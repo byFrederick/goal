@@ -118,14 +118,17 @@ function FileDiff({ file, pair, changes }: { file: FileChange; pair: ComparePair
 const mark = { context: ' ', added: '+', removed: '−' } as const;
 const spoken = { context: '', added: 'Added: ', removed: 'Removed: ' } as const;
 
-export function DiffView({ hunks, label }: { hunks: Hunk[]; label: string }) {
+export function DiffView({ hunks, label, bare = false }: { hunks: Hunk[]; label: string; bare?: boolean }) {
   if (hunks.length === 0) return <p className="m-0 text-secondary text-muted">No line changes.</p>;
   return (
     <section
       aria-label={label}
       // biome-ignore lint/a11y/noNoninteractiveTabindex: the diff scrolls sideways; the keyboard scrolls it
       tabIndex={0}
-      className="overflow-x-auto rounded-control border border-line bg-card py-2 font-mono text-secondary leading-relaxed"
+      className={cn(
+        'overflow-x-auto bg-card py-2 font-mono text-secondary leading-relaxed',
+        !bare && 'rounded-control border border-line',
+      )}
     >
       <table className="w-full border-collapse">
         {hunks.map((h, i) => (

@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { ApiError, applyBakeOff, rerunBakeOff } from '../../api/client';
 import { bakeOffQuery, bakeOffsQuery, defKeys, keys } from '../../api/queries';
 import type { BakeOff } from '../../api/types';
+import { PendingSkeleton } from '../../app/route-skeletons';
 import { TopBarSlot } from '../../app/top-bar';
 import { useFactory, useFactoryParams } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
@@ -17,7 +18,7 @@ import { Callout } from '../../ui/callout';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { EmptyState } from '../../ui/empty-state';
-import { Skeleton, SkeletonRows } from '../../ui/skeleton';
+import { NumberRoll } from '../../ui/number-roll';
 import { RecommendationBanner } from './bake-off-banner';
 import { CaseGrid } from './bake-off-cases';
 import {
@@ -37,27 +38,61 @@ import { JonahTabs } from './jonah-header';
 /** The breadcrumb's parent crumb: the list of the factory's bake-offs. A constant, so the top bar's effect runs once. */
 const bakeOffsCrumb = { label: 'Bake-offs', to: '/o/$org/f/$factory/jonah/bake-offs' } as const;
 
-/** Loading shows the page's rows as a skeleton while the data waits. */
-export function BakeOffLoading() {
+const block = 'rounded-control bg-hover';
+
+/** The bake-off's layout in muted blocks: the title, the tabs, the banner, the plot and grid cards, the table. */
+export function BakeOffShape() {
   return (
-    <Skeleton ready={false} placeholder={<SkeletonRows rows={4} className="min-h-40" />}>
-      <span />
-    </Skeleton>
+    <div className="flex w-full min-w-0 flex-col gap-5">
+      <div className="flex flex-col gap-2">
+        <div className={`${block} h-7 w-96 max-w-full`} />
+        <div className={`${block} h-4 w-[34rem] max-w-full`} />
+      </div>
+      <div className={`${block} h-11 w-96 max-w-full md:h-9`} />
+      <div className={`${block} h-20`} />
+      <div className="grid gap-4 @[960px]:grid-cols-2">
+        <div className={`${block} h-80`} />
+        <div className={`${block} h-80`} />
+      </div>
+      <div className={`${block} h-48`} />
+    </div>
   );
+}
+
+/** The route's pendingComponent: the bake-off's layout, pulsing until the page arrives. */
+export function BakeOffPending() {
+  return (
+    <div className="@container">
+      <PendingSkeleton placeholder={<BakeOffShape />} />
+    </div>
+  );
+}
+
+/** Loading shows the page's layout as a skeleton while the bake-off waits. */
+export function BakeOffLoading() {
+  return <BakeOffPending />;
 }
 
 /** The subline's second half: the finish when the bake-off is done, otherwise its status chip and what it has cost so far. */
 function Status({ bakeOff }: { bakeOff: BakeOff }) {
   if (bakeOff.state === 'done') {
-    return <>{`${finishedAt(bakeOff) ?? statusWords.done}, cost ${bakeOffCost(bakeOff)}.`}</>;
+    return (
+      <>
+        {finishedAt(bakeOff) ?? statusWords.done}, cost <NumberRoll value={bakeOffCost(bakeOff)} />.
+      </>
+    );
   }
   const tone = bakeOff.state === 'running' ? 'run' : bakeOff.state === 'failed' ? 'rework' : 'plain';
   return (
     <>
       <Chip tone={tone} dot>
-        {statusWords[bakeOff.state]}
+        {bakeOff.state === 'running' ? (
+          <span className="thinking">{statusWords[bakeOff.state]}</span>
+        ) : (
+          statusWords[bakeOff.state]
+        )}
       </Chip>{' '}
-      cost {bakeOffCost(bakeOff)} so far.
+      cost <NumberRoll value={bakeOffCost(bakeOff)} /> so far.
     </>
   );
 }
@@ -102,7 +137,6 @@ export function BakeOffPage() {
     return (
       <div className="flex min-w-0 flex-col gap-5">
         <TopBarSlot crumb="Bake-offs" />
-        <JonahTabs tab="bake-offs" />
         <BakeOffLoading />
       </div>
     );
@@ -211,7 +245,7 @@ export function BakeOffPage() {
           title="Pass rate against cost"
           aside={<span className="text-meta text-muted">Up and left is better</span>}
         >
-          <PassCostPlot arms={b.arms} />
+          <PassCostPlot arms={b.arms} recommendedArm={b.recommended_arm} />
         </SectionCard>
         <SectionCard
           title="Tries passed per case"

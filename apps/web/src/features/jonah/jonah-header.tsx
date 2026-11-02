@@ -31,7 +31,7 @@ const overviewIntro = (factory: string) =>
 /** The intro line under the name, per tab. The tabs without a page keep the evals line, the first Jonah had. */
 const introOf: Record<Exclude<JonahTab, 'overview' | 'proposals'>, string> = {
   judges: 'Judges read a sample of runs and score them against a rubric you write.',
-  evals: evalsIntro,
+  evals: 'Cases replay tasks agents must get right. They run on every publish, and a failing case blocks it.',
   'bake-offs': evalsIntro,
 };
 

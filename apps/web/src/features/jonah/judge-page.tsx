@@ -10,18 +10,21 @@ import { type FormEvent, useState } from 'react';
 import { ApiError, tryJudge, updateJudge } from '../../api/client';
 import { builderMetaQuery, judgeQuery, versionModelQuery } from '../../api/queries';
 import type { Judge, JudgeScore, JudgeSummary } from '../../api/types';
+import { PendingSkeleton } from '../../app/route-skeletons';
 import { TopBarSlot } from '../../app/top-bar';
 import { useFactory, useFactoryParams } from '../../shared/factory';
 import { formatUsd } from '../../shared/format';
 import { useOrg } from '../../shared/org';
+import { useArrivals } from '../../ui/arrivals';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { SectionCard } from '../../ui/card';
 import { Chip, type ChipTone } from '../../ui/chip';
+import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
 import { Field, Input, useFieldControl } from '../../ui/field';
 import { Select } from '../../ui/select';
-import { Skeleton, SkeletonRows } from '../../ui/skeleton';
+import { Skeleton } from '../../ui/skeleton';
 import { Switch } from '../../ui/switch';
 import { formErrors, formOf, type JudgeForm, type JudgeFormErrors, judgeWrite } from './judge-form';
 import { RangeInput } from './judge-range';
@@ -39,14 +42,49 @@ import {
   tryFailure,
 } from './judges-format';
 
-/** Loading shows the page's rows as a skeleton while the data waits. */
+const block = 'rounded-control bg-hover';
+
+/** The judge page's layout in muted blocks: the title row, the form's fields and the two side cards. */
+export function JudgeShape() {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-5">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className={`${block} h-7 w-64 max-w-full`} />
+        <div className={`${block} h-5 w-16`} />
+      </div>
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="flex flex-col gap-5">
+          <div className={`${block} h-16`} />
+          <div className={`${block} h-12`} />
+          <div className={`${block} h-48`} />
+          <div className={`${block} h-32`} />
+          <div className={`${block} h-16`} />
+        </div>
+        <div className="flex flex-col gap-4">
+          <div className={`${block} h-56`} />
+          <div className={`${block} h-32`} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The route's pendingComponent: the page's layout, pulsing until it arrives. */
+export function JudgePending() {
+  return <PendingSkeleton placeholder={<JudgeShape />} />;
+}
+
+/** Loading shows the page's layout as a skeleton while the data waits. */
 function Loading() {
   return (
-    <Skeleton ready={false} placeholder={<SkeletonRows rows={4} className="min-h-40" />}>
+    <Skeleton ready={false} placeholder={<JudgeShape />}>
       <span />
     </Skeleton>
   );
 }
+
+/** Pass and fail chips are plain, with a coloured dot: the dot carries the colour, the text the meaning. */
+const plainDot = 'border-line bg-panel text-ink';
 
 /** A score's chip: green when it passed, red when it failed, plain while it is still on its way. */
 function scoreTone(score: JudgeScore): ChipTone {
@@ -86,6 +124,8 @@ function JudgeEditor({
   const [form, setForm] = useState<JudgeForm>(() => formOf(judge));
   const [submitted, setSubmitted] = useState(false);
   const [addingAgent, setAddingAgent] = useState(false);
+  const agentArrived = useArrivals(form.agents);
+  const outcomeArrived = useArrivals(form.outcomes.map((_, i) => String(i)));
 
   const errors: JudgeFormErrors = formErrors(form);
   const shownErrors: JudgeFormErrors = submitted ? errors : {};
@@ -177,8 +217,8 @@ function JudgeEditor({
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-        <form id="judge-form" onSubmit={onSubmit} noValidate className="flex min-w-0 flex-1 flex-col gap-5">
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <form id="judge-form" onSubmit={onSubmit} noValidate className="flex min-w-0 flex-col gap-5">
           <fieldset disabled={!canPublish} className="contents">
             <Field label="What it checks" error={shownErrors.criterion}>
               <Input value={form.criterion} onChange={(e) => set({ criterion: e.target.value })} maxLength={200} />
@@ -189,7 +229,7 @@ function JudgeEditor({
               <div className="flex flex-wrap items-center gap-2">
                 {form.agents.length === 0 ? <span className="text-secondary text-ink-soft">All agents</span> : null}
                 {form.agents.map((agent) => (
-                  <Chip key={agent} size="lg">
+                  <Chip key={agent} size="lg" className={cn(agentArrived(agent) && 'motion-safe:animate-item-in')}>
                     {agent}
                     <button
                       type="button"
@@ -237,40 +277,47 @@ function JudgeEditor({
             <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
               <legend className="mb-2 text-sm font-medium text-ink">Outcomes</legend>
               {form.outcomes.map((outcome, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: outcomes have no id; a row is kept by its place
-                <div key={i} className="flex flex-wrap items-center gap-2 rounded-card border border-line bg-card p-3">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    aria-label={`Outcome ${i + 1} score`}
-                    value={outcome.score}
-                    onChange={(e) => setOutcome(i, { score: Number(e.target.value) })}
-                    className="w-20"
-                  />
-                  <Input
-                    aria-label={`Outcome ${i + 1} label`}
-                    value={outcome.label}
-                    onChange={(e) => setOutcome(i, { label: e.target.value })}
-                    className="w-40 font-control font-semibold"
-                  />
-                  <Input
-                    aria-label={`Outcome ${i + 1} meaning`}
-                    value={outcome.meaning}
-                    onChange={(e) => setOutcome(i, { meaning: e.target.value })}
-                    className="min-w-48 flex-1"
-                  />
-                  <Chip tone={outcomePasses(outcome, form.passMark) ? 'ok' : 'rework'}>
-                    {outcomePasses(outcome, form.passMark) ? 'Passes' : 'Fails'}
-                  </Chip>
+                <div
+                  // biome-ignore lint/suspicious/noArrayIndexKey: outcomes have no id; a row is kept by its place
+                  key={i}
+                  className={cn('flex items-center gap-2', outcomeArrived(String(i)) && 'motion-safe:animate-item-in')}
+                >
+                  <div className="grid min-w-0 flex-1 grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-3 rounded-control border border-line bg-card px-3 py-2 text-secondary sm:grid-cols-[48px_120px_minmax(0,1fr)_72px]">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      aria-label={`Outcome ${i + 1} score`}
+                      value={outcome.score}
+                      onChange={(e) => setOutcome(i, { score: Number(e.target.value) })}
+                      className="h-6 px-1 text-center font-control font-medium tabular-nums"
+                    />
+                    <Input
+                      aria-label={`Outcome ${i + 1} label`}
+                      value={outcome.label}
+                      onChange={(e) => setOutcome(i, { label: e.target.value })}
+                      className="h-6 px-1 font-control font-semibold"
+                    />
+                    <Input
+                      aria-label={`Outcome ${i + 1} meaning`}
+                      value={outcome.meaning}
+                      onChange={(e) => setOutcome(i, { meaning: e.target.value })}
+                      className="h-6 px-1 text-ink-soft max-sm:order-4 max-sm:col-span-3"
+                    />
+                    <span className="flex justify-end max-sm:order-3">
+                      <Chip tone={outcomePasses(outcome, form.passMark) ? 'ok' : 'rework'} dot className={plainDot}>
+                        {outcomePasses(outcome, form.passMark) ? 'Passes' : 'Fails'}
+                      </Chip>
+                    </span>
+                  </div>
                   <Button
-                    size="sm"
-                    variant="danger"
+                    size="icon"
+                    variant="secondary"
                     aria-label={`Remove outcome ${i + 1}`}
                     onClick={() => set({ outcomes: form.outcomes.filter((_, j) => j !== i) })}
                   >
-                    Remove
+                    <X aria-hidden="true" />
                   </Button>
                 </div>
               ))}
@@ -317,33 +364,34 @@ function JudgeEditor({
           </fieldset>
         </form>
 
-        <aside className="flex min-w-0 flex-col gap-4 lg:w-85 lg:shrink-0">
+        <aside className="flex min-w-0 flex-col gap-4">
           <SectionCard title="Recent scores" headingLevel="h2">
             {judge.recent.length === 0 ? (
               <p className="m-0 text-secondary text-muted">No scores yet.</p>
             ) : (
               <ul className="m-0 flex list-none flex-col p-0">
                 {judge.recent.map((score) => (
-                  <li key={score.id} className="flex flex-col gap-1 border-b border-line py-3 last:border-b-0">
-                    <span className="font-control text-secondary font-semibold">
+                  <li
+                    key={score.id}
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-line py-3 first:border-t-0 first:pt-0"
+                  >
+                    <span className="min-w-0 font-control text-secondary font-medium text-ink">
                       {itemNumber(score.item_ref)} {score.item_title}
                     </span>
-                    <span>
-                      <Chip tone={scoreTone(score)}>
-                        {score.state === 'scored' && score.score !== undefined
-                          ? `${scoreText(score)}, ${score.score}`
-                          : scoreText(score)}
-                      </Chip>
-                    </span>
-                    {score.reason ? <span className="text-meta text-muted">{score.reason}</span> : null}
+                    <Chip tone={scoreTone(score)} dot className={plainDot}>
+                      {score.state === 'scored' && score.score !== undefined
+                        ? `${scoreText(score)}, ${score.score}`
+                        : scoreText(score)}
+                    </Chip>
+                    {score.reason ? <span className="col-span-full text-meta text-muted">{score.reason}</span> : null}
                   </li>
                 ))}
               </ul>
             )}
           </SectionCard>
 
-          <SectionCard title="Runs on" headingLevel="h2">
-            <dl className="m-0 flex flex-col gap-3 text-secondary">
+          <SectionCard title="Runs on" headingLevel="h2" className="gap-3">
+            <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 text-secondary">
               <RunsOnRow term="Box" value={judge.runs_on.size} />
               <RunsOnRow
                 term="Connections"
@@ -363,10 +411,12 @@ function JudgeEditor({
 
 function RunsOnRow({ term, value }: { term: string; value: string }) {
   return (
-    <div className="flex flex-col gap-1 sm:flex-row sm:gap-3">
-      <dt className="w-28 shrink-0 text-muted">{term}</dt>
-      <dd className="m-0 min-w-0">{value}</dd>
-    </div>
+    <>
+      <dt className="m-0 whitespace-nowrap border-t border-line py-2 text-muted first:border-t-0">{term}</dt>
+      <dd className="m-0 min-w-0 border-t border-line py-2 text-ink first:border-t-0 [dt:first-child+&]:border-t-0">
+        {value}
+      </dd>
+    </>
   );
 }
 
