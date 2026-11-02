@@ -140,8 +140,8 @@ describe('BoardCard as the screen draws it', () => {
 
     const card_ = await article();
     expect(within(card_).getByRole('link', { name: 'Part 2 of 3 of PWA' })).toBeTruthy();
-    expect(card_.querySelectorAll('i.bg-ok')).toHaveLength(1);
-    expect(card_.querySelectorAll('i.bg-ok-tint')).toHaveLength(2);
+    expect(card_.querySelectorAll('i.bg-ink')).toHaveLength(1);
+    expect(card_.querySelectorAll('i.bg-rule')).toHaveLength(2);
   });
 
   it('keeps the Move button and the M shortcut on the card', async () => {

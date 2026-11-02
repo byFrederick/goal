@@ -4,6 +4,7 @@ import {
   budgetNote,
   cardState,
   columnCount,
+  columnGroups,
   constraintSentence,
   doingText,
   expediteHeader,
@@ -15,6 +16,7 @@ import {
   stationMeter,
   stationNote,
   stationStat,
+  visibleCards,
   waitsOn,
   wipText,
 } from './stats';
@@ -403,5 +405,26 @@ describe('open assemblies count toward no station', () => {
     expect(columnCount(build)).toBe('1 of 3');
     expect(stationMeter(build)).toEqual({ value: 1, max: 3, tone: 'run' });
     expect(stationStat(inbox)).toBe('4 waiting');
+  });
+});
+
+describe('columnGroups', () => {
+  const card = (id: string, in_buffer: boolean) => ({ id, in_buffer }) as ItemCard;
+  const cards = [card('a', true), card('b', false), card('c', true), card('d', false)];
+
+  it('puts In progress first and Ready (buffer) second in a column with a buffer', () => {
+    const groups = columnGroups(cards, true);
+    expect(groups.map((g) => g.kind)).toEqual(['in-progress', 'ready']);
+    expect(groups[0]?.items.map((c) => c.id)).toEqual(['b', 'd']);
+    expect(groups[1]?.items.map((c) => c.id)).toEqual(['a', 'c']);
+  });
+
+  it('is one In progress group in a column without a buffer', () => {
+    expect(columnGroups(cards, false)).toEqual([{ kind: 'in-progress', items: cards }]);
+  });
+
+  it('shows the first cards, or all once expanded', () => {
+    expect(visibleCards(cards, false, 2).map((c) => c.id)).toEqual(['a', 'b']);
+    expect(visibleCards(cards, true, 2)).toHaveLength(4);
   });
 });

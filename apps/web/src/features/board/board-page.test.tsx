@@ -462,15 +462,14 @@ describe('the desktop Board, as the screen draws it', () => {
     expect(within(build).getByRole('link', { name: 'Wire the retry flag' })).toBeTruthy();
   });
 
-  it('keeps the empty sub-header slot of a column without drum labels out of the reading order', async () => {
+  it('starts every column body directly under its header, with no spacer or fixed height', async () => {
     const drum = board({ release: { policy: 'push', enforced: false, drum: 'build', buffer: 2, in_buffer: 0 } });
     renderBoardPage({ page: ShellBoard, org, factory, board: drum });
 
     const columns = await screen.findByRole('region', { name: 'Stations' });
     const investigate = within(columns).getByRole('region', { name: 'Investigate' });
-    const slot = investigate.querySelector('[aria-hidden="true"].min-h-\\[1lh\\]');
-    expect(slot).not.toBeNull();
-    expect(slot?.textContent).toBe('');
+    expect(investigate.querySelector('[aria-hidden="true"].min-h-\\[1lh\\]')).toBeNull();
+    expect(investigate.innerHTML).not.toMatch(/min-h-\[\d{3}px\]/);
     expect(within(investigate).queryByText('In progress')).toBeNull();
   });
 });
@@ -727,8 +726,8 @@ describe('board filters and grouping', () => {
     expect(within(wireCard as HTMLElement).getByRole('link', { name: 'Part 5 of 5 of PWA' })).toBeTruthy();
     // Three of the five parts are merged: three filled pips on each part's card.
     for (const card of [addCard, wireCard] as HTMLElement[]) {
-      expect(card.querySelectorAll('i.bg-ok')).toHaveLength(3);
-      expect(card.querySelectorAll('i.bg-ok-tint')).toHaveLength(2);
+      expect(card.querySelectorAll('i.bg-ink')).toHaveLength(3);
+      expect(card.querySelectorAll('i.bg-rule')).toHaveLength(2);
     }
   });
 
