@@ -34,12 +34,12 @@ describe('rotating a webhook secret through the session', () => {
       .mockResolvedValueOnce(
         json(403, { code: 'reauth-required', title: 'Sign in again', status: 403 }, 'application/problem+json'),
       )
-      .mockResolvedValueOnce(json(200, { id: 'cf-endpoint', name: 'cf-deploys', secret: zeros }));
+      .mockResolvedValueOnce(json(200, { id: 'acme-endpoint', name: 'acme-deploys', secret: zeros }));
     vi.stubGlobal('fetch', fetch);
     const reauth = vi.fn(async () => true);
     setSessionHandlers({ reauth });
 
-    const rotated = await rotateWebhookSecret('org-1', 'software-id', 'cf-endpoint');
+    const rotated = await rotateWebhookSecret('org-1', 'software-id', 'acme-endpoint');
 
     expect(reauth).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledTimes(2);
@@ -58,7 +58,7 @@ describe('rotating a webhook secret through the session', () => {
     const unauthenticated = vi.fn();
     setSessionHandlers({ unauthenticated });
 
-    await expect(rotateWebhookSecret('org-1', 'software-id', 'cf-endpoint')).rejects.toBeInstanceOf(ApiError);
+    await expect(rotateWebhookSecret('org-1', 'software-id', 'acme-endpoint')).rejects.toBeInstanceOf(ApiError);
     expect(unauthenticated).toHaveBeenCalledTimes(1);
   });
 
@@ -73,7 +73,7 @@ describe('rotating a webhook secret through the session', () => {
     );
     setSessionHandlers({ reauth: async () => false });
 
-    await expect(rotateWebhookSecret('org-1', 'software-id', 'cf-endpoint')).rejects.toMatchObject({
+    await expect(rotateWebhookSecret('org-1', 'software-id', 'acme-endpoint')).rejects.toMatchObject({
       code: 'reauth-required',
     });
   });

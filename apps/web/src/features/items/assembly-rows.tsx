@@ -135,11 +135,12 @@ export function ItemTableRow({
         <SelectBox label={`Select ${item.ref}`} checked={selected} onChange={() => onSelect(item.id)} />
       </td>
       <td className={cn(cell, 'whitespace-nowrap text-muted tabular-nums')}>{item.ref}</td>
-      <td className={cn(cell, indent && 'pl-8')}>
+      <td className={cn(cell, 'lg:w-full lg:min-w-40 lg:max-w-0', indent && 'pl-8')}>
         <Link
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
-          className="font-medium text-ink no-underline hover:text-run-ink"
+          title={item.title}
+          className="block font-medium text-ink no-underline hover:text-run-ink lg:truncate"
         >
           {item.title}
         </Link>
@@ -246,7 +247,7 @@ export function AssemblyTableRow({
             <span className="text-muted tabular-nums">{ref}</span>
           </span>
         </td>
-        <td colSpan={6} className={cell}>
+        <td colSpan={6} className={cn(cell, 'whitespace-normal lg:max-w-0')}>
           <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
             <Link
               to="/o/$org/f/$factory/items/$ref"
