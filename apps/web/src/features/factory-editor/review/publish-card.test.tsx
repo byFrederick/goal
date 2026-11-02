@@ -13,8 +13,10 @@ const closeDraft = vi.hoisted(() =>
     state.hasDraft = false;
   }),
 );
+const toast = vi.hoisted(() => vi.fn());
 const publishDraft = vi.hoisted(() => vi.fn(async () => ({ number: 5 })));
 
+vi.mock('sonner', () => ({ toast }));
 vi.mock('../../../api/definitions', () => ({ publishDraft }));
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }));
 vi.mock('../../../shared/org', () => ({ useOrg: () => ({ id: 'org-1', slug: 'acme' }) }));
@@ -68,6 +70,10 @@ describe('PublishCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Publish v5' }));
 
     expect(await screen.findByRole('status')).toBeTruthy();
+    const published = screen.getByRole('button', { name: 'Published' });
+    expect(published.getAttribute('aria-disabled')).toBe('true');
+    expect(screen.queryByRole('button', { name: 'Publish v5' })).toBeNull();
+    expect(toast).toHaveBeenCalledWith('Line v5 published');
     expect(screen.getByText('v5 is published and running.')).toBeTruthy();
     expect(closeDraft).toHaveBeenCalledOnce();
     await waitFor(() => expect(publishDraft).toHaveBeenCalledOnce());

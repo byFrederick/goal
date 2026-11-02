@@ -15,8 +15,9 @@ import { defKeys, keys } from '../../../api/queries';
 import type { ItemsAtRemovedStations, Validation } from '../../../api/types';
 import { useOrg } from '../../../shared/org';
 import { Button } from '../../../ui/button';
-import { SectionCard, Stat, StatGrid } from '../../../ui/card';
+import { SectionCard } from '../../../ui/card';
 import { Field, Input, NativeSelect } from '../../../ui/field';
+import { StatStrip } from '../../../ui/stat-strip';
 import { useDraftSession, useModel } from '../draft/use-draft';
 import { SearchLink } from '../search-link';
 import { blockedSentence, defaultMessage, type MoveNeed, mergeMoveNeeds, publishExplainer } from './review';
@@ -156,10 +157,16 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
     return (
       <SectionCard title="Publish">
         {published !== null ? (
-          <p role="status" className="m-0 flex items-center gap-2 text-body">
-            <Check size={16} strokeWidth={1.5} aria-hidden="true" className="motion-safe:animate-success-check" />v
-            {published} is published and running.
-          </p>
+          // The Publish button's label swaps for a check (MOTION.md, Approve, publish, merge succeed).
+          <>
+            <Button variant="primary" size="lg" className="w-full justify-center" aria-disabled="true">
+              <Check size={16} strokeWidth={1.5} aria-hidden="true" className="motion-safe:animate-success-check" />
+              Published
+            </Button>
+            <p role="status" className="m-0 text-body">
+              v{published} is published and running.
+            </p>
+          </>
         ) : (
           <p className="m-0 text-body">
             {current ? `No draft. v${current.number} is running.` : 'Nothing to publish yet.'}
@@ -173,20 +180,15 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
   return (
     <SectionCard title="Publish">
       {place === 'wizard' ? (
-        <StatGrid>
-          <Stat label="Stations">
-            <dd className="m-0 text-detail-title tabular-nums">{counts?.stations ?? '–'}</dd>
-          </Stat>
-          <Stat label="Agents">
-            <dd className="m-0 text-detail-title tabular-nums">{counts?.agents ?? '–'}</dd>
-          </Stat>
-          <Stat label="Connections">
-            <dd className="m-0 text-detail-title tabular-nums">{counts?.connections ?? '–'}</dd>
-          </Stat>
-          <Stat label="Skills">
-            <dd className="m-0 text-detail-title tabular-nums">{counts?.skills ?? '–'}</dd>
-          </Stat>
-        </StatGrid>
+        <StatStrip
+          label="What publishing creates"
+          stats={[
+            { label: 'Stations', value: counts?.stations ?? null },
+            { label: 'Agents', value: counts?.agents ?? null },
+            { label: 'Connections', value: counts?.connections ?? null },
+            { label: 'Skills', value: counts?.skills ?? null },
+          ]}
+        />
       ) : null}
       <Field label="What changed, in one line">
         <Input value={note} maxLength={200} onChange={(e) => setMessage(e.target.value)} />
