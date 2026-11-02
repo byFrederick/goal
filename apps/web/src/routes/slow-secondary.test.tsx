@@ -5,6 +5,16 @@ import { agentStatsQuery, boardQuery, itemsQuery, versionModelQuery } from '../a
 import { Route as AgentRoute } from './o.$org.f.$factory.agents.$agent';
 import { Route as ItemsRoute } from './o.$org.f.$factory.items.index';
 
+// The secondary requests never settle, so a loader that awaits one stays pending.
+vi.mock('../api/definitions', async (orig) => ({
+  ...(await orig<typeof import('../api/definitions')>()),
+  getVersionModel: () => new Promise(() => {}),
+}));
+vi.mock('../api/client', async (orig) => ({
+  ...(await orig<typeof import('../api/client')>()),
+  getBoard: () => new Promise(() => {}),
+}));
+
 type Loader = (args: Record<string, unknown>) => Promise<unknown> | unknown;
 
 const org = { id: 'org-1' };
@@ -32,7 +42,9 @@ describe('loaders wait only for the primary data', () => {
     );
 
     expect(outcome).toBe('resolved');
-    expect(queryClient.getQueryData(versionModelQuery(org.id, factory.id, 'current').queryKey)).toBeUndefined();
+    expect(queryClient.getQueryState(versionModelQuery(org.id, factory.id, 'current').queryKey)?.fetchStatus).toBe(
+      'fetching',
+    );
   });
 
   it('Items resolves while the board is still loading', async () => {
@@ -44,6 +56,6 @@ describe('loaders wait only for the primary data', () => {
     const outcome = await settles(() => loader({ context: { queryClient, org, factory }, deps: {} }));
 
     expect(outcome).toBe('resolved');
-    expect(queryClient.getQueryData(boardQuery(org.id, factory.id).queryKey)).toBeUndefined();
+    expect(queryClient.getQueryState(boardQuery(org.id, factory.id).queryKey)?.fetchStatus).toBe('fetching');
   });
 });
