@@ -237,19 +237,33 @@ describe('Needs you: filters live in the URL', () => {
 });
 
 describe('Needs you: deciding a Decision', () => {
-  it('swaps the Approve label for a check once the approval went through', async () => {
+  it('swaps the Approve label for a check once the approval went through, before the entry leaves', async () => {
     vi.mocked(approveItem).mockResolvedValue({ id: 'item-3', state: 'done' } as unknown as Item);
     // The refetch after the approval no longer lists the entry: the page keeps it in view for the check.
     vi.mocked(getInbox).mockResolvedValue(inbox(entries.filter((e) => e.id !== 'decision:item-3')));
     renderPage({ search: { entry: 'decision:item-3' } });
 
     const button = await screen.findByRole('button', { name: /^Approve/ });
-    expect(within(button).getByRole('status').textContent).toBe('');
-    expect(button.querySelector('svg')?.getAttribute('class')).toContain('opacity-0');
+    expect(button.querySelector('svg')).toBeNull();
     fireEvent.click(button);
 
-    await waitFor(() => expect(within(button).getByRole('status').textContent).toBe('Approved'));
-    expect(button.querySelector('svg')?.getAttribute('class')).not.toContain('opacity-0');
+    await waitFor(() => expect(button.querySelector('svg')?.getAttribute('class')).toContain('animate-success-check'));
+    expect(button.textContent).toBe('Approved');
+    expect(within(button).getByRole('status').textContent).toBe('Approved');
+    expect(button.isConnected).toBe(true);
+  });
+
+  it('brings the Approve label back, with no check, when the approval fails', async () => {
+    vi.mocked(approveItem).mockRejectedValue(new Error('goald is down'));
+    vi.mocked(getInbox).mockResolvedValue(inbox(entries));
+    renderPage({ search: { entry: 'decision:item-3' } });
+
+    const button = await screen.findByRole('button', { name: /^Approve/ });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(approveItem).toHaveBeenCalled());
+    await waitFor(() => expect(button.textContent).toBe('ApproveA'), { timeout: 3000 });
+    expect(button.querySelector('svg')).toBeNull();
   });
 
   it('approves the selected Decision with approveItem', async () => {
@@ -260,6 +274,20 @@ describe('Needs you: deciding a Decision', () => {
 
     await waitFor(() => expect(approveItem).toHaveBeenCalledWith('org-1', 'item-3'));
     expect(mergeItem).not.toHaveBeenCalled();
+  });
+
+  it('swaps Merge for a check once the merge went through, on the phone too', async () => {
+    phoneWidth();
+    vi.mocked(mergeItem).mockResolvedValue({ id: 'item-4', state: 'done' } as unknown as Item);
+    vi.mocked(getInbox).mockResolvedValue(inbox(entries.filter((e) => e.id !== 'decision:item-4')));
+    renderPage({ search: { entry: 'decision:item-4' } });
+
+    const button = await screen.findByRole('button', { name: /^Merge/ });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button.querySelector('svg')?.getAttribute('class')).toContain('animate-success-check'));
+    expect(button.textContent).toBe('Merged');
+    expect(within(button).getByRole('status').textContent).toBe('Merged');
   });
 
   it('merges instead of approving when the entry action is merge', async () => {
