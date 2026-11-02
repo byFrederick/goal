@@ -366,6 +366,7 @@ function renderFloor({
   activity = feed,
   touches = touchesNow,
   subject = factory,
+  topBar = false,
 }: {
   entries?: InboxEntry[];
   line?: Board;
@@ -379,6 +380,8 @@ function renderFloor({
   touches?: TouchMetrics;
   /** The factory the page is for, with the permissions the test gives it. */
   subject?: Factory;
+  /** Draw the shell's top bar above the page, where a phone's actions go. */
+  topBar?: boolean;
 } = {}) {
   const range = rangeOf({});
   return renderFactoryPage({
@@ -389,6 +392,7 @@ function renderFloor({
       </TooltipProvider>
     ),
     path: '/',
+    topBar,
     org,
     factory: subject,
     seed: [
@@ -714,5 +718,50 @@ describe('the cards below the figures', () => {
     const card = await screen.findByRole('region', { name: 'Activity' });
     expect(card.getAttribute('aria-busy')).toBe('true');
     expect(within(card).getByText('Loading')).toBeTruthy();
+  });
+});
+
+describe('the Floor actions at each width', () => {
+  function stubWidth(phone: boolean) {
+    window.matchMedia = (query: string) =>
+      ({
+        matches: phone && query === '(max-width: 767px)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList;
+  }
+
+  afterEach(() => {
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  it('puts Needs you, Pull the andon cord and New item in the phone top bar and not in the page', async () => {
+    stubWidth(true);
+    renderFloor({ topBar: true, subject: { ...factory, can: [...(factory.can ?? []), 'item:create'] } });
+
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Floor' });
+    const bar = document.querySelector('.shell-topbar') as HTMLElement;
+    const header = heading.closest('header') as HTMLElement;
+    await waitFor(() => expect(within(bar).getByRole('link', { name: /^Needs you/ })).toBeTruthy());
+    expect(within(bar).getByRole('button', { name: /Pull the andon cord/ })).toBeTruthy();
+    expect(within(bar).getByRole('button', { name: /New item/ })).toBeTruthy();
+    expect(within(header).queryByRole('link', { name: /^Needs you/ })).toBeNull();
+    expect(within(header).queryByRole('button', { name: /Pull the andon cord/ })).toBeNull();
+    expect(within(header).queryByRole('button', { name: /New item/ })).toBeNull();
+  });
+
+  it('keeps the actions in the page header from 768 px', async () => {
+    stubWidth(false);
+    renderFloor({ topBar: true, subject: { ...factory, can: [...(factory.can ?? []), 'item:create'] } });
+
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Floor' });
+    const header = heading.closest('header') as HTMLElement;
+    expect(within(header).getByRole('link', { name: /^Needs you/ })).toBeTruthy();
+    expect(within(header).getByRole('button', { name: /Pull the andon cord/ })).toBeTruthy();
+    expect(within(header).getByRole('button', { name: /New item/ })).toBeTruthy();
   });
 });
