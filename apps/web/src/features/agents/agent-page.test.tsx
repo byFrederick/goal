@@ -198,12 +198,17 @@ describe('the Agent page, ready', () => {
       version: { model: { ...model, agents: { ...model.agents, agents: [{ ...agent, skills }] } } },
     });
     const settings = screen.getByRole('region', { name: 'Settings' });
-    expect(within(settings).getAllByText(/^skill-\d+$/)).toHaveLength(7);
+    const shown = () =>
+      within(settings)
+        .getAllByText(/^skill-\d+$/)
+        .filter((el) => !el.closest('[inert]'));
+    expect(shown()).toHaveLength(7);
     const more = within(settings).getByRole('button', { name: '+ 13 more' });
     expect(more.getAttribute('aria-expanded')).toBe('false');
     await user.click(more);
-    expect(within(settings).getAllByText(/^skill-\d+$/)).toHaveLength(20);
+    expect(shown()).toHaveLength(20);
     expect(more.getAttribute('aria-expanded')).toBe('true');
+    expect(document.getElementById(more.getAttribute('aria-controls') ?? '')?.getAttribute('data-state')).toBe('open');
   });
 
   it('shows no more chip for 7 skills or fewer', async () => {

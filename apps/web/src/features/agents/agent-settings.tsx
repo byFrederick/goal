@@ -2,7 +2,7 @@
 // sets reads "Own value"; one it leaves to the factory reads "Default", with the factory's value beside
 // it. Read only: the Definition editor changes these.
 import { Link } from '@tanstack/react-router';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useId, useState } from 'react';
 import { toast } from 'sonner';
 import { useRunningModel } from '../../shared/definition/agent-cards';
 import { toolPolicy } from '../../shared/definition/tool-policy';
@@ -67,33 +67,37 @@ function ResetModel({ agent, fallback }: { agent: string; fallback: string | und
 
 const skillsShown = 7;
 
-/** The first skills as chips, then "+ N more", which opens the rest in place. */
+/** The first skills as chips, then "+ N more", which opens the rest below in place (MOTION.md, accordion). */
 function SkillChips({ skills }: { skills: readonly string[] }) {
   const [open, setOpen] = useState(false);
+  const restId = useId();
   const rest = skills.slice(skillsShown);
   return (
-    <span className="flex flex-wrap gap-2">
-      {skills.slice(0, skillsShown).map((s) => (
-        <Chip key={s}>{s}</Chip>
-      ))}
-      {rest.length > 0 ? (
-        <>
-          {open
-            ? rest.map((s) => (
-                <Chip key={s} className="motion-safe:animate-fade-in motion-reduce:animate-none">
-                  {s}
-                </Chip>
-              ))
-            : null}
+    <span className="flex flex-col">
+      <span className="flex flex-wrap gap-2">
+        {skills.slice(0, skillsShown).map((s) => (
+          <Chip key={s}>{s}</Chip>
+        ))}
+        {rest.length > 0 ? (
           <button
             type="button"
             aria-expanded={open}
+            aria-controls={restId}
             onClick={() => setOpen((o) => !o)}
             className="cursor-pointer rounded-chip border border-line px-2 text-meta text-muted hover:text-ink"
           >
             {open ? 'Show fewer' : `+ ${rest.length} more`}
           </button>
-        </>
+        ) : null}
+      </span>
+      {rest.length > 0 ? (
+        <span id={restId} data-state={open ? 'open' : 'closed'} inert={!open} className="motion-disclosure">
+          <span className="flex flex-wrap gap-2 pt-2">
+            {rest.map((s) => (
+              <Chip key={s}>{s}</Chip>
+            ))}
+          </span>
+        </span>
       ) : null}
     </span>
   );
