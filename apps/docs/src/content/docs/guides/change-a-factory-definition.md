@@ -7,6 +7,10 @@ You end with a new published version of a factory, and the work that runs from t
 
 Use the web app's Definition page to edit the same definition by hand. In its Agents section, an agent's prompt has a Reset to default button that restores the prompt file from the running version; the [Add an agent, skill or rule](../add-an-agent-skill-or-rule/) guide describes when it is off. Each entry in the page's section nav shows a summary of its section, such as the number of stations on the Line or the agents and models in Agents. A count of changes and problems appears beside the section name when there are some. Use the steps below when you want the files in your editor and in version control.
 
+## Edit in the YAML view
+
+The Definition page's YAML view shows the draft's files. Pick a file in the file tree, edit it, and use Format to rewrite it in Goal's own layout. The Problems panel under the editor lists each validation problem of the draft with its file and line; select one to jump there. It says "No problems." when the draft is valid. The bar above the editor, "Ask the factory to change it", is not available yet: its input is disabled.
+
 ## Before you start
 
 - A signed-in `goal` CLI that can reach your Goal server ([Self-host with Docker Compose](../self-host-with-docker-compose/) shows how to start one on your machine).
@@ -72,6 +76,15 @@ Publishing runs the validation again, and the new version runs from then on. If 
 ```sh
 goal factory push ./acme-line --publish --move build-old=build
 ```
+
+## Edit the line in the app
+
+You can also change the line in the draft's form: open the factory's Definition and choose Line. The stations are one table, in the order work moves through them. Each row has its number, its name with its id under it, its kind (Queue, Agent, Human or Done), its WIP limit, who works there, and the Order buttons. On a narrow screen the table scrolls sideways inside its own box.
+
+- Change a station's name, kind or WIP limit in its row. A kind change that drops fields, such as an agent's checks, says what it removed and offers Undo.
+- Move a station with its up and down buttons, or focus its row and press Alt with the up or down arrow, or drag its number. The More menu inserts a station above or below, duplicates it or deletes it.
+- Open Rules under a row to set its checks, rework rule, merge step and note. A row that has a problem opens its rules for you.
+- Checks on this line, under the table, lists what passed, what to know and what must be fixed before you can publish.
 
 ## Check the result
 
