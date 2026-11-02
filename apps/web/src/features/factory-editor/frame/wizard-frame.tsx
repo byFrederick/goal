@@ -45,10 +45,7 @@ export function WizardHeader({
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="flex min-w-0 max-w-[72ch] flex-col gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <h1
-              translate="no"
-              className="m-0 min-w-0 text-[34px] leading-[1.05] font-normal tracking-display break-words md:text-[44px]"
-            >
+            <h1 translate="no" className="m-0 min-w-0 text-page-title tracking-display break-words">
               {title}
             </h1>
             {chip}
