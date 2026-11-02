@@ -130,6 +130,7 @@
   --distance-base: 8px;
 
   --blur-small: 2px;
+  --blur-pane: 3px;
 
   /* The running status dot pulses: the one ambient motion (MOTION.md, rule 10). Off under reduced motion (chip.tsx). */
   --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
@@ -147,9 +148,14 @@
   --animate-item-in: item-in var(--duration-fast) var(--ease-out) both;
   /* A skeleton pulses once while it waits (MOTION.md, Loading). */
   --animate-skeleton-pulse: skeleton-pulse var(--duration-pulse) linear;
+  /* A count badge appears: it slides up and pops in (MOTION.md, The needs-you count badge appears in the sidebar). */
+  --animate-notification-badge: notification-badge var(--duration-emphasis) var(--ease-bounce) both;
   /* An invalid field shakes once, side to side, in five micro segments (MOTION.md, Invalid form field). */
   --animate-error-shake: error-state-shake calc(var(--duration-micro) * 5) var(--ease-in-out);
   /* A new row in a list fades in and rises 4px (MOTION.md, A new item appears in a list or column). */
+  /* A page slides 8px in with a 3px blur in the direction of travel (MOTION.md, List ↔ detail). */
+  --animate-pane-forward: pane-forward var(--duration-fast) var(--ease-out) both;
+  --animate-pane-back: pane-back var(--duration-fast) var(--ease-out) both;
   --animate-row-in: row-in var(--duration-fast) var(--ease-out) both;
   /* The sweep across an agent's working status line (MOTION.md, An agent working). See the thinking utility below. */
   --animate-thinking-shimmer: thinking-shimmer var(--duration-shimmer) linear infinite;
@@ -189,9 +195,32 @@
     }
   }
 
+  @keyframes notification-badge {
+    from {
+      opacity: 0;
+      transform: translateY(var(--distance-micro)) scale(var(--scale-tooltip));
+    }
+  }
+
   @keyframes skeleton-pulse {
     50% {
       opacity: 0.5;
+    }
+  }
+
+  @keyframes pane-forward {
+    from {
+      opacity: 0;
+      transform: translateX(var(--distance-base));
+      filter: blur(var(--blur-pane));
+    }
+  }
+
+  @keyframes pane-back {
+    from {
+      opacity: 0;
+      transform: translateX(calc(var(--distance-base) * -1));
+      filter: blur(var(--blur-pane));
     }
   }
 
@@ -556,6 +585,34 @@
   .motion-disclosure-trigger[data-state="open"] .motion-chevron {
     transform: rotate(180deg);
   }
+
+  /* The sidebar's body (the expanded sidebar or the rail) enters with its labels: it slides in from the left edge
+     and fades, on the in-out curve. The column's width changes at once, so no layout animates (MOTION.md, Sidebar
+     collapse). Under reduced motion only the fade remains, at the quick duration. */
+  .motion-sidebar {
+    transition:
+      opacity var(--duration-fast) var(--ease-in-out),
+      transform var(--duration-fast) var(--ease-in-out);
+  }
+
+  @starting-style {
+    .motion-sidebar {
+      opacity: 0;
+      transform: translateX(calc(var(--distance-base) * -1));
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .motion-sidebar {
+      transition: opacity var(--duration-quick) var(--ease-out);
+    }
+
+    @starting-style {
+      .motion-sidebar {
+        transform: none;
+      }
+    }
+  }
 }
 
 @keyframes motion-hold {
@@ -623,6 +680,12 @@
     scroll-behavior: auto;
   }
 
+  /* A list ↔ detail switch fades without the slide. */
+  .animate-pane-forward,
+  .animate-pane-back {
+    animation-name: fade-in;
+  }
+
   .animate-spin,
   .animate-pulse-dot,
   .animate-error-shake {
@@ -672,6 +735,24 @@
   [data-sonner-toaster] [data-sonner-toast][data-mounted="false"] {
     --y: translateY(0);
   }
+}
+
+/* A board card moves to another column or lane (card-move.ts names each card card-<ref> and gives it this class).
+   The card travels from its old box to its new one; the cards around it reflow the same way (MOTION.md,
+   Board card moves). The cross-fade of the card's old and new picture stays off: the card is the same. */
+::view-transition-group(.board-card) {
+  animation-duration: var(--duration-fast);
+  animation-timing-function: var(--ease-in-out);
+}
+
+::view-transition-old(.board-card),
+::view-transition-new(.board-card) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(.board-card) {
+  display: none;
 }
 
 /* Route change (MOTION.md, Route change): the content region fades in and rises; the shell never moves.

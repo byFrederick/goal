@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BuilderMeta, Factory } from '../../api/types';
 import { renderBoardPage } from '../../test/route';
@@ -227,8 +227,10 @@ describe('TraceList: the event rows', () => {
     const row = within(events).getByRole('listitem');
     expect(row.textContent).toContain('failed');
     expect(row.textContent).toContain('Ran go…');
-    const details = within(row).getByText(output).closest('details');
-    expect(details).not.toBeNull();
-    expect(details?.open).toBe(false);
+    const toggle = within(row).getByRole('button', { name: 'Show the output' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(within(row).getByText(output)).toBeTruthy();
   });
 });

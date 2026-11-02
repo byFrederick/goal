@@ -54,6 +54,7 @@ They live in `apps/web/src/styles.css` under `@theme` and are documented here. T
 | `--distance-micro` | 4px | text swap, route content rise |
 | `--distance-base` | 8px | page slide, toast rise (16px on phones) |
 | `--blur-small` | 2px | text swap, icon swap, skeleton reveal |
+| `--blur-pane` | 3px | the incoming pane of a list ↔ detail slide |
 
 ## The catalogue: every component and its transition
 
@@ -69,6 +70,8 @@ The recipe column names the transitions.dev recipe the implementation follows (f
 | Sheet and phone drawer | slide from its edge with fade | open `--duration-slow`, close `--duration-medium`, `--ease-drawer` | panel-reveal (07) |
 | Sidebar collapse / expand and the snap to the rail | width via a transform on an inner wrapper, labels fade | `--duration-fast` `--ease-in-out`; none while dragging | card-resize (01) |
 | ⌘K search | no open animation; results update in place | instant | — |
+| Keyboard shortcuts list, opened by ? (`ShortcutsDialog`, `instant`) | no transition, in or out: a key opens it, and rule 1 says keyboard actions never animate | instant | — |
+| Keyboard shortcuts list, opened from the account menu | as a dialog: overlay fades, panel scales from the centre | dialog row | modal (06) |
 | Route change (any page) | the content area fades in and rises 4px; the shell never moves | `--duration-quick` `--ease-out`; first five blocks staggered by `--duration-stagger` | texts-reveal (18), shortened |
 | List ↔ detail inside a page (Needs you on a phone, a two-pane picker on a phone, onboarding steps) | the incoming pane slides 8px with a 3px blur cross-fade in the direction of travel | `--duration-fast` `--ease-out` | page-side-by-side (08) |
 | Tabs (Item tabs, Jonah tabs, Account side nav) and segmented controls (time window, Board/List, Form/YAML) | the selected pill or underline slides to the new tab; the content swaps with a quick fade | pill `--duration-fast` `--ease-out`; content `--duration-quick` | tabs-sliding (16) |

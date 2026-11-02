@@ -236,6 +236,21 @@ describe('Needs you: filters live in the URL', () => {
 });
 
 describe('Needs you: deciding a Decision', () => {
+  it('swaps the Approve label for a check once the approval went through', async () => {
+    vi.mocked(approveItem).mockResolvedValue({ id: 'item-3', state: 'done' } as unknown as Item);
+    // The refetch after the approval no longer lists the entry: the page keeps it in view for the check.
+    vi.mocked(getInbox).mockResolvedValue(inbox(entries.filter((e) => e.id !== 'decision:item-3')));
+    renderPage({ search: { entry: 'decision:item-3' } });
+
+    const button = await screen.findByRole('button', { name: /^Approve/ });
+    expect(within(button).getByRole('status').textContent).toBe('');
+    expect(button.querySelector('svg')?.getAttribute('class')).toContain('opacity-0');
+    fireEvent.click(button);
+
+    await waitFor(() => expect(within(button).getByRole('status').textContent).toBe('Approved'));
+    expect(button.querySelector('svg')?.getAttribute('class')).not.toContain('opacity-0');
+  });
+
   it('approves the selected Decision with approveItem', async () => {
     vi.mocked(approveItem).mockResolvedValue({ id: 'item-3', state: 'done' } as unknown as Item);
     renderPage();
@@ -502,6 +517,14 @@ describe('Needs you on a phone', () => {
     expect(screen.getByRole('heading', { name: 'Decision' })).toBeTruthy();
     expect(screen.queryByRole('list', { name: /Waiting on you/ })).toBeNull();
     expect(screen.getByRole('button', { name: /^Approve/ })).toBeTruthy();
+  });
+
+  it('slides the approve view in from the right, on the pane-forward motion', async () => {
+    phoneWidth();
+    renderPage({ search: { entry: 'decision:item-3' } });
+
+    const back = await screen.findByRole('link', { name: 'Back to Needs you' });
+    expect(back.closest('.animate-pane-forward')).not.toBeNull();
   });
 
   it('shows the list with its tabs when the URL names no entry', async () => {

@@ -1,6 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 import { Collapsible as C } from 'radix-ui';
 import { type ReactNode, useId, useState } from 'react';
+import { cn } from './cn';
 
 interface DisclosureProps {
   /** The text of the button that opens and closes the section. */
@@ -11,6 +12,8 @@ interface DisclosureProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   className?: string;
+  /** Classes for the summary button, to size it down inside dense rows. */
+  triggerClassName?: string;
 }
 
 /**
@@ -18,7 +21,15 @@ interface DisclosureProps {
  * button with aria-expanded and controls the content. The content grows from 0 to its height, and closed
  * content leaves the tab order and the accessibility tree. Tool-call details and settings groups use it.
  */
-export function Disclosure({ summary, children, defaultOpen = false, open, onOpenChange, className }: DisclosureProps) {
+export function Disclosure({
+  summary,
+  children,
+  defaultOpen = false,
+  open,
+  onOpenChange,
+  className,
+  triggerClassName,
+}: DisclosureProps) {
   const [own, setOwn] = useState(defaultOpen);
   const isOpen = open ?? own;
   const contentId = useId();
@@ -33,7 +44,10 @@ export function Disclosure({ summary, children, defaultOpen = false, open, onOpe
     >
       <C.Trigger
         aria-controls={contentId}
-        className="motion-disclosure-trigger flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 rounded-control px-2 text-left text-body text-ink"
+        className={cn(
+          'motion-disclosure-trigger flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 rounded-control px-2 text-left text-body text-ink',
+          triggerClassName,
+        )}
       >
         {summary}
         <ChevronDown className="motion-chevron" size={16} strokeWidth={1.75} aria-hidden="true" />
