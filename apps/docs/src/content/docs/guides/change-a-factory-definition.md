@@ -7,6 +7,10 @@ You end with a new published version of a factory, and the work that runs from t
 
 Use the web app's Definition page to edit the same definition by hand. In its Agents section, an agent's prompt has a Reset to default button that restores the prompt file from the running version; the [Add an agent, skill or rule](../add-an-agent-skill-or-rule/) guide describes when it is off. Use the steps below when you want the files in your editor and in version control.
 
+## Edit in the YAML view
+
+The Definition page's YAML view shows the draft's files. Pick a file in the file tree, edit it, and use Format to rewrite it in Goal's own layout. The Problems panel under the editor lists each validation problem of the draft with its file and line; select one to jump there. It says "No problems." when the draft is valid. The bar above the editor, "Ask the factory to change it", is not available yet: its input is disabled.
+
 ## Before you start
 
 - A signed-in `goal` CLI that can reach your Goal server ([Self-host with Docker Compose](../self-host-with-docker-compose/) shows how to start one on your machine).

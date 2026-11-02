@@ -90,7 +90,7 @@ export function usePhoneEditor(): boolean {
 
 export function CodeEditor(props: CodeEditorProps) {
   const phone = usePhoneEditor();
-  if (phone) return <TextareaEditor {...props} />;
+  if (phone) return <TextareaEditor {...props} phone />;
   return (
     <div className="flex flex-col">
       <FallBack to={<TextareaEditor {...props} />}>
@@ -163,7 +163,8 @@ function offsetOf(text: string, line: number): number {
   return offset;
 }
 
-function TextareaEditor({
+export function TextareaEditor({
+  phone = false,
   value,
   onChange,
   onBlur,
@@ -174,7 +175,8 @@ function TextareaEditor({
   changedLines = [],
   onCursor,
   ref,
-}: CodeEditorProps) {
+}: CodeEditorProps & { phone?: boolean }) {
+  const text = phone ? phoneText : codeText;
   const box = useRef<HTMLDivElement>(null);
   const area = useRef<HTMLTextAreaElement>(null);
   const changed = useMemo(() => new Set(changedLines), [changedLines]);
@@ -209,7 +211,7 @@ function TextareaEditor({
 
   return (
     <div ref={box} className="flex max-h-[70dvh] overflow-auto overscroll-contain py-2.5">
-      <div aria-hidden="true" className={cn('w-12 shrink-0 pr-2 text-right text-muted select-none', phoneText)}>
+      <div aria-hidden="true" className={cn('w-12 shrink-0 pr-2 text-right text-muted select-none', text)}>
         {lineNumbers(value, minLines).map((n) => (
           <div key={n} className="flex items-center justify-end gap-0.5">
             {problems.has(n) ? (
@@ -236,7 +238,7 @@ function TextareaEditor({
         autoComplete="off"
         className={cn(
           'field-sizing-content min-w-0 flex-1 self-start resize-none overflow-hidden border-0 bg-transparent p-0 pr-3 text-ink outline-none',
-          phoneText,
+          text,
         )}
         style={{ minHeight: `${minLines * 1.75}em` }}
       />

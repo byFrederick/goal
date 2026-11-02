@@ -230,3 +230,30 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 }
+
+for (const theme of ['light', 'dark'] as const) {
+  for (const [name, size] of [
+    ['1440', { width: 1440, height: 900 }],
+    ['390', { width: 390, height: 844 }],
+  ] as const) {
+    test(`the YAML view at ${name} px in ${theme}: Problems, a one-row ask bar, no overflow`, async ({
+      page,
+    }, testInfo) => {
+      await page.emulateMedia({ colorScheme: theme });
+      await page.setViewportSize(size);
+      await page.goto('/o/acme/f/goal/definition/line?mode=yaml');
+      await expect(page.getByRole('region', { name: /Problems/ })).toBeVisible();
+      const bar = await page
+        .getByRole('textbox', { name: 'Ask the factory to change its definition' })
+        .locator('xpath=..')
+        .boundingBox();
+      expect(bar?.height ?? 0).toBeLessThan(56);
+      await expectAccessible(page);
+      await expectNoHorizontalScroll(page);
+      await testInfo.attach(`yaml-${name}-${theme}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: 'image/png',
+      });
+    });
+  }
+}
