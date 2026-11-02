@@ -66,7 +66,7 @@ export function ProblemAlert({ errors, next, model }: { errors: DefinitionProble
 /** A passed check is a plain green check (build/definition-publish); a warning or failure keeps its icon. */
 function CheckIcon({ status }: { status: CheckResult['status'] }) {
   if (status === 'passed')
-    return <Check size={16} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0 text-ok" />;
+    return <Check size={16} strokeWidth={1.75} aria-hidden="true" className="mt-px shrink-0 text-ok" />;
   return <TriangleAlert size={16} strokeWidth={1.75} aria-hidden="true" className="mt-1 shrink-0 text-rework" />;
 }
 
