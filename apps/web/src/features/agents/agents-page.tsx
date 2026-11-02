@@ -218,7 +218,15 @@ function Line({ model, statsByAgent }: { model: Model; statsByAgent: Map<string,
   );
 }
 
-function StationHead({ station, isConstraint, first }: { station: ModelStation; isConstraint: boolean; first: boolean }) {
+function StationHead({
+  station,
+  isConstraint,
+  first,
+}: {
+  station: ModelStation;
+  isConstraint: boolean;
+  first: boolean;
+}) {
   const done = station.kind === 'done';
   const subtitle = [
     station.wip === undefined ? null : `WIP ${station.wip}`,
