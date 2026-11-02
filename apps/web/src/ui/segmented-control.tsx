@@ -9,6 +9,7 @@
 // paint without a slide, and it slides only when the choice changes.
 import { useId, useLayoutEffect, useRef } from 'react';
 import { cn } from './cn';
+import { placePill, tabPill } from './tab-nav';
 import { Tooltip } from './tooltip';
 
 export interface SegmentedOption<T extends string> {
@@ -59,8 +60,7 @@ export function SegmentedControl<T extends string>({
       }
       if (!animate) el.style.transition = 'none';
       el.style.opacity = '1';
-      el.style.width = `${chosen.offsetWidth}px`;
-      el.style.transform = `translateX(${chosen.offsetLeft}px)`;
+      placePill(el, chosen);
       if (!animate) {
         void el.offsetWidth;
         el.style.transition = '';
@@ -82,11 +82,7 @@ export function SegmentedControl<T extends string>({
       )}
     >
       <legend className="sr-only">{label}</legend>
-      <span
-        ref={pill}
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-y-1 left-0 rounded-chip bg-card opacity-0 shadow-raised transition-[transform,width] duration-(--duration-fast) ease-out"
-      />
+      <span ref={pill} aria-hidden="true" className={tabPill} />
       {options.map((o, i) => {
         const checked = o.value === value;
         const reasonId = `${name}-${i}-reason`;

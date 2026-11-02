@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Board, BoardLane, BoardStation, Factory, ItemCard, OrgSummary } from '../../api/types';
 import { ShellFrame } from '../../app/app-shell';
 import { renderBoardPage } from '../../test/route';
+import { choose, shownChoice } from '../../test/select';
 import { TooltipProvider } from '../../ui/tooltip';
 import { BoardPage } from './board-page';
 
@@ -413,12 +414,12 @@ describe('the desktop Board, as the screen draws it', () => {
 
     await screen.findByRole('region', { name: 'Stations' });
     const search = () => router.state.location.search as Record<string, unknown>;
-    fireEvent.change(screen.getByRole('combobox', { name: 'Work type' }), { target: { value: 'incident' } });
+    await choose('Work type', 'Incident');
     await waitFor(() => expect(search().type).toBe('incident'));
-    fireEvent.change(screen.getByRole('combobox', { name: 'Lane' }), { target: { value: 'backend' } });
+    await choose('Lane', 'Backend');
     await waitFor(() => expect(search().lane).toBe('backend'));
     expect(search().type).toBe('incident');
-    expect((screen.getByRole('combobox', { name: 'Lane' }) as HTMLSelectElement).value).toBe('backend');
+    expect(shownChoice('Lane')).toBe('Backend');
   });
 
   it('heads the Done column with Merged pull requests and the week’s count', async () => {
@@ -593,14 +594,22 @@ describe('board filters and grouping', () => {
   const expectShown = (titles: string[], region?: HTMLElement) =>
     expect([...shownTitles(region)].sort()).toEqual([...titles].sort());
 
-  /** A filter's chosen value: the option's value, '' for Any. */
-  const choice = (name: string) => (screen.getByRole('combobox', { name }) as HTMLSelectElement).value;
+  /** A filter's chosen option, as the select shows it. */
+  const choice = shownChoice;
+  /** The label a filter shows for each value the tests use. */
+  const labels: Record<string, string> = {
+    '': 'Any',
+    [ASM1]: ASM1_TITLE,
+    working: 'Working',
+    waiting: 'Waiting for another item',
+    'same-files': 'Waiting for same files',
+  };
 
   it('filters the cards by assembly, agent role and status, in every station', async () => {
     renderBoardPage({ page: ShellBoard, org, factory, board: filterBoard() });
     await screen.findByRole('region', { name: 'Stations' });
     const filter = async (name: string, value: string, titles: string[]) => {
-      fireEvent.change(screen.getByRole('combobox', { name }), { target: { value } });
+      await choose(name, labels[value] ?? value);
       await waitFor(() => expectShown(titles));
     };
     await filter('Assembly', ASM1, [ADD, WIRE]);
@@ -618,7 +627,7 @@ describe('board filters and grouping', () => {
     renderBoardPage({ page: ShellBoard, org, factory, board: filterBoard() });
     await screen.findByRole('region', { name: 'Stations' });
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Agent role' }), { target: { value: 'Triager' } });
+    await choose('Agent role', 'Triager');
     await waitFor(() => expectShown([ROTATE]));
     const build = within(screen.getByRole('region', { name: 'Stations' })).getByRole('region', { name: 'Build' });
     expect(within(build).getByRole('heading', { name: 'Build' })).toBeTruthy();
@@ -653,14 +662,14 @@ describe('board filters and grouping', () => {
     });
     await screen.findByRole('region', { name: 'Stations' });
     const search = () => router.state.location.search as Record<string, unknown>;
-    expect(choice('Assembly')).toBe(ASM1);
+    expect(choice('Assembly')).toBe(ASM1_TITLE);
     expectShown([ADD, WIRE]);
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), { target: { value: 'waiting' } });
+    await choose('Status', 'Waiting for another item');
     await waitFor(() => expect(search().status).toBe('waiting'));
     expect(search().assembly).toBe(ASM1);
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Assembly' }), { target: { value: '' } });
+    await choose('Assembly', 'Any');
     await waitFor(() => expect(search().assembly).toBeUndefined());
     expect(search().group).toBe('assembly');
 
@@ -677,11 +686,11 @@ describe('board filters and grouping', () => {
       search: { assembly: 'item-gone', role: 'Infra engineer', status: 'blocked', group: 'lane', type: 'nope' },
     });
     await screen.findByRole('region', { name: 'Stations' });
-    expect(choice('Assembly')).toBe('');
-    expect(choice('Agent role')).toBe('');
-    expect(choice('Status')).toBe('');
-    expect(choice('Work type')).toBe('');
-    expect(choice('Lane')).toBe('');
+    expect(choice('Assembly')).toBe('Any');
+    expect(choice('Agent role')).toBe('Any');
+    expect(choice('Status')).toBe('Any');
+    expect(choice('Work type')).toBe('Any');
+    expect(choice('Lane')).toBe('Any');
     expect(screen.getByRole('searchbox', { name: 'Search items' })).toHaveProperty('value', '');
     expect(screen.getByRole('radio', { name: 'None' })).toHaveProperty('checked', true);
     expectShown([ADD, DRAFT, TRIAGE, WIRE, ROTATE, SHIP]);

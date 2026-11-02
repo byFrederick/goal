@@ -2,9 +2,11 @@
 // factory and the footnote. The window is the last 7 UTC days, not a calendar week, so the footnote says
 // "Last 7 days" (the picture's "Resets Monday" holds only for the org spend endpoint, which has no client).
 // "Spend and billing" is not built yet: it renders through NotAvailable and never navigates.
+
 import type { FactoryOverviewList, OrgSummary } from '../../api/types';
+import { FactoryBadge } from '../../app/factory-badge';
 import { formatUsd } from '../../shared/format';
-import { Meter } from '../../ui/hatch';
+import { Meter } from '../../ui/meter';
 import { NotAvailable } from '../../ui/not-available';
 
 export function SpendWeek({
@@ -40,12 +42,7 @@ export function SpendWeek({
           <li key={o.factory.id} className="flex flex-col gap-2 border-t border-line py-3">
             <div className="flex items-center justify-between gap-3 text-secondary">
               <span className="flex min-w-0 items-center gap-2">
-                <span
-                  aria-hidden="true"
-                  className="flex size-5 shrink-0 items-center justify-center rounded-chip bg-run text-meta font-semibold text-white"
-                >
-                  {mark(o.factory)}
-                </span>
+                <FactoryBadge mark={mark(o.factory)} />
                 <span className="truncate">{o.factory.name}</span>
               </span>
               <span className="shrink-0 tabular-nums">
@@ -57,9 +54,8 @@ export function SpendWeek({
               <Meter
                 value={o.spend_usd}
                 max={o.budget_usd}
-                tone={o.spend_usd > o.budget_usd ? 'rework' : 'run'}
+                tone={o.spend_usd > o.budget_usd ? 'rework' : 'ink'}
                 label={`${o.factory.name}: ${formatUsd(o.spend_usd)} of ${formatUsd(o.budget_usd)}`}
-                className="h-1.5 bg-panel"
               />
             ) : null}
           </li>

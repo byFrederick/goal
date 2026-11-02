@@ -104,7 +104,7 @@ export function QuickFixes({
           key={f.label}
           variant="white"
           size="sm"
-          className={dense ? 'h-6 px-2 text-meta' : 'h-11 md:h-8'}
+          className={dense ? 'h-6 px-2 text-meta' : undefined}
           disabled={pending !== null}
           aria-busy={pending === f ? true : undefined}
           onClick={() => void apply(f)}

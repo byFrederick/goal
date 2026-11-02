@@ -17,7 +17,7 @@ test('the YAML view: the tree marks changes, the outline lists the file, accessi
   page,
 }) => {
   await openYaml(page);
-  await expect(editorView(page).getByRole('button', { name: 'YAML' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(editorView(page).getByRole('radio', { name: 'YAML' })).toBeChecked();
   await expect(page.getByRole('tab', { name: 'factory.yaml' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('button', { name: 'frontend-engineer.md, changed' })).toBeAttached();
   await expect(page.getByRole('complementary', { name: 'Outline' })).toContainText('runtime');
@@ -29,7 +29,7 @@ test('the YAML view: the tree marks changes, the outline lists the file, accessi
   // A file of a folder opens from the tree (agents/ is open at first); Form from there is that agent.
   await page.getByRole('button', { name: 'reviewer.md' }).click();
   await expect(page.getByRole('textbox', { name: 'agents/reviewer.md, draft of v9' })).toBeAttached();
-  await editorView(page).getByRole('button', { name: 'Form' }).click();
+  await editorView(page).getByRole('radio', { name: 'Form' }).click();
   await expect(page).toHaveURL(/\/definition\/agents\?agent=reviewer$/);
   await expectAccessible(page);
 });
@@ -40,7 +40,7 @@ test('Form ↔ YAML: one draft, comments kept, the place kept (flow 2)', async (
   await title.fill('Goal platform');
   await expect(status(page)).toContainText('Autosaved');
 
-  await editorView(page).getByRole('button', { name: 'YAML' }).click();
+  await editorView(page).getByRole('radio', { name: 'YAML' }).click();
   await editorReady(page);
   await expectShown(page, 'title: Goal platform');
   await expectShown(page, "# the spec's lane picks the engineer");
@@ -54,7 +54,7 @@ test('Form ↔ YAML: one draft, comments kept, the place kept (flow 2)', async (
   await expect(page.getByRole('button', { name: /^factory\.yaml.*changed/ })).toBeAttached();
 
   // Form opens at the station under the cursor.
-  const form = editorView(page).getByRole('button', { name: 'Form' });
+  const form = editorView(page).getByRole('radio', { name: 'Form' });
   await form.click();
   await expect(page).toHaveURL(/\/definition\/line\?station=spec$/);
   // The Spec row, with the check added in YAML, has focus.
@@ -120,7 +120,7 @@ test('a factory.yaml that stops parsing holds Form until it parses again', async
   await expect(status(page)).toContainText('factory.yaml doesn’t parse');
   await expect(page.getByRole('button', { name: 'Format' })).toBeDisabled();
 
-  await editorView(page).getByRole('button', { name: 'Form' }).click();
+  await editorView(page).getByRole('radio', { name: 'Form' }).click();
   const held = page.getByRole('alert').filter({ hasText: 'factory.yaml doesn’t parse' });
   await expect(held).toContainText(/has a syntax error on line \d+\. Visual opens again when it parses\./);
   await expect(page.getByRole('textbox', { name: 'Title' })).toHaveCount(0);
@@ -130,7 +130,7 @@ test('a factory.yaml that stops parsing holds Form until it parses again', async
   await editorReady(page);
   await replaceLine(page, 'kind: Factory: x', 'kind: Factory');
 
-  await editorView(page).getByRole('button', { name: 'Form' }).click();
+  await editorView(page).getByRole('radio', { name: 'Form' }).click();
   await expect(page.getByRole('textbox', { name: 'Title' })).toHaveValue('Goal');
   await expect(status(page)).not.toContainText('doesn’t parse');
 });

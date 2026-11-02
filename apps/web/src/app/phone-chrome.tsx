@@ -22,6 +22,7 @@ import type { Factory, OrgSummary } from '../api/types';
 import { lastFactory } from '../shared/org';
 import { GoalMark } from '../ui/goal-mark';
 import { Menu, MenuContent, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../ui/menu';
+import { NumberRoll } from '../ui/number-roll';
 import { SidebarContent, useSidebarBusy } from './sidebar';
 
 const phoneQuery = '(max-width: 767px)';
@@ -279,7 +280,7 @@ export function PhoneTabBar({ org, onMore }: PhoneTabBarProps) {
   );
 }
 
-/** Needs you: the organization's page, with the count of what waits on a person in a violet badge. */
+/** Needs you: the organization's page, with the count of what waits on a person in an orange badge. */
 function NeedsYouTab({ org }: { org: OrgSummary }) {
   const waiting = useQuery(attentionQuery(org.id)).data?.waiting_on_you ?? 0;
   return (
@@ -294,9 +295,9 @@ function NeedsYouTab({ org }: { org: OrgSummary }) {
         {waiting > 0 ? (
           <span
             aria-hidden="true"
-            className="absolute -top-1 -right-2 flex h-4 min-w-4 items-center justify-center rounded-chip bg-you px-1 text-meta leading-none font-semibold text-white"
+            className="absolute -top-1 -right-2 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-you px-1 text-meta leading-none font-semibold text-white motion-safe:animate-notification-badge motion-reduce:animate-fade-in"
           >
-            {waiting}
+            <NumberRoll value={waiting} />
           </span>
         ) : null}
       </span>

@@ -12,6 +12,7 @@ import { holds } from '../../shared/permissions';
 import { perItem, reasonLabel, touchReasons } from '../../shared/touches';
 import { SectionCard } from '../../ui/card';
 import { cn } from '../../ui/cn';
+import { Select } from '../../ui/select';
 import { touchMeta, touchSentence } from './touch-words';
 
 interface Props {
@@ -148,29 +149,18 @@ function ReasonSelect({
 
   return (
     <div className="flex flex-col gap-1">
-      <select
+      <Select
         aria-label={`Reason for the ${time} touch`}
         aria-describedby={change.isError ? errorId : undefined}
         value={reason ?? ''}
-        onChange={(e) => change.mutate(e.target.value as TouchReason)}
+        onValueChange={(next) => change.mutate(next as TouchReason)}
+        placeholder="Choose a reason"
+        options={touchReasons.map((r) => ({ value: r.value, label: r.label }))}
         className={cn(
-          'h-11 w-full max-w-[220px] cursor-pointer rounded-control border px-2.5 text-base transition-colors duration-200 md:h-9 md:text-sm',
-          reason === 'missing_knowledge'
-            ? 'border-you-tint bg-you-tint text-you-ink hover:border-you'
-            : 'border-line bg-card text-ink hover:border-muted',
+          'max-w-[220px]',
+          reason === 'missing_knowledge' && 'border-you-tint bg-you-tint text-you-ink hover:border-you',
         )}
-      >
-        {reason === null ? (
-          <option value="" disabled>
-            Choose a reason
-          </option>
-        ) : null}
-        {touchReasons.map((r) => (
-          <option key={r.value} value={r.value}>
-            {r.label}
-          </option>
-        ))}
-      </select>
+      />
       {change.isError ? (
         <p id={errorId} role="alert" className="m-0 text-[13px] text-rework-ink">
           Not saved:{' '}

@@ -706,6 +706,8 @@ export const defKeys = {
   validation: (org: string, f: string, revision: number) =>
     ['org', org, 'factory', f, 'draft', 'validation', revision] as const,
   versions: (org: string, f: string) => ['org', org, 'factory', f, 'versions'] as const,
+  /** The pages of the Versions section: under `versions`, so its invalidations re-read them too. */
+  versionPages: (org: string, f: string) => ['org', org, 'factory', f, 'versions', 'pages'] as const,
   /** The prefix of every version of the factory and its model. */
   versionsOf: (org: string, f: string) => ['org', org, 'factory', f, 'version'] as const,
   version: (org: string, f: string, v: string) => ['org', org, 'factory', f, 'version', v] as const,
@@ -839,6 +841,15 @@ export const versionsQuery = (org: string, factory: string) =>
   queryOptions({
     queryKey: defKeys.versions(org, factory),
     queryFn: ({ signal }) => listVersions(org, factory, {}, signal),
+  });
+
+/** Every published version, newest first, a page at a time (`before`/`limit`). */
+export const versionPagesQuery = (org: string, factory: string, limit = 20) =>
+  infiniteQueryOptions({
+    queryKey: [...defKeys.versionPages(org, factory), limit],
+    queryFn: ({ pageParam, signal }) => listVersions(org, factory, { before: pageParam, limit }, signal),
+    initialPageParam: undefined as number | undefined,
+    getNextPageParam: (last) => last.next_before ?? undefined,
   });
 
 export const versionQuery = (org: string, factory: string, version: string) =>

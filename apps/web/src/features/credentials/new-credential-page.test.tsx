@@ -14,6 +14,7 @@ import { ApiError } from '../../api/client';
 import { createCredential, importCredentials, listCredentials } from '../../api/credentials';
 import { factoriesQuery, orgQuery, versionModelQuery } from '../../api/queries';
 import type { Factory, Org, OrgSummary } from '../../api/types';
+import { choose } from '../../test/select';
 import { TooltipProvider } from '../../ui/tooltip';
 import { NewCredentialPage } from './new-credential-page';
 
@@ -111,7 +112,7 @@ describe('creating one credential', () => {
 
     fillCreate();
     fireEvent.change(screen.getByLabelText('Expires'), { target: { value: '2027-10-29' } });
-    fireEvent.change(screen.getByLabelText('Remind me to rotate it'), { target: { value: '7' } });
+    await choose('Remind me to rotate it', '7 days before it expires');
     fireEvent.click(screen.getByRole('button', { name: 'Create credential' }));
 
     await waitFor(() =>
@@ -142,6 +143,17 @@ describe('creating one credential', () => {
 
     await waitFor(() => expect(createCredential).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(vi.mocked(listCredentials).mock.calls.length).toBeGreaterThan(before));
+  });
+
+  it('fills Create credential with the action colour and marks the invalid name', async () => {
+    renderNew();
+    await screen.findByRole('heading', { name: 'Create one' });
+    expect(screen.getByRole('button', { name: 'Create credential' }).className).toContain('bg-action');
+
+    fillCreate({ name: 'Bad_Name' });
+    fireEvent.click(screen.getByRole('button', { name: 'Create credential' }));
+    await screen.findByText(/Use 3 to 40 lowercase letters/);
+    expect(screen.getByLabelText('Name').getAttribute('aria-invalid')).toBe('true');
   });
 
   it('refuses a name that is not a credential name, and sends nothing', async () => {
@@ -292,6 +304,13 @@ describe('importing many credentials', () => {
     for (const query of queryClient.getQueryCache().getAll()) {
       expect(JSON.stringify(query.state.data ?? null)).not.toContain('sntrys_test-1');
     }
+  });
+
+  it('draws the drop zone dashed, with the download icon', async () => {
+    renderNew({ panel: 'import' });
+    const zone = (await screen.findByText('Drop a file, or paste below')).closest('label') as HTMLElement;
+    expect(zone.className).toContain('border-dashed');
+    expect(zone.querySelector('svg')).toBeTruthy();
   });
 
   it('renders the paste area masked', async () => {

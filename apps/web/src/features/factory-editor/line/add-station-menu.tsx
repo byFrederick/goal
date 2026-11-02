@@ -26,7 +26,7 @@ export function AddStationMenu() {
   return (
     <Menu>
       <MenuTrigger asChild>
-        <Button variant="primary" className="h-11 md:h-10">
+        <Button variant="primary">
           <Plus size={16} strokeWidth={1.5} aria-hidden="true" />
           Add station
           <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" />

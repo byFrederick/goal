@@ -63,7 +63,7 @@ export function AgentDetail({ agent, place, openPicker }: AgentDetailProps) {
   return (
     <section
       aria-labelledby="agent-detail-name"
-      className="flex min-w-0 flex-col gap-[18px] rounded-card border border-line bg-card p-4 md:p-5"
+      className="@container flex min-w-0 flex-col gap-[18px] rounded-card border border-line bg-card p-4 md:p-5"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-[1_1_260px]">
@@ -83,13 +83,13 @@ export function AgentDetail({ agent, place, openPicker }: AgentDetailProps) {
           {place === 'definition' ? <AgentPageLink agent={agent.name} /> : null}
           {viewOnly ? null : (
             <>
-              <Button variant="white" size="sm" className="h-11 md:h-8" onClick={() => void duplicate()}>
+              <Button variant="white" size="sm" onClick={() => void duplicate()}>
                 Duplicate
               </Button>
-              <Button variant="white" size="sm" className="h-11 md:h-8" onClick={() => setRenaming(true)}>
+              <Button variant="white" size="sm" onClick={() => setRenaming(true)}>
                 Rename…
               </Button>
-              <Button variant="white" size="sm" className="h-11 md:h-8" onClick={() => setRemoving(true)}>
+              <Button variant="white" size="sm" onClick={() => setRemoving(true)}>
                 Remove…
               </Button>
             </>
@@ -154,7 +154,7 @@ export function AgentDetail({ agent, place, openPicker }: AgentDetailProps) {
 function AgentPageLink({ agent }: { agent: string }) {
   const params = useFactoryParams();
   return (
-    <Button asChild variant="white" size="sm" className="h-11 md:h-8">
+    <Button asChild variant="white" size="sm">
       <Link to="/o/$org/f/$factory/agents/$agent" params={{ ...params, agent }}>
         Open agent page
         <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />

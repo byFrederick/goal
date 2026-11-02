@@ -182,38 +182,48 @@ describe('the Evals page, its four states', () => {
     expect(screen.queryByRole('table')).toBeNull();
   });
 
-  it('is an error when the cases cannot be read, and Try again reads them once more', async () => {
-    vi.mocked(listEvals).mockRejectedValueOnce(
+  it('is the empty state at once when goald has no evals, with adding not available yet', async () => {
+    vi.mocked(listEvals).mockRejectedValue(
       new ApiError({ title: 'Service Unavailable', status: 503, code: 'evals-unavailable' }),
     );
+    renderEvals(editor, []);
+
+    expect(await screen.findByText('No eval cases yet')).toBeTruthy();
+    expect(screen.queryByText('Eval cases could not be loaded')).toBeNull();
+    const add = screen.getByRole('button', { name: 'Add a case from a past run' });
+    expect(add.getAttribute('aria-disabled')).toBe('true');
+    expect(listEvals).toHaveBeenCalledTimes(1);
+  });
+
+  it('is an error when the cases cannot be read, and Try again reads them once more', async () => {
+    vi.mocked(listEvals).mockRejectedValueOnce(new ApiError({ title: 'Bad Gateway', status: 502 }));
     vi.mocked(listEvals).mockResolvedValueOnce(list);
     renderEvals(editor, []);
 
     expect(await screen.findByText('Eval cases could not be loaded')).toBeTruthy();
-    expect(screen.getByText('Evals are not available on this goald yet.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
     expect(await screen.findByRole('table')).toBeTruthy();
     expect(listEvals).toHaveBeenCalledTimes(2);
   });
 
-  it('is ready: the intro, the three tiles, the cases table and its footnote', async () => {
+  it('is ready: a two-stat strip, the cases table with a count and the one footnote', async () => {
     renderEvals();
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Jonah' })).toBeTruthy();
-    expect(
-      screen.getByText(
-        'Eval cases replay a task an agent must get right, before any change to the definition is published.',
-      ),
-    ).toBeTruthy();
 
-    expect(screen.getByText('Cases passing every try, v21')).toBeTruthy();
-    expect(screen.getByText('3 of 5')).toBeTruthy();
-    expect(screen.getByText('Pass on first try')).toBeTruthy();
-    expect(screen.getByText('87%')).toBeTruthy();
-    expect(screen.getByText('13 of 15 tries')).toBeTruthy();
-    expect(screen.getByText('Every publish')).toBeTruthy();
-    expect(screen.getByText('A failing case blocks the publish')).toBeTruthy();
+    const strip = screen.getByRole('region', { name: 'Last run of all cases' });
+    expect(within(strip).getByText('Cases passing every try, v21')).toBeTruthy();
+    expect(within(strip).getByText('of 5')).toBeTruthy();
+    expect(within(strip).getByText('Pass on first try')).toBeTruthy();
+    expect(within(strip).getByText('87')).toBeTruthy();
+    expect(within(strip).getByText('13 of 15 tries')).toBeTruthy();
+    expect(screen.queryByText('Every publish')).toBeNull();
+    expect(screen.queryByText('A failing case blocks the publish')).toBeNull();
+
+    const cases = screen.getByRole('region', { name: 'Cases' });
+    expect(within(cases).getAllByText('5').length).toBeGreaterThan(0);
+    expect(screen.getByText('evals/cases/')).toBeTruthy();
 
     const table = screen.getByRole('table');
     expect(within(table).getAllByRole('row')).toHaveLength(6);
@@ -221,10 +231,10 @@ describe('the Evals page, its four states', () => {
     expect(within(table).getByText('Judge: Spec criteria testable')).toBeTruthy();
     expect(within(table).getByText('Reference patch')).toBeTruthy();
     expect(within(table).getByText('$0.30')).toBeTruthy();
-    expect(screen.getByText('In the definition under')).toBeTruthy();
+    expect(screen.getByText('Green passed, red failed.')).toBeTruthy();
     expect(
       screen.getByText(
-        'Green passed, red failed. Add a case from any run where an agent got something wrong, and it is tested before every publish.',
+        'Cases replay tasks agents must get right. They run on every publish, and a failing case blocks it.',
       ),
     ).toBeTruthy();
   });

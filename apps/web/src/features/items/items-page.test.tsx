@@ -179,6 +179,16 @@ describe('Items page header and views', () => {
     expect(within(views).getByRole('link', { name: /^Done this week/ }).textContent).toContain('1');
   });
 
+  it('keeps the full title in the title link, so a cut-off title stays readable', async () => {
+    renderItems([item({ id: 'a', ref: 'sre#1', title: 'A very long title that the table cuts off', state: 'queued' })]);
+
+    const table = await screen.findByRole('table', { name: 'Items' });
+    const link = within(table)
+      .getAllByRole('link')
+      .find((a) => a.getAttribute('href')?.includes('/items/')) as HTMLElement;
+    expect(link.getAttribute('title')).toBe(link.textContent);
+  });
+
   it('marks the Waiting on you view as current when the URL has its state', async () => {
     renderItems(
       [
@@ -271,7 +281,9 @@ describe('Items filters in the URL', () => {
     );
 
     expect(await screen.findByText('Move the schema')).toBeTruthy();
-    expect(screen.getByText('1 of 3 parts merged')).toBeTruthy();
+    const progress = screen.getByText('1 of 3 parts merged').closest('div');
+    expect(progress?.querySelector('.bg-ink')).not.toBeNull();
+    expect(progress?.querySelector('.bg-run, .bg-ok')).toBeNull();
     expect(screen.getByText('Checkout API latency')).toBeTruthy();
     expect(screen.queryByText('Backfill the ledger')).toBeNull();
   });

@@ -18,6 +18,7 @@ import { Callout } from '../../ui/callout';
 import { EmptyState } from '../../ui/empty-state';
 import { descriptionClass, PageHeader } from '../../ui/page-header';
 import { ReadOnly } from '../../ui/read-only';
+import { Skeleton, SkeletonRows } from '../../ui/skeleton';
 import { ViewOnlyBanner } from '../../ui/view-only-banner';
 import { BoxCard } from './box-card';
 import { CommandsCard } from './commands-card';
@@ -44,11 +45,9 @@ export function ModelsPage() {
         }
       />
       {query.isPending ? (
-        <div aria-busy="true">
-          <span role="status" className="sr-only">
-            Loading models and policies
-          </span>
-        </div>
+        <Skeleton ready={false} placeholder={<SkeletonRows rows={6} />}>
+          {null}
+        </Skeleton>
       ) : query.isError ? (
         <div
           className="flex max-w-xl flex-col items-start gap-3 rounded-card border border-line bg-card p-5"
@@ -105,7 +104,7 @@ function Ready({ load, org }: { load: PolicyLoad; org: string }) {
     <ReadOnly when={!mayManage}>
       <TopBarSlot
         actions={
-          <Button variant="primary" disabled={!mayManage || !dirty || save.isPending} onClick={() => save.mutate(form)}>
+          <Button variant="action" disabled={!mayManage || !dirty || save.isPending} onClick={() => save.mutate(form)}>
             Save changes
           </Button>
         }

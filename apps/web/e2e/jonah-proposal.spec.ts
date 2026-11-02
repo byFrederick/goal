@@ -62,3 +62,17 @@ test('the page fits 375 and 768 px and renders in dark mode', async ({ page }) =
   await expect(page.getByText('Waiting for your review')).toBeVisible();
   await expectAccessible(page);
 });
+
+// Screenshots of proposal 7 at 1440 and 375 px in light and dark, for the pull request.
+for (const scheme of ['light', 'dark'] as const) {
+  for (const width of [1440, 375]) {
+    test(`screenshot: proposal 7 at ${width} px, ${scheme}`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/o/acme/f/software/jonah/proposals/7');
+      await expect(page.getByRole('region', { name: 'Expected effect' })).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      await page.screenshot({ path: `test-results/jonah-proposal-${width}-${scheme}.png`, fullPage: true });
+    });
+  }
+}

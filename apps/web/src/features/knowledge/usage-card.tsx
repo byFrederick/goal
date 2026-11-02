@@ -15,8 +15,6 @@ import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
-import { cn } from '../../ui/cn';
-import { touchLink } from '../../ui/touch-target';
 
 /** The card's grid: the document, its bar (from md), the runs and the verdicts. */
 const row =
@@ -127,21 +125,19 @@ function UsageRow({ doc, width }: { doc: KnowledgeDocumentUsage; width: number }
   const id = useId();
   return (
     <li className="border-t border-line">
-      <div className={`${row} py-2 max-md:py-3`}>
+      <div className={`${row} py-2`}>
         <button
           type="button"
           aria-expanded={open}
           aria-controls={id}
           onClick={() => setOpen((o) => !o)}
-          className={cn(
-            touchLink,
-            'min-w-0 break-all text-left font-mono text-secondary text-ink underline-offset-3 hover:underline',
-          )}
+          title={doc.title}
+          className="min-w-0 truncate text-left font-mono text-secondary text-ink underline-offset-3 hover:underline"
         >
           {doc.title}
         </button>
-        <span aria-hidden="true" className="hidden h-2 overflow-hidden rounded-chip bg-panel md:block">
-          <span className="block h-full bg-run" style={{ width: `${width}%` }} />
+        <span aria-hidden="true" className="hidden h-2 overflow-hidden rounded-chip bg-hover md:block">
+          <span className="block h-full bg-ink" style={{ width: `${width}%` }} />
         </span>
         <span className="text-right tabular-nums text-body text-ink">{doc.runs}</span>
         <span className="flex gap-2 text-secondary tabular-nums">

@@ -20,9 +20,6 @@ function usageOf(model: Model, isDefault: boolean): string {
   return `Used by ${model.used_by.map((u) => `${u.name}'s ${u.agents.join(', ')}`).join('; ')}`;
 }
 
-/** An icon tile of a row. The picture's peach tile has no token, so the panel and ink-soft tokens stand in. */
-const tile = 'grid size-8 shrink-0 place-items-center rounded-cell bg-panel text-ink-soft';
-
 export function ModelsCard({
   form,
   models,
@@ -43,13 +40,11 @@ export function ModelsCard({
           const last = on && form.allowed_models.length === 1;
           return (
             <li key={model.id} className="flex items-center gap-3 border-t border-line py-3 first:border-t-0">
-              <span className={tile} aria-hidden="true">
-                <Asterisk size={17} strokeWidth={1.7} />
-              </span>
+              <Asterisk size={16} strokeWidth={1.6} aria-hidden="true" className="shrink-0 text-muted" />
               <span className="flex min-w-0 flex-1 flex-col gap-1">
                 <span className="flex flex-wrap items-center gap-2 font-medium text-ink">
                   {model.label}
-                  {isDefault ? <Chip tone="run">Default</Chip> : null}
+                  {isDefault ? <Chip>Default</Chip> : null}
                 </span>
                 <span className="text-secondary text-muted">{usageOf(model, isDefault && on)}</span>
               </span>
@@ -63,9 +58,7 @@ export function ModelsCard({
           );
         })}
         <li className="flex items-center gap-3 border-t border-line py-3">
-          <span className={cn(tile, 'border border-dashed border-rule text-muted')} aria-hidden="true">
-            <Shuffle size={16} strokeWidth={1.6} />
-          </span>
+          <Shuffle size={16} strokeWidth={1.6} aria-hidden="true" className="shrink-0 text-muted" />
           <span className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="font-medium text-ink">Other providers, through a router</span>
             <span className="text-secondary text-muted">Bedrock, Vertex or any OpenAI-compatible endpoint</span>
@@ -81,7 +74,7 @@ export function ModelsCard({
 
 /** One harness option, drawn as a card around a native radio. Only Claude Code is built. */
 const harnessCard =
-  'flex min-w-0 items-start gap-2 rounded-cell border border-rule p-3 has-checked:border-run has-checked:bg-run-tint';
+  'flex min-w-0 items-start gap-2 rounded-cell border border-rule p-3 has-checked:border-ink has-checked:bg-panel';
 
 export function HarnessCard() {
   return (
@@ -91,12 +84,12 @@ export function HarnessCard() {
     >
       <div role="radiogroup" aria-label="Harness" className="grid gap-2 xl:grid-cols-2">
         <label className={harnessCard}>
-          <input type="radio" name="harness" aria-label="Claude Code" defaultChecked className="mt-1 accent-run" />
+          <input type="radio" name="harness" aria-label="Claude Code" defaultChecked className="mt-1 accent-ink" />
           <HarnessText title="Claude Code" detail="Skills, rules, MCP tools and tool permissions from the definition" />
         </label>
         <label className={cn(harnessCard, 'opacity-60')}>
           <NotAvailable label="Another harness">
-            <input type="radio" name="harness" aria-label="Another harness" className="mt-1 accent-run" />
+            <input type="radio" name="harness" aria-label="Another harness" className="mt-1 accent-ink" />
           </NotAvailable>
           <HarnessText title="Another harness" detail="Codex or your own command, per agent" />
         </label>

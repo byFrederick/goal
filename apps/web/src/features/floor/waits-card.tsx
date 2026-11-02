@@ -24,10 +24,13 @@ function BusyRow({ station, ratio, constraint }: { station: string; ratio: numbe
   return (
     <div className="flex items-center gap-3 text-body">
       <span className={cn('w-24 shrink-0 truncate text-ink', constraint && 'font-semibold')}>{humanize(station)}</span>
-      <span className="block h-2 min-w-0 flex-1 overflow-hidden rounded-chip bg-panel" aria-hidden="true">
+      <span className="block h-2 min-w-0 flex-1 overflow-hidden rounded-chip bg-hover" aria-hidden="true">
         <span
-          className={cn('block h-full rounded-chip', constraint ? 'bg-amber' : 'bg-run')}
-          style={{ width: `${pct}%` }}
+          className={cn(
+            'block h-full origin-left rounded-chip transition-transform duration-(--duration-fast) ease-out motion-reduce:transition-none',
+            constraint ? 'bg-amber' : 'bg-ink',
+          )}
+          style={{ transform: `scaleX(${pct / 100})` }}
         />
       </span>
       <span className="w-12 shrink-0 text-right text-secondary tabular-nums text-ink">{formatPercent(ratio)}</span>

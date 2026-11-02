@@ -4,11 +4,11 @@
 // version (a pointer move). A lazy section view.
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { listVersions } from '../../../api/definitions';
-import { defKeys } from '../../../api/queries';
+import { versionPagesQuery } from '../../../api/queries';
 import type { Version } from '../../../api/types';
 import { Button } from '../../../ui/button';
 import { SectionCard } from '../../../ui/card';
+import { Skeleton, SkeletonRows } from '../../../ui/skeleton';
 import { useViewOnly } from '../draft/use-draft';
 import { SectionShell } from '../frame/section-shell';
 import { ChangesCard } from '../review/changes-card';
@@ -23,12 +23,7 @@ export function VersionsSection({ search }: SectionViewProps) {
   const { org, factory, hasDraft, next, draft } = useEditorFacts();
   // Restoring a version publishes it: not for a view-only editor.
   const viewOnly = useViewOnly();
-  const pages = useInfiniteQuery({
-    queryKey: [...defKeys.versions(org, factory), 'pages'],
-    queryFn: ({ pageParam, signal }) => listVersions(org, factory, { before: pageParam, limit: pageSize }, signal),
-    initialPageParam: undefined as number | undefined,
-    getNextPageParam: (last) => last.next_before ?? undefined,
-  });
+  const pages = useInfiniteQuery(versionPagesQuery(org, factory, pageSize));
   const versions = pages.data?.pages.flatMap((p) => p.versions) ?? [];
   const [restoring, setRestoring] = useState<Version | null>(null);
   const pair = parseCompare(search.compare);
@@ -36,14 +31,10 @@ export function VersionsSection({ search }: SectionViewProps) {
   return (
     <div className="grid min-w-0 gap-4 @[960px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] @[960px]:items-start">
       <SectionShell section="versions">
-        {pages.isPending ? (
-          <div aria-busy="true" className="h-40 rounded-control bg-panel/60">
-            <span className="sr-only">Loading the versions</span>
-          </div>
-        ) : pages.isError ? (
+        {pages.isError ? (
           <p className="m-0 text-body text-rework-ink">The versions could not load.</p>
         ) : (
-          <>
+          <Skeleton ready={!pages.isPending} placeholder={<SkeletonRows rows={4} />}>
             <ul className="m-0 list-none p-0 [&>li:first-child]:border-t-0">
               {hasDraft ? <DraftRow label={`Draft of v${next}`} detail={draftDetail(draft?.updated_at)} /> : null}
               {versions.map((v) => (
@@ -55,22 +46,17 @@ export function VersionsSection({ search }: SectionViewProps) {
                 />
               ))}
             </ul>
-            {versions.length === 0 ? (
+            {!pages.isPending && versions.length === 0 ? (
               <p className="m-0 text-body text-muted">Never published. Publish v1 from Review and publish.</p>
             ) : null}
             {pages.hasNextPage ? (
               <div>
-                <Button
-                  variant="white"
-                  className="h-11 md:h-10"
-                  disabled={pages.isFetchingNextPage}
-                  onClick={() => void pages.fetchNextPage()}
-                >
+                <Button variant="white" disabled={pages.isFetchingNextPage} onClick={() => void pages.fetchNextPage()}>
                   {pages.isFetchingNextPage ? 'Loading…' : 'Show older versions'}
                 </Button>
               </div>
             ) : null}
-          </>
+          </Skeleton>
         )}
       </SectionShell>
       {pair ? (

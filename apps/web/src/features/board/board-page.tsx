@@ -17,8 +17,8 @@ import { useOrg } from '../../shared/org';
 import { factoryRoleNote, holds, reasons } from '../../shared/permissions';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
-import { NativeSelect } from '../../ui/field';
 import { SegmentedControl, type SegmentedOption } from '../../ui/segmented-control';
+import { Select, type SelectOption } from '../../ui/select';
 import { StatusIcon } from '../../ui/status-icon';
 import { StationColumn } from './board-column';
 import { CardDnd } from './board-dnd';
@@ -195,14 +195,14 @@ const groupChoices: SegmentedOption<'none' | 'assembly'>[] = [
   { value: 'assembly', label: 'Assembly' },
 ];
 
-/** A filter: a labelled native select (44 px on phones), with the status icon of its choice beside it. */
+/** A filter: a labelled select (44 px on phones), with the status icon of its choice beside it. */
 function FilterSelect({
   label,
   value,
   onChange,
   icon,
   phoneOnly = false,
-  children,
+  options,
 }: {
   label: string;
   value: string;
@@ -210,7 +210,7 @@ function FilterSelect({
   icon?: ReactNode;
   /** Status and Group by only the phone's station tabs use; from 768 px the columns do not take them. */
   phoneOnly?: boolean;
-  children: ReactNode;
+  options: SelectOption[];
 }) {
   const id = useId();
   return (
@@ -218,14 +218,13 @@ function FilterSelect({
       <label htmlFor={id} className="shrink-0">
         {label}
       </label>
-      <NativeSelect
+      <Select
         id={id}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-44 max-w-full truncate"
-      >
-        {children}
-      </NativeSelect>
+        onValueChange={onChange}
+        options={[{ value: '', label: 'Any' }, ...options]}
+        className="w-44 max-w-full"
+      />
       {icon}
     </div>
   );
@@ -252,56 +251,38 @@ function FilterRow({
     <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-0 p-0">
       <legend className="sr-only">Filter and group the cards</legend>
       {phone ? <SearchItems value={view.q ?? ''} onChange={(q) => onChange({ q: q || undefined })} /> : null}
-      <FilterSelect label="Work type" value={view.type ?? ''} onChange={(v) => onChange({ type: v || undefined })}>
-        <option value="">Any</option>
-        {typeOptions(board).map((type) => (
-          <option key={type} value={type}>
-            {humanize(type)}
-          </option>
-        ))}
-      </FilterSelect>
-      <FilterSelect label="Lane" value={view.lane ?? ''} onChange={(v) => onChange({ lane: v || undefined })}>
-        <option value="">Any</option>
-        {laneOptions(board).map((lane) => (
-          <option key={lane} value={lane}>
-            {humanize(lane)}
-          </option>
-        ))}
-      </FilterSelect>
+      <FilterSelect
+        label="Work type"
+        value={view.type ?? ''}
+        onChange={(v) => onChange({ type: v || undefined })}
+        options={typeOptions(board).map((type) => ({ value: type, label: humanize(type) }))}
+      />
+      <FilterSelect
+        label="Lane"
+        value={view.lane ?? ''}
+        onChange={(v) => onChange({ lane: v || undefined })}
+        options={laneOptions(board).map((lane) => ({ value: lane, label: humanize(lane) }))}
+      />
       <FilterSelect
         label="Assembly"
         value={view.assembly ?? ''}
         onChange={(v) => onChange({ assembly: v || undefined })}
-      >
-        <option value="">Any</option>
-        {assemblies.map((a) => (
-          <option key={a.id} value={a.id} title={a.title}>
-            {a.title}
-          </option>
-        ))}
-      </FilterSelect>
-      <FilterSelect label="Agent role" value={view.role ?? ''} onChange={(v) => onChange({ role: v || undefined })}>
-        <option value="">Any</option>
-        {roleOptions(board).map((role) => (
-          <option key={role} value={role}>
-            {role}
-          </option>
-        ))}
-      </FilterSelect>
+        options={assemblies.map((a) => ({ value: a.id, label: a.title }))}
+      />
+      <FilterSelect
+        label="Agent role"
+        value={view.role ?? ''}
+        onChange={(v) => onChange({ role: v || undefined })}
+        options={roleOptions(board).map((role) => ({ value: role, label: role }))}
+      />
       <FilterSelect
         label="Status"
         phoneOnly
         value={view.status ?? ''}
         onChange={(v) => onChange({ status: statusChoices.find((s) => s.value === v)?.value })}
         icon={view.status ? <StatusIcon status={view.status} /> : null}
-      >
-        <option value="">Any</option>
-        {statusChoices.map((s) => (
-          <option key={s.value} value={s.value}>
-            {s.label}
-          </option>
-        ))}
-      </FilterSelect>
+        options={statusChoices.map((s) => ({ value: s.value, label: s.label }))}
+      />
       <div className="md:hidden">
         <SegmentedControl
           label="Group by"

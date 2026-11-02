@@ -118,7 +118,7 @@ function KeyShown({
         >
           {secret}
         </code>
-        <Button variant="primary" size="sm" className="h-11 md:h-8" onClick={() => void copy()}>
+        <Button variant="primary" size="sm" onClick={() => void copy()}>
           {copied === 'yes' ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
           {copied === 'yes' ? 'Copied' : 'Copy'}
         </Button>
@@ -141,7 +141,7 @@ function KeyShown({
         <dd className="m-0">{formatDay(key.expires_at)}</dd>
       </dl>
       <div className="flex justify-end">
-        <Button variant="primary" size="lg" className="md:h-10 md:text-sm" onClick={onDone}>
+        <Button variant="primary" onClick={onDone}>
           I copied it
         </Button>
       </div>
@@ -176,7 +176,7 @@ function Shown({ secret, title, description, what, warning, onDone }: ShownProps
           >
             {secret}
           </code>
-          <Button variant="white" size="sm" className="h-11 md:h-8" onClick={() => void copy()}>
+          <Button variant="white" size="sm" onClick={() => void copy()}>
             {copied === 'yes' ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
             {copied === 'yes' ? 'Copied' : 'Copy'}
           </Button>
@@ -199,7 +199,7 @@ function Shown({ secret, title, description, what, warning, onDone }: ShownProps
         I’ve stored it somewhere safe
       </label>
       <div className="flex justify-end">
-        <Button variant="primary" size="lg" className="md:h-10 md:text-sm" disabled={!stored} onClick={onDone}>
+        <Button variant="primary" disabled={!stored} onClick={onDone}>
           Done
         </Button>
       </div>

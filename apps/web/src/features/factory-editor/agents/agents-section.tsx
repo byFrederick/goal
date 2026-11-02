@@ -1,7 +1,7 @@
 // Agents (D §10.7, canvas Define-Agents and New-Agents): the list of the factory's agents with
 // where each works, then the chosen one's detail (`?agent=`, else the first), then the factory's
 // rules (ADR 0014) below them. Two columns from
-// 760 px of `main`, one below; on phones the list comes first and `?agent=` opens the detail with
+// 760 px of the section's own width, one below; on phones the list comes first and `?agent=` opens the detail with
 // a back link. Definition and the wizard share it (`place`).
 import { ChevronLeft } from 'lucide-react';
 import { whereLabel } from '../../../shared/definition/where';
@@ -25,73 +25,75 @@ export function AgentsSection({ place, search }: SectionViewProps) {
 
   return (
     <SectionShell section="agents" className={bareSection}>
-      <div className="grid items-start gap-4 @[760px]:grid-cols-[264px_minmax(0,1fr)]">
-        <nav
-          aria-label="Agents"
-          className={cn(
-            'flex min-w-0 flex-col gap-2.5 rounded-card border border-line bg-card p-3.5',
-            search.agent && 'max-md:hidden',
-          )}
-        >
-          <h3 className="m-0 mx-1 text-[15px] font-medium">
-            {agents.length === 1 ? '1 agent' : `${agents.length} agents`}
-          </h3>
-          {agents.length > 0 ? (
-            <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-              {agents.map((a) => {
-                const current = a.name === chosen?.name;
-                return (
-                  <li key={a.name}>
-                    <SearchLink
-                      patch={{ agent: a.name, add: undefined }}
-                      aria-current={current ? 'true' : undefined}
-                      className={cn(
-                        'grid min-h-11 grid-cols-[36px_minmax(0,1fr)] items-center gap-2.5 rounded-control border px-3 py-2.5 text-ink no-underline transition-colors duration-(--duration-quick)',
-                        current ? 'border-line bg-hover' : 'border-line bg-card hover:border-rule',
-                        arrived(a.name) && 'motion-safe:animate-item-in',
-                      )}
-                    >
-                      <span className="min-w-0">
-                        <span translate="no" className="block truncate text-[15px] font-medium">
-                          {a.name}
+      <div className="@container">
+        <div className="grid items-start gap-4 @[760px]:grid-cols-[264px_minmax(0,1fr)]">
+          <nav
+            aria-label="Agents"
+            className={cn(
+              'flex min-w-0 flex-col gap-2.5 rounded-card border border-line bg-card p-3.5',
+              search.agent && 'max-md:hidden',
+            )}
+          >
+            <h3 className="m-0 mx-1 text-[15px] font-medium">
+              {agents.length === 1 ? '1 agent' : `${agents.length} agents`}
+            </h3>
+            {agents.length > 0 ? (
+              <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+                {agents.map((a) => {
+                  const current = a.name === chosen?.name;
+                  return (
+                    <li key={a.name}>
+                      <SearchLink
+                        patch={{ agent: a.name, add: undefined }}
+                        aria-current={current ? 'true' : undefined}
+                        className={cn(
+                          'flex min-h-11 min-w-0 items-center rounded-control border px-3 py-2.5 text-ink no-underline transition-colors duration-(--duration-quick)',
+                          current ? 'border-line bg-hover' : 'border-line bg-card hover:border-rule',
+                          arrived(a.name) && 'motion-safe:animate-item-in',
+                        )}
+                      >
+                        <span className="min-w-0">
+                          <span translate="no" className="block truncate text-[15px] font-medium">
+                            {a.name}
+                          </span>
+                          <span className="block truncate text-[13px] text-muted">{whereLabel(line, a.name)}</span>
                         </span>
-                        <span className="block truncate text-[13px] text-muted">{whereLabel(line, a.name)}</span>
-                      </span>
-                    </SearchLink>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
-          {viewOnly ? null : (
-            <>
-              <AddAgentButton />
-              <CopyAgentButton />
-            </>
-          )}
-        </nav>
+                      </SearchLink>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+            {viewOnly ? null : (
+              <>
+                <AddAgentButton />
+                <CopyAgentButton />
+              </>
+            )}
+          </nav>
 
-        <div className={cn('flex min-w-0 flex-col gap-3', !search.agent && 'max-md:hidden')}>
-          {search.agent ? (
-            <SearchLink
-              patch={{ agent: undefined, add: undefined }}
-              className="inline-flex min-h-11 items-center gap-1 self-start text-[15px] text-ink md:hidden"
-            >
-              <ChevronLeft size={18} strokeWidth={1.5} aria-hidden="true" />
-              All agents
-            </SearchLink>
-          ) : null}
-          {chosen ? (
-            <AgentDetail key={chosen.name} agent={chosen} place={place} openPicker={search.add === 'skill'} />
-          ) : agents.length === 0 ? (
-            <EmptyState title="Add the first agent">
-              Agents work at the line’s agent stations. Give one a name, then its role, model and prompt.
-            </EmptyState>
-          ) : (
-            <EmptyState title={`No agent named ${search.agent}`}>
-              It may have been renamed or removed. Pick one from the list.
-            </EmptyState>
-          )}
+          <div className={cn('flex min-w-0 flex-col gap-3', !search.agent && 'max-md:hidden')}>
+            {search.agent ? (
+              <SearchLink
+                patch={{ agent: undefined, add: undefined }}
+                className="inline-flex min-h-11 items-center gap-1 self-start text-[15px] text-ink md:hidden"
+              >
+                <ChevronLeft size={18} strokeWidth={1.5} aria-hidden="true" />
+                All agents
+              </SearchLink>
+            ) : null}
+            {chosen ? (
+              <AgentDetail key={chosen.name} agent={chosen} place={place} openPicker={search.add === 'skill'} />
+            ) : agents.length === 0 ? (
+              <EmptyState title="Add the first agent">
+                Agents work at the line’s agent stations. Give one a name, then its role, model and prompt.
+              </EmptyState>
+            ) : (
+              <EmptyState title={`No agent named ${search.agent}`}>
+                It may have been renamed or removed. Pick one from the list.
+              </EmptyState>
+            )}
+          </div>
         </div>
       </div>
       <RulesEditor />

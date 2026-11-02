@@ -209,7 +209,7 @@ export function StartStep({ search }: { search: StartSearch }) {
       <WizardFooter
         step="start"
         start={
-          <Button asChild variant="white" size="lg" className="md:h-10 md:text-sm">
+          <Button asChild variant="white">
             <Link to="/o/$org" params={{ org: org.slug }}>
               Cancel
             </Link>
@@ -279,8 +279,6 @@ function ContinueButton({
   const button = (
     <Button
       variant="primary"
-      size="lg"
-      className="md:h-10 md:text-sm"
       aria-disabled={reason || pending ? true : undefined}
       aria-describedby={reason ? reasonId : undefined}
       onClick={() => (reason || pending ? undefined : onClick())}

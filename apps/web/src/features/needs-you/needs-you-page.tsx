@@ -197,7 +197,7 @@ export function NeedsYouPage() {
     <header className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 md:px-7 md:py-4">
       <div className="flex items-center gap-2">
         <h1 className="m-0 text-page-title font-semibold text-ink">Needs you</h1>
-        {entries.length > 0 ? <Count value={counts.all} label=" waiting on you" tone="you" /> : null}
+        {entries.length > 0 ? <Count value={counts.all} label=" waiting on you" /> : null}
       </div>
       {entries.length > 0 ? (
         <div className="flex w-full min-w-0 items-center gap-2 md:ml-auto md:w-auto">

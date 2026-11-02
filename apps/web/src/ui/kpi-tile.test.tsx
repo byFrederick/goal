@@ -41,12 +41,16 @@ describe('KpiTile', () => {
         label="Throughput"
         value="7.6"
         unit="a day"
-        bar={{ value: 7.6, max: 10, tone: 'run', label: '76% of the target of 10 a day' }}
+        bar={{ value: 7.6, max: 10, tone: 'ink', label: '76% of the target of 10 a day' }}
         target="Target 10"
         delta={{ value: -0.6, unit: 'a day', good: false }}
       />,
     );
     const meter = screen.getByRole('meter', { name: '76% of the target of 10 a day' });
+    expect(meter.className).toContain('bg-hover');
+    expect(meter.innerHTML).toContain('bg-ink');
+    expect(meter.innerHTML).not.toContain('bg-run');
+    expect(meter.querySelector('pattern')).toBeNull();
     expect(meter.getAttribute('aria-valuenow')).toBe('7.6');
     expect(meter.getAttribute('aria-valuemin')).toBe('0');
     expect(meter.getAttribute('aria-valuemax')).toBe('10');

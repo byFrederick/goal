@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { keys } from '../../api/queries';
 import type { AuthConfig, Member, OrgSettings, OrgSummary } from '../../api/types';
+import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { TooltipProvider } from '../../ui/tooltip';
 import { OrgSettingsPage } from './settings-page';
 
@@ -70,6 +72,17 @@ const member = (id: string, name: string, role: string) =>
 
 const admins = [member('maya', 'Maya Ruiz', 'admin')];
 
+// The page under a stand-in for the shell's top bar (the real one needs the router), so its TopBarSlot actions show.
+function TopBarFrame({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<TopBarState | null>(null);
+  return (
+    <TopBarSetContext.Provider value={setState}>
+      <header data-testid="top-bar">{state?.actions}</header>
+      {children}
+    </TopBarSetContext.Provider>
+  );
+}
+
 function renderPage({
   held = ['org:manage', 'org:delete', 'org:transfer'],
   auth = signIn,
@@ -89,7 +102,9 @@ function renderPage({
   return render(
     <QueryClientProvider client={client}>
       <TooltipProvider>
-        <OrgSettingsPage />
+        <TopBarFrame>
+          <OrgSettingsPage />
+        </TopBarFrame>
       </TooltipProvider>
     </QueryClientProvider>,
   );
@@ -195,6 +210,60 @@ describe('controls the API does not have yet', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Export$/ }));
     expect(api.patchOrgSettings).not.toHaveBeenCalled();
     expect(google.getAttribute('aria-checked')).toBe('false');
+  });
+});
+
+describe('Organization settings v3 details', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('puts an ink Save changes in the top bar, not in the page', () => {
+    renderPage();
+    const save = screen.getByRole('button', { name: 'Save changes' });
+    expect(save.className).toContain('bg-action');
+    expect(save.className).not.toContain('bg-run');
+    expect(save.closest('header')).toBeTruthy();
+    expect(save.getAttribute('form')).toBe('org-settings');
+  });
+
+  it('keeps the address prefix whole and lets the address take the rest', () => {
+    renderPage();
+    const prefix = screen.getByText(`${window.location.host}/o/`);
+    expect(prefix.className).toContain('shrink-0');
+    expect(prefix.className).toContain('whitespace-nowrap');
+    expect(screen.getByLabelText('Address').className).toContain('flex-1');
+  });
+
+  it('draws each factory chip with its badge mark', () => {
+    renderPage();
+    const marked = document.querySelectorAll('span.bg-run.size-\\[18px\\]');
+    expect(marked.length).toBe(3);
+    for (const m of marked) expect(m.className).not.toContain('bg-card');
+  });
+
+  it('marks the section in view in the table of contents', () => {
+    let notify: (entries: Partial<IntersectionObserverEntry>[]) => void = () => undefined;
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(cb: (e: Partial<IntersectionObserverEntry>[]) => void) {
+          notify = cb;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    renderPage();
+    const toc = screen.getByRole('navigation', { name: 'On this page' });
+    const current = () =>
+      within(toc)
+        .getAllByRole('link')
+        .filter((a) => a.getAttribute('aria-current') === 'location');
+    expect(current().map((a) => a.textContent)).toEqual(['General']);
+    fireEvent.click(within(toc).getByRole('link', { name: 'Data' }));
+    expect(current().map((a) => a.textContent)).toEqual(['Data']);
+    const sec = document.getElementById('signin');
+    act(() => notify([{ isIntersecting: true, target: sec as Element }]));
+    expect(current().map((a) => a.textContent)).toEqual(['Sign-in']);
   });
 });
 
