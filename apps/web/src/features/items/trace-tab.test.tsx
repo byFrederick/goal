@@ -293,3 +293,55 @@ describe('TraceTab following', () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(2);
   });
 });
+
+function stubPhone(phone: boolean) {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: phone && query === '(max-width: 767px)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }) as unknown as MediaQueryList;
+}
+
+describe('TraceTab bars', () => {
+  it('keeps a 4 px minimum width and stays inside the track for a step of no duration', async () => {
+    stubPhone(false);
+    renderTab(trace([specRun]));
+    const row = (await screen.findByRole('button', { name: /Read\s*src\/deliver\.ts/ })).closest('li');
+    const bar = row?.querySelector('i') as HTMLElement;
+    expect(bar.style.width).toContain('4px');
+    expect(bar.style.left).toContain('100% - 4px');
+    expect(bar.className).not.toContain('transition');
+  });
+});
+
+describe('TraceTab on a phone', () => {
+  it('lists each run without the axis, and a step opens and closes its detail under the row', async () => {
+    stubPhone(true);
+    renderTab(trace([specRun, buildRun]));
+    const row = await screen.findByRole('button', { name: /Read\s*src\/deliver\.ts/ });
+    expect(screen.queryByText('Span')).toBeNull();
+    expect(screen.queryByText('Took')).toBeNull();
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('complementary')).toBeNull();
+
+    fireEvent.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    expect(within(row.closest('li') as HTMLElement).getByRole('complementary')).toBeTruthy();
+
+    fireEvent.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('complementary')).toBeNull();
+  });
+
+  it('rises a step that arrives while following', async () => {
+    stubPhone(true);
+    Element.prototype.scrollIntoView = vi.fn();
+    renderBoardPage({ page: () => <Harness />, org, factory, builderMeta });
+    await screen.findByRole('button', { name: /Read\s*one\.ts/ });
+    fireEvent.click(screen.getByRole('button', { name: 'Step arrives' }));
+    const added = await screen.findByRole('button', { name: /Edit\s*two\.ts/ });
+    expect(added.closest('li')?.className).toContain('motion-safe:animate-row-in');
+  });
+});
