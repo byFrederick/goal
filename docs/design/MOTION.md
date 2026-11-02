@@ -64,7 +64,7 @@ The recipe column names the transitions.dev recipe the implementation follows (f
 |---|---|---|---|
 | Button, icon button, segmented button, nav row: press | `scale(var(--scale-press))` on `:active` (the `press` utility, used by `Button` and `SegmentedControl`) | `--duration-micro` `--ease-out` | — |
 | Hover on anything | background, border and text colour only | `--duration-quick` `ease` | — |
-| Menu, select, popover, combobox (org menu, account menu, factory picker, Move menu, filters) | open: opacity 0→1 and `scale(0.97)`→1 from the trigger; close: opacity and `scale(0.99)` | open `--duration-fast`, close `--duration-quick`, `--ease-out` | menu-dropdown (05) |
+| Menu, select, popover, combobox (org menu, account menu, factory picker, Move menu, filters, `Select`) | open: opacity 0→1 and `scale(0.97)`→1 from the trigger; close: opacity and `scale(0.99)` | open `--duration-fast`, close `--duration-quick`, `--ease-out` | menu-dropdown (05) |
 | Tooltip | delayed 80ms in with fade and `scale(0.98)`; instant out; once one is open, the next opens with no delay (`Tooltip`, `TooltipProvider`) | in `--duration-quick` `ease-out` | tooltip (17) |
 | Dialog (New item, confirm, publish, create organization) | overlay fades; panel opacity and `scale(0.96)`→1 from centre; close is the reverse, faster | open `--duration-fast`, close `--duration-quick`, `--ease-out` | modal (06) |
 | Sheet and phone drawer | slide from its edge with fade | open `--duration-slow`, close `--duration-medium`, `--ease-drawer` | panel-reveal (07) |

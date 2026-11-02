@@ -8,7 +8,8 @@ import { toast } from 'sonner';
 import { connectionsQuery, notificationsQuery } from '../../api/queries';
 import type { NotificationChannels, NotificationEvents, NotificationPreferences } from '../../api/types';
 import { Button } from '../../ui/button';
-import { NotAvailable } from '../../ui/not-available';
+import { Checkbox } from '../../ui/checkbox';
+import { Tooltip } from '../../ui/tooltip';
 import { type PreferencesChange, useSaveNotifications } from './notification-preferences';
 
 type Event = keyof NotificationEvents;
@@ -31,6 +32,8 @@ const channels: { channel: Channel; label: string }[] = [
 const saveFailed = 'Goal couldn’t save that. Check your connection and try again.';
 
 /** The table, live with a person; the Notifications section's own body. */
+const noop = () => {};
+
 export function NotificationsTable({ org, signedIn }: { org: string; signedIn: boolean }) {
   return signedIn ? <LiveTable org={org} /> : <PreferencesTable />;
 }
@@ -116,19 +119,15 @@ function PreferencesTable({
                 return (
                   <td key={channel} className="text-center">
                     {changeable ? (
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         aria-label={boxLabel}
                         checked={checked}
-                        onChange={(e) => onChange(event, channel, e.target.checked)}
-                        className="size-4"
+                        onCheckedChange={(next) => onChange(event, channel, next)}
                       />
                     ) : (
-                      // Uncontrolled: a click on a box that is not available is cancelled, which needs the box
-                      // to keep its saved value (defaultChecked), not a React-controlled one.
-                      <NotAvailable label={boxLabel}>
-                        <input type="checkbox" aria-label={boxLabel} defaultChecked={checked} className="size-4" />
-                      </NotAvailable>
+                      <Tooltip label={boxLabel} detail="Not available yet">
+                        <Checkbox aria-label={boxLabel} checked={checked} onCheckedChange={noop} unavailable />
+                      </Tooltip>
                     )}
                   </td>
                 );
