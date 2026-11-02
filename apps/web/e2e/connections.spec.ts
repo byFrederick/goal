@@ -18,6 +18,18 @@ async function fits(page: Page) {
 }
 
 test.describe('the Connections page', () => {
+  test('at 768 the crumbs end before the search input and the page does not scroll sideways', async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 900 });
+    await page.goto('/o/acme/connections');
+    await expect(page.getByRole('heading', { level: 1, name: 'Connections' })).toBeVisible();
+    await expectNoHorizontalScroll(page);
+    const crumbs = await page.getByRole('navigation', { name: 'Breadcrumb' }).boundingBox();
+    const search = await page.getByRole('banner').getByRole('searchbox').boundingBox();
+    expect(crumbs).not.toBeNull();
+    expect(search).not.toBeNull();
+    expect((crumbs?.x ?? 0) + (crumbs?.width ?? 0)).toBeLessThanOrEqual(search?.x ?? 0);
+  });
+
   test('lists each connection with its status, a failed test above the list, and what uses each', async ({ page }) => {
     await page.goto('/o/acme/connections');
     await expect(page).toHaveTitle('Connections · Acme · Goal');

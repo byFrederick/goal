@@ -30,6 +30,18 @@ test('the agent page shows the last 7 days, its station and why work was sent ba
   await expectNoHorizontalScroll(page);
 });
 
+test('the agent page at 768 keeps the crumbs clear of the actions and does not scroll sideways', async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto('/o/acme/f/sre/agents/investigator');
+  await expect(page.getByRole('heading', { level: 1, name: 'investigator' })).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  const crumbs = await page.getByRole('navigation', { name: 'Breadcrumb' }).boundingBox();
+  const action = await page.getByRole('button', { name: 'Bake off this agent' }).boundingBox();
+  expect(crumbs).not.toBeNull();
+  expect(action).not.toBeNull();
+  expect((crumbs?.x ?? 0) + (crumbs?.width ?? 0)).toBeLessThanOrEqual(action?.x ?? 0);
+});
+
 test('an agent without history says so, and an unknown agent is not found', async ({ page }) => {
   await page.goto('/o/acme/f/goal/agents/reviewer');
   await expect(page.getByRole('heading', { level: 1, name: 'reviewer' })).toBeVisible();
