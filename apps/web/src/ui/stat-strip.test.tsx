@@ -48,4 +48,12 @@ describe('StatStrip', () => {
     rerender(<StatStrip label="Flow" stats={[{ label: 'Throughput', value: 5, progress: 0.5 }]} />);
     expect(container.querySelector('[style*="scaleX"]')).toBeNull();
   });
+
+  it('keeps the figures on one row from md up, and lets them wrap below', () => {
+    render(<StatStrip label="Flow" stats={stats} />);
+    const strip = screen.getByRole('region', { name: 'Flow' });
+    expect(strip.className).toContain('flex-wrap');
+    expect(strip.className).toContain('md:flex-nowrap');
+    expect(within(strip).getByText('Throughput').parentElement?.className).toContain('md:min-w-0');
+  });
 });

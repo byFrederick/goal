@@ -2,7 +2,7 @@
 // sets reads "Own value"; one it leaves to the factory reads "Default", with the factory's value beside
 // it. Read only: the Definition editor changes these.
 import { Link } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 import { useRunningModel } from '../../shared/definition/agent-cards';
 import { toolPolicy } from '../../shared/definition/tool-policy';
@@ -65,6 +65,40 @@ function ResetModel({ agent, fallback }: { agent: string; fallback: string | und
   );
 }
 
+const skillsShown = 7;
+
+/** The first skills as chips, then "+ N more", which opens the rest in place. */
+function SkillChips({ skills }: { skills: readonly string[] }) {
+  const [open, setOpen] = useState(false);
+  const rest = skills.slice(skillsShown);
+  return (
+    <span className="flex flex-wrap gap-2">
+      {skills.slice(0, skillsShown).map((s) => (
+        <Chip key={s}>{s}</Chip>
+      ))}
+      {rest.length > 0 ? (
+        <>
+          {open
+            ? rest.map((s) => (
+                <Chip key={s} className="motion-safe:animate-fade-in motion-reduce:animate-none">
+                  {s}
+                </Chip>
+              ))
+            : null}
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((o) => !o)}
+            className="cursor-pointer rounded-chip border border-line px-2 text-meta text-muted hover:text-ink"
+          >
+            {open ? 'Show fewer' : `+ ${rest.length} more`}
+          </button>
+        </>
+      ) : null}
+    </span>
+  );
+}
+
 export function AgentSettings({ agent }: { agent: string }) {
   const params = useFactoryParams();
   const running = useRunningModel();
@@ -87,7 +121,7 @@ export function AgentSettings({ agent }: { agent: string }) {
           </Setting>
           <Setting label="Turns per run">
             <span className="flex flex-wrap items-center gap-2">
-              <b>{found.max_turns ?? defaults?.max_turns_per_task ?? none}</b>
+              <span>{found.max_turns ?? defaults?.max_turns_per_task ?? none}</span>
               <Origin own={found.max_turns !== undefined} />
               {found.max_turns !== undefined && defaults?.max_turns_per_task !== undefined ? (
                 <span className="text-meta text-muted">Default {defaults.max_turns_per_task}</span>
@@ -96,13 +130,13 @@ export function AgentSettings({ agent }: { agent: string }) {
           </Setting>
           <Setting label="Per item">
             <span className="flex flex-wrap items-center gap-2">
-              <b>
+              <span>
                 {found.per_item_usd !== undefined
                   ? formatUsd(found.per_item_usd)
                   : defaults?.per_item_usd !== undefined
                     ? formatUsd(defaults.per_item_usd)
                     : none}
-              </b>
+              </span>
               <Origin own={found.per_item_usd !== undefined} />
               {found.per_item_usd !== undefined && defaults?.per_item_usd !== undefined ? (
                 <span className="text-meta text-muted">Default {formatUsd(defaults.per_item_usd)}</span>
@@ -111,11 +145,7 @@ export function AgentSettings({ agent }: { agent: string }) {
           </Setting>
           <Setting label="Skills">
             {found.skills?.length ? (
-              <span className="flex flex-wrap gap-2">
-                {found.skills.map((s) => (
-                  <Chip key={s}>{s}</Chip>
-                ))}
-              </span>
+              <SkillChips skills={found.skills} />
             ) : (
               <span className="text-body text-muted">None</span>
             )}

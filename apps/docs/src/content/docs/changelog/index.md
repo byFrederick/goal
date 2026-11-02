@@ -7,6 +7,7 @@ This page lists the changes a person using Goal would notice, newest first, grou
 
 ## Week of 2026-11-02
 
+- On the agent's Overview, Why review sent work back shows each reason in sentence case on one line, with the full text in a tooltip, and a solid red bar. Settings values are regular weight, Skills shows the first seven with a + N more chip, and the stat strip keeps four figures on one line from 768 px up.
 - The agent's page shows the agent's name in the top bar, with Bake off this agent, Open prompt file and Save changes there, and its tabs are an underline row with the tasks finished this week on Runs.
 - New trigger shows its sources as plain icons, keeps its title and step on one line, lists suggestions one per row, and shows a Connect link to Connections for GitHub when the organization has no GitHub connection. The top bar reads Intake > New trigger.
 - Intake and Webhooks show their place in the top bar, Intake uses the same page width as the other pages, and neither scrolls sideways on a phone. The Webhooks empty state no longer repeats New webhook.

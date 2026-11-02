@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blockedSentence, reasonShare } from './sentences';
+import { blockedSentence, reasonLabel, reasonShare } from './sentences';
 
 describe('blockedSentence', () => {
   it('counts the calls its policy blocked and names the tool when it is always the same', () => {
@@ -31,5 +31,20 @@ describe('reasonShare', () => {
     ];
     expect(reasonShare({ count: 4 }, reasons)).toBe(1);
     expect(reasonShare({ count: 1 }, reasons)).toBe(0.25);
+  });
+});
+
+describe('reasonLabel', () => {
+  it('upper-cases the first letter and leaves the rest', () => {
+    expect(reasonLabel('nothing was delivered. after a fresh `git fetch`…')).toBe(
+      'Nothing was delivered. after a fresh `git fetch`…',
+    );
+  });
+  it('keeps only the first line of a label that spans several', () => {
+    expect(reasonLabel('missing test\nsecond line')).toBe('Missing test');
+  });
+  it('returns an empty string for an empty label', () => {
+    expect(reasonLabel('')).toBe('');
+    expect(reasonLabel('\n  ')).toBe('');
   });
 });

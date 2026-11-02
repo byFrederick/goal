@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { Problem } from '@goal/api-client';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, startBakeOff } from '../../api/client';
 import { createDraftRequest } from '../../api/definitions';
@@ -175,6 +176,44 @@ describe('the Agent page, ready', () => {
     expect(within(reasons).getAllByRole('listitem')).toHaveLength(4);
     expect(within(reasons).getByText('No test for a new empty or error state')).toBeTruthy();
     expect(screen.queryByText(/copy \d/i)).toBeNull();
+  });
+
+  it('shows each reason in sentence case on one line, with its full text in a tooltip and a solid bar', async () => {
+    const long = 'nothing was delivered. after a fresh `git fetch` the branch had no commits';
+    await renderPage('overview', { agentStats: { ...stats, reasons: [{ label: long, count: 3 }] } });
+    const reasons = screen.getByRole('region', { name: 'Why review sent work back' });
+    const line = within(reasons).getByText(/^Nothing was delivered\./);
+    expect(line.className).toContain('truncate');
+    line.focus();
+    expect((await screen.findAllByText(long)).length).toBeGreaterThan(0);
+    expect(reasons.querySelector('.bg-rework')).not.toBeNull();
+    expect(reasons.querySelector('[class*="hatch"], [style*="repeating"]')).toBeNull();
+  });
+
+  it('shows 7 skills and a + N more chip that reveals the rest', async () => {
+    const user = userEvent.setup();
+    const skills = Array.from({ length: 20 }, (_, i) => `skill-${i + 1}`);
+    const agent = model.agents.agents[0];
+    await renderPage('overview', {
+      version: { model: { ...model, agents: { ...model.agents, agents: [{ ...agent, skills }] } } },
+    });
+    const settings = screen.getByRole('region', { name: 'Settings' });
+    expect(within(settings).getAllByText(/^skill-\d+$/)).toHaveLength(7);
+    const more = within(settings).getByRole('button', { name: '+ 13 more' });
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    await user.click(more);
+    expect(within(settings).getAllByText(/^skill-\d+$/)).toHaveLength(20);
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('shows no more chip for 7 skills or fewer', async () => {
+    const skills = Array.from({ length: 7 }, (_, i) => `skill-${i + 1}`);
+    const agent = model.agents.agents[0];
+    await renderPage('overview', {
+      version: { model: { ...model, agents: { ...model.agents, agents: [{ ...agent, skills }] } } },
+    });
+    const settings = screen.getByRole('region', { name: 'Settings' });
+    expect(within(settings).queryByRole('button', { name: /more/ })).toBeNull();
   });
 
   it('settles each setting as its own value or the factory default', async () => {

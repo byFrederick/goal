@@ -17,7 +17,6 @@ import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
-import { Meter } from '../../ui/hatch';
 import { NotAvailable } from '../../ui/not-available';
 import { StatStrip } from '../../ui/stat-strip';
 import { TabNav, tabNavUnderlineItem } from '../../ui/tab-nav';
@@ -32,7 +31,7 @@ import { PromptFull, PromptPreview } from './agent-prompt';
 import { AgentSettings } from './agent-settings';
 import { AskJonahButton } from './ask-jonah-button';
 import { BakeOffButton } from './bake-off-button';
-import { blockedSentence, reasonShare } from './sentences';
+import { blockedSentence, reasonLabel, reasonShare } from './sentences';
 import { type AgentView, agentViews } from './views';
 
 const none = '—';
@@ -79,7 +78,7 @@ function AgentMeasures({ stats }: { stats: AgentStats }) {
   );
 }
 
-/** "Why review sent work back": each reason with a hatched rust bar against the most frequent one. */
+/** "Why review sent work back": each reason, cut to one line, with a solid rework bar against the most frequent one. */
 function SendBackReasons({ stats }: { stats: AgentStats }) {
   return (
     <SectionCard
@@ -96,16 +95,23 @@ function SendBackReasons({ stats }: { stats: AgentStats }) {
               key={r.label}
               className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-t border-line py-3 md:grid-cols-[minmax(0,1fr)_150px_auto]"
             >
-              <span className="min-w-0 text-body">{r.label}</span>
+              <Tooltip label={r.label} side="top">
+                <button type="button" className="min-w-0 cursor-default truncate text-left text-body">
+                  {reasonLabel(r.label)}
+                </button>
+              </Tooltip>
               <span className="text-right text-body text-rework-ink tabular-nums md:col-start-3 md:row-start-1">
                 {r.count}×<span className="sr-only"> sent back</span>
               </span>
-              <Meter
-                value={reasonShare(r, stats.reasons)}
-                max={1}
-                tone="rework"
-                className="col-span-2 h-2.5 border border-line md:col-span-1 md:col-start-2 md:row-start-1"
-              />
+              <span
+                aria-hidden="true"
+                className="col-span-2 h-2.5 overflow-hidden rounded-full border border-line md:col-span-1 md:col-start-2 md:row-start-1"
+              >
+                <span
+                  className="block h-full origin-left bg-rework transition-transform duration-(--duration-fast) ease-(--ease-out) motion-reduce:transition-none"
+                  style={{ transform: `scaleX(${reasonShare(r, stats.reasons)})` }}
+                />
+              </span>
             </li>
           ))}
         </ul>
