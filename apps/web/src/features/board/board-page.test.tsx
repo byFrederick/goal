@@ -408,6 +408,14 @@ describe('the desktop Board, as the screen draws it', () => {
     expect(screen.getByRole('button', { name: 'New item' })).toBeTruthy();
   });
 
+  it('shows Board | List in the top bar only from 1024 px, so the actions fit at 768', async () => {
+    renderBoardPage({ page: ShellBoard, org, factory, board: board() });
+
+    await screen.findByRole('region', { name: 'Stations' });
+    const wrapper = screen.getByRole('radio', { name: 'List' }).closest('.hidden');
+    expect(wrapper?.className).toContain('lg:flex');
+  });
+
   it('writes the search to the URL, and List goes to the Items page', async () => {
     const { router } = renderBoardPage({ page: ShellBoard, org, factory, board: board() });
 
