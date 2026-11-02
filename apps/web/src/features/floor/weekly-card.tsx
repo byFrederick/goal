@@ -62,7 +62,7 @@ function Ready({ weekly }: { weekly: WeeklyThroughput }) {
         summary={summary}
         caption="Items merged per day, by week"
         columns={['Week', 'Merged']}
-        className="h-44"
+        className="h-48"
       />
       {first ? (
         <div className="flex justify-between gap-3 text-secondary text-muted tabular-nums">

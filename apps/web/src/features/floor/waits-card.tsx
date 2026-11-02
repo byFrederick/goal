@@ -24,9 +24,9 @@ function BusyRow({ station, ratio, constraint }: { station: string; ratio: numbe
   return (
     <div className="flex items-center gap-3 text-body">
       <span className={cn('w-24 shrink-0 truncate text-ink', constraint && 'font-semibold')}>{humanize(station)}</span>
-      <span className="block h-2 min-w-0 flex-1 overflow-hidden rounded-chip bg-panel" aria-hidden="true">
+      <span className="block h-1.5 min-w-0 flex-1 overflow-hidden rounded-chip bg-hover" aria-hidden="true">
         <span
-          className={cn('block h-full rounded-chip', constraint ? 'bg-amber' : 'bg-run')}
+          className={cn('block h-full rounded-chip', constraint ? 'bg-amber' : 'bg-ink')}
           style={{ width: `${pct}%` }}
         />
       </span>

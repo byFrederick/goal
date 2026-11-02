@@ -87,7 +87,7 @@ const intake = {
 
 const doneItem = { id: 'item-1', ref: 'software#1', number: 1, state: 'done' } as ItemCard;
 
-/** The seeds every card reads, at the picture's state: 6 of 9 done (no Slack, no knowledge, no invitations). */
+/** The seeds every card reads, at a new factory's state: 5 of 9 done (no Slack, no knowledge, no invitations, no merged item). */
 function seeds({
   members = [member],
   invitations = [],
@@ -95,7 +95,7 @@ function seeds({
   knowledge = [],
   model = published,
   triggers = intake,
-  finished = [doneItem],
+  finished = [],
 }: {
   members?: Member[];
   invitations?: unknown[];
@@ -134,8 +134,8 @@ describe('SetupCard', () => {
     renderCard();
 
     expect(await screen.findByRole('heading', { name: 'Finish setting up' })).toBeTruthy();
-    expect(screen.getByText('6 of 9 done')).toBeTruthy();
-    expect(screen.getByRole('img', { name: '6 of 9 done' })).toBeTruthy();
+    expect(screen.getByText('5 of 9 done')).toBeTruthy();
+    expect(screen.getByRole('img', { name: '5 of 9 done' })).toBeTruthy();
 
     expect(screen.getByRole('link', { name: 'Invite' }).getAttribute('href')).toBe('/o/acme/members');
     expect(screen.getByRole('link', { name: 'Connect' }).getAttribute('href')).toBe(
@@ -148,8 +148,8 @@ describe('SetupCard', () => {
     renderCard();
 
     await screen.findByRole('heading', { name: 'Finish setting up' });
-    expect(screen.getAllByText('Done')).toHaveLength(6);
-    expect(screen.getAllByText('To do')).toHaveLength(3);
+    expect(screen.getAllByText('Done')).toHaveLength(5);
+    expect(screen.getAllByText('To do')).toHaveLength(4);
     expect(screen.getAllByRole('link')).toHaveLength(3);
     expect(screen.getByText('GitHub, 1 repository')).toBeTruthy();
     expect(screen.getByText('The line, 4 stations')).toBeTruthy();
@@ -162,10 +162,18 @@ describe('SetupCard', () => {
         invitations: [{ id: 'i-1' }],
         connections: [github, { id: 'c-slack', name: 'slack', kind: 'slack' } as Connection],
         knowledge: [{ id: 'k-1', name: 'handbook' }],
+        finished: [doneItem],
       }),
     );
 
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Finish setting up' })).toBeNull());
+  });
+
+  it('is gone once an item has merged, even with rows still to do', async () => {
+    renderCard(seeds({ finished: [doneItem] }));
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Finish setting up' })).toBeNull());
+    expect(screen.queryByText('Loading')).toBeNull();
   });
 
   it('closing the card remembers it: it stays hidden after a reload', async () => {
@@ -196,7 +204,7 @@ describe('SetupCard', () => {
     expect(await screen.findByText('Could not load the setup checklist.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
-    expect(await screen.findByText('6 of 9 done')).toBeTruthy();
+    expect(await screen.findByText('5 of 9 done')).toBeTruthy();
     expect(listMembers).toHaveBeenCalledTimes(2);
   });
 });
