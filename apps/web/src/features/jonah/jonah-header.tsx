@@ -50,7 +50,7 @@ export function JonahHeader({
   return (
     <div className="flex flex-col gap-4">
       <header className="flex flex-wrap items-center gap-3">
-        <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-card bg-andon text-white">
+        <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-card bg-panel text-ink">
           <SearchCheck size={24} strokeWidth={2} />
         </span>
         <div className="flex min-w-0 flex-col gap-1">

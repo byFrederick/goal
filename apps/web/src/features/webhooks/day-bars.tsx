@@ -18,7 +18,7 @@ export function DayBars({ days }: { days: readonly WebhookDeliveryDay[] }) {
               key={day.day}
               title={`${day.day}: ${weekSummary([day])}`}
               style={{ height: `${height}%` }}
-              className={`block w-2 rounded-chip ${day.refused > 0 ? 'bg-rework' : 'bg-run-soft'}`}
+              className={`block w-2 rounded-chip ${day.refused > 0 ? 'bg-rework' : 'bg-run'}`}
             />
           );
         })}

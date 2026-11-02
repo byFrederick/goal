@@ -107,7 +107,7 @@ export function OrgStep({ home }: { home: OrgSummary | undefined }) {
       }
     >
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 font-numeral text-kpi tracking-display">Name your organization</h1>
+        <h1 className="m-0 text-kpi tracking-display">Name your organization</h1>
         <p className="m-0 text-heading font-normal text-ink-soft">
           An organization holds your factories, the people who run them and what they connect to.
         </p>

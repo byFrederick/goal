@@ -398,9 +398,7 @@ function SummaryLabel({ children }: { children: ReactNode }) {
 }
 
 function SummaryValue({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <span className={cn('text-kpi font-numeral tracking-numeral tabular-nums text-ink', className)}>{children}</span>
-  );
+  return <span className={cn('text-kpi tabular-nums text-ink', className)}>{children}</span>;
 }
 
 function ConnectionName({

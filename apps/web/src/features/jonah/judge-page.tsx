@@ -253,7 +253,7 @@ function JudgeEditor({
                     aria-label={`Outcome ${i + 1} score`}
                     value={outcome.score}
                     onChange={(e) => setOutcome(i, { score: Number(e.target.value) })}
-                    className="w-20 font-numeral"
+                    className="w-20"
                   />
                   <Input
                     aria-label={`Outcome ${i + 1} label`}

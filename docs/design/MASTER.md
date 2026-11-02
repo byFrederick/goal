@@ -1,231 +1,144 @@
 # Goal design system
 
-The one source for how Goal looks, reads and behaves. It replaces the "control room" system of 2026-10-23: the user approved this revamp on 2026-10-26. Every screen is exported to [screens/](screens/README.md) as a picture and its HTML, from the owner's Goal UI canvas; [ADR 0016](../adr/0016-ui-revamp.md) makes them binding.
+The one source for how Goal looks, reads and moves. Version 3, "Plain", replaces the 2026-10-26 revamp (cobalt, violet, Archivo and the navy andon panel) because it read as generic AI product UI. The owner approved it on 2026-11-01. The screens are on the owner's Goal UI canvas and exported to [screens/](screens/README.md). Motion has its own file: [MOTION.md](MOTION.md), and it is as binding as this one.
 
-> **LOGIC:** when building a page, check `docs/design/pages/<page>.md` first. A rule there overrides this file. Otherwise, follow this file exactly.
+> **LOGIC:** when building a page, check `docs/design/pages/<page>.md` first. A rule there overrides this file. Otherwise, follow this file and MOTION.md exactly.
 
 ## Principles
 
-- **The line is the product.** A factory's stations, their load and their agents appear as a line wherever flow matters. The Floor's andon panel is the one bold element; everything around it stays quiet.
-- **Each colour has one meaning everywhere** (see Colour). Colour is never the only signal: a word, an icon or a number says the same thing.
-- **Show it, don't write it.** Use a number with its target, a bar, a chip, a list or a timeline before a sentence. Insight text is one line. There are no paragraphs of explanation on working screens.
-- **People act where they read.** Approve, Deny, Reply and Add sit on the row or card that asks for them. One primary action per screen.
-- **Plain words, Goal's words.** Sentence case, plain verbs, and the vocabulary below. Name an agent by its role, never by a copy number.
+- **Quiet by default, loud only for meaning.** The interface is neutral: white, near-black text, grey rules. Colour appears only where it says something (running, needs you, sent back, constraint, done), and mostly as a small dot, a bar or a number, not a filled block.
+- **Contrast before colour.** The primary action is a near-black button. Selection is a grey fill. Emphasis comes from weight, size and position before hue.
+- **Density is a feature.** People scan lines, boards and lists all day. Use 13–14px text, 32px controls, tight rows and hairline rules, not big padded cards.
+- **Show it, don't write it.** A number with its target, a bar, a list or a timeline before a sentence. No insight paragraphs, no eyebrow labels, no decorative icon tiles.
+- **People act where they read.** Approve, Deny, Reply sit on the row or card that asks. One primary action per screen.
+- **Things move because someone acted** (MOTION.md). Nothing appears, disappears or changes size without a short transition, and nothing moves on its own except a running dot.
+
+## What we never do (the slop list)
+
+The review rejects a screen that has any of these:
+- gradients, glows, glassmorphism, coloured or "tinted brand" shadows, noise or grain;
+- purple or indigo as a brand colour; saturated colour fills behind large areas;
+- a coloured left-border accent on cards or callouts;
+- emoji, sparkle icons, or a "magic"/AI glyph for agent features;
+- icon tiles (an icon inside a tinted rounded square) as decoration in lists, timelines or empty states;
+- rows of more than four KPI tiles, or a KPI without a target or a comparison;
+- ALL-CAPS labels, eyebrow text above headings, "A · B · C" strings;
+- pill-shaped everything: radius above 10px anywhere except avatars, dots and dialogs (12px);
+- a dark hero panel inside a light page (the old navy andon panel);
+- copy that explains the UI ("Here you can…", "Easily manage…"); filler empty states;
+- stretched or display typefaces in the app UI.
 
 ## Colour
 
-Tokens keep their names across themes, and components use token names only. `apps/web/src/ui/raw-colors.test.ts` fails on a raw hex, `rgb()` or `hsl()`. No gradients, no decorative shadows.
+Tokens keep their names across themes, and components use token names only (`apps/web/src/ui/raw-colors.test.ts` fails on a raw hex, `rgb()` or `hsl()`).
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `--color-shell` | `#FFFFFF` | `#0E1120` | Page and content background |
-| `--color-sidebar` | `#F3F4F9` | `#13172A` | Sidebar and rail |
-| `--color-panel` | `#F7F8FC` | `#161A2F` | Quiet panels, board cells, table hover, segmented controls |
-| `--color-hover` | `#E9EBF4` | `#1E2340` | Hover on nav and icon buttons |
-| `--color-card` | `#FFFFFF` | `#0E1120` | Cards (white with a rule border, no fill change) |
-| `--color-line` | `#E3E6EF` | `#252A45` | Card borders, dividers |
-| `--color-rule` | `#CBD0DF` | `#3A4066` | Input and button borders, dashed "new" outlines |
-| `--color-ink` | `#14182B` | `#ECEEF7` | Text and headings |
-| `--color-ink-soft` | `#464D6A` | `#B7BCD4` | Secondary text, nav labels (8.3:1 on white) |
-| `--color-muted` | `#626986` | `#9096B3` | Meta text, captions (5.3:1 on white, 4.8:1 on the sidebar) |
-| `--color-run` | `#2742F5` | `#4A63F5` | Brand, primary buttons, links, running, the selected nav (white text on it 6.6:1) |
-| `--color-run-ink` | `#1B33C9` | `#A3B2FF` | Link hover; text on the run tint |
-| `--color-run-tint` | `#E8ECFF` | `#1D2556` | Selected nav item, "running" chips, the selection |
-| `--color-run-soft` | `#9AA6FF` | `#5B6BC9` | Secondary data bars (past weeks, other stations) |
-| `--color-you` | `#7B3FE4` | `#9061F5` | Waiting on a person: counts, approve buttons in Needs you (white text 5.7:1) |
-| `--color-you-tint` | `#F1EBFE` | `#2A1E4F` | Questions, selected Needs you row |
-| `--color-you-ink` | `#5A24B8` | `#CDB4FF` | Text on the violet tint |
-| `--color-rework` | `#D63A1F` | `#E2512F` | Sent back, andon, loss, destructive actions (white text 4.7:1) |
-| `--color-rework-tint` | `#FDECE8` | `#3B1C16` | Background of sent-back and alert chips |
-| `--color-rework-ink` | `#AE2C14` | `#FFA08A` | Text in red (5.7:1 on its tint) |
-| `--color-amber` | `#FFC21A` | `#FFC21A` | The constraint only: its tag, ring and busy bar (ink text on it) |
-| `--color-amber-tint` | `#FFF4D1` | `#3A3013` | The expedite lane and constraint callouts |
-| `--color-amber-ink` | `#6E4B00` | `#FFD666` | Text on the amber tint |
-| `--color-ok` | `#0FA36B` | `#22C17F` | Done and healthy marks (bars, dots; never small text) |
-| `--color-ok-tint` | `#E1F5EB` | `#10301F` | "Line running", "merged" chips |
-| `--color-ok-ink` | `#0A7A4F` | `#62DDA5` | Healthy text, positive deltas |
-| `--color-andon` | `#121633` | `#090C1A` | The andon panel (the line, now) |
-| `--color-andon-raised` | `#1C2147` | `#151A36` | Station nodes on the andon panel |
-| `--color-andon-line` | `#262C58` | `#272D58` | Dividers on the andon panel |
-| `--color-andon-text` | `#C3C8EA` | `#C3C8EA` | Secondary text on the andon panel (9.5:1) |
+| `--color-shell` | `#FFFFFF` | `#0F0F0F` | Page and content background, cards |
+| `--color-sidebar` | `#F8F8F7` | `#141414` | Sidebar |
+| `--color-panel` | `#FAFAF9` | `#171717` | Board cells, table header, quiet wells |
+| `--color-hover` | `#F0F0EE` | `#1F1F1F` | Hover, selected nav, segmented track |
+| `--color-line` | `#EAEAE7` | `#262626` | Card borders, dividers, table rules |
+| `--color-rule` | `#D6D6D2` | `#363636` | Input and secondary button borders |
+| `--color-ink` | `#171717` | `#EDEDEC` | Text, headings, the primary button fill |
+| `--color-ink-soft` | `#4A4A47` | `#B4B4B0` | Secondary text |
+| `--color-muted` | `#6B6B67` | `#8F8F8A` | Meta text, icons (5.3:1 on white, 4.9:1 on the sidebar) |
+| `--color-action` | `#171717` | `#EDEDEC` | Primary buttons (text `--color-action-ink`: white / `#111111`) |
+| `--color-run` | `#2B5BD7` | `#3D6BE0` | Running, links, focus ring, the selection |
+| `--color-run-ink` | `#1E46B0` | `#A9C1FA` | Link hover, text on the run tint |
+| `--color-run-tint` | `#EEF2FC` | `#17213A` | Text selection, a running item's highlight |
+| `--color-you` | `#C2410C` | `#B84D1C` | Waiting on a person: counts, the Approve button (white text 5.2:1) |
+| `--color-you-tint` | `#FDF2EC` | `#341C10` | A question or approval waiting; selected Needs you row |
+| `--color-you-ink` | `#9A3412` | `#FDBA94` | Text on the orange tint |
+| `--color-rework` | `#C93030` | `#C73A3A` | Sent back, andon, destructive (white text 4.9:1) |
+| `--color-rework-tint` | `#FDF0F0` | `#361616` | Sent-back and andon chips, the andon strip |
+| `--color-rework-ink` | `#A42525` | `#FCA5A5` | Red text |
+| `--color-amber` | `#EAB308` | `#EAB308` | The constraint only: its marker and busy bar |
+| `--color-amber-tint` | `#FEF8E1` | `#30270C` | The expedite lane |
+| `--color-amber-ink` | `#6F5000` | `#F5D46B` | Text on the amber tint |
+| `--color-ok` | `#1F8A4C` | `#2E9E5E` | Done and healthy marks (dots, bars) |
+| `--color-ok-tint` | `#EEF7F1` | `#11291B` | Rarely: a merged confirmation |
+| `--color-ok-ink` | `#17663A` | `#7EDBA4` | Healthy text, good deltas |
 
-**Factory colours** are a factory's identity on its letter badge only (white letter, at least 4.5:1). A factory picks one when it is created: cobalt `#2742F5`, teal `#0E8576`, orange `#C24E17`, green `#1F7A3A`, ocean `#0B6E99`, ochre `#8A5A00`, slate `#5B6170`, indigo `#3F3AB8`. Pink is never used.
+The `--color-andon*` tokens are removed.
 
 Rules:
-- Running is cobalt. Waiting on you is violet. Sent back, andon and destructive are red. The constraint is yellow, and nothing else is. Done is green.
-- A delta's arrow and sign carry its direction. Green or red only says whether that direction is good.
-- Charts: the current period in `run`, past periods in `run-soft`, the target as a dashed `muted` line with its label, and the constraint in `amber`. Categorical series (where work came from) use the factory colours in order.
-- The Goal mark is a cobalt square holding a white G that ends in a yellow node: a line arriving at its station. It is the product's sign. It sits at the top of the sidebar and on sign-in and onboarding.
+- Running is blue. Waiting on you is orange. Sent back, andon and destructive are red. The constraint is yellow, and nothing else is. Done is green. Blue and orange are the pair that must always be told apart, and they also differ in lightness.
+- Status chips are neutral (white with a line border) carrying a 6px coloured dot. Only "needs you" and "sent back" chips get a tint fill, because they ask for action.
+- Charts: the current period in `ink`, past periods in `rule`, the target as a dashed `muted` line with its label, the constraint in `amber`. Categorical series use the factory colours.
+- **Factory colours** are a factory's identity on its 18px letter badge only: cobalt `#2B5BD7`, teal `#0E7C6E`, rust `#B4461A`, green `#1F7A3A`, ocean `#0B6493`, ochre `#7E5A00`, slate `#55595F`, plum `#6B3A5E`.
+- **The Goal mark** is a near-black rounded square (`#171717`, 6px radius, a 1px inner white rule at 12% so it holds on dark) with a white G ending in a yellow node. It is the only place the yellow node appears outside the constraint.
 
 ## Typography
 
-- **Archivo** (variable, `wdth` 62–125, `wght` 100–900), self-hosted with `@fontsource-variable/archivo` (the `wdth` axis file), for all text. UI text is at width 100%. Page titles are at 108%, and numbers and factory letters at 112%, which gives the factory-signage feel.
-- **JetBrains Mono** (`@fontsource-variable/jetbrains-mono`) only for code, file paths, commands, YAML and tool names. It is never used for labels.
-- Tabular numerals everywhere (`font-variant-numeric: tabular-nums`).
+- **IBM Plex Sans** (`@fontsource/ibm-plex-sans`, weights 400, 500, 600 and italic 400) for all text. Its engineered, slightly industrial shapes suit a factory; it is not the default every AI tool picks.
+- **IBM Plex Mono** (`@fontsource/ibm-plex-mono`, 400 and 500) for code, paths, commands, YAML, refs (#147), keyboard shortcuts and tool names.
+- Tabular numerals everywhere.
 - Scale:
-  - 12px: meta and captions.
-  - 13–13.5px: secondary lines and tables.
+  - 12px: meta, captions, chips.
+  - 13px: secondary text, tables, sidebar sub-items, buttons.
   - 14px: body and controls.
-  - 16px at weight 620: section headings.
-  - 22px: detail titles.
-  - 26px at weight 650, letter-spacing −0.015em: page titles.
-  - 28px at weight 600: KPI numbers.
-- Weights: 520–580 for nav and buttons, 600–650 for titles and emphasis.
-- Never ALL CAPS labels, never eyebrow labels above headings, never "A · B" strings.
+  - 14px at 600: section headings.
+  - 18px at 600: detail titles.
+  - 20px at 600, letter-spacing −0.01em: page titles.
+  - 24px at 500: KPI numbers, with the unit at 13px in `muted`.
+- Weights: 400 for text, 500 for controls, nav and numbers, 600 for headings. Nothing heavier.
+- Sentence case. Never ALL CAPS, never eyebrow labels, never "A · B" strings.
 
-## Shape, space and motion
+## Shape, space and elevation
 
-- Radii:
-  - 18px for the andon panel;
-  - 14px for cards, popovers, dialogs and the KPI tiles;
-  - 10px for item cards and board cells;
-  - 8px for buttons, inputs and nav items;
-  - 6px for chips and badges;
-  - 50% only for dots, avatars and station nodes.
-- Spacing: a 4px base, with 8, 12, 16, 20 and 28px between blocks. Content padding is 22px 28px on desktop and 16px on phones.
-- Elevation: borders, not shadows. Popovers and dialogs get one shadow (`0 20px 44px -18px` of ink at 40%).
-- Motion: the only ambient motion is the pulsing dot on running things (1.6s ease). Everything else moves because someone acted (opening, expanding, confirming), at 150–250ms. `prefers-reduced-motion` turns all of it off.
+- Radii: 4px chips and badges; 6px buttons, inputs, nav items and menus' items; 8px cards, board cells, popovers and menus; 12px dialogs and sheets; 50% only for dots and avatars.
+- Spacing: a 4px base, with 8, 12, 16, 20, 24 and 32px between blocks. Content padding is 24px 28px on desktop and 16px on phones.
+- Elevation: borders, not shadows. Popovers, menus, dialogs and toasts share one shadow, `--shadow-pop` (`0 0 0 1px` ink at 6% plus `0 10px 28px -10px` ink at 18%; on dark the ring is white at 8%). The selected segment gets a 1px hairline shadow.
+- Icons: lucide at 16px, stroke 1.75, in `muted`; `ink` when active. Never in a tinted tile.
 
 ## The shell
 
-- The app fills the viewport. The sidebar is pinned left at full height, and the content sits beside it. There is no framed shell and no outer margin.
-- **Sidebar** (256px by default; resizable; collapses to a 60px rail):
-  - **Resizing** (from 768px; below it there is no handle, and the phone drawer is unchanged):
-    - The sidebar is 216px to 400px wide, 256px by default. Drag its right edge to set the width.
-    - The handle is a 6px hit area centred on the right border. On hover and while dragging, the border shows as a 2px cobalt line. The cursor is col-resize.
-    - Releasing below 160px folds the sidebar into the 60px rail. Dragging the rail's edge out past 160px expands it again, to the width dragged and clamped to 216–400px.
-    - Double-clicking the handle resets the width to 256px.
-    - Keyboard: the handle is focusable (`role="separator"`, labelled "Resize sidebar", with its value). ArrowRight and ArrowLeft change the width by 16px; Home collapses to the rail; End sets 400px; Enter resets to 256px. ArrowRight on the rail expands it at its last width.
-    - Labels truncate with an ellipsis at every width and never wrap. The content beside the sidebar takes the width left over.
-    - Motion: no animation while dragging. Snapping between the sidebar and the rail takes 200ms, and none under reduced motion.
-  - **Top row:**
-    - The Goal mark and the organization's name open the **organization menu**:
-      - the organizations, with factory count and role (organizations have no image or letter square);
-      - Create organization;
-      - Members and roles, Spend and billing, Models and policies, API keys, Organization settings.
-    - Search (⌘K) and Collapse sit at the right of the row.
-  - **New item:** a cobalt button with the shortcut C. It opens the composer with a factory picker.
-  - **Organization-wide:** Home, Needs you (violet count), Runs, Connections, Credentials, Knowledge.
-  - **Factories:**
-    - The section label has a quiet `+` (New factory). Each factory is a collapsible group: its letter badge, its name, and a violet count (needs you) or a red count or dot (andon).
-    - Only the open factory is expanded. Its pages are Floor, Board, Items, Agents, Intake, Jonah, Definition and Settings, as plain text under a thin guide line. The current page is a white chip.
-  - **Bottom:** "Spend this week" with a bar (it opens Spend and billing), then the person: avatar, name, role.
-    - The **account menu** holds:
-      - the name with a role pill and the GitHub identity;
-      - Theme (Auto, Light, Dark) inline;
-      - Profile, Notifications, Personal tokens, Connected apps, Keyboard shortcuts;
-      - Sign out and Sign out everywhere (red).
-- **Collapsed rail:** the Goal mark, expand, New item, the organization icons, the factory badges with their counts, `+`, a spend ring and the avatar.
-- **Top bar** (56px):
-  - On the left, a breadcrumb starting with the factory badge (Software / Intake / Flaky test on main).
-  - On the right, the page's actions, with the primary one last.
-- **Search** turns the sidebar's top row into an input. Results are grouped (Items, Pages, Actions) and use the arrow keys.
-- **Phones** (below 768px):
-  - a top bar with the Goal mark (which opens the same sidebar as a drawer), the page title and the page's actions;
-  - a bottom tab bar: Needs you, Floor, Board, Items, More.
-  - Primary buttons sit above the tab bar. Hover-only controls are always visible on touch. Targets are at least 44px.
+- The app fills the viewport. The sidebar is pinned left, full height, on `--color-sidebar` with a 1px right rule. There is no framed shell.
+- **Sidebar** (248px by default; resizable 216–400px; collapses to a 56px rail; the existing resize behaviour is unchanged, with the snap animated per MOTION.md):
+  - **Top row:** the Goal mark and the organization's name open the organization menu; Search (⌘K) and Collapse on the right.
+  - **New item:** a secondary button (white, rule border, ink text) with a `C` key hint in a mono keycap. Not a filled brand block.
+  - **Organization-wide:** Home, Needs you (orange count), Runs, Connections, Credentials, Knowledge. 32px rows, 16px icons. The current page is a grey `--color-hover` fill with ink text and an ink icon.
+  - **Factories:** each factory is a collapsible group: its 18px letter badge, its name, and an orange count (needs you) or a red dot (andon). The open factory's pages (Floor, Board, Items, Agents, Intake, Jonah, Definition, Settings) sit under a 1px guide line; the current one is a grey fill.
+  - **Bottom:** spend this week as a plain row with a 4px bar (no card), then the person.
+- **Top bar** (52px): the breadcrumb (muted ancestors, ink current) on the left; the page's actions on the right, the primary one last.
+- **Phones** (below 768px): a top bar with the mark (opens the drawer), the title and actions; a bottom tab bar (Needs you, Floor, Board, Items, More) with a 2px ink indicator on the current tab. Targets are at least 44px.
 
 ## Vocabulary
 
-| Say | Not | Meaning |
-|---|---|---|
-| New item | New chat, New request | The one way a person adds work; a factory picker chooses where |
-| Needs you | Inbox | What waits on a person, typed **Approval** (an agent's write outside its item), **Decision** (a gate or rework limit), **Question** (an agent asks) and **Alert** (andon, budget, a refused trigger event) |
-| Intake | Automations | Where a factory's work comes from |
-| Trigger | Automation | An event, schedule or webhook that creates a work item of a type at a station, with "only if" checks and limits |
-| Agents | Org chart | The line with each station's agents |
-| Jonah | Self-improvement | The learning loop: **Proposals** (definition changes for a person to approve), **Judges** (LLM judges that score sampled runs), **Evals** (fixed cases), **Bake-offs** (configurations compared on cost and quality) |
-| Credentials | Secrets | Stored secrets that connections and agents use |
-| Connections | MCPs and apps, Integrations | Code hosts, apps, MCP servers and model providers |
-| Hands-off | Autonomy | The share of items merged with no human touch |
-| Sent back | Rejected | A gate returned the item for rework |
-| frontend-engineer | frontend-engineer-1 | Agents are named by role; copies show as slots or counts |
-
-Keep using Floor, Board, Items, line, station, lane, WIP, buffer, expedite lane, constraint, andon, assembly, part, touch and definition, as the [glossary](../reference/glossary.md) defines them.
+Unchanged from version 2: New item, Needs you (Approval, Decision, Question, Alert), Intake, Trigger, Agents, Jonah (Proposals, Judges, Evals, Bake-offs), Credentials, Connections, Hands-off, Sent back; agents named by role. Keep Floor, Board, Items, line, station, lane, WIP, buffer, expedite lane, constraint, andon, assembly, part, touch and definition as the [glossary](../reference/glossary.md) defines them.
 
 ## Components
 
-- **Buttons:** 34px tall (30px small).
-  - Primary: cobalt fill with white text.
-  - Secondary: white with a rule border.
-  - Danger: red text, or a red fill for the final confirmation.
-  - Approve inside Needs you: violet fill.
-  - Icon buttons: 32px, with an `aria-label`.
-- **Chips:** 22px tall (28px large), 6px radius, a tint fill and ink text. Neutral chips are panel-coloured with a line border.
-  - Status chips have a dot: running (cobalt, pulsing), needs you (violet), sent back (red), constraint and expedite (yellow), done (green).
-- **Segmented control:** a panel track with a white raised selected segment. Used for time windows, views and filters with counts.
-- **KPI tile:**
-  - a label, the number at 28px with its unit at 14px;
-  - a bar against the target, or a sparkline;
-  - a meta line: the target on the left, the signed delta on the right.
-  - Six tiles in a row on the Floor.
-- **Andon panel:** a navy panel, "The line, now".
-  - Each station is a 54px node on a cobalt track. Its number is the items at the station.
-  - The constraint gets a yellow ring and a Constraint tag; Done gets a check.
-  - Under each node: the name, what waits, the agent slots (14px squares: cobalt for working, violet for waiting on you, an outline for free), and its busy share.
-  - A footer gives in progress, release, the expedite lane and the andon state.
-- **Board column:** a header card with the name, "n of WIP", a segmented WIP meter, the agent count and busy share. The constraint's header has a yellow border.
-  - The expedite lane is a yellow row above the standard lane.
-  - Build splits into Ready (buffer) and In progress.
-- **Item card:**
-  - the ref, the work type and lane chips, the age;
-  - the title, clamped to two lines;
-  - the assembly line ("Usage and budgets", part pips, "2 of 4");
-  - the agent (role) with the cost;
-  - one state line or chip.
-  - A card waiting on you has a violet ring.
-- **Run timeline:**
-  - Each run is a card: the station chip, the agent and the outcome chip, then duration, turns and cost.
-  - Events are rows: time, a 22px icon tile, the text and a meta column on the right. Red and green tiles mark failed and passed checks; violet marks people.
-- **Needs you list:**
-  - Each row has the factory badge, the type in its colour, the title, the item and station, and the age. The selected row is violet-tinted with a 3px violet edge.
-  - The detail shows exactly what will happen (the comment text, the tool, where, why it asks).
-  - The action bar holds Approve (A), "Edit, then approve", Deny (D), and an optional standing approval.
-- **Sentence builder** (triggers): rows of inline token buttons.
-  - "When [GitHub] [a check run fails] on [main ×] in [repo ×]";
-  - then "Only if", "Create" and "Limits" sections;
-  - template variables as violet mono tokens.
-- **Two-pane picker** (connections, triggers, credentials): a searchable catalog on the left, the chosen item's details and its factory scope on the right. On phones it is one pane with Back.
-- **Definition editor:** a file tree, tabs (a preview tab in italics), a YAML editor with schema errors and a problems panel, a Form/YAML switch, and a draft banner with Review changes and Publish.
-- **Stepper** (an item's progress, onboarding): circles joined by a track. Done ones are cobalt with a check; the current one has a violet ring when it waits on you.
-- **Empty states:** a line icon, one sentence that says what to do, and one action.
+- **Buttons:** 32px tall (28px small), 6px radius, 13px at 500.
+  - Primary: `--color-action` fill, `--color-action-ink` text.
+  - Secondary: shell fill, `rule` border; hover darkens the border to `muted`.
+  - Danger: red text; a red fill only for the final confirmation in a dialog.
+  - Approve inside Needs you: orange fill, white text.
+  - Icon buttons: 30px, `aria-label`, muted icon that turns ink on hover.
+  - Every button scales to 0.97 while pressed (MOTION.md).
+- **Chips:** 22px, 4px radius, 12px at 500, white with a line border and a 6px dot for status. Tinted only for needs you (orange) and sent back (red).
+- **Segmented control:** a `hover`-grey track with no border, 2px inset; the selected segment is white with a hairline shadow, and the highlight slides between segments.
+- **Inputs:** 32px (40px on onboarding), 6px radius, `rule` border, focus: `run` border plus a 3px `run-tint` ring.
+- **Switch:** 32×18px track; off `rule`, on `ink`; the thumb travels (MOTION.md, Toggle).
+- **Stat strip** (replaces the KPI tiles): up to four numbers in one row separated by 1px vertical rules, no boxes. Each has a 12px muted label, the 24px number and unit, and one meta line: the target, and the signed delta in `ok-ink` or `rework-ink`. A 2px bar under the number shows progress to target only when there is one.
+- **The line** (replaces the andon panel): a plain section on the page, no dark panel. Each station is a column: its name at 13px/500, the item count at 24px/500, a 4px load bar (ink for busy, `rule` for free capacity, amber for the constraint), the agent slots as 8px squares (ink working, orange waiting on you, outlined free) and what waits as muted text. Stations are joined by a 1px rule with a small chevron. The constraint gets a yellow 6px marker and the word "Constraint". When the andon is pulled, a red-tint strip spans the top of the Floor with the reason, who pulled it and Clear.
+- **Board column:** a header row (name, "n of WIP" with a 4px segmented meter, agents and busy share) over a `panel` cell; no header card. The constraint's header has a yellow marker. The expedite lane is a row with the amber tint above the standard lane. A station with a buffer (Build) shows its **In progress** cards first, at the top of the column, then the **Ready (buffer)** cards below them, dimmed, under their own "Ready, buffer n of m" label; "Show N more" belongs to the In progress group. The same order holds on phones.
+- **Item card:** white, 8px radius, line border, 12px padding: the ref in mono and the type, the title (two lines), the assembly line, the agent and cost, and one status chip. A card waiting on you has a 1px orange border and an orange dot, not a glow. Cards lift nothing on hover; the border darkens.
+- **Run timeline:** runs are plain sections with a header (station, agent, outcome chip, duration, turns, cost). Events are rows with the time in mono, a 6px dot on a 1px vertical rule (red for a failed check, green for passed, orange for a person), the text and a meta column.
+- **Needs you list:** rows with the factory badge, the type as a word in its colour, the title, item and station, the age. The selected row has the orange tint and no edge bar.
+- **Sentence builder, two-pane picker, definition editor, stepper:** as in version 2, restyled with these tokens. The stepper uses 8px dots on a 1px track: ink for done, an ink ring for current (orange ring when it waits on you).
+- **Empty states:** one sentence that says what to do and one action. No illustration, no icon tile.
+- **Menus and popovers:** 8px radius, `--shadow-pop`, 4px padding, 30px items with 6px radius and a grey hover.
+- **Toasts:** bottom-right, ink fill with white text in light mode (inverted in dark), 8px radius, one line plus an optional action.
 
 ## Screens
 
-The screens, one folder per flow in [screens/](screens/README.md):
-
-- **Get started:** sign up, the email code, then eight steps:
-  1. name the organization;
-  2. connect GitHub and choose repositories;
-  3. the first factory from a template;
-  4. shape the line;
-  5. budget and targets;
-  6. starter triggers;
-  7. invite people;
-  8. the first item, running end to end.
-
-  The flow ends on the new factory's Floor with a setup checklist.
-- **Daily work:** Home (every factory), Floor, Board, Work item, Needs you, Items, Runs.
-- **Intake:** Intake, New trigger, Trigger, Webhooks.
-- **Build a factory:** Agents, Agent, Definition, Review and publish, Factory settings.
-- **Jonah:** Overview, Proposal, Judges, Judge, Evals, Bake-off.
-- **Connections and knowledge:** Connections, Add a connection, Credentials, New credential, Knowledge.
-- **Organization:** Members and roles, Spend and billing, Models and policies, API keys, Organization settings.
-- **Sidebar and account:** the sidebar states (collapsed, search, organization menu, account menu), Account, and approving an app or a CLI sign-in.
-- **Mobile:** Sign in, the drawer, Needs you, Approve, Floor, Board, Work item, Intake.
-
-Buttons for features that are not built yet appear on these screens. They are described in the item that builds them, never as working features:
-- Watch live;
-- Trace and Teardown on an item;
-- Always allow on an approval;
-- trying a trigger on a past event;
-- a model check in a trigger's "Only if";
-- Add a build agent from the constraint;
-- Bake off this agent.
+The screens on the canvas, one page per flow (unchanged list from version 2): Get started (sign up, the code, eight onboarding steps, ready), Daily work (Home, Floor, Board, Work item, Needs you, Items, Runs), Intake (Intake, New trigger, Trigger, Webhooks), Build a factory (Agents, Agent, Definition, Review and publish, Factory settings), Jonah (Overview, Proposal, Judges, Judge, Evals, Bake-off), Connections and knowledge, Organization, Sidebar and account, Mobile. Controls for features not built yet render disabled with "Not available yet" (ADR 0016, decision 4).
 
 ## Accessibility and checks
 
-- WCAG 2.2 AA in both themes. Text is at least 4.5:1 (3:1 at 24px and up), and controls are at least 3:1. Colours that must be told apart also differ in lightness.
-- Use real elements: `<button>`, `<a href>`, `<input>` with `<label>`, and `role="switch"` on toggles. Focus rings are 2px cobalt with a 2px offset. Every drag has a Move menu, and every keyboard shortcut is shown where its action is.
-- Lay out phone-first and check 375, 768 and 1440px. A wide table scrolls in its own box, and the page never scrolls sideways.
-- Run the ui-ux-pro-max pre-delivery checklist on every visual change.
+- WCAG 2.2 AA in both themes: text 4.5:1 (3:1 at 24px+), controls 3:1. Colours that must be told apart also differ in lightness.
+- Real elements: `<button>`, `<a href>`, `<input>` with `<label>`, `role="switch"`. Focus rings are 2px `run` with a 2px offset. Every drag has a Move menu, and every shortcut is shown where its action is.
+- Phone-first: check 375, 768 and 1440px. Wide tables scroll in their own box.
+- Every visual change runs the ui-ux-pro-max pre-delivery checklist and the MOTION.md checklist.

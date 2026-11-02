@@ -10,7 +10,7 @@ export type StationNodeTone = 'plain' | 'constraint' | 'done';
 export type StationNodeSize = 'andon' | 'compact';
 
 const tones: Record<StationNodeTone, string> = {
-  plain: 'border-run-soft',
+  plain: 'border-run',
   constraint: 'border-amber ring-6 ring-amber/20',
   done: 'border-ok',
 };
@@ -36,7 +36,7 @@ export function StationNode({
   return (
     <span
       className={cn(
-        'relative z-10 grid shrink-0 place-items-center rounded-full bg-andon-raised font-numeral text-white tabular-nums',
+        'relative z-10 grid shrink-0 place-items-center rounded-full bg-hover text-ink tabular-nums',
         sizes[size],
         tones[tone],
         className,

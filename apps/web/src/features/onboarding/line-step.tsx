@@ -60,7 +60,7 @@ function NoFactory({ org, search, message }: { org: OrgSummary; search: Onboardi
       }
     >
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 font-numeral text-kpi tracking-display">Shape the line</h1>
+        <h1 className="m-0 text-kpi tracking-display">Shape the line</h1>
       </div>
       <Callout tone="rework">{message}</Callout>
     </OnboardingLayout>
@@ -144,7 +144,7 @@ function LineBody({ org, search, factory }: { org: OrgSummary; search: Onboardin
       })}
     >
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 font-numeral text-kpi tracking-display">Shape the line</h1>
+        <h1 className="m-0 text-kpi tracking-display">Shape the line</h1>
         <p className="m-0 text-heading font-normal text-ink-soft">
           Work moves left to right. Each station has an agent, how many copies of it run at once, and a limit on work in
           progress.
