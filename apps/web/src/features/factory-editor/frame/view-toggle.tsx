@@ -1,19 +1,16 @@
 // Form | YAML (screens build/definition): a segmented control of the two views of the draft. The
 // entity stays across the views; from YAML, Form opens the entity at the cursor's line (`?line=`,
 // kept by the YAML view), or the agent whose prompt is open. YAML is Later while no YAML view is
-// registered. Each segment is a button with aria-pressed; it navigates like a link would.
+// registered. A SegmentedControl: the pill slides to the chosen view, and choosing one navigates.
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { laterText } from '../../../app/screens';
 import { placeAtLine } from '../../../shared/definition/place';
 import { useFactoryParams } from '../../../shared/factory';
-import { cn } from '../../../ui/cn';
+import { SegmentedControl } from '../../../ui/segmented-control';
 import { useDraft, useModel } from '../draft/use-draft';
 import { yamlView } from '../section-views';
 import type { EditorSection } from '../sections';
 import { validateDefinitionSearch } from '../sections';
-
-const segment =
-  'inline-flex h-7 items-center rounded-chip px-3 text-secondary font-control transition-colors duration-(--duration-quick)';
 
 export function ViewToggle({ section, yaml }: { section: EditorSection; yaml: boolean }) {
   const params = useFactoryParams();
@@ -41,32 +38,14 @@ export function ViewToggle({ section, yaml }: { section: EditorSection; yaml: bo
     });
 
   return (
-    <fieldset
-      aria-label="Editor view"
-      className="m-0 inline-flex gap-1 rounded-control border border-line bg-panel p-1"
-    >
-      <button
-        type="button"
-        aria-pressed={!showYaml}
-        onClick={() => void toForm()}
-        className={cn(segment, !showYaml ? 'bg-card text-ink shadow-raised' : 'text-ink-soft hover:text-ink')}
-      >
-        Form
-      </button>
-      {yamlView ? (
-        <button
-          type="button"
-          aria-pressed={showYaml}
-          onClick={() => void toYaml()}
-          className={cn(segment, showYaml ? 'bg-card text-ink shadow-raised' : 'text-ink-soft hover:text-ink')}
-        >
-          YAML
-        </button>
-      ) : (
-        <span aria-disabled="true" className={cn(segment, 'cursor-default text-muted')}>
-          YAML<span className="sr-only">, {laterText}</span>
-        </span>
-      )}
-    </fieldset>
+    <SegmentedControl
+      label="Editor view"
+      value={showYaml ? 'yaml' : 'form'}
+      options={[
+        { value: 'form', label: 'Form' },
+        { value: 'yaml', label: 'YAML', disabledReason: yamlView ? undefined : laterText },
+      ]}
+      onChange={(v) => void (v === 'yaml' ? toYaml() : toForm())}
+    />
   );
 }
