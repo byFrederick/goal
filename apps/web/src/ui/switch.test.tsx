@@ -22,12 +22,12 @@ function Toggle({ disabled = false, onChange }: { disabled?: boolean; onChange?:
   );
 }
 
-  it('answers across 44 px or more below 768 px: its 18 px height plus 13 px, and 32 px width plus 6 px, each side', () => {
-  it('answers across 44 px or more below 768 px: its 22 px inner box plus 12 px each side', () => {
+describe('Switch', () => {
+  it('answers across 44 px or more below 768 px', () => {
+    render(<Toggle />);
     const cls = screen.getByRole('switch').className;
     expect(cls).toContain('before:-inset-y-3.25');
     expect(cls).toContain('before:-inset-x-1.5');
-    expect(screen.getByRole('switch').className).toContain('before:-inset-3');
   });
 
   it('is a switch named by its label', () => {
