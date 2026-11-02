@@ -130,6 +130,7 @@
   --distance-base: 8px;
 
   --blur-small: 2px;
+  --blur-pane: 3px;
 
   /* The running status dot pulses: the one ambient motion (MOTION.md, rule 10). Off under reduced motion (chip.tsx). */
   --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
@@ -144,6 +145,9 @@
   /* A skeleton pulses once while it waits (MOTION.md, Loading). */
   --animate-skeleton-pulse: skeleton-pulse var(--duration-pulse) linear;
   /* A new row in a list fades in and rises 4px (MOTION.md, A new item appears in a list or column). */
+  /* A page slides 8px in with a 3px blur in the direction of travel (MOTION.md, List ↔ detail). */
+  --animate-pane-forward: pane-forward var(--duration-fast) var(--ease-out) both;
+  --animate-pane-back: pane-back var(--duration-fast) var(--ease-out) both;
   --animate-row-in: row-in var(--duration-fast) var(--ease-out) both;
   /* The sweep across an agent's working status line (MOTION.md, An agent working). See the thinking utility below. */
   --animate-thinking-shimmer: thinking-shimmer var(--duration-shimmer) linear infinite;
@@ -186,6 +190,22 @@
   @keyframes skeleton-pulse {
     50% {
       opacity: 0.5;
+    }
+  }
+
+  @keyframes pane-forward {
+    from {
+      opacity: 0;
+      transform: translateX(var(--distance-base));
+      filter: blur(var(--blur-pane));
+    }
+  }
+
+  @keyframes pane-back {
+    from {
+      opacity: 0;
+      transform: translateX(calc(var(--distance-base) * -1));
+      filter: blur(var(--blur-pane));
     }
   }
 
@@ -573,6 +593,12 @@
     animation-duration: var(--duration-quick);
     animation-iteration-count: 1;
     scroll-behavior: auto;
+  }
+
+  /* A list ↔ detail switch fades without the slide. */
+  .animate-pane-forward,
+  .animate-pane-back {
+    animation-name: fade-in;
   }
 
   .animate-spin,

@@ -54,6 +54,7 @@ They live in `apps/web/src/styles.css` under `@theme` and are documented here. T
 | `--distance-micro` | 4px | text swap, route content rise |
 | `--distance-base` | 8px | page slide, toast rise (16px on phones) |
 | `--blur-small` | 2px | text swap, icon swap, skeleton reveal |
+| `--blur-pane` | 3px | the incoming pane of a list ↔ detail slide |
 
 ## The catalogue: every component and its transition
 
