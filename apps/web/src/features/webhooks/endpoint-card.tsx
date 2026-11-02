@@ -2,7 +2,7 @@
 // (or the words that it feeds none), the last seven days, and its newest deliveries (ADR 0026). The
 // secret is never read here: Rotate asks the server for a new one and hands it to the page's dialog.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, KeyRound, RotateCw } from 'lucide-react';
+import { KeyRound, RotateCw } from 'lucide-react';
 import { useState } from 'react';
 import { ApiError } from '../../api/client';
 import { keys } from '../../api/queries';
@@ -11,6 +11,7 @@ import { rotateWebhookSecret, type WebhookEndpoint } from '../../api/webhooks';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
+import { CopyButton } from '../../ui/copy-button';
 import { DayBars } from './day-bars';
 import { Deliveries, type DeliveriesScope } from './deliveries';
 import type { RequestTarget } from './request-dialog';
@@ -50,7 +51,6 @@ export function EndpointCard({
 }: EndpointCardProps) {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
-  const [copied, setCopied] = useState(false);
   const { refused } = weekTotals(endpoint.days);
   const url = addressUrl(endpoint, window.location.origin);
   const headingId = `webhook-${endpoint.id}`;
@@ -69,17 +69,6 @@ export function EndpointCard({
   const openRotate = () => {
     rotate.reset();
     setConfirming(true);
-  };
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      // The check goes back to the copy icon after 1.5 s (MOTION.md, Copy to clipboard).
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setCopied(false);
-    }
   };
 
   return (
@@ -106,19 +95,7 @@ export function EndpointCard({
           <span className="min-w-0 max-w-full overflow-hidden rounded-control border border-line bg-panel px-3 py-1 font-mono text-meta text-ellipsis whitespace-nowrap">
             {url}
           </span>
-          <Button variant="secondary" size="sm" onClick={() => void copy()}>
-            <span key={String(copied)} className="inline-flex motion-safe:animate-fade-in motion-reduce:animate-none">
-              {copied ? (
-                <Check size={14} strokeWidth={1.5} aria-hidden="true" />
-              ) : (
-                <Copy size={14} strokeWidth={1.5} aria-hidden="true" />
-              )}
-            </span>
-            Copy
-          </Button>
-          <span role="status" className="text-meta text-muted">
-            {copied ? 'Copied.' : ''}
-          </span>
+          <CopyButton text={url} />
         </dd>
 
         <dt className="text-muted">Signing secret</dt>

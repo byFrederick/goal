@@ -1,10 +1,10 @@
 // A signing secret, shown once (ADR 0026, decision 2): right after a webhook is created or its secret
 // rotated. Only Done closes it, since the secret is never shown again. The page keeps the secret in its
 // state while the dialog is open and drops it on Done; no query cache or request keeps it.
-import { Check, Copy } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
+import { CopyButton } from '../../ui/copy-button';
 import { Dialog, DialogContent } from '../../ui/dialog';
 
 export interface ShownSecret {
@@ -21,23 +21,18 @@ export function SecretDialog({ shown, onDone }: { shown: ShownSecret | null; onD
 }
 
 function Shown({ shown, onDone }: { shown: ShownSecret; onDone: () => void }) {
-  const [copied, setCopied] = useState<'yes' | 'failed' | null>(null);
+  const [failed, setFailed] = useState(false);
   const secretRef = useRef<HTMLElement>(null);
   const created = shown.reason === 'created';
 
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(shown.secret);
-      setCopied('yes');
-    } catch {
-      // The clipboard refused: select the secret so the person can copy it themselves.
-      setCopied('failed');
-      const range = document.createRange();
-      if (secretRef.current) {
-        range.selectNodeContents(secretRef.current);
-        window.getSelection()?.removeAllRanges();
-        window.getSelection()?.addRange(range);
-      }
+  const selectSecret = () => {
+    // The clipboard refused: select the secret so the person can copy it themselves.
+    setFailed(true);
+    const range = document.createRange();
+    if (secretRef.current) {
+      range.selectNodeContents(secretRef.current);
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
     }
   };
 
@@ -61,17 +56,10 @@ function Shown({ shown, onDone }: { shown: ShownSecret; onDone: () => void }) {
           >
             {shown.secret}
           </code>
-          <Button variant="secondary" onClick={() => void copy()}>
-            {copied === 'yes' ? (
-              <Check size={16} strokeWidth={1.5} aria-hidden="true" />
-            ) : (
-              <Copy size={16} strokeWidth={1.5} aria-hidden="true" />
-            )}
-            Copy
-          </Button>
+          <CopyButton size="md" text={shown.secret} onClick={() => setFailed(false)} onFailed={selectSecret} />
         </div>
         <p role="status" className="m-0 text-meta text-muted">
-          {copied === 'yes' ? 'Copied.' : copied === 'failed' ? 'Copy did not work. The secret is selected.' : ''}
+          {failed ? 'Copy did not work. The secret is selected.' : ''}
         </p>
       </div>
       <Callout tone="note">
