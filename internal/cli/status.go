@@ -212,3 +212,121 @@ func printTouches(out *printer, t *gen.ItemTouches) {
 		out.noticef("  %s  %s  %s %s, %s, %s\n", stamp(x.At), x.Actor.Name, x.Kind, station, planned, reason)
 	}
 }
+
+// printTeardown writes an item's teardown (GET .../items/{item}/teardown) for the person reading
+// goal item --teardown: the headline numbers, the time by station, the runs, why it went back and
+// its human touches, with the numbers the API answers.
+func printTeardown(out *printer, t *gen.Teardown) {
+	soFar := ""
+	if t.Open {
+		soFar = " so far"
+	}
+
+	target, budget := "no target", "no budget"
+	if t.TargetSeconds != nil {
+		target = "target " + span(*t.TargetSeconds)
+	}
+
+	if t.BudgetUsd != nil {
+		budget = "budget " + usd(*t.BudgetUsd)
+	}
+
+	out.printf("lead time %s%s, %s; cost %s%s, %s\n", span(t.LeadTimeSeconds), soFar, target, usd(t.CostUsd), soFar, budget)
+	out.printf("rework: %s, %s, %s\n", plural(t.Rework.Loops, "loop"), span(t.Rework.Seconds), usd(t.Rework.CostUsd))
+	out.printf("human touches: %d, waited %s\n", t.TouchCount, span(t.TouchWaitSeconds))
+
+	var b bytes.Buffer
+
+	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "STATION\tWORKING\tWAITING\tTOTAL")
+
+	for _, s := range t.Stations {
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", s.Station, span(s.WorkingSeconds), span(s.WaitingSeconds), span(s.TotalSeconds))
+	}
+
+	_, _ = fmt.Fprintf(tw, "total\t%s\t%s\t%s\n", span(t.Total.WorkingSeconds), span(t.Total.WaitingSeconds), span(t.Total.TotalSeconds))
+	_ = tw.Flush()
+
+	out.printf("\nTime by station\n%s", b.String())
+
+	b.Reset()
+
+	tw = tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "STATION\tAGENT\tMODEL\tTURNS\tTOOK\tCOST\tOUTCOME")
+
+	for _, r := range t.Runs {
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\t%s\n", r.Station, r.Agent, r.Model, r.Turns, span(r.Seconds), usd(r.CostUsd), words(string(r.Outcome)))
+	}
+
+	_, _ = fmt.Fprintf(tw, "total\t%s\t\t%d\t%s\t%s\n", plural(t.RunTotal.Runs, "run"), t.RunTotal.Turns, span(t.RunTotal.Seconds), usd(t.RunTotal.CostUsd))
+	_ = tw.Flush()
+
+	out.printf("\nRuns\n%s", b.String())
+
+	printTeardownLoops(out, t.Loops)
+	printTeardownTouches(out, t.Touches)
+}
+
+// printTeardownLoops writes a teardown's Why it went back: one line per rework loop.
+func printTeardownLoops(out *printer, loops []gen.ReworkLoop) {
+	out.printf("\nWhy it went back\n")
+
+	if len(loops) == 0 {
+		out.printf("  it did not go back\n")
+	}
+
+	for _, l := range loops {
+		line := words(string(l.Cause)) + " at " + l.Station
+		if l.To != nil {
+			line += ", to " + *l.To
+		}
+
+		if l.Reason != nil && *l.Reason != "" {
+			line += ": " + cut(oneLine(*l.Reason), 200)
+		}
+
+		out.printf("  %s (%s, %s)\n", line, span(l.Seconds), usd(l.CostUsd))
+	}
+}
+
+// printTeardownTouches writes a teardown's Human touches: one line per touch with its wait.
+func printTeardownTouches(out *printer, touches []gen.TeardownTouch) {
+	out.printf("\nHuman touches\n")
+
+	if len(touches) == 0 {
+		out.printf("  no human touches\n")
+	}
+
+	for _, x := range touches {
+		station := "no station"
+		if x.Touch.Station != nil {
+			station = *x.Touch.Station
+		}
+
+		out.printf("  %s  %s  waited %s\n", station, stamp(x.Touch.At), span(x.WaitSeconds))
+	}
+}
+
+// span formats a number of seconds for a person: 45s, 59m 15s, 2h 5m (no seconds once it runs to
+// hours).
+func span(seconds int64) string {
+	h, m, s := seconds/3600, seconds%3600/60, seconds%60
+
+	switch {
+	case h > 0 && m > 0:
+		return fmt.Sprintf("%dh %dm", h, m)
+	case h > 0:
+		return fmt.Sprintf("%dh", h)
+	case m > 0 && s > 0:
+		return fmt.Sprintf("%dm %ds", m, s)
+	case m > 0:
+		return fmt.Sprintf("%dm", m)
+	default:
+		return fmt.Sprintf("%ds", s)
+	}
+}
+
+// words turns an API enum such as check_failed into words: check failed.
+func words(s string) string {
+	return strings.ReplaceAll(s, "_", " ")
+}

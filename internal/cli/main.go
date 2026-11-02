@@ -34,8 +34,10 @@ const usage = `usage:
                                                   (--type: one of the factory's work types; default its
                                                   first, none when it declares none)
   goal follow <item>                              follow an item's events again
-  goal item <item>                                show an item with its outputs as JSON, and its human
-                                                  touches (who acted, where, planned or not, why) on stderr
+  goal item <item> [--teardown]                   show an item with its outputs as JSON, and its human
+                                                  touches (who acted, where, planned or not, why) on stderr;
+                                                  --teardown prints where its lead time, cost and human
+                                                  help went instead (by station, runs, rework, touches)
   goal approve <item> [--always-allow]            approve an item waiting at a human station, or the
                                                   tool call its agent waits on; --always-allow also lets
                                                   that agent role call that tool without asking from now

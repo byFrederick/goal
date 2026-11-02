@@ -48,10 +48,12 @@ follow an item's events again
 ## goal item
 
 ```text
-goal item <item>
+goal item <item> [--teardown]
 ```
 
-show an item with its outputs as JSON, and its human touches (who acted, where, planned or not, why) on stderr
+show an item with its outputs as JSON, and its human touches (who acted, where, planned or not, why) on stderr; --teardown prints where its lead time, cost and human help went instead (by station, runs, rework, touches)
+
+Flags: `--teardown`.
 
 ## goal approve
 
