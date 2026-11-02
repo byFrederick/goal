@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import type { Board, Factory, Metrics } from '../../api/types';
+import { usePhone } from '../../app/phone-chrome';
 import { AndonButton, LineStatus } from '../../shared/andon';
-import { NeedsYouLink } from '../../shared/needs-you-link';
 import { NewItemButton } from '../../shared/new-item';
 import { Chip } from '../../ui/chip';
 import { SegmentedControl } from '../../ui/segmented-control';
@@ -21,15 +21,44 @@ const windowOptions = [
 /** The touches grouping of the search, kept when the window changes. */
 const keepGrouping = ({ touches }: FloorSearch) => (touches ? { touches } : {});
 
-/**
- * The Floor's header: the title, the line's status, the range it shows and the actions. The window
- * control writes ?from&to (the work type and the touches grouping are kept); a custom range shows
- * no window as pressed.
- */
-export function FloorHeader({ factory, board, metrics }: { factory: Factory; board: Board; metrics: Metrics }) {
+/** The window control: it writes ?from&to (the work type and the touches grouping are kept); a custom range shows none pressed. */
+function WindowControl({ metrics }: { metrics: Metrics }) {
   const navigate = useNavigate({ from: floorRoute });
   const type = metrics.type ?? undefined;
   const shown = windowOf(metrics.from, metrics.to);
+  return (
+    <SegmentedControl<Window>
+      label="Time window"
+      options={windowOptions}
+      value={shown === null ? undefined : (String(shown) as Window)}
+      onChange={(next) =>
+        navigate({
+          search: (prev) => ({ ...lastDaysSearch(Number(next), type), ...keepGrouping(prev) }),
+          resetScroll: false,
+        })
+      }
+    />
+  );
+}
+
+/**
+ * The top bar's actions on the Floor (floor.html, .tact): the time window, Pull andon (Clear the andon
+ * while the cord is pulled) and New item. A phone keeps the window in the page body (FloorHeader).
+ */
+export function FloorTopBarActions({ factory, board, metrics }: { factory: Factory; board: Board; metrics: Metrics }) {
+  const phone = usePhone();
+  return (
+    <div className="flex min-w-0 items-center justify-end gap-2">
+      {phone ? null : <WindowControl metrics={metrics} />}
+      <AndonButton factory={factory} andon={board.line.andon} />
+      <NewItemButton factory={factory} />
+    </div>
+  );
+}
+
+/** The Floor's header: the title, the line's status and the range it shows. The actions are in the top bar. */
+export function FloorHeader({ board, metrics }: { board: Board; metrics: Metrics }) {
+  const phone = usePhone();
   const days = daysIn(metrics.from, metrics.to);
   const before = days === 1 ? 'the day before' : `the ${days} days before`;
   const andon = board.line.andon;
@@ -49,23 +78,7 @@ export function FloorHeader({ factory, board, metrics }: { factory: Factory; boa
           {`${rangeLabel(metrics.from, metrics.to)}, compared with ${before}`}
         </p>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <SegmentedControl<Window>
-          label="Time window"
-          options={windowOptions}
-          value={shown === null ? undefined : (String(shown) as Window)}
-          onChange={(next) =>
-            navigate({
-              search: (prev) => ({ ...lastDaysSearch(Number(next), type), ...keepGrouping(prev) }),
-              resetScroll: false,
-            })
-          }
-        />
-        <NeedsYouLink factory={factory} />
-        {/* While the cord is pulled, its strip under the line holds the Clear control instead. */}
-        {andon ? null : <AndonButton factory={factory} andon={andon} />}
-        <NewItemButton factory={factory} />
-      </div>
+      {phone ? <WindowControl metrics={metrics} /> : null}
     </header>
   );
 }
