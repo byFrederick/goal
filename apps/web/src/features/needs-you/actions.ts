@@ -56,7 +56,10 @@ export function useEntryDecision() {
             always_allow: decision.always_allow,
           });
         case 'tool_deny':
-          return decideToolApproval(org.id, item, { decision: 'deny', note: decision.reason });
+          return decideToolApproval(org.id, item, {
+            decision: 'deny',
+            ...(decision.reason.trim() ? { note: decision.reason } : {}),
+          });
       }
     },
     onSuccess: (updated, { entry, decision }) => {
