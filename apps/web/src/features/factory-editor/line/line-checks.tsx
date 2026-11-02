@@ -5,6 +5,8 @@
 import { Check, CircleAlert, Info, TriangleAlert } from 'lucide-react';
 import { useId } from 'react';
 import type { CheckResult } from '../../../api/types';
+import { cn } from '../../../ui/cn';
+import { sectionHeadingClass } from '../../../ui/page-header';
 import { useValidation } from '../frame/use-editor';
 import { noMergeHint, stationLabel } from './labels';
 import { useLineEditor } from './line-editor';
@@ -76,7 +78,7 @@ export function LineChecks() {
       aria-labelledby={id}
       className="flex min-w-0 flex-col gap-1 rounded-card border border-line bg-card p-4 md:p-5"
     >
-      <h2 id={id} className="m-0 mb-1.5 text-lg font-medium">
+      <h2 id={id} className={cn(sectionHeadingClass, 'mb-1.5')}>
         Checks on this line
       </h2>
       {rows.length === 0 ? (
