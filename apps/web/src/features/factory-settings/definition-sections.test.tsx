@@ -331,9 +331,7 @@ describe('Save changes', () => {
 
   it('reads Saving… while the publish is pending, then shows Published', async () => {
     let finish: (v: never) => void = () => {};
-    vi.mocked(publishDraft).mockImplementationOnce(
-      () => new Promise((resolve) => (finish = resolve as never)),
-    );
+    vi.mocked(publishDraft).mockImplementationOnce(() => new Promise((resolve) => (finish = resolve as never)));
     await renderSettings();
     fireEvent.click(screen.getByRole('radio', { name: 'Stop at once' }));
     await savedSection('review', (v) => v.budget?.on_exhausted === 'stop');
