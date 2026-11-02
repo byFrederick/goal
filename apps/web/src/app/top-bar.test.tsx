@@ -94,11 +94,22 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
   const items = createRoute({ getParentRoute: () => factoryRoute, path: 'items', component: Outlet });
   const itemsIndex = createRoute({ getParentRoute: () => items, path: '/', component: () => <p>Items page</p> });
   const itemRoute = createRoute({ getParentRoute: () => items, path: '$ref', component: ItemStub });
+  const intake = createRoute({ getParentRoute: () => factoryRoute, path: 'intake', component: Outlet });
+  const intakeIndex = createRoute({ getParentRoute: () => intake, path: '/', component: () => <p>Intake page</p> });
+  const webhooks = createRoute({
+    getParentRoute: () => intake,
+    path: 'webhooks',
+    component: () => <TopBarSlot crumb="Webhooks" />,
+  });
   const router = createRouter({
     routeTree: rootRoute.addChildren([
       orgRoute.addChildren([
         orgPages.addChildren([home]),
-        factoryRoute.addChildren([floor, items.addChildren([itemsIndex, itemRoute])]),
+        factoryRoute.addChildren([
+          floor,
+          items.addChildren([itemsIndex, itemRoute]),
+          intake.addChildren([intakeIndex, webhooks]),
+        ]),
       ]),
     ]),
     history: createMemoryHistory({ initialEntries: [at] }),
@@ -144,5 +155,21 @@ describe('TopBar', () => {
     expect(within(nav).getByText('Home').getAttribute('aria-current')).toBe('page');
     expect(within(nav).queryByRole('link')).toBeNull();
     expect(within(nav).getAllByRole('listitem')).toHaveLength(1);
+  });
+
+  it('shows Software / Intake on the Intake page', async () => {
+    renderBar({ at: '/o/acme/f/software/intake' });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(nav).getByRole('link', { name: 'Software' })).toBeTruthy();
+    expect(within(nav).getByText('Intake').getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getAllByRole('listitem')).toHaveLength(2);
+  });
+
+  it('shows Software / Intake / Webhooks on the Webhooks page', async () => {
+    renderBar({ at: '/o/acme/f/software/intake/webhooks' });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(nav).getByRole('link', { name: 'Intake' }).getAttribute('href')).toBe('/o/acme/f/software/intake');
+    expect(within(nav).getByText('Webhooks').getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getAllByRole('listitem')).toHaveLength(3);
   });
 });
