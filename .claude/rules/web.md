@@ -20,7 +20,7 @@ The UI is one product, so its look comes from one design system: [MASTER.md](../
 ## The four states
 
 - Every screen renders loading, empty, error and ready. A missing state shows as a blank page or a crash.
-- Loading shows the app background with an sr-only "Loading" and `aria-busy`, never a gray placeholder shape. Placeholders flash and then shift when the page arrives.
+- Loading shows the page's skeleton: `Skeleton` (`apps/web/src/ui/skeleton.tsx`), with an sr-only "Loading" and `aria-busy`. The skeleton's pulse and reveal are the Loading row of [MOTION.md](../../docs/design/MOTION.md). Never a blank page, and never a placeholder that does not match the layout it stands for.
 
 ## Data and routing
 
