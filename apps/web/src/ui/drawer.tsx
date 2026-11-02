@@ -21,7 +21,7 @@ export function DrawerContent({ title, description, children }: DrawerContentPro
   const opener = useRef<HTMLElement | null>(null);
   return (
     <D.Portal>
-      <D.Overlay className="fixed inset-0 z-40 bg-ink/45 max-md:hidden data-[state=open]:animate-fade-in" />
+      <D.Overlay className="motion-panel fixed inset-0 z-40 bg-ink/45 max-md:hidden" />
       <D.Content
         onOpenAutoFocus={() => {
           opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -33,7 +33,7 @@ export function DrawerContent({ title, description, children }: DrawerContentPro
           e.preventDefault();
           back.focus();
         }}
-        className="fixed inset-0 z-50 flex flex-col gap-4 overflow-y-auto overscroll-contain bg-card p-5 shadow-pop outline-none data-[state=open]:animate-fade-in md:inset-y-0 md:right-0 md:left-auto md:w-[460px] md:border-l md:border-line"
+        className="motion-panel motion-drawer fixed inset-0 z-50 flex flex-col gap-4 overflow-y-auto overscroll-contain bg-card p-5 shadow-pop outline-none md:inset-y-0 md:right-0 md:left-auto md:w-[460px] md:border-l md:border-line"
         // Radix warns about a missing description unless aria-describedby is explicitly unset.
         {...(description ? {} : ({ 'aria-describedby': undefined } as object))}
       >
