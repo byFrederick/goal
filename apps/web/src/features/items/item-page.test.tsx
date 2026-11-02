@@ -130,8 +130,15 @@ function TopBarHarness({ children }: { children: ReactNode }) {
   );
 }
 
-function renderPage(it: Item, events: ItemEvent[] = [approval], grants: Factory = factory, search = '') {
+function renderPage(
+  it: Item,
+  events: ItemEvent[] = [approval],
+  grants: Factory = factory,
+  search = '',
+  loader?: () => Promise<unknown> | undefined,
+) {
   return renderFactoryPage({
+    ...(loader ? { loader } : {}),
     page: () => (
       <TopBarHarness>
         <ItemPage />
@@ -702,10 +709,24 @@ describe('Watch live', () => {
       }) as unknown as MediaQueryList) as typeof window.matchMedia;
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
-    renderPage(running());
+    // The router commits the new tab a render after the press, as it does in a browser.
+    let release: () => void = () => {};
+    let held = false;
+    const loader = () => {
+      if (!held) return undefined;
+      return new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    };
+    renderPage(running(), [approval], factory, '', loader);
 
     const bar = await screen.findByLabelText('Top bar');
+    held = true;
     fireEvent.click(within(bar).getByRole('button', { name: 'Watch live' }));
+    // Let the page commit the press while the tab is still Timeline.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByRole('tabpanel', { name: 'Trace' })).toBeNull();
+    release();
 
     await screen.findByRole('tabpanel', { name: 'Trace' });
     // The tab row also scrolls its selected tab into view; only the anchor past the newest step counts.
