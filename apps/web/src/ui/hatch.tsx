@@ -76,7 +76,7 @@ export function Meter({
       }
     : { 'aria-hidden': true };
   return (
-    <div {...meter} className={cn('relative h-2.5 rounded-[3px] bg-card', className)}>
+    <div {...meter} className={cn('relative h-2.5 rounded-chip bg-card', className)}>
       {variant === 'solid' ? (
         <div
           className={cn(
@@ -86,13 +86,13 @@ export function Meter({
           style={{ transform: `scaleX(${pct / 100})` }}
         />
       ) : pct > 0 ? (
-        <div className="h-full overflow-hidden rounded-[3px]" style={{ width: `${pct}%` }}>
+        <div className="h-full overflow-hidden rounded-chip" style={{ width: `${pct}%` }}>
           <Hatch tone={tone} />
         </div>
       ) : null}
       {target !== undefined && max > 0 ? (
         <span
-          className="absolute -top-1.5 h-[calc(100%+12px)] w-0.5 rounded-[1px] bg-ink"
+          className="absolute -top-1.5 h-[calc(100%+12px)] w-0.5 rounded-full bg-ink"
           style={{ left: `${Math.min(100, (target / max) * 100)}%` }}
         />
       ) : null}
@@ -120,12 +120,12 @@ export function HatchBars({
   return (
     <span role="img" aria-label={label} className={cn('flex shrink-0 items-end gap-0.5', className)} style={{ height }}>
       {bars.map((b, i) => {
-        if (b.value <= 0 || max === 0) return <span key={b.key} className="h-0.5 w-[5px] rounded-[1px] bg-line" />;
+        if (b.value <= 0 || max === 0) return <span key={b.key} className="h-0.5 w-[5px] rounded-full bg-line" />;
         const latest = i === bars.length - 1;
         return (
           <span
             key={b.key}
-            className={cn('w-[5px] overflow-hidden rounded-[1px]', latest && 'bg-run')}
+            className={cn('w-[5px] overflow-hidden rounded-full', latest && 'bg-run')}
             style={{ height: Math.max(3, Math.round((b.value / max) * height)) }}
           >
             {latest ? null : <Hatch tone="run" />}
