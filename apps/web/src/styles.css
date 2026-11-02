@@ -577,6 +577,9 @@
      of the text grows from the clamp to its full height and back. */
   .motion-disclosure-peek {
     visibility: visible;
+  }
+
+  .motion-disclosure-peek > * {
     min-height: 4.875em;
   }
 

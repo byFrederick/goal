@@ -16,11 +16,12 @@ Open a factory's Board at `/o/<org>/f/<factory>/board`.
 - **Show N more:** a column shows its first six In progress cards, then a **Show N more** button that reveals the rest. In a station with a buffer, the button ends the In progress group, above the Ready cards. **Show fewer** folds the column back.
 - **Assembly line:** a card that is part of an assembly shows the assembly's title, one pip per part (filled for each merged part) and its place, such as `2 of 4`.
 - **Waiting** items say what they wait on: a person's decision, another item, or a clock. A waiting card and its row in the list use the same words.
-- **Expedite** items appear in their own tinted card in their station.
+- **Constraint:** the column of the line's constraint, the drum, carries a yellow mark and the word **Constraint** in its header. The buffer's **Ready, buffer n of m** group is in that column, whichever station it is. Which station that is comes from the factory definition's `flow.constraint`; without it, the line's detected constraint.
+- **Expedite** items sit in a yellow-tinted **Expedite** row at the top of each column. Its caption gives the lane's use, such as `Expedite, 1 of 1 in use, jumps every queue`. The row stays when the lane is empty, and shows whenever the line has an expedite lane.
 
 A card that moves to another column or lane, because an agent finished or because you moved it, travels there instead of jumping, and the cards around it shift to make room. When your system asks for reduced motion, the card appears in its new place at once. A card you drag follows the pointer and settles into place when you drop it; the drop then opens the Move menu to confirm.
 
-Filter the Board by assembly, agent role or status, and group it by assembly or not at all. On a phone, the Board has one tab per station.
+The search box and the **Board | List** switch are in the top bar. Four dropdown buttons next to the title filter by work type, lane, assembly and agent role; each choice is kept in the page's address, so a link reproduces the view. On a phone, the **Filter** button shows them, with status and grouping by assembly, and the Board has one tab per station.
 
 The Items page at `/o/<org>/f/<factory>/items` lists the same items as a table, with saved views and CSV export.
 
@@ -32,14 +33,14 @@ The Items page at `/o/<org>/f/<factory>/items` lists the same items as a table, 
 
 Open an item from the Board or the Items page. Its URL is `/o/<org>/f/<factory>/items/<ref>`, where `<ref>` is the item's number.
 
-The page has four tabs:
+The page has four tabs. Move between them with the arrow keys; Home and End jump to the first and last. The selected tab is in the URL as `?tab=`, and Timeline leaves it out:
 
 - **Timeline** shows each run's events as grouped steps in plain words: the station, the agent, what it did and how it ended.
 - **Spec** shows the request and the acceptance criteria from the spec the agents wrote.
 - **Changes** shows the outputs the stations produced, and says so when nothing has been produced yet.
 - **Checks** shows the checks that have run on the item, and says so when none have.
 
-Beside the tabs, the side column shows the item's details, its cost, the items it overlaps with, and the rules its runs received.
+The timeline and the note field are the main column on the left. To the right of them, the details column shows the item's details, its cost, the items it overlaps with, and the rules its runs received.
 
 The Trace and Teardown controls on the item page are not available yet; the page shows them disabled.
 

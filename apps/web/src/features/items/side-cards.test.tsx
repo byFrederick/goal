@@ -259,6 +259,9 @@ describe('CostCard', () => {
     expect(cost.textContent).toContain('Spec $0.62');
     expect(cost.textContent).toContain('Build $2.38');
     expect(cost.textContent).toContain('Stops at the cap');
+    const bar = screen.getByRole('img', { name: /of a \$12 cap/ });
+    expect(bar.innerHTML).not.toContain('bg-run');
+    expect(bar.innerHTML).toContain('bg-ink');
   });
 
   it('shows the cost and the legend alone without a cap', async () => {

@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { ExternalLink, Users, Zap } from 'lucide-react';
+import { ExternalLink, Zap } from 'lucide-react';
 import type { CSSProperties, KeyboardEvent, PointerEvent, Ref } from 'react';
 import type { ItemCard, PartsSummary } from '../../api/types';
 import { refParam, useFactory, useFactoryParams } from '../../shared/factory';
@@ -51,6 +51,7 @@ export function BoardCard({
   drag,
   compact = false,
   assemblyParts,
+  arrived = false,
 }: {
   item: ItemCard;
   onMove?: (() => void) | undefined;
@@ -58,6 +59,8 @@ export function BoardCard({
   compact?: boolean;
   /** The assembly's parts summary from the board: the pips of the assembly line (desktop cards). */
   assemblyParts?: PartsSummary | undefined;
+  /** The card is new on the board since it first had cards: it rises in (MOTION.md, A new item appears). */
+  arrived?: boolean;
 }) {
   // A decision waits on "you" only for someone who decides here.
   const decides = holds(useFactory(), 'item:decide');
@@ -90,7 +93,7 @@ export function BoardCard({
       onKeyDown={moveKeys(onMove, drag)}
       style={drag?.style}
       className={cn(
-        'relative flex rounded-control border bg-card transition-[border-color,box-shadow,opacity] duration-(--duration-quick)',
+        'group relative flex rounded-control border bg-card transition-[border-color,box-shadow,opacity] duration-(--duration-quick)',
         'hover:border-muted has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-run',
         compact ? 'items-center gap-2 p-3' : 'flex-col gap-2 rounded-cell p-3',
         // The desktop card keeps its border plain: an expedite item is tinted by its column's zone.
@@ -108,6 +111,7 @@ export function BoardCard({
                   ? 'border-rework-tint'
                   : 'border-line',
         drag?.dragging && 'opacity-40',
+        arrived && 'motion-safe:animate-item-in',
       )}
     >
       {compact ? (
@@ -128,23 +132,28 @@ export function BoardCard({
         </>
       ) : (
         <>
-          <div className="flex min-w-0 flex-wrap items-center gap-2 text-meta text-muted tabular-nums">
-            <span>{item.ref}</span>
-            {item.type ? <Chip tone="plain">{humanize(item.type)}</Chip> : null}
-            {item.lane ? <Chip tone="plain">{humanize(item.lane)}</Chip> : null}
+          <div className="flex min-w-0 items-center gap-2 text-meta text-muted tabular-nums">
+            <span className="font-mono text-ink-soft">#{item.number}</span>
+            {item.type ? <span className="whitespace-nowrap">{item.type}</span> : null}
+            {item.lane ? <span className="whitespace-nowrap">{item.lane}</span> : null}
             <span className="ml-auto whitespace-nowrap">{age}</span>
           </div>
           {expediteLabel}
           <CardTitle item={item} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
           {item.assembly ? <AssemblyLine item={item} parts={assemblyParts} /> : null}
           {item.agent ? <AgentLine item={item} /> : null}
-          <div className="flex items-end gap-2">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-              {stateLine}
-              {prLink}
-              {touches}
-            </div>
-            {onMove ? <MoveButton item={item} onMove={onMove} size="lg" className="-mr-1 -mb-1 md:size-8" /> : null}
+          <div className={cn('flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1', onMove && 'md:pr-10')}>
+            {stateLine}
+            {prLink}
+            {touches}
+            {onMove ? (
+              <MoveButton
+                item={item}
+                onMove={onMove}
+                size="lg"
+                className="ml-auto md:absolute md:right-2 md:bottom-2 md:ml-0 md:size-8 md:opacity-0 md:focus-visible:opacity-100 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+              />
+            ) : null}
           </div>
         </>
       )}
@@ -176,12 +185,7 @@ export function ExpediteMark() {
 /** People who had to act on an item so far (spec 4 §4.9); an item nobody touched says nothing. */
 export function TouchCount({ item }: { item: Pick<ItemCard, 'touch_count'> }) {
   if (item.touch_count <= 0) return null;
-  return (
-    <span className="inline-flex basis-full items-center gap-1 text-xs text-you-ink tabular-nums">
-      <Users size={12} strokeWidth={1.75} aria-hidden="true" />
-      {plural(item.touch_count, 'touch', 'touches')}
-    </span>
-  );
+  return <span className="text-xs text-muted tabular-nums">{plural(item.touch_count, 'touch', 'touches')}</span>;
 }
 
 /** The item's pull request, in a new tab; nothing when it has none. */
@@ -291,7 +295,7 @@ function AgentLine({ item }: { item: ItemCard }) {
     <div className="flex min-w-0 items-center gap-2 text-meta text-ink-soft">
       <span
         aria-hidden="true"
-        className="flex size-5 shrink-0 items-center justify-center rounded-full bg-run text-meta font-bold text-white"
+        className="flex size-5 shrink-0 items-center justify-center rounded-full bg-hover text-meta font-semibold text-ink-soft"
       >
         {roleMark(item.agent ?? '')}
       </span>
