@@ -35,11 +35,13 @@ export function SuggestedTriggers({
 
   return (
     <section aria-labelledby="suggested-heading" className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
         <h2 id="suggested-heading" className="m-0 text-heading">
           Suggested triggers
         </h2>
-        <SegmentedControl label="Suggested for" options={options} value={group} onChange={onGroupChange} />
+        <div className="min-w-0 max-w-full overflow-x-auto">
+          <SegmentedControl label="Suggested for" options={options} value={group} onChange={onGroupChange} />
+        </div>
       </div>
       {shown.length === 0 ? (
         <p className="m-0 text-secondary text-muted">No suggestions for this group yet.</p>
