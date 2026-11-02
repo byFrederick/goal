@@ -73,3 +73,13 @@ describe('FileTree', () => {
     expect(screen.queryByRole('button', { name: 'New file in the definition' })).toBeNull();
   });
 });
+
+describe('FileTree phone tap targets', () => {
+  it('makes New file in the definition 44 px below md and 24 px from md', () => {
+    renderTree();
+    const button = screen.getByRole('button', { name: 'New file in the definition' });
+    expect(button.classList.contains('size-11')).toBe(true);
+    expect(button.classList.contains('md:size-6')).toBe(true);
+    expect(button.classList.contains('size-6')).toBe(false);
+  });
+});

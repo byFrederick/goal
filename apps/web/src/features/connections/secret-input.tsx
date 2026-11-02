@@ -4,6 +4,7 @@
 import { type ComponentProps, useState } from 'react';
 import { cn } from '../../ui/cn';
 import { Input } from '../../ui/field';
+import { touchTarget } from '../../ui/touch-target';
 
 export function SecretInput({ className, ...props }: Omit<ComponentProps<typeof Input>, 'type' | 'autoComplete'>) {
   const [shown, setShown] = useState(false);
@@ -23,7 +24,10 @@ export function SecretInput({ className, ...props }: Omit<ComponentProps<typeof 
         aria-pressed={shown}
         aria-label="Show the value"
         onClick={() => setShown((s) => !s)}
-        className="absolute top-1/2 right-1.5 inline-flex h-8 -translate-y-1/2 items-center justify-center rounded-chip bg-hover px-2 text-meta font-control text-ink-soft transition-colors duration-(--duration-quick) hover:text-ink"
+        className={cn(
+          touchTarget,
+          'absolute top-1/2 right-1.5 inline-flex h-8 -translate-y-1/2 items-center justify-center rounded-chip bg-hover px-2 text-meta font-control text-ink-soft transition-colors duration-(--duration-quick) hover:text-ink',
+        )}
       >
         {shown ? 'Hide' : 'Show'}
       </button>
