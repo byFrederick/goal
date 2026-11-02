@@ -856,3 +856,49 @@ func TestAPI_HumanDecisions(t *testing.T) {
 		t.Errorf("events %+v, want an approval by the local user", events)
 	}
 }
+
+// A submitted item records where it came from, for Intake: people for a browser session and
+// for GOAL_AUTH=none's one person, the CLI for goal login's session and a personal token, the
+// API for an API key.
+func TestAPI_SubmitRecordsItsSource(t *testing.T) {
+	t.Parallel()
+
+	h := keyed(t)
+	h.identity.AddSession(freshCLIToken, ownerID, domain.Session{ID: "fresh-cli", CreatedAt: t0, ExpiresAt: t0.Add(7 * 24 * time.Hour)})
+	pat, _ := h.createToken(t, freshToken, laptop)
+	key, _ := h.create(t, ciDeploy)
+
+	cases := []struct {
+		name   string
+		h      *harness
+		header http.Header
+		want   domain.ItemSource
+	}{
+		{"a browser session", h.harness, cookie(ownerToken), domain.ItemFromPeople},
+		{"goal login's session", h.harness, bearer(freshCLIToken), domain.ItemFromCLI},
+		{"a personal token", h.harness, bearer(pat.Secret), domain.ItemFromCLI},
+		{"an API key", h.harness, bearer(key.Secret), domain.ItemFromAPI},
+		{"the local user of GOAL_AUTH=none", newHarness(t), nil, domain.ItemFromPeople},
+	}
+
+	for _, c := range cases {
+		res := c.h.request(t, http.MethodPost, acmeItems, submitFix, c.header)
+		if res.status != http.StatusCreated {
+			t.Fatalf("submit with %s = %d %s", c.name, res.status, res.body)
+		}
+
+		var made gen.Item
+		if err := json.Unmarshal(res.body, &made); err != nil {
+			t.Fatal(err)
+		}
+
+		it, err := c.h.store.Item(inOrg(t), domain.ItemID(made.Id))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if it.Source != c.want {
+			t.Errorf("submit with %s: source %q, want %q", c.name, it.Source, c.want)
+		}
+	}
+}
