@@ -9,7 +9,23 @@ import { cn } from './cn';
 export const tabNavItem =
   'press relative inline-flex h-11 shrink-0 items-center gap-1 rounded-chip px-3 text-secondary whitespace-nowrap text-muted hover:text-ink aria-[current=page]:font-control aria-[current=page]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run md:h-7.5';
 
-export function TabNav({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
+/** The class of each link inside an underline TabNav: a 40px row (44px on phones), the current link in ink. */
+export const tabNavUnderlineItem =
+  'press relative inline-flex h-11 shrink-0 items-center gap-2 px-3 text-secondary font-control whitespace-nowrap text-ink-soft transition-colors duration-(--duration-quick) hover:text-ink aria-[current=page]:font-semibold aria-[current=page]:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-run md:h-10';
+
+export function TabNav({
+  label,
+  className,
+  variant = 'pill',
+  children,
+}: {
+  label: string;
+  className?: string;
+  /** "pill" is the segmented look; "underline" is a rule under the row with a 2px ink indicator (Jonah). */
+  variant?: 'pill' | 'underline';
+  children: ReactNode;
+}) {
+  const underline = variant === 'underline';
   const nav = useRef<HTMLElement>(null);
   const pill = useRef<HTMLSpanElement>(null);
   const placed = useRef(false);
@@ -45,14 +61,19 @@ export function TabNav({ label, className, children }: { label: string; classNam
       ref={nav}
       aria-label={label}
       className={cn(
-        'relative inline-flex max-w-full gap-px self-start overflow-x-auto rounded-control border border-line bg-panel p-1',
+        underline
+          ? 'relative flex max-w-full gap-1 overflow-x-auto border-b border-rule'
+          : 'relative inline-flex max-w-full gap-px self-start overflow-x-auto rounded-control border border-line bg-panel p-1',
         className,
       )}
     >
       <span
         ref={pill}
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-1 left-0 rounded-chip bg-card opacity-0 shadow-raised transition-[transform,width] duration-(--duration-fast) ease-out"
+        className={cn(
+          'pointer-events-none absolute left-0 opacity-0 transition-[transform,width] duration-(--duration-fast) ease-out motion-reduce:transition-none',
+          underline ? 'bottom-0 h-0.5 bg-ink' : 'inset-y-1 rounded-chip bg-card shadow-raised',
+        )}
       />
       {children}
     </nav>
