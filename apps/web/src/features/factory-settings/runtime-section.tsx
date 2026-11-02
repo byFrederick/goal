@@ -22,7 +22,7 @@ export function RuntimeSection() {
   const tools = basics.tools ?? [];
   return (
     <SettingsGroup id="runtime" title="Runtime">
-      <div className="flex min-w-0 flex-col gap-1.5">
+      <div className="flex min-w-0 flex-col gap-2">
         {/* The group's legend names it for screen readers. */}
         <span aria-hidden="true" className="text-sm font-medium">
           Size of each run’s box
@@ -35,9 +35,7 @@ export function RuntimeSection() {
           onChange={(size) => session.edit(setBasics(basics, 'size', size), { coalesce: '/basics/size' })}
           className="self-start"
         />
-        <p className="m-0 text-[13px] leading-snug text-muted">
-          Small 1 CPU, 2 GiB. Medium 2 CPU, 4 GiB. Large 4 CPU, 8 GiB.
-        </p>
+        <p className="m-0 text-secondary text-muted">Small 1 CPU, 2 GiB. Medium 2 CPU, 4 GiB. Large 4 CPU, 8 GiB.</p>
       </div>
       <TokenField
         label="Tools"

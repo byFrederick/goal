@@ -40,7 +40,7 @@ function Choice<T extends string>({
   const helpId = useId();
   const viewOnly = useViewOnly();
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
+    <div className="flex min-w-0 flex-col gap-2">
       <span aria-hidden="true" className="text-sm font-medium">
         {name}
       </span>
@@ -53,7 +53,7 @@ function Choice<T extends string>({
         onChange={onChange}
         className="max-w-full self-start"
       />
-      <p id={helpId} className="m-0 text-[13px] leading-snug text-muted">
+      <p id={helpId} className="m-0 text-secondary text-muted">
         {help}
       </p>
     </div>

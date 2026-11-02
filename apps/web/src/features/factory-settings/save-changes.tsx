@@ -60,13 +60,13 @@ export function SaveChanges({ org, factory }: { org: string; factory: Factory })
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-[13px] text-muted">Saving publishes v{next}</span>
+        <span className="text-secondary text-muted">Saving publishes v{next}</span>
         <Button variant="primary" onClick={() => void save()} disabled={!hasDraft || pending}>
           Save changes
         </Button>
       </div>
       {refusal ? (
-        <p role="alert" className="m-0 max-w-md text-right text-[13px] leading-snug text-rework-ink">
+        <p role="alert" className="m-0 max-w-md text-right text-secondary text-rework-ink">
           {refusal}
         </p>
       ) : null}
