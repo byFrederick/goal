@@ -9,6 +9,7 @@ import { useEffect, useRef } from 'react';
 import type { ParseError, SectionSummary } from '../../../api/types';
 import { type Section, sections } from '../../../shared/definition/model';
 import { useFactoryParams } from '../../../shared/factory';
+import { Chip } from '../../../ui/chip';
 import { cn } from '../../../ui/cn';
 import { useModel } from '../draft/use-draft';
 import { type EditorSection, sectionInfo } from '../sections';
@@ -102,6 +103,10 @@ function Tile({
     search: line === undefined ? {} : { mode: 'yaml' as const, ...(line ? { line } : {}) },
   });
   const label = sectionInfo[section].label;
+  // A section's own problem count is a red chip next to its caption ("1 change" + "1 problem").
+  const split = problem && state === undefined ? /^(.*?)(?:, )?(\d+ problems?)$/.exec(text) : null;
+  const chip = split ? split[2] : null;
+  const caption = split ? split[1] : text;
   // In the scrolling row (phones), the current tile scrolls into view.
   const ref = useRef<HTMLAnchorElement>(null);
   useEffect(() => {
@@ -123,7 +128,14 @@ function Tile({
       <span className="sr-only">{state ? `${label}, ${text}, ${state}` : `${label}, ${text}`}</span>
       <span aria-hidden="true" className="flex min-w-0 flex-col leading-tight">
         <span className="truncate font-medium">{label}</span>
-        <span className={cn('truncate text-xs', problem ? 'text-rework-ink' : 'text-muted')}>{text}</span>
+        <span className="flex min-w-0 items-center gap-1">
+          {caption ? (
+            <span className={cn('truncate text-xs', problem && !chip ? 'text-rework-ink' : 'text-muted')}>
+              {caption}
+            </span>
+          ) : null}
+          {chip ? <Chip tone="rework">{chip}</Chip> : null}
+        </span>
       </span>
     </a>
   );
