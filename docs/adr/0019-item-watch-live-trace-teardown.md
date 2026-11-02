@@ -17,7 +17,7 @@ What exists today:
 
 ## Decision
 
-1. **Watch live opens the Trace tab on the running run and follows it.** A person who chooses Watch live sees the Trace tab (decision 2) scrolled to the running run's newest step, and each new tool call, result and agent message appears at the end as it is recorded; the existing live line ("<role> working, N tool calls") stays in the view's header. Scrolling up stops the following; choosing Watch live again resumes it. It is a view of the item page, not a page of its own: the URL gains the tab (`?view=trace`), so a shared link opens the same view.
+1. **Watch live opens the Trace tab on the running run and follows it.** A person who chooses Watch live sees the Trace tab (decision 2) scrolled to the running run's newest step, and each new tool call, result and agent message appears at the end as it is recorded; the existing live line ("<role> working, N tool calls") stays in the view's header. Scrolling up stops the following; choosing Watch live again resumes it. It is a view of the item page, not a page of its own: the URL gains the tab (`?tab=trace`), so a shared link opens the same view.
    - **Data:** the item's events and runs only, as the trace reads them today. No transcript, no box output, nothing new in the bucket.
    - **API:** none new. `listItemEvents` (`GET /v1/orgs/{org}/items/{item}/events?after=`), `listItemRuns` and `getItem` (for `flow.current_run`).
    - **Live:** `event: item` on the stream invalidates `keys.item(org, item)`, which refetches `keys.events` (only the events after the last cached one) and `keys.runs`. No polling, no second stream.
@@ -57,9 +57,11 @@ Each row is one pull request. All come after the item screen's restyle (software
 
 | # | Pull request | Lane | Files it changes | Merges after |
 | --- | --- | --- | --- | --- |
-| 1 | Trace tab: move the Trace card into the Trace tab, `?view=trace`, "Full trace" opens it; enable Trace | frontend | `apps/web/src/features/items/item-page.tsx`, `trace-view.tsx`, their tests, `apps/web/mock` fixtures, the item e2e spec, `docs/engineering/frontend.md` | software#150, software#153 |
+| 1 | Trace tab: move the Trace card into the Trace tab, `?tab=trace`, "Full trace" opens it; enable Trace | frontend | `apps/web/src/features/items/item-page.tsx`, `trace-view.tsx`, their tests, `apps/web/mock` fixtures, the item e2e spec, `docs/engineering/frontend.md` | software#150, software#153 |
 | 2 | Watch live: open the Trace tab on the running run and follow it; disabled with no running run; enable Watch live | frontend | `apps/web/src/features/items/item-page.tsx`, `trace-view.tsx`, `timeline.ts`, their tests, `apps/web/mock` fixtures, the item e2e spec, `docs/engineering/frontend.md` | 1 |
 | 3 | Teardown in the domain and the API: `domain.Teardown`, `TeardownOf`, `getItemTeardown`, `task api:gen`, the access golden | backend | `internal/core/domain/teardown.go` and its test, `contracts/api/openapi.yaml`, `internal/api` (handler and tests, `testdata/access.golden`), generated code, `docs/engineering/architecture.md`, the glossary row's status | the owner's confirmation of decision 3 |
 | 4 | Teardown in the CLI: `goal item <item> --teardown` | backend | `internal/cli` (the item command and its test), `docs/engineering/architecture.md` (the CLI line) | 3 |
 | 5 | Teardown tab: the view as the owner drew it, its four states, its query under `keys.item`; enable Teardown | frontend | `apps/web/src/features/items/` (a teardown view and its tests), `apps/web/src/api/queries.ts`, `apps/web/mock` fixtures, the item e2e spec, `docs/engineering/frontend.md`, `docs/design/screens/README.md` (the "Not built yet" cell) | 3, and the owner's canvas picture (decision 4) |
 | 6 | OAuth consent | per spec 6 | as PR 6-7 of [spec 6](../history/specs/6-goal-mcp-server.md) | 6-2, 6-3 |
+
+Amended 2026-11-02: the item page keeps its tab in `?tab=` (`item-tabs.tsx`), so the Trace tab is `?tab=trace`, not `?view=trace`.

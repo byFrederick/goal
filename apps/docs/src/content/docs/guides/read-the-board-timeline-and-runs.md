@@ -33,7 +33,7 @@ The Items page at `/o/<org>/f/<factory>/items` lists the same items as a table, 
 
 Open an item from the Board or the Items page. Its URL is `/o/<org>/f/<factory>/items/<ref>`, where `<ref>` is the item's number.
 
-The page has four tabs. Move between them with the arrow keys; Home and End jump to the first and last. The selected tab is in the URL as `?tab=`, and Timeline leaves it out:
+The page has five tabs. Move between them with the arrow keys; Home and End jump to the first and last. The selected tab is in the URL as `?tab=`, and Timeline leaves it out:
 
 - **Timeline** shows each run's events as grouped steps in plain words: the station, the agent, what it did and how it ended.
 - **Spec** shows the request and the acceptance criteria from the spec the agents wrote.
@@ -42,7 +42,9 @@ The page has four tabs. Move between them with the arrow keys; Home and End jump
 
 The timeline and the note field are the main column on the left. To the right of them, the details column shows the item's details, its cost, the items it overlaps with, and the rules its runs received.
 
-The Trace and Teardown controls on the item page are not available yet; the page shows them disabled.
+- **Trace** shows every run of the item, oldest first, on one time axis. Each run lists its tool calls, checks, notes and human touches as rows. Select a row to see its detail beside the list. On a phone, each run is a list and the detail opens under the row. Open it from **Full trace** on the Latest steps card. It shows "No tool calls yet." before any run, and new steps appear as agents work.
+
+The Teardown control on the item page is not available yet; the page shows it disabled.
 
 The same history is available from the CLI:
 
