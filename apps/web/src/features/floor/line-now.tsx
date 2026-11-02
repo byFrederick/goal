@@ -1,19 +1,16 @@
 // "The line, now" on the Floor (MASTER.md, Components: The line): the factory's stations from intake to done, in
 // the page's own colours, with the andon strip above them while the cord is pulled. The figures under it are the
 // Board's; the stations come from lineStations, the same mapping Home's line uses.
-import type { Board, Factory } from '../../api/types';
-import { AndonButton } from '../../shared/andon';
+import type { Board } from '../../api/types';
 import { humanize } from '../../shared/format';
 import { Line, type LineAndon } from '../../ui/line';
 import { lineStations } from './line-stations';
 
 export function LineNow({
-  factory,
   board,
   constraint,
   doneThisWeek,
 }: {
-  factory: Factory;
   board: Board;
   /** The constraint to show: the constraint report's, else the board's. */
   constraint: string | null;
@@ -31,9 +28,9 @@ export function LineNow({
     <Line
       title="The line, now"
       legend
+      className="rounded-card border border-line bg-card p-4 md:px-5"
       stations={lineStations(board, constraint, doneThisWeek)}
       andon={andon}
-      clear={line.andon ? <AndonButton factory={factory} andon={line.andon} /> : null}
       footer={
         <>
           <span>

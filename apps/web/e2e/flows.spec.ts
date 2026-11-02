@@ -509,7 +509,7 @@ test('pull the andon cord, then clear it: the line stops and runs again', async 
   await expect(status).toHaveText(/^Line running/);
   await expect(goalSquare).not.toHaveAccessibleName(/andon pulled/);
 
-  await page.getByRole('button', { name: 'Pull the andon cord' }).click();
+  await page.getByRole('button', { name: 'Pull andon' }).click();
   const pull = page.getByRole('dialog', { name: 'Pull the andon cord' });
   await pull.getByRole('button', { name: 'Stop the line' }).click();
   await expect(pull.getByText('Write why, so whoever clears it knows what to fix.')).toBeVisible();
@@ -531,7 +531,7 @@ test('pull the andon cord, then clear it: the line stops and runs again', async 
   await expect(clear).toBeHidden();
   await expect(status).toHaveText(/^Line running/);
   await expect(goalSquare).not.toHaveAccessibleName(/andon pulled/);
-  await expect(page.getByRole('button', { name: 'Pull the andon cord' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Pull andon' })).toBeVisible();
 });
 
 test('on a phone: floor to board to item and back', async ({ page }) => {
