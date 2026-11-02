@@ -115,7 +115,7 @@ const board = { stations: [{ id: 'architect', items: [], lanes }] } as unknown a
 
 /** Renders the Assembly page with its header, then opens Add a part. */
 async function openDialog() {
-  renderItemPage({ page: () => <AssemblyPage />, org, factory, item: assembly, parts, board });
+  renderItemPage({ page: () => <AssemblyPage />, org, factory, item: assembly, parts, board, topBar: true });
   await screen.findByRole('heading', { level: 1 });
   fireEvent.click(screen.getByRole('button', { name: 'Add a part' }));
   return screen.getByRole('dialog', { name: 'Add a part' });

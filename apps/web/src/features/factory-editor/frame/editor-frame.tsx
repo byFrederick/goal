@@ -9,9 +9,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Clock } from 'lucide-react';
-import { type ReactNode, useEffect, useId, useState } from 'react';
+import { type ReactNode, useEffect, useId, useMemo, useState } from 'react';
 import { draftQuery, factoryQuery } from '../../../api/queries';
 import type { Draft } from '../../../api/types';
+import { usePhone } from '../../../app/phone-chrome';
+import { TopBarSlot } from '../../../app/top-bar';
 import { type Model, sections } from '../../../shared/definition/model';
 import { useFactory, useFactoryParams } from '../../../shared/factory';
 import { plural } from '../../../shared/format';
@@ -21,7 +23,7 @@ import { Button } from '../../../ui/button';
 import { Chip } from '../../../ui/chip';
 import { ViewOnlyBanner } from '../../../ui/view-only-banner';
 import type { DraftSession, SessionState } from '../draft/session';
-import { useDraft, useDraftOpen, useDraftSession } from '../draft/use-draft';
+import { DraftSessionContext, useDraft, useDraftOpen, useDraftSession } from '../draft/use-draft';
 import type { EditorSection } from '../sections';
 import { AskBar } from '../yaml/ask-bar';
 import { ConflictDialog, DiscardedDialog, FileConflictDialog } from './conflict-dialog';
@@ -72,6 +74,18 @@ export function useUndoKeys(session: DraftSession): void {
   }, [session]);
 }
 
+function VersionsButton() {
+  const params = useFactoryParams();
+  return (
+    <Button asChild variant="white" className="h-11 md:h-10">
+      <Link to="/o/$org/f/$factory/definition/$section" params={{ ...params, section: 'versions' }}>
+        <Clock size={16} strokeWidth={1.5} aria-hidden="true" />
+        Versions
+      </Link>
+    </Button>
+  );
+}
+
 export function DefinitionFrame({ section, yaml, children }: FrameProps) {
   const org = useOrg();
   const factory = useFactory();
@@ -83,6 +97,7 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
   const draft = useQuery({ ...draftQuery(org.id, factory.id), enabled: open === true }).data;
   const detail = useQuery(factoryQuery(org.id, factory.id)).data;
   const validation = useValidation();
+  const phone = usePhone();
   useUndoKeys(session);
 
   const [discardOpen, setDiscardOpen] = useState(false);
@@ -114,8 +129,84 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
   const publishNumber = draft?.next_number ?? (current ? current.number + 1 : 1);
   const canPublish = !viewOnly && !unchanged && problemCount === 0;
 
+  const { org: orgSlug, factory: factoryName } = params;
+  const actions = useMemo(() => {
+    const versionsButton = <VersionsButton />;
+    // From 768 px the top bar holds every action, the primary one last. The phone's bar keeps Publish;
+    // the Form | YAML toggle and Versions sit in the content (Review changes is in the draft banner).
+    const publish = viewOnly ? null : (
+      <>
+        {canPublish ? (
+          <Button asChild variant="primary" className="h-11 md:h-10">
+            <Link
+              to="/o/$org/f/$factory/definition/$section"
+              params={{ org: orgSlug, factory: factoryName, section: 'review' }}
+            >
+              Publish v{publishNumber}
+            </Link>
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            className="h-11 md:h-10"
+            disabled
+            aria-describedby={unchanged ? unchangedId : blockedId}
+          >
+            Publish v{publishNumber}
+          </Button>
+        )}
+        <span id={unchangedId} className="sr-only">
+          No changes yet
+        </span>
+        <span id={blockedId} className="sr-only">
+          {problemCount > 0 ? `Fix ${plural(problemCount, 'problem')} before you publish` : 'Nothing to publish'}
+        </span>
+      </>
+    );
+    // The top bar sits outside the draft session's provider; the toggle reads the session, so hand it down.
+    return (
+      <DraftSessionContext.Provider value={session}>
+        <div className="flex min-w-0 items-center justify-end gap-2">
+          {phone ? null : (
+            <>
+              {yaml ? null : <ViewToggle section={section} yaml={false} />}
+              {versionsButton}
+              {viewOnly ? null : (
+                <Button asChild variant="white" className="h-11 md:h-10">
+                  <Link
+                    to="/o/$org/f/$factory/definition/$section"
+                    params={{ org: orgSlug, factory: factoryName, section: 'review' }}
+                    aria-describedby={unchanged ? unchangedId : undefined}
+                  >
+                    Review changes
+                  </Link>
+                </Button>
+              )}
+            </>
+          )}
+          {publish}
+        </div>
+      </DraftSessionContext.Provider>
+    );
+  }, [
+    phone,
+    yaml,
+    section,
+    viewOnly,
+    canPublish,
+    unchanged,
+    unchangedId,
+    orgSlug,
+    factoryName,
+    blockedId,
+    problemCount,
+    publishNumber,
+    session,
+  ]);
+
   return (
     <>
+      <TopBarSlot actions={actions} />
       <header className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -126,52 +217,12 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
               </Chip>
             ) : null}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {yaml ? null : <ViewToggle section={section} yaml={false} />}
-            <Button asChild variant="white" className="h-11 md:h-10">
-              <Link to="/o/$org/f/$factory/definition/$section" params={{ ...params, section: 'versions' }}>
-                <Clock size={16} strokeWidth={1.5} aria-hidden="true" />
-                Versions
-              </Link>
-            </Button>
-            {viewOnly ? null : (
-              <>
-                <Button asChild variant="white" className="h-11 md:h-10">
-                  <Link
-                    to="/o/$org/f/$factory/definition/$section"
-                    params={{ ...params, section: 'review' }}
-                    aria-describedby={unchanged ? unchangedId : undefined}
-                  >
-                    Review changes
-                  </Link>
-                </Button>
-                {canPublish ? (
-                  <Button asChild variant="primary" className="h-11 md:h-10">
-                    <Link to="/o/$org/f/$factory/definition/$section" params={{ ...params, section: 'review' }}>
-                      Publish v{publishNumber}
-                    </Link>
-                  </Button>
-                ) : (
-                  <Button
-                    variant="primary"
-                    className="h-11 md:h-10"
-                    disabled
-                    aria-describedby={unchanged ? unchangedId : blockedId}
-                  >
-                    Publish v{publishNumber}
-                  </Button>
-                )}
-                <span id={unchangedId} className="sr-only">
-                  No changes yet
-                </span>
-                <span id={blockedId} className="sr-only">
-                  {problemCount > 0
-                    ? `Fix ${plural(problemCount, 'problem')} before you publish`
-                    : 'Nothing to publish'}
-                </span>
-              </>
-            )}
-          </div>
+          {phone ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {yaml ? null : <ViewToggle section={section} yaml={false} />}
+              <VersionsButton />
+            </div>
+          ) : null}
         </div>
         {viewOnly ? (
           <ViewOnlyBanner

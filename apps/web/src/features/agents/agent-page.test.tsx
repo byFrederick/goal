@@ -14,6 +14,7 @@ import {
 } from '../../api/queries';
 import type { AgentStats, Factory, OrgSummary } from '../../api/types';
 import { renderFactoryPage, type Seed } from '../../test/route';
+import { TopBarProbe } from '../../test/top-bar-probe';
 import { TooltipProvider } from '../../ui/tooltip';
 import { AgentPage } from './agent-page';
 import type { AgentView } from './views';
@@ -24,13 +25,16 @@ vi.mock('../../api/client', async (original) => ({
 }));
 
 const slotCrumbs = vi.hoisted(() => [] as (string | undefined)[]);
-vi.mock('../../app/top-bar', async (original) => ({
-  ...(await original<typeof import('../../app/top-bar')>()),
-  TopBarSlot: ({ crumb, back }: { crumb?: string; back?: React.ReactNode }) => {
-    slotCrumbs.push(crumb);
-    return back ?? null;
-  },
-}));
+vi.mock('../../app/top-bar', async (original) => {
+  const real = await original<typeof import('../../app/top-bar')>();
+  return {
+    ...real,
+    TopBarSlot: (props: Parameters<typeof real.TopBarSlot>[0]) => {
+      slotCrumbs.push(props.crumb);
+      return real.TopBarSlot(props);
+    },
+  };
+});
 
 vi.mock('../../api/definitions', async (original) => ({
   ...(await original<typeof import('../../api/definitions')>()),
@@ -134,24 +138,30 @@ function seeds({
 /** Renders the page and waits for its first render: the router mounts the page after its match. */
 async function renderPage(
   view: AgentView = 'overview',
-  options: Parameters<typeof seeds>[0] & { can?: Factory['can'] } = {},
+  options: Parameters<typeof seeds>[0] & { can?: Factory['can']; probe?: boolean } = {},
 ) {
-  const { can, ...seedOptions } = options;
+  const { can, probe, ...seedOptions } = options;
   const result = renderFactoryPage({
-    page: () => (
-      <TooltipProvider>
-        <AgentPage agent="frontend-engineer" view={view} />
-      </TooltipProvider>
-    ),
+    page: () => {
+      const page = (
+        <TooltipProvider>
+          <AgentPage agent="frontend-engineer" view={view} />
+        </TooltipProvider>
+      );
+      return probe ? <TopBarProbe>{page}</TopBarProbe> : page;
+    },
     path: 'agents/frontend-engineer',
     org,
     factory: can ? { ...factory, can } : factory,
     seed: seeds(seedOptions),
     search: view === 'overview' ? undefined : { view },
+    topBar: !probe,
   });
   await screen.findByRole('heading', { level: 1, name: 'frontend-engineer' });
   return result;
 }
+
+const topBar = () => screen.getAllByRole('banner')[0] as HTMLElement;
 
 describe('the Agent page, ready', () => {
   it('names the agent, says where it works and lists the views', async () => {
@@ -176,6 +186,24 @@ describe('the Agent page, ready', () => {
     expect(slotCrumbs.at(-1)).toBe('frontend-engineer');
   });
 
+  it('puts Bake off this agent and Open prompt file in the top bar, the prompt file last', async () => {
+    await renderPage();
+    const bar = within(topBar());
+    const bake = bar.getByRole('button', { name: 'Bake off this agent' });
+    const prompt = bar.getByRole('link', { name: 'Open prompt file' });
+    expect(bake.compareDocumentPosition(prompt)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(screen.getAllByRole('button', { name: 'Bake off this agent' })).toHaveLength(1);
+  });
+
+  it('says why Bake off is disabled in the page, and the top bar button points at it', async () => {
+    await renderPage();
+    const bake = within(topBar()).getByRole('button', { name: 'Bake off this agent' }) as HTMLButtonElement;
+    expect(bake.disabled).toBe(true);
+    const reason = document.getElementById(bake.getAttribute('aria-describedby') ?? '');
+    expect(reason?.textContent).toBeTruthy();
+    expect(topBar().contains(reason)).toBe(false);
+  });
+
   it('has no in-page breadcrumb, and a phone gets Back to Agents in the top bar', async () => {
     window.matchMedia = ((query: string) =>
       ({
@@ -184,9 +212,9 @@ describe('the Agent page, ready', () => {
         addEventListener: () => {},
         removeEventListener: () => {},
       }) as unknown as MediaQueryList) as typeof window.matchMedia;
-    await renderPage();
+    await renderPage('overview', { probe: true });
     expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
-    const back = screen.getByRole('link', { name: 'Back to Agents' });
+    const back = within(screen.getByLabelText('Top bar')).getByRole('link', { name: 'Back to Agents' });
     expect(back.getAttribute('href')).toBe('/o/acme/f/goal/agents');
     delete (window as { matchMedia?: unknown }).matchMedia;
   });

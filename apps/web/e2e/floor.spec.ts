@@ -25,6 +25,15 @@ function dayLabel(offset: number): string {
 
 const throughput = (page: Page) => page.getByRole('region', { name: 'Throughput' });
 
+test('the floor puts New item in the top bar, with the time window from 768 px', async ({ page }) => {
+  await page.goto('/o/acme/f/sre');
+  const bar = page.getByRole('banner').first();
+  await expect(bar.getByRole('button', { name: /New item/ })).toBeVisible();
+  await expect(page.getByRole('main').getByRole('button', { name: /New item/ })).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Time window' })).toBeVisible();
+  if (!isPhone(page)) await expect(bar.getByRole('group', { name: 'Time window' })).toBeVisible();
+});
+
 test('the floor shows the cards below the figures: Needs you, where work waits, throughput and activity', async ({
   page,
 }) => {

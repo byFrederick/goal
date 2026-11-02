@@ -147,6 +147,26 @@ async function renderAssembly(over: { item?: Item; parts?: AssemblyParts; factor
   await screen.findByRole('heading', { level: 1 });
 }
 
+describe('AssemblyPage actions in the top bar', () => {
+  it('draws Add a part, Pause and Cancel assembly in the top bar and none in the page', async () => {
+    await renderAssembly({ factory: { ...factory, can: ['item:create', 'item:operate', 'item:decide'] } });
+
+    const bar = within(screen.getByLabelText('Top bar'));
+    for (const name of ['Add a part', 'Pause', 'Cancel assembly']) {
+      expect(bar.getByRole('button', { name })).toBeTruthy();
+      expect(screen.getAllByRole('button', { name })).toHaveLength(1);
+    }
+  });
+
+  it('puts Resume, the primary action, last', async () => {
+    await renderAssembly({ parts: pausedParts });
+
+    const bar = within(screen.getByLabelText('Top bar'));
+    const names = bar.getAllByRole('button').map((b) => b.textContent);
+    expect(names.at(-1)).toBe('Resume');
+  });
+});
+
 function stubWidth(phone: boolean) {
   window.matchMedia = (query: string) =>
     ({

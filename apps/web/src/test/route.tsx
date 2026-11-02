@@ -223,6 +223,7 @@ export function renderItemPage({
   item,
   parts,
   board,
+  topBar = false,
 }: {
   page: () => ReactNode;
   org: OrgSummary;
@@ -230,6 +231,8 @@ export function renderItemPage({
   item: Item;
   parts?: AssemblyParts;
   board?: Board;
+  /** Draw the shell's top bar above the page, for a page whose actions live there (TopBarSlot). */
+  topBar?: boolean;
 }) {
   const seed: Seed[] = [[itemQuery(org.id, item.ref).queryKey, item]];
   if (parts) seed.push([partsQuery(org.id, item.ref).queryKey, parts]);
@@ -242,5 +245,6 @@ export function renderItemPage({
     org,
     factory,
     seed,
+    topBar,
   });
 }

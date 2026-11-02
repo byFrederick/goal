@@ -4,9 +4,10 @@
 
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import { useMemo } from 'react';
 import { agentStatsQuery } from '../../api/queries';
 import type { AgentStats } from '../../api/types';
-import { usePhoneBack } from '../../app/phone-chrome';
+import { usePhone, usePhoneBack } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { DraftChangesNote, SkillsCard, ToolPolicyCard, useRunningModel } from '../../shared/definition/agent-cards';
 import { useFactory, useFactoryParams } from '../../shared/factory';
@@ -23,7 +24,7 @@ import { DraftSessionProvider } from '../factory-editor/draft/use-draft';
 import { PromptFull, PromptPreview } from './agent-prompt';
 import { AgentSettings } from './agent-settings';
 import { AskJonahButton } from './ask-jonah-button';
-import { BakeOffButton } from './bake-off-button';
+import { useBakeOff } from './bake-off-button';
 import { blockedSentence, reasonShare } from './sentences';
 import { type AgentView, agentViews } from './views';
 
@@ -130,25 +131,34 @@ function AgentPageBody({ agent, view }: { agent: string; view: AgentView }) {
   const { data: stats } = useSuspenseQuery(agentStatsQuery(org.id, factory.id, agent));
   const description = useRunningModel().data?.agents.agents?.find((a) => a.name === agent)?.description;
   const agentParams = { ...params, agent };
+  const phone = usePhone();
+  const bakeOff = useBakeOff(agent);
+  // From 768 px the top bar holds Bake off and Open prompt file, the last one primary; the phone's bar keeps
+  // Open prompt file and Bake off sits in the content, with its reason or refusal.
+  const actions = useMemo(
+    () => (
+      <div className="flex min-w-0 items-center justify-end gap-2">
+        {phone ? null : bakeOff.button}
+        <Button asChild variant="secondary" size="sm">
+          <Link
+            to="/o/$org/f/$factory/definition/$section"
+            params={{ org: params.org, factory: params.factory, section: 'agents' }}
+            search={{ agent }}
+          >
+            Open prompt file
+          </Link>
+        </Button>
+      </div>
+    ),
+    [phone, bakeOff.button, params.org, params.factory, agent],
+  );
 
   const back = usePhoneBack('Back to Agents', '/o/$org/f/$factory/agents', params);
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      <TopBarSlot crumb={agent} back={back} />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          <BakeOffButton agent={agent} />
-          <Button asChild variant="secondary" size="sm">
-            <Link
-              to="/o/$org/f/$factory/definition/$section"
-              params={{ ...params, section: 'agents' }}
-              search={{ agent }}
-            >
-              Open prompt file
-            </Link>
-          </Button>
-        </div>
-      </div>
+      <TopBarSlot crumb={agent} actions={actions} back={back} />
+      {phone ? bakeOff.button : null}
+      {bakeOff.notes}
 
       <header className="flex flex-wrap items-start gap-4">
         <span

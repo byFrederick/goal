@@ -140,6 +140,7 @@ async function renderSettings({ canEdit = true }: { canEdit?: boolean } = {}) {
     org,
     factory,
     seed,
+    topBar: true,
   });
   await screen.findByRole('region', { name: 'Repository' });
   await waitFor(() => expect(screen.getByLabelText('Repository URL')).toBeTruthy(), { timeout: 3000 });

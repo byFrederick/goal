@@ -1,7 +1,7 @@
-// Settings of a factory (canvas "Settings"): the title and Save changes, then General, Repository, Runtime,
+// Settings of a factory (canvas "Settings"): the title, then General, Repository, Runtime,
 // Budgets and targets, Flow, People with access and the Danger zone, with a list of the sections at the right
 // from 1024 px. The four groups between General and People edit the factory definition through a draft
-// session, the same one the Definition editor uses, and Save changes publishes it. The Danger zone shows the rows the caller may use:
+// session, the same one the Definition editor uses, and Save changes, in the top bar, publishes it. The Danger zone shows the rows the caller may use:
 // Pause on factory:manage in the factory's `can` (not for an archived factory), Archive or Restore on
 // factory:archive and Delete on factory:delete, both in the organization's `can`. The card shows when at
 // least one row does. The factory is the detail goald answers, so archived and paused stay current after an
@@ -48,10 +48,8 @@ export function FactorySettingsPage() {
   return (
     <DraftSessionProvider key={`${factory.id}:${canEdit}`} org={org.id} factory={factory.id} readOnly={!canEdit}>
       <div className="flex max-w-6xl flex-col gap-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <h1 className="m-0 text-page-title">Settings</h1>
-          {canEdit ? <SaveChanges org={org.id} factory={factory} /> : null}
-        </div>
+        <h1 className="m-0 text-page-title">Settings</h1>
+        {canEdit ? <SaveChanges org={org.id} factory={factory} /> : null}
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_200px] lg:gap-10">
           <div className="flex min-w-0 flex-col gap-4">
             <GeneralCard factory={factory} />
