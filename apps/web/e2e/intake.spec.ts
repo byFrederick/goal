@@ -51,3 +51,22 @@ test('the picker is one pane with Back on a phone', async ({ page }) => {
   await expect(dialog.getByRole('button', { name: 'Schedule' })).toBeVisible();
   await expectNoHorizontalScroll(page);
 });
+
+// The pull request's screenshots: Intake and New trigger at 1440 and 375 px in the light and dark themes.
+// Not run in the box (no browser): written to the test output directory when the suite runs elsewhere.
+for (const scheme of ['light', 'dark'] as const) {
+  for (const width of [1440, 375]) {
+    test(`screenshots of Intake and New trigger at ${width} px, ${scheme}`, async ({ page }, testInfo) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: width === 1440 ? 1000 : 800 });
+      await page.goto(intake);
+      await expect(page.getByRole('heading', { level: 2, name: 'Suggested triggers' })).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`intake-${width}-${scheme}.png`), fullPage: true });
+
+      await page.goto(`${intake}/new`);
+      await expect(page.getByRole('dialog', { name: 'New trigger' })).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`intake-new-${width}-${scheme}.png`) });
+      await expectNoHorizontalScroll(page);
+    });
+  }
+}

@@ -1,6 +1,7 @@
 // The Triggers table (intake): each trigger of the running definition with its source, when it fires, what
 // it creates, its last 7 days and its switch. A problem is named in red under the name. The table is a
 // table from 768 px; below it each row stacks its cells, with no column headings.
+import { Link } from '@tanstack/react-router';
 import type { LucideIcon } from 'lucide-react';
 import { Clock, GitBranch, Webhook } from 'lucide-react';
 import type { IntakeTrigger } from '../../api/types';
@@ -93,7 +94,18 @@ function TriggerRow({ trigger, arrived }: { trigger: IntakeTrigger; arrived: boo
             >
               {trigger.name}
             </a>
-            {trigger.problem ? (
+            {trigger.problem?.kind === 'missing_connection' ? (
+              <span className="text-meta text-muted">
+                Needs the {connectionName(trigger)} connection.{' '}
+                <Link
+                  to="/o/$org/f/$factory/intake/webhooks"
+                  params={{ org: params.org, factory: params.factory }}
+                  className="font-medium text-ink underline-offset-2 hover:underline"
+                >
+                  Connect
+                </Link>
+              </span>
+            ) : trigger.problem ? (
               <span className="text-meta font-semibold text-rework-ink">{trigger.problem.message}</span>
             ) : null}
             {toggle.notice ? (
@@ -113,7 +125,7 @@ function TriggerRow({ trigger, arrived }: { trigger: IntakeTrigger; arrived: boo
         </div>
       </td>
       <td className="block py-1 md:table-cell md:px-3 md:py-3 md:align-middle">
-        <LastWeek days={trigger.days} items={items} />
+        {trigger.enabled ? <LastWeek days={trigger.days} items={items} /> : <span className="text-muted">Off</span>}
       </td>
       <td className="block pt-2 md:table-cell md:px-3 md:py-3 md:text-right md:align-middle">
         <Switch
@@ -125,6 +137,13 @@ function TriggerRow({ trigger, arrived }: { trigger: IntakeTrigger; arrived: boo
       </td>
     </tr>
   );
+}
+
+/** The connection a trigger waits for: its source's name, or its webhook endpoint's name. */
+function connectionName(trigger: IntakeTrigger): string {
+  if (trigger.source === 'github') return 'GitHub';
+  if (trigger.source === 'webhook') return trigger.on.replace(/^webhook\./, '').split('.')[0] ?? 'webhook';
+  return sourceIcon[trigger.source].label;
 }
 
 /** The seven days' items as bars, the last (today) in cobalt; the number beside them is the total. */
