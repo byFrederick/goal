@@ -26,8 +26,8 @@ export function SectionCard({
       className={cn('flex min-w-0 flex-col gap-4 rounded-card border border-line bg-card p-4 md:p-5', className)}
       {...props}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+        <div className="min-w-0 max-w-full">
           <H id={id} className="m-0 text-base font-medium md:text-lg">
             {title}
           </H>

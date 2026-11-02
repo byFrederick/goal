@@ -40,6 +40,16 @@ test('the screen shows the acme policy, and a model switch, a denied command and
   await expectNoHorizontalScroll(page);
 });
 
+test('the Harness title is not clipped at 1024 px', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await page.goto('/o/acme/models');
+  const title = page.getByRole('heading', { name: 'Harness', exact: true });
+  await expect(title).toBeVisible();
+  const clipped = await title.evaluate((el) => el.scrollWidth > el.clientWidth);
+  expect(clipped).toBe(false);
+  await expectNoHorizontalScroll(page);
+});
+
 for (const width of [375, 768, 1440]) {
   test(`the screen fits at ${width} px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });

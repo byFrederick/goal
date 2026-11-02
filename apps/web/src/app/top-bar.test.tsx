@@ -57,6 +57,11 @@ function ItemStub() {
   );
 }
 
+/** A connection page: it names itself in the top bar's crumb. */
+function ConnectionStub() {
+  return <TopBarSlot crumb="Deploy key" />;
+}
+
 /** The shell as the routes draw it: the organization's, the factory's, and the items' pages. */
 function renderBar({ at, item }: { at: string; item?: { number: number } }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
@@ -80,6 +85,26 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
     ),
   });
   const home = createRoute({ getParentRoute: () => orgPages, path: '/', component: () => <p>Home page</p> });
+  const connection = createRoute({
+    getParentRoute: () => orgPages,
+    path: 'connections/$connection',
+    component: ConnectionStub,
+  });
+  const spend = createRoute({
+    getParentRoute: () => orgPages,
+    path: 'spend',
+    component: () => (
+      <>
+        <TopBarSlot actions={<button type="button">Export CSV</button>} />
+        <p>Spend page</p>
+      </>
+    ),
+  });
+  const models = createRoute({
+    getParentRoute: () => orgPages,
+    path: 'models',
+    component: () => <p>Models page</p>,
+  });
   const factoryRoute = createRoute({
     getParentRoute: () => orgRoute,
     path: '/f/$factory',
@@ -97,7 +122,7 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
   const router = createRouter({
     routeTree: rootRoute.addChildren([
       orgRoute.addChildren([
-        orgPages.addChildren([home]),
+        orgPages.addChildren([home, connection, spend, models]),
         factoryRoute.addChildren([floor, items.addChildren([itemsIndex, itemRoute])]),
       ]),
     ]),
@@ -138,11 +163,33 @@ describe('TopBar', () => {
     expect(buttons).toEqual(['Share', 'Publish']);
   });
 
-  it('shows only the page name on an organization page', async () => {
+  it('names the spend page and shows its actions', async () => {
+    renderBar({ at: '/o/acme/spend' });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(nav).getByText('Spend and billing').getAttribute('aria-current')).toBe('page');
+    expect(within(await screen.findByRole('banner')).getByRole('button', { name: 'Export CSV' })).toBeTruthy();
+  });
+
+  it('names the models page as the current crumb', async () => {
+    renderBar({ at: '/o/acme/models' });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(nav).getByText('Models and policies').getAttribute('aria-current')).toBe('page');
+  });
+
+  it('starts an organization page with the organization, linked, then the current page', async () => {
     renderBar({ at: '/o/acme/' });
     const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
     expect(within(nav).getByText('Home').getAttribute('aria-current')).toBe('page');
-    expect(within(nav).queryByRole('link')).toBeNull();
-    expect(within(nav).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(nav).getByRole('link', { name: 'Acme' }).getAttribute('href')).toBe('/o/acme');
+    expect(within(nav).getAllByRole('listitem')).toHaveLength(2);
+  });
+
+  it('starts a connection page with the organization, then Connections, then its name', async () => {
+    renderBar({ at: '/o/acme/connections/c1' });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(nav).getByRole('link', { name: 'Acme' }).getAttribute('href')).toBe('/o/acme');
+    expect(within(nav).getByRole('link', { name: 'Connections' }).getAttribute('href')).toBe('/o/acme/connections');
+    expect(within(nav).getByText('Deploy key').getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getAllByRole('listitem')).toHaveLength(3);
   });
 });

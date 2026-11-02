@@ -1,17 +1,22 @@
 // A checkbox (MOTION.md, Checkbox): a native input, visually hidden, so the keyboard and the screen
 // reader see the real control, and a box drawn beside it. The box fills first, then the check draws
 // (styles.css, .check-box). The name is the visible label, or aria-label when there is no label.
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { cn } from './cn';
 
-interface CheckboxProps {
+/** What a wrapper (NotAvailable, a tooltip trigger) may put on the native input: handlers, aria, a ref. */
+type InputPassThrough = Omit<
+  ComponentProps<'input'>,
+  'type' | 'checked' | 'disabled' | 'onChange' | 'className' | 'name'
+>;
+
+interface CheckboxProps extends InputPassThrough {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   /** Shown as a disabled box: it does not change when clicked or when Space is pressed. */
   disabled?: boolean;
   /** The visible name, beside the box. Give aria-label instead when there is none. */
   label?: ReactNode;
-  'aria-label'?: string;
   name?: string;
   className?: string;
 }
@@ -23,7 +28,7 @@ export function Checkbox({
   label,
   name,
   className,
-  ...props
+  ...input
 }: CheckboxProps) {
   return (
     <label
@@ -38,7 +43,19 @@ export function Checkbox({
         name={name}
         checked={checked}
         disabled={disabled}
-        aria-label={props['aria-label']}
+        {...input}
+        onClick={(event) => {
+          input.onClick?.(event);
+          // A wrapper that cancels the click (NotAvailable) makes the browser revert the toggle after React
+          // restored the controlled value, which leaves the box flipped. Put the saved value back once the
+          // cancelled click is over.
+          if (event.defaultPrevented) {
+            const el = event.currentTarget;
+            setTimeout(() => {
+              el.checked = checked;
+            }, 0);
+          }
+        }}
         onChange={(event) => {
           if (!disabled) onCheckedChange(event.currentTarget.checked);
         }}
