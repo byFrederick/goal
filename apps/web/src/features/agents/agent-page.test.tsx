@@ -209,7 +209,7 @@ describe('the Agent page, ready', () => {
     expect(shown()).toHaveLength(7);
     const more = within(settings).getByRole('button', { name: '+ 13 more' });
     expect(more.getAttribute('aria-expanded')).toBe('false');
-    expect(more.className).toContain('max-md:before:-inset-y-2');
+    expect(more.className).toContain('max-md:before:-inset-y-[11px]');
     await user.click(more);
     expect(shown()).toHaveLength(20);
     expect(more.getAttribute('aria-expanded')).toBe('true');
@@ -369,7 +369,7 @@ describe('Reset to default', () => {
     await renderPage('overview', { can: edit });
     const settings = within(screen.getByRole('region', { name: 'Settings' }));
     expect(settings.getByRole('button', { name: 'Reset to default, claude-opus-5-5' }).className).toContain(
-      'max-md:py-3',
+      'max-md:py-[13px]',
     );
     cleanup();
 
