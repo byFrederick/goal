@@ -39,7 +39,7 @@ export function DocumentLine({ source, document: d }: { source: string; document
   const org = useOrg();
   const path = documentPath(d);
   return (
-    <span className="flex min-w-0 flex-col overflow-hidden">
+    <span className="flex min-w-0 flex-col">
       <Link
         to="/o/$org/knowledge/$source"
         params={{ org: org.slug, source }}
@@ -160,7 +160,7 @@ function DocumentActions({
   return (
     <Menu>
       <MenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="size-11 md:size-8" aria-label={`Actions for ${d.title}`}>
+        <Button variant="ghost" size="icon" className="size-11 shrink-0 md:size-8" aria-label={`Actions for ${d.title}`}>
           <Ellipsis size={18} strokeWidth={1.5} aria-hidden="true" />
         </Button>
       </MenuTrigger>
