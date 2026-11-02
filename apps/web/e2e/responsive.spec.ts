@@ -1,5 +1,5 @@
 // No page scrolls sideways (MASTER.md "Layout" and "Accessibility and checks"): the document is never wider than
-// the window (scrollWidth against innerWidth), at 1440x1000, 1280x800, 1024x768, 768x1024 and 390x844, in light and
+// the window (documentElement.scrollWidth against clientWidth, which counts a button's hit area), at 1440x1000, 1280x800, 1024x768, 768x1024 and 390x844, in light and
 // dark, against the mock. The routes: Runs, Items, Needs you, Item (/items/12), New trigger, Jonah, Home,
 // Definition line, Board, Account, Factory settings, Assembly item (/items/17), Agents, Agent (reviewer),
 // Connections, GitHub connection, Knowledge source (handbook) and Spend. A wide table scrolls in its own box, so
@@ -90,6 +90,7 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
     open: async (page) => {
       await page.goto('/account');
       await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Save changes' }).filter({ visible: true })).toBeVisible();
     },
   },
   {

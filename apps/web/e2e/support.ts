@@ -11,15 +11,19 @@ export async function expectAccessible(page: Page) {
   expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
 }
 
-/** The document is never wider than the window: fails with the overflow in px. */
+/**
+ * The document is never wider than the layout viewport: fails with the overflow in px. It compares with
+ * `clientWidth`, not `innerWidth`: on a phone the layout viewport grows to fit an overflow (a button's hit
+ * area, a pseudo-element), and innerWidth grows with it.
+ */
 export async function expectNoHorizontalScroll(page: Page) {
-  const { scrollWidth, innerWidth } = await page.evaluate(() => ({
+  const { scrollWidth, clientWidth } = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
-    innerWidth: window.innerWidth,
+    clientWidth: document.documentElement.clientWidth,
   }));
   expect(
-    scrollWidth - innerWidth,
-    `page overflows the viewport by ${scrollWidth - innerWidth}px (scrollWidth ${scrollWidth}, innerWidth ${innerWidth})`,
+    scrollWidth - clientWidth,
+    `page overflows the viewport by ${scrollWidth - clientWidth}px (scrollWidth ${scrollWidth}, clientWidth ${clientWidth})`,
   ).toBeLessThanOrEqual(0);
 }
 

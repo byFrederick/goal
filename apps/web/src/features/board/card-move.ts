@@ -9,7 +9,13 @@ import type { Board } from '../../api/types';
 
 /** The browser's parts of a card move; `browserDeps` is the real set. */
 export interface CardMoveDeps {
-  startViewTransition: ((update: () => void) => { finished: Promise<unknown> }) | undefined;
+  startViewTransition:
+    | ((update: () => void) => {
+        finished: Promise<unknown>;
+        ready?: Promise<unknown>;
+        updateCallbackDone?: Promise<unknown>;
+      })
+    | undefined;
   reducedMotion: () => boolean;
   /** Another view transition (a route change) is running: the card move waits its turn and just changes. */
   transitionRunning: () => boolean;
@@ -19,7 +25,11 @@ export interface CardMoveDeps {
 
 export function browserDeps(): CardMoveDeps {
   const doc = document as Document & {
-    startViewTransition?: (update: () => void) => { finished: Promise<unknown> };
+    startViewTransition?: (update: () => void) => {
+      finished: Promise<unknown>;
+      ready?: Promise<unknown>;
+      updateCallbackDone?: Promise<unknown>;
+    };
     activeViewTransition?: unknown;
   };
   return {
@@ -69,7 +79,10 @@ export function animateCardMove(apply: () => void, deps: CardMoveDeps = browserD
         el.style.removeProperty('view-transition-class');
       }
     };
+    // A skipped transition rejects all three promises; none is left unhandled.
     transition.finished.then(clear, clear);
+    transition.ready?.catch(() => {});
+    transition.updateCallbackDone?.catch(() => {});
     return;
   }
   flip(cards, apply, deps);
