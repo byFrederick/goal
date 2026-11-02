@@ -10,7 +10,7 @@ import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { EmptyState } from '../../ui/empty-state';
 import { BakeOffLoading } from './bake-off-page';
-import { JonahTabs } from './jonah-header';
+import { JonahHeader } from './jonah-header';
 
 export function BakeOffIndexPage() {
   const factory = useFactory();
@@ -30,7 +30,7 @@ export function BakeOffIndexPage() {
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <TopBarSlot crumb="Bake-offs" />
-      <JonahTabs tab="bake-offs" counts={list.data ? { 'bake-offs': 0 } : undefined} />
+      <JonahHeader tab="bake-offs" counts={list.data ? { 'bake-offs': 0 } : undefined} />
       {list.isPending ? <BakeOffLoading /> : null}
       {list.isError ? (
         <EmptyState
