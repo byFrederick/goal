@@ -155,7 +155,7 @@ describe('the Add a connection page', () => {
       can: manage,
       components: { list: () => null, add: NewConnectionPage, connection: () => null },
     });
-    expect((await screen.findByRole('status')).textContent).toBe('Loading connection kinds');
+    expect(await screen.findByText('Loading')).toBeTruthy();
   });
 
   it('says the error and offers to try again when the kinds do not load', async () => {

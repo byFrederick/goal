@@ -1,6 +1,6 @@
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { ensureLoaded, factoriesQuery, orgsQuery } from '../api/queries';
-import { NotFoundScreen } from '../app/states';
+import { NotFoundScreen, PendingScreen } from '../app/states';
 import { findFactory } from '../shared/factory';
 import { legacyPath, legacyTarget } from '../shared/legacy';
 import { lastOrgSlug } from '../shared/org';
@@ -8,6 +8,7 @@ import { lastOrgSlug } from '../shared/org';
 // Links from before organizations (/f/:factory/...): finds the factory in the organization used
 // last, then in every other, and moves to its page under /o/:org, keeping the search params.
 export const Route = createFileRoute('/f/$')({
+  pendingComponent: PendingScreen,
   loader: async ({ context: { queryClient }, params, location }) => {
     const target = legacyTarget(params._splat ?? '');
     if (!target) throw notFound();

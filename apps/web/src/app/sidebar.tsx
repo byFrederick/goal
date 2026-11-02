@@ -73,7 +73,7 @@ export function Sidebar({ org }: { org: OrgSummary }) {
       {/* The column's width changes at once; the body inside it moves and fades (styles.css, .motion-sidebar). */}
       <div
         ref={column}
-        className="sticky top-0 hidden h-dvh shrink-0 md:flex"
+        className="shell-sidebar sticky top-0 hidden h-dvh shrink-0 md:flex"
         style={{ width: `var(${sidebarWidthVar})`, [sidebarWidthVar]: `${shownWidth(size)}px` } as CSSProperties}
       >
         {size.collapsed ? (
