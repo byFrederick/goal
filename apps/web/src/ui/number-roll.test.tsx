@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
-import { NumberRoll } from './number-roll';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { NumberRoll, QUIET_MS } from './number-roll';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 // The animated characters: the visible copy is aria-hidden, so its spans are the characters.
 const characters = (container: HTMLElement) => Array.from(container.querySelectorAll('[aria-hidden="true"] > span'));
@@ -51,5 +54,26 @@ describe('NumberRoll', () => {
     rerender(<NumberRoll value={8} />);
     const changed = characters(container).find((el) => el.textContent === '8');
     expect(Array.from(changed?.classList ?? [])).toEqual(expect.arrayContaining(['motion-reduce:animate-fade-in']));
+  });
+
+  it('swaps in place when the value changes again within the quiet window, so no digit shows twice', () => {
+    vi.useFakeTimers();
+    const { container, rerender } = render(<NumberRoll value="$3.20" />);
+    rerender(<NumberRoll value="$3.21" />);
+    expect(popping(container)).toContain(true);
+    vi.advanceTimersByTime(3000);
+    rerender(<NumberRoll value="$3.22" />);
+    expect(popping(container).some(Boolean)).toBe(false);
+    expect(characters(container).some((el) => el.classList.contains('motion-reduce:animate-fade-in'))).toBe(false);
+    expect(screen.getByText('$3.22')).toBeTruthy();
+  });
+
+  it('rolls again once the value has held for the quiet window', () => {
+    vi.useFakeTimers();
+    const { container, rerender } = render(<NumberRoll value="14" />);
+    rerender(<NumberRoll value="15" />);
+    vi.advanceTimersByTime(QUIET_MS + 1);
+    rerender(<NumberRoll value="16" />);
+    expect(popping(container)).toEqual([false, true]);
   });
 });

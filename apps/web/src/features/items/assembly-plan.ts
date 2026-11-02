@@ -115,3 +115,9 @@ export function agentLabel(agent: string, lanes: readonly BoardLane[]): string {
   if (!lane) return humanize(agent);
   return lane.model_label ? `${lane.role} · ${lane.model_label}` : lane.role;
 }
+
+/** Who works a part, by role alone: "Builder". Without a lane it is the agent's name as words. */
+export function agentRole(agent: string, lanes: readonly BoardLane[]): string {
+  const lane = lanes.find((l) => l.kind === 'agent' && l.key === agent);
+  return lane ? lane.role : humanize(agent);
+}

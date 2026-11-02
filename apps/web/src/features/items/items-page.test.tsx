@@ -293,15 +293,50 @@ describe('Items filters in the URL', () => {
       show: 'flat',
     });
 
-    const grouped = await screen.findByRole('switch', { name: 'Grouped by assembly' });
-    expect(grouped.getAttribute('aria-checked')).toBe('false');
+    const grouped = await screen.findByRole('button', { name: 'Grouped by assembly', pressed: false });
+    expect(grouped.className).toContain('text-muted');
     expect(screen.queryByRole('button', { name: 'Parts of Migrate billing' })).toBeNull();
     expect(screen.getAllByRole('row')).toHaveLength(3);
 
     fireEvent.click(screen.getByRole('link', { name: /^Done this week/ }));
-    expect((await screen.findByRole('switch', { name: 'Grouped by assembly' })).getAttribute('aria-checked')).toBe(
-      'false',
-    );
+    expect(await screen.findByRole('button', { name: 'Grouped by assembly', pressed: false })).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Grouped by assembly', pressed: false }));
+    expect(await screen.findByRole('button', { name: 'Grouped by assembly', pressed: true })).toBeTruthy();
+  });
+
+  it('shows the ref as a mono number and the type as it is written', async () => {
+    renderItems([item({ id: 'a', ref: 'sre#144', title: 'Fix it', type: 'feature' })]);
+
+    const ref = await screen.findByText('#144');
+    expect(ref.className).toContain('font-mono');
+    expect(ref.getAttribute('title')).toBe('sre#144');
+    expect(screen.getByText('feature')).toBeTruthy();
+    expect(screen.queryByText('Feature')).toBeNull();
+  });
+
+  it('draws assembly progress as one segment per part, the merged ones in ink', async () => {
+    renderItems([assembly(), partOf(1, { title: 'Move the schema', state: 'done' })]);
+
+    const meter = await screen.findByTestId('assembly-meter');
+    const segments = Array.from(meter.children);
+    expect(segments).toHaveLength(3);
+    expect(segments.filter((s) => s.className.includes('bg-ink'))).toHaveLength(1);
+    expect(segments.filter((s) => s.className.includes('bg-rule'))).toHaveLength(2);
+  });
+
+  it('lines the assembly row up with the header, cell for cell', async () => {
+    renderItems([assembly(), partOf(1, { title: 'Move the schema', state: 'done' })]);
+
+    await screen.findByTestId('assembly-meter');
+    const span = (row: HTMLElement) =>
+      Array.from(row.children).reduce((n, c) => n + Number(c.getAttribute('colspan') ?? 1), 0);
+    const [header, assemblyRow] = screen.getAllByRole('row') as [HTMLElement, HTMLElement];
+    expect(Array.from(assemblyRow.children).length).toBeGreaterThan(0);
+    expect(span(assemblyRow)).toBe(span(header));
+    // each hideable header has a matching hideable cell in the assembly row
+    const hidden = (row: HTMLElement) => Array.from(row.children).filter((c) => c.className.includes('hidden'));
+    expect(hidden(assemblyRow)).toHaveLength(hidden(header).length);
   });
 });
 

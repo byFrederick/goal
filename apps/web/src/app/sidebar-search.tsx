@@ -21,6 +21,7 @@ import { useOrgGrants } from '../shared/org';
 import { holds } from '../shared/permissions';
 import { Button } from '../ui/button';
 import { cn } from '../ui/cn';
+import { keyCap } from '../ui/kbd';
 import {
   apiKeysScreen,
   connectionsScreen,
@@ -52,9 +53,6 @@ const resultClass =
   'flex h-9 w-full min-w-0 items-center gap-2 rounded-control px-2 text-left text-body text-ink no-underline hover:bg-hover aria-disabled:cursor-default aria-disabled:text-muted aria-disabled:hover:bg-transparent';
 
 const groupLabel = 'm-0 px-2 pt-3 pb-1 text-meta font-semibold text-muted';
-
-const keyCap =
-  'grid h-5 min-w-5 place-items-center rounded-chip border border-rule px-1 text-meta font-semibold text-ink-soft';
 
 const badgeClass =
   'flex size-5 flex-none items-center justify-center rounded-chip bg-run text-meta font-semibold text-white';

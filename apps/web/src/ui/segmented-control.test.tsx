@@ -68,4 +68,13 @@ describe('SegmentedControl', () => {
     expect(radio('All').disabled).toBe(true);
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it('keeps the default heights unless the compact size is asked for', () => {
+    const { rerender } = render(<SegmentedControl label="View" options={options} value="mine" onChange={() => {}} />);
+    const label = () => screen.getByRole('radio', { name: 'All' }).closest('label');
+    expect(label()?.className).toContain('md:h-7.5');
+    rerender(<SegmentedControl label="View" options={options} value="mine" onChange={() => {}} size="compact" />);
+    expect(label()?.className).toContain('md:h-7');
+    expect(label()?.className).toContain('h-11');
+  });
 });

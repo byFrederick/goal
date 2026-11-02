@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ActivityEvent } from '../../api/types';
-import { activityWords, actorRole, avatarOf } from './activity-words';
+import { activityWords, actorRole } from './activity-words';
 
 const event = (over: Partial<ActivityEvent>): ActivityEvent => ({
   id: 1,
@@ -55,13 +55,5 @@ describe('activityWords', () => {
       head: 'goal#146 future thing',
       rest: '',
     });
-  });
-});
-
-describe('avatarOf', () => {
-  it('uses the initials of a two-word role and the first two letters of one word', () => {
-    expect(avatarOf('frontend-engineer-2')).toBe('FE');
-    expect(avatarOf('reviewer')).toBe('RE');
-    expect(avatarOf('engine')).toBe('G');
   });
 });

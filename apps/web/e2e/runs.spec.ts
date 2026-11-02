@@ -54,6 +54,46 @@ test('keeps the controls that are not built yet disabled', async ({ page }) => {
   await expect(page).toHaveURL(/\/o\/acme\/runs$/);
 });
 
+const columns = ['Factory', 'Item', 'Station', 'Agent', 'Model', 'Started', 'Duration', 'Turns', 'Cost', 'Outcome'];
+
+for (const width of [1280, 1440]) {
+  test(`shows every column at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await openRuns(page);
+
+    const box = await page.getByRole('table').locator('xpath=..').boundingBox();
+    for (const name of columns) {
+      const header = page.getByRole('columnheader', { name, exact: true });
+      await expect(header).toBeVisible();
+      const at = await header.boundingBox();
+      expect((at?.x ?? 0) + (at?.width ?? 0)).toBeLessThanOrEqual((box?.x ?? 0) + (box?.width ?? 0) + 1);
+    }
+  });
+}
+
+for (const width of [375, 390]) {
+  test(`has the Runs title, an Export CSV icon and no sideways scroll at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await openRuns(page);
+
+    await expect(page.getByRole('banner').getByText('Runs', { exact: true })).toBeVisible();
+    const exportCsv = page.getByRole('button', { name: 'Export CSV' });
+    expect((await exportCsv.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+    await expectNoHorizontalScroll(page);
+  });
+}
+
+for (const scheme of ['light', 'dark'] as const) {
+  for (const width of [1440, 390]) {
+    test(`screenshot at ${width} px, ${scheme}`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await openRuns(page);
+      await page.screenshot({ path: `test-results/runs-${width}-${scheme}.png`, fullPage: true });
+    });
+  }
+}
+
 for (const width of [375, 768, 1440]) {
   test(`fits ${width} px with the table in its own scroll box`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
