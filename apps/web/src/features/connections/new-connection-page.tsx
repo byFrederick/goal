@@ -23,6 +23,7 @@ import { Callout } from '../../ui/callout';
 import { cn } from '../../ui/cn';
 import { Field, Input } from '../../ui/field';
 import { NotAvailable } from '../../ui/not-available';
+import { Skeleton } from '../../ui/skeleton';
 import { DefineKindDialog } from './define-kind-dialog';
 import { Monogram, WriteOnly } from './parts';
 import { SecretInput } from './secret-input';
@@ -56,11 +57,17 @@ export function NewConnectionPage() {
       <h1 className="m-0 text-page-title">Add a connection</h1>
 
       {kindsQuery.isPending ? (
-        <div aria-busy="true" className="rounded-card border border-line bg-card p-4">
-          <span role="status" className="sr-only">
-            Loading connection kinds
-          </span>
-        </div>
+        <Skeleton
+          ready={false}
+          placeholder={
+            <div className="flex flex-col gap-3 rounded-card border border-line bg-card p-4">
+              <div className="h-10 rounded-control bg-hover" />
+              <div className="h-24 rounded-control bg-hover" />
+            </div>
+          }
+        >
+          <span />
+        </Skeleton>
       ) : kindsQuery.isError ? (
         <div
           className="flex max-w-xl flex-col items-start gap-3 rounded-card border border-line bg-card p-4"

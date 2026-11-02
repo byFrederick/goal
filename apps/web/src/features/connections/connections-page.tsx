@@ -22,6 +22,7 @@ import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
 import { Field, Input, NativeSelect } from '../../ui/field';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../ui/menu';
+import { Skeleton } from '../../ui/skeleton';
 import { Monogram, Status } from './parts';
 import { ReplaceSecretDialog } from './replace-secret-dialog';
 import { useTestConnection } from './use-test';
@@ -138,11 +139,18 @@ export function ConnectionsPage() {
       ))}
 
       {list.isPending && !missing ? (
-        <div aria-busy="true" className="rounded-card border border-line bg-card p-4">
-          <span role="status" className="sr-only">
-            Loading connections
-          </span>
-        </div>
+        <Skeleton
+          ready={false}
+          placeholder={
+            <div className="flex flex-col gap-3 rounded-card border border-line bg-card p-4">
+              <div className="h-12 rounded-control bg-hover" />
+              <div className="h-12 rounded-control bg-hover" />
+              <div className="h-12 rounded-control bg-hover" />
+            </div>
+          }
+        >
+          <span />
+        </Skeleton>
       ) : list.isError ? (
         <div
           className="flex max-w-xl flex-col items-start gap-3 rounded-card border border-line bg-card p-4"
