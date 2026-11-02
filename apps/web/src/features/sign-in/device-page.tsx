@@ -240,7 +240,7 @@ function ReviewStep({ heading, me, code, request, onApproved, onDenied, onInvali
 
   return (
     <AuthPage wide>
-      <span className="inline-grid size-12 flex-none place-items-center rounded-cell bg-andon text-white">
+      <span className="inline-grid size-12 flex-none place-items-center rounded-cell bg-panel text-ink">
         <Terminal size={20} strokeWidth={1.8} aria-hidden="true" />
       </span>
       <div className="flex flex-col gap-2">

@@ -233,13 +233,13 @@ export function ApiKeysPage() {
                 From your terminal
               </h2>
               <p className="m-0 text-secondary text-ink-soft">People sign in as themselves instead of using a key.</p>
-              <pre className="m-0 overflow-x-auto rounded-cell bg-andon p-3 font-mono text-secondary leading-relaxed whitespace-pre text-andon-text">
-                <span aria-hidden="true" className="text-run-soft">
+              <pre className="m-0 overflow-x-auto rounded-cell bg-panel p-3 font-mono text-secondary leading-relaxed whitespace-pre text-ink-soft">
+                <span aria-hidden="true" className="text-run">
                   ${' '}
                 </span>
                 goal login
                 {'\n'}
-                <span aria-hidden="true" className="text-run-soft">
+                <span aria-hidden="true" className="text-run">
                   ${' '}
                 </span>
                 goal item create --factory {sample}

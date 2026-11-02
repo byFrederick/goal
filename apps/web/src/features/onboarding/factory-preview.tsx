@@ -84,13 +84,13 @@ export function FactoryCard({
   return (
     <section
       aria-label="Your factory"
-      className="flex min-w-0 flex-col gap-5 rounded-card border border-run-soft bg-andon-raised p-4 ring-4 ring-run-soft/25 md:p-5"
+      className="flex min-w-0 flex-col gap-5 rounded-card border border-run bg-hover p-4 ring-4 ring-run/25 md:p-5"
     >
       <div className="flex min-w-0 items-center gap-3">
         <FactoryInitial name={name} />
         <div className="flex min-w-0 flex-col">
-          <span className="font-control text-heading break-words text-white">{name || 'Your factory'}</span>
-          {purpose ? <span className="text-secondary break-words text-andon-text">{purpose}</span> : null}
+          <span className="font-control text-heading break-words text-ink">{name || 'Your factory'}</span>
+          {purpose ? <span className="text-secondary break-words text-ink-soft">{purpose}</span> : null}
         </div>
       </div>
       <FactoryLine stations={stations} item={item} />
@@ -107,7 +107,7 @@ function FactoryLine({
   item: { station: string; number: number } | undefined;
 }) {
   if (stations.length === 0) {
-    return <p className="m-0 text-secondary text-andon-text">The stations appear here as you add them.</p>;
+    return <p className="m-0 text-secondary text-ink-soft">The stations appear here as you add them.</p>;
   }
   return (
     <ol aria-label="The line" className="m-0 flex list-none gap-1 p-0">
@@ -132,7 +132,7 @@ function FactoryLine({
               </span>
               <span aria-hidden="true" className={cn('h-0.5 flex-1', last ? 'bg-transparent' : 'bg-run')} />
             </div>
-            <span className="max-w-full truncate text-secondary text-andon-text">{s.label}</span>
+            <span className="max-w-full truncate text-secondary text-ink-soft">{s.label}</span>
             <WipSlots wip={s.wip} label={s.label} />
           </li>
         );
@@ -149,7 +149,7 @@ function WipSlots({ wip, label }: { wip: number | undefined; label: string }) {
     <span className="flex flex-wrap justify-center gap-1">
       <span className="sr-only">{`WIP limit ${wip} at ${label}`}</span>
       {slots.map((slot) => (
-        <span key={slot} aria-hidden="true" className="size-2 rounded-xs border border-andon-line" />
+        <span key={slot} aria-hidden="true" className="size-2 rounded-xs border border-line" />
       ))}
     </span>
   );
@@ -173,7 +173,7 @@ export function RunningItemCard({
   return (
     <section
       aria-label="Your first item"
-      className="flex min-w-0 items-center gap-3 rounded-card border border-run-soft bg-andon-raised p-4 ring-4 ring-run-soft/25"
+      className="flex min-w-0 items-center gap-3 rounded-card border border-run bg-hover p-4 ring-4 ring-run/25"
     >
       <span
         aria-hidden="true"
@@ -182,8 +182,8 @@ export function RunningItemCard({
         {number}
       </span>
       <div className="flex min-w-0 flex-col">
-        <span className="font-control text-body break-words text-white">{title}</span>
-        <span className="text-secondary break-words text-andon-text">
+        <span className="font-control text-body break-words text-ink">{title}</span>
+        <span className="text-secondary break-words text-ink-soft">
           {`At ${station}, ${minutes} min in, ${formatUsd(cost)} so far`}
         </span>
       </div>

@@ -67,7 +67,7 @@ function NoFactory({ org, search, message }: { org: OrgSummary; search: Onboardi
   return (
     <OnboardingLayout step="people" org={org} back={<Back org={org} search={search} />}>
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 font-numeral text-kpi tracking-display">Invite people</h1>
+        <h1 className="m-0 text-kpi tracking-display">Invite people</h1>
       </div>
       <Callout tone="rework">{message}</Callout>
     </OnboardingLayout>
@@ -110,7 +110,7 @@ function Invite({
     return (
       <OnboardingLayout step="people" org={org} back={<Back org={org} search={search} factory={factoryId} />}>
         <div className="flex flex-col gap-2">
-          <h1 className="m-0 font-numeral text-kpi tracking-display">Invite people</h1>
+          <h1 className="m-0 text-kpi tracking-display">Invite people</h1>
         </div>
         <Callout tone="rework">
           <span>The factory can’t be read.</span>
@@ -256,7 +256,7 @@ function Ready({
       preview={stepPanel({ org, search, factory, model, intake })}
     >
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 font-numeral text-kpi tracking-display">Invite people</h1>
+        <h1 className="m-0 text-kpi tracking-display">Invite people</h1>
         <p className="m-0 text-heading font-normal text-ink-soft">
           People answer what needs them, approve writes and shape the factory with you.
         </p>

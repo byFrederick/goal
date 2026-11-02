@@ -1,6 +1,8 @@
-# Screens: the UI revamp's reference
+# Screens: design system v3 "Plain"
 
-Each screen of the revamp is here twice. `<screen>.jpg` is what it looks like. `<screen>.html` is its exact source: layout, copy, sizes and colours, which open in a browser. They are exported from the Goal UI canvas (the owner's design artifact, pages "Revamp"), and [ADR 0016](../../adr/0016-ui-revamp.md) makes them binding. [MASTER.md](../MASTER.md) holds the tokens, components and vocabulary they share.
+Each screen is here twice. `<screen>.jpg` is what it looks like. `<screen>.html` is its exact source: layout, copy, sizes and colours, which open in a browser. They are exported from the owner's Goal UI canvas, and [ADR 0016](../../adr/0016-ui-revamp.md) makes them binding. [MASTER.md](../MASTER.md) holds the tokens, components and vocabulary they share, and [MOTION.md](../MOTION.md) how each of them moves. Version 3 (2026-11-01) restyled every screen and added the ones below marked **v3**; [the live audit](../live-audit-2026-11-01.md) lists what the live app was missing.
+
+`design-system/` shows the foundations, the components and the motion demos (`motion.html` is interactive: open it in a browser and press each demo's button).
 
 How to use them:
 - Build the screen to match the picture. Read the HTML for exact values, then map each one to the MASTER.md token or component it stands for. A hex value in the HTML is a token's value, so use the token name in code.
@@ -94,3 +96,20 @@ Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jona
 ## Mobile (`mobile/`)
 
 `sign-in`, `drawer`, `needs-you`, `approve`, `floor`, `board`, `item`, `intake`: the phone layouts at 390px. Every other screen follows MASTER.md's phone rules: a top bar with the Goal mark, a drawer, a bottom tab bar, one column, and tables that scroll in their own box.
+
+## Added in v3: live pages that had no design
+
+| Screen | Route | Status | Not built yet |
+|---|---|---|---|
+| `daily-work/assembly` | the assembly page (`features/items/assembly-page.tsx`) | restyle | |
+| `daily-work/trace` | an item's Trace tab | new (the tab is "Not available yet" today) | |
+| `build/new-factory` | `/o/$org/new/start`: template, clone, import | restyle | |
+| `build/definition-form` | `…/definition/$section` in Form view, with the unsaved-changes dialog | restyle | |
+| `jonah/bake-offs` | `…/jonah/bake-offs` empty state | restyle | |
+| `connections/connection` | `/o/$org/connections/$connection` | restyle | |
+| `connections/knowledge-source`, `connections/knowledge-new` | `/o/$org/knowledge/$source`, `…/knowledge/new` | restyle | |
+| `account/shortcuts` | the `?` keyboard-shortcuts dialog | new | |
+| `account/states` | Pending (skeleton), Error, Not found; archived and view-only banners (`app/states.tsx`) | restyle | |
+| `account/no-org` | `/` with no organization, and Create organization | restyle | |
+| `account/invite-accept` | `/invite/$invitation`, signed out and in | restyle | |
+| `account/oauth-consent` | `/oauth/consent` | new feature (phase 6) | Everything |

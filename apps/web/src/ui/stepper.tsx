@@ -49,7 +49,7 @@ export function Stepper({
                   aria-hidden="true"
                   className="absolute top-1/2 right-0 left-6 h-1 -translate-y-1/2 rounded-full bg-rule"
                 >
-                  {step.state === 'done' ? <span className="block h-full rounded-full bg-run-soft" /> : null}
+                  {step.state === 'done' ? <span className="block h-full rounded-full bg-run" /> : null}
                   {current ? <span className="block h-full w-1/2 rounded-full bg-run" /> : null}
                 </span>
               )}

@@ -31,7 +31,7 @@ export function TokenField({
   /** B's problem with the list. */
   problem?: string | undefined;
   help: ReactNode;
-  /** Values in JetBrains Mono (tool specs). */
+  /** Values in IBM Plex Mono (tool specs). */
   mono?: boolean;
   onAdd: (value: string) => void;
   onRemove: (value: string) => void;

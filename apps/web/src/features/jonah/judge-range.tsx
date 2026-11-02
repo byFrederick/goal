@@ -39,7 +39,7 @@ export function RangeInput({
       />
       <span
         aria-hidden="true"
-        className="min-w-14 rounded-chip border border-rule bg-card px-2 py-1 text-center font-numeral font-semibold tabular-nums"
+        className="min-w-14 rounded-chip border border-rule bg-card px-2 py-1 text-center font-semibold tabular-nums"
       >
         {shown}
       </span>

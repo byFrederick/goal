@@ -349,7 +349,7 @@ function TriggerEditor({ org, factory, text, saved, blank, board, detail }: Edit
                 </Link>
               </div>
               {saved ? (
-                <pre className="m-0 overflow-x-auto rounded-cell bg-andon p-3 font-mono text-meta leading-relaxed text-andon-text">
+                <pre className="m-0 overflow-x-auto rounded-cell bg-panel p-3 font-mono text-meta leading-relaxed text-ink-soft">
                   {triggerYaml(saved)}
                 </pre>
               ) : (

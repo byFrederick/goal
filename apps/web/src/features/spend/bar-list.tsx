@@ -45,7 +45,7 @@ export function BarList({
               >
                 <span className="block h-full rounded-chip bg-run" style={{ width: `${percentOf(r.usd, top)}%` }} />
               </span>
-              <span className="w-16 shrink-0 text-right font-numeral font-semibold text-ink">{money(r.usd)}</span>
+              <span className="w-16 shrink-0 text-right font-semibold text-ink">{money(r.usd)}</span>
             </li>
           ))}
         </ul>
