@@ -138,11 +138,11 @@ describe('TopBar', () => {
     expect(buttons).toEqual(['Share', 'Publish']);
   });
 
-  it('shows only the page name on an organization page', async () => {
+  it('starts an organization page with the organization, linked, then the current page', async () => {
     renderBar({ at: '/o/acme/' });
     const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
     expect(within(nav).getByText('Home').getAttribute('aria-current')).toBe('page');
-    expect(within(nav).queryByRole('link')).toBeNull();
-    expect(within(nav).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(nav).getByRole('link', { name: 'Acme' }).getAttribute('href')).toBe('/o/acme');
+    expect(within(nav).getAllByRole('listitem')).toHaveLength(2);
   });
 });

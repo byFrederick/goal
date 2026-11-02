@@ -46,6 +46,8 @@ Use `↑` and `↓` to move between results, `Enter` to open the one you chose, 
 
 ## The phone
 
+From 768 px, the top bar's breadcrumb starts with the organization (or the factory on a factory page) and links back to it.
+
 Below 768 px, the sidebar is hidden. The top bar has the Goal mark, which opens the drawer. The drawer holds the same content as the sidebar: the organization menu, search, New item, the organization's pages, the factories and the account. The tab bar at the bottom opens Needs you, Floor, Board, Items and More. More opens the drawer.
 
 ## Shortcuts
