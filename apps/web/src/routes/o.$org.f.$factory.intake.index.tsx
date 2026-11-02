@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { pageTitle } from '../app/route-focus';
-import { PendingScreen } from '../app/states';
 import { IntakePage } from '../features/intake/intake-page';
 import { IntakeSkeleton } from '../features/intake/intake-skeleton';
 import { type SuggestionGroup, suggestionGroups } from '../features/intake/suggestions';
