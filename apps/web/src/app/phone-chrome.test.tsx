@@ -207,8 +207,32 @@ describe('the phone top bar with actions', () => {
     expect(screen.getByRole('button', { name: 'New item' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Import' })).toBeNull();
     fireEvent.pointerDown(screen.getByRole('button', { name: 'More actions' }), { button: 0, ctrlKey: false });
-    expect(await screen.findByRole('button', { name: 'Import' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'New factory' })).toBeTruthy();
+    expect(await screen.findByRole('menuitem', { name: 'Import' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'New factory' })).toBeTruthy();
+  });
+
+  it('reaches a hidden action with the keyboard, runs it and closes the menu', async () => {
+    const onImport = vi.fn();
+    topBar(
+      <>
+        <button type="button">New factory</button>
+        <button type="button" onClick={onImport}>
+          Import
+        </button>
+        <button type="button">New item</button>
+      </>,
+    );
+    const more = screen.getByRole('button', { name: 'More actions' });
+    more.focus();
+    fireEvent.keyDown(more, { key: 'Enter' });
+    await screen.findByRole('menu');
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'New factory' })).toBe(document.activeElement));
+    fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowDown' });
+    const second = screen.getByRole('menuitem', { name: 'Import' });
+    await waitFor(() => expect(document.activeElement).toBe(second));
+    fireEvent.keyDown(second, { key: 'Enter' });
+    expect(onImport).toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
   });
 });
 

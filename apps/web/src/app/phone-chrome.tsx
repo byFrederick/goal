@@ -21,7 +21,7 @@ import { attentionQuery, factoriesQuery } from '../api/queries';
 import type { Factory, OrgSummary } from '../api/types';
 import { lastFactory } from '../shared/org';
 import { GoalMark } from '../ui/goal-mark';
-import { Menu, MenuContent, MenuTrigger } from '../ui/menu';
+import { Menu, MenuContent, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../ui/menu';
 import { SidebarContent, useSidebarBusy } from './sidebar';
 
 const phoneQuery = '(max-width: 767px)';
@@ -108,14 +108,55 @@ function TopBarActions({ children }: { children: ReactNode }) {
             </button>
           </MenuTrigger>
           <MenuContent align="end" side="bottom">
-            <div className="flex flex-col gap-1 p-1 [&_a]:min-h-11 [&_button]:min-h-11 [&_button]:w-full [&_kbd]:hidden">
-              {more}
-            </div>
+            {more.map((action, i) => (
+              <MoreAction key={isValidElement(action) && action.key != null ? action.key : i}>{action}</MoreAction>
+            ))}
           </MenuContent>
         </Menu>
       ) : null}
       {primary}
     </div>
+  );
+}
+
+/** What a page's menu action is made of: its trigger's label and its panel's entries. */
+function menuParts(action: ReactNode): { label: ReactNode; entries: ReactNode } | undefined {
+  if (!isValidElement<{ children?: ReactNode }>(action) || action.type !== Menu) return undefined;
+  const parts = Children.toArray(action.props.children);
+  const trigger = parts.find((c) => isValidElement(c) && c.type === MenuTrigger);
+  const content = parts.find((c) => isValidElement(c) && c.type === MenuContent);
+  if (!isValidElement<{ children?: ReactNode }>(trigger) || !isValidElement<{ children?: ReactNode }>(content)) {
+    return undefined;
+  }
+  const button = Children.toArray(trigger.props.children)[0];
+  if (!isValidElement<{ children?: ReactNode }>(button)) return undefined;
+  return { label: button.props.children, entries: content.props.children };
+}
+
+/**
+ * One hidden action as an entry of the More actions menu: a menu action of the page becomes a submenu; any other
+ * is a menu item that activates the page's own button or link, and closes the menu.
+ */
+function MoreAction({ children }: { children: ReactNode }) {
+  const parts = menuParts(children);
+  if (parts) {
+    return (
+      <MenuSub>
+        <MenuSubTrigger>{parts.label}</MenuSubTrigger>
+        <MenuSubContent>{parts.entries}</MenuSubContent>
+      </MenuSub>
+    );
+  }
+  return (
+    <MenuItem
+      asChild
+      onSelect={(event) => {
+        const control = (event.currentTarget as HTMLElement).querySelector<HTMLElement>('a, button');
+        control?.click();
+      }}
+    >
+      <div className="[&_*]:pointer-events-none [&_kbd]:hidden">{children}</div>
+    </MenuItem>
   );
 }
 
