@@ -45,7 +45,7 @@ export function DocumentLine({ source, document: d }: { source: string; document
         params={{ org: org.slug, source }}
         search={{ document: d.id }}
         title={d.title}
-        className="flex min-w-0 items-center font-control text-body text-ink hover:text-run-ink max-md:min-h-11"
+        className="flex min-w-0 max-w-full items-center font-control text-body text-ink hover:text-run-ink max-md:min-h-11"
       >
         <span title={d.title} className="min-w-0 truncate">
           {d.title}
@@ -148,7 +148,7 @@ function DocumentActions({
         asChild
         variant="ghost"
         size="icon"
-        className="size-11 md:size-8"
+        className="size-11 shrink-0 md:size-8"
         aria-label={`Open ${d.title} at its source`}
       >
         <a href={url} target="_blank" rel="noreferrer noopener">
@@ -160,7 +160,12 @@ function DocumentActions({
   return (
     <Menu>
       <MenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="size-11 md:size-8" aria-label={`Actions for ${d.title}`}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-11 shrink-0 md:size-8"
+          aria-label={`Actions for ${d.title}`}
+        >
           <Ellipsis size={18} strokeWidth={1.5} aria-hidden="true" />
         </Button>
       </MenuTrigger>

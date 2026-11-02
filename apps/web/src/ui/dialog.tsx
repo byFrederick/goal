@@ -92,7 +92,7 @@ export function DialogContent({
           </div>
           {dismissible ? (
             <D.Close
-              className="-mt-1 -mr-1 inline-flex size-10 shrink-0 items-center justify-center rounded-control text-ink transition-colors hover:bg-hover"
+              className="-mt-1 -mr-1 inline-flex size-10 max-md:size-11 shrink-0 items-center justify-center rounded-control text-ink transition-colors hover:bg-hover"
               aria-label="Close"
             >
               <X size={18} strokeWidth={1.5} aria-hidden="true" />

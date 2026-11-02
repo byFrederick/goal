@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useId } from 'react';
 import { attentionQuery, inboxQuery, overviewQuery } from '../../api/queries';
+import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { plural } from '../../shared/format';
 import { factoryMark } from '../../shared/marks';
@@ -26,6 +27,7 @@ import { SpendWeek } from './spend-week';
 
 export function FactoriesPage({ archived = false }: { archived?: boolean }) {
   const org = useOrg();
+  const phone = usePhone();
   const listId = useId();
   const mayCreate = useOrgHolds('factory:create');
   const overview = useQuery(overviewQuery(org.id));
@@ -46,7 +48,7 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
                 <StartLink>New factory</StartLink>
               </Button>
             ) : null}
-            <NewItemFromSidebar />
+            <NewItemFromSidebar compact={phone} />
           </>
         )
       }

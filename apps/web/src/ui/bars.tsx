@@ -55,7 +55,7 @@ export function Bars({
           const latest = i === bars.length - 1;
           return (
             <div key={b.key} className="group relative flex h-full min-w-0 flex-1 items-end">
-              <div className="relative h-full w-full overflow-hidden rounded-t-[3px] rounded-b-[1px] bg-hover">
+              <div className="relative h-full w-full overflow-hidden rounded-chip bg-hover">
                 <div
                   className={cn(
                     'absolute inset-0 origin-bottom transition-transform duration-(--duration-fast) ease-out motion-reduce:transition-none',
