@@ -82,6 +82,7 @@ The recipe column names the transitions.dev recipe the implementation follows (f
 | Board card moves to another column or lane (live update or a person's drag) | the card travels from its old box to its new one (FLIP / View Transitions); other cards in both columns reflow | `--duration-fast` `--ease-in-out` | card-resize (01) |
 | A new item appears in a list or column | fades in and rises 4px; never shifts the list it lands in without a reflow transition | `--duration-fast` `--ease-out` | texts-reveal (18) |
 | A status changes in place ("Running" → "Sent back", a chip) | new text in with a 4px move and 2px blur (`Chip`) | `--duration-quick` `--ease-in-out` | text-states-swap (04) or text-morph (33) |
+| A meter's fill changes (the spend bar on Home) | the fill grows or shrinks from its left edge with `transform: scaleX`, never `width` | `--duration-fast` `--ease-out`; none under reduced motion | — (added: no catalogue row covered a bar resizing) |
 | A number changes (KPIs, counts, cost, the needs-you count) | changed digits pop in from below with blur (`NumberRoll`) | `--duration-emphasis` `--ease-bounce`, 40ms per digit | number-pop-in (02) |
 | The needs-you count badge appears in the sidebar | slides in and pops | `--duration-emphasis` `--ease-bounce` | notification-badge (03) |
 | Loading: any route or panel waiting on data more than 100ms | a skeleton of the real layout pulses once, then cross-fades with a 2px blur to the content (`Skeleton`) | pulse `--duration-pulse` linear; reveal `--duration-slow` | skeleton-reveal (14) |
