@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { connectionsQuery, notificationsQuery } from '../../api/queries';
 import type { NotificationChannels, NotificationEvents, NotificationPreferences } from '../../api/types';
 import { Button } from '../../ui/button';
+import { Checkbox } from '../../ui/checkbox';
 import { NotAvailable } from '../../ui/not-available';
 import { type PreferencesChange, useSaveNotifications } from './notification-preferences';
 
@@ -116,18 +117,15 @@ function PreferencesTable({
                 return (
                   <td key={channel} className="text-center">
                     {changeable ? (
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         aria-label={boxLabel}
                         checked={checked}
-                        onChange={(e) => onChange(event, channel, e.target.checked)}
-                        className="size-4"
+                        onCheckedChange={(on) => onChange(event, channel, on)}
                       />
                     ) : (
-                      // Uncontrolled: a click on a box that is not available is cancelled, which needs the box
-                      // to keep its saved value (defaultChecked), not a React-controlled one.
+                      // Controlled with a no-op: a click on a box that is not available leaves it at its saved value.
                       <NotAvailable label={boxLabel}>
-                        <input type="checkbox" aria-label={boxLabel} defaultChecked={checked} className="size-4" />
+                        <Checkbox aria-label={boxLabel} checked={checked} onCheckedChange={() => undefined} />
                       </NotAvailable>
                     )}
                   </td>

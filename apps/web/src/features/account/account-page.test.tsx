@@ -185,6 +185,41 @@ describe('the account page', () => {
     ]);
   });
 
+  it('marks the current section on the hover fill and moves the mark when a section is followed', async () => {
+    // jsdom has no scrollIntoView, which the router calls for a hash.
+    Element.prototype.scrollIntoView = vi.fn();
+    renderAccount(session);
+    await screen.findByRole('heading', { level: 1, name: 'Your account' });
+    const nav = screen.getByRole('navigation', { name: 'Account sections' });
+    const current = () =>
+      within(nav)
+        .getAllByRole('link')
+        .filter((a) => a.getAttribute('aria-current') === 'true');
+    expect(current().map((a) => a.textContent)).toEqual(['Profile']);
+    const pill = nav.querySelector('span[aria-hidden="true"]') as HTMLElement;
+    expect(pill.className).toContain('bg-hover');
+    expect(pill.className).not.toMatch(/run-tint|run-ink/);
+    fireEvent.click(within(nav).getByRole('link', { name: 'Appearance' }));
+    await waitFor(() => expect(current().map((a) => a.textContent)).toEqual(['Appearance']));
+  });
+
+  it('draws the theme swatches from theme tokens only, never a raw palette class', async () => {
+    renderAccount(session);
+    const dark = await screen.findByRole('button', { name: 'Dark' });
+    expect(dark.innerHTML).toContain('bg-preview-dark');
+    for (const name of ['Match device', 'Light', 'Dark']) {
+      expect(screen.getByRole('button', { name }).innerHTML).not.toMatch(/bg-white|bg-black/);
+    }
+  });
+
+  it('shows the goal CLI icon bare, with no tile', async () => {
+    renderAccount(session);
+    const heading = await screen.findByRole('heading', { name: 'Connected apps' });
+    const row = (heading.closest('section') as HTMLElement).querySelector('svg') as SVGElement;
+    expect(row.getAttribute('class')).toContain('text-muted');
+    expect(row.parentElement?.className).not.toContain('bg-ink');
+  });
+
   it('starts the name with the person’s name and shows their role', async () => {
     renderAccount(session);
     expect((await screen.findByRole('textbox', { name: 'Name' })).getAttribute('value')).toBe('Freddy Cruz');
