@@ -1610,6 +1610,40 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       state = seed(clock());
       // {orgs: "none"}: a person with no organization yet, so onboarding's first step is what opens.
       if (body.orgs === 'none') state.orgs = [];
+      // {expediteCrowd: true}: three expedite items in Build and one in Review of the goal factory, one with a long
+      // title, so the Board's expedite boxes show a station with several cards.
+      if (body.expediteCrowd === true) {
+        const at = new Date(clock()).toISOString();
+        const crowd: [string, string, string][] = [
+          ['build', 'Fix the retry loop', 'fix'],
+          ['build', 'Rotate the signing key before the certificate on the edge proxy expires on Friday night', 'fix'],
+          ['build', 'Restore the nightly export', 'feature'],
+          ['review', 'Stop the worker leaking file handles', 'fix'],
+        ];
+        crowd.forEach(([station, title, type], i) => {
+          state.items.push({
+            id: crypto.randomUUID(),
+            factory: 'goal',
+            number: 100 + i,
+            type,
+            lane: i === 1 ? 'frontend' : null,
+            title,
+            body: '',
+            station,
+            state: 'queued',
+            class_of_service: 'expedite',
+            priority: 0,
+            rework_count: 0,
+            cost_usd: 0,
+            outputs: {},
+            created_at: at,
+            updated_at: at,
+            agent: null,
+            pr_url: null,
+            spans: [],
+          });
+        });
+      }
       const role = roleSetting(body.role);
       grants = role ? grantsOf(sources.table, role) : undefined;
       if (grants) withRole(state, grants);

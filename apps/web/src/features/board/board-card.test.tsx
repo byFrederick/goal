@@ -222,3 +222,15 @@ describe('BoardCard as the screen draws it', () => {
     ).toBe(moveShortcut);
   });
 });
+
+describe('BoardCard meta line', () => {
+  it('lets the type and lane shrink with their full text as a title, and keeps the number and age whole', async () => {
+    renderCard(card({ number: 123, type: 'feature', lane: 'frontend' }));
+
+    const type = await screen.findByText('feature');
+    expect(type.getAttribute('title')).toBe('feature');
+    expect(type.className).toContain('text-ellipsis');
+    expect(screen.getByText('frontend').className).toContain('text-ellipsis');
+    expect(screen.getByText('#123').className).toContain('shrink-0');
+  });
+});
