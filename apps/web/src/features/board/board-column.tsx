@@ -1,6 +1,6 @@
 // The board's columns (from 768 px, and the phone's picked station): one column per station, headed by a
 // row (name, count, WIP meter and what the station says), then the expedite zone and the standard zone of
-// cards. On the desktop each column is a subgrid of the board's rows, so headers, the Expedite band and cards line up. The drum's column lists its In progress cards first and the buffer's Ready cards below them, dimmed;
+// cards. On the desktop each column is a subgrid of the board's rows, so headers, the Expedite boxes and cards line up. The drum's column lists its In progress cards first and the buffer's Ready cards below them, dimmed;
 // every column's In progress group ends in "Show N more" past a few cards. The columns have no fixed heights:
 // a body starts directly under its header.
 import { Zap } from 'lucide-react';
@@ -208,21 +208,14 @@ export function StationColumn({
     >
       <ColumnHeader station={station} constraint={constraint} decides={decides} finishedThisWeek={finishedThisWeek} />
       {showExpedite ? (
-        inBoard !== undefined ? (
-          // Transparent: the board's band shows through; its label row is reserved above the cards.
-          <div data-zone="expedite" className="flex flex-col gap-2 px-2 pt-10 pb-2">
-            {expedite.map(card)}
-          </div>
-        ) : (
-          <fieldset
-            data-zone="expedite"
-            aria-label="Expedite lane"
-            className="m-0 flex min-h-10 min-w-0 flex-col gap-2 rounded-cell border-0 bg-amber-tint p-2 transition-colors duration-(--duration-quick)"
-          >
-            <ExpediteLabel />
-            {expedite.map(card)}
-          </fieldset>
-        )
+        <fieldset
+          data-zone="expedite"
+          aria-label="Expedite lane"
+          className="m-0 flex min-h-11 min-w-0 flex-col gap-2 rounded-cell border-0 bg-amber-tint p-2 transition-colors duration-(--duration-quick)"
+        >
+          {inBoard === undefined || inBoard === 1 ? <ExpediteLabel /> : null}
+          {expedite.map(card)}
+        </fieldset>
       ) : null}
       <div className="flex min-h-10 flex-col gap-2 self-start rounded-cell bg-panel p-2">
         {columnGroups(standard, isDrum).map((group) => {

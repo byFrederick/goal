@@ -141,10 +141,10 @@ test('fits the top bar at 768 with New item inside the viewport', async ({ page 
   await expectNoHorizontalScroll(page);
 });
 
-// The expedite lane is one band: it starts at the first column's left edge, ends at the last column's right
-// edge, and every column's expedite cell has its top and height. Nothing reaches past the viewport.
+// Every column has its own Expedite box: the same top and height in every column, headers of one height, and
+// from 1280 px every station fits without the board scrolling. Nothing outside the board's scroller passes the edge.
 for (const width of [1440, 1280, 1024, 768]) {
-  test(`the expedite band spans every column at ${width} px`, async ({ page }) => {
+  test(`the expedite boxes line up across the columns at ${width} px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/o/acme/f/goal/board');
     await expect(page.getByRole('region', { name: 'Stations', exact: true })).toBeVisible();
@@ -152,28 +152,34 @@ for (const width of [1440, 1280, 1024, 768]) {
 
     const geometry = await page.evaluate(() => {
       const stations = document.querySelector<HTMLElement>('section[aria-label="Stations"]');
-      const band = stations?.querySelector<HTMLElement>('[aria-label="Expedite lane"]')?.getBoundingClientRect();
       const columns = Array.from(stations?.querySelectorAll<HTMLElement>(':scope > div > section') ?? []);
+      const lastRight = columns[columns.length - 1]?.getBoundingClientRect().right ?? 0;
       return {
-        band: band ? { left: band.left, right: band.right, top: band.top, height: band.height } : null,
-        first: columns[0]?.getBoundingClientRect().left ?? 0,
-        last: columns[columns.length - 1]?.getBoundingClientRect().right ?? 0,
-        cells: columns.map((column) => {
-          const cell = column.querySelector('[data-zone="expedite"]')?.getBoundingClientRect();
-          return cell ? { top: cell.top, height: cell.height } : null;
+        scrollWidth: stations?.scrollWidth ?? 0,
+        clientWidth: stations?.clientWidth ?? 0,
+        lastRight,
+        sectionRight: stations?.getBoundingClientRect().right ?? 0,
+        boxes: columns.map((column) => {
+          const box = column.querySelector('[data-zone="expedite"]')?.getBoundingClientRect();
+          return box ? { top: box.top, height: box.height } : null;
         }),
+        headers: columns.map((column) => column.querySelector(':scope > header')?.getBoundingClientRect().height ?? 0),
         overflowing: Array.from(document.querySelectorAll<HTMLElement>('body *'))
           .filter((el) => !stations?.contains(el) && el.getBoundingClientRect().right > window.innerWidth + 1)
           .map((el) => el.tagName),
       };
     });
 
-    expect(geometry.band).not.toBeNull();
-    expect(geometry.band?.left).toBeCloseTo(geometry.first, 0);
-    expect(geometry.band?.right).toBeCloseTo(geometry.last, 0);
-    for (const cell of geometry.cells) {
-      expect(cell?.top).toBeCloseTo(geometry.band ? geometry.band.top + 0 : 0, 0);
-      expect(cell?.height).toBeCloseTo(geometry.band?.height ?? 0, 0);
+    expect(geometry.boxes.length).toBeGreaterThan(0);
+    for (const box of geometry.boxes) {
+      expect(box).not.toBeNull();
+      expect(Math.abs((box?.top ?? 0) - (geometry.boxes[0]?.top ?? 0))).toBeLessThanOrEqual(1);
+      expect(Math.abs((box?.height ?? 0) - (geometry.boxes[0]?.height ?? 0))).toBeLessThanOrEqual(1);
+    }
+    for (const height of geometry.headers) expect(Math.abs(height - (geometry.headers[0] ?? 0))).toBeLessThanOrEqual(1);
+    if (width >= 1280) {
+      expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
+      expect(geometry.lastRight).toBeLessThanOrEqual(geometry.sectionRight + 1);
     }
     expect(geometry.overflowing).toEqual([]);
   });
