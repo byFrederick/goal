@@ -81,6 +81,19 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
     ),
   });
   const home = createRoute({ getParentRoute: () => orgPages, path: '/', component: () => <p>Home page</p> });
+  const page = (path: string) =>
+    createRoute({ getParentRoute: () => orgPages, path, component: () => <p>{path} page</p> });
+  const connections = createRoute({ getParentRoute: () => orgPages, path: 'connections', component: Outlet });
+  const connectionsIndex = createRoute({
+    getParentRoute: () => connections,
+    path: '/',
+    component: () => <p>Connections page</p>,
+  });
+  const connectionRoute = createRoute({
+    getParentRoute: () => connections,
+    path: '$connection',
+    component: () => <TopBarSlot crumb="github" />,
+  });
   const factoryRoute = createRoute({
     getParentRoute: () => orgRoute,
     path: '/f/$factory',
@@ -98,7 +111,13 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
   const router = createRouter({
     routeTree: rootRoute.addChildren([
       orgRoute.addChildren([
-        orgPages.addChildren([home]),
+        orgPages.addChildren([
+          home,
+          page('members'),
+          page('needs-you'),
+          page('spend'),
+          connections.addChildren([connectionsIndex, connectionRoute]),
+        ]),
         factoryRoute.addChildren([floor, items.addChildren([itemsIndex, itemRoute])]),
       ]),
     ]),
@@ -150,6 +169,28 @@ describe('TopBar', () => {
     expect(within(nav).getByText('Home').getAttribute('aria-current')).toBe('page');
     expect(within(nav).getByRole('link', { name: 'Acme' }).getAttribute('href')).toBe('/o/acme');
     expect(within(nav).getAllByRole('listitem')).toHaveLength(2);
+  });
+
+  it.each([
+    ['members', 'Members and roles'],
+    ['needs-you', 'Needs you'],
+    ['spend', 'Spend and billing'],
+    ['connections', 'Connections'],
+  ])('reads Acme > page on /%s', async (path, label) => {
+    renderBar({ at: `/o/acme/${path}` });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(nav).getByRole('link', { name: 'Acme' }).getAttribute('href')).toBe('/o/acme');
+    expect(within(nav).getByText(label).getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getAllByRole('listitem')).toHaveLength(2);
+  });
+
+  it('reads Acme > Connections > name on a connection page', async () => {
+    renderBar({ at: '/o/acme/connections/github' });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(nav).getByRole('link', { name: 'Acme' }).getAttribute('href')).toBe('/o/acme');
+    expect(within(nav).getByRole('link', { name: 'Connections' }).getAttribute('href')).toBe('/o/acme/connections');
+    expect(within(nav).getByText('github').getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getAllByRole('listitem')).toHaveLength(3);
   });
 
   it('names a page for every shell route', () => {
