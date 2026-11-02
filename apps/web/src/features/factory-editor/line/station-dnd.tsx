@@ -7,6 +7,7 @@ import {
   type Announcements,
   type CollisionDetection,
   DndContext,
+  type DropAnimation,
   DragOverlay,
   type KeyboardCoordinateGetter,
   KeyboardSensor,
@@ -46,6 +47,20 @@ const collision: CollisionDetection = (args) => {
   const within = pointerWithin(args);
   return within.length > 0 ? within : rectIntersection(args);
 };
+
+/**
+ * The settle after a drop (MOTION.md, Drag): the dropped station glides into its row at --duration-fast
+ * with --ease-out. dnd-kit hands its timing to the Web Animations API, which takes literal values, so the
+ * token values are read from the page. Under reduced motion, or without the tokens, the station snaps.
+ */
+export function settleTiming(): DropAnimation | null {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return null;
+  const css = getComputedStyle(document.documentElement);
+  const duration = Number.parseFloat(css.getPropertyValue('--duration-fast'));
+  const easing = css.getPropertyValue('--ease-out').trim();
+  if (!Number.isFinite(duration) || easing === '') return null;
+  return { duration, easing };
+}
 
 export function StationDnd({ children }: { children: ReactNode }) {
   const editor = useLineEditor();
@@ -106,7 +121,7 @@ export function StationDnd({ children }: { children: ReactNode }) {
       }}
     >
       {children}
-      <DragOverlay dropAnimation={null}>
+      <DragOverlay dropAnimation={settleTiming()}>
         {active ? (
           <div className="flex w-[240px] items-center gap-3 rounded-control border border-muted bg-card px-3 py-2.5 shadow-pop">
             <span className="flex size-7 items-center justify-center rounded-chip bg-shell text-[13px] font-semibold tabular-nums">

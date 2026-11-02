@@ -139,6 +139,10 @@
   --animate-text-states-swap: text-states-swap var(--duration-quick) ease-in-out;
   /* A changed digit pops in from below with a blur (MOTION.md, A number changes). */
   --animate-number-pop-in: number-pop-in var(--duration-emphasis) var(--ease-bounce) both;
+  /* The check that replaces Publish after a version publishes: it grows in at the emphasis duration (MOTION.md, Approve, publish, merge succeed). */
+  --animate-success-check: success-check var(--duration-emphasis) var(--ease-bounce) both;
+  /* A new row in a list fades in and rises 4 px (MOTION.md, A new item appears in a list). */
+  --animate-item-in: item-in var(--duration-fast) var(--ease-out) both;
   /* A skeleton pulses once while it waits (MOTION.md, Loading). */
   --animate-skeleton-pulse: skeleton-pulse var(--duration-pulse) linear;
   /* Four segments of --duration-micro: an invalid field's short shake (MOTION.md, Invalid form field). */
@@ -182,6 +186,21 @@
   @keyframes skeleton-pulse {
     50% {
       opacity: 0.5;
+    }
+  }
+
+  /* A success check settles in after a publish: it grows from 60% with a fade (MOTION.md, Approve, publish, merge succeed). */
+  @keyframes item-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--distance-micro));
+    }
+  }
+
+  @keyframes success-check {
+    from {
+      opacity: 0;
+      transform: scale(0.6);
     }
   }
 
