@@ -71,10 +71,10 @@ function Stations({ selected }: { selected: string | undefined }) {
       }
       aside={editor.viewOnly ? null : <AddStationMenu />}
     >
-      <div className="@container -mx-1 flex min-w-0 flex-col gap-2 md:mx-0">
+      <div className="@container -mx-1 min-w-0 overflow-hidden rounded-cell border border-line md:mx-0">
         <div
           aria-hidden="true"
-          className={`hidden px-4 text-[13px] font-medium text-muted @[960px]:grid ${lineColumns}`}
+          className={`hidden gap-y-0 bg-panel px-3 py-2 text-xs font-medium text-muted @[960px]:grid ${lineColumns}`}
         >
           <span />
           <span>Station</span>
@@ -84,16 +84,12 @@ function Stations({ selected }: { selected: string | undefined }) {
           <span className="text-right">{editor.viewOnly ? null : 'Order'}</span>
         </div>
         {stations.length === 0 ? (
-          <p className="m-0 rounded-control border border-dashed border-rule px-4 py-3.5 text-sm text-muted">
+          <p className="m-0 px-4 py-3.5 text-sm text-muted">
             No stations yet. Add a queue where work arrives, the stations that work on it, then Done.
           </p>
         ) : (
           <StationDnd>
-            <ol
-              aria-label="Stations, in order"
-              aria-describedby={help}
-              className="m-0 flex list-none flex-col gap-2 p-0"
-            >
+            <ol aria-label="Stations, in order" aria-describedby={help} className="m-0 flex list-none flex-col p-0">
               {stations.map((s, i) => (
                 <StationRow key={editor.keyOf(s.id)} station={s} index={i} selected={s.id === selected} />
               ))}

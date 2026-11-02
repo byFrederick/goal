@@ -115,8 +115,8 @@ function Tile({
       aria-current={current ? 'location' : undefined}
       className={cn(
         // relative: the screen-reader name stays inside the tile, not past the scrolling row.
-        'relative flex min-h-11 items-center gap-2.5 rounded-control border px-3 py-1.5 text-sm no-underline transition-colors duration-(--duration-quick)',
-        current ? 'border-transparent bg-hover text-ink' : 'border-transparent text-ink hover:bg-hover',
+        'relative flex min-h-11 items-center rounded-control px-2.5 py-2 text-sm no-underline transition-colors duration-(--duration-quick) hover:bg-hover',
+        current ? 'bg-hover text-ink' : 'text-ink-soft',
       )}
     >
       {/* One name for screen readers ("Connections, 1 change, 1 problem"); two lines on screen. */}
