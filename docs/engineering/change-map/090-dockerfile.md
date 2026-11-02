@@ -4,7 +4,7 @@ A Dockerfile (`cmd/goald`, `cmd/goal-egress`, `auth`, `worker`)
 
 ## Also change
 
-Its `Dockerfile.dockerignore`; its inputs in `deploy/cloudflare/scripts/images.mjs`; the app paths list of `.github/workflows/deploy.yml`
+Its `Dockerfile.dockerignore`; its inputs in `deploy/cloudflare/scripts/images.mjs`
 
 ## Run
 

@@ -32,7 +32,7 @@ docs/reference/        the glossary and the generated environment reference
 AGENTS.md              the index of rules for every agent and human (CLAUDE.md imports it)
 Taskfile.yml           task check = everything the pre-push hook and CI run
 .githooks/             pre-push hook: task check (+ task migrate-check when db/migrations/ or apps/auth/ changed)
-.github/               CI workflow (ci.yml): the pre-push gate on every pull request and push to main
+.github/               CI workflow (ci.yml): the pre-push gate on pull requests into main
 .claude/rules/         path-scoped rules, one home per rule, each naming its area's skills
 .claude/skills/        vendored skills (pinned in skills-lock.json) and our goal-* procedures
 ```
@@ -98,7 +98,7 @@ An item is `<factory>#<number>` (`goal#2`), its id, or a bare number when only o
 
 `goal up --compose` (`task up:compose`) runs goald and the auth service as compose services too (the `stack` profile, images built from this checkout, goald holding the Docker socket: one's own laptop only), with `.env`'s settings and the addresses of compose's network, and returns once everything is healthy; `docker compose logs -f goald` follows it and `docker compose stop goald auth` stops it. It needs `GOAL_AUTH=session`. Plain `goal up` keeps goald on this machine.
 
-Two gates run the same checks. Locally, the pre-push hook blocks `git push` unless `task check` passes (and `task migrate-check` when the pushed commits touch `db/migrations/` or `apps/auth/`). On GitHub, CI (`.github/workflows/ci.yml`) runs on every pull request and every push to main: `task check`, `task migrate-check` when the pull request changes `db/migrations/` or `apps/auth/` (always on main), and `task test-integration` on compose.yaml's services, with the tools at `.mise.toml`'s versions. It needs no secrets, so pull requests from forks run it as well. It went unused while the private repository had no Actions minutes; if GitHub shows it as disabled once the repository is public, a person re-enables it with `gh workflow enable ci.yml`.
+Two gates run the same checks. Locally, the pre-push hook blocks `git push` unless `task check` passes (and `task migrate-check` when the pushed commits touch `db/migrations/` or `apps/auth/`). On GitHub, CI (`.github/workflows/ci.yml`) runs only on pull requests into main (none on pushes to main, none on pull requests into an assembly's integration branch): `task check`, `task migrate-check` when the pull request changes `db/migrations/` or `apps/auth/`, and `task test-integration` on compose.yaml's services, with the tools at `.mise.toml`'s versions. It needs no secrets, so pull requests from forks run it as well. It went unused while the private repository had no Actions minutes; if GitHub shows it as disabled once the repository is public, a person re-enables it with `gh workflow enable ci.yml`.
 
 Read `AGENTS.md` before changing anything.
 
@@ -190,7 +190,7 @@ task tf:plan                  # needs the operator's credentials (task tf:creden
 task deploy:production        # wrangler deploy (builds and pushes the images), then the health check
 ```
 
-A merge to main that changes the app deploys production on its own once `ci` passes (`.github/workflows/deploy.yml`: `task deploy:worker`, then `task deploy:health` polls `GET /v1/health` until it is healthy or fails after 5 minutes); `deploy/terraform/`-only and docs-only changes deploy nothing. To roll back, run the deploy workflow by hand with the sha of an earlier commit of main.
+A merge to main does not deploy. A person deploys production by running the deploy workflow by hand with a sha of main (`gh workflow run deploy.yml -f sha=<sha>`; `.github/workflows/deploy.yml`: `task deploy:worker`, then `task deploy:health` polls `GET /v1/health` until it is healthy or fails after 5 minutes). It looks for no ci run, since every commit of main arrived through a pull request into main that passed ci. To roll back, dispatch it with the sha of an earlier commit of main.
 
 Bootstrap, deploys, master key escrow and rotation, and restores: [docs/engineering/cloudflare-operations.md](docs/engineering/cloudflare-operations.md). Agents format, check and plan; only the owner, or the coordinator the owner authorizes, applies.
 
