@@ -8,6 +8,8 @@ import { cn } from './cn';
 const variants = {
   /** Cobalt: the one primary action on a surface. */
   primary: 'border-run bg-run text-white hover:bg-run/90',
+  /** Ink (the near-black action colour): the design's primary button, as the state screens draw it. */
+  action: 'border-action bg-action text-action-ink hover:bg-action/90',
   /** White with a rule border: the secondary action. */
   secondary: 'border-rule bg-card text-ink hover:bg-panel',
   /** Alias of secondary, kept so callers do not change. */
