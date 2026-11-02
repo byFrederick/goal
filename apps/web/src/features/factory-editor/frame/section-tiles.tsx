@@ -131,12 +131,16 @@ function Tile({
       <span className="sr-only">{[label, badge, text, state].filter(Boolean).join(', ')}</span>
       <span aria-hidden="true" className="flex min-w-0 flex-1 flex-col leading-tight">
         <span className="flex items-baseline justify-between gap-2">
-          <span className="truncate font-medium">{label}</span>
+          <span className="truncate font-medium" title={label}>
+            {label}
+          </span>
           {badge ? (
             <span className={cn('shrink-0 text-xs', problem ? 'text-rework-ink' : 'text-muted')}>{badge}</span>
           ) : null}
         </span>
-        <span className={cn('truncate text-xs', problem && !badge ? 'text-rework-ink' : 'text-muted')}>{text}</span>
+        <span className={cn('truncate text-xs', problem && !badge ? 'text-rework-ink' : 'text-muted')} title={text}>
+          {text}
+        </span>
       </span>
     </a>
   );

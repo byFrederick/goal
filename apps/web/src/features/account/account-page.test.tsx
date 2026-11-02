@@ -226,6 +226,13 @@ describe('the account page', () => {
     expect(screen.getByText('Owner of Goal')).toBeTruthy();
   });
 
+  it('gives the truncated name and email their full text as a title', async () => {
+    renderAccount(session);
+    await screen.findByRole('textbox', { name: 'Name' });
+    expect(screen.getAllByTitle('Freddy Cruz').length).toBeGreaterThan(0);
+    expect(screen.getByTitle('freddy@example.com').textContent).toBe('freddy@example.com');
+  });
+
   it('refuses a name outside 1 to 80 characters and sends nothing', async () => {
     renderAccount(session);
     const name = await screen.findByRole('textbox', { name: 'Name' });

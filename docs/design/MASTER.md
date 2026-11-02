@@ -133,6 +133,7 @@ Unchanged from version 2: New item, Needs you (Approval, Decision, Question, Ale
   - Every button scales to 0.97 while pressed (MOTION.md).
 - **Chips:** 22px, 4px radius, 12px at 500, white with a line border and a 6px dot for status. Tinted only for needs you (orange) and sent back (red).
 - **Segmented control:** a `hover`-grey track with no border, 2px inset; the selected segment is white with a hairline shadow, and the highlight slides between segments.
+- **Truncated labels:** a label that truncates carries a `title` with its full text (or wraps); `truncate-title.test.ts` guards it.
 - **Inputs:** 32px (40px on onboarding), 6px radius, `rule` border, focus: `run` border plus a 3px `run-tint` ring.
 - **Switch:** 32×18px track; off `rule`, on `ink`; the thumb travels (MOTION.md, Toggle).
 - **Stat strip** (replaces the KPI tiles): up to four numbers in one row separated by 1px vertical rules, no boxes. Each has a 12px muted label, the 24px number and unit, and one meta line: the target, and the signed delta in `ok-ink` or `rework-ink`. A 2px bar under the number shows progress to target only when there is one.

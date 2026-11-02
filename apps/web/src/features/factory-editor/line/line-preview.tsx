@@ -43,8 +43,10 @@ export function LinePreview() {
                     s.kind === 'human' && !drum && 'border-you-tint',
                   )}
                 >
-                  <span className="truncate text-sm font-medium">{stationLabel(s)}</span>
-                  <span className="truncate text-muted">
+                  <span className="truncate text-sm font-medium" title={stationLabel(s)}>
+                    {stationLabel(s)}
+                  </span>
+                  <span className="truncate text-muted" title={previewDetail(s, line)}>
                     {previewDetail(s, line)}
                     {drum ? <span className="sr-only">, the constraint</span> : null}
                   </span>
