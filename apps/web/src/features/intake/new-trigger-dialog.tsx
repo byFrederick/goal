@@ -10,6 +10,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Dialog, DialogClose, DialogContent } from '../../ui/dialog';
 import { NotAvailable } from '../../ui/not-available';
+import { SourceTile } from '../../ui/source-tile';
 import {
   defaultEvent,
   githubEventGroups,
@@ -96,7 +97,7 @@ export function NewTriggerDialog() {
                 Back
               </Button>
               <div className="flex items-center gap-3">
-                <SourceTile source={chosen} />
+                <SourceTile icon={chosen.icon} fill={chosen.tile} size="sm" />
                 <h3 className="m-0 text-heading">{chosen.label}</h3>
               </div>
               {chosen.key === 'github' ? (
@@ -197,23 +198,11 @@ function SourceButton({ source, pressed, onPick }: { source: PickerSource; press
         !source.available && 'text-muted',
       )}
     >
-      <SourceTile source={source} />
+      <SourceTile icon={source.icon} fill={source.tile} size="sm" />
       {source.label}
     </button>
   );
   return source.available ? button : <NotAvailable label={source.label}>{button}</NotAvailable>;
-}
-
-function SourceTile({ source }: { source: PickerSource }) {
-  const Icon = source.icon;
-  return (
-    <span
-      aria-hidden="true"
-      className={cn('flex size-6 flex-none items-center justify-center rounded-cell text-white', source.tile)}
-    >
-      <Icon className="size-3.5" />
-    </span>
-  );
 }
 
 /** The GitHub events the picture lists; only the two the schema accepts can be chosen. */

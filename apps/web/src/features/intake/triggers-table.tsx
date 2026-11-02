@@ -11,10 +11,10 @@ import { cn } from '../../ui/cn';
 import { Switch } from '../../ui/switch';
 import { useTriggerToggle } from './trigger-toggle';
 
-/** The square and icon each source is drawn with (its tile is a foundation token, its icon white). */
-export const sourceIcon: Record<IntakeTrigger['source'], { icon: LucideIcon; tile: string; label: string }> = {
-  github: { icon: GitBranch, tile: 'bg-ink', label: 'GitHub' },
-  schedule: { icon: Clock, tile: 'bg-muted', label: 'Schedule' },
+/** The square and icon each source is drawn with (its tile is the near-black mark unless blue, its icon white). */
+export const sourceIcon: Record<IntakeTrigger['source'], { icon: LucideIcon; tile?: string; label: string }> = {
+  github: { icon: GitBranch, label: 'GitHub' },
+  schedule: { icon: Clock, label: 'Schedule' },
   webhook: { icon: Webhook, tile: 'bg-run', label: 'Webhook' },
 };
 
