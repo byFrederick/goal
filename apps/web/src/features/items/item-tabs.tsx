@@ -1,7 +1,7 @@
 // The item's views, in the URL: `?tab=` names the selected one; Timeline is the default and leaves
 // the URL clean. Trace and Teardown are not built yet: they stay in the bar, disabled.
-import { Link, useParams } from '@tanstack/react-router';
-import { useLayoutEffect, useRef } from 'react';
+import { Link, useNavigate, useParams } from '@tanstack/react-router';
+import { type KeyboardEvent, useLayoutEffect, useRef } from 'react';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
@@ -18,6 +18,10 @@ const labels: Record<ItemTab, string> = {
   changes: 'Changes',
   checks: 'Checks',
 };
+
+export const tabId = (t: ItemTab) => `item-tab-${t}`;
+/** The id of the panel the selected tab controls. */
+export const panelId = 'item-tabpanel';
 
 interface Props {
   tab: ItemTab;
@@ -43,6 +47,9 @@ export function ItemTabs({ tab, files, checks, className }: Props) {
 
   // The underline is measured from the selected tab: placed at once on the first paint and on a resize, and it
   // slides when the tab changes (MOTION.md, Tabs).
+  const navigate = useNavigate();
+  // A keyboard switch moves the underline at once: no animation on keyboard-driven actions (MOTION.md).
+  const byKeyboard = useRef(false);
   const underline = useRef<HTMLSpanElement>(null);
   const links = useRef(new Map<ItemTab, HTMLElement>());
   const placed = useRef(false);
@@ -59,25 +66,59 @@ export function ItemTabs({ tab, files, checks, className }: Props) {
         el.style.transition = '';
       }
     };
-    place(placed.current);
+    place(placed.current && !byKeyboard.current);
+    byKeyboard.current = false;
     placed.current = true;
     const onResize = () => place(false);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [tab]);
 
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const at = itemTabs.indexOf(tab);
+    const next =
+      e.key === 'ArrowRight'
+        ? itemTabs[(at + 1) % itemTabs.length]
+        : e.key === 'ArrowLeft'
+          ? itemTabs[(at - 1 + itemTabs.length) % itemTabs.length]
+          : e.key === 'Home'
+            ? itemTabs[0]
+            : e.key === 'End'
+              ? itemTabs[itemTabs.length - 1]
+              : undefined;
+    if (!next) return;
+    e.preventDefault();
+    byKeyboard.current = true;
+    links.current.get(next)?.focus();
+    void navigate({
+      to: '/o/$org/f/$factory/items/$ref',
+      params,
+      search: next === 'timeline' ? {} : { tab: next },
+    });
+  };
+
   return (
-    <nav aria-label="Item views" className={cn('relative flex gap-1 overflow-x-auto border-b border-line', className)}>
+    <div
+      role="tablist"
+      aria-label="Item views"
+      onKeyDown={onKeyDown}
+      className={cn('relative flex gap-1 overflow-x-auto border-b border-line', className)}
+    >
       <span
         ref={underline}
         aria-hidden="true"
-        className="pointer-events-none absolute bottom-0 left-0 h-0.5 bg-ink transition-[transform,width] duration-(--duration-fast) ease-out"
+        className="pointer-events-none absolute bottom-0 left-0 h-0.5 bg-ink transition-[transform,width] duration-(--duration-fast) ease-out motion-reduce:transition-none"
       />
       {itemTabs.map((t) => {
         const active = t === tab;
         return (
           <Link
             key={t}
+            id={tabId(t)}
+            role="tab"
+            aria-selected={active}
+            aria-controls={active ? panelId : undefined}
+            tabIndex={active ? 0 : -1}
             ref={(el) => {
               if (el) links.current.set(t, el);
             }}
@@ -94,11 +135,19 @@ export function ItemTabs({ tab, files, checks, className }: Props) {
       })}
       {(['Trace', 'Teardown'] as const).map((label) => (
         <NotAvailable key={label} label={label}>
-          <Button variant="ghost" type="button" className={cn(tabClass(false), 'rounded-none')}>
+          <Button
+            variant="ghost"
+            type="button"
+            role="tab"
+            aria-selected={false}
+            aria-disabled="true"
+            tabIndex={-1}
+            className={cn(tabClass(false), 'rounded-none')}
+          >
             {label}
           </Button>
         </NotAvailable>
       ))}
-    </nav>
+    </div>
   );
 }

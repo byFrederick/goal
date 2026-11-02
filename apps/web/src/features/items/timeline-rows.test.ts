@@ -49,15 +49,15 @@ describe('toolSteps', () => {
       call({ tool: 'Edit', argument: 'c.go' }),
     ]);
 
-    expect(steps.map(sentence)).toEqual(['Edited 2 files', 'Ran go…', 'Edited c.go']);
+    expect(steps.map(sentence)).toEqual(['Edited 2 files', 'Ran go test ./...', 'Edited c.go']);
   });
 
-  it('shortens a long Bash command to one line', () => {
-    const command = `go test ./internal/engine/ ${'-run TestClaimExpediteBeforePriority '.repeat(20)}`;
-    const step = one(toolSteps([call({ tool: 'Bash', argument: command.slice(0, 139) })]));
+  it('keeps the whole Bash command, on one line, so the row can wrap it', () => {
+    const command = 'cd apps/web &&\n  go test ./internal/engine/ -run TestClaim';
+    const step = one(toolSteps([call({ tool: 'Bash', argument: command })]));
 
-    expect(sentence(step)).toBe('Ran go…');
-    expect(step.segments.find((s) => s.code)?.text).toBe('go…');
+    expect(sentence(step)).toBe('Ran cd apps/web && go test ./internal/engine/ -run TestClaim');
+    expect(step.segments.find((s) => s.code)?.text).toBe('cd apps/web && go test ./internal/engine/ -run TestClaim');
   });
 
   it('never uses call.summary as the right label', () => {

@@ -33,14 +33,14 @@ The Items page at `/o/<org>/f/<factory>/items` lists the same items as a table, 
 
 Open an item from the Board or the Items page. Its URL is `/o/<org>/f/<factory>/items/<ref>`, where `<ref>` is the item's number.
 
-The page has four tabs:
+The page has four tabs. Move between them with the arrow keys; Home and End jump to the first and last. The selected tab is in the URL as `?tab=`, and Timeline leaves it out:
 
 - **Timeline** shows each run's events as grouped steps in plain words: the station, the agent, what it did and how it ended.
 - **Spec** shows the request and the acceptance criteria from the spec the agents wrote.
 - **Changes** shows the outputs the stations produced, and says so when nothing has been produced yet.
 - **Checks** shows the checks that have run on the item, and says so when none have.
 
-Beside the tabs, the side column shows the item's details, its cost, the items it overlaps with, and the rules its runs received.
+The timeline and the note field are the main column on the left. To the right of them, the details column shows the item's details, its cost, the items it overlaps with, and the rules its runs received.
 
 The Trace and Teardown controls on the item page are not available yet; the page shows them disabled.
 

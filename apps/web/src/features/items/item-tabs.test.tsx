@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Factory } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
@@ -42,38 +42,66 @@ function renderTabs(tab: Parameters<typeof ItemTabs>[0]['tab']) {
 }
 
 describe('ItemTabs', () => {
-  it('shows the views with the file and check counts, and marks the selected one', async () => {
+  it('shows the views as tabs with the counts, and marks the selected one', async () => {
     renderTabs('checks');
 
-    const nav = await screen.findByRole('navigation', { name: 'Item views' });
-    expect(within(nav).getByRole('link', { name: 'Timeline' })).toBeTruthy();
-    expect(within(nav).getByRole('link', { name: 'Spec' })).toBeTruthy();
-    expect(within(nav).getByRole('link', { name: /^Changes\s*6 files$/ })).toBeTruthy();
-    expect(
-      within(nav)
-        .getByRole('link', { name: /^Checks\s*2$/ })
-        .getAttribute('aria-current'),
-    ).toBe('page');
-    expect(within(nav).getByRole('link', { name: 'Timeline' }).getAttribute('aria-current')).toBeNull();
+    const list = await screen.findByRole('tablist', { name: 'Item views' });
+    const tabs = within(list).getAllByRole('tab');
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      'Timeline',
+      'Spec',
+      'Changes6 files',
+      'Checks2',
+      'Trace',
+      'Teardown',
+    ]);
+    const selected = tabs.filter((t) => t.getAttribute('aria-selected') === 'true');
+    expect(selected.map((t) => t.textContent)).toEqual(['Checks2']);
+    expect(selected[0]?.tabIndex).toBe(0);
+    expect(within(list).getByRole('tab', { name: 'Timeline' }).tabIndex).toBe(-1);
   });
 
   it('draws one underline that slides between tabs, on the motion tokens', async () => {
     renderTabs('spec');
 
-    const nav = await screen.findByRole('navigation', { name: 'Item views' });
-    const underline = nav.querySelector('span[aria-hidden="true"]');
+    const list = await screen.findByRole('tablist', { name: 'Item views' });
+    const underline = list.querySelector('span[aria-hidden="true"]');
     expect(underline).not.toBeNull();
     expect(underline?.className).toContain('duration-(--duration-fast)');
     expect(underline?.className).toContain('ease-out');
-    expect(within(nav).getByRole('link', { name: 'Spec' }).className).not.toContain('border-b-2');
+    expect(underline?.className).toContain('motion-reduce:transition-none');
+  });
+
+  it('moves to the next tab with ArrowRight and puts it in the URL', async () => {
+    const { router } = renderTabs('timeline');
+
+    const list = await screen.findByRole('tablist', { name: 'Item views' });
+    const timeline = within(list).getByRole('tab', { name: 'Timeline' });
+    timeline.focus();
+    fireEvent.keyDown(timeline, { key: 'ArrowRight' });
+    await waitFor(() => expect(router.state.location.search).toEqual({ tab: 'spec' }));
+    expect(document.activeElement).toBe(within(list).getByRole('tab', { name: 'Spec' }));
+  });
+
+  it('keeps the URL clean when Home returns to Timeline, and skips Trace and Teardown at End', async () => {
+    const { router } = renderTabs('spec');
+
+    const list = await screen.findByRole('tablist', { name: 'Item views' });
+    const spec = within(list).getByRole('tab', { name: 'Spec' });
+    fireEvent.keyDown(spec, { key: 'End' });
+    await waitFor(() => expect(router.state.location.search).toEqual({ tab: 'checks' }));
+    fireEvent.keyDown(within(list).getByRole('tab', { name: /^Checks/ }), { key: 'Home' });
+    await waitFor(() => expect(router.state.location.search).toEqual({}));
   });
 
   it('keeps Trace and Teardown inert until they are built', async () => {
     renderTabs('timeline');
 
-    const nav = await screen.findByRole('navigation', { name: 'Item views' });
+    const list = await screen.findByRole('tablist', { name: 'Item views' });
     for (const name of ['Trace', 'Teardown']) {
-      expect(within(nav).getByRole('button', { name }).getAttribute('aria-disabled')).toBe('true');
+      const tab = within(list).getByRole('tab', { name });
+      expect(tab.getAttribute('aria-disabled')).toBe('true');
+      expect(tab.getAttribute('aria-selected')).toBe('false');
     }
   });
 });

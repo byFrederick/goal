@@ -25,3 +25,25 @@ for (const scheme of ['light', 'dark'] as const) {
     await expectNoHorizontalScroll(page);
   });
 }
+
+for (const width of [375, 390]) {
+  test(`the item page does not scroll sideways at ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/o/acme/f/goal/items/12');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+}
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`item page screenshot at 390, ${theme}`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+    await page.goto('/o/acme/f/goal/items/12');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await testInfo.attach(`item-390-${theme}`, {
+      body: await page.screenshot({ fullPage: true }),
+      contentType: 'image/png',
+    });
+  });
+}
