@@ -127,8 +127,10 @@ function ColumnHeader({
 function ZoneLabel({ children, aside }: { children: string; aside?: string | undefined }) {
   return (
     <div className="flex items-center justify-between gap-2 px-1 text-meta font-medium text-muted">
-      <span>{children}</span>
-      {aside ? <span>{aside}</span> : null}
+      <span className="min-w-0 truncate" title={children}>
+        {children}
+      </span>
+      {aside ? <span className="shrink-0 whitespace-nowrap">{aside}</span> : null}
     </div>
   );
 }

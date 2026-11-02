@@ -164,6 +164,12 @@ for (const width of [1440, 1280, 1024, 768]) {
           return box ? { top: box.top, height: box.height } : null;
         }),
         headers: columns.map((column) => column.querySelector(':scope > header')?.getBoundingClientRect().height ?? 0),
+        pastColumn: columns.flatMap((column) => {
+          const edge = column.getBoundingClientRect().right + 1;
+          return Array.from(column.querySelectorAll<HTMLElement>('*'))
+            .filter((el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().right > edge)
+            .map((el) => el.tagName);
+        }),
         overflowing: Array.from(document.querySelectorAll<HTMLElement>('body *'))
           .filter((el) => !stations?.contains(el) && el.getBoundingClientRect().right > window.innerWidth + 1)
           .map((el) => el.tagName),
@@ -181,6 +187,7 @@ for (const width of [1440, 1280, 1024, 768]) {
       expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
       expect(geometry.lastRight).toBeLessThanOrEqual(geometry.sectionRight + 1);
     }
+    expect(geometry.pastColumn).toEqual([]);
     expect(geometry.overflowing).toEqual([]);
   });
 }
