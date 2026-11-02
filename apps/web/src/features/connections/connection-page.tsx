@@ -25,7 +25,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Field, Input } from '../../ui/field';
-import { descriptionClass, PageHeader } from '../../ui/page-header';
+import { descriptionClass, PageHeader, sectionHeadingClass } from '../../ui/page-header';
 import { ReadOnly } from '../../ui/read-only';
 import { EnvNames, ToneText, WriteOnly } from './parts';
 import { ReplaceSecretDialog } from './replace-secret-dialog';
@@ -227,7 +227,7 @@ function FieldsCard({
       noValidate
       className="flex min-w-0 flex-col gap-4 rounded-card border border-line bg-card p-4 md:p-5"
     >
-      <h2 id={`${id}-fields`} className="m-0 text-lg font-medium">
+      <h2 id={`${id}-fields`} className={sectionHeadingClass}>
         Fields
       </h2>
       <div className="grid grid-cols-1 gap-x-5 gap-y-4 @[640px]:grid-cols-2">
@@ -350,7 +350,7 @@ function UsedByCard({ connection: c }: { connection: Connection }) {
       aria-labelledby={`${id}-used`}
       className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-4 md:p-5"
     >
-      <h2 id={`${id}-used`} className="m-0 text-lg font-medium">
+      <h2 id={`${id}-used`} className={sectionHeadingClass}>
         Used by
       </h2>
       {c.used_by.factories.length === 0 ? (
@@ -456,7 +456,7 @@ function RunGetsCard({ connection: c, kind }: { connection: Connection; kind: Co
       aria-labelledby={`${id}-gets`}
       className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-4 md:p-5"
     >
-      <h2 id={`${id}-gets`} className="m-0 text-lg font-medium">
+      <h2 id={`${id}-gets`} className={sectionHeadingClass}>
         What a run gets
       </h2>
       <p className="m-0 text-sm leading-normal text-muted">
@@ -494,7 +494,7 @@ function RecentUse({ org, connection, now }: { org: string; connection: Connecti
       className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-4 md:p-5"
     >
       <div className="flex items-baseline justify-between gap-3">
-        <h2 id={`${id}-use`} className="m-0 text-lg font-medium">
+        <h2 id={`${id}-use`} className={sectionHeadingClass}>
           Recent use
         </h2>
         <span className="text-secondary text-muted">From the audit log</span>

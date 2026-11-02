@@ -23,7 +23,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Field, Input, NativeSelect } from '../../ui/field';
-import { descriptionClass, PageHeader } from '../../ui/page-header';
+import { descriptionClass, PageHeader, sectionHeadingClass } from '../../ui/page-header';
 import { ReadOnly } from '../../ui/read-only';
 import { ConfigFields, configErrors, readerOf, trimmed } from './config-fields';
 import { DocumentDialog, DocumentList } from './documents';
@@ -111,7 +111,7 @@ export function SourcePage() {
           {source.kind === 'upload' && manage ? <UploadCard source={source} /> : null}
           {source.kind === 'live' ? (
             <section className={card}>
-              <h2 className="m-0 text-lg font-medium">Documents</h2>
+              <h2 className={sectionHeadingClass}>Documents</h2>
               <p className="m-0 text-sm leading-normal text-muted">
                 A live source stores nothing. Factories that list it get the tools of{' '}
                 <span translate="no">{source.connection}</span>, which search at question time.
@@ -120,7 +120,7 @@ export function SourcePage() {
           ) : (
             <section aria-labelledby={docsId} className={card}>
               <div className="flex items-baseline justify-between gap-3">
-                <h2 id={docsId} className="m-0 text-lg font-medium">
+                <h2 id={docsId} className={sectionHeadingClass}>
                   Documents
                 </h2>
                 <span className="text-[13px] text-muted">{plural(source.documents, 'document')}</span>
@@ -161,7 +161,7 @@ function UploadCard({ source }: { source: KnowledgeSource }) {
   return (
     <section aria-labelledby={id} className={card}>
       <div className="flex items-baseline justify-between gap-3">
-        <h2 id={id} className="m-0 text-lg font-medium">
+        <h2 id={id} className={sectionHeadingClass}>
           Upload
         </h2>
         {over && !uploader.busy ? (
@@ -225,7 +225,7 @@ function SettingsCard({ source: s, manage }: { source: KnowledgeSource; manage: 
 
   const form = (
     <form aria-labelledby={id} onSubmit={submit} noValidate className={card}>
-      <h2 id={id} className="m-0 text-lg font-medium">
+      <h2 id={id} className={sectionHeadingClass}>
         Settings
       </h2>
       <Field
@@ -283,7 +283,7 @@ function UsedByCard({ source: s }: { source: KnowledgeSource }) {
   const id = useId();
   return (
     <section aria-labelledby={id} className={card}>
-      <h2 id={id} className="m-0 text-lg font-medium">
+      <h2 id={id} className={sectionHeadingClass}>
         Used by
       </h2>
       {s.used_by.factories.length === 0 ? (

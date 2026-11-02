@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 export const eyebrowClass = 'm-0 text-[13px] text-muted';
 /** For the sentence under a page's h1. */
 export const descriptionClass = 'm-0 text-[15px] leading-normal text-muted';
+/** For a section's heading (h2, h3 or legend) on a page: 14 px at 600, from the `--text-heading` token. */
+export const sectionHeadingClass = 'm-0 text-heading';
 /** For the element holding a page's actions. */
 export const actionsClass = 'flex flex-wrap gap-2';
 
