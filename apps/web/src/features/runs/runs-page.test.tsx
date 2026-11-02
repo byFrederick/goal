@@ -18,7 +18,7 @@ import { orgRunsOf } from '../../../mock/runs.ts';
 import type { RunsFilter } from '../../api/client';
 import * as client from '../../api/client';
 import * as download from '../../api/download';
-import { factoriesQuery } from '../../api/queries';
+import { attentionQuery, factoriesQuery } from '../../api/queries';
 import type { OrgRunList, OrgSummary } from '../../api/types';
 import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { TooltipProvider } from '../../ui/tooltip';
@@ -71,6 +71,7 @@ const emptyList: OrgRunList = {
 function renderRuns(search = '') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   queryClient.setQueryData(factoriesQuery(acmeOrg).queryKey, factories);
+  queryClient.setQueryData(attentionQuery(acmeOrg).queryKey, { waiting_on_you: 3, factories: [] });
 
   const rootRoute = createRootRoute();
   const orgRoute = createRoute({
@@ -318,16 +319,33 @@ describe('the controls that are not built yet', () => {
     expect(control.getAttribute('aria-disabled')).toBeNull();
   });
 
-  it('shows the Waiting on you figure as no data yet, and its chip disabled, and says why', async () => {
+  it('shows the failed count in red, the waiting count from the attention data in orange, and the chip disabled', async () => {
     renderRuns();
     await screen.findByRole('table');
 
-    expect(screen.getByText('No data yet')).toBeTruthy();
+    const strip = screen.getByRole('region', { name: 'Today' });
+    const failed = within(strip).getByText('Failed').parentElement as HTMLElement;
+    const waiting = within(strip).getByText('Waiting on you').parentElement as HTMLElement;
+    expect(failed.querySelector('.text-rework-ink')).toBeTruthy();
+    expect(waiting.querySelector('.text-you-ink')?.textContent).toContain('3');
+    expect(within(waiting).getByText('Paused until you answer')).toBeTruthy();
+
     const chip = screen.getByRole('button', { name: /Waiting on you/ });
     expect(chip.getAttribute('aria-disabled')).toBe('true');
     expect(chip.tabIndex).not.toBe(-1);
     fireEvent.focus(chip);
     expect((await screen.findAllByText('Not available yet')).length).toBeGreaterThan(0);
+  });
+
+  it('marks the selected outcome with the hover fill, not the ink fill', async () => {
+    renderRuns();
+    await screen.findByRole('table');
+
+    const all = screen.getByRole('button', { name: /^All\d/ });
+    expect(all.getAttribute('aria-pressed')).toBe('true');
+    expect(all.classList.contains('bg-hover')).toBe(true);
+    expect(all.classList.contains('bg-ink')).toBe(false);
+    expect(screen.getByRole('button', { name: /^Running/ }).getAttribute('aria-pressed')).toBe('false');
   });
 
   it('renders Open transcript and Send to Jonah on a failed row disabled and inert', async () => {
