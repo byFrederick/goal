@@ -70,9 +70,9 @@ export function ListShape() {
   );
 }
 
-function BoardColumn() {
+function BoardColumn({ phone = false }: { phone?: boolean }) {
   return (
-    <div className="flex w-64 flex-none flex-col gap-2">
+    <div className={cn('flex flex-col gap-2', phone ? 'w-full min-w-0' : 'w-64 flex-none')}>
       <div className={cn(block, 'h-5 w-24')} />
       <div className={cn(block, 'h-1 w-full')} />
       <div className={cn(block, 'h-10')} />
@@ -96,11 +96,19 @@ export function BoardShape() {
         <div className={cn(block, 'h-7 w-24')} />
         <div className={cn(block, 'h-7 w-24')} />
       </div>
-      <div className="flex min-w-0 gap-3 overflow-hidden">
+      <div className="flex min-w-0 gap-3 overflow-hidden max-md:hidden">
         <BoardColumn />
         <BoardColumn />
         <BoardColumn />
         <BoardColumn />
+      </div>
+      <div className="flex min-w-0 flex-col gap-3 md:hidden">
+        <div className="flex gap-2">
+          <div className={cn(block, 'h-11 w-24 min-w-0')} />
+          <div className={cn(block, 'h-11 w-24 min-w-0')} />
+          <div className={cn(block, 'h-11 w-24 min-w-0')} />
+        </div>
+        <BoardColumn phone />
       </div>
     </div>
   );
@@ -116,11 +124,11 @@ export function BoardSkeleton() {
   return <PendingSkeleton placeholder={<BoardShape />} />;
 }
 
-function Panel({ className }: { className?: string }) {
+export function Panel({ className }: { className?: string }) {
   return <div className={cn('rounded-card border border-line bg-card', className)} />;
 }
 
-function HomeShape() {
+export function HomeShape() {
   return (
     <div className="flex w-full min-w-0 flex-col gap-5">
       <Heading />
@@ -142,29 +150,29 @@ export function HomeSkeleton() {
   return <PendingSkeleton placeholder={<HomeShape />} />;
 }
 
-function AgentsShape() {
+export function AgentsShape() {
   return (
     <div className="flex w-full min-w-0 flex-col gap-5">
       <Heading />
       <Panel className="h-16" />
-      <div className="flex min-w-0 gap-4 overflow-hidden">
-        <div className="flex w-64 flex-none flex-col gap-3">
+      <div className="flex min-w-0 flex-col gap-4 md:flex-row md:overflow-hidden">
+        <div className="flex w-full min-w-0 flex-col gap-3 md:w-64 md:flex-none">
           <div className={cn(block, 'h-5 w-24')} />
           <div className={cn(block, 'h-10 w-16')} />
           <Panel className="h-28" />
         </div>
-        <div className="flex w-64 flex-none flex-col gap-3">
+        <div className="flex w-full min-w-0 flex-col gap-3 md:w-64 md:flex-none">
           <div className={cn(block, 'h-5 w-24')} />
           <div className={cn(block, 'h-10 w-16')} />
           <Panel className="h-44" />
         </div>
-        <div className="flex w-64 flex-none flex-col gap-3">
+        <div className="flex w-full min-w-0 flex-col gap-3 md:w-64 md:flex-none">
           <div className={cn(block, 'h-5 w-24')} />
           <div className={cn(block, 'h-10 w-16')} />
           <Panel className="h-28" />
           <Panel className="h-28" />
         </div>
-        <div className="flex w-64 flex-none flex-col gap-3">
+        <div className="flex w-full min-w-0 flex-col gap-3 md:w-64 md:flex-none">
           <div className={cn(block, 'h-5 w-24')} />
           <div className={cn(block, 'h-10 w-16')} />
           <Panel className="h-44" />
@@ -179,7 +187,7 @@ export function AgentsSkeleton() {
   return <PendingSkeleton placeholder={<AgentsShape />} />;
 }
 
-function AgentShape() {
+export function AgentShape() {
   return (
     <div className="flex w-full min-w-0 flex-col gap-5">
       <div className="flex items-start gap-4">
@@ -268,7 +276,7 @@ export function AgentSkeleton() {
   return <PendingSkeleton placeholder={<AgentShape />} />;
 }
 
-function ItemsShape() {
+export function ItemsShape() {
   return (
     <div className="flex w-full min-w-0 flex-col gap-5">
       <Heading />
@@ -306,4 +314,29 @@ export function ItemsSkeleton() {
 /** The pending component of the Trigger route. */
 export function TriggerSkeleton() {
   return <PendingSkeleton placeholder={<TriggerShape />} />;
+}
+
+/** The Floor: its header, the stat strip, the line, then the cards. */
+export function FloorShape() {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-5">
+      <Heading />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Panel className="h-20" />
+        <Panel className="h-20" />
+        <Panel className="h-20" />
+        <Panel className="h-20" />
+      </div>
+      <Panel className="h-28" />
+      <div className="grid gap-4 md:grid-cols-2">
+        <Panel className="h-64" />
+        <Panel className="h-64" />
+      </div>
+    </div>
+  );
+}
+
+/** The pending component of the Floor route. */
+export function FloorSkeleton() {
+  return <PendingSkeleton placeholder={<FloorShape />} />;
 }

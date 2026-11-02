@@ -16,12 +16,12 @@ interface SkeletonProps {
 
 export function Skeleton({ ready, placeholder, children, className }: SkeletonProps) {
   return (
-    <div aria-busy={ready ? undefined : true} className={cn('grid', className)}>
+    <div aria-busy={ready ? undefined : true} className={cn('grid grid-cols-[minmax(0,1fr)]', className)}>
       {ready ? null : <span className="sr-only">Loading</span>}
       <div
         aria-hidden="true"
         className={cn(
-          'col-start-1 row-start-1 transition-[opacity,filter] duration-(--duration-slow) ease-in-out',
+          'col-start-1 row-start-1 min-w-0 transition-[opacity,filter] duration-(--duration-slow) ease-in-out',
           ready && 'opacity-0 blur-(--blur-small)',
         )}
       >
@@ -30,7 +30,7 @@ export function Skeleton({ ready, placeholder, children, className }: SkeletonPr
       <div
         inert={!ready}
         className={cn(
-          'col-start-1 row-start-1 transition-[opacity,filter] duration-(--duration-slow) ease-in-out',
+          'col-start-1 row-start-1 min-w-0 transition-[opacity,filter] duration-(--duration-slow) ease-in-out',
           !ready && 'opacity-0 blur-(--blur-small)',
         )}
       >

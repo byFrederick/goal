@@ -17,6 +17,11 @@ const ownSkeletons = new Map([
   ['o.$org.f.$factory.agents.index.tsx', 'AgentsSkeleton'],
   ['o.$org.f.$factory.agents.$agent.tsx', 'AgentSkeleton'],
   ['o.$org.f.$factory.items.index.tsx', 'ItemsSkeleton'],
+  ['o.$org.f.$factory.index.tsx', 'FloorSkeleton'],
+  ['o.$org.f.$factory.board.tsx', 'BoardSkeleton'],
+  ['o.$org.f.$factory.items.$ref.tsx', 'ItemSkeleton'],
+  ['o.$org._org.runs.tsx', 'ListPageSkeleton'],
+  ['o.$org.f.$factory.jonah.index.tsx', 'JonahPending'],
 ]);
 
 const routes = import.meta.glob<string>(['../routes/*.tsx', '!../routes/*.test.tsx'], {
@@ -54,7 +59,7 @@ describe('route pending components', () => {
     }
   });
 
-  it('gives Home, Agents, an agent and Items their own skeleton', () => {
+  it('gives Home, Floor, Board, Items, an item, Runs, Jonah, Agents and an agent their own skeleton', () => {
     for (const [file, name] of ownSkeletons) {
       const source = routes[`../routes/${file}`] ?? '';
       expect(source, file).toMatch(new RegExp(`pendingComponent:\\s*${name}\\b`));
