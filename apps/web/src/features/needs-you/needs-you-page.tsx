@@ -255,10 +255,10 @@ export function NeedsYouPage() {
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col', cameBack && 'animate-pane-back')}>
       {header}
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <section
           aria-label="Waiting on you"
-          className="flex min-h-0 flex-col md:w-90 md:flex-none md:border-r md:border-line"
+          className="flex min-h-0 flex-col lg:w-90 lg:flex-none lg:border-r lg:border-line"
         >
           {visible.length === 0 ? (
             <p className="m-0 px-4 py-5 text-secondary text-muted">Nothing of this type waits on you.</p>
@@ -271,7 +271,7 @@ export function NeedsYouPage() {
               siblings={factoriesOf(entries)}
             />
           )}
-          <p className="m-0 hidden px-4 py-3 text-meta text-muted md:block">
+          <p className="m-0 hidden px-4 py-3 text-meta text-muted lg:block">
             <Kbd>J</Kbd> <Kbd>K</Kbd> to move, <Kbd>A</Kbd> approve, <Kbd>D</Kbd> deny
           </p>
         </section>

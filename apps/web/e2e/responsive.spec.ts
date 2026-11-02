@@ -47,8 +47,7 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
   {
     name: 'New trigger',
     open: async (page) => {
-      await page.goto('/o/acme/f/software/intake');
-      await page.getByRole('link', { name: 'New trigger' }).first().click();
+      await page.goto('/o/acme/f/software/intake/new');
       await expect(page.getByRole('dialog', { name: 'New trigger' })).toBeVisible();
     },
   },
