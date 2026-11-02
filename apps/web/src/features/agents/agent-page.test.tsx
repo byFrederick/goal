@@ -23,6 +23,15 @@ vi.mock('../../api/client', async (original) => ({
   startBakeOff: vi.fn(),
 }));
 
+const slotCrumbs = vi.hoisted(() => [] as (string | undefined)[]);
+vi.mock('../../app/top-bar', async (original) => ({
+  ...(await original<typeof import('../../app/top-bar')>()),
+  TopBarSlot: ({ crumb }: { crumb?: string }) => {
+    slotCrumbs.push(crumb);
+    return null;
+  },
+}));
+
 vi.mock('../../api/definitions', async (original) => ({
   ...(await original<typeof import('../../api/definitions')>()),
   createDraftRequest: vi.fn(),
@@ -160,6 +169,11 @@ describe('the Agent page, ready', () => {
         .map((l) => l.textContent),
     ).toEqual(['Overview', 'Prompt', 'Tools and access', 'Runs']);
     expect(within(views).getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it("sets the agent's name as the top bar's last crumb once loaded", async () => {
+    await renderPage();
+    expect(slotCrumbs.at(-1)).toBe('frontend-engineer');
   });
 
   it('shows the last 7 days and the reasons review sent work back, by role', async () => {

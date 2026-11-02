@@ -194,7 +194,7 @@ export function JonahOverviewPage() {
   if (overview.isError) {
     return (
       <div className="flex min-w-0 flex-col gap-5">
-        <TopBarSlot crumb="Jonah" actions={actions} />
+        <TopBarSlot actions={actions} />
         <JonahHeader tab="overview" />
         <JonahError error={overview.error} retry={() => void overview.refetch()} />
       </div>
@@ -208,7 +208,7 @@ export function JonahOverviewPage() {
 
   return (
     <div className="@container flex min-w-0 flex-col gap-5">
-      <TopBarSlot crumb="Jonah" actions={actions} />
+      <TopBarSlot actions={actions} />
       <JonahHeader tab="overview" counts={{ proposals: data.waiting }} />
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         {empty ? (
@@ -271,7 +271,7 @@ export function JonahProposalsPage({ state }: { state?: ProposalState | undefine
   if (list.isError) {
     return (
       <div className="flex min-w-0 flex-col gap-5">
-        <TopBarSlot crumb="Jonah" actions={actions} />
+        <TopBarSlot actions={actions} />
         <JonahHeader tab="proposals" counts={counts} />
         <JonahError error={list.error} retry={() => void list.refetch()} />
       </div>
@@ -287,7 +287,7 @@ export function JonahProposalsPage({ state }: { state?: ProposalState | undefine
 
   return (
     <div className="@container flex min-w-0 flex-col gap-5">
-      <TopBarSlot crumb="Jonah" actions={actions} />
+      <TopBarSlot actions={actions} />
       <JonahHeader tab="proposals" counts={counts} />
       <SegmentedControl
         label="Proposal state"

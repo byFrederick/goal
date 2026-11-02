@@ -44,6 +44,10 @@ Press `⌘K` (or `Ctrl K`), or choose the search icon. Type to search the organi
 
 Use `↑` and `↓` to move between results, `Enter` to open the one you chose, and `Esc` to close search. The results update as you type and stay on screen while the next search loads.
 
+## The top bar
+
+From 768 px, the top bar shows a breadcrumb on every page. On an organization page it reads the organization's name, then the page, such as Acme > Members and roles. On a factory page it reads the factory, then the page, then the item or detail you opened, such as Software > Agents > frontend-engineer. Every crumb but the last links to its page.
+
 ## The phone
 
 Below 768 px, the sidebar is hidden. The top bar has the Goal mark, which opens the drawer. The drawer holds the same content as the sidebar: the organization menu, search, New item, the organization's pages, the factories and the account. The tab bar at the bottom opens Needs you, Floor, Board, Items and More. More opens the drawer.
