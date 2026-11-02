@@ -202,7 +202,9 @@ export function StationColumn({
     <DropColumn
       station={station}
       className={cn('min-w-0', inBoard !== undefined ? 'grid grid-rows-subgrid' : 'flex flex-col gap-2')}
-      {...(inBoard !== undefined ? { style: { gridColumn: inBoard, gridRow: `1 / span ${showExpedite ? 3 : 2}` } } : {})}
+      {...(inBoard !== undefined
+        ? { style: { gridColumn: inBoard, gridRow: `1 / span ${showExpedite ? 3 : 2}` } }
+        : {})}
     >
       <ColumnHeader station={station} constraint={constraint} decides={decides} finishedThisWeek={finishedThisWeek} />
       {showExpedite ? (
