@@ -3,6 +3,7 @@
 // one's indexed text over the page (?document=); and beside them its settings (title, schedule,
 // what a synced source reads), the factories that may search it and Delete, which needs the name
 // typed and is refused while a factory's current version lists it. Members read it all.
+
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { type FormEvent, useId, useState } from 'react';
@@ -10,6 +11,7 @@ import { toast } from 'sonner';
 import { deleteKnowledgeSource, updateKnowledgeSource } from '../../api/knowledge';
 import { connectionKindsQuery, connectionsQuery, keys, knowledgeSourceQuery } from '../../api/queries';
 import type { KnowledgeSource } from '../../api/types';
+import { usePhoneBack } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { namesText } from '../../shared/connections';
 import { useCreatedOnce } from '../../shared/created';
@@ -45,31 +47,18 @@ export function SourcePage() {
   const times = syncTimes(source, Date.now());
   const docsId = useId();
 
+  const back = usePhoneBack('Back to Knowledge', '/o/$org/knowledge', { org: org.slug });
   return (
     <>
       <TopBarSlot
-        crumb={source.name}
+        crumb={source.title}
+        back={back}
         actions={
           manage && source.kind === 'synced' ? (
             <SyncNowButton source={source} sync={sync} className="h-11 md:h-10" />
           ) : null
         }
       />
-      <nav aria-label="Breadcrumb" className="text-sm text-muted">
-        <ol className="m-0 flex list-none gap-1.5 p-0">
-          <li>
-            <Link
-              to="/o/$org/knowledge"
-              params={{ org: org.slug }}
-              className="text-muted underline underline-offset-3 hover:text-ink"
-            >
-              Knowledge
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li aria-current="page">{source.title}</li>
-        </ol>
-      </nav>
       <PageHeader
         title={
           <span className="inline-flex flex-wrap items-center gap-3">

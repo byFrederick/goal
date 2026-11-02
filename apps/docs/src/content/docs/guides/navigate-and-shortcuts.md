@@ -52,7 +52,7 @@ The page's actions sit at the right of the top bar, the primary one last: New cr
 
 ## The phone
 
-Below 768 px, the sidebar is hidden. The top bar has the Goal mark, which opens the drawer. The drawer holds the same content as the sidebar: the organization menu, search, New item, the organization's pages, the factories and the account. The tab bar at the bottom opens Needs you, Floor, Board, Items and More. More opens the drawer.
+Below 768 px, the sidebar is hidden. The top bar has the Goal mark, which opens the drawer. The drawer holds the same content as the sidebar: the organization menu, search, New item, the organization's pages, the factories and the account. The tab bar at the bottom opens Needs you, Floor, Board, Items and More. More opens the drawer. On a page that belongs to a list (a connection, a knowledge source, an agent, an assembly), the top bar also has a Back link, after the Goal mark, to that list.
 
 ## Shortcuts
 

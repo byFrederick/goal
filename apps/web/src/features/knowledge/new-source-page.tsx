@@ -3,6 +3,7 @@
 // connection whose kind can sync, what of it to read (a repository's paths, Confluence spaces)
 // and how often. Live: a connection that runs an MCP server; nothing is stored. Add source opens
 // the new source's page, which says what happens next.
+
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { Info } from 'lucide-react';
@@ -12,6 +13,7 @@ import { ApiError } from '../../api/client';
 import { createKnowledgeSource } from '../../api/knowledge';
 import { connectionKindsQuery, connectionsQuery, keys, knowledgeSourcesQuery } from '../../api/queries';
 import type { Connection, ConnectionKind, KnowledgeSourceKind } from '../../api/types';
+import { usePhoneBack } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { sourceKinds } from '../../shared/knowledge';
 import { useOrg, useOrgHolds } from '../../shared/org';
@@ -43,24 +45,10 @@ export function NewSourcePage() {
   const kind = search.kind ?? 'upload';
   const id = useId();
 
+  const back = usePhoneBack('Back to Knowledge', '/o/$org/knowledge', { org: org.slug });
   return (
     <>
-      <TopBarSlot crumb="New source" />
-      <nav aria-label="Breadcrumb" className="text-sm text-muted">
-        <ol className="m-0 flex list-none gap-1.5 p-0">
-          <li>
-            <Link
-              to="/o/$org/knowledge"
-              params={{ org: org.slug }}
-              className="text-muted underline underline-offset-3 hover:text-ink"
-            >
-              Knowledge
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li aria-current="page">New source</li>
-        </ol>
-      </nav>
+      <TopBarSlot crumb="New source" back={back} />
       <PageHeader
         title="New source"
         description={

@@ -5,9 +5,9 @@
 // these and keeps the drawer's state.
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useRouterState } from '@tanstack/react-router';
-import { Ellipsis, Inbox, Kanban, LayoutGrid, type LucideIcon, TextAlignStart, X } from 'lucide-react';
+import { ChevronLeft, Ellipsis, Inbox, Kanban, LayoutGrid, type LucideIcon, TextAlignStart, X } from 'lucide-react';
 import { Dialog as D } from 'radix-ui';
-import { type ReactNode, type RefObject, useEffect, useRef, useSyncExternalStore } from 'react';
+import { type ReactNode, type RefObject, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { attentionQuery, factoriesQuery } from '../api/queries';
 import type { Factory, OrgSummary } from '../api/types';
 import { lastFactory } from '../shared/org';
@@ -27,6 +27,29 @@ export function usePhone(): boolean {
     },
     () => typeof window.matchMedia === 'function' && window.matchMedia(phoneQuery).matches,
     () => false,
+  );
+}
+
+/**
+ * The Back link a detail page gives the phone top bar (TopBarSlot `back`), to the page its crumb
+ * pointed at. Undefined above 768 px, where the top bar's trail is the way back.
+ */
+export function usePhoneBack(label: string, to: string, params: Record<string, string>): ReactNode | undefined {
+  const phone = usePhone();
+  const key = JSON.stringify(params);
+  return useMemo(
+    () =>
+      phone ? (
+        <Link
+          to={to}
+          params={JSON.parse(key)}
+          aria-label={label}
+          className="flex size-11 flex-none items-center justify-center rounded-control text-ink-soft no-underline hover:bg-hover hover:text-ink"
+        >
+          <ChevronLeft size={20} strokeWidth={1.5} aria-hidden="true" />
+        </Link>
+      ) : undefined,
+    [phone, label, to, key],
   );
 }
 

@@ -4,6 +4,7 @@
 // needs the name typed and is refused while a factory's current version names it; and beside
 // them what a run gets (the env names and modes, the kind's docs) and its recent use from the
 // audit log. A rename is refused while it is used (the field says so). Members read it all.
+
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { Check, RefreshCw } from 'lucide-react';
@@ -13,6 +14,7 @@ import { ApiError } from '../../api/client';
 import { deleteConnection, updateConnection } from '../../api/connections';
 import { connectionActivityQuery, connectionKindsQuery, connectionQuery, keys } from '../../api/queries';
 import type { Connection, ConnectionKind, ConnectionKindField } from '../../api/types';
+import { usePhoneBack } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { connectionName, modeLabels, namesText, statusLine, testedText } from '../../shared/connections';
 import { useCreatedOnce } from '../../shared/created';
@@ -76,26 +78,10 @@ export function ConnectionPage() {
     });
   }, [created, connection.name, kind?.testable]);
 
+  const back = usePhoneBack('Back to Connections', '/o/$org/connections', { org: org.slug });
   return (
     <>
-      <TopBarSlot crumb={connection.name} actions={testButton} />
-      <nav aria-label="Breadcrumb" className="text-sm text-muted">
-        <ol className="m-0 flex list-none gap-2 p-0">
-          <li>
-            <Link
-              to="/o/$org/connections"
-              params={{ org: org.slug }}
-              className="text-muted underline underline-offset-3 hover:text-ink"
-            >
-              Connections
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li aria-current="page" translate="no">
-            {connection.name}
-          </li>
-        </ol>
-      </nav>
+      <TopBarSlot crumb={connection.name} back={back} actions={testButton} />
       <PageHeader
         title={
           <span className="inline-flex flex-wrap items-center gap-3">
