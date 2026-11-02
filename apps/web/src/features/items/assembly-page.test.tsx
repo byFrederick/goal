@@ -241,6 +241,13 @@ describe('AssemblyPage v3 header', () => {
     expect(text()).toBe(1);
   });
 
+  it('wraps a long unbroken word inside the brief box', async () => {
+    await renderAssembly({ item: { ...assembly, body: 'x'.repeat(300) } });
+
+    // jsdom cannot measure layout: the wrap class stands in for it.
+    expect(screen.getByText(/^x+$/).className).toContain('[overflow-wrap:anywhere]');
+  });
+
   it('shows a short brief whole, with no button', async () => {
     await renderAssembly();
 

@@ -257,7 +257,11 @@ function Brief({ body }: { body: string }) {
   const id = useId();
   const long = body.length > briefLimit || body.split('\n').length > 3;
   if (!long)
-    return <p className="m-0 max-w-[820px] text-[15px] leading-relaxed whitespace-pre-wrap text-muted">{body}</p>;
+    return (
+      <p className="m-0 max-w-[820px] text-[15px] leading-relaxed whitespace-pre-wrap text-muted [overflow-wrap:anywhere]">
+        {body}
+      </p>
+    );
   return (
     <div className="flex max-w-[820px] flex-col items-start gap-1">
       <div
@@ -266,7 +270,9 @@ function Brief({ body }: { body: string }) {
         className="motion-disclosure motion-disclosure-peek text-[15px]"
       >
         <div>
-          <p className="m-0 text-[15px] leading-relaxed whitespace-pre-wrap text-muted">{body}</p>
+          <p className="m-0 text-[15px] leading-relaxed whitespace-pre-wrap text-muted [overflow-wrap:anywhere]">
+            {body}
+          </p>
         </div>
       </div>
       <button

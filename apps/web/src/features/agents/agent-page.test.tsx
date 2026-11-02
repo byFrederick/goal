@@ -187,6 +187,7 @@ describe('the Agent page, ready', () => {
     const reasons = screen.getByRole('region', { name: 'Why review sent work back' });
     const line = within(reasons).getByText(/^Nothing was delivered\./);
     expect(line.className).toContain('truncate');
+    expect(line.getAttribute('title')).toBe(long);
     line.focus();
     expect((await screen.findAllByText(long)).length).toBeGreaterThan(0);
     expect(reasons.querySelector('.bg-rework')).not.toBeNull();
@@ -208,6 +209,7 @@ describe('the Agent page, ready', () => {
     expect(shown()).toHaveLength(7);
     const more = within(settings).getByRole('button', { name: '+ 13 more' });
     expect(more.getAttribute('aria-expanded')).toBe('false');
+    expect(more.className).toContain('max-md:before:-inset-y-3');
     await user.click(more);
     expect(shown()).toHaveLength(20);
     expect(more.getAttribute('aria-expanded')).toBe('true');
@@ -366,7 +368,9 @@ describe('Reset to default', () => {
   it('offers the factory model beside an agent that sets its own, and not beside one that does not', async () => {
     await renderPage('overview', { can: edit });
     const settings = within(screen.getByRole('region', { name: 'Settings' }));
-    expect(settings.getByRole('button', { name: 'Reset to default, claude-opus-5-5' })).toBeTruthy();
+    expect(settings.getByRole('button', { name: 'Reset to default, claude-opus-5-5' }).className).toContain(
+      'max-md:min-h-11',
+    );
     cleanup();
 
     const { model: own, ...rest } = model.agents.agents[0] as Record<string, unknown>;

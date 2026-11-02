@@ -111,7 +111,7 @@ function NarrowActions({
         )}
         <Menu>
           <MenuTrigger asChild>
-            <Button variant="white" className="size-11 shrink-0 p-0" aria-label="More actions">
+            <Button variant="white" className="size-11 shrink-0 justify-center p-0" aria-label="More actions">
               <Ellipsis size={16} strokeWidth={1.5} aria-hidden="true" />
             </Button>
           </MenuTrigger>

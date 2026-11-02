@@ -68,6 +68,13 @@ describe('the ask bar layout', () => {
     expect(icons.every((icon) => icon.closest('button'))).toBe(true);
   });
 
+  it('draws Send 44 px square below md and 32 px from md up', async () => {
+    await renderBar();
+    const send = screen.getByRole('button', { name: 'Send' });
+    expect(send.className).toContain('size-8');
+    expect(send.className).toContain('max-md:size-11');
+  });
+
   it('keeps its hint, hidden below md so the bar stays one row on a phone', async () => {
     const input = await renderBar();
     const hint = screen.getByText('Becomes an item, reviewed like any change');
