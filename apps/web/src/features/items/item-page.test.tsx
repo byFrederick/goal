@@ -738,6 +738,19 @@ describe('Watch live', () => {
     expect(anchorCalls()[0]).toEqual([{ block: 'end', behavior }]);
   });
 
+  it('opens Trace without letting the router reset the scroll, which would undo the scroll to the newest step', async () => {
+    stubWidth(false);
+    const { router } = renderPage(running());
+    const navigate = vi.spyOn(router, 'navigate');
+
+    const bar = await screen.findByLabelText('Top bar');
+    fireEvent.click(within(bar).getByRole('button', { name: 'Watch live' }));
+
+    await screen.findByRole('tabpanel', { name: 'Trace' });
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate.mock.calls[0]?.[0]).toMatchObject({ search: { tab: 'trace' }, resetScroll: false });
+  });
+
   it('is disabled with its reason when no run is working, and does not open the Trace tab', async () => {
     stubWidth(false);
     renderPage(item({ state: 'in_progress' }));

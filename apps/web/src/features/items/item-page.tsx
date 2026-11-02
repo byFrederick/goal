@@ -118,8 +118,14 @@ export function ItemPage() {
   const asking = Boolean(item.question);
   const trace = useMemo(() => buildTrace(events, runs?.runs, asking), [events, runs, asking]);
   const navigate = useNavigate();
+  // The router would reset the window scroll after Trace mounted and scrolled to the newest step, so it keeps it.
   const showTrace = () =>
-    void navigate({ to: '/o/$org/f/$factory/items/$ref', params: { ...params, ref }, search: { tab: 'trace' } });
+    void navigate({
+      to: '/o/$org/f/$factory/items/$ref',
+      params: { ...params, ref },
+      search: { tab: 'trace' },
+      resetScroll: false,
+    });
   const { tab = 'timeline', step } = useSearch({ from: '/o/$org/f/$factory/items/$ref' });
   // Watch live: following lives here, not in the URL. `watchSeq` counts presses so a second press scrolls again.
   const [following, setFollowing] = useState(false);
