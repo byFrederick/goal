@@ -2,6 +2,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router';
 import { authConfigQuery, ensureLoaded } from '../api/queries';
 import { safeNext } from '../api/session';
 import { pageTitle } from '../app/route-focus';
+import { PendingScreen } from '../app/states';
 import { SignInPage } from '../features/sign-in/sign-in-page';
 
 export interface SignInSearch {
@@ -13,6 +14,7 @@ export interface SignInSearch {
 
 // Sign in (spec 3 §10.1). Under GOAL_AUTH=none there is no sign-in: the page opens the app.
 export const Route = createFileRoute('/sign-in')({
+  pendingComponent: PendingScreen,
   // Both members are always set, undefined when refused: a route's search is laid over the raw
   // search of the URL, which would otherwise show through.
   validateSearch: (search: Record<string, unknown>): SignInSearch => ({
