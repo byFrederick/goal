@@ -21,7 +21,7 @@ Open a factory's Board at `/o/<org>/f/<factory>/board`.
 
 A card that moves to another column or lane, because an agent finished or because you moved it, travels there instead of jumping, and the cards around it shift to make room. When your system asks for reduced motion, the card appears in its new place at once. A card you drag follows the pointer and settles into place when you drop it; the drop then opens the Move menu to confirm.
 
-The search box and the **Board | List** switch are in the top bar. Four dropdown buttons next to the title filter by work type, lane, assembly and agent role; each choice is kept in the page's address, so a link reproduces the view. On a phone, the **Filter** button shows them, with status and grouping by assembly, and the Board has one tab per station.
+The search box is in the top bar. The **Board | List** switch shows there from 1024 px wide; on narrower screens, open the list from **Items** in the sidebar. Four dropdown buttons next to the title filter by work type, lane, assembly and agent role; each choice is kept in the page's address, so a link reproduces the view. On a phone, the **Filter** button shows them, with status and grouping by assembly, and the Board has one tab per station.
 
 The Items page at `/o/<org>/f/<factory>/items` lists the same items as a table, with saved views and CSV export.
 

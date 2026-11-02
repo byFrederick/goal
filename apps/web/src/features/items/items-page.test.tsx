@@ -189,6 +189,25 @@ describe('Items page header and views', () => {
     expect(link.getAttribute('title')).toBe(link.textContent);
   });
 
+  it('gives every title the full text in a title attribute and clamps it to two lines below lg', async () => {
+    renderItems([
+      item({ id: 'a', ref: 'sre#1', title: 'A very long title that the table cuts off', state: 'queued' }),
+      assembly(),
+      partOf(1, { title: 'Move the schema', state: 'queued', station: 'build' }),
+    ]);
+
+    const table = await screen.findByRole('table', { name: 'Items' });
+    const links = within(table)
+      .getAllByRole('link')
+      .filter((a) => a.getAttribute('href')?.includes('/items/'));
+    expect(links.length).toBeGreaterThanOrEqual(3);
+    for (const link of links) {
+      const titled = link.hasAttribute('title') ? link : (link.querySelector('[title]') as HTMLElement);
+      expect(titled.getAttribute('title')).toBe(titled.textContent);
+      expect(titled.className).toContain('line-clamp-2');
+    }
+  });
+
   it('marks the Waiting on you view as current when the URL has its state', async () => {
     renderItems(
       [
