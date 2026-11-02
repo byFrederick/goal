@@ -119,7 +119,7 @@ export function BoardCard({
     >
       {compact ? (
         <>
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex min-w-0 flex-1 flex-col gap-1 [&>*]:min-w-0">
             {expediteLabel}
             <span className="text-xs text-muted tabular-nums">
               {[item.ref, item.type ? humanize(item.type) : null, age].filter(Boolean).join(', ')}

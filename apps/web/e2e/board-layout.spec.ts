@@ -304,3 +304,33 @@ test('on a phone the crowded station stacks its expedite cards inside the lane',
   });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+// A Done card with a long assembly title (mock item 21's parts) must truncate inside its column.
+for (const width of [1280, 1440]) {
+  test(`every card stays inside its column and the board does not scroll sideways at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/o/acme/f/goal/board');
+    await expect(page.getByRole('region', { name: 'Stations' })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+
+    const result = await page.evaluate(() => {
+      const region = document.querySelector<HTMLElement>('section[aria-label="Stations"]');
+      const columns = Array.from(region?.querySelectorAll<HTMLElement>(':scope > div > section') ?? []);
+      return {
+        scrollWidth: region?.scrollWidth ?? 0,
+        clientWidth: region?.clientWidth ?? 0,
+        overflowing: columns.flatMap((column) =>
+          Array.from(column.querySelectorAll<HTMLElement>('article'))
+            .filter((card) => card.getBoundingClientRect().right > column.getBoundingClientRect().right + 0.5)
+            .map((card) => card.textContent?.slice(0, 40) ?? ''),
+        ),
+        longTitle: Array.from(document.querySelectorAll('article span.truncate')).some(
+          (span) => (span.textContent?.length ?? 0) > 80,
+        ),
+      };
+    });
+    expect(result.longTitle, 'the mock has a Done card with a long assembly title').toBe(true);
+    expect(result.overflowing).toEqual([]);
+    expect(result.scrollWidth).toBeLessThanOrEqual(result.clientWidth);
+  });
+}

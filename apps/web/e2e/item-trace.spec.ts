@@ -68,3 +68,17 @@ test('the Trace tab fits at every width', async ({ page }) => {
     await expectNoClippedElements(page);
   }
 });
+
+for (const width of [1024, 1440]) {
+  test(`every Took cell stays on one line at ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/o/acme/f/goal/items/6?tab=trace');
+    await expect(page.getByRole('tabpanel', { name: 'Trace' })).toBeVisible();
+    const wrapped = await page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLElement>('[role="tabpanel"] span.whitespace-nowrap.tabular-nums'))
+        .filter((cell) => cell.scrollHeight > parseFloat(getComputedStyle(cell).lineHeight) + 1)
+        .map((cell) => cell.textContent),
+    );
+    expect(wrapped).toEqual([]);
+  });
+}

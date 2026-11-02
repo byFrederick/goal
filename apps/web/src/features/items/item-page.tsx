@@ -295,15 +295,6 @@ export function ItemPage() {
               className="order-2 @[720px]:order-none"
             />
           ) : null}
-          {phone ? (
-            <LatestInRun trace={trace} onShowAll={showTrace} className="order-3 @[720px]:hidden" />
-          ) : (
-            <LatestSteps
-              trace={trace}
-              onShowAll={showTrace}
-              className={cn(deciding ? 'order-4' : 'order-3', '@[720px]:hidden')}
-            />
-          )}
           <ItemTabs tab={tab} files={files} checks={checks.length} className="order-5 @[720px]:order-none" />
           {tab === 'timeline' ? (
             <section
@@ -399,6 +390,11 @@ export function ItemPage() {
               </SectionCard>
             </div>
           ) : null}
+          {phone ? (
+            <LatestInRun trace={trace} onShowAll={showTrace} className="order-7 @[720px]:hidden" />
+          ) : (
+            <LatestSteps trace={trace} onShowAll={showTrace} className={cn('order-7', '@[720px]:hidden')} />
+          )}
           <NoteComposer
             itemKey={key}
             factory={factory}

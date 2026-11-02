@@ -60,7 +60,7 @@ const legend: { label: string; tone: StepTone }[] = [
 ];
 
 /** The waterfall's columns: the span, the time axis and the duration. */
-const waterfallColumns = { gridTemplateColumns: 'minmax(0, 280px) minmax(0, 1fr) 72px' };
+const waterfallColumns = { gridTemplateColumns: 'minmax(0, 280px) minmax(0, 1fr) 96px' };
 
 const ms = (at: string) => Date.parse(at);
 
@@ -324,7 +324,7 @@ function Axis({ spanMs }: { spanMs: number }) {
           </span>
         ))}
       </span>
-      <span className="px-3 text-right">Took</span>
+      <span className="px-3 text-right whitespace-nowrap">Took</span>
     </div>
   );
 }
@@ -578,7 +578,7 @@ function StepRow({
               style={{ left: `min(${left}%, calc(100% - 4px))`, width: `max(${width}%, 4px)` }}
             />
           </span>
-          <span className="px-3 text-right text-secondary text-muted tabular-nums">{took}</span>
+          <span className="px-3 text-right whitespace-nowrap text-secondary text-muted tabular-nums">{took}</span>
         </>
       )}
     </button>

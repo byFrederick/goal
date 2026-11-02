@@ -367,6 +367,15 @@ describe('the item decisions at each width', () => {
     expect(router.state.location.search).toEqual({ tab: 'trace' });
   });
 
+  it('puts the tab row before the Latest card', async () => {
+    stubWidth(true);
+    renderPage(item());
+
+    const latest = await screen.findByRole('heading', { name: 'Latest in this run' });
+    const tabs = screen.getByRole('tablist', { name: 'Item views' });
+    expect(tabs.compareDocumentPosition(latest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('shows one Details card on a phone and no separate Cost card', async () => {
     stubWidth(true);
     renderPage(item());

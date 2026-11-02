@@ -334,6 +334,13 @@
 
 /* A pressable control (MOTION.md, Button press and Hover): colour changes at the quick duration, and the
    press scales the control at the micro duration with the entering ease. Movement only on :active. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @utility press {
   transition:
     color var(--duration-quick) ease,

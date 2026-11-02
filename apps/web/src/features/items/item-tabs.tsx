@@ -104,7 +104,7 @@ export function ItemTabs({ tab, files, checks, className }: Props) {
       role="tablist"
       aria-label="Item views"
       onKeyDown={onKeyDown}
-      className={cn('relative flex gap-1 overflow-x-auto border-b border-line', className)}
+      className={cn('no-scrollbar relative flex gap-1 overflow-x-auto border-b border-line', className)}
     >
       <span
         ref={underline}

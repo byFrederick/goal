@@ -696,7 +696,7 @@ const goalSeeds: Seed[] = [
   // A finished assembly of two merged parts: its page keeps the parts view once it is done.
   {
     number: 21,
-    title: 'Rename the line to the board across the screens',
+    title: 'Rename the line to the board across every screen, its labels, its docs and its help text, in one pass',
     type: 'feature',
     body: 'Every screen says board where it said line. Two parts: the labels, then the docs.',
     station: 'done',

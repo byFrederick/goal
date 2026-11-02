@@ -219,7 +219,7 @@ export function StationColumn({
           {expedite.map(card)}
         </fieldset>
       ) : null}
-      <div className="flex min-h-10 flex-col gap-2 self-start rounded-cell bg-panel p-2">
+      <div className="flex min-h-10 w-full min-w-0 flex-col gap-2 self-start rounded-cell bg-panel p-2">
         {columnGroups(standard, isDrum).map((group) => {
           const shown = group.kind === 'in-progress' ? visibleCards(group.items, expanded) : group.items;
           const hidden = group.items.length - shown.length;
@@ -233,7 +233,7 @@ export function StationColumn({
                 )
               ) : null}
               {group.kind === 'ready' ? (
-                <div className="flex flex-col gap-2 opacity-70" data-group="ready">
+                <div className="flex min-w-0 flex-col gap-2 opacity-70" data-group="ready">
                   {shown.map(card)}
                 </div>
               ) : (
