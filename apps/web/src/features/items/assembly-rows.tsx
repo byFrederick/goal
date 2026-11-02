@@ -156,7 +156,7 @@ export function ItemTableRow({
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
           title={item.title}
-          className="line-clamp-2 block w-64 whitespace-normal break-words font-medium text-ink no-underline hover:text-run-ink lg:line-clamp-none lg:w-auto lg:truncate lg:whitespace-nowrap"
+          className="line-clamp-2 w-64 whitespace-normal break-words font-medium text-ink no-underline hover:text-run-ink lg:line-clamp-none lg:w-auto lg:truncate lg:whitespace-nowrap"
         >
           {item.title}
         </Link>
@@ -281,7 +281,7 @@ export function AssemblyTableRow({
               <LayoutGrid size={14} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ok-ink" />
               <span className="sr-only">Assembly, </span>
               <span
-                className="line-clamp-2 block w-64 whitespace-normal break-words lg:line-clamp-none lg:w-auto lg:truncate lg:whitespace-nowrap"
+                className="line-clamp-2 w-64 whitespace-normal break-words lg:line-clamp-none lg:w-auto lg:truncate lg:whitespace-nowrap"
                 title={title}
               >
                 {title}
