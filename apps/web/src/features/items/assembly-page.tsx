@@ -258,15 +258,10 @@ function Brief({ body }: { body: string }) {
     return <p className="m-0 max-w-[820px] text-[15px] leading-relaxed whitespace-pre-wrap text-muted">{body}</p>;
   return (
     <div className="flex max-w-[820px] flex-col items-start gap-1">
-      <p hidden={open} className="m-0 line-clamp-3 text-[15px] leading-relaxed whitespace-pre-wrap text-muted">
-        {body}
-      </p>
       <div
         id={id}
         data-state={open ? 'open' : 'closed'}
-        aria-hidden={open ? undefined : true}
-        inert={!open}
-        className="motion-disclosure"
+        className="motion-disclosure motion-disclosure-peek text-[15px]"
       >
         <div>
           <p className="m-0 text-[15px] leading-relaxed whitespace-pre-wrap text-muted">{body}</p>

@@ -177,11 +177,16 @@ describe('AssemblyPage v3 header', () => {
   it('collapses a long brief under Show more and opens it', async () => {
     await renderAssembly({ item: { ...assembly, body: 'A long brief. '.repeat(40) } });
 
+    const text = (): number => screen.queryAllByText(/A long brief\./).length;
     const more = screen.getByRole('button', { name: 'Show more' });
     expect(more.getAttribute('aria-expanded')).toBe('false');
+    expect(text()).toBe(1);
     fireEvent.click(more);
     const less = screen.getByRole('button', { name: 'Show less' });
     expect(less.getAttribute('aria-expanded')).toBe('true');
+    expect(text()).toBe(1);
+    fireEvent.click(less);
+    expect(text()).toBe(1);
   });
 
   it('shows a short brief whole, with no button', async () => {
