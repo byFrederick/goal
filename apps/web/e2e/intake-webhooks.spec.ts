@@ -1,5 +1,5 @@
 // The Webhooks page (docs/design/screens/intake/webhooks.html) against the mock: software's two
-// endpoints (cf-deploys, refused and created deliveries; uptime, which feeds nothing), the request
+// endpoints (acme-deploys, refused and created deliveries; uptime, which feeds nothing), the request
 // dialog, New webhook and Rotate, each showing its secret once, and the Send a test panel. Not run in
 // the build box, which has no browser; run with `pnpm --dir apps/web run e2e`.
 import { expect, type Page, test } from '@playwright/test';
@@ -21,14 +21,17 @@ test.describe('the Webhooks page', () => {
   test('lists each endpoint with its address, its week and its newest deliveries', async ({ page }) => {
     await page.goto(page_);
 
-    const cf = page.getByRole('region', { name: 'cf-deploys' });
+    const cf = page.getByRole('region', { name: 'acme-deploys' });
     await expect(cf.getByText('2 refused this week')).toBeVisible();
     await expect(cf.getByText('7 delivered, 2 refused')).toBeVisible();
+    await expect(cf.getByText('in Credentials, HMAC SHA-256')).toBeVisible();
+    await expect(cf.getByRole('button', { name: 'Rotate' })).toBeVisible();
     await expect(cf.getByText('Refused: signature did not match')).toBeVisible();
     await expect(cf.getByText('Accepted, no trigger matched').first()).toBeVisible();
     await expect(cf.getByRole('link', { name: '#131' })).toBeVisible();
 
     const uptime = page.getByRole('region', { name: 'uptime' });
+    await expect(uptime.getByText('No trigger yet')).toBeVisible();
     await expect(uptime.getByText('Nothing. 3 deliveries were kept but created no items.')).toBeVisible();
     await expect(uptime.getByRole('link', { name: 'Create a trigger' })).toBeVisible();
 
@@ -38,7 +41,7 @@ test.describe('the Webhooks page', () => {
   test('opens a delivery request with its headers and body, and closes it', async ({ page }) => {
     await page.goto(page_);
 
-    const cf = page.getByRole('region', { name: 'cf-deploys' });
+    const cf = page.getByRole('region', { name: 'acme-deploys' });
     await cf
       .getByRole('button', { name: /View request/ })
       .first()
@@ -71,7 +74,7 @@ test.describe('the Webhooks page', () => {
   test('rotates a secret after a confirmation and shows the new one once', async ({ page }) => {
     await page.goto(page_);
 
-    const cf = page.getByRole('region', { name: 'cf-deploys' });
+    const cf = page.getByRole('region', { name: 'acme-deploys' });
     await cf.getByRole('button', { name: 'Rotate' }).click();
     await page
       .getByRole('dialog', { name: /Rotate the signing secret/ })
@@ -97,4 +100,21 @@ test.describe('the Webhooks page', () => {
     await fits(page);
     if (isPhone(page)) await expect(page.getByRole('heading', { name: 'Webhooks', level: 1 })).toBeVisible();
   });
+
+  // The pictures the pull request attaches: the page at the export's width and the phone's, in both themes.
+  for (const width of [1440, 375]) {
+    for (const scheme of ['light', 'dark'] as const) {
+      test(`looks as the export at ${width} px in ${scheme}`, async ({ page }, testInfo) => {
+        await page.setViewportSize({ width, height: width === 1440 ? 900 : 812 });
+        await page.emulateMedia({ colorScheme: scheme });
+        await page.goto(page_);
+        await expect(
+          page.getByRole('region', { name: 'acme-deploys' }).getByText('Refused: signature did not match'),
+        ).toBeVisible();
+        await expect(page.getByRole('complementary', { name: 'Send a test' })).toBeVisible();
+        await fits(page);
+        await page.screenshot({ path: testInfo.outputPath(`webhooks-${width}-${scheme}.png`), fullPage: true });
+      });
+    }
+  }
 });
