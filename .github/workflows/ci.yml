@@ -1,31 +1,28 @@
-# The same gate as the local pre-push hook (.githooks/pre-push), on every pull request and every
-# push to main: `task check`, and `task migrate-check` when db/migrations/ or apps/auth/ changed (on a pull
-# request, against its base; on main, always); plus `task test-integration` on PostgreSQL 18,
+# The same gate as the local pre-push hook (.githooks/pre-push), only on pull requests whose base is
+# main: `task check`, and `task migrate-check` when db/migrations/ or apps/auth/ changed against the
+# pull request's base; plus `task test-integration` on PostgreSQL 18,
 # RustFS and Mailpit from compose.yaml. The tools come from .mise.toml, as on a laptop, and so does
 # how they install (its [settings]: npm: tools such as pnpm install with npm, not aube).
 # If the workflow shows as disabled on GitHub, a person re-enables it: `gh workflow enable ci.yml`.
+# Pull requests into an assembly's integration branch (goal/a<number>-...) run no ci: each part's
+# merged-tree checks (task check:changed) gate its merge there, and the landing pull request into
+# main runs ci. Nothing runs on a push to main; deploy.yml is dispatched by hand.
 # Hardening (github-actions-hardening skill): a read-only token no job widens, actions pinned to
 # commit SHAs, only the pull_request trigger for pull requests, no secrets (pull requests from
 # forks get none, and none are needed), no ${{ }} expressions inside run scripts.
-# Concurrency: one group per ref. A pull request's newer push cancels its run in flight; on main no
-# run is cancelled once started, so every started run completes, one at a time in push order, and
-# deploy.yml (workflow_run on ci's success) can always follow the newest merge. GitHub keeps one
-# pending run per group: in a burst of merges a middle commit's run may be cancelled before it
-# starts, which is expected (the newest commit's run covers its tree). Per-sha groups would let
-# main's runs finish out of order and an older commit deploy last.
+# Concurrency: one group per pull request; a newer push to it cancels its run in flight.
 name: ci
 
 on:
-  push:
-    branches: [main]
   pull_request:
+    branches: [main]
 
 permissions:
   contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   check:
@@ -52,10 +49,9 @@ jobs:
       - name: Did db/migrations/ or apps/auth/ change
         id: migrations
         env:
-          EVENT: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          if [ "$EVENT" != pull_request ] || [ -n "$(git diff --name-only "$BASE_SHA"...HEAD -- db/migrations/ apps/auth/)" ]; then
+          if [ -n "$(git diff --name-only "$BASE_SHA"...HEAD -- db/migrations/ apps/auth/)" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Migrations apply from zero, Better Auth schema drift
