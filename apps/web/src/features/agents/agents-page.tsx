@@ -201,7 +201,7 @@ function Line({
   return (
     <div className="-mx-4 overflow-x-auto px-4 md:-mx-7 md:px-7">
       <ol
-        className="m-0 flex list-none flex-col gap-6 p-0 md:grid md:gap-3.5"
+        className="m-0 flex list-none flex-col gap-6 p-0 md:grid md:gap-4"
         style={{ gridTemplateColumns: columnsOf(stations), minWidth: minWidthOf(stations) }}
       >
         {stations.map((station, index) => {
@@ -237,7 +237,7 @@ const columns = {
   agent: { track: 'minmax(0,1fr)', min: 176 },
   routed: { track: 'minmax(0,1.7fr)', min: 300 },
 };
-const gapPx = 14;
+const gapPx = 16;
 
 function columnOf(station: ModelStation) {
   if (station.route) return columns.routed;
@@ -297,7 +297,7 @@ function StationHead({
         <h2 className="m-0 flex items-center gap-2 text-secondary font-control">
           {station.name ?? humanize(station.id)}
           {isConstraint ? (
-            <span className="inline-flex animate-constraint-in items-center gap-1.5 text-meta text-amber-ink">
+            <span className="inline-flex animate-constraint-in items-center gap-2 text-meta text-amber-ink">
               <span aria-hidden="true" className="size-1.5 rounded-full bg-amber" />
               Constraint
             </span>
@@ -372,7 +372,7 @@ function StationBody({
       <div className="flex flex-col gap-4">
         {staffed.map((place) => (
           <div key={place.key} className="flex items-center gap-3">
-            <span className="flex w-21 shrink-0 items-center gap-2 text-meta font-control text-ink-soft">
+            <span className="flex w-20 shrink-0 items-center gap-2 text-meta font-control text-ink-soft">
               {place.lane}
               <span aria-hidden="true" className="h-px min-w-2 flex-1 bg-line" />
             </span>
