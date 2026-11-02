@@ -337,6 +337,12 @@ describe('the Knowledge page', () => {
     }
     const name = within(sources).getAllByRole('link', { name: 'goal-docs' })[0];
     expect(name?.className).toContain('font-mono');
+    // MASTER, Phones: the source link answers across 44 px on a phone.
+    expect(
+      within(sources)
+        .getAllByRole('link', { name: 'goal-docs' })
+        .some((l) => l.className.includes('max-md:py-3')),
+    ).toBe(true);
     // A synced source reads "Synced" with its time, and its schedule under it.
     expect(within(sources).getAllByText(/^Synced \S/).length).toBeGreaterThan(0);
     expect(within(sources).getAllByText('Every hour').length).toBeGreaterThan(0);
@@ -345,7 +351,9 @@ describe('the Knowledge page', () => {
     expect(within(sources).getAllByText(/^Sync failed/).length).toBeGreaterThan(0);
 
     expect(screen.getByRole('region', { name: 'Look something up' })).toBeTruthy();
-    expect(screen.getByRole('region', { name: 'Where it was used' })).toBeTruthy();
+    const usageCard = screen.getByRole('region', { name: 'Where it was used' });
+    // MASTER, Phones: the document toggle answers across 44 px on a phone.
+    expect(within(usageCard).getAllByRole('button', { expanded: false })[0]?.className).toContain('max-md:py-3');
     expect(screen.queryByText('Who finds what')).toBeNull();
     expect(screen.queryByText('Try a search')).toBeNull();
   });

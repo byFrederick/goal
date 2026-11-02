@@ -89,6 +89,36 @@ test.describe('the phone approve view at 375 px', () => {
   });
 });
 
+test.describe('Needs you at 390 px', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('shows the filter on one row and only the list, and Back returns to the same scroll position', async ({
+    page,
+  }) => {
+    await page.goto('/o/acme/needs-you');
+    const list = page.getByRole('list', { name: /Waiting on you/ });
+    await expect(list).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Approve/ })).toHaveCount(0);
+
+    const tops = await page
+      .getByRole('group', { name: 'Show' })
+      .getByRole('button')
+      .evaluateAll((buttons) => buttons.map((b) => Math.round(b.getBoundingClientRect().top)));
+    expect(new Set(tops).size).toBe(1);
+
+    await page.evaluate(() => window.scrollTo(0, 40));
+    const before = await page.evaluate(() => window.scrollY);
+    await list.getByRole('link').first().click();
+    await expect(page).toHaveURL(/entry=/);
+    await expect(list).toHaveCount(0);
+    await page.getByRole('link', { name: 'Back to Needs you' }).click();
+    await expect(list).toBeVisible();
+    await expect(page).not.toHaveURL(/entry=/);
+    expect(await page.evaluate(() => window.scrollY)).toBe(before);
+    await expectNoHorizontalScroll(page);
+  });
+});
+
 test('the sidebar Needs you link shows the page', async ({ page }) => {
   await page.goto('/o/acme');
   await orgNav(page)

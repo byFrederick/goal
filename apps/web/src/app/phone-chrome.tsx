@@ -7,11 +7,22 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useRouterState } from '@tanstack/react-router';
 import { ChevronLeft, Ellipsis, Inbox, Kanban, LayoutGrid, type LucideIcon, TextAlignStart, X } from 'lucide-react';
 import { Dialog as D } from 'radix-ui';
-import { type ReactNode, type RefObject, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import {
+  Children,
+  Fragment,
+  isValidElement,
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 import { attentionQuery, factoriesQuery } from '../api/queries';
 import type { Factory, OrgSummary } from '../api/types';
 import { lastFactory } from '../shared/org';
 import { GoalMark } from '../ui/goal-mark';
+import { Menu, MenuContent, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../ui/menu';
 import { NumberRoll } from '../ui/number-roll';
 import { SidebarContent, useSidebarBusy } from './sidebar';
 
@@ -84,9 +95,93 @@ export function PhoneTopBar({ title, actions, back, onMenu, drawerOpen, menuRef 
         <GoalMark size="shell" />
       </button>
       {back ? <div className="flex-none">{back}</div> : null}
-      <p className="m-0 min-w-0 flex-1 truncate text-heading text-ink">{title}</p>
-      {actions ? <div className="flex min-w-0 flex-none items-center gap-2">{actions}</div> : null}
+      <p className="m-0 min-w-16 flex-1 truncate text-heading text-ink">{title}</p>
+      <TopBarActions>{actions}</TopBarActions>
     </header>
+  );
+}
+
+/** One level of fragments and arrays flattened, so a page's actions count one by one. */
+function flattenActions(node: ReactNode): ReactNode[] {
+  return Children.toArray(node).flatMap((child) =>
+    isValidElement<{ children?: ReactNode }>(child) && child.type === Fragment
+      ? flattenActions(child.props.children)
+      : [child],
+  );
+}
+
+/**
+ * The page's actions: the last (the primary one) stays in the bar, the others sit behind More actions, so the
+ * title keeps its room. Keycap hints are hidden and every control is 44 px tall.
+ */
+function TopBarActions({ children }: { children: ReactNode }) {
+  const actions = flattenActions(children);
+  if (actions.length === 0) return null;
+  const primary = actions[actions.length - 1];
+  const more = actions.slice(0, -1);
+  return (
+    <div className="flex min-w-0 flex-none items-center gap-1 [&_a]:min-h-11 [&_button]:min-h-11 [&_kbd]:hidden">
+      {more.length > 0 ? (
+        <Menu>
+          <MenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="More actions"
+              className="flex size-11 flex-none items-center justify-center rounded-control text-ink-soft hover:bg-hover hover:text-ink"
+            >
+              <Ellipsis size={18} strokeWidth={1.5} aria-hidden="true" />
+            </button>
+          </MenuTrigger>
+          <MenuContent align="end" side="bottom">
+            {more.map((action, i) => (
+              <MoreAction key={isValidElement(action) && action.key != null ? action.key : i}>{action}</MoreAction>
+            ))}
+          </MenuContent>
+        </Menu>
+      ) : null}
+      {primary}
+    </div>
+  );
+}
+
+/** What a page's menu action is made of: its trigger's label and its panel's entries. */
+function menuParts(action: ReactNode): { label: ReactNode; entries: ReactNode } | undefined {
+  if (!isValidElement<{ children?: ReactNode }>(action) || action.type !== Menu) return undefined;
+  const parts = Children.toArray(action.props.children);
+  const trigger = parts.find((c) => isValidElement(c) && c.type === MenuTrigger);
+  const content = parts.find((c) => isValidElement(c) && c.type === MenuContent);
+  if (!isValidElement<{ children?: ReactNode }>(trigger) || !isValidElement<{ children?: ReactNode }>(content)) {
+    return undefined;
+  }
+  const button = Children.toArray(trigger.props.children)[0];
+  if (!isValidElement<{ children?: ReactNode }>(button)) return undefined;
+  return { label: button.props.children, entries: content.props.children };
+}
+
+/**
+ * One hidden action as an entry of the More actions menu: a menu action of the page becomes a submenu; any other
+ * is a menu item that activates the page's own button or link, and closes the menu.
+ */
+function MoreAction({ children }: { children: ReactNode }) {
+  const parts = menuParts(children);
+  if (parts) {
+    return (
+      <MenuSub>
+        <MenuSubTrigger>{parts.label}</MenuSubTrigger>
+        <MenuSubContent>{parts.entries}</MenuSubContent>
+      </MenuSub>
+    );
+  }
+  return (
+    <MenuItem
+      asChild
+      onSelect={(event) => {
+        const control = (event.currentTarget as HTMLElement).querySelector<HTMLElement>('a, button');
+        control?.click();
+      }}
+    >
+      <div className="[&_*]:pointer-events-none [&_kbd]:hidden">{children}</div>
+    </MenuItem>
   );
 }
 
@@ -170,9 +265,10 @@ function PageWatch({ onChange }: { onChange: () => void }) {
   return null;
 }
 
+// The current tab (aria-current) has ink text and a 2px ink indicator along its top edge. The indicator only
+// fades, so reduced motion needs no transform to drop (MOTION.md, Phone tab bar indicator).
 const tab =
-  'flex min-h-16 flex-col items-center justify-center gap-1 text-meta font-medium text-muted no-underline transition-colors duration-200';
-const tabActive = { className: 'font-semibold text-run-ink' } as const;
+  'relative flex min-h-16 flex-col items-center justify-center gap-1 text-meta font-medium text-muted no-underline transition-colors duration-quick after:pointer-events-none after:absolute after:inset-x-4 after:top-0 after:h-0.5 after:rounded-chip after:bg-ink after:opacity-0 after:transition-opacity after:duration-fast after:ease-out aria-[current=page]:font-semibold aria-[current=page]:text-ink aria-[current=page]:after:opacity-100';
 
 interface PhoneTabBarProps {
   org: OrgSummary;
@@ -216,7 +312,6 @@ function NeedsYouTab({ org }: { org: OrgSummary }) {
       to="/o/$org/needs-you"
       params={{ org: org.slug }}
       className={tab}
-      activeProps={tabActive}
       aria-label={waiting > 0 ? `Needs you, ${waiting} waiting on you` : 'Needs you'}
     >
       <span className="relative">
@@ -259,13 +354,13 @@ function FactoryTab({ org, factory, to, exact = false, label, icon: Icon }: Fact
   );
   if (factory === undefined) {
     return (
-      <Link to="/o/$org" params={{ org: org.slug }} className={tab} activeProps={tabActive}>
+      <Link to="/o/$org" params={{ org: org.slug }} className={tab}>
         {body}
       </Link>
     );
   }
   return (
-    <Link to={to} params={{ org: org.slug, factory }} activeOptions={{ exact }} className={tab} activeProps={tabActive}>
+    <Link to={to} params={{ org: org.slug, factory }} activeOptions={{ exact }} className={tab}>
       {body}
     </Link>
   );
