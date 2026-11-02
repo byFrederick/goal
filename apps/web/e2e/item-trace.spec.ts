@@ -49,6 +49,9 @@ test('Watch live opens the Trace tab and keeps a new step in view', async ({ pag
   await expect(page).toHaveURL(/tab=trace/);
   const panel = page.getByRole('tabpanel', { name: 'Trace' });
   await expect(panel.getByRole('list', { name: 'Legend' })).toBeVisible();
+  // The first press already scrolls to the newest existing step, before any new one arrives.
+  await expect(panel.getByRole('button', { name: /Grep\s*watch-live-marker/ })).toHaveCount(0);
+  await expect(panel.getByRole('button').last()).toBeInViewport();
 
   await request.post('/__mock/step', { data: { number: 9, tool: 'Grep', input: 'watch-live-marker' } });
   const added = panel.getByRole('button', { name: /Grep\s*watch-live-marker/ });

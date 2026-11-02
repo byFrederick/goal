@@ -356,7 +356,7 @@ function useFollowScroll(
   onStop: (() => void) | undefined,
 ) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: `trigger` re-runs the scroll when a step arrives
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!following) return;
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     // A press and the steps that arrive afterwards glide, unless motion is reduced.
