@@ -208,7 +208,7 @@ export function CreateCredentialCard({ org, slug, factories }: { org: string; sl
                 onClick={() => toggleFactory(f.id)}
                 className="inline-flex h-11 items-center gap-2 rounded-control border border-rule bg-card px-3 text-body font-control text-ink transition-colors duration-200 hover:border-muted aria-pressed:border-run aria-pressed:bg-run-tint aria-pressed:text-run-ink disabled:opacity-60 md:h-9"
               >
-                <FactoryBadge mark={factoryMark(f, factories)} className="size-5" />
+                <FactoryBadge mark={factoryMark(f, factories)} />
                 {f.title}
               </button>
             );
@@ -243,7 +243,7 @@ export function CreateCredentialCard({ org, slug, factories }: { org: string; sl
                     id={`agents-${f.id}`}
                     className="m-0 flex items-center gap-2 bg-panel px-3 py-2 text-meta font-control text-ink-soft"
                   >
-                    <FactoryBadge mark={factoryMark(f, factories)} className="size-4" />
+                    <FactoryBadge mark={factoryMark(f, factories)} />
                     {f.title}
                   </h3>
                   {model?.isPending ? (
