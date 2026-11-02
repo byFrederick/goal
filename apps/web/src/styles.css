@@ -579,7 +579,7 @@
     visibility: visible;
   }
 
-  .motion-disclosure-peek > * {
+  .motion-disclosure.motion-disclosure-peek > * {
     min-height: 4.875em;
   }
 
