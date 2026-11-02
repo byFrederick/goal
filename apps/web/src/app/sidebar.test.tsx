@@ -729,3 +729,125 @@ describe('the sidebar’s resize handle', () => {
     expect((await handle()).getAttribute('aria-valuenow')).toBe('256');
   });
 });
+
+describe('the sidebar’s motion', () => {
+  const wrapper = async () => (await nav()).parentElement as HTMLElement;
+  const stubReduced = (matches: boolean) =>
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.includes('prefers-reduced-motion') ? matches : true,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('collapsing applies the transition classes to the inner wrapper and the labels', async () => {
+    renderSidebar();
+    const before = await wrapper();
+    expect(before.className).not.toContain('motion-sidebar-resize');
+
+    await collapse();
+
+    const after = (await nav()).parentElement as HTMLElement;
+    expect(after.className).toContain('motion-sidebar-resize');
+    expect(after.getAttribute('data-sidebar-motion')).toBe('animate');
+    expect(after.style.getPropertyValue('--sidebar-from-scale')).toBe(String(256 / 60));
+    expect((await nav()).className).toContain('motion-sidebar');
+  });
+
+  it('expanding from the rail animates too', async () => {
+    window.localStorage.setItem('goal.sidebar', 'collapsed');
+    renderSidebar();
+    fireEvent.click(await screen.findByRole('button', { name: 'Expand sidebar' }));
+
+    const after = await wrapper();
+    expect(after.className).toContain('motion-sidebar-resize');
+    expect((await nav()).className).toContain('motion-sidebar');
+  });
+
+  it('during a drag the transitions are off', async () => {
+    renderSidebar();
+    await collapse();
+    expect((await wrapper()).className).toContain('motion-sidebar-resize');
+    const sep = await screen.findByRole('separator', { name: 'Resize sidebar' });
+    sep.setPointerCapture = () => {};
+    sep.hasPointerCapture = () => false;
+    sep.releasePointerCapture = () => {};
+
+    fireEvent.pointerDown(sep, { pointerId: 1, button: 0, clientX: 60 });
+    fireEvent.pointerMove(sep, { pointerId: 1, clientX: 200 });
+
+    const during = await wrapper();
+    expect(during.className).not.toContain('motion-sidebar-resize');
+    expect(during.getAttribute('data-sidebar-motion')).toBeNull();
+    expect(sep.hasAttribute('data-dragging')).toBe(true);
+  });
+
+  const stubPointer = (sep: HTMLElement) => {
+    sep.setPointerCapture = () => {};
+    sep.hasPointerCapture = () => false;
+    sep.releasePointerCapture = () => {};
+  };
+
+  it('a drag release that snaps to the rail animates from the width under the pointer', async () => {
+    renderSidebar();
+    const sep = await screen.findByRole('separator', { name: 'Resize sidebar' });
+    stubPointer(sep);
+
+    fireEvent.pointerDown(sep, { pointerId: 1, button: 0, clientX: 256 });
+    fireEvent.pointerMove(sep, { pointerId: 1, clientX: 100 });
+    fireEvent.pointerUp(sep, { pointerId: 1, clientX: 100 });
+
+    await screen.findByRole('button', { name: 'Expand sidebar' });
+    const after = sep.previousElementSibling as HTMLElement;
+    expect(after.className).toContain('motion-sidebar-resize');
+    expect(after.style.getPropertyValue('--sidebar-from-scale')).toBe(String(100 / 60));
+  });
+
+  it('a drag release that expands from the rail animates from the width under the pointer', async () => {
+    window.localStorage.setItem('goal.sidebar', 'collapsed');
+    renderSidebar();
+    const sep = await screen.findByRole('separator', { name: 'Resize sidebar' });
+    stubPointer(sep);
+
+    fireEvent.pointerDown(sep, { pointerId: 1, button: 0, clientX: 60 });
+    fireEvent.pointerMove(sep, { pointerId: 1, clientX: 300 });
+    fireEvent.pointerUp(sep, { pointerId: 1, clientX: 300 });
+
+    await screen.findByRole('button', { name: 'Collapse sidebar' });
+    const after = sep.previousElementSibling as HTMLElement;
+    expect(after.className).toContain('motion-sidebar-resize');
+    expect(after.style.getPropertyValue('--sidebar-from-scale')).toBe(String(300 / 300));
+  });
+
+  it('with reduced motion matched, no transition class is applied', async () => {
+    stubReduced(true);
+    renderSidebar();
+    await collapse();
+
+    const after = await wrapper();
+    expect(after.className).not.toContain('motion-sidebar-resize');
+    // Only the labels' opacity fade remains; styles.css drops it to the quick duration.
+    expect((await nav()).className).toContain('motion-sidebar');
+  });
+
+  it('keyboard resizes and Command K do not animate', async () => {
+    renderSidebar();
+    const sep = await screen.findByRole('separator', { name: 'Resize sidebar' });
+
+    fireEvent.keyDown(sep, { key: 'Home' });
+    await screen.findByRole('button', { name: 'Expand sidebar' });
+    expect((await wrapper()).className).not.toContain('motion-sidebar-resize');
+    expect((await nav()).className).not.toContain('motion-sidebar');
+
+    fireEvent.keyDown(sep, { key: 'ArrowRight' });
+    await screen.findByRole('button', { name: 'Collapse sidebar' });
+    expect((await wrapper()).className).not.toContain('motion-sidebar-resize');
+
+    fireEvent.keyDown(sep, { key: 'Home' });
+    await screen.findByRole('button', { name: 'Expand sidebar' });
+    fireEvent.keyDown(window, { key: 'k', metaKey: true });
+    await screen.findByRole('searchbox').catch(() => null);
+    expect((await wrapper()).className).not.toContain('motion-sidebar-resize');
+  });
+});

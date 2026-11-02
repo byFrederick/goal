@@ -21,6 +21,7 @@ import { Kbd } from '../../ui/kbd';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '../../ui/menu';
 import { SegmentedControl } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
+import { successHoldMs } from '../../ui/success-label';
 import { alwaysAllowOffered, type DecidedEntry, decisionOf, useEntryDecision } from './actions';
 import { DenyDialog } from './deny-dialog';
 import { Detail } from './detail';
@@ -35,9 +36,6 @@ function decidable(entry: InboxEntry | undefined): DecidedEntry['entry'] | undef
     ? (entry as DecidedEntry['entry'])
     : undefined;
 }
-
-/** How long an approved entry stays in view for its check: the swap, then a beat to read it. */
-const approvedHoldMs = 900;
 
 export function NeedsYouPage() {
   const org = useOrg();
@@ -60,7 +58,7 @@ export function NeedsYouPage() {
   const [held, setHeld] = useState<InboxEntry | undefined>(undefined);
   useEffect(() => {
     if (!held) return;
-    const timer = setTimeout(() => setHeld(undefined), approvedHoldMs);
+    const timer = setTimeout(() => setHeld(undefined), successHoldMs);
     return () => clearTimeout(timer);
   }, [held]);
   const heldGone = held !== undefined && !visible.some((e) => e.id === held.id);

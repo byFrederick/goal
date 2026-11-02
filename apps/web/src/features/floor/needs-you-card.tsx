@@ -4,7 +4,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { CircleAlert, RotateCcw, ShieldCheck } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { inboxQuery } from '../../api/queries';
 import type { ItemCard } from '../../api/types';
 import { useFactory, useFactoryParams } from '../../shared/factory';
@@ -14,6 +14,7 @@ import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
 import { Count } from '../../ui/count';
+import { SuccessLabel, successHoldMs } from '../../ui/success-label';
 import { CardEmpty, CardFailed, CardLoading } from './card-states';
 import { type InboxRow, inboxGroups } from './needs-you-groups';
 
@@ -34,7 +35,17 @@ function Tile({ row }: { row: InboxRow }) {
 }
 
 /** A decision's Deny and Approve, on the row. Phones get Deny and Review instead (Approve is on the item). */
-function DecisionActions({ item, factory }: { item: ItemCard; factory: string }) {
+function DecisionActions({
+  item,
+  factory,
+  approved,
+  onApproved,
+}: {
+  item: ItemCard;
+  factory: string;
+  approved: boolean;
+  onApproved: () => void;
+}) {
   const decide = useDecision(decidable(item), factory);
   const params = useFactoryParams();
   const [denying, setDenying] = useState(false);
@@ -48,11 +59,13 @@ function DecisionActions({ item, factory }: { item: ItemCard; factory: string })
         size="sm"
         variant="primary"
         className="border-you bg-you hover:bg-you/90 max-md:hidden"
-        disabled={decide.isPending}
-        aria-label={`Approve ${item.ref}`}
-        onClick={() => decide.mutate({ kind: 'approve' })}
+        disabled={decide.isPending || approved}
+        aria-label={`${approved ? 'Approved' : 'Approve'} ${item.ref}`}
+        onClick={() => decide.mutate({ kind: 'approve' }, { onSuccess: onApproved })}
       >
-        {pending === 'approve' ? 'Approving…' : 'Approve'}
+        <SuccessLabel done={approved} doneLabel="Approved">
+          {pending === 'approve' ? 'Approving…' : 'Approve'}
+        </SuccessLabel>
       </Button>
       <Link
         to="/o/$org/f/$factory/items/$ref"
@@ -93,8 +106,25 @@ export function NeedsYouCard({ className }: { className?: string }) {
   const org = useOrg();
   const factory = useFactory();
   const query = useQuery(inboxQuery(org.id, factory.id));
-  const rows = query.data ? inboxGroups(query.data.entries).flatMap((g) => g.rows) : [];
-  const count = rows.length;
+  const live = query.data ? inboxGroups(query.data.entries).flatMap((g) => g.rows) : [];
+  const count = live.length;
+  // A row just approved stays in the list for its check, though the inbox no longer has it, then leaves.
+  const [approvedKeys, setApprovedKeys] = useState<string[]>([]);
+  const lastRows = useRef<InboxRow[]>([]);
+  const rows = [...live];
+  for (const key of approvedKeys) {
+    const at = lastRows.current.findIndex((r) => r.key === key);
+    const row = lastRows.current[at];
+    if (row && !rows.some((r) => r.key === key)) rows.splice(Math.min(at, rows.length), 0, row);
+  }
+  useEffect(() => {
+    lastRows.current = rows;
+  });
+  useEffect(() => {
+    if (approvedKeys.length === 0) return;
+    const timer = setTimeout(() => setApprovedKeys([]), successHoldMs);
+    return () => clearTimeout(timer);
+  }, [approvedKeys]);
 
   return (
     <SectionCard
@@ -134,7 +164,16 @@ export function NeedsYouCard({ className }: { className?: string }) {
                     <p className="m-0 text-meta text-muted">{item ? `${item.ref} at ${station}` : row.why}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 max-md:flex-col max-md:items-stretch">
-                    {decision ? <DecisionActions item={item} factory={factory.id} /> : <DecideLink row={row} />}
+                    {decision ? (
+                      <DecisionActions
+                        item={item}
+                        factory={factory.id}
+                        approved={approvedKeys.includes(row.key)}
+                        onApproved={() => setApprovedKeys((keys) => [...keys, row.key])}
+                      />
+                    ) : (
+                      <DecideLink row={row} />
+                    )}
                   </div>
                 </div>
               </li>

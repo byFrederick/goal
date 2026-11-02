@@ -10,6 +10,7 @@ import { holds } from '../../shared/permissions';
 import { WaitLine } from '../../shared/waiting-for';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { WorkingLine } from '../../ui/working-line';
 import type { OpenAssembly } from './board-filters';
 import { cardState, isExpedite, waitsOn } from './stats';
 
@@ -76,7 +77,9 @@ export function BoardCard({
     item.state === 'done' ? null : wait ? (
       <WaitLine waiting={wait} status={itemStatus(item)} className="text-secondary" />
     ) : (
-      <span className={cn('line-clamp-2 text-secondary', toneText[state.tone])}>{state.text}</span>
+      <span className={cn('line-clamp-2 text-secondary', toneText[state.tone])}>
+        <WorkingLine text={state.text} running={item.state === 'in_progress'} />
+      </span>
     )
   ) : (
     <DeskState item={item} state={state} decides={decides} wait={wait} />
@@ -282,7 +285,9 @@ function DeskState({
           aria-hidden="true"
           className="size-1.5 shrink-0 rounded-full bg-run animate-pulse-dot motion-reduce:animate-none"
         />
-        <span className="line-clamp-2">{state.text}</span>
+        <span className="line-clamp-2">
+          <WorkingLine text={state.text} running />
+        </span>
       </span>
     );
   }

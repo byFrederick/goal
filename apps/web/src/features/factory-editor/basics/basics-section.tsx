@@ -3,8 +3,8 @@
 // (spec 3 §10.2) and, in Definition, the factory id. Two columns that become one under 640 px of
 // `main`. Every change is a session edit (typing into one field is one undo step) saved 800 ms
 // later; leaving a field saves at once. B's problems show at their field.
-import { Copy } from 'lucide-react';
 import { toast } from 'sonner';
+import { CopyButton } from '../../../ui/copy-button';
 import { Field, Input, Textarea } from '../../../ui/field';
 import { setBasics } from '../draft/ops';
 import { useDraftSession, useSection } from '../draft/use-draft';
@@ -84,15 +84,7 @@ export function BasicsSection({ place }: SectionViewProps) {
   );
 }
 
-function FactoryId({ id }: { id: string }) {
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(id);
-      toast.success('Factory id copied');
-    } catch {
-      toast.error('The factory id could not be copied');
-    }
-  };
+export function FactoryId({ id }: { id: string }) {
   return (
     <div className="col-span-full flex min-w-0 flex-col gap-1.5">
       <span className="text-sm font-medium">Factory id</span>
@@ -100,14 +92,13 @@ function FactoryId({ id }: { id: string }) {
         <span translate="no" className="font-mono text-sm break-all">
           {id}
         </span>
-        <button
-          type="button"
+        <CopyButton
+          size="icon"
+          label=""
           aria-label="Copy factory id"
-          onClick={() => void copy()}
-          className="inline-flex size-11 shrink-0 items-center justify-center rounded-control border border-line bg-card text-ink transition-colors duration-(--duration-quick) hover:bg-shell md:size-8"
-        >
-          <Copy size={15} strokeWidth={1.5} aria-hidden="true" />
-        </button>
+          text={id}
+          onFailed={() => toast.error('The factory id could not be copied')}
+        />
       </span>
       <p className="m-0 text-[13px] leading-snug text-muted">
         Never changes, even if you rename the factory. Items, traces and spend keep pointing here.

@@ -34,6 +34,8 @@ interface SidebarRailProps {
   org: OrgSummary;
   /** Attention or overview still loading: aria-busy and a spoken "Loading", no placeholder shapes. */
   busy: boolean;
+  /** The labels fade in (a click or a drag expanded or folded the sidebar). */
+  animated?: boolean;
   /** The Expand button takes focus when the rail appears by the person's own Collapse. */
   focusOnMount: boolean;
   /** Expands the sidebar; `search` opens it straight into search (Command K). */
@@ -42,7 +44,7 @@ interface SidebarRailProps {
   onNewItem: () => void;
 }
 
-export function SidebarRail({ org, busy, focusOnMount, onExpand, onNewItem }: SidebarRailProps) {
+export function SidebarRail({ org, busy, animated = false, focusOnMount, onExpand, onNewItem }: SidebarRailProps) {
   const can = useOrgGrants()?.can;
   const mayCreate = useOrgHolds('factory:create');
   const attention = useQuery(attentionQuery(org.id));
@@ -71,7 +73,7 @@ export function SidebarRail({ org, busy, focusOnMount, onExpand, onNewItem }: Si
     <nav
       aria-label="Organization and factories"
       aria-busy={busy}
-      className="motion-sidebar sticky top-0 hidden h-dvh w-15 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-line bg-sidebar pt-2 pb-3 md:flex"
+      className={`${animated ? 'motion-sidebar ' : ''}sticky top-0 hidden h-dvh w-15 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-line bg-sidebar pt-2 pb-3 md:flex`}
     >
       {busy ? <span className="sr-only">Loading</span> : null}
       <span className="flex size-10 flex-none items-center justify-center">

@@ -7,7 +7,7 @@
 // item:operate pause and move are not offered. goald refuses them anyway.
 import { type QueryKey, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Ban, Check, Ellipsis, ExternalLink, GitMerge, Pause, Play, RotateCcw, Undo2 } from 'lucide-react';
-import { type FormEvent, useId, useState } from 'react';
+import { type FormEvent, useEffect, useId, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError, approveItem, cancelItem, mergeItem, pauseItem, rejectItem, retryItem } from '../api/client';
 import { keys } from '../api/queries';
@@ -18,6 +18,7 @@ import { ConfirmDialog } from '../ui/confirm-dialog';
 import { Dialog, DialogClose, DialogContent } from '../ui/dialog';
 import { Field, Textarea } from '../ui/field';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../ui/menu';
+import { SuccessLabel, successHoldMs } from '../ui/success-label';
 import { useFactoryById } from './factory';
 import { humanize } from './format';
 import { factoryWorkInvalidations } from './invalidation';
@@ -205,10 +206,22 @@ export function ItemDecisions({
   const mayDecide = holds(grants, 'item:decide');
   const mayOperate = holds(grants, 'item:operate');
   const reasonId = useId();
-  const can = decisionsFor(item, station);
+  // The cache write that follows a success hides Approve and Merge at once; the one that succeeded stays
+  // for its check (MOTION.md, Approve, publish, merge succeed), then goes. It is set only after the call resolved.
+  const [held, setHeld] = useState<'approve' | 'merge' | null>(null);
+  const [open, setOpen] = useState<'reject' | 'merge' | 'pause' | 'move' | null>(null);
+  useEffect(() => {
+    if (!held) return;
+    const timer = setTimeout(() => {
+      setHeld(null);
+      if (held === 'merge') setOpen(null);
+    }, successHoldMs);
+    return () => clearTimeout(timer);
+  }, [held]);
+  const base = decisionsFor(item, station);
+  const can = { ...base, approve: base.approve || held === 'approve', merge: base.merge || held === 'merge' };
   const ctl =
     controls && mayOperate ? controlsFor(item, controls.reworkTarget) : { pause: false, sendBack: false, move: false };
-  const [open, setOpen] = useState<'reject' | 'merge' | 'pause' | 'move' | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const reject = can.reject || ctl.sendBack;
@@ -263,11 +276,16 @@ export function ItemDecisions({
           variant="primary"
           size={s}
           className={btn}
-          {...decision(() => decide.mutate({ kind: 'approve' }))}
-          aria-label={layout === 'row' && size === 'md' ? `Approve ${item.ref}` : undefined}
+          {...decision(() => decide.mutate({ kind: 'approve' }, { onSuccess: () => setHeld('approve') }))}
+          disabled={mayDecide ? decide.isPending || held === 'approve' : undefined}
+          aria-label={
+            layout === 'row' && size === 'md' ? `${held === 'approve' ? 'Approved' : 'Approve'} ${item.ref}` : undefined
+          }
         >
-          <Check size={16} strokeWidth={1.75} aria-hidden="true" />
-          {pending === 'approve' ? 'Approving…' : 'Approve'}
+          <SuccessLabel done={held === 'approve'} doneLabel="Approved">
+            <Check size={16} strokeWidth={1.75} aria-hidden="true" />
+            {pending === 'approve' ? 'Approving…' : 'Approve'}
+          </SuccessLabel>
         </Button>
       ) : null}
       {split !== 'controls' && can.retry ? (
@@ -420,7 +438,8 @@ export function ItemDecisions({
             // A refusal said in the dialog goes with it.
             if (!o) decide.reset();
           }}
-          onConfirm={() => decide.mutate({ kind: 'merge' }, { onSuccess: () => setOpen(null) })}
+          onConfirm={() => decide.mutate({ kind: 'merge' }, { onSuccess: () => setHeld('merge') })}
+          done={held === 'merge'}
           pending={pending === 'merge'}
           refusal={decide.variables?.kind === 'merge' ? mergeRefusal(decide.error) : undefined}
         />
@@ -640,7 +659,8 @@ export function MergeDialog({
   onConfirm,
   pending,
   refusal,
-}: DialogProps<void> & { refusal: string | undefined }) {
+  done = false,
+}: DialogProps<void> & { refusal: string | undefined; done?: boolean }) {
   const prs = item.pull_requests;
   const one = prs.length === 1 ? prs[0] : undefined;
   const what = one ? pullRequestLabel(one) : prs.length > 1 ? `${prs.length} pull requests` : 'the pull request';
@@ -688,9 +708,11 @@ export function MergeDialog({
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" disabled={pending}>
-              <GitMerge size={16} strokeWidth={1.75} aria-hidden="true" />
-              {pending ? 'Merging…' : refusal ? 'Merge again' : 'Squash and merge'}
+            <Button type="submit" variant="primary" disabled={pending || done}>
+              <SuccessLabel done={done} doneLabel="Merged">
+                <GitMerge size={16} strokeWidth={1.75} aria-hidden="true" />
+                {pending ? 'Merging…' : refusal ? 'Merge again' : 'Squash and merge'}
+              </SuccessLabel>
             </Button>
           </div>
         </form>
