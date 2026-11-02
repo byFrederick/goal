@@ -169,10 +169,10 @@ export function ItemTableRow({
         {item.lane ? <Chip tone="plain">{item.lane}</Chip> : <span className="text-muted">Not set</span>}
       </td>
       <td className={cn(cell, 'whitespace-nowrap')}>{humanize(item.station)}</td>
-      <td className={cn(cell, 'whitespace-nowrap')}>
-        <span className="inline-flex items-center gap-2">
+      <td className={cell}>
+        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
           <span
-            className={cn('inline-flex min-w-0 items-center gap-2 text-secondary font-medium', toneText[label.tone])}
+            className={cn('inline-flex min-w-0 items-center gap-2 whitespace-nowrap text-secondary font-medium', toneText[label.tone])}
             title={label.text}
           >
             {status ? <StatusIcon status={status} /> : null}
