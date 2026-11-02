@@ -31,7 +31,7 @@ interface FileTreeProps {
 }
 
 const rowBase =
-  'flex min-h-8 min-w-0 flex-1 items-center gap-2 rounded-chip px-2 text-left text-secondary text-ink-soft hover:bg-hover hover:text-ink focus-visible:-outline-offset-2';
+  'flex min-h-7 min-w-0 flex-1 items-center gap-2 rounded-chip px-2 text-left text-secondary text-ink-soft hover:bg-hover hover:text-ink focus-visible:-outline-offset-2';
 
 const hasInside = (folder: TreeFolder, path: string): boolean =>
   folder.children.some((c) => (c.kind === 'file' ? c.path === path : hasInside(c, path)));
@@ -40,10 +40,10 @@ const anyChanged = (folder: TreeFolder, changed: ReadonlySet<string>): boolean =
   folder.children.some((c) => (c.kind === 'file' ? changed.has(c.path) : anyChanged(c, changed)));
 
 /** A dot for a changed file or folder: a mark beside the name, the words for screen readers. */
-function ChangedMark({ on }: { on: boolean }) {
+function ChangedMark({ on, className = 'ml-auto' }: { on: boolean; className?: string }) {
   return on ? (
     <>
-      <span aria-hidden="true" className="ml-auto size-2 shrink-0 rounded-full bg-run" />
+      <span aria-hidden="true" className={cn(className, 'size-1.5 shrink-0 rounded-full bg-muted')} />
       <span className="sr-only">, changed</span>
     </>
   ) : null;
@@ -53,7 +53,10 @@ function ChangedMark({ on }: { on: boolean }) {
 function ErrorCount({ count }: { count: number }) {
   return count > 0 ? (
     <>
-      <span aria-hidden="true" className="ml-auto rounded-chip bg-rework px-1 text-meta font-medium text-white">
+      <span
+        aria-hidden="true"
+        className="ml-auto rounded-chip bg-rework-tint px-1 text-meta font-control text-rework-ink"
+      >
         {count}
       </span>
       <span className="sr-only">, {plural(count, 'error')}</span>
@@ -88,11 +91,7 @@ export function FileTree({
           type="button"
           aria-current={selected ? 'true' : undefined}
           onClick={() => onOpen(file.path)}
-          className={cn(
-            rowBase,
-            selected && 'border border-rule bg-card font-control text-ink',
-            !selected && 'border border-transparent',
-          )}
+          className={cn(rowBase, selected && 'bg-hover font-control text-ink')}
         >
           <File size={14} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-muted" />
           <span className="truncate font-mono text-meta">{file.name}</span>
@@ -140,7 +139,7 @@ export function FileTree({
                 return next;
               })
             }
-            className={cn(rowBase, 'border border-transparent font-control text-ink')}
+            className={cn(rowBase, 'font-control text-ink')}
           >
             {open ? (
               <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-muted" />
@@ -148,11 +147,11 @@ export function FileTree({
               <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-muted" />
             )}
             <span className="truncate">{folder.name}</span>
-            <span aria-hidden="true" className="text-meta text-muted tabular-nums">
+            <span aria-hidden="true" className="ml-auto text-meta text-muted tabular-nums">
               {folder.count}
             </span>
             <span className="sr-only">, {plural(folder.count, 'file')}</span>
-            <ChangedMark on={anyChanged(folder, changed)} />
+            <ChangedMark on={anyChanged(folder, changed)} className="" />
           </button>
           {canAdd ? (
             <button

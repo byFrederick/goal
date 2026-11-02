@@ -47,9 +47,10 @@ describe('the Ask the factory bar, not built yet', () => {
     );
   });
 
-  it('keeps Ask "Not available yet" and sends no request', async () => {
+  it('keeps Send "Not available yet" and sends no request', async () => {
     await renderBar();
-    const ask = screen.getByRole('button', { name: 'Ask' });
+    const ask = screen.getByRole('button', { name: 'Send' });
+    expect(screen.queryByRole('button', { name: 'Ask' })).toBeNull();
     expect(ask.getAttribute('aria-disabled')).toBe('true');
 
     fireEvent.click(ask);
