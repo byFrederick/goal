@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Definition, form</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#FFFFFF}
+a{color:#2B5BD7}a:hover{color:#1E46B0}
+*{box-sizing:border-box}
+h1,h2,h3,p,ol,ul{margin:0}
+ol,ul{padding:0;list-style:none}
+.g{--bg:#FFFFFF;--side:#F8F8F7;--panel:#FAFAF9;--hover:#F0F0EE;--rule:#EAEAE7;--rule2:#D6D6D2;--ink:#171717;--ink2:#4A4A47;--ink3:#6B6B67;--pri:#2B5BD7;--pri-ink:#1E46B0;--pri-t:#EEF2FC;--you:#C2410C;--you-t:#FDF2EC;--you-ink:#9A3412;--red:#C93030;--red-t:#FDF0F0;--red-ink:#A42525;--yel:#EAB308;--yel-t:#FEF8E1;--yel-ink:#6F5000;--grn:#1F8A4C;--grn-t:#EEF7F1;--grn-ink:#17663A;--navy:#FAFAF9;--navy2:#FFFFFF;--navy3:#EAEAE7;--act:#171717;--act-ink:#FFFFFF;--act-hover:#333331;--shadow-pop:0 0 0 1px rgba(0,0,0,.06),0 10px 28px -10px rgba(0,0,0,.18);--dur-stagger:40ms;--dur-micro:80ms;--dur-quick:150ms;--dur-fast:250ms;--dur-medium:350ms;--dur-slow:400ms;--ease-out:cubic-bezier(.22,1,.36,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-bounce:cubic-bezier(.34,1.36,.64,1);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:14px;line-height:1.5;color:var(--ink);background:var(--bg);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.g.dark{--bg:#0F0F0F;--side:#141414;--panel:#171717;--hover:#1F1F1F;--rule:#262626;--rule2:#363636;--ink:#EDEDEC;--ink2:#B4B4B0;--ink3:#8F8F8A;--pri:#3D6BE0;--pri-ink:#A9C1FA;--pri-t:#17213A;--you:#B84D1C;--you-t:#341C10;--you-ink:#FDBA94;--red:#C73A3A;--red-t:#361616;--red-ink:#FCA5A5;--yel-t:#30270C;--yel-ink:#F5D46B;--grn:#2E9E5E;--grn-t:#11291B;--grn-ink:#7EDBA4;--navy:#171717;--navy2:#0F0F0F;--navy3:#262626;--act:#EDEDEC;--act-ink:#111111;--act-hover:#D4D4D0;--shadow-pop:0 0 0 1px rgba(255,255,255,.08),0 12px 32px -10px rgba(0,0,0,.6)}
+.h1{font-size:20px;line-height:1.25;font-weight:600;letter-spacing:-0.01em}
+.h2{font-size:14px;line-height:1.35;font-weight:600}
+.num{font-weight:500;letter-spacing:-0.01em}
+.m2{color:var(--ink2)}.m3{color:var(--ink3)}.sm{font-size:13px}.xs{font-size:12px}
+.code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px}
+.app{display:flex;flex-wrap:wrap;align-items:stretch;min-height:100vh;background:var(--bg)}
+.side{width:248px;flex:none;background:var(--side);border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:1px;padding:10px 8px 12px;min-height:100vh}
+.srow{display:flex;align-items:center;gap:2px;margin-bottom:6px}
+.orgb{flex:1;min-width:0;display:flex;align-items:center;gap:9px;height:36px;padding:0 6px;border:0;border-radius:6px;background:none;font:inherit;font-weight:600;font-size:14px;color:var(--ink);cursor:pointer;text-align:left}
+.omk{width:24px;height:24px;flex:none;border-radius:6px;background:#171717;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:600}
+.ib{width:30px;height:30px;flex:none;border:0;border-radius:6px;background:none;color:var(--ink3);display:grid;place-items:center;cursor:pointer;padding:0}
+.orgb,.ib,.ni,.fh,.sub a,.me,.newb,.use,.btn,.chip,.seg button,.pk,.in,.inrow,.card,.box{transition:background-color var(--dur-quick) ease,color var(--dur-quick) ease,border-color var(--dur-quick) ease,box-shadow var(--dur-quick) ease,transform var(--dur-quick) var(--ease-out)}
+.orgb:hover,.ib:hover,.ni:hover,.fh:hover,.sub a:hover,.me:hover{background:var(--hover);color:var(--ink)}
+.newb{display:flex;align-items:center;gap:8px;height:34px;padding:0 6px 0 10px;border-radius:6px;background:var(--bg);border:1px solid var(--rule2);color:var(--ink);font-weight:500;text-decoration:none;margin:0 0 8px}
+.newb:hover{border-color:var(--ink3);color:var(--ink)}
+.kb{margin-left:auto;min-width:20px;height:20px;padding:0 5px;border-radius:4px;background:var(--panel);border:1px solid var(--rule);color:var(--ink3);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;font-weight:500;display:grid;place-items:center}
+.ni{display:flex;align-items:center;gap:10px;height:32px;padding:0 8px;border-radius:6px;color:var(--ink2);text-decoration:none;font-weight:500}
+.ni svg{flex:none;color:var(--ink3)}
+.ni.on{background:var(--hover);color:var(--ink)}.ni.on svg{color:var(--ink)}
+.cnt{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;font-size:11.5px;font-weight:600;display:inline-grid;place-items:center;background:var(--you);color:#fff}
+.cnt.n{background:none;color:var(--ink3);font-weight:500}
+.sec{display:flex;align-items:center;justify-content:space-between;height:28px;margin-top:14px;padding:0 2px 0 8px;font-size:12px;font-weight:500;color:var(--ink3)}
+.sec .ib{width:24px;height:24px}
+.fh{display:flex;align-items:center;gap:10px;height:32px;padding:0 8px;border-radius:6px;color:var(--ink);text-decoration:none;font-weight:500}
+.fh .chev{margin-left:auto;color:var(--ink3);flex:none}
+.fb{width:18px;height:18px;flex:none;border-radius:4px;display:grid;place-items:center;color:#fff;font-size:10.5px;font-weight:600}
+.sub{display:flex;flex-direction:column;gap:1px;margin:2px 0 6px 16px;padding-left:8px;border-left:1px solid var(--rule)}
+.sub a{display:flex;align-items:center;height:28px;padding:0 8px;border-radius:6px;color:var(--ink2);text-decoration:none;font-size:13px;font-weight:400}
+.sub a.on{background:var(--hover);color:var(--ink);font-weight:500;box-shadow:none}
+.sdot{width:6px;height:6px;border-radius:50%;flex:none}
+.sbot{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-top:12px}
+.use{display:flex;flex-direction:column;gap:6px;padding:8px 8px;border-radius:6px;border:0;background:none;text-decoration:none;color:var(--ink)}
+.use:hover{background:var(--hover);color:var(--ink)}
+.bar{height:4px;border-radius:2px;background:var(--hover);overflow:hidden;display:flex}
+.bar span{display:block;height:100%}
+.me{display:flex;align-items:center;gap:10px;width:100%;padding:6px;border:0;border-radius:6px;background:none;font:inherit;color:var(--ink);cursor:pointer;text-align:left}
+.av{width:28px;height:28px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:11.5px;font-weight:600;color:#fff;background:#4A5A52}
+.main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 28px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.crumb{display:flex;align-items:center;gap:8px;font-weight:500;color:var(--ink2);min-width:0}
+.crumb a{color:var(--ink3);text-decoration:none}.crumb a:hover{color:var(--ink)}
+.tact{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:6px;border:1px solid var(--rule2);background:var(--bg);color:var(--ink);font:inherit;font-weight:500;font-size:13px;text-decoration:none;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--panel);border-color:var(--ink3);color:var(--ink)}
+.btn:active,.ib:active,.newb:active,.pk:active,.me:active{transform:scale(.97)}
+.btn.pri{background:var(--act);border-color:var(--act);color:var(--act-ink)}.btn.pri:hover{background:var(--act-hover);border-color:var(--act-hover);color:var(--act-ink)}
+.btn.warn{color:var(--red-ink)}
+.btn.sm{height:28px;padding:0 10px;font-size:12.5px}
+.seg{display:inline-flex;padding:2px;border-radius:7px;background:var(--hover);border:0;gap:2px;flex-wrap:wrap}
+.seg button{height:26px;padding:0 10px;border:0;border-radius:5px;background:none;font:inherit;font-size:12.5px;font-weight:500;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px var(--rule)}
+.seg .k{font-size:12px;color:var(--ink3)}
+.page{padding:24px 28px 40px;display:flex;flex-direction:column;gap:20px}
+.page>*{animation:enter var(--dur-fast) var(--ease-out) both}
+.page>*:nth-child(2){animation-delay:var(--dur-stagger)}.page>*:nth-child(3){animation-delay:calc(var(--dur-stagger)*2)}.page>*:nth-child(n+4){animation-delay:calc(var(--dur-stagger)*3)}
+@keyframes enter{from{opacity:0;transform:translateY(4px)}}
+.card{border:1px solid var(--rule);border-radius:8px;background:var(--bg);padding:16px 18px;min-width:0;display:flex;flex-direction:column}
+a.card:hover{border-color:var(--rule2)}
+.chip{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 7px;border-radius:4px;font-size:12px;font-weight:500;background:var(--bg);color:var(--ink2);border:1px solid var(--rule);white-space:nowrap;text-decoration:none}
+.chip.run{color:var(--ink2)}.chip.run .dot{color:var(--pri)}
+.chip.you{background:var(--you-t);color:var(--you-ink);border-color:transparent}
+.chip.red{background:var(--red-t);color:var(--red-ink);border-color:transparent}
+.chip.yel{color:var(--ink2)}.chip.yel .dot{color:var(--yel)}
+.chip.grn{color:var(--ink2)}.chip.grn .dot{color:var(--grn)}
+.chip.big{height:26px;padding:0 9px;font-size:12.5px;border-radius:5px}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.live{animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important}}
+@media (max-width:760px){.side{width:100%;min-height:0;border-right:0;border-bottom:1px solid var(--rule)}.side .navs,.side .sbot{display:none}.top{padding:8px 16px}.page{padding:16px}}
+
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px}
+.phd{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.phd .t{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.ttl{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sline{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);flex-wrap:wrap}
+.cols{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:20px;align-items:start}
+.stack{display:flex;flex-direction:column;gap:20px;min-width:0}
+.sc{border:1px solid var(--rule);border-radius:8px;background:var(--bg);min-width:0}
+.sc>header{display:flex;align-items:center;gap:10px;min-height:46px;padding:10px 16px;border-bottom:1px solid var(--rule)}
+.sc>header h2{font-size:14px;font-weight:600}
+.sc>header .n{font-size:12px;color:var(--ink3)}
+.sc>header .r{margin-left:auto;display:flex;gap:8px;align-items:center}
+.sc .bd{padding:16px;display:flex;flex-direction:column;gap:14px}
+.fld{display:flex;flex-direction:column;gap:6px;min-width:0}
+.fld>label,.fld .lb{font-size:13px;font-weight:500;color:var(--ink);display:flex;align-items:center;gap:6px}
+.help{font-size:12px;color:var(--ink3);line-height:1.45}
+.in{height:32px;border:1px solid var(--rule2);border-radius:6px;background:var(--bg);padding:0 10px;font:inherit;font-size:14px;color:var(--ink);width:100%;min-width:0}
+.in:hover{border-color:var(--ink3)}
+.in:focus{border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-t);outline:0}
+.in[readonly]{background:var(--panel);color:var(--ink2);border-color:var(--rule)}
+.in::placeholder{color:var(--ink3)}
+.wo{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:400;color:var(--ink3)}
+.rows>li{display:flex;align-items:center;gap:12px;min-height:44px;padding:8px 16px;border-top:1px solid var(--rule);font-size:13px;min-width:0}
+.rows>li:first-child{border-top:0}
+.rows a{color:var(--ink);text-decoration:none;font-weight:500}
+.rows a:hover{color:var(--pri-ink)}
+.st{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2)}
+.st.ok .dot{color:var(--grn)}.st.run .dot{color:var(--pri)}.st.bad{color:var(--red-ink)}.st.bad .dot{color:var(--red)}.st.off .dot{color:var(--rule2)}.st.you .dot{color:var(--you)}
+.call{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;font-size:13px;border:1px solid var(--rule);background:var(--bg);color:var(--ink)}
+.call svg{flex:none;color:var(--ink3)}
+.call.red{background:var(--red-t);border-color:transparent;color:var(--red-ink)}.call.red svg{color:var(--red-ink)}
+.ib2{width:30px;height:30px;flex:none;border:0;border-radius:6px;background:none;color:var(--ink3);display:grid;place-items:center;cursor:pointer;padding:0;transition:background-color var(--dur-quick) ease,color var(--dur-quick) ease}
+.ib2:hover{background:var(--hover);color:var(--ink)}
+.btn.danger{color:var(--red-ink)}
+.btn.danger:hover{border-color:var(--red);color:var(--red-ink)}
+.btn.red{background:var(--red);border-color:var(--red);color:#fff}
+.btn[aria-disabled="true"],.btn:disabled{opacity:.5;cursor:not-allowed}
+.kc{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 6px;border-radius:4px;border:1px solid var(--rule2);border-bottom-width:2px;background:var(--bg);color:var(--ink);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;font-weight:500;line-height:1}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.tabs a,.tabs button,.tabs span.tb{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 10px;margin-bottom:-1px;border:0;border-bottom:2px solid transparent;background:none;font:inherit;font-size:13px;font-weight:500;color:var(--ink2);text-decoration:none;cursor:pointer;transition:color var(--dur-quick) ease,border-color var(--dur-fast) var(--ease-out)}
+.tabs a:hover,.tabs button:hover{color:var(--ink)}
+.tabs [aria-current="page"],.tabs [aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+.tabs .c{font-size:12px;color:var(--ink3)}
+.tabs [aria-disabled="true"]{color:var(--ink3);cursor:not-allowed}
+.empty{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:28px 0}
+.empty h2{font-size:14px;font-weight:600}
+.empty p{font-size:13px;color:var(--ink2);max-width:60ch}
+@keyframes pop{from{opacity:0;transform:scale(.97)}}
+@keyframes popd{from{opacity:0;transform:scale(.96)}}
+@keyframes fade{from{opacity:0}}
+.ovl{position:absolute;inset:0;background:rgba(15,15,15,.32);animation:fade var(--dur-fast) ease both;z-index:5}
+.g.dark .ovl{background:rgba(0,0,0,.6)}
+.dlg{position:absolute;left:50%;top:120px;margin-left:-240px;width:480px;z-index:6;background:var(--bg);border-radius:12px;box-shadow:var(--shadow-pop);padding:20px;display:flex;flex-direction:column;gap:16px;transform-origin:center;animation:popd var(--dur-fast) var(--ease-out) both}
+.dlg h2{font-size:16px;font-weight:600;line-height:1.3}
+.dlg .ds{font-size:13px;color:var(--ink2)}
+.dlg .act{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.dlg .x{position:absolute;top:14px;right:14px}
+.app{position:relative}
+.dh{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.dh .r{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.draft{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--rule);border-radius:8px;background:var(--panel);font-size:13px;flex-wrap:wrap}
+.draft .r{margin-left:auto;display:flex;gap:8px}
+.ask{display:flex;align-items:center;gap:10px;height:40px;padding:0 6px 0 12px;border:1px solid var(--rule2);border-radius:6px;background:var(--bg)}
+.ask:focus-within{border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-t)}
+.ask input{flex:1;min-width:0;border:0;outline:0;background:none;font:inherit;font-size:14px;color:var(--ink)}
+.ask input::placeholder{color:var(--ink3)}
+.ask .h{font-size:12px;color:var(--ink3);white-space:nowrap}
+.status{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink3);flex-wrap:wrap;margin-top:-8px}
+.status a{color:var(--ink2)}
+.status .pr{display:inline-flex;align-items:center;gap:5px;color:var(--red-ink)}
+.ed{display:grid;grid-template-columns:220px minmax(0,1fr);gap:28px;align-items:start}
+.snav{display:flex;flex-direction:column;gap:2px;position:sticky;top:12px}
+.snav a{display:flex;flex-direction:column;gap:1px;padding:8px 10px;border-radius:6px;text-decoration:none;color:var(--ink2);transition:background-color var(--dur-quick) ease,color var(--dur-quick) ease}
+.snav a:hover{background:var(--hover);color:var(--ink)}
+.snav a .l{font-size:13.5px;font-weight:500;display:flex;align-items:center;gap:8px}
+.snav a .s{font-size:12px;color:var(--ink3)}
+.snav a[aria-current="page"]{background:var(--hover);color:var(--ink)}
+.snav .n{margin-left:auto;font-size:11.5px;color:var(--ink3);font-weight:500}
+.snav .n.bad{color:var(--red-ink)}
+.sh{display:flex;align-items:flex-start;gap:16px}
+.sh h2{font-size:16px;font-weight:600}
+.sh .r{margin-left:auto}
+.lt{border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.lr{display:grid;grid-template-columns:36px minmax(0,1.3fr) 268px 128px minmax(0,1fr) 92px;gap:12px;align-items:center;padding:10px 12px;border-top:1px solid var(--rule);font-size:13px}
+.lr.hd{background:var(--panel);border-top:0;padding:8px 12px;font-size:12px;font-weight:500;color:var(--ink3)}
+.lr.sel{background:var(--pri-t)}
+.num2{display:flex;align-items:center;gap:6px;color:var(--ink3);font-size:12px;cursor:grab}
+.nm2{display:flex;flex-direction:column;gap:4px;min-width:0}
+.nm2 .in{height:30px;font-size:13.5px}
+.nm2 .meta{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink3)}
+.kseg{display:inline-flex;padding:2px;border-radius:6px;background:var(--hover);gap:2px}
+.kseg button{height:24px;padding:0 8px;border:0;border-radius:4px;background:none;font:inherit;font-size:12px;font-weight:500;color:var(--ink2);cursor:pointer}
+.kseg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px var(--rule)}
+.kseg button:disabled{color:var(--ink3);opacity:.6;cursor:not-allowed}
+.wip{display:inline-flex;align-items:center;height:28px;border:1px solid var(--rule2);border-radius:6px;overflow:hidden}
+.wip button{width:26px;height:100%;border:0;background:none;color:var(--ink2);display:grid;place-items:center;cursor:pointer}
+.wip button:hover{background:var(--hover);color:var(--ink)}
+.wip input{width:34px;height:100%;border:0;border-left:1px solid var(--rule);border-right:1px solid var(--rule);text-align:center;font:inherit;font-size:13px;color:var(--ink);background:var(--bg)}
+.ord{display:flex;align-items:center;gap:0}
+.ord .ib2{width:26px;height:26px}
+.cons{display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 6px;border-radius:4px;border:1px solid var(--rule);font-size:11.5px;font-weight:500;color:var(--ink2)}
+.cons i{width:6px;height:6px;border-radius:1px;background:var(--yel);display:block}
+.chk li{display:flex;align-items:flex-start;gap:10px;padding:9px 16px;border-top:1px solid var(--rule);font-size:13px}
+.chk li:first-child{border-top:0}
+.chk svg{flex:none;margin-top:2px}
+.dlg .act .btn.red{margin-right:auto}
+</style>
+</helmet>
+<div class="g app {{theme}}">
+  <nav class="side" aria-label="Goal">
+    <div class="srow">
+      <button class="orgb" type="button" aria-haspopup="menu" aria-label="Acme organization, switch organization"><span class="omk" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#EAB308"></circle></svg></span><span style="flex: 1; min-width: 0">Acme</span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m4 5.5 3-3 3 3M4 8.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+      <button class="ib" type="button" aria-label="Search, Command K"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><circle cx="8" cy="8" r="5.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="m12 12 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button>
+      <button class="ib" type="button" aria-label="Collapse sidebar"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><rect x="2.5" y="3" width="13" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"></rect><path d="M7 3v12" stroke="currentColor" stroke-width="1.6"></path></svg></button>
+    </div>
+    <a class="newb" href="V2-Item.dc.html"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>New item<span class="kb" aria-label="shortcut C">C</span></a>
+    <div class="navs" style="display: flex; flex-direction: column; gap: 1px">
+      <a class="ni" href="V2-Home.dc.html"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 8.25 9 3.5l6 4.75V15a1 1 0 0 1-1 1h-3.25v-4h-3.5v4H4a1 1 0 0 1-1-1Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>Home</a>
+      <a class="ni" href="V2-Needs-You.dc.html"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 10.5h3.75l1 2h3.5l1-2h3.75M4.5 3.5h9l2 7v4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-4Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>Needs you<span class="cnt">5</span></a>
+      <a class="ni" href="V2-Runs.dc.html"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 9.5h3l2-5.5 4 10 2-4.5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Runs</a>
+      <a class="ni" href="V2-Connections.dc.html"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M6.5 2.5v3M11.5 2.5v3M4.5 5.5h9v3a4.5 4.5 0 0 1-9 0ZM9 13v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Connections</a>
+      <a class="ni" href="V2-Credentials.dc.html"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="6" cy="12" r="3.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M8.4 9.6 15 3M12.5 5.5l2 2M10.4 7.6l1.5 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Credentials</a>
+      <a class="ni" href="V2-Knowledge.dc.html"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 4.5C3 3.7 3.7 3 4.5 3H8v12H4.5c-.8 0-1.5-.7-1.5-1.5ZM15 4.5c0-.8-.7-1.5-1.5-1.5H10v12h3.5c.8 0 1.5-.7 1.5-1.5Z" fill="none" stroke="currentColor" stroke-width="1.6"></path></svg>Knowledge</a>
+      <div class="sec"><span>Factories</span><a class="ib" href="V2-New-Factory.dc.html" aria-label="New factory"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></a></div>
+      <a class="fh" href="V2-Floor.dc.html" aria-expanded="true"><span class="fb" style="background: #2B5BD7" aria-hidden="true">S</span>Software<span class="cnt" style="margin-left: auto">3</span><svg class="chev" style="margin-left: 0" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m3.5 5.5 3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+      <div class="sub">
+        <a href="V2-Floor.dc.html">Floor</a>
+        <a href="V2-Board.dc.html">Board</a>
+        <a href="V2-Items.dc.html">Items</a>
+        <a href="V2-Agents.dc.html">Agents</a>
+        <a href="V2-Intake.dc.html">Intake</a>
+        <a href="V2-Jonah.dc.html">Jonah<span class="cnt n" style="height: 18px; font-size: 11px">2</span></a>
+        <a class="on" href="V2-Definition.dc.html" aria-current="page">Definition</a>
+        <a href="V2-Factory-Settings.dc.html">Settings</a>
+      </div>
+      <a class="fh" href="#"><span class="fb" style="background: #0E7C6E" aria-hidden="true">R</span>SRE<span class="cnt" style="margin-left: auto; background: var(--red)">1</span><svg class="chev" style="margin-left: 0" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m5.5 3.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+      <a class="fh" href="#"><span class="fb" style="background: #B4461A" aria-hidden="true">P</span>Support<span class="cnt" style="margin-left: auto">1</span><svg class="chev" style="margin-left: 0" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m5.5 3.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
+    </div>
+    <div class="sbot">
+      <a class="use" href="V2-Spend.dc.html"><span style="display: flex; justify-content: space-between; font-size: 13px"><span class="m2">Spend this week</span><span class="num" style="font-weight: 600">$512 of $1,400</span></span><span class="bar" aria-hidden="true"><span style="width: 37%; background: var(--ink)"></span></span></a>
+      <button class="me" type="button" aria-haspopup="menu"><span class="av" aria-hidden="true">FC</span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-weight: 600">Freddy Cruz</span><span class="xs m3">Owner</span></span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m4 5.5 3-3 3 3M4 8.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+    </div>
+  </nav>
+  <div class="main">
+    <header class="top">
+      <div class="crumb"><span class="fb" style="background: #2B5BD7; width: 20px; height: 20px; font-size: 11px" aria-hidden="true">S</span><a href="V2-Floor.dc.html">Software</a><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m4.5 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg><span style="color: var(--ink); font-weight: 600">Definition</span></div>
+      <div class="tact"></div>
+    </header>
+    <main class="page">
+      <div class="dh">
+        <h1 class="h1">Definition</h1><span class="chip"><span class="dot" style="color: var(--grn)"></span>v12 running</span>
+        <div class="r">
+          <div class="seg" role="group" aria-label="Editor view"><button type="button" aria-pressed="true">Form</button><a class="btn sm" href="V2-Definition.dc.html" style="border: 0; background: none; height: 26px; color: var(--ink2)">YAML</a></div>
+          <a class="btn" href="V2-Definition.dc.html"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M8 5v3.2l2 1.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>Versions</a>
+          <a class="btn" href="V2-Definition-Publish.dc.html">Review changes</a>
+          <button class="btn pri" type="button" disabled aria-describedby="df-blk">Publish v13</button><span id="df-blk" class="sr">Fix 1 problem before you publish</span>
+        </div>
+      </div>
+      <section class="draft" aria-label="Draft">
+        <p><span style="font-weight: 500">Draft of v13, 3 changes</span> <span class="m2">Fix 1 problem before you publish. Running items keep v12.</span></p>
+        <div class="r"><a class="btn sm" href="V2-Definition-Publish.dc.html">Review changes</a><button class="btn sm" type="button" aria-haspopup="dialog">Discard draft</button></div>
+      </section>
+      <label class="ask"><span class="sr">Ask the factory to change</span><input placeholder="Ask the factory to change it, for example: give Review a 4th reviewer"><span class="h">Becomes an item, reviewed like any change</span><button class="btn sm pri" type="button">Ask</button></label>
+      <p class="status" role="status"><span class="st ok" style="color: var(--ink3)"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path></svg>Saved 14:02</span><span>Based on v12</span><a href="V2-Definition-Publish.dc.html">3 changes</a><a class="pr" href="#df-checks"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.5 13.5h-13Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path><path d="M8 6.5v3M8 11.5v.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>1 problem</a></p>
+
+      <div class="ed">
+        <nav class="snav" aria-label="Definition sections"><a href="V2-Definition-Form.dc.html"><span class="l">Basics</span><span class="s">Software, 3 work types</span></a><a href="V2-Definition-Form.dc.html" aria-current="page"><span class="l">Line<span class="n bad">1 problem</span></span><span class="s">7 stations, constraint Review</span></a><a href="V2-Definition-Form.dc.html"><span class="l">Agents</span><span class="s">6 agents on 2 models</span></a><a href="V2-Definition-Form.dc.html"><span class="l">Connections</span><span class="s">github, slack, 2 sources</span></a><a href="V2-Definition-Form.dc.html"><span class="l">Review and publish</span><span class="s">3 changes from v12</span></a></nav>
+        <div class="stack">
+          <section aria-labelledby="df-line" style="display: flex; flex-direction: column; gap: 14px">
+            <div class="sh">
+              <div style="display: flex; flex-direction: column; gap: 4px"><h2 id="df-line">Line</h2><p id="df-help" class="sm m2">Stations in the order work moves through them. Software’s constraint right now is Review.</p></div>
+              <div class="r"><button class="btn" type="button" aria-haspopup="menu"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>Add station</button></div>
+            </div>
+            <div class="lt">
+              <div class="lr hd" aria-hidden="true"><span></span><span>Station</span><span>Kind</span><span>WIP limit</span><span>Who works here</span><span>Order</span></div>
+              <ol aria-label="Stations, in order" aria-describedby="df-help">
+            <li class="lr" data-station="inbox" aria-label="1. Inbox, queue station">
+              <span class="num2" aria-label="Drag Inbox, station 1 of 7"><svg width="10" height="14" viewBox="0 0 10 14" aria-hidden="true"><circle cx="3" cy="3" r="1.1" fill="currentColor"></circle><circle cx="7" cy="3" r="1.1" fill="currentColor"></circle><circle cx="3" cy="7" r="1.1" fill="currentColor"></circle><circle cx="7" cy="7" r="1.1" fill="currentColor"></circle><circle cx="3" cy="11" r="1.1" fill="currentColor"></circle><circle cx="7" cy="11" r="1.1" fill="currentColor"></circle></svg>1</span>
+              <span class="nm2"><input class="in" aria-label="Name of station 1" value="Inbox"><span class="meta"><span class="mono">id: inbox</span></span></span>
+              <span class="kseg" role="group" aria-label="Kind of Inbox"><button type="button" aria-pressed="true">Queue</button><button type="button" aria-pressed="false">Agent</button><button type="button" aria-pressed="false">Human</button><button type="button" aria-pressed="false" disabled title="Only the last station can be Done">Done</button></span>
+              <span><span class="m3">Not limited</span></span>
+              <span class="m2">Manual and GitHub issues labelled goal</span>
+              <span class="ord"><button class="ib2" type="button" aria-label="Move Inbox up" disabled><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 11V3M3.5 6.5 7 3l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="ib2" type="button" aria-label="Move Inbox down"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 3v8M3.5 7.5 7 11l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="ib2" type="button" aria-label="More for Inbox" aria-haspopup="menu"><svg width="16" height="4" viewBox="0 0 16 4" aria-hidden="true"><circle cx="2" cy="2" r="1.5" fill="currentColor"></circle><circle cx="8" cy="2" r="1.5" fill="currentColor"></circle><circle cx="14" cy="2" r="1.5" fill="currentColor"></circle></svg></button></span>
+            </li><li class="lr" data-station="spec" aria-label="2. Spec, agent station">
+              <span class="num2" aria-label="Drag Spec, station 2 of 7"><svg width="10" height="14" viewBox="0 0 10 14" aria-hidden="true"><circle cx="3" cy="3" r="1.1" fill="currentColor"></circle><circle cx="7" cy="3" r="1.1" fill="currentColor"></circle><circle cx="3" cy="7" r="1.1" fill="currentColor"></circle><circle cx="7" cy="7" r="1.1" fill="currentColor"></circle><circle cx="3" cy="11" r="1.1" fill="currentColor"></circle><circle cx="7" cy="11" r="1.1" fill="currentColor"></circle></svg>2</span>
+              <span class="nm2"><input class="in" aria-label="Name of station 2" value="Spec"><span class="meta"><span class="mono">id: spec</span></span></span>
+              <span class="kseg" role="group" aria-label="Kind of Spec"><button type="button" aria-pressed="false">Queue</button><button type="button" aria-pressed="true">Agent</button><button type="button" aria-pressed="false">Human</button><button type="button" aria-pressed="false" disabled title="Only the last station can be Done">Done</button></span>
+              <span><span class="wip"><button type="button" aria-label="Lower the WIP limit of Spec"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button><input aria-label="WIP limit of Spec" value="2"><button type="button" aria-label="Raise the WIP limit of Spec"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2.5v7M2.5 6h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button></span></span>
+              <span class="m2">spec-writer</span>
+              <span class="ord"><button class="ib2" type="button" aria-label="Move Spec up"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 11V3M3.5 6.5 7 3l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="ib2" type="button" aria-label="Move Spec down"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 3v8M3.5 7.5 7 11l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="ib2" type="button" aria-label="More for Spec" aria-haspopup="menu"><svg width="16" height="4" viewBox="0 0 16 4" aria-hidden="true"><circle cx="2" cy="2" r="1.5" fill="currentColor"></circle><circle cx="8" cy="2" r="1.5" fill="currentColor"></circle><circle cx="14" cy="2" r="1.5" fill="currentColor"></circle></svg></button></span>
+            </li><li class="lr" data-station="build" aria-label="3. Build, agent station">
+              <span class="num2" aria-label="Drag Build, station 3 of 7"><svg width="10" height="14" viewBox="0 0 10 14" aria-hidden="true"><circle cx="3" cy="3" r="1.1" fill="currentColor"></circle><circle cx="7" cy="3" r="1.1" fill="currentColor"></circle><circle cx="3" cy="7" r="1.1" fill="currentColor"></circle><circle cx="7" cy="7" r="1.1" fill="currentColor"></circle><circle cx="3" cy="11" r="1.1" fill="currentColor"></circle><circle cx="7" cy="11" r="1.1" fill="currentColor"></circle></svg>3</span>
+              <span class="nm2"><input class="in" aria-label="Name of station 3" value="Build"><span class="meta"><span class="mono">id: build</span></span></span>
+              <span class="kseg" role="group" aria-label="Kind of Build"><button type="button" aria-pressed="false">Queue</button><button type="button" aria-pressed="true">Agent</button><button type="button" aria-pressed="false">Human</button><button type="button" aria-pressed="false" disabled title="Only the last station can be Done">Done</button></span>
+              <span><span class="wip"><button type="button" aria-label="Lower the WIP limit of Build"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button><input aria-label="WIP limit of Build" value="4"><button type="button" aria-label="Raise the WIP limit of Build"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2.5v7M2.5 6h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button></span></span>
+              <span class="m2">builder × 3</span>
+              <span class="ord"><button class="ib2" type="button" aria-label="Move Build up"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 11V3M3.5 6.5 7 3l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="ib2" type="button" aria-label="Move Build down"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 3v8M3.5 7.5 7 11l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="ib2" type="button" aria-label="More for Build" aria-haspopup="menu"><svg width="16" height="4" viewBox="0 0 16 4" aria-hidden="true"><circle cx="2" cy="2" r="1.5" fill="currentColor"></circle><circle cx="8" cy="2" r="1.5" fill="currentColor"></circle><circle cx="14" cy="2" r="1.5" fill="currentColor"></circle></svg></button></span>
+            </li><li class="lr sel" data-station="review" aria-label="4. Review, agent station">
+              <span class="num2" aria-label="Drag Review, station 4 of 7"><svg width="10" height="14" viewBox="0 0 10 14" aria-hidden="true"><circle cx="3" cy="3" r="1.1" fill="currentColor"></circle><circle cx="7" cy="3" r="1.1" fill="currentColor"></circle><circle cx="3" cy="7" r="1.1" fill="currentColor"></circle><circle cx="7" cy="7" r="1.1" fill="currentColor"></circle><circle cx="3" cy="11" r="1.1" fill="currentColor"></circle><circle cx="7" cy="11" r="1.1" fill="currentColor"></circle></svg>4</span>
+              <span class="nm2"><input class="in" aria-label="Name of station 4" value="Review"><span class="meta"><span class="mono">id: review</span><span class="cons"><i aria-hidden="true"></i>Constraint, busy 92%</span></span></span>
+              <span class="kseg" role="group" aria-label="Kind of Review"><button type="button" aria-pressed="false">Queue</button><button type="button" aria-pressed="true">Agent</button><button type="button" aria-pressed="false">Human</button><button type="button" aria-pressed="false" disabled title="Only the last station can be Done">Done</button></span>
+              <span><span class="wip"><button type="button" aria-label="Lower the WIP limit of Review"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button><input aria-label="WIP limit of Review" value="2"><button type="button" aria-label="Raise the WIP limit of Review"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2.5v7M2.5 6h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button></span></span>
+              <span class="m2">reviewer, gate</span>
+              <span class="ord"><button class="ib2" type="button" aria-label="Move Review up"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 11V3M3.5 6.5 7 3l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="ib2" type="button" aria-label="Move Review down"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 3v8M3.5 7.5 7 11l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="ib2" type="button" aria-label="More for Review" aria-haspopup="menu"><svg width="16" height="4" viewBox="0 0 16 4" aria-hidden="true"><circle cx="2" cy="2" r="1.5" fill="currentColor"></circle><circle cx="8" cy="2" r="1.5" fill="currentColor"></circle><circle cx="14" cy="2" r="1.5" fill="currentColor"></circle></svg></button></span>
+            </li><li class="lr" data-station="approve" aria-label="5. Approve, human station">
+              <span class="num2" aria-label="Drag Approve, station 5 of 7"><svg width="10" height="14" viewBox="0 0 10 14" aria-hidden="true"><circle cx="3" cy="3" r="1.1" fill="currentColor"></circle><circle cx="7" cy="3" r="1.1" fill="currentColor"></circle><circle cx="3" cy="7" r="1.1" fill="currentColor"></circle><circle cx="7" cy="7" r="1.1" fill="currentColor"></circle><circle cx="3" cy="11" r="1.1" fill="currentColor"></circle><circle cx="7" cy="11" r="1.1" fill="currentColor"></circle></svg>5</span>
+              <span class="nm2"><input class="in" aria-label="Name of station 5" value="Approve"><span class="meta"><span class="mono">id: approve</span><span class="chip" style="height: 20px; font-size: 11.5px"><span class="dot" style="color: var(--grn)"></span>New<span class="sr"> in this draft</span></span></span></span>
+              <span class="kseg" role="group" aria-label="Kind of Approve"><button type="button" aria-pressed="false">Queue</button><button type="button" aria-pressed="false">Agent</button><button type="button" aria-pressed="true">Human</button><button type="button" aria-pressed="false" disabled title="Only the last station can be Done">Done</button></span>
+              <span><span class="wip"><button type="button" aria-label="Lower the WIP limit of Approve"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button><input aria-label="WIP limit of Approve" value="3"><button type="button" aria-label="Raise the WIP limit of Approve"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2.5v7M2.5 6h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button></span></span>
+              <span class="m2">Maintainers</span>
+              <span class="ord"><button class="ib2" type="button" aria-label="Move Approve up"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 11V3M3.5 6.5 7 3l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="ib2" type="button" aria-label="Move Approve down"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 3v8M3.5 7.5 7 11l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="ib2" type="button" aria-label="More for Approve" aria-haspopup="menu"><svg width="16" height="4" viewBox="0 0 16 4" aria-hidden="true"><circle cx="2" cy="2" r="1.5" fill="currentColor"></circle><circle cx="8" cy="2" r="1.5" fill="currentColor"></circle><circle cx="14" cy="2" r="1.5" fill="currentColor"></circle></svg></button></span>
+            </li><li class="lr" data-station="merge" aria-label="6. Merge, agent station">
+              <span class="num2" aria-label="Drag Merge, station 6 of 7"><svg width="10" height="14" viewBox="0 0 10 14" aria-hidden="true"><circle cx="3" cy="3" r="1.1" fill="currentColor"></circle><circle cx="7" cy="3" r="1.1" fill="currentColor"></circle><circle cx="3" cy="7" r="1.1" fill="currentColor"></circle><circle cx="7" cy="7" r="1.1" fill="currentColor"></circle><circle cx="3" cy="11" r="1.1" fill="currentColor"></circle><circle cx="7" cy="11" r="1.1" fill="currentColor"></circle></svg>6</span>
+              <span class="nm2"><input class="in" aria-label="Name of station 6" value="Merge"><span class="meta"><span class="mono">id: merge</span></span></span>
+              <span class="kseg" role="group" aria-label="Kind of Merge"><button type="button" aria-pressed="false">Queue</button><button type="button" aria-pressed="true">Agent</button><button type="button" aria-pressed="false">Human</button><button type="button" aria-pressed="false" disabled title="Only the last station can be Done">Done</button></span>
+              <span><span class="wip"><button type="button" aria-label="Lower the WIP limit of Merge"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button><input aria-label="WIP limit of Merge" value="1"><button type="button" aria-label="Raise the WIP limit of Merge"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2.5v7M2.5 6h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button></span></span>
+              <span class="m2">merger, merge</span>
+              <span class="ord"><button class="ib2" type="button" aria-label="Move Merge up"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 11V3M3.5 6.5 7 3l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="ib2" type="button" aria-label="Move Merge down"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 3v8M3.5 7.5 7 11l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="ib2" type="button" aria-label="More for Merge" aria-haspopup="menu"><svg width="16" height="4" viewBox="0 0 16 4" aria-hidden="true"><circle cx="2" cy="2" r="1.5" fill="currentColor"></circle><circle cx="8" cy="2" r="1.5" fill="currentColor"></circle><circle cx="14" cy="2" r="1.5" fill="currentColor"></circle></svg></button></span>
+            </li><li class="lr" data-station="done" aria-label="7. Done, done station">
+              <span class="num2" aria-label="Drag Done, station 7 of 7"><svg width="10" height="14" viewBox="0 0 10 14" aria-hidden="true"><circle cx="3" cy="3" r="1.1" fill="currentColor"></circle><circle cx="7" cy="3" r="1.1" fill="currentColor"></circle><circle cx="3" cy="7" r="1.1" fill="currentColor"></circle><circle cx="7" cy="7" r="1.1" fill="currentColor"></circle><circle cx="3" cy="11" r="1.1" fill="currentColor"></circle><circle cx="7" cy="11" r="1.1" fill="currentColor"></circle></svg>7</span>
+              <span class="nm2"><input class="in" aria-label="Name of station 7" value="Done"><span class="meta"><span class="mono">id: done</span></span></span>
+              <span class="kseg" role="group" aria-label="Kind of Done"><button type="button" aria-pressed="false">Queue</button><button type="button" aria-pressed="false">Agent</button><button type="button" aria-pressed="false">Human</button><button type="button" aria-pressed="true">Done</button></span>
+              <span><span class="m3">Not limited</span></span>
+              <span class="m3">None</span>
+              <span class="ord"><button class="ib2" type="button" aria-label="Move Done up"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 11V3M3.5 6.5 7 3l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="ib2" type="button" aria-label="Move Done down" disabled><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 3v8M3.5 7.5 7 11l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="ib2" type="button" aria-label="More for Done" aria-haspopup="menu"><svg width="16" height="4" viewBox="0 0 16 4" aria-hidden="true"><circle cx="2" cy="2" r="1.5" fill="currentColor"></circle><circle cx="8" cy="2" r="1.5" fill="currentColor"></circle><circle cx="14" cy="2" r="1.5" fill="currentColor"></circle></svg></button></span>
+            </li>
+              </ol>
+            </div>
+          </section>
+
+          <section class="sc" id="df-checks" aria-labelledby="df-ch">
+            <header><h2 id="df-ch">Checks on this line</h2></header>
+            <ul class="chk">
+              <li><span style="color: var(--red)" role="img" aria-label="Problem"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.5 13.5h-13Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path><path d="M8 6.5v3M8 11.5v.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></span><span>Approve has no approvers. Add a role in Basics or an approver here.</span></li>
+              <li><span style="color: var(--ink)" role="img" aria-label="Note"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M8 7.2v4M8 4.8v.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></span><span>Merge is a merge step, so merger needs pull request access. You’ll set that in Connections.</span></li>
+              <li><span style="color: var(--grn)" role="img" aria-label="Passed"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path></svg></span><span>Review sends work back to Build, at most twice.</span></li>
+              <li><span style="color: var(--grn)" role="img" aria-label="Passed"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path></svg></span><span>New work enters when Review has fewer than 3 waiting.</span></li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+  <sc-if value="{{dialog}}">
+    <div class="ovl" aria-hidden="true"></div>
+    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="us-h" aria-describedby="us-d" style="top: 200px">
+      <div style="display: flex; flex-direction: column; gap: 6px"><h2 id="us-h">Your last changes aren’t saved yet</h2><p id="us-d" class="ds">They are still being saved.</p></div>
+      <div class="act"><button class="btn red" type="button">Leave anyway</button><button class="btn" type="button">Stay</button><button class="btn pri" type="button">Retry</button></div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"dialog":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1198}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { theme: this.props.dark ? 'dark' : '', dialog: !!this.props.dialog };
+  }
+}
+</script>
+</body>
+</html>
