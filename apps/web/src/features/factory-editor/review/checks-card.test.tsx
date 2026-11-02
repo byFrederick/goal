@@ -25,9 +25,9 @@ const passing = {
 } as unknown as Validation;
 
 describe('ChecksCard', () => {
-  it('says the checks are being read while the draft is checked', () => {
+  it('shows a skeleton while the draft is checked', () => {
     renderChecks(undefined);
-    const busy = screen.getByText('Loading the checks').closest('[aria-busy="true"]');
+    const busy = screen.getByText('Loading').closest('[aria-busy="true"]');
     expect(busy).not.toBeNull();
   });
 

@@ -48,7 +48,7 @@ A factory can also create items on its own, from an event or a schedule. Those t
 
 On that page you can:
 
-- create a trigger with New trigger,
+- create a trigger with New trigger. The dialog's "Or start from a suggestion" lists the factory's suggested triggers; Use opens the trigger page with that source and event chosen. A suggestion whose event Goal cannot create yet has Use turned off.
 - try a trigger on one of its recent past events, which shows whether it would have created an item and why, without creating one,
 - see the items each trigger created in the last seven days.
 

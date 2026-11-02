@@ -160,7 +160,7 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
                 ) : (
                   <Button
                     variant="primary"
-                    className="h-11 opacity-50 md:h-10"
+                    className="h-11 md:h-10"
                     disabled
                     aria-describedby={unchanged ? unchangedId : blockedId}
                   >
@@ -224,20 +224,22 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
         )}
       </header>
 
-      {yaml ? null : (
-        <SectionTiles
-          current={section}
-          summaries={summaries}
-          changeCount={changeCount}
-          problemCount={problemCount}
-          hasDraft={s.hasDraft}
-          yaml={false}
-          parseError={s.parseError}
-          viewOnly={viewOnly}
-        />
-      )}
+      <div className={yaml ? 'contents' : 'grid gap-5 @[880px]:grid-cols-[220px_minmax(0,1fr)] @[880px]:items-start'}>
+        {yaml ? null : (
+          <SectionTiles
+            current={section}
+            summaries={summaries}
+            changeCount={changeCount}
+            problemCount={problemCount}
+            hasDraft={s.hasDraft}
+            yaml={false}
+            parseError={s.parseError}
+            viewOnly={viewOnly}
+          />
+        )}
 
-      {children}
+        {children}
+      </div>
 
       <DiscardDialog
         open={discardOpen}

@@ -15,7 +15,7 @@ describe('Field', () => {
 
     const input = screen.getByRole('textbox', { name: 'Connection name' });
     expect(input.getAttribute('aria-invalid')).toBe('true');
-    expect(input.closest('div')?.classList.contains('animate-error-shake')).toBe(true);
+    expect(input.closest('div')?.classList.contains('motion-safe:animate-error-shake')).toBe(true);
     expect(screen.getByText('Use letters, numbers and dashes only.').classList.contains('animate-fade-in')).toBe(true);
   });
 
@@ -28,6 +28,6 @@ describe('Field', () => {
 
     const input = screen.getByRole('textbox', { name: 'Connection name' });
     expect(input.getAttribute('aria-invalid')).toBeNull();
-    expect(input.closest('div')?.classList.contains('animate-error-shake')).toBe(false);
+    expect(input.closest('div')?.classList.contains('motion-safe:animate-error-shake')).toBe(false);
   });
 });

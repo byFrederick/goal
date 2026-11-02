@@ -5,6 +5,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Clock, GitBranch, Webhook } from 'lucide-react';
 import type { IntakeTrigger } from '../../api/types';
 import { useFactoryParams } from '../../shared/factory';
+import { useArrivals } from '../../ui/arrivals';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Switch } from '../../ui/switch';
@@ -18,6 +19,7 @@ export const sourceIcon: Record<IntakeTrigger['source'], { icon: LucideIcon; til
 };
 
 export function TriggersTable({ triggers }: { triggers: readonly IntakeTrigger[] }) {
+  const arrived = useArrivals(triggers.map((trigger) => trigger.name));
   return (
     <section aria-labelledby="triggers-heading" className="rounded-card border border-line">
       <div className="flex flex-wrap items-center gap-3 p-5 pb-3">
@@ -57,7 +59,7 @@ export function TriggersTable({ triggers }: { triggers: readonly IntakeTrigger[]
               </tr>
             ) : null}
             {triggers.map((trigger) => (
-              <TriggerRow key={trigger.name} trigger={trigger} />
+              <TriggerRow key={trigger.name} trigger={trigger} arrived={arrived(trigger.name)} />
             ))}
           </tbody>
         </table>
@@ -66,20 +68,22 @@ export function TriggersTable({ triggers }: { triggers: readonly IntakeTrigger[]
   );
 }
 
-function TriggerRow({ trigger }: { trigger: IntakeTrigger }) {
+function TriggerRow({ trigger, arrived }: { trigger: IntakeTrigger; arrived: boolean }) {
   const params = useFactoryParams();
   const toggle = useTriggerToggle(trigger.name, trigger.enabled);
-  const { icon: Icon, tile } = sourceIcon[trigger.source];
+  const { icon: Icon } = sourceIcon[trigger.source];
   const items = trigger.days.reduce((sum, n) => sum + n, 0);
 
   return (
-    <tr className="block border-t border-line px-3 py-3 first:border-t-0 md:table-row md:p-0">
+    <tr
+      className={cn(
+        'block border-t border-line px-3 py-3 first:border-t-0 md:table-row md:p-0',
+        arrived && 'motion-safe:animate-item-in',
+      )}
+    >
       <td className="block py-1 md:table-cell md:px-3 md:py-3 md:align-middle">
         <div className="flex min-w-0 items-start gap-3">
-          <span
-            aria-hidden="true"
-            className={cn('mt-px flex size-8 flex-none items-center justify-center rounded-cell text-white', tile)}
-          >
+          <span aria-hidden="true" className="mt-px flex size-4 flex-none items-center justify-center text-muted">
             <Icon className="size-4" />
           </span>
           <div className="flex min-w-0 flex-col gap-px">
@@ -134,7 +138,7 @@ function LastWeek({ days, items }: { days: readonly number[]; items: number }) {
             // The seven days are a fixed window: their position is their identity.
             // biome-ignore lint/suspicious/noArrayIndexKey: a day's position is its identity
             key={i}
-            className={cn('w-1.5', i === days.length - 1 ? 'bg-run' : 'bg-rule')}
+            className={cn('w-1.5', i === days.length - 1 ? 'bg-ink' : 'bg-rule')}
             style={{ height: `${(n / top) * 100}%` }}
           />
         ))}

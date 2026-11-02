@@ -39,3 +39,16 @@ export function Skeleton({ ready, placeholder, children, className }: SkeletonPr
     </div>
   );
 }
+
+/** Muted bars standing for rows of text: a list's or a table's placeholder, inside `Skeleton`. */
+const rowKeys = ['row-1', 'row-2', 'row-3', 'row-4', 'row-5', 'row-6', 'row-7', 'row-8'];
+
+export function SkeletonRows({ rows = 3, className }: { rows?: number; className?: string }) {
+  return (
+    <div className={cn('flex flex-col gap-3', className)}>
+      {rowKeys.slice(0, rows).map((key) => (
+        <div key={key} className="h-9 rounded-control bg-hover" />
+      ))}
+    </div>
+  );
+}
