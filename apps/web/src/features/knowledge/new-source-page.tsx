@@ -327,12 +327,12 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
         </p>
       ) : null}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
-        <Button asChild variant="white" className="h-11 md:h-10">
+        <Button asChild variant="white">
           <Link to="/o/$org/knowledge" params={{ org: org.slug }}>
             Cancel
           </Link>
         </Button>
-        <Button type="submit" variant="primary" className="h-11 md:h-10" disabled={create.isPending || uploader.busy}>
+        <Button type="submit" variant="primary" disabled={create.isPending || uploader.busy}>
           {create.isPending || uploader.busy ? 'Adding…' : 'Add source'}
         </Button>
       </div>

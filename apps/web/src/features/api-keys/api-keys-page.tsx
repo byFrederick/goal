@@ -62,7 +62,7 @@ export function ApiKeysPage() {
 
   const newKey = (variant: 'primary' | 'secondary') =>
     manage ? (
-      <Button variant={variant} className="h-11 md:h-8.5" onClick={() => setCreating(true)}>
+      <Button variant={variant} onClick={() => setCreating(true)}>
         <Plus size={15} strokeWidth={1.75} aria-hidden="true" />
         New key
       </Button>

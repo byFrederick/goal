@@ -137,12 +137,7 @@ export function ImportPanel({ onResult }: { onResult: (result: ImportResult | un
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button
-          variant="white"
-          className="h-11 md:h-10"
-          disabled={text.trim() === '' || check.isPending}
-          onClick={() => run(files)}
-        >
+        <Button variant="white" disabled={text.trim() === '' || check.isPending} onClick={() => run(files)}>
           {check.isPending ? 'Checking…' : 'Check'}
         </Button>
         <p role="status" className="m-0 text-sm text-muted">

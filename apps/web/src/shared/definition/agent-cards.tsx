@@ -97,7 +97,7 @@ function CardError({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <p className="m-0 text-sm text-rework-ink">The version that runs can’t be read right now.</p>
-      <Button variant="secondary" className="h-11 md:h-8" size="sm" onClick={onRetry}>
+      <Button variant="secondary" size="sm" onClick={onRetry}>
         Try again
       </Button>
     </div>

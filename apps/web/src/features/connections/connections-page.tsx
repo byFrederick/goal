@@ -100,7 +100,7 @@ export function ConnectionsPage() {
   };
 
   const addConnection = manage ? (
-    <Button asChild variant="primary" className="h-11 md:h-8.5">
+    <Button asChild variant="primary">
       <Link to="/o/$org/connections/new" params={{ org: org.slug }}>
         <span aria-hidden="true">+</span> Add connection
       </Link>
@@ -134,7 +134,7 @@ export function ConnectionsPage() {
             </span>
           </p>
           {manage ? (
-            <Button variant="white" className="h-11 md:h-8.5 shrink-0" onClick={() => replaceSecret(c)}>
+            <Button variant="white" className="shrink-0" onClick={() => replaceSecret(c)}>
               Replace secret…
             </Button>
           ) : null}

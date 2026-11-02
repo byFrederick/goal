@@ -78,7 +78,7 @@ export function VersionRow({
             <Button
               size="sm"
               variant="white"
-              className={cn('h-11 md:h-8', pressed && 'border-ink')}
+              className={cn(pressed && 'border-ink')}
               aria-pressed={pressed}
               aria-label={pressed ? `Comparing ${name}` : `Compare ${name}`}
               onClick={() => setSearch({ compare: pressed ? undefined : compareParam(pair) })}
@@ -90,7 +90,6 @@ export function VersionRow({
             <Button
               size="sm"
               variant="white"
-              className="h-11 md:h-8"
               aria-haspopup="dialog"
               aria-label={`Restore ${name}…`}
               onClick={() => onRestore(version)}

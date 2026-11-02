@@ -134,7 +134,7 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
           </nav>
           <div className="flex flex-wrap items-center gap-2">
             {yaml ? null : <ViewToggle section={section} yaml={false} />}
-            <Button asChild variant="white" className="h-11 md:h-10">
+            <Button asChild variant="white">
               <Link to="/o/$org/f/$factory/definition/$section" params={{ ...params, section: 'versions' }}>
                 <Clock size={16} strokeWidth={1.5} aria-hidden="true" />
                 Versions
@@ -142,7 +142,7 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
             </Button>
             {viewOnly ? null : (
               <>
-                <Button asChild variant="white" className="h-11 md:h-10">
+                <Button asChild variant="white">
                   <Link
                     to="/o/$org/f/$factory/definition/$section"
                     params={{ ...params, section: 'review' }}
@@ -152,18 +152,13 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
                   </Link>
                 </Button>
                 {canPublish ? (
-                  <Button asChild variant="primary" className="h-11 md:h-10">
+                  <Button asChild variant="primary">
                     <Link to="/o/$org/f/$factory/definition/$section" params={{ ...params, section: 'review' }}>
                       Publish v{publishNumber}
                     </Link>
                   </Button>
                 ) : (
-                  <Button
-                    variant="primary"
-                    className="h-11 md:h-10"
-                    disabled
-                    aria-describedby={unchanged ? unchangedId : blockedId}
-                  >
+                  <Button variant="primary" disabled aria-describedby={unchanged ? unchangedId : blockedId}>
                     Publish v{publishNumber}
                   </Button>
                 )}
