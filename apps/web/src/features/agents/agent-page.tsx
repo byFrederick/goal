@@ -12,6 +12,7 @@ import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
+import { TabNav, tabNavItem } from '../../ui/tab-nav';
 import { cn } from '../../ui/cn';
 import { Meter } from '../../ui/hatch';
 import { KpiTile } from '../../ui/kpi-tile';
@@ -170,7 +171,7 @@ export function AgentPage({ agent, view }: { agent: string; view: AgentView }) {
         ) : null}
       </header>
 
-      <nav aria-label="Agent views" className="flex gap-1 overflow-x-auto border-b border-line">
+      <TabNav label="Agent views">
         {agentViews.map((v) => {
           const current = v === view;
           return (
@@ -180,16 +181,13 @@ export function AgentPage({ agent, view }: { agent: string; view: AgentView }) {
               params={agentParams}
               search={{ view: v }}
               aria-current={current ? 'page' : undefined}
-              className={cn(
-                '-mb-px inline-flex h-10 shrink-0 items-center border-b-2 px-3 text-body transition-colors duration-(--duration-quick) hover:text-ink',
-                current ? 'border-run font-control text-ink' : 'border-transparent text-ink-soft',
-              )}
+              className={tabNavItem}
             >
               {tabLabels[v]}
             </Link>
           );
         })}
-      </nav>
+      </TabNav>
 
       <DraftChangesNote agent={agent} />
 
