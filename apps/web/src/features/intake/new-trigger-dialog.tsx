@@ -232,7 +232,7 @@ function SourceButton({
         if (source.available) onPick();
       }}
       className={cn(
-        'flex min-h-11 min-w-0 md:h-10 flex-1 items-center gap-3 rounded-control px-2 text-left text-body font-medium text-ink hover:bg-hover',
+        'flex h-11 min-w-0 flex-1 md:h-10 items-center gap-3 rounded-control px-2 text-left text-body font-medium text-ink hover:bg-hover',
         'aria-pressed:bg-hover',
         !source.available && 'text-muted',
       )}

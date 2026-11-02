@@ -179,7 +179,7 @@ describe('New trigger phone tap targets', () => {
     await screen.findByRole('dialog', { name: 'New trigger' });
     for (const name of ['Schedule', 'Webhook', 'GitHub']) {
       const source = screen.getByRole('button', { name });
-      expect(source.classList.contains('min-h-11')).toBe(true);
+      expect(source.classList.contains('h-11')).toBe(true);
       expect(source.classList.contains('md:h-10')).toBe(true);
     }
   });

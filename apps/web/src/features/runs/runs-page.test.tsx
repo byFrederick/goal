@@ -22,7 +22,7 @@ import { attentionQuery, factoriesQuery } from '../../api/queries';
 import type { OrgRunList, OrgSummary } from '../../api/types';
 import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { TooltipProvider } from '../../ui/tooltip';
-import { touchTarget } from '../../ui/touch-target';
+import { touchLink } from '../../ui/touch-target';
 import { RunsPage } from './runs-page';
 import { runsSearch } from './search';
 
@@ -376,7 +376,7 @@ describe('the controls that are not built yet', () => {
 });
 
 describe('phone tap targets on the failed row', () => {
-  it('gives Open transcript and Send to Jonah the touchTarget classes', async () => {
+  it('gives Open transcript and Send to Jonah the touchLink classes', async () => {
     renderRuns();
     const table = await screen.findByRole('table');
     const failed = within(table)
@@ -385,7 +385,7 @@ describe('phone tap targets on the failed row', () => {
     const detail = failed.nextElementSibling as HTMLElement;
     for (const name of ['Open transcript', 'Send to Jonah']) {
       const control = within(detail).getByRole('button', { name });
-      for (const cls of touchTarget.split(' ')) expect(control.classList.contains(cls)).toBe(true);
+      for (const cls of touchLink.split(' ')) expect(control.classList.contains(cls)).toBe(true);
     }
   });
 });

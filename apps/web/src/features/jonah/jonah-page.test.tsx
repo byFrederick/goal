@@ -18,7 +18,7 @@ import type {
 import { TopBar, TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { renderFactoryPage, type Seed } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
-import { touchTarget } from '../../ui/touch-target';
+import { touchLink } from '../../ui/touch-target';
 import { JonahOverviewPage, JonahProposalsPage } from './jonah-page';
 
 vi.mock('../../api/client', async (original) => ({
@@ -424,7 +424,7 @@ describe('the Proposals tab', () => {
 });
 
 describe('phone tap targets on the Jonah policy', () => {
-  it('gives both Not available yet buttons the touchTarget classes', async () => {
+  it('gives both Not available yet buttons the touchLink classes', async () => {
     vi.mocked(getJonahOverview).mockResolvedValue(overview);
     vi.mocked(listProposals).mockResolvedValue(listOf([proposal8, proposal7]));
     renderOverview();
@@ -432,6 +432,6 @@ describe('phone tap targets on the Jonah policy', () => {
     const buttons = within(policy).getAllByRole('button', { name: 'Not available yet' });
     expect(buttons).toHaveLength(2);
     for (const button of buttons)
-      for (const cls of touchTarget.split(' ')) expect(button.classList.contains(cls)).toBe(true);
+      for (const cls of touchLink.split(' ')) expect(button.classList.contains(cls)).toBe(true);
   });
 });
