@@ -15,7 +15,7 @@ import { modelOf } from '../../shared/definition/model';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
-import { cn } from '../../ui/cn';
+import { SourceTile } from '../../ui/source-tile';
 import { Switch } from '../../ui/switch';
 import { stationLabel } from '../factory-editor/line/labels';
 import { OpenDraftError, setTriggersEnabled } from '../intake/set-trigger-enabled';
@@ -345,12 +345,7 @@ function TriggerRow({
   const missing = needsConnection(trigger);
   return (
     <div className="flex items-center gap-3 border-t border-line p-4">
-      <span
-        aria-hidden="true"
-        className={cn('flex size-8.5 flex-none items-center justify-center rounded-cell text-white', tile)}
-      >
-        <Icon className="size-4" />
-      </span>
+      <SourceTile icon={Icon} fill={tile} size="md" />
       <div className="flex min-w-0 flex-1 flex-col gap-px">
         <span className="font-control text-body text-ink">{trigger.name}</span>
         <span className="text-secondary break-words text-ink-soft">{trigger.when}</span>

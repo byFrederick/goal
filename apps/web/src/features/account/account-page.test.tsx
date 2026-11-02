@@ -206,7 +206,7 @@ describe('the account page', () => {
   it('draws the theme swatches from theme tokens only, never a raw palette class', async () => {
     renderAccount(session);
     const dark = await screen.findByRole('button', { name: 'Dark' });
-    expect(dark.innerHTML).toContain('bg-swatch-dark');
+    expect(dark.innerHTML).toContain('bg-preview-dark');
     for (const name of ['Match device', 'Light', 'Dark']) {
       expect(screen.getByRole('button', { name }).innerHTML).not.toMatch(/bg-white|bg-black/);
     }
