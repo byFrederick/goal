@@ -3,6 +3,7 @@
 // sync, retry, upload and add from it. Below it, "Look something up" searches every source, and
 // "Where it was used" (usage-card.tsx) shows the runs that opened one source's documents. ?factory=
 // (the factory sidebar's Knowledge) shows only the sources that factory's current version lists.
+
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearch } from '@tanstack/react-router';
 import { BookOpen, Plus } from 'lucide-react';
@@ -16,6 +17,7 @@ import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
 import { EmptyState } from '../../ui/empty-state';
+import { SourceTile } from '../../ui/source-tile';
 import { StatusText, SyncNowButton, UsedBy, useSyncSource } from './parts';
 import { SearchCard } from './search-card';
 import { UploadDialog } from './upload';
@@ -191,12 +193,7 @@ function SourcesCard({
                   <tr key={s.id} className="align-top [&>td]:border-t [&>td]:border-line [&>td]:px-4 [&>td]:py-3">
                     <td className="min-w-0">
                       <span className="flex min-w-0 items-center gap-3">
-                        <span
-                          aria-hidden="true"
-                          className="grid size-9 shrink-0 place-items-center rounded-cell bg-ink text-shell"
-                        >
-                          <Icon size={18} strokeWidth={1.5} />
-                        </span>
+                        <SourceTile icon={Icon} size="lg" />
                         <span className="flex min-w-0 flex-col">
                           <Link
                             to="/o/$org/knowledge/$source"
