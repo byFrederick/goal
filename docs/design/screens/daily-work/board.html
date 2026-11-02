@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Software board</title>
+
 </head>
 <body>
 <x-dc>
@@ -109,7 +110,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 .colm{display:flex;justify-content:space-between;font-size:12px;color:var(--ink3)}
 .exp{grid-column:1 / -1;display:grid;grid-template-columns:repeat(5,minmax(200px,1fr));column-gap:12px;padding:8px 0;border-radius:8px;background:var(--yel-t)}
 .exp>div{padding:0 8px;min-width:0}
-.exl{display:flex;flex-direction:column;gap:2px;padding-top:2px}
+.exl{display:flex;align-items:flex-start;padding-top:2px}
 .exl b{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--yel-ink)}
 .exl span{font-size:12px;color:var(--ink2)}
 .cell{display:flex;flex-direction:column;gap:8px;padding:8px;border-radius:8px;background:var(--panel);min-height:40px;min-width:0}
@@ -141,7 +142,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 .kmore:hover{color:var(--pri-ink);text-decoration:underline}
 </style>
 </helmet>
-<div class="g app {{theme}}">
+<div class="g app ">
   <nav class="side" aria-label="Goal">
     <div class="srow">
       <button class="orgb" type="button" aria-haspopup="menu" aria-label="Goal organization, switch organization"><span class="omk" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#EAB308"></circle></svg></span><span style="flex: 1; min-width: 0">Goal</span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m4 5.5 3-3 3 3M4 8.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
@@ -209,7 +210,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
           <div class="colh"><div class="t">Done<span class="n">7 today</span></div><div class="colm"><span>Merged pull requests</span><span>53 this week</span></div></div>
 
           <section class="exp" aria-label="Expedite lane">
-            <div class="exl"><b><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6.5 1 2.5 7h3l-.5 4 4-6h-3Z" fill="currentColor"></path></svg>Expedite</b><span>1 of 1 in use, jumps every queue</span></div>
+            <div class="exl"><b><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6.5 1 2.5 7h3l-.5 4 4-6h-3Z" fill="currentColor"></path></svg>Expedite</b></div>
             <div></div>
             <div>
               <a class="kc" href="V2-Item.dc.html">
@@ -261,12 +262,6 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1311}}'>
-class Component extends DCLogic {
-  renderVals() {
-    return { theme: this.props.dark ? 'dark' : '' };
-  }
-}
-</script>
+
 </body>
 </html>
