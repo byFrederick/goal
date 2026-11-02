@@ -90,6 +90,11 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
       </>
     ),
   });
+  const models = createRoute({
+    getParentRoute: () => orgPages,
+    path: 'models',
+    component: () => <p>Models page</p>,
+  });
   const factoryRoute = createRoute({
     getParentRoute: () => orgRoute,
     path: '/f/$factory',
@@ -107,7 +112,7 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
   const router = createRouter({
     routeTree: rootRoute.addChildren([
       orgRoute.addChildren([
-        orgPages.addChildren([home, spend]),
+        orgPages.addChildren([home, spend, models]),
         factoryRoute.addChildren([floor, items.addChildren([itemsIndex, itemRoute])]),
       ]),
     ]),
@@ -153,6 +158,12 @@ describe('TopBar', () => {
     const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
     expect(within(nav).getByText('Spend and billing').getAttribute('aria-current')).toBe('page');
     expect(within(await screen.findByRole('banner')).getByRole('button', { name: 'Export CSV' })).toBeTruthy();
+  });
+
+  it('names the models page as the current crumb', async () => {
+    renderBar({ at: '/o/acme/models' });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(nav).getByText('Models and policies').getAttribute('aria-current')).toBe('page');
   });
 
   it('shows only the page name on an organization page', async () => {

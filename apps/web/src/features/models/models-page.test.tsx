@@ -105,7 +105,7 @@ describe('Models and policies', () => {
     renderPage();
 
     expect(screen.getByRole('heading', { name: 'Models and policies' })).toBeTruthy();
-    expect(screen.getByRole('status').textContent).toBe('Loading models and policies');
+    expect(screen.getByText('Loading').closest('[aria-busy="true"]')).toBeTruthy();
   });
 
   it('shows the error with Try again, which reads the policy once more', async () => {
@@ -150,6 +150,40 @@ describe('Models and policies', () => {
     expect(screen.getByRole('button', { name: 'Remove terraform apply' })).toBeTruthy();
     expect((screen.getByRole('textbox', { name: 'Hours before a box stops' }) as HTMLInputElement).value).toBe('3');
     expect(screen.getByText('192.0.2.0/24')).toBeTruthy();
+    // Neutral Default chip, a bare icon with no tile, an ink Harness option.
+    expect(screen.getByText('Default').closest('span.border')?.className).toContain('bg-panel');
+    expect(document.querySelector('.rounded-cell.bg-panel.size-8')).toBeNull();
+    const claude = screen.getByRole('radio', { name: 'Claude Code' });
+    expect(claude.className).toContain('accent-ink');
+    expect(claude.closest('label')?.className).toContain('has-checked:border-ink');
+    expect(claude.closest('label')?.className).not.toContain('run');
+    // Save changes is the ink action button.
+    expect(save().className).toContain('bg-action');
+    expect(save().className).not.toContain('bg-run');
+  });
+
+  it('colours the tool policy by what it means, and follows a change', async () => {
+    renderPage();
+    const select = await screen.findByRole('combobox', { name: /Write outside the item/ });
+    fireEvent.change(select, { target: { value: 'ask' } });
+    expect(select.className).toContain('text-you-ink');
+    fireEvent.change(select, { target: { value: 'allowed' } });
+    expect(select.className).toContain('text-ok-ink');
+    expect(select.className).not.toContain('text-you-ink');
+    fireEvent.change(select, { target: { value: 'off' } });
+    expect(select.className).not.toContain('ok-ink');
+    expect(select.className).toContain('text-ink');
+  });
+
+  it('draws denied commands as neutral chips, not red ones', async () => {
+    renderPage();
+    const remove = await screen.findByRole('button', { name: 'Remove terraform apply' });
+    const chip = remove.closest('li');
+    expect(chip?.className).toContain('bg-panel');
+    expect(chip?.className).toContain('border-rule');
+    expect(chip?.className).not.toContain('rework');
+    expect(remove.className).toContain('text-muted');
+    expect(remove.className).toContain('hover:text-ink');
   });
 
   it('keeps a routers row and another harness not available yet', async () => {
