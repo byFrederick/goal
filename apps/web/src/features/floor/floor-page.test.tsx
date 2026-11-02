@@ -391,6 +391,7 @@ function renderFloor({
     path: '/',
     org,
     factory: subject,
+    topBar: true,
     seed: [
       [touchesQuery(org.id, factory.id, range).queryKey, touches],
       [touchesQuery(org.id, factory.id, previousRange(range)).queryKey, touchesBefore],
@@ -460,6 +461,22 @@ describe('FloorPage', () => {
     expect(screen.queryByText('Line running')).toBeNull();
     expect(screen.getByRole('button', { name: 'Clear the andon' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Pull the andon cord' })).toBeNull();
+  });
+
+  it('puts the time window, Needs you, Pull andon and New item in the top bar, New item last', async () => {
+    renderFloor({ subject: { ...factory, can: [...(factory.can ?? []), 'item:create'] } });
+
+    const bar = within((await screen.findAllByRole('banner'))[0] as HTMLElement);
+    const names = [
+      bar.getByRole('group', { name: 'Time window' }),
+      bar.getByRole('link', { name: /^Needs you/ }),
+      bar.getByRole('button', { name: 'Pull the andon cord' }),
+      bar.getByRole('button', { name: /^New item/ }),
+    ];
+    for (let i = 1; i < names.length; i++) {
+      expect(names[i - 1]?.compareDocumentPosition(names[i] as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    }
+    expect(screen.getAllByRole('button', { name: /^New item/ })).toHaveLength(1);
   });
 
   it('writes the 30-day window to the URL and presses it', async () => {

@@ -1,5 +1,8 @@
 import { useNavigate } from '@tanstack/react-router';
+import { useMemo } from 'react';
 import type { Board, Factory, Metrics } from '../../api/types';
+import { usePhone } from '../../app/phone-chrome';
+import { TopBarSlot } from '../../app/top-bar';
 import { AndonButton, LineStatus } from '../../shared/andon';
 import { NeedsYouLink } from '../../shared/needs-you-link';
 import { NewItemButton } from '../../shared/new-item';
@@ -21,21 +24,56 @@ const windowOptions = [
 /** The touches grouping of the search, kept when the window changes. */
 const keepGrouping = ({ touches }: FloorSearch) => (touches ? { touches } : {});
 
+/** The window control: writes ?from&to, keeps the work type and the touches grouping; a custom range presses none. */
+function TimeWindow({ shown, type }: { shown: number | null; type: string | undefined }) {
+  const navigate = useNavigate({ from: floorRoute });
+  return (
+    <SegmentedControl<Window>
+      label="Time window"
+      options={windowOptions}
+      value={shown === null ? undefined : (String(shown) as Window)}
+      onChange={(next) =>
+        navigate({
+          search: (prev) => ({ ...lastDaysSearch(Number(next), type), ...keepGrouping(prev) }),
+          resetScroll: false,
+        })
+      }
+    />
+  );
+}
+
 /**
- * The Floor's header: the title, the line's status, the range it shows and the actions. The window
- * control writes ?from&to (the work type and the touches grouping are kept); a custom range shows
- * no window as pressed.
+ * The Floor's header: the title, the line's status and the range it shows. The actions are the top bar's
+ * (the window, Needs you, Pull andon, New item); the phone's bar keeps New item and the window sits here.
  */
 export function FloorHeader({ factory, board, metrics }: { factory: Factory; board: Board; metrics: Metrics }) {
-  const navigate = useNavigate({ from: floorRoute });
   const type = metrics.type ?? undefined;
   const shown = windowOf(metrics.from, metrics.to);
   const days = daysIn(metrics.from, metrics.to);
   const before = days === 1 ? 'the day before' : `the ${days} days before`;
   const andon = board.line.andon;
 
+  const phone = usePhone();
+  // From 768 px the top bar holds every action; the phone's bar keeps New item and the window stays in the content.
+  const actions = useMemo(
+    () =>
+      phone ? (
+        <NewItemButton factory={factory} compact />
+      ) : (
+        <div className="flex min-w-0 items-center justify-end gap-2">
+          <TimeWindow shown={shown} type={type} />
+          <NeedsYouLink factory={factory} />
+          {/* While the cord is pulled, its strip under the line holds the Clear control instead. */}
+          {andon ? null : <AndonButton factory={factory} andon={andon} />}
+          <NewItemButton factory={factory} />
+        </div>
+      ),
+    [phone, factory, andon, shown, type],
+  );
+
   return (
     <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+      <TopBarSlot actions={actions} />
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h1 className="m-0 text-page-title tracking-display">Floor</h1>
         {andon ? (
@@ -49,23 +87,7 @@ export function FloorHeader({ factory, board, metrics }: { factory: Factory; boa
           {`${rangeLabel(metrics.from, metrics.to)}, compared with ${before}`}
         </p>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <SegmentedControl<Window>
-          label="Time window"
-          options={windowOptions}
-          value={shown === null ? undefined : (String(shown) as Window)}
-          onChange={(next) =>
-            navigate({
-              search: (prev) => ({ ...lastDaysSearch(Number(next), type), ...keepGrouping(prev) }),
-              resetScroll: false,
-            })
-          }
-        />
-        <NeedsYouLink factory={factory} />
-        {/* While the cord is pulled, its strip under the line holds the Clear control instead. */}
-        {andon ? null : <AndonButton factory={factory} andon={andon} />}
-        <NewItemButton factory={factory} />
-      </div>
+      {phone ? <TimeWindow shown={shown} type={type} /> : null}
     </header>
   );
 }

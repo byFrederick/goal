@@ -50,13 +50,28 @@ const member = (name: string, role: Member['role']): Member => ({
 const orgWith = (can: string[]): Org => ({ ...org, created_at: '2026-10-01T00:00:00Z', can });
 
 /** Renders the settings page with its factory, the organization's `can` and its members (or none seeded). */
-async function renderSettings({ can = [], members }: { can?: string[]; members?: Member[] } = {}) {
+async function renderSettings({
+  can = [],
+  members,
+  subject = factory,
+}: {
+  can?: string[];
+  members?: Member[];
+  subject?: Factory;
+} = {}) {
   const seed: [readonly unknown[], unknown][] = [
     [orgQuery(org.id).queryKey, orgWith(can)],
-    [defKeys.factory(org.id, factory.id), factory],
+    [defKeys.factory(org.id, factory.id), subject],
   ];
   if (members) seed.push([membersQuery(org.id).queryKey, members]);
-  const rendered = renderFactoryPage({ page: () => <FactorySettingsPage />, path: 'settings', org, factory, seed });
+  const rendered = renderFactoryPage({
+    page: () => <FactorySettingsPage />,
+    path: 'settings',
+    org,
+    factory: subject,
+    seed,
+    topBar: true,
+  });
   await screen.findByRole('heading', { name: 'Settings' });
   return rendered;
 }
@@ -151,5 +166,22 @@ describe('Factory settings page', () => {
       expect(within(group).getByText('Loading')).toBeTruthy();
       expect(group.querySelector('[aria-busy="true"]')).toBeTruthy();
     }
+  });
+
+  it('puts Saving publishes vN and Save changes in the top bar with definition:edit', async () => {
+    await renderSettings({ subject: { ...factory, can: ['factory:manage', 'definition:edit'] }, members: [] });
+
+    const bar = within((await screen.findAllByRole('banner'))[0] as HTMLElement);
+    expect(bar.getByText('Saving publishes v1')).toBeTruthy();
+    const save = bar.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(screen.getAllByRole('button', { name: 'Save changes' })).toHaveLength(1);
+  });
+
+  it('shows no Save changes without definition:edit', async () => {
+    await renderSettings({ members: [] });
+
+    expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
+    expect(screen.queryByText(/Saving publishes/)).toBeNull();
   });
 });
