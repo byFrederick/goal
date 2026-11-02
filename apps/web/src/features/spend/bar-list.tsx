@@ -41,9 +41,9 @@ export function BarList({
               </span>
               <span
                 {...meterOf(`${r.label}: ${money(r.usd)}`, r.usd, top)}
-                className="relative h-3 min-w-0 flex-1 overflow-hidden rounded-chip bg-panel"
+                className="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-chip bg-hover"
               >
-                <span className="block h-full rounded-chip bg-run" style={{ width: `${percentOf(r.usd, top)}%` }} />
+                <span className="block h-full rounded-chip bg-ink" style={{ width: `${percentOf(r.usd, top)}%` }} />
               </span>
               <span className="w-16 shrink-0 text-right font-semibold text-ink">{money(r.usd)}</span>
             </li>
