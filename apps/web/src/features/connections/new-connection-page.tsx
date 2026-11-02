@@ -9,23 +9,26 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useRouter, useSearch } from '@tanstack/react-router';
 import { Plus, Search } from 'lucide-react';
-import { type FormEvent, type ReactNode, useDeferredValue, useId, useState } from 'react';
+import { type FormEvent, type ReactNode, useDeferredValue, useEffect, useId, useRef, useState } from 'react';
 import { ApiError } from '../../api/client';
 import { createConnection } from '../../api/connections';
 import { connectionKindsQuery, connectionsQuery, keys } from '../../api/queries';
 import type { Connection, ConnectionKind } from '../../api/types';
+import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { connectionName } from '../../shared/connections';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
+import { Dot } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { ConnectionGlyph } from '../../ui/connection-glyph';
 import { Field, Input } from '../../ui/field';
 import { NotAvailable } from '../../ui/not-available';
 import { Skeleton } from '../../ui/skeleton';
 import { DefineKindDialog } from './define-kind-dialog';
-import { Monogram, WriteOnly } from './parts';
+import { WriteOnly } from './parts';
 import { SecretInput } from './secret-input';
 import { kindSummary, refusalText } from './words';
 
@@ -37,15 +40,38 @@ export function NewConnectionPage() {
   const kindsQuery = useQuery(connectionKindsQuery(org.id));
   const connections = useQuery(connectionsQuery(org.id)).data ?? [];
   const kinds = kindsQuery.data ?? [];
-  const kind = kinds.find((k) => k.name === chosen);
+  const phone = usePhone();
+  // On a wide screen an entry is always picked: the first of the catalog until the URL names one.
+  // On a phone the catalog shows alone until one is picked.
+  const kind = kinds.find((k) => k.name === chosen) ?? (phone ? undefined : catalogOrder(kinds)[0]);
+  const showCatalog = !phone || !kind;
+  const showDetails = kind !== undefined;
   const [defining, setDefining] = useState(false);
 
+  // Set after render, so the catalog's return from a pick animates back once.
+  const chosenWas = useRef(false);
+  useEffect(() => {
+    chosenWas.current = chosen !== undefined;
+  }, [chosen]);
   const choose = (name: string) => void navigate({ search: { kind: name }, replace: true });
 
   return (
     <>
       <TopBarSlot
         crumb="Add connection"
+        back={
+          phone && chosen ? (
+            <Link
+              to="/o/$org/connections/new"
+              params={{ org: org.slug }}
+              search={{ next }}
+              replace
+              className="text-run no-underline transition-colors duration-(--duration-quick) hover:text-run-ink"
+            >
+              Back
+            </Link>
+          ) : undefined
+        }
         actions={
           <Button asChild variant="white" className="h-11 md:h-8.5">
             <Link to="/o/$org/connections" params={{ org: org.slug }}>
@@ -83,38 +109,43 @@ export function NewConnectionPage() {
           {org.name} has no connection kinds yet.
         </p>
       ) : (
-        <div className="grid overflow-hidden rounded-card border border-line bg-card @[960px]:grid-cols-[300px_minmax(0,1fr)]">
-          <Catalog
-            kinds={kinds}
-            added={new Set(connections.map((c) => c.kind))}
-            chosen={kind?.name}
-            onChoose={choose}
-            onDefine={manage ? () => setDefining(true) : undefined}
-          />
-          <section aria-labelledby="kind-details" className="flex min-w-0 flex-col gap-5 p-6">
-            {kind ? (
-              <>
-                <div className="flex items-center gap-4">
-                  <Monogram name={kind.title} className="size-11 text-heading" />
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <h2 id="kind-details" className="m-0 text-detail-title">
-                      {kind.title}
-                    </h2>
-                    <p className="m-0 text-secondary text-muted">{kind.description ?? kindSummary(kind)}</p>
+        <div
+          className={cn(
+            'grid overflow-hidden rounded-card border border-line bg-card @[960px]:grid-cols-[300px_minmax(0,1fr)]',
+            phone && (kind ? 'animate-pane-forward' : chosenWas.current && 'animate-pane-back'),
+          )}
+        >
+          {showCatalog ? (
+            <Catalog
+              kinds={kinds}
+              added={new Set(connections.map((c) => c.kind))}
+              chosen={kind?.name}
+              onChoose={choose}
+              onDefine={manage ? () => setDefining(true) : undefined}
+            />
+          ) : null}
+          {showDetails ? (
+            <section aria-labelledby="kind-details" className="flex min-w-0 flex-col gap-5 p-6">
+              {kind ? (
+                <>
+                  <div className="flex items-center gap-4">
+                    <ConnectionGlyph kind={kind.name} title={kind.title} className="size-11 text-heading" />
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <h2 id="kind-details" className="m-0 text-detail-title">
+                        {kind.title}
+                      </h2>
+                      <p className="m-0 text-secondary text-muted">{kind.description ?? kindSummary(kind)}</p>
+                    </div>
                   </div>
-                </div>
-                {manage ? (
-                  <ConnectionForm key={kind.name} kind={kind} connections={connections} next={next} />
-                ) : (
-                  <Callout tone="note">{reasons.connections(org.name)}</Callout>
-                )}
-              </>
-            ) : (
-              <p id="kind-details" className="m-0 text-body text-muted">
-                Choose an app or an MCP server to see what it asks for.
-              </p>
-            )}
-          </section>
+                  {manage ? (
+                    <ConnectionForm key={kind.name} kind={kind} connections={connections} next={next} />
+                  ) : (
+                    <Callout tone="note">{reasons.connections(org.name)}</Callout>
+                  )}
+                </>
+              ) : null}
+            </section>
+          ) : null}
         </div>
       )}
 
@@ -130,6 +161,21 @@ export function NewConnectionPage() {
       ) : null}
     </>
   );
+}
+
+const byTitle = (a: ConnectionKind, b: ConnectionKind) => a.title.localeCompare(b.title);
+
+function splitKinds(kinds: ConnectionKind[]) {
+  return {
+    platform: kinds.filter((k) => k.platform).sort(byTitle),
+    own: kinds.filter((k) => !k.platform).sort(byTitle),
+  };
+}
+
+/** The catalog's entries in the order it lists them. */
+function catalogOrder(kinds: ConnectionKind[]): ConnectionKind[] {
+  const { platform, own } = splitKinds(kinds);
+  return [...platform, ...own];
 }
 
 /** The catalog: a search, the platform's kinds, then the organization's own and "Define a kind…". */
@@ -151,9 +197,9 @@ function Catalog({
   const id = useId();
   const matches = (k: ConnectionKind) =>
     !q || [k.name, k.title, k.description ?? ''].some((s) => s.toLowerCase().includes(q));
-  const byTitle = (a: ConnectionKind, b: ConnectionKind) => a.title.localeCompare(b.title);
-  const platform = kinds.filter((k) => k.platform && matches(k)).sort(byTitle);
-  const own = kinds.filter((k) => !k.platform && matches(k)).sort(byTitle);
+  const { platform: allPlatform, own: allOwn } = splitKinds(kinds);
+  const platform = allPlatform.filter(matches);
+  const own = allOwn.filter(matches);
 
   return (
     <nav
@@ -208,7 +254,7 @@ function Catalog({
             <button
               type="button"
               onClick={onDefine}
-              className="flex min-h-11 items-center gap-3 rounded-control px-2 py-2 text-left text-body font-control text-ink hover:bg-hover"
+              className="press flex min-h-11 items-center gap-3 rounded-control px-2 py-2 text-left text-body font-control text-ink transition-colors duration-(--duration-quick) hover:bg-hover"
             >
               <span
                 aria-hidden="true"
@@ -257,16 +303,21 @@ function CatalogItem({
       aria-current={current ? 'true' : undefined}
       onClick={() => onChoose(kind.name)}
       className={cn(
-        'flex min-h-11 min-w-0 items-center gap-3 rounded-control px-2 py-2 text-left text-ink hover:bg-hover',
-        current && 'bg-card shadow-raised hover:bg-card',
+        'press flex min-h-11 min-w-0 items-center gap-3 rounded-control px-2 py-2 text-left text-ink transition-colors duration-(--duration-quick) hover:bg-hover',
+        current && 'bg-hover',
       )}
     >
-      <Monogram name={kind.title} />
+      <ConnectionGlyph kind={kind.name} title={kind.title} />
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="font-control text-body">{kind.title}</span>
         <span className="truncate text-secondary text-muted">{kindSummary(kind)}</span>
       </span>
-      {added ? <span className="shrink-0 text-meta font-control text-ok-ink">Added</span> : null}
+      {added ? (
+        <span className="inline-flex shrink-0 items-center gap-2 text-meta font-control text-muted">
+          <Dot className="bg-ok" />
+          Added
+        </span>
+      ) : null}
     </button>
   );
 }

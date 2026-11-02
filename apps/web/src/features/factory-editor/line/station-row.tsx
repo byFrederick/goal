@@ -54,7 +54,7 @@ const and = (words: string[]) =>
   words.length < 2 ? (words[0] ?? '') : `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`;
 
 export const lineColumns =
-  '@[960px]:grid-cols-[32px_minmax(170px,1.1fr)_268px_132px_minmax(170px,1fr)_124px] @[960px]:gap-x-3';
+  '@[960px]:grid-cols-[36px_minmax(170px,1.3fr)_268px_128px_minmax(170px,1fr)_92px] @[960px]:gap-x-3';
 
 const iconButton =
   'inline-flex size-11 shrink-0 items-center justify-center rounded-control border border-line bg-card text-ink transition-colors duration-(--duration-quick) hover:bg-shell md:size-9 aria-disabled:cursor-not-allowed aria-disabled:opacity-45 aria-disabled:hover:bg-card';
@@ -157,11 +157,10 @@ export function StationRow({ station, index, selected }: { station: ModelStation
         editor.lastFocused.current = station.id;
       }}
       className={cn(
-        'grid grid-cols-[32px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2.5 rounded-control border bg-card p-3 transition-[border-color,box-shadow,opacity] duration-(--duration-quick) @[960px]:px-4 @[960px]:py-3.5',
+        'grid grid-cols-[32px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2.5 border-t border-line bg-card p-3 transition-[background-color,opacity] duration-(--duration-quick) first:border-t-0 @[960px]:px-3 @[960px]:py-2.5',
         lineColumns,
-        selected ? 'border-ink shadow-[0_0_0_1px_var(--color-ink)]' : 'border-line focus-within:border-rule',
-        problems.length > 0 && !selected && 'border-rework focus-within:border-rework',
-        drag.over && 'border-run shadow-[0_0_0_1px_var(--color-run)]',
+        selected && 'bg-run-tint',
+        drag.over && 'bg-hover',
         drag.dragging && 'opacity-50',
       )}
     >

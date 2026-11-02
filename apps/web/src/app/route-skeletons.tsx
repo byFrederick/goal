@@ -106,6 +106,36 @@ export function BoardSkeleton() {
   return <PendingSkeleton placeholder={<BoardShape />} />;
 }
 
+/** The Trigger page: its title, then four form blocks beside the recent events and the YAML. */
+export function TriggerShape() {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-4">
+      <div className="flex items-center gap-4">
+        <div className={cn(block, 'h-7 w-56 max-w-full')} />
+        <div className={cn(block, 'h-5 w-16')} />
+        <div className={cn(block, 'ms-auto hidden h-4 w-72 sm:block')} />
+      </div>
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className={cn(block, 'h-36')} />
+          <div className={cn(block, 'h-40')} />
+          <div className={cn(block, 'h-72')} />
+          <div className={cn(block, 'h-28')} />
+        </div>
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className={cn(block, 'h-64')} />
+          <div className={cn(block, 'h-48')} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The pending component of the Trigger route. */
+export function TriggerSkeleton() {
+  return <PendingSkeleton placeholder={<TriggerShape />} />;
+}
+
 /** The Definition editor: the draft strip and Ask bar over the file tree, the editor and the outline. */
 export function DefinitionShape() {
   return (

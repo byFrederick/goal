@@ -74,16 +74,18 @@ export function ErrorScreen({ error, reset }: ErrorComponentProps) {
   );
 }
 
+/**
+ * Not found, centred in the content area under the top bar (the design's "Not found"): a heading, one
+ * sentence and one action. The caller's main region provides the Route change fade and rise.
+ */
 export function NotFoundScreen({ what = 'page' }: { what?: string }) {
   return (
-    <div className="flex max-w-xl flex-col gap-3 rounded-card border border-line bg-card p-5">
-      <h1 className="m-0 text-xl font-medium">No such {what}</h1>
-      <p className="m-0 text-[15px] text-muted">It may have been renamed, or the link is from another goald.</p>
-      <div>
-        <Button asChild variant="primary">
-          <Link to="/">Go to the floor</Link>
-        </Button>
-      </div>
+    <div className="flex flex-1 flex-col items-start justify-center gap-3 pb-15">
+      <h1 className="m-0 text-page-title tracking-[-0.01em]">No such {what}</h1>
+      <p className="m-0 text-body text-muted">It may have been renamed, or the link is from another goald.</p>
+      <Button asChild variant="action">
+        <Link to="/">Go to the floor</Link>
+      </Button>
     </div>
   );
 }

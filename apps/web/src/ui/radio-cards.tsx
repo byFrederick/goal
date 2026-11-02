@@ -26,6 +26,8 @@ interface RadioGroupProps<T extends string> {
   value: T | undefined;
   onChange: (value: T) => void;
   className?: string;
+  /** The cards' grid columns, when the default (2, then 4) does not fit the number of options. */
+  gridClassName?: string;
 }
 
 const radio =
@@ -42,11 +44,12 @@ export function RadioCards<T extends string>({
   value,
   onChange,
   className,
+  gridClassName,
 }: RadioGroupProps<T>) {
   return (
     <fieldset className={cn('m-0 min-w-0 border-0 p-0', className)}>
       <legend className={showLegend ? 'mb-3 p-0 text-lg font-medium tracking-[-0.01em]' : 'sr-only'}>{legend}</legend>
-      <div className="grid gap-3 @[560px]:grid-cols-2 @[1100px]:grid-cols-4">
+      <div className={cn('grid gap-3', gridClassName ?? '@[560px]:grid-cols-2 @[1100px]:grid-cols-4')}>
         {options.map((o) => (
           <label
             key={o.value}

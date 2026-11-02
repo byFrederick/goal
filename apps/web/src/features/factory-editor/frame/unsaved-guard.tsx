@@ -91,7 +91,7 @@ export function UnsavedGuard() {
           </p>
         ) : null}
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="rework" className="h-11 md:h-10" onClick={() => blocker.proceed?.()}>
+          <Button variant="rework" className="mr-auto h-11 md:h-10" onClick={() => blocker.proceed?.()}>
             Leave anyway
           </Button>
           <Button variant="secondary" className="h-11 md:h-10" onClick={close}>
