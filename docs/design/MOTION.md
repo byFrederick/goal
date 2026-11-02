@@ -40,6 +40,7 @@ They live in `apps/web/src/styles.css` under `@theme` and are documented here. T
 | `--duration-medium` | 350ms | sheet close, toast open, toggle thumb |
 | `--duration-slow` | 400ms | sheet open, skeleton → content reveal |
 | `--duration-emphasis` | 500ms | rare: a success check, a number pop-in on a KPI |
+| `--duration-pulse` | 1s | one skeleton pulse, linear (`Skeleton`) |
 | `--ease-out` | `cubic-bezier(0.22, 1, 0.36, 1)` | entering, opening, moving, resizing |
 | `--ease-in-out` | `cubic-bezier(0.65, 0, 0.35, 1)` | an element moving on screen from A to B (board card, sidebar snap) |
 | `--ease-bounce` | `cubic-bezier(0.34, 1.36, 0.64, 1)` | only the toggle thumb and the count badge pop |
@@ -59,10 +60,10 @@ The recipe column names the transitions.dev recipe the implementation follows (f
 
 | Component / event | What moves | Duration and easing | Recipe |
 |---|---|---|---|
-| Button, icon button, segmented button, nav row: press | `scale(var(--scale-press))` on `:active` | `--duration-micro` `--ease-out` | — |
+| Button, icon button, segmented button, nav row: press | `scale(var(--scale-press))` on `:active` (the `press` utility, used by `Button` and `SegmentedControl`) | `--duration-micro` `--ease-out` | — |
 | Hover on anything | background, border and text colour only | `--duration-quick` `ease` | — |
 | Menu, select, popover, combobox (org menu, account menu, factory picker, Move menu, filters) | open: opacity 0→1 and `scale(0.97)`→1 from the trigger; close: opacity and `scale(0.99)` | open `--duration-fast`, close `--duration-quick`, `--ease-out` | menu-dropdown (05) |
-| Tooltip | delayed 80ms in with fade and `scale(0.98)`; instant out; once one is open, the next opens with no delay | in `--duration-quick` `ease-out` | tooltip (17) |
+| Tooltip | delayed 80ms in with fade and `scale(0.98)`; instant out; once one is open, the next opens with no delay (`Tooltip`, `TooltipProvider`) | in `--duration-quick` `ease-out` | tooltip (17) |
 | Dialog (New item, confirm, publish, create organization) | overlay fades; panel opacity and `scale(0.96)`→1 from centre; close is the reverse, faster | open `--duration-fast`, close `--duration-quick`, `--ease-out` | modal (06) |
 | Sheet and phone drawer | slide from its edge with fade | open `--duration-slow`, close `--duration-medium`, `--ease-drawer` | panel-reveal (07) |
 | Sidebar collapse / expand and the snap to the rail | width via a transform on an inner wrapper, labels fade | `--duration-fast` `--ease-in-out`; none while dragging | card-resize (01) |
@@ -71,15 +72,15 @@ The recipe column names the transitions.dev recipe the implementation follows (f
 | List ↔ detail inside a page (Needs you on a phone, a two-pane picker on a phone, onboarding steps) | the incoming pane slides 8px with a 3px blur cross-fade in the direction of travel | `--duration-fast` `--ease-out` | page-side-by-side (08) |
 | Tabs (Item tabs, Jonah tabs, Account side nav) and segmented controls (time window, Board/List, Form/YAML) | the selected pill or underline slides to the new tab; the content swaps with a quick fade | pill `--duration-fast` `--ease-out`; content `--duration-quick` | tabs-sliding (16) |
 | Accordion and disclosure (tool-call details, "Show transcript", settings groups, sidebar factory groups), built as `ui/disclosure.tsx` | height via `grid-template-rows` 0fr→1fr; chevron rotates | `--duration-fast` `--ease-out` | accordion (21) |
-| Switch | thumb travels with a slight overshoot; track colour fades | `--duration-medium` `--ease-bounce` | toggle (27) |
-| Checkbox (bulk select, notification matrix) | box fills, then the check draws | box `--duration-quick`, check `--duration-medium` | checkbox-check (25) |
+| Switch | thumb travels with a slight overshoot; track colour fades (`Switch`) | thumb `--duration-medium` `--ease-bounce`; track `--duration-quick` | toggle (27) |
+| Checkbox (bulk select, notification matrix) | box fills, then the check draws (`Checkbox`) | box `--duration-quick`, check `--duration-medium` after the box | checkbox-check (25) |
 | Toast (sonner) | rises 8px with fade and `scale(0.97)`; stacked toasts push back | open `--duration-medium`, close `--duration-fast`, `--ease-out` | toast (22), banner-stacking (32) |
 | Board card moves to another column or lane (live update or a person's drag) | the card travels from its old box to its new one (FLIP / View Transitions); other cards in both columns reflow | `--duration-fast` `--ease-in-out` | card-resize (01) |
 | A new item appears in a list or column | fades in and rises 4px; never shifts the list it lands in without a reflow transition | `--duration-fast` `--ease-out` | texts-reveal (18) |
-| A status changes in place ("Running" → "Sent back", a chip) | old text out, new text in with a 4px move and 2px blur | `--duration-quick` `--ease-in-out` | text-states-swap (04) or text-morph (33) |
-| A number changes (KPIs, counts, cost, the needs-you count) | changed digits pop in from below with blur | `--duration-emphasis` `--ease-bounce`, 40ms per digit | number-pop-in (02) |
+| A status changes in place ("Running" → "Sent back", a chip) | new text in with a 4px move and 2px blur (`Chip`) | `--duration-quick` `--ease-in-out` | text-states-swap (04) or text-morph (33) |
+| A number changes (KPIs, counts, cost, the needs-you count) | changed digits pop in from below with blur (`NumberRoll`) | `--duration-emphasis` `--ease-bounce`, 40ms per digit | number-pop-in (02) |
 | The needs-you count badge appears in the sidebar | slides in and pops | `--duration-emphasis` `--ease-bounce` | notification-badge (03) |
-| Loading: any route or panel waiting on data more than 100ms | a skeleton of the real layout pulses once, then cross-fades with a 2px blur to the content | pulse 1s linear; reveal `--duration-slow` | skeleton-reveal (14) |
+| Loading: any route or panel waiting on data more than 100ms | a skeleton of the real layout pulses once, then cross-fades with a 2px blur to the content (`Skeleton`) | pulse `--duration-pulse` linear; reveal `--duration-slow` | skeleton-reveal (14) |
 | An agent working (item header, run row, Floor activity) | the status line shimmers ("Writing the spec…") and swaps to the next state | shimmer 2s linear; swap `--duration-quick` | thinking-states (28) |
 | Streaming agent output in Watch live | words resolve through a 1px blur | 60ms per word, `--duration-medium` fade | streaming-text (30) |
 | Invalid form field | a short horizontal shake; the message fades in | segments `--duration-micro` | error-state-shake (12) |
@@ -96,8 +97,8 @@ Anything not in this table: pick the closest row, add it to the table in the sam
 - Radix primitives: animate on `[data-state=open]` and `[data-state=closed]`, using Radix's `--radix-popover-content-transform-origin` (and the equivalents for dropdown, select and tooltip) as the `transform-origin`.
 - Route changes: TanStack Router's `defaultViewTransition` with a `::view-transition-old(main)` / `::view-transition-new(main)` fade and rise on the content region only (`view-transition-name: main`). The sidebar and top bar keep their own names so they never cross-fade.
 - Layout moves (board cards): `document.startViewTransition` with a `view-transition-name` per card (`card-<ref>`), or FLIP where View Transitions are unavailable.
-- Numbers: a `<NumberFlow>`-style component of our own built on the number-pop-in recipe, used by the stat strip, counts and costs.
-- Skeletons: one `Skeleton` component, and every route's `pendingComponent` renders the page's skeleton (`pendingMs: 100`, `pendingMinMs: 300`) instead of a blank page.
+- Numbers: `NumberRoll` (`apps/web/src/ui/number-roll.tsx`), our own component on the number-pop-in recipe, used by the stat strip, counts and costs.
+- Skeletons: one `Skeleton` component (`apps/web/src/ui/skeleton.tsx`), and every route's `pendingComponent` renders the page's skeleton (`pendingMs: 100`, `pendingMinMs: 300`) instead of a blank page.
 - No new animation library unless a recipe truly needs springs. CSS and the View Transitions API cover this catalogue.
 
 ## Checklist (reviewer and author)
