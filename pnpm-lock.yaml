@@ -250,10 +250,10 @@ importers:
       '@astrojs/starlight':
         specifier: 0.42.7
         version: 0.42.7(astro@7.3.8(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3)
-      '@fontsource-variable/archivo':
+      '@fontsource/ibm-plex-mono':
         specifier: 5.3.0
         version: 5.3.0
-      '@fontsource-variable/jetbrains-mono':
+      '@fontsource/ibm-plex-sans':
         specifier: 5.3.0
         version: 5.3.0
       astro:
@@ -1399,12 +1399,6 @@ packages:
 
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
-
-  '@fontsource-variable/archivo@5.3.0':
-    resolution: {integrity: sha512-HogK8FJelrD1o7TlZlkIVtHgc20bO5PZRWE7mUeUTdMN055alznQV6/00J00IBeu8FQAH4s3zW9UJNvKExXf+g==}
-
-  '@fontsource-variable/jetbrains-mono@5.3.0':
-    resolution: {integrity: sha512-F32xpS2NsGYoQi2ADSkKTgpJj7ozajsGgDJ8woTnqjmIB+dxDIqImjl4pXZVEExu8UFZ2ndhmX18EBS/hdz3Lw==}
 
   '@fontsource/ibm-plex-mono@5.3.0':
     resolution: {integrity: sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q==}
@@ -6729,10 +6723,6 @@ snapshots:
       react-dom: 19.3.1(react@19.3.1)
 
   '@floating-ui/utils@0.2.12': {}
-
-  '@fontsource-variable/archivo@5.3.0': {}
-
-  '@fontsource-variable/jetbrains-mono@5.3.0': {}
 
   '@fontsource/ibm-plex-mono@5.3.0': {}
 

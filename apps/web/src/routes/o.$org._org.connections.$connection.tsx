@@ -3,7 +3,7 @@ import { ApiError } from '../api/client';
 import { connectionActivityQuery, connectionKindsQuery, connectionQuery, ensureLoaded, keys } from '../api/queries';
 import type { Org } from '../api/types';
 import { pageTitle } from '../app/route-focus';
-import { NotFoundScreen } from '../app/states';
+import { NotFoundScreen, PendingScreen } from '../app/states';
 import { ConnectionPage } from '../features/connections/connection-page';
 import { type ConnectionSearch, connectionSearch } from '../features/connections/search';
 
@@ -11,6 +11,7 @@ import { type ConnectionSearch, connectionSearch } from '../features/connections
 // run gets and its kind's docs, what uses it, its recent use from the audit log (owners and
 // admins), Test, Replace secret and Delete. ?created says it was just made here.
 export const Route = createFileRoute('/o/$org/_org/connections/$connection')({
+  pendingComponent: PendingScreen,
   validateSearch: (search: Record<string, unknown>): ConnectionSearch => connectionSearch(search),
   loader: async ({ context: { queryClient, org }, params }) => {
     try {
