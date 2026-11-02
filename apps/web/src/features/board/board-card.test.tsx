@@ -183,6 +183,15 @@ describe('BoardCard as the screen draws it', () => {
     expect(card_.querySelectorAll('i.bg-rule')).toHaveLength(2);
   });
 
+  it('shimmers the state line of a running item and not of a queued one', async () => {
+    renderMovable(card({ state: 'in_progress', agent: 'builder' }));
+    const running = await article();
+    expect(running.querySelector('.thinking')).toBeTruthy();
+    cleanup();
+    renderMovable(card({ state: 'queued' }));
+    expect((await article()).querySelector('.thinking')).toBeNull();
+  });
+
   it('keeps the Move button and the M shortcut on the card', async () => {
     renderMovable(card({ state: 'queued' }));
 

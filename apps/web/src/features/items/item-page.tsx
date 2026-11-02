@@ -16,6 +16,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
 import { Stepper } from '../../ui/stepper';
+import { WorkingLine } from '../../ui/working-line';
 import { ItemTabs, panelId, tabId } from './item-tabs';
 import { NoteComposer } from './note-composer';
 import { OutputsCard } from './outputs';
@@ -271,7 +272,10 @@ export function ItemPage() {
                 {run ? (
                   <>
                     <span aria-hidden="true" className="size-2 rounded-full bg-run ring-4 ring-run-tint" />
-                    {runRole(run)} working, {run.tools.length} tool calls
+                    <WorkingLine
+                      text={`${runRole(run)} working, ${run.tools.length} tool calls`}
+                      running={item.state === 'in_progress'}
+                    />
                   </>
                 ) : null}
               </p>
