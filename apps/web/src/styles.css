@@ -159,7 +159,7 @@
   /* A changed digit pops in from below with a blur (MOTION.md, A number changes). */
   --animate-number-pop-in: number-pop-in var(--duration-emphasis) var(--ease-bounce) both;
   /* The check that replaces Publish after a version publishes: it grows in at the emphasis duration (MOTION.md, Approve, publish, merge succeed). */
-  --animate-success-check: success-check var(--duration-emphasis) var(--ease-bounce) both;
+  --animate-success-check: success-check var(--duration-emphasis) var(--ease-out) both;
   /* A new row in a list fades in and rises 4 px (MOTION.md, A new item appears in a list). */
   --animate-item-in: item-in var(--duration-fast) var(--ease-out) both;
   /* A skeleton pulses once while it waits (MOTION.md, Loading). */
