@@ -15,7 +15,9 @@ import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
+import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
+import { touchLink } from '../../ui/touch-target';
 import { StatusText, SyncNowButton, UsedBy, useSyncSource } from './parts';
 import { SearchCard } from './search-card';
 import { UploadDialog } from './upload';
@@ -267,7 +269,10 @@ function SourcesCard({
                     <Link
                       to="/o/$org/knowledge/$source"
                       params={{ org: org.slug, source: s.name }}
-                      className="min-w-0 font-control text-ink break-words underline-offset-3 hover:underline"
+                      className={cn(
+                        touchLink,
+                        'min-w-0 font-control text-ink break-words underline-offset-3 hover:underline',
+                      )}
                     >
                       {s.title}
                     </Link>

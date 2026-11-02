@@ -128,18 +128,23 @@ test.describe('every phone control has a 44 px hit area at 390 px', () => {
     [
       'Connections row title',
       '/o/acme/connections',
-      (p) => p.getByRole('main').locator('a[href^="/o/acme/connections/"]:not([href$="/new"])').first(),
+      (p) => p.locator('a[href^="/o/acme/connections/"]:not([href$="/new"]):visible').first(),
     ],
-    ['Knowledge document title', '/o/acme/knowledge', (p) => p.locator('a[href*="document="]').first()],
+    ['Knowledge document title', '/o/acme/knowledge/goal-docs', (p) => p.locator('a[href*="document="]').first()],
+    ['Knowledge source title', '/o/acme/knowledge', (p) => p.locator('a:visible', { hasText: 'goal docs' }).first()],
     [
       'Knowledge new kind',
       '/o/acme/knowledge/new',
       (p) => p.locator('label', { has: p.getByRole('radio', { name: /Synced/ }) }),
     ],
-    ['Home New factory', '/o/acme', (p) => p.getByRole('main').getByRole('link', { name: 'New factory' }).first()],
-    ['Floor Pull andon', '/o/acme/f/goal', (p) => p.getByRole('button', { name: 'Pull andon' }).first()],
+    ['Home New item', '/o/acme', (p) => p.getByRole('banner').getByRole('button', { name: 'New item' })],
+    [
+      'Floor Pull andon',
+      '/o/acme/f/goal',
+      (p) => p.getByRole('banner').getByRole('button', { name: 'Pull the andon cord' }),
+    ],
     ['Members switch', '/o/acme/members', (p) => p.getByRole('switch').first()],
-    ['Agents Edit defaults', '/o/acme/f/goal/agents', (p) => p.getByRole('link', { name: 'Edit defaults' })],
+    ['Floor Add a build agent', '/o/acme/f/goal', (p) => p.getByRole('button', { name: 'Add a build agent' })],
   ];
 
   for (const [name, path, find] of samples) {
@@ -147,7 +152,7 @@ test.describe('every phone control has a 44 px hit area at 390 px', () => {
       await page.goto(path);
       const area = await hitArea(find(page));
       expect(area.height).toBeGreaterThanOrEqual(43.5);
-      if (name.endsWith('switch') || name.includes('factory')) expect(area.width).toBeGreaterThanOrEqual(43.5);
+      if (name.endsWith('switch') || name.includes('New item')) expect(area.width).toBeGreaterThanOrEqual(43.5);
     });
   }
 });

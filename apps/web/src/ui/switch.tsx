@@ -27,7 +27,7 @@ export function Switch({ checked, onCheckedChange, disabled: off, className, ...
       }}
       className={cn(
         'relative h-6 w-10 shrink-0 rounded-chip border border-rule bg-panel transition-colors duration-(--duration-quick)',
-        'before:absolute before:-inset-2.5 before:content-[""] md:before:-inset-1',
+        'before:absolute before:-inset-3 before:content-[""] md:before:-inset-1',
         'aria-checked:border-run aria-checked:bg-run',
         'aria-disabled:cursor-not-allowed aria-disabled:border-rule aria-disabled:opacity-60',
         className,
