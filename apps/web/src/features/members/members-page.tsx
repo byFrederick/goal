@@ -18,6 +18,7 @@ import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
+import { CopyButton } from '../../ui/copy-button';
 import { NativeSelect } from '../../ui/field';
 import { Avatar } from '../../ui/mark';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../ui/menu';
@@ -641,9 +642,7 @@ function InviteLinkCard({ org, owner, email }: { org: OrgSummary; owner: boolean
       <div className="flex h-9 min-w-0 items-center gap-2 rounded-control border border-rule bg-panel px-3">
         <span className="min-w-0 flex-1 truncate text-secondary text-muted">Not available yet</span>
         <NotAvailable label="Copy the invite link">
-          <Button variant="white" size="sm">
-            Copy
-          </Button>
+          <CopyButton variant="white" text="" />
         </NotAvailable>
       </div>
       <div className="flex flex-wrap items-center gap-3">
