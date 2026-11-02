@@ -395,11 +395,14 @@ function ConnectionName({
           to="/o/$org/connections/$connection"
           params={{ org, connection: c.name }}
           translate="no"
+          title={c.name}
           className={cn(touchLink, 'truncate font-control text-body text-ink underline-offset-3 hover:underline')}
         >
           {c.name}
         </Link>
-        <span className="truncate text-secondary text-muted">{c.description || kind?.title || c.kind}</span>
+        <span className="truncate text-secondary text-muted" title={c.description || kind?.title || c.kind}>
+          {c.description || kind?.title || c.kind}
+        </span>
       </span>
     </span>
   );

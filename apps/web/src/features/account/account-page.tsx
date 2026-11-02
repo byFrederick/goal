@@ -189,8 +189,12 @@ function ProfileSection({
       <div className="flex flex-wrap items-center gap-4">
         <Avatar initials={person ? initialsOf(person) : 'LU'} size="card" />
         <div className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-heading font-semibold">{person ? displayName(person) : 'Local user'}</span>
-          <span className="truncate text-secondary text-muted">{person ? person.email : 'This install'}</span>
+          <span className="truncate text-heading font-semibold" title={person ? displayName(person) : 'Local user'}>
+            {person ? displayName(person) : 'Local user'}
+          </span>
+          <span className="truncate text-secondary text-muted" title={person ? person.email : 'This install'}>
+            {person ? person.email : 'This install'}
+          </span>
         </div>
         {role ? <Chip tone={org.role === 'owner' ? 'ok' : org.role === 'admin' ? 'you' : 'plain'}>{role}</Chip> : null}
       </div>

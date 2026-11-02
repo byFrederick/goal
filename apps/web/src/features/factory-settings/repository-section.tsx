@@ -36,7 +36,9 @@ export function RepositorySection() {
         <RepositoryField basics={basics} connections={connections} kindOf={kindOf} />
       ) : (
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-          <span className="min-w-0 flex-1 truncate text-body">{repository?.url || 'No repository URL'}</span>
+          <span className="min-w-0 flex-1 truncate text-body" title={repository?.url || 'No repository URL'}>
+            {repository?.url || 'No repository URL'}
+          </span>
           <Chip tone="ok" dot>
             {repository?.connection ? `Connected with ${repository.connection}` : 'Public, no connection'}
           </Chip>
