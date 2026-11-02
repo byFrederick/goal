@@ -294,11 +294,11 @@ describe('Items filters in the URL', () => {
 });
 
 describe('Items list states', () => {
-  it('shows the app background with aria-busy and a spoken Loading while the items load', async () => {
+  it('shows the skeleton, busy and with a spoken Loading, while the items load', async () => {
     list.hold = true;
     renderItems([]);
 
-    expect((await screen.findByText('Loading')).closest('main')?.getAttribute('aria-busy')).toBe('true');
+    expect((await screen.findByText('Loading')).closest('[aria-busy]')?.getAttribute('aria-busy')).toBe('true');
   });
 
   it('shows an empty sentence and New item when the factory has no items', async () => {

@@ -90,7 +90,7 @@ test('the window control writes the URL, and the cards follow it', async ({ page
   await expectAccessible(page);
 });
 
-test('the line and the flow tiles show on the Floor', async ({ page }) => {
+test('the line and the flow figures show on the Floor', async ({ page }) => {
   await page.goto('/o/acme/f/software');
   await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
   await expect(page.getByText('Line running')).toBeVisible();
@@ -101,11 +101,9 @@ test('the line and the flow tiles show on the Floor', async ({ page }) => {
   await expect(line.getByText('Constraint')).toBeVisible();
 
   const flow = page.getByRole('region', { name: 'Flow against targets' });
-  await expect(flow.getByRole('meter', { name: /of the target of 10 a day$/ })).toBeVisible();
-  // The phone shows four tiles; Hands-off is one of the two hidden on it.
-  test.skip(isPhone(page), 'the phone shows four tiles');
-  await expect(flow.getByText('Hands-off')).toBeVisible();
-  await expect(flow.getByRole('img', { name: /over 7 days$/ })).toBeVisible();
+  await expect(flow.getByText('Target 10')).toBeVisible();
+  await expect(flow.getByText('Lead time, p85')).toBeVisible();
+  await expect(flow.getByText('Hands-off')).toHaveCount(0);
   await expectAccessible(page);
 });
 

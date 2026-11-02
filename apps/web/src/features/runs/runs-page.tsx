@@ -4,12 +4,12 @@
 // the URL. Stream events refresh the queries (shared/invalidation.ts); nothing polls.
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { Activity, ChevronDown, Download, Search } from 'lucide-react';
-import { Fragment, type ReactNode, useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { ChevronDown, Download, Search } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { exportOrgRuns, type RunsExportFilter } from '../../api/client';
 import { exportFailure, saveCsv } from '../../api/download';
 import { factoriesQuery, runsQuery } from '../../api/queries';
-import type { OrgRun, RunStatus, RunSummary } from '../../api/types';
+import type { OrgRun, RunStatus } from '../../api/types';
 import { FactoryBadge } from '../../app/factory-badge';
 import { TopBarSlot } from '../../app/top-bar';
 import { factoryTitle, refParam } from '../../shared/factory';
@@ -24,7 +24,9 @@ import { EmptyState } from '../../ui/empty-state';
 import { Input } from '../../ui/field';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '../../ui/menu';
 import { NotAvailable } from '../../ui/not-available';
+import { Skeleton } from '../../ui/skeleton';
 import { Spinner } from '../../ui/spinner';
+import { StatStrip } from '../../ui/stat-strip';
 import { type RunsRange, type RunsSearch, rangeWord, runsWindow } from './search';
 
 /** The rows one page asks for: the footer counts what is shown, and paging is not built yet. */
@@ -51,7 +53,6 @@ const outcomes: {
 ];
 
 /** Dot colours for the outcome chips and the spend bar, from the palette tokens only. */
-const factoryFills = ['bg-run', 'bg-you', 'bg-ok', 'bg-amber', 'bg-rework'] as const;
 
 /** Two letters from an agent's name: "backend-engineer" is BE. Agents are named by role, never by copy. */
 function initialsOf(agent: string): string {
@@ -79,7 +80,7 @@ function Outcome({ status }: { status: RunStatus }) {
     case 'running':
       return (
         <Chip tone="run" dot>
-          Running
+          <span className="thinking">Running</span>
         </Chip>
       );
     case 'failed':
@@ -89,51 +90,6 @@ function Outcome({ status }: { status: RunStatus }) {
     case 'cancelled':
       return <Chip>Stopped</Chip>;
   }
-}
-
-/** A KPI tile: a label, the figure, and a line under it. */
-function Tile({
-  label,
-  value,
-  note,
-  valueClass,
-  children,
-}: {
-  label: string;
-  value: string;
-  note: string;
-  valueClass?: string;
-  children?: ReactNode;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-card border border-line bg-card px-4 py-3">
-      <span className="text-secondary text-ink-soft">{label}</span>
-      <span className={cn('text-kpi tabular-nums', valueClass)}>{value}</span>
-      <span className="text-meta text-muted">{note}</span>
-      {children}
-    </div>
-  );
-}
-
-function SpendBar({ summary }: { summary: RunSummary }) {
-  const total = summary.spend_usd;
-  const summaryText = summary.spend_by_factory.map((f) => `${f.name} ${formatUsdCompact(f.spend_usd)}`).join(', ');
-  return (
-    <>
-      <span aria-hidden="true" className="flex h-2 overflow-hidden rounded-chip bg-hover">
-        {total > 0
-          ? summary.spend_by_factory.map((f, i) => (
-              <span
-                key={f.id}
-                className={cn('block h-full', factoryFills[i % factoryFills.length])}
-                style={{ width: `${(f.spend_usd / total) * 100}%` }}
-              />
-            ))
-          : null}
-      </span>
-      <span className="sr-only">{summaryText || 'No spend today'}</span>
-    </>
-  );
 }
 
 export function RunsPage() {
@@ -265,9 +221,9 @@ export function RunsPage() {
       ) : null}
 
       {runs.isPending ? (
-        <div aria-busy="true">
-          <span className="sr-only">Loading</span>
-        </div>
+        <Skeleton ready={false} placeholder={<RunsPlaceholder />}>
+          {null}
+        </Skeleton>
       ) : runs.isError ? (
         <div
           role="alert"
@@ -280,41 +236,25 @@ export function RunsPage() {
         </div>
       ) : (
         <>
-          <section
-            aria-label={word === 'today' ? 'Today' : 'Yesterday'}
-            className="grid gap-3 md:grid-cols-2 xl:grid-cols-4"
-          >
-            <Tile
-              label="Runs today"
-              value={String(summary?.total ?? 0)}
-              note={`${summary?.running ?? 0} running now`}
-            />
-            <Tile
-              label="Failed"
-              value={String(summary?.failed ?? 0)}
-              note="Each one starts over"
-              valueClass="text-rework-ink"
-            />
-            <NotAvailable label="Waiting on you">
-              <button
-                type="button"
-                className="flex min-w-0 w-full flex-col gap-1 rounded-card border border-line bg-card px-4 py-3 text-left"
-              >
-                <span className="text-secondary text-ink-soft">Waiting on you</span>
-                <span className="text-kpi text-you-ink tabular-nums">—</span>
-                <span className="text-meta text-muted">Paused until you answer</span>
-              </button>
-            </NotAvailable>
-            <Tile
-              label="Spend today"
-              value={formatUsdCompact(summary?.spend_usd ?? 0)}
-              note={(summary?.spend_by_factory ?? [])
-                .map((f) => `${f.name} ${formatUsdCompact(f.spend_usd)}`)
-                .join(', ')}
-            >
-              {summary ? <SpendBar summary={summary} /> : null}
-            </Tile>
-          </section>
+          <StatStrip
+            label={word === 'today' ? 'Today' : 'Yesterday'}
+            stats={[
+              {
+                label: 'Runs today',
+                value: summary?.total ?? 0,
+                note: `${summary?.running ?? 0} running now`,
+              },
+              { label: 'Failed', value: summary?.failed ?? 0, note: 'Each one starts over' },
+              { label: 'Waiting on you', value: null, note: 'Not available yet' },
+              {
+                label: 'Spend today',
+                value: formatUsdCompact(summary?.spend_usd ?? 0),
+                note: (summary?.spend_by_factory ?? [])
+                  .map((f) => `${f.name} ${formatUsdCompact(f.spend_usd)}`)
+                  .join(', '),
+              },
+            ]}
+          />
 
           <div className="flex flex-wrap items-center gap-2">
             <fieldset className="m-0 flex min-w-0 flex-wrap gap-2 border-0 p-0">
@@ -398,7 +338,6 @@ export function RunsPage() {
 
           {rows.length === 0 ? (
             <EmptyState
-              icon={<Activity size={20} strokeWidth={1.5} />}
               title={summary?.total ? 'No runs match these filters' : `No runs ${word} yet`}
               actions={
                 summary?.total ? (
@@ -464,7 +403,12 @@ export function RunsPage() {
                 <tbody>
                   {rows.map((run) => (
                     <Fragment key={run.id}>
-                      <tr className={cn('border-t border-line', run.status === 'failed' && 'bg-rework-tint/50')}>
+                      <tr
+                        className={cn(
+                          'border-t border-line motion-safe:animate-row-in motion-reduce:animate-fade-in',
+                          run.status === 'failed' && 'bg-rework-tint/50',
+                        )}
+                      >
                         <td className="px-3 py-2">
                           <FactoryBadge
                             mark={factoryMark(run.factory, factories.data ?? [run.factory])}
@@ -537,6 +481,26 @@ export function RunsPage() {
           ) : null}
         </>
       )}
+    </div>
+  );
+}
+
+/** The runs table's skeleton: the stat strip's four figures and the table's first rows, drawn as muted blocks. */
+function RunsPlaceholder() {
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: placeholder rows are fixed in number and never reorder
+          <span key={i} className="block h-14 rounded-control bg-hover" />
+        ))}
+      </div>
+      <div className="flex flex-col gap-2">
+        {Array.from({ length: 6 }, (_, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: placeholder rows are fixed in number and never reorder
+          <span key={i} className="block h-9 rounded-control bg-hover" />
+        ))}
+      </div>
     </div>
   );
 }
