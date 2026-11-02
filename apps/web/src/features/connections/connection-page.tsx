@@ -250,9 +250,13 @@ function FieldsCard({
                   {set ? 'Set' : f.required ? 'Not set: runs that get it fail' : 'Not set'}
                 </span>
                 {manage ? (
-                  <Button variant="white" className="h-10 md:h-9" onClick={() => onReplace(f)}>
+                  <Button
+                    variant="white"
+                    className="h-10 md:h-9"
+                    aria-label={`${set ? 'Replace secret…' : 'Set secret…'}, ${f.title}`}
+                    onClick={() => onReplace(f)}
+                  >
                     {set ? 'Replace secret…' : 'Set secret…'}
-                    <span className="sr-only">, {f.title}</span>
                   </Button>
                 ) : null}
               </div>

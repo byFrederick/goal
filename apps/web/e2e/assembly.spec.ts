@@ -42,3 +42,38 @@ for (const size of sizes) {
     }
   }
 }
+
+// A part row's pull request link must not intersect a part title link or a wave heading at the widths where the
+// two columns are narrowest. Not run in the box (no browser).
+const narrow = [
+  { name: '1024', width: 1024, height: 768 },
+  { name: '768', width: 768, height: 1024 },
+];
+
+for (const size of narrow) {
+  test(`part rows keep the pull request link clear of titles and wave headings at ${size.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: size.width, height: size.height });
+    await page.goto('/o/acme/f/goal/items/17');
+    await expect(page.getByRole('heading', { name: 'Parts', exact: true })).toBeVisible();
+
+    const prLinks = page.getByRole('link', { name: /^PR #\d+/ });
+    const count = await prLinks.count();
+    expect(count).toBeGreaterThan(0);
+    const others = page.locator('main a[title], main h3');
+    const boxes = [];
+    for (const handle of await others.all()) {
+      const box = await handle.boundingBox();
+      if (box) boxes.push(box);
+    }
+    for (let i = 0; i < count; i++) {
+      const pr = await prLinks.nth(i).boundingBox();
+      if (!pr) continue;
+      for (const b of boxes) {
+        const apart =
+          pr.x + pr.width <= b.x || b.x + b.width <= pr.x || pr.y + pr.height <= b.y || b.y + b.height <= pr.y;
+        expect(apart).toBe(true);
+      }
+    }
+    await expectNoHorizontalScroll(page);
+  });
+}

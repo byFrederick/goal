@@ -65,3 +65,15 @@ describe('StatStrip layout', () => {
     expect(cells[3]?.className).toMatch(/(^|\s)border-l/);
   });
 });
+
+describe('StatStrip narrow', () => {
+  it('stays two by two until 2xl', () => {
+    render(<StatStrip label="Narrow" stats={stats} narrow />);
+
+    const strip = screen.getByRole('region', { name: 'Narrow' });
+    expect(strip.className).toContain('2xl:grid-cols-4');
+    expect(strip.className).not.toContain('md:grid-cols-4');
+    const cells = Array.from(strip.children) as HTMLElement[];
+    expect(cells[2]?.className).not.toMatch(/(^|\s)(md:)?border-l/);
+  });
+});
