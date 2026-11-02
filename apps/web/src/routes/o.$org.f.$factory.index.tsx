@@ -9,12 +9,12 @@ import {
   weeklyQuery,
 } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
-import { PendingScreen } from '../app/states';
+import { FloorSkeleton } from '../app/route-skeletons';
 import { FloorPage } from '../features/floor/floor-page';
 import { type FloorSearch, floorSearch, rangeOf } from '../features/floor/range';
 
 export const Route = createFileRoute('/o/$org/f/$factory/')({
-  pendingComponent: PendingScreen,
+  pendingComponent: FloorSkeleton,
   validateSearch: (search: Record<string, unknown>): FloorSearch => floorSearch(search),
   // The range is the one the figures and the cards load by.
   loaderDeps: ({ search }) => rangeOf(search),
