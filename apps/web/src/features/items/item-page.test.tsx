@@ -130,7 +130,7 @@ function TopBarHarness({ children }: { children: ReactNode }) {
   );
 }
 
-function renderPage(it: Item, events: ItemEvent[] = [approval], grants: Factory = factory) {
+function renderPage(it: Item, events: ItemEvent[] = [approval], grants: Factory = factory, search = '') {
   return renderFactoryPage({
     page: () => (
       <TopBarHarness>
@@ -138,7 +138,7 @@ function renderPage(it: Item, events: ItemEvent[] = [approval], grants: Factory 
       </TopBarHarness>
     ),
     path: 'items/$ref',
-    location: 'items/147',
+    location: `items/147${search}`,
     org,
     factory: grants,
     seed: [
@@ -232,6 +232,36 @@ describe('the item layout', () => {
     expect(panel.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const tabs = screen.getAllByRole('tab');
     expect(tabs.find((t) => t.getAttribute('aria-selected') === 'true')?.textContent).toBe('Timeline');
+  });
+
+  it('puts the tab row before the side cards and after the question card at phone width', async () => {
+    stubWidth(true);
+    renderPage(item({ question }));
+
+    const tablist = await screen.findByRole('tablist', { name: 'Item views' });
+    const details = screen.getByRole('heading', { name: 'Details' });
+    expect(tablist.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const ask = screen.getByText(question.text);
+    expect(ask.compareDocumentPosition(tablist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('opens ?tab=teardown on the Teardown panel without the side cards', async () => {
+    stubWidth(false);
+    renderPage(item(), [approval], factory, '?tab=teardown');
+
+    expect(await screen.findByRole('tabpanel', { name: 'Teardown' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Details' })).toBeNull();
+  });
+
+  it('shows no side cards on Trace, and keeps them on Spec', async () => {
+    stubWidth(false);
+    const { unmount } = renderPage(item(), [approval], factory, '?tab=trace');
+    expect(await screen.findByRole('tabpanel', { name: 'Trace' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Details' })).toBeNull();
+    unmount();
+
+    renderPage(item(), [approval], factory, '?tab=spec');
+    expect(await screen.findByRole('heading', { name: 'Details' })).toBeTruthy();
   });
 
   it('shows the loading skeleton as busy, with the same column order', async () => {
@@ -636,6 +666,37 @@ describe('Watch live', () => {
 
     expect(await screen.findByRole('tabpanel', { name: 'Trace' })).toBeTruthy();
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+  });
+
+  it.each([
+    [false, 'smooth'],
+    [true, 'auto'],
+  ])('scrolls the newest step on the first press from Timeline (reduced motion: %s)', async (reduced, behavior) => {
+    window.matchMedia = ((query: string) =>
+      ({
+        matches: reduced && query === '(prefers-reduced-motion: reduce)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList) as typeof window.matchMedia;
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    renderPage(running());
+
+    const bar = await screen.findByLabelText('Top bar');
+    fireEvent.click(within(bar).getByRole('button', { name: 'Watch live' }));
+
+    await screen.findByRole('tabpanel', { name: 'Trace' });
+    // The tab row also scrolls its selected tab into view; only the anchor past the newest step counts.
+    const anchorCalls = () =>
+      scrollIntoView.mock.calls.filter((_, i) =>
+        (scrollIntoView.mock.contexts[i] as HTMLElement).className.includes('h-px'),
+      );
+    await waitFor(() => expect(anchorCalls()).toHaveLength(1));
+    expect(anchorCalls()[0]).toEqual([{ block: 'end', behavior }]);
   });
 
   it('is disabled with its reason when no run is working, and does not open the Trace tab', async () => {

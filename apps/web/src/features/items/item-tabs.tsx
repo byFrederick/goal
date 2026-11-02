@@ -67,6 +67,8 @@ export function ItemTabs({ tab, files, checks, className }: Props) {
       }
     };
     place(placed.current && !byKeyboard.current);
+    // On a phone the row scrolls sideways: keep the selected tab in view.
+    links.current.get(tab)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
     byKeyboard.current = false;
     placed.current = true;
     const onResize = () => place(false);

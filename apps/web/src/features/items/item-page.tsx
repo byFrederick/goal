@@ -130,9 +130,15 @@ export function ItemPage() {
     setWatchSeq((n) => n + 1);
     if (tab !== 'trace') showTrace();
   };
+  // A press from another tab sets following before Trace opens, so only leaving Trace (or the run ending) stops it.
+  const lastTab = useRef(tab);
   useEffect(() => {
-    if (tab !== 'trace' || !watching) setFollowing(false);
+    const left = lastTab.current === 'trace' && tab !== 'trace';
+    lastTab.current = tab;
+    if (left || !watching) setFollowing(false);
   }, [tab, watching]);
+  // Trace and Teardown use the whole main column; the other tabs keep the side cards.
+  const showRail = tab !== 'trace' && tab !== 'teardown';
   const noteField = useRef<HTMLTextAreaElement>(null);
   const compactNoteField = useRef<HTMLTextAreaElement>(null);
   const runsStatus: TimelineStatus = runsQ.isPending ? 'loading' : runsQ.isError ? 'error' : 'ready';
@@ -268,7 +274,12 @@ export function ItemPage() {
         ) : null}
       </header>
 
-      <div className="flex flex-col gap-3 @[1100px]:grid @[1100px]:grid-cols-[minmax(0,1fr)_336px] @[1100px]:items-start @[1100px]:gap-4">
+      <div
+        className={cn(
+          'flex flex-col gap-3 @[1100px]:grid @[1100px]:items-start @[1100px]:gap-4',
+          showRail ? '@[1100px]:grid-cols-[minmax(0,1fr)_336px]' : '@[1100px]:grid-cols-[minmax(0,1fr)]',
+        )}
+      >
         <div className="contents @[1100px]:flex @[1100px]:flex-col @[1100px]:gap-4">
           {item.question ? (
             <QuestionCard
@@ -412,26 +423,30 @@ export function ItemPage() {
               className={deciding || item.state === 'blocked' ? 'order-1' : 'order-9'}
             />
           ) : null}
-          {/* On a phone, Details is the one card of the four rows; the Cost card is the desktop's. */}
-          <DetailsCard
-            item={item}
-            factory={factory}
-            events={events}
-            trace={trace}
-            runs={runs?.runs ?? []}
-            summary={phone}
-            className="order-4 @[720px]:order-none"
-          />
-          {phone ? null : <CostCard item={item} factory={factory} runs={runs?.runs ?? []} />}
-          <OverlapsCard item={item} className="order-4 @[720px]:order-none" />
-          <RulesCard item={item} factory={factory} trace={trace} className="order-4 @[720px]:order-none" />
-          <TouchesCard
-            item={item}
-            itemKey={key}
-            factory={factory}
-            events={events}
-            className="order-4 @[720px]:order-none"
-          />
+          {showRail ? (
+            <>
+              {/* On a phone, Details is the one card of the four rows; the Cost card is the desktop's. */}
+              <DetailsCard
+                item={item}
+                factory={factory}
+                events={events}
+                trace={trace}
+                runs={runs?.runs ?? []}
+                summary={phone}
+                className="order-7 @[720px]:order-none"
+              />
+              {phone ? null : <CostCard item={item} factory={factory} runs={runs?.runs ?? []} />}
+              <OverlapsCard item={item} className="order-7 @[720px]:order-none" />
+              <RulesCard item={item} factory={factory} trace={trace} className="order-7 @[720px]:order-none" />
+              <TouchesCard
+                item={item}
+                itemKey={key}
+                factory={factory}
+                events={events}
+                className="order-7 @[720px]:order-none"
+              />
+            </>
+          ) : null}
         </div>
         <NoteComposer
           itemKey={key}

@@ -33,17 +33,17 @@ The Items page at `/o/<org>/f/<factory>/items` lists the same items as a table, 
 
 Open an item from the Board or the Items page. Its URL is `/o/<org>/f/<factory>/items/<ref>`, where `<ref>` is the item's number.
 
-The page has five tabs. Move between them with the arrow keys; Home and End jump to the first and last. The selected tab is in the URL as `?tab=`, and Timeline leaves it out:
+The page has six tabs. The tab row sits right under the title and scrolls sideways on a phone. Move between them with the arrow keys; Home and End jump to the first and last. The selected tab is in the URL as `?tab=`, and Timeline leaves it out:
 
 - **Timeline** shows each run's events as grouped steps in plain words: the station, the agent, what it did and how it ended.
 - **Spec** shows the request and the acceptance criteria from the spec the agents wrote.
 - **Changes** shows the outputs the stations produced, and says so when nothing has been produced yet.
 - **Checks** shows the checks that have run on the item, and says so when none have.
 
-The timeline and the note field are the main column on the left. To the right of them, the details column shows the item's details, its cost, the items it overlaps with, and the rules its runs received.
+The selected tab and the note field are the main column. From wide screens the details column sits to the right of them; on narrower screens it comes after the tab's content. It shows the item's details, its cost, the items it overlaps with, and the rules its runs received. The Trace and Teardown tabs hide it and use the full width.
 
 - **Trace** shows every run of the item, oldest first, on one time axis. Each run lists its tool calls, checks, notes and human touches as rows. Select a row to see its detail beside the list. On a phone, each run is a list and the detail opens under the row. Open it from **Full trace** on the Latest steps card. It shows "No tool calls yet." before any run, and new steps appear as agents work.
-- **Watch live** (the button in the item's header) opens the Trace tab at the newest step of the run that is working, and keeps new tool calls, results and agent messages in view as they arrive. Scroll up to stop following; select **Watch live** again to jump back to the newest step and follow again. The button is disabled, with the tip "No run is working on this item", when no run is working or the item is not in progress.
+- **Watch live** (the button in the item's header) opens the Trace tab and scrolls to the newest step of the run that is working (smoothly, or at once if your system reduces motion), and keeps new tool calls, results and agent messages in view as they arrive. Scroll up to stop following; select **Watch live** again to scroll back to the newest step and follow again. The button is disabled, with the tip "No run is working on this item", when no run is working or the item is not in progress.
 
 - **Teardown** shows where the item's lead time, cost and human help went, worked out from its runs and events each time you open the tab. It has four figures: lead time against the factory's target, cost against the item's budget, the rework loops with their time and cost, and the human touches. Below them, **Time by station** splits each station's time into working and waiting. **Runs** lists each run with its agent, model, turns, time, cost and outcome. **Why it went back** lists each failed check or send-back with its reason, and links to that step in the Trace tab. **Human touches** lists each time a person stepped in and how long the item waited for them, and links to the Timeline. An item no agent has picked up shows "No breakdown yet". Below 1000 px the Waiting column is hidden and Runs is a list.
 
