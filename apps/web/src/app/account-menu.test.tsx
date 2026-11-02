@@ -29,6 +29,8 @@ interface Setup {
   me?: Me | 'pending' | 'error';
   /** The permissions the caller holds in the organization. */
   can?: string[];
+  /** The trigger's size: the sidebar row or the collapsed rail's avatar. */
+  size?: 'sidebar' | 'rail';
 }
 
 /** jsdom has no matchMedia, which the theme reads to follow the system. */
@@ -47,7 +49,7 @@ function stubMatchMedia() {
 }
 
 /** The account menu at the sidebar's bottom, inside the account's provider, as the app mounts it. */
-function renderAccount({ me = session, can = ['personal_token:read'] }: Setup = {}) {
+function renderAccount({ me = session, can = ['personal_token:read'], size = 'sidebar' }: Setup = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   const grants = { ...org, created_at: '2026-09-01T00:00:00Z', can } as Org;
   client.setQueryData(orgQuery(org.id).queryKey, grants);
@@ -64,7 +66,7 @@ function renderAccount({ me = session, can = ['personal_token:read'] }: Setup = 
     beforeLoad: () => ({ org }),
     component: () => (
       <AccountProvider>
-        <AccountMenu org={org} size="sidebar" />
+        <AccountMenu org={org} size={size} />
         <Outlet />
       </AccountProvider>
     ),
@@ -161,6 +163,13 @@ describe('the account menu', () => {
     const trigger = await screen.findByRole('button', { name: /account$/ });
 
     expect(trigger.querySelector('svg.lucide-chevrons-up-down')).toBeTruthy();
+  });
+
+  it('draws no chevron on the rail avatar', async () => {
+    renderAccount({ size: 'rail' });
+    const trigger = await screen.findByRole('button', { name: /account$/ });
+
+    expect(trigger.querySelector('svg.lucide-chevrons-up-down')).toBeNull();
   });
 
   it('links Notifications to the notifications section of the account page', async () => {
