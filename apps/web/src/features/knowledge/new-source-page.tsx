@@ -17,9 +17,8 @@ import { sourceKinds } from '../../shared/knowledge';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
-import { cn } from '../../ui/cn';
 import { Field, Input, NativeSelect } from '../../ui/field';
-import { descriptionClass, PageHeader } from '../../ui/page-header';
+import { RadioCards } from '../../ui/radio-cards';
 import { type Config, ConfigFields, configErrors, readerOf, trimmed } from './config-fields';
 import { DropZone, UploadRows, useUploader } from './upload';
 import { nameFor, refusalText, sourceName, syncChoices } from './words';
@@ -41,76 +40,41 @@ export function NewSourcePage() {
   const navigate = useNavigate({ from: '/o/$org/knowledge/new' });
   const manage = useOrgHolds('knowledge:manage');
   const kind = search.kind ?? 'upload';
-  const id = useId();
 
   return (
     <>
       <TopBarSlot crumb="New source" />
-      <nav aria-label="Breadcrumb" className="text-sm text-muted">
-        <ol className="m-0 flex list-none gap-1.5 p-0">
-          <li>
-            <Link
-              to="/o/$org/knowledge"
-              params={{ org: org.slug }}
-              className="text-muted underline underline-offset-3 hover:text-ink"
-            >
-              Knowledge
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li aria-current="page">New source</li>
-        </ol>
-      </nav>
-      <PageHeader
-        title="New source"
-        description={
-          <p className={cn(descriptionClass, 'max-w-[680px]')}>
-            Add text agents can search: files you upload, or a system Goal reaches through one of {org.name}’s
-            connections. Factories add a source in their Definition.
-          </p>
-        }
-      />
+      <header className="flex flex-col gap-1">
+        <h1 className="m-0 text-page-title">New source</h1>
+        <p className="m-0 max-w-[680px] text-body text-muted">
+          Add text agents can search: files you upload, or a system Goal reaches through one of {org.name}’s
+          connections. Factories add a source in their Definition.
+        </p>
+      </header>
       {manage ? (
         <div className="flex max-w-[980px] flex-col gap-4">
-          <section aria-labelledby={id} className={card}>
-            <fieldset className="m-0 min-w-0 border-0 p-0">
-              <legend id={id} className="mb-3 p-0 text-lg font-medium">
-                Kind
-              </legend>
-              <div className="grid gap-3 @[720px]:grid-cols-3">
-                {(['upload', 'synced', 'live'] as const).map((k) => {
-                  const { label, icon: Icon } = sourceKinds[k];
-                  return (
-                    <label
-                      key={k}
-                      className={cn(
-                        'flex min-w-0 cursor-pointer items-start gap-3 rounded-control border bg-card p-4 transition-colors duration-200',
-                        k === kind
-                          ? 'border-ink shadow-[inset_0_0_0_1px_var(--color-ink)]'
-                          : 'border-line hover:border-rule',
-                      )}
-                    >
-                      <input
-                        type="radio"
-                        name="kind"
-                        value={k}
-                        checked={k === kind}
-                        onChange={() => void navigate({ search: { kind: k }, replace: true })}
-                        className="m-0 mt-0.5 size-5 shrink-0 cursor-pointer appearance-none rounded-full border border-rule bg-card transition-[border-width,border-color] duration-200 checked:border-[6px] checked:border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
-                      />
-                      <span className="flex min-w-0 flex-col gap-1">
-                        <span className="inline-flex items-center gap-2 text-[15px] font-medium">
-                          <Icon size={16} strokeWidth={1.5} aria-hidden="true" />
-                          {label}
-                        </span>
-                        <span className="text-sm leading-normal text-muted">{kindText[k](org.name)}</span>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
-          </section>
+          <div className="flex flex-col gap-2">
+            <span aria-hidden="true" className="text-secondary font-control text-ink">
+              Kind
+            </span>
+            <RadioCards
+              legend="Kind"
+              showLegend={false}
+              name="kind"
+              value={kind}
+              onChange={(k) => void navigate({ search: { kind: k }, replace: true })}
+              gridClassName="@[720px]:grid-cols-3"
+              options={(['upload', 'synced', 'live'] as const).map((k) => {
+                const { label, icon: Icon } = sourceKinds[k];
+                return {
+                  value: k,
+                  label,
+                  icon: <Icon size={16} strokeWidth={1.5} />,
+                  description: kindText[k](org.name),
+                };
+              })}
+            />
+          </div>
           <SourceForm key={kind} kind={kind} />
         </div>
       ) : (
@@ -204,7 +168,7 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
   return (
     <form onSubmit={submit} noValidate aria-labelledby={id} className="flex flex-col gap-4">
       <section className={card}>
-        <h2 id={id} className="m-0 text-lg font-medium">
+        <h2 id={id} className="m-0 text-heading">
           {heading}
         </h2>
         {kind !== 'upload' && usable.length === 0 ? (
@@ -287,7 +251,7 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
               autoCapitalize="off"
               spellCheck={false}
               translate="no"
-              className="font-mono md:text-sm"
+              className="font-mono md:text-body"
             />
           </Field>
           {kind === 'synced' ? (
@@ -306,11 +270,26 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
           <div className="flex flex-col gap-2">
             <DropZone onFiles={(files) => void uploader.add(files)} disabled={create.isPending} />
             <UploadRows rows={uploader.rows} onRemove={create.isPending ? undefined : uploader.remove} />
-            <p className="m-0 text-[13px] text-muted">
+            <p className="m-0 text-secondary text-muted">
               The files go up when you add the source. You can add more on its page later.
             </p>
           </div>
         ) : null}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
+          <Button asChild variant="white" className="h-11 md:h-8.5">
+            <Link to="/o/$org/knowledge" params={{ org: org.slug }}>
+              Cancel
+            </Link>
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            className="h-11 md:h-8.5"
+            disabled={create.isPending || uploader.busy}
+          >
+            {create.isPending || uploader.busy ? 'Adding…' : 'Add source'}
+          </Button>
+        </div>
       </section>
 
       {create.error && !takenByGoald ? (
@@ -319,23 +298,13 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
         </div>
       ) : null}
       {kind !== 'upload' ? (
-        <p className="m-0 flex items-start gap-2.5 text-sm leading-normal text-ink-soft">
+        <p className="m-0 flex items-start gap-2.5 text-body leading-normal text-ink-soft">
           <Info size={16} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0 text-muted" />
           {kind === 'synced'
             ? 'Goal indexes the source with the connection’s access. Every factory that lists it can find anything that access sees.'
             : 'Agents of factories that list it call the connection’s tools with the connection’s access.'}
         </p>
       ) : null}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
-        <Button asChild variant="white" className="h-11 md:h-10">
-          <Link to="/o/$org/knowledge" params={{ org: org.slug }}>
-            Cancel
-          </Link>
-        </Button>
-        <Button type="submit" variant="primary" className="h-11 md:h-10" disabled={create.isPending || uploader.busy}>
-          {create.isPending || uploader.busy ? 'Adding…' : 'Add source'}
-        </Button>
-      </div>
     </form>
   );
 }
