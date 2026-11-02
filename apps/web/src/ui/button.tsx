@@ -8,6 +8,8 @@ import { cn } from './cn';
 const variants = {
   /** Near-black action fill with its ink text: the one primary action on a surface. Blue stays for running, links and focus. */
   primary: 'border-action bg-action text-action-ink hover:bg-action/90',
+  /** Alias of primary, kept so callers do not change. */
+  action: 'border-action bg-action text-action-ink hover:bg-action/90',
   /** White with a rule border: the secondary action. */
   secondary: 'border-rule bg-card text-ink hover:bg-panel',
   /** Alias of secondary, kept so callers do not change. */

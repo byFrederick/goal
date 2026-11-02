@@ -9,6 +9,7 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { type ReactNode, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   factoriesQuery,
@@ -29,6 +30,7 @@ import type {
   Org,
   OrgSummary,
 } from '../../api/types';
+import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { TooltipProvider } from '../../ui/tooltip';
 import { KnowledgePage } from './knowledge-page';
 
@@ -262,7 +264,13 @@ function renderKnowledge({
   }
   if (hits) client.setQueryData(knowledgeSearchQuery(org.id, { q: q ?? '' }).queryKey, hits);
 
-  const rootRoute = createRootRoute();
+  const rootRoute = createRootRoute({
+    component: () => (
+      <TopBarHost>
+        <Outlet />
+      </TopBarHost>
+    ),
+  });
   const orgRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/o/$org',
@@ -297,6 +305,17 @@ function renderKnowledge({
   };
 }
 
+/** Stands in for the shell's top bar: draws the actions a page's TopBarSlot sets. */
+function TopBarHost({ children }: { children: ReactNode }) {
+  const [top, setTop] = useState<TopBarState | null>(null);
+  return (
+    <TopBarSetContext.Provider value={setTop}>
+      <div data-testid="top-bar">{top?.actions}</div>
+      {children}
+    </TopBarSetContext.Provider>
+  );
+}
+
 describe('the Knowledge page', () => {
   it('shows the sources, the search and the usage cards as pictured, and not the old documents or who-finds cards', async () => {
     renderKnowledge();
@@ -304,15 +323,26 @@ describe('the Knowledge page', () => {
     expect(
       screen.getByText('What agents can look up before they act: synced documents, searched on every run.'),
     ).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Add a source' }).getAttribute('href')).toBe('/o/acme/knowledge/new');
+    const bar = screen.getByTestId('top-bar');
+    expect(
+      within(bar)
+        .getByRole('link', { name: /Add a source/ })
+        .getAttribute('href'),
+    ).toBe('/o/acme/knowledge/new');
 
     const sources = screen.getByRole('region', { name: 'Sources' });
     expect(within(sources).getByText('3')).toBeTruthy();
     for (const column of ['Source', 'Sync', 'Read by', 'Documents']) {
       expect(within(sources).getAllByRole('columnheader', { name: column }).length).toBeGreaterThan(0);
     }
-    expect(within(sources).getAllByRole('link', { name: 'goal docs' }).length).toBeGreaterThan(0);
-    expect(within(sources).getAllByText('Sync failed').length).toBeGreaterThan(0);
+    const name = within(sources).getAllByRole('link', { name: 'goal-docs' })[0];
+    expect(name?.className).toContain('font-mono');
+    // A synced source reads "Synced" with its time, and its schedule under it.
+    expect(within(sources).getAllByText(/^Synced \S/).length).toBeGreaterThan(0);
+    expect(within(sources).getAllByText('Every hour').length).toBeGreaterThan(0);
+    // Read by shows the factory's letter badge with its name.
+    expect(within(sources).getAllByText('sre').length).toBeGreaterThan(0);
+    expect(within(sources).getAllByText(/^Sync failed/).length).toBeGreaterThan(0);
 
     expect(screen.getByRole('region', { name: 'Look something up' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Where it was used' })).toBeTruthy();
@@ -387,7 +417,8 @@ describe('the Knowledge page', () => {
     counts.forEach(([name, runs, helped, misled], i) => {
       const row = rows[i];
       if (!row) return;
-      expect(within(row).getByRole('button', { name })).toBeTruthy();
+      // A long path is cut with an ellipsis and carries its full text in a title.
+      expect(within(row).getByRole('button', { name }).getAttribute('title')).toBe(name);
       expect(within(row).getByText(runs)).toBeTruthy();
       expect(within(row).getByText(helped)).toBeTruthy();
       expect(within(row).getByText(misled)).toBeTruthy();

@@ -5,7 +5,7 @@
 // owner"). Members see the same page read-only and may leave. Two columns from 960 px of content;
 // below 720 px, person cards whose details open in a sheet.
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
-import { Check, ChevronDown, ChevronRight, Ellipsis, Minus, Plus, Search, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Ellipsis, Minus, Plus, X } from 'lucide-react';
 import { Component, type ReactNode, Suspense, useId, useState } from 'react';
 import { authConfigQuery, factoriesQuery, invitationsQuery, membersQuery, meQuery, orgQuery } from '../../api/queries';
 import type { Factory, FactoryRole, Invitation, Member, OrgRole, OrgSummary } from '../../api/types';
@@ -22,6 +22,7 @@ import { Avatar } from '../../ui/mark';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../ui/menu';
 import { NotAvailable } from '../../ui/not-available';
 import { descriptionClass, PageHeader } from '../../ui/page-header';
+import { SearchField } from '../../ui/search-field';
 import { SegmentedControl, type SegmentedOption } from '../../ui/segmented-control';
 import { Sheet, SheetContent } from '../../ui/sheet';
 import { Switch } from '../../ui/switch';
@@ -185,7 +186,7 @@ function Members({ org, members, invitations, factories, powers, signIn }: Membe
         <div className="flex min-w-0 flex-col gap-4">
           <SectionCard
             title="Members"
-            aside={<SearchField value={query} onChange={setQuery} />}
+            aside={<SearchField value={query} onChange={setQuery} label="Search members" className="@[720px]:w-56" />}
             className="gap-3 p-4 md:p-5"
           >
             {/* From 720 px: a table. */}
@@ -359,32 +360,6 @@ function MutationError({ error, org }: { error: unknown; org: string }) {
       {refusalText(error, org)}
     </p>
   ) : null;
-}
-
-function SearchField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const id = useId();
-  return (
-    <div className="relative w-full @[720px]:w-56">
-      <label htmlFor={id} className="sr-only">
-        Search members
-      </label>
-      <Search
-        size={16}
-        strokeWidth={1.5}
-        aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted"
-      />
-      <input
-        id={id}
-        type="search"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Search members"
-        autoComplete="off"
-        className="h-11 w-full rounded-control border border-rule bg-card pr-3 pl-9 text-body text-ink transition-colors duration-200 hover:border-muted md:h-8"
-      />
-    </div>
-  );
 }
 
 interface RowActions {

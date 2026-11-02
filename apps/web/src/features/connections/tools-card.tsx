@@ -9,17 +9,17 @@ import type { Connection } from '../../api/types';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
-import { cn } from '../../ui/cn';
+import { SegmentedControl, type SegmentedOption } from '../../ui/segmented-control';
 import { refusalText } from './words';
 
 /** One tool of the connection and its mode, as the contract names them. */
 type ConnectionTool = Connection['tools'][number];
 type ConnectionToolMode = ConnectionTool['mode'];
 
-const modes: readonly { mode: ConnectionToolMode; label: string }[] = [
-  { mode: 'allow', label: 'Allow' },
-  { mode: 'ask', label: 'Ask first' },
-  { mode: 'off', label: 'Off' },
+const modes: readonly SegmentedOption<ConnectionToolMode>[] = [
+  { value: 'allow', label: 'Allow' },
+  { value: 'ask', label: 'Ask first' },
+  { value: 'off', label: 'Off' },
 ];
 
 /** The tools of one connection, one row each, with the three-way setting; read-only without connection:manage. */
@@ -43,7 +43,7 @@ export function ToolsCard({ connection: c, manage }: { connection: Connection; m
       aria-labelledby={`${id}-tools`}
       className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-4 md:p-5"
     >
-      <h2 id={`${id}-tools`} className="m-0 text-lg font-medium">
+      <h2 id={`${id}-tools`} className="m-0 text-heading">
         Tools agents may use <span className="text-secondary font-medium text-muted">{c.tools.length} found</span>
       </h2>
       {save.error ? (
@@ -72,31 +72,13 @@ export function ToolsCard({ connection: c, manage }: { connection: Connection; m
               <code translate="no" className="min-w-0 break-all font-mono text-secondary text-ink">
                 {t.name}
               </code>
-              <fieldset className="m-0 inline-flex min-w-0 gap-1 rounded-control border border-line bg-panel p-1">
-                <legend className="sr-only">{t.name}</legend>
-                {modes.map((option) => {
-                  const pressed = t.mode === option.mode;
-                  return (
-                    <button
-                      key={option.mode}
-                      type="button"
-                      aria-pressed={pressed}
-                      disabled={!manage || save.isPending}
-                      onClick={() => setMode(t.name, option.mode)}
-                      className={cn(
-                        'h-11 rounded-chip px-2 text-meta font-control text-ink-soft md:h-6',
-                        'cursor-pointer disabled:cursor-not-allowed disabled:text-muted',
-                        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run',
-                        pressed && option.mode === 'allow' && 'bg-shell text-ink shadow-raised',
-                        pressed && option.mode === 'ask' && 'bg-you-tint text-you-ink',
-                        pressed && option.mode === 'off' && 'bg-hover text-ink',
-                      )}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </fieldset>
+              <SegmentedControl
+                label={t.name}
+                options={modes}
+                value={t.mode}
+                readOnly={!manage || save.isPending}
+                onChange={(mode) => setMode(t.name, mode)}
+              />
             </li>
           ))}
         </ul>

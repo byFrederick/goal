@@ -4,20 +4,18 @@
 // Owners and admins (credential:manage) get New credential, Replace value and Delete; members read.
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { KeyRound, Search } from 'lucide-react';
+import { ChevronDown, KeyRound, Lock, Plus, Search } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
 import { credentialsQuery, factoriesQuery } from '../../api/queries';
 import type { Credential, CredentialType } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
-import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
-import { Field, Input } from '../../ui/field';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../ui/menu';
 import { NotAvailable } from '../../ui/not-available';
-import { descriptionClass, eyebrowClass, PageHeader } from '../../ui/page-header';
 import { SegmentedControl } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
 import { DeleteCredentialDialog, ReplaceCredentialDialog } from './credential-dialogs';
@@ -61,54 +59,86 @@ export function CredentialsPage() {
   const setSearch = (patch: { type?: CredentialType | undefined; q?: string | undefined }) =>
     void navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
 
-  const newCredential = (variant: 'primary' | 'secondary') =>
-    manage ? (
-      <Menu>
-        <MenuTrigger asChild>
-          <Button variant={variant}>
-            <span aria-hidden="true">+</span> New credential
-          </Button>
-        </MenuTrigger>
-        <MenuContent side="bottom" align="end" className="w-72">
-          <MenuItem asChild>
-            <Link to="/o/$org/credentials/new" params={{ org: org.slug }}>
-              <KeyRound size={16} strokeWidth={1.5} aria-hidden="true" className="mt-1 text-muted" />
-              <span className="flex flex-col">
-                <span className="font-medium">Create a credential</span>
-                <span className="text-meta text-muted">One value, typed</span>
-              </span>
-            </Link>
-          </MenuItem>
-          <MenuItem asChild>
-            <Link to="/o/$org/credentials/new" params={{ org: org.slug }} search={{ panel: 'import' }}>
-              <span className="flex flex-col">
-                <span className="font-medium">Import from .env or YAML</span>
-                <span className="text-meta text-muted">Many at once, checked before saving</span>
-              </span>
-            </Link>
-          </MenuItem>
-        </MenuContent>
-      </Menu>
-    ) : null;
+  const newCredential = manage ? (
+    <Menu>
+      <MenuTrigger asChild>
+        <Button variant="action" className="h-11 md:h-8.5">
+          <Plus size={15} strokeWidth={1.8} aria-hidden="true" />
+          New credential
+          <ChevronDown size={12} strokeWidth={1.5} aria-hidden="true" />
+        </Button>
+      </MenuTrigger>
+      <MenuContent side="bottom" align="end" className="w-72">
+        <MenuItem asChild>
+          <Link to="/o/$org/credentials/new" params={{ org: org.slug }}>
+            <KeyRound size={16} strokeWidth={1.5} aria-hidden="true" className="mt-1 text-muted" />
+            <span className="flex flex-col">
+              <span className="font-medium">Create a credential</span>
+              <span className="text-meta text-muted">One value, typed</span>
+            </span>
+          </Link>
+        </MenuItem>
+        <MenuItem asChild>
+          <Link to="/o/$org/credentials/new" params={{ org: org.slug }} search={{ panel: 'import' }}>
+            <span className="flex flex-col">
+              <span className="font-medium">Import from .env or YAML</span>
+              <span className="text-meta text-muted">Many at once, checked before saving</span>
+            </span>
+          </Link>
+        </MenuItem>
+      </MenuContent>
+    </Menu>
+  ) : null;
+
+  const searchField = (
+    <label className="relative flex h-11 w-40 items-center md:h-8.5 md:w-55">
+      <span className="sr-only">Search credentials</span>
+      <Search
+        size={15}
+        strokeWidth={1.5}
+        aria-hidden="true"
+        className="pointer-events-none absolute left-3 text-muted"
+      />
+      <input
+        type="search"
+        value={text}
+        placeholder="Search credentials"
+        autoComplete="off"
+        className="h-full w-full rounded-control border border-rule bg-card pr-3 pl-9 text-body text-ink placeholder:text-muted transition-colors duration-(--duration-quick) hover:border-muted"
+        onChange={(e) => {
+          setText(e.target.value);
+          setSearch({ q: e.target.value.trim() || undefined });
+        }}
+      />
+    </label>
+  );
 
   return (
     <>
-      <PageHeader
-        eyebrow={<p className={cn(eyebrowClass, 'md:hidden')}>{org.name}</p>}
-        title="Credentials"
-        description={
-          <p className={cn(descriptionClass, 'max-w-3xl')}>
-            Keys and tokens that connections and agents use. Nobody can read a value back.
-          </p>
+      <TopBarSlot
+        actions={
+          <>
+            {searchField}
+            {newCredential}
+          </>
         }
-        actions={newCredential('primary')}
       />
+      <div className="flex min-w-0 flex-col gap-1 md:gap-2">
+        <h1 className="m-0 text-page-title tracking-display">Credentials</h1>
+        <p className="m-0 text-body text-ink-soft">
+          Keys and tokens that connections and agents use. Nobody can read a value back.
+        </p>
+      </div>
 
-      <NotAvailable label="Encrypt in your browser">
-        <button type="button" className="text-sm text-muted underline underline-offset-3 hover:text-ink">
-          Encrypt in your browser instead
-        </button>
-      </NotAvailable>
+      <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-secondary text-muted">
+        <Lock size={16} strokeWidth={1.5} aria-hidden="true" className="shrink-0" />
+        <span>Encrypted before storage, never shown again, given to agents only inside their run’s box.</span>
+        <NotAvailable label="Encrypt in your browser">
+          <button type="button" className="font-control whitespace-nowrap text-ink underline underline-offset-3">
+            Encrypt in your browser instead
+          </button>
+        </NotAvailable>
+      </p>
 
       {list.isPending ? (
         <Skeleton
@@ -134,11 +164,7 @@ export function CredentialsPage() {
           </Button>
         </div>
       ) : all.length === 0 ? (
-        <EmptyState
-          icon={<KeyRound size={20} strokeWidth={1.5} />}
-          title="No credentials yet"
-          actions={newCredential('secondary')}
-        >
+        <EmptyState icon={<KeyRound size={20} strokeWidth={1.5} />} title="No credentials yet">
           {manage
             ? 'Add the keys and tokens your connections and agents use.'
             : `Owners and admins of ${org.name} add credentials.`}
@@ -160,27 +186,6 @@ export function CredentialsPage() {
                 {expiringText(expiring)}
               </Chip>
             ) : null}
-            <Field label={<span className="sr-only">Search credentials</span>} className="w-full sm:w-56">
-              <span className="relative flex">
-                <Search
-                  size={16}
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                  className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted"
-                />
-                <Input
-                  type="search"
-                  value={text}
-                  placeholder="Search credentials"
-                  autoComplete="off"
-                  className="pl-9"
-                  onChange={(e) => {
-                    setText(e.target.value);
-                    setSearch({ q: e.target.value.trim() || undefined });
-                  }}
-                />
-              </span>
-            </Field>
           </div>
 
           {shown.length === 0 ? (
