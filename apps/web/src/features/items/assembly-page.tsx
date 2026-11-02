@@ -307,10 +307,7 @@ export function AssemblyPage() {
           <Chip tone="plain">Assembly</Chip>
           <span className="text-sm text-muted">{item.ref}</span>
         </div>
-        <h1
-          title={item.title}
-          className="line-clamp-2 m-0 max-w-[820px] text-[26px] leading-[1.15] font-normal tracking-display md:text-[42px] md:leading-[1.08]"
-        >
+        <h1 title={item.title} className="line-clamp-2 m-0 max-w-[820px] text-detail-title tracking-display">
           {item.title}
         </h1>
         {item.body ? (
