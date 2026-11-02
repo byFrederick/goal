@@ -26,7 +26,7 @@ export function DraftBanner({ next, current, changeCount, problemCount, children
         <span className="font-control text-ink">
           Draft of v{next}, {plural(changeCount, 'change')}
         </span>{' '}
-        <span className="text-ink-soft">
+        <span className="text-muted">
           {problems} {running}
         </span>
       </p>
