@@ -247,7 +247,7 @@ export function AssemblyTableRow({
             <span className="text-muted tabular-nums">{ref}</span>
           </span>
         </td>
-        <td colSpan={6} className={cell}>
+        <td colSpan={6} className={cn(cell, 'whitespace-normal lg:max-w-0')}>
           <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
             <Link
               to="/o/$org/f/$factory/items/$ref"

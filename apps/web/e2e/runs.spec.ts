@@ -1,7 +1,7 @@
 // The Runs page (/o/acme/runs) against the mock: the pictured rows, the URL filters and the controls
-// that are not built yet. Not run in the box (no browser): CI runs it with the mock server.
+// that are not built yet. Not run in the box (no browser): run it against the mock server outside the box.
 import { expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll } from './support';
+import { expectAccessible, expectNoHorizontalScroll, lengthenTitles } from './support';
 
 const runs = '/o/acme/runs';
 
@@ -77,6 +77,7 @@ for (const { width, height } of [
 ]) {
   test(`shows every column without sideways scroll at ${width} px`, async ({ page }) => {
     await page.setViewportSize({ width, height });
+    await lengthenTitles(page, /\/v1\/orgs\/[^/]+\/runs(\?|$)/);
     await openRuns(page);
 
     const table = page.getByRole('table');

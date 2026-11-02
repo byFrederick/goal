@@ -450,7 +450,7 @@ export function RunsPage() {
                       {run.status === 'failed' ? (
                         <tr className="bg-rework-tint/50">
                           <td />
-                          <td colSpan={9} className="px-3 pb-3">
+                          <td colSpan={9} className="whitespace-normal break-words px-3 pb-3 lg:max-w-0">
                             <div className="flex flex-wrap items-center gap-3 text-secondary">
                               {run.error ? <span className="text-rework-ink">{run.error}</span> : null}
                               <span className="ml-auto flex gap-3">

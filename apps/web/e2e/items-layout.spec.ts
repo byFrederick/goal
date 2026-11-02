@@ -1,6 +1,7 @@
 // The Items table at desktop widths: every column shows, long titles end in an ellipsis.
-// Not run in the box (no browser): CI runs it with the mock server.
+// Not run in the box (no browser): run it against the mock server outside the box.
 import { expect, test } from '@playwright/test';
+import { lengthenTitles } from './support';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -12,6 +13,7 @@ for (const { width, height } of [
 ]) {
   test(`shows every column without sideways scroll at ${width} px`, async ({ page }) => {
     await page.setViewportSize({ width, height });
+    await lengthenTitles(page, /\/v1\/orgs\/[^/]+\/factories\/[^/]+\/items(\?|$)/);
     await page.goto('/o/acme/f/goal/items');
 
     const table = page.getByRole('table', { name: 'Items' });
