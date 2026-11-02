@@ -30,7 +30,7 @@ The review rejects a screen that has any of these:
 
 ## Colour
 
-Tokens keep their names across themes, and components use token names only (`apps/web/src/ui/raw-colors.test.ts` fails on a raw hex, `rgb()` or `hsl()`).
+Tokens keep their names across themes, and components use token names only (`apps/web/src/ui/raw-colors.test.ts` fails on a raw hex, `rgb()` or `hsl()`). Inverted fills (the primary button, org mark, skip link, toast) use `bg-action text-action-ink`, never `bg-ink text-white`: `ink` is near-white in dark. `text-white` is allowed only on a fill that is dark in both themes (`run`, `you`, `rework`, `mark`). The same test fails on `bg-ink`/`bg-action` with `text-white`, `hover:bg-ink/`, `bg-white`, `bg-black` and `text-black`; `theme-contrast.test.ts` checks the pairs at 4.5:1 in both themes.
 
 | Token | Light | Dark | Use |
 |---|---|---|---|

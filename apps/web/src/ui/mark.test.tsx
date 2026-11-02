@@ -35,4 +35,20 @@ describe('Mark', () => {
     const { container } = render(<Mark kind="factory">A</Mark>);
     expect(container.querySelector('[data-count]')).toBeNull();
   });
+
+  it('fills the org and current factory marks with the action tokens, not white', () => {
+    const { container } = render(
+      <>
+        <Mark kind="org">AC</Mark>
+        <Mark kind="factory" current>
+          A
+        </Mark>
+      </>,
+    );
+    for (const el of Array.from(container.children)) {
+      expect(el.classList).toContain('bg-action');
+      expect(el.classList).toContain('text-action-ink');
+      expect(el.classList).not.toContain('text-white');
+    }
+  });
 });

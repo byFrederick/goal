@@ -43,4 +43,28 @@ describe('raw colors', () => {
       expect(rawColor.test(text), `${file} has no raw color any more: take it off the allow-list`).toBe(true);
     }
   });
+
+  // An inverted fill is bg-action with text-action-ink: bg-ink flips to near-white in dark, so white text on it vanishes.
+  // text-white stays on fills that are dark in both themes (run, you, rework, mark).
+  const themeClash: [RegExp, string][] = [
+    [
+      /!?\bbg-(?:ink|action)\b(?!-).*\btext-white\b|\btext-white\b.*!?\bbg-(?:ink|action)\b(?!-)/,
+      'white text on an inverted fill: use text-action-ink',
+    ],
+    [/\bhover:bg-ink\//, 'hover:bg-ink/ on a filled control: use hover:bg-action/'],
+    [/\bbg-white\b/, 'bg-white: use a surface token'],
+    [/\bbg-black\b/, 'bg-black: use a token'],
+    [/\btext-black\b/, 'text-black: use text-ink or text-action-ink'],
+  ];
+
+  it('never pairs white text with an inverted fill or names white or black', () => {
+    const found = sources(srcDir).flatMap((path) =>
+      readFileSync(path, 'utf8')
+        .split('\n')
+        .flatMap((line, i) =>
+          themeClash.flatMap(([re, why]) => (re.test(line) ? [`${rel(path)}:${i + 1}: ${why}`] : [])),
+        ),
+    );
+    expect(found).toEqual([]);
+  });
 });
