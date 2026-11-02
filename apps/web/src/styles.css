@@ -136,6 +136,8 @@
   --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
   /* The open and close fade of menus, popovers, dialogs and sheets: opacity only, at the quick duration. */
   --animate-fade-in: fade-in var(--duration-quick) var(--ease-out);
+  /* The Agents page's constraint marker fades in at the station that now paces the line (MOTION.md). */
+  --animate-constraint-in: fade-in var(--duration-fast) var(--ease-out);
   /* A tooltip opens with a fade and a small scale from its trigger (MOTION.md, Tooltip). */
   --animate-tooltip-in: tooltip-in var(--duration-quick) var(--ease-out);
   /* A status changes in place: the new text rises in with a blur (MOTION.md, A status changes in place). */

@@ -8,10 +8,17 @@ afterEach(cleanup);
 const classes = (name: string) => Array.from(screen.getByRole('button', { name }).classList);
 
 describe('Button', () => {
-  it('draws the primary action in cobalt with white text', () => {
+  it('draws the primary action in the action colour', () => {
     render(<Button variant="primary">Save</Button>);
     expect(classes('Save')).toEqual(
-      expect.arrayContaining(['bg-run', 'text-white', 'h-8.5', 'rounded-control', 'font-control']),
+      expect.arrayContaining([
+        'border-action',
+        'bg-action',
+        'text-action-ink',
+        'h-8.5',
+        'rounded-control',
+        'font-control',
+      ]),
     );
   });
 
