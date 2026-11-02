@@ -222,6 +222,11 @@ describe('the Evals page, its four states', () => {
     expect(within(table).getByText('Reference patch')).toBeTruthy();
     expect(within(table).getByText('$0.30')).toBeTruthy();
     expect(screen.getByText('Green passed, red failed.')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Cases replay tasks agents must get right. They run on every publish, and a failing case blocks it.',
+      ),
+    ).toBeTruthy();
   });
 
   it('says how each case’s last tries went in words, not only in colour', async () => {
