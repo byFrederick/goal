@@ -479,6 +479,26 @@ describe('FloorPage', () => {
     expect(screen.getAllByRole('button', { name: /^New item/ })).toHaveLength(1);
   });
 
+  it('keeps Pull andon and Needs you in the page on a phone, with New item in the top bar', async () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: true,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    try {
+      renderFloor({ subject: { ...factory, can: [...(factory.can ?? []), 'item:create'] } });
+      const banner = within((await screen.findAllByRole('banner'))[0] as HTMLElement);
+      expect(banner.getByRole('button', { name: /^New item/ })).toBeTruthy();
+      expect(banner.queryByRole('button', { name: 'Pull the andon cord' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Pull the andon cord' })).toBeTruthy();
+      expect(screen.getByRole('link', { name: /^Needs you/ })).toBeTruthy();
+    } finally {
+      // @ts-expect-error restoring the jsdom default, which has no matchMedia
+      delete window.matchMedia;
+    }
+  });
+
   it('writes the 30-day window to the URL and presses it', async () => {
     const { router } = renderFloor();
 

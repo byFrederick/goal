@@ -44,7 +44,7 @@ function TimeWindow({ shown, type }: { shown: number | null; type: string | unde
 
 /**
  * The Floor's header: the title, the line's status and the range it shows. The actions are the top bar's
- * (the window, Needs you, Pull andon, New item); the phone's bar keeps New item and the window sits here.
+ * (the window, Needs you, Pull andon, New item); the phone's bar keeps New item and the window, Needs you and Pull andon sit here.
  */
 export function FloorHeader({ factory, board, metrics }: { factory: Factory; board: Board; metrics: Metrics }) {
   const type = metrics.type ?? undefined;
@@ -54,7 +54,7 @@ export function FloorHeader({ factory, board, metrics }: { factory: Factory; boa
   const andon = board.line.andon;
 
   const phone = usePhone();
-  // From 768 px the top bar holds every action; the phone's bar keeps New item and the window stays in the content.
+  // From 768 px the top bar holds every action; the phone's bar keeps New item and the other controls stay in the content.
   const actions = useMemo(
     () =>
       phone ? (
@@ -87,7 +87,13 @@ export function FloorHeader({ factory, board, metrics }: { factory: Factory; boa
           {`${rangeLabel(metrics.from, metrics.to)}, compared with ${before}`}
         </p>
       </div>
-      {phone ? <TimeWindow shown={shown} type={type} /> : null}
+      {phone ? (
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <TimeWindow shown={shown} type={type} />
+          <NeedsYouLink factory={factory} />
+          {andon ? null : <AndonButton factory={factory} andon={andon} />}
+        </div>
+      ) : null}
     </header>
   );
 }
