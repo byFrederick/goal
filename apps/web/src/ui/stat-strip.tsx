@@ -36,17 +36,30 @@ const mdColumns: Record<number, string> = {
   4: 'md:grid-cols-4',
 };
 
-export function StatStrip({ stats, label, className }: { stats: readonly Stat[]; label: string; className?: string }) {
+export function StatStrip({
+  stats,
+  label,
+  className,
+  narrow = false,
+}: {
+  stats: readonly Stat[];
+  label: string;
+  className?: string;
+  /** For a strip in a column too narrow for four figures at `md`: it stays two by two until `2xl`. */
+  narrow?: boolean;
+}) {
   const shown = stats.slice(0, maxStats);
+  const columns = narrow && shown.length > 2 ? `2xl:${mdColumns[shown.length]}` : mdColumns[shown.length];
+  const rule = narrow ? '2xl:border-l 2xl:border-line 2xl:pl-5' : 'md:border-l md:border-line md:pl-5';
   return (
-    <section aria-label={label} className={cn('grid grid-cols-2 gap-y-4', mdColumns[shown.length], className)}>
+    <section aria-label={label} className={cn('grid grid-cols-2 gap-y-4', columns, className)}>
       {shown.map((stat, i) => (
         <div
           key={stat.label}
           className={cn(
             'flex min-w-0 flex-col gap-1 pr-5',
             i % 2 === 1 ? 'border-l border-line pl-5' : i > 0 ? 'pl-0' : '',
-            i > 0 && 'md:border-l md:border-line md:pl-5',
+            i > 0 && rule,
           )}
         >
           <span className="text-meta text-muted">{stat.label}</span>
