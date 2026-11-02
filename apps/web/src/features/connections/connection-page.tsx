@@ -81,7 +81,7 @@ export function ConnectionPage() {
   const back = usePhoneBack('Back to Connections', '/o/$org/connections', { org: org.slug });
   return (
     <>
-      <TopBarSlot crumb={connection.name} back={back} />
+      <TopBarSlot crumb={connection.name} back={back} actions={testButton} />
       <PageHeader
         title={
           <span className="inline-flex flex-wrap items-center gap-3">
@@ -108,7 +108,6 @@ export function ConnectionPage() {
             ) : null}
           </p>
         }
-        actions={<div className="flex flex-wrap gap-2">{testButton}</div>}
       />
 
       {connection.status === 'failing' && connection.last_test?.error ? (

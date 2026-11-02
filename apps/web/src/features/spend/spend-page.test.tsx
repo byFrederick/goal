@@ -10,6 +10,12 @@ import type { OrgSpend, SpendWindow } from '../../api/types';
 import { answerFor, spendFixture } from './fixture';
 import { renderSpend } from './harness';
 
+// The top bar is the app's shell: here the page's actions render in a region named Top bar, where the page puts them.
+vi.mock('../../app/top-bar', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../app/top-bar')>()),
+  TopBarSlot: ({ actions }: { actions?: React.ReactNode }) => <section aria-label="Top bar">{actions}</section>,
+}));
+
 const { getOrgSpend, exportOrgSpend } = vi.hoisted(() => ({
   getOrgSpend: vi.fn(),
   exportOrgSpend: vi.fn(),
@@ -37,11 +43,26 @@ afterEach(() => {
 });
 
 describe('the spend screen, ready', () => {
+  it('puts the window control and Export CSV in the top bar, and a phone copy of the window in the page', async () => {
+    renderSpend();
+
+    const bar = await screen.findByRole('region', { name: 'Top bar' });
+    expect(within(bar).getByRole('group', { name: 'Time window' })).toBeTruthy();
+    expect(within(bar).getByRole('button', { name: 'Export CSV' })).toBeTruthy();
+    expect(screen.getAllByRole('group', { name: 'Time window' })).toHaveLength(2);
+  });
+
   it('shows the title, the window control and the figures', async () => {
     renderSpend();
 
     expect(await screen.findByRole('heading', { name: 'Spend and billing' })).toBeTruthy();
-    expect((screen.getByRole('radio', { name: 'This week' }) as HTMLInputElement).checked).toBe(true);
+    expect(
+      (
+        within(screen.getByRole('region', { name: 'Top bar' })).getByRole('radio', {
+          name: 'This week',
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
     expect(await screen.findByText('Spend this week')).toBeTruthy();
     expect(screen.getByText('$1,940')).toBeTruthy();
     expect(screen.getByText('September $2,310')).toBeTruthy();
@@ -123,10 +144,12 @@ describe('the window in the URL', () => {
   it('asks for the window the URL names, and moves the URL when another is chosen', async () => {
     const { router } = renderSpend('/o/acme/spend?window=month');
 
-    await screen.findByRole('radio', { name: 'This month' });
+    await within(await screen.findByRole('region', { name: 'Top bar' })).findByRole('radio', { name: 'This month' });
     expect(getOrgSpend).toHaveBeenCalledWith('org-1', 'month', expect.anything());
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Last 90 days' }));
+    fireEvent.click(
+      within(screen.getByRole('region', { name: 'Top bar' })).getByRole('radio', { name: 'Last 90 days' }),
+    );
     await waitFor(() => expect(router.state.location.search).toEqual({ window: '90d' }));
     await waitFor(() => expect(getOrgSpend).toHaveBeenCalledWith('org-1', '90d', expect.anything()));
   });
@@ -136,7 +159,13 @@ describe('the window in the URL', () => {
 
     await screen.findByRole('heading', { name: 'Budgets' });
     expect(getOrgSpend).toHaveBeenCalledWith('org-1', 'week', expect.anything());
-    expect((screen.getByRole('radio', { name: 'This week' }) as HTMLInputElement).checked).toBe(true);
+    expect(
+      (
+        within(screen.getByRole('region', { name: 'Top bar' })).getByRole('radio', {
+          name: 'This week',
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
   });
 });
 

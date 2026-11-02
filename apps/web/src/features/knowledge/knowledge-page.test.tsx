@@ -32,6 +32,12 @@ import type {
 import { TooltipProvider } from '../../ui/tooltip';
 import { KnowledgePage } from './knowledge-page';
 
+// The top bar is the app's shell: here the page's actions render in a region named Top bar, where the page puts them.
+vi.mock('../../app/top-bar', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../app/top-bar')>()),
+  TopBarSlot: ({ actions }: { actions?: React.ReactNode }) => <section aria-label="Top bar">{actions}</section>,
+}));
+
 // goal-docs' usage is answered by a load the test sets: pending never answers, error fails.
 const usageLoad = vi.hoisted(() => ({ run: (): Promise<unknown> => Promise.resolve(null) }));
 vi.mock('../../api/queries', async (importOriginal) => {
@@ -304,7 +310,9 @@ describe('the Knowledge page', () => {
     expect(
       screen.getByText('What agents can look up before they act: synced documents, searched on every run.'),
     ).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Add a source' }).getAttribute('href')).toBe('/o/acme/knowledge/new');
+    const bar = screen.getByRole('region', { name: 'Top bar' });
+    expect(within(bar).getByRole('link', { name: 'Add a source' }).getAttribute('href')).toBe('/o/acme/knowledge/new');
+    expect(screen.getAllByRole('link', { name: 'Add a source' })).toHaveLength(1);
 
     const sources = screen.getByRole('region', { name: 'Sources' });
     expect(within(sources).getByText('3')).toBeTruthy();
@@ -354,6 +362,7 @@ describe('the Knowledge page', () => {
     renderKnowledge({ sources: [], can: [] });
     expect(await screen.findByText('Owners and admins of Acme add knowledge sources.')).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Add a source' })).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Top bar' })).queryByRole('link')).toBeNull();
   });
 
   it('narrows the Sources card to the factory the URL names, and says so when there is no such factory', async () => {

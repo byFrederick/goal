@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { connectionKindsQuery, connectionQuery } from '../../api/queries';
@@ -66,6 +66,21 @@ function renderConnection(connection: Connection, search?: Record<string, string
 const passed = (): ConnectionTestResult => ({ ok: true, status: 200, at: new Date().toISOString() });
 
 describe('the connection page', () => {
+  it('puts Test in the top bar, once, before any test ran', async () => {
+    renderConnection(connectionFixture({ name: 'datadog-prod', kind: 'datadog' }));
+
+    const bar = await screen.findByRole('region', { name: 'Top bar' });
+    expect(within(bar).getByRole('button', { name: 'Test' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Test' })).toHaveLength(1);
+  });
+
+  it('leaves the top bar empty once a test result holds Test again', async () => {
+    renderConnection(connectionFixture({ name: 'datadog-prod', kind: 'datadog', last_test: passed() }));
+
+    const bar = await screen.findByRole('region', { name: 'Top bar' });
+    expect(within(bar).queryByRole('button')).toBeNull();
+  });
+
   it('has no in-page breadcrumb, and a phone gets Back to Connections in the top bar', async () => {
     window.matchMedia = ((query: string) =>
       ({

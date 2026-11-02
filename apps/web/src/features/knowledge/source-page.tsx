@@ -50,7 +50,15 @@ export function SourcePage() {
   const back = usePhoneBack('Back to Knowledge', '/o/$org/knowledge', { org: org.slug });
   return (
     <>
-      <TopBarSlot crumb={source.title} back={back} />
+      <TopBarSlot
+        crumb={source.title}
+        back={back}
+        actions={
+          manage && source.kind === 'synced' ? (
+            <SyncNowButton source={source} sync={sync} className="h-11 md:h-10" />
+          ) : null
+        }
+      />
       <PageHeader
         title={
           <span className="inline-flex flex-wrap items-center gap-3">
@@ -79,11 +87,6 @@ export function SourcePage() {
               )}
             </p>
           </div>
-        }
-        actions={
-          manage && source.kind === 'synced' ? (
-            <SyncNowButton source={source} sync={sync} className="h-11 md:h-10" />
-          ) : null
         }
       />
 

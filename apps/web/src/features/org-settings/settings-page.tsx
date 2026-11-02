@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { ApiError, patchOrgSettings } from '../../api/client';
 import { authConfigQuery, keys, settingsQuery } from '../../api/queries';
 import type { OrgSettings, OrgSettingsPatch, OrgSummary } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
 import { factoryMark } from '../../shared/marks';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { reasons } from '../../shared/permissions';
@@ -153,12 +154,16 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
     <>
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="m-0 text-page-title tracking-display">Organization settings</h1>
-        {mayManage ? (
-          <Button type="submit" form={formId} variant="primary" disabled={!dirty || save.isPending}>
-            {save.isPending ? 'Saving…' : 'Save changes'}
-          </Button>
-        ) : null}
       </header>
+      <TopBarSlot
+        actions={
+          mayManage ? (
+            <Button type="submit" form={formId} variant="primary" disabled={!dirty || save.isPending}>
+              {save.isPending ? 'Saving…' : 'Save changes'}
+            </Button>
+          ) : null
+        }
+      />
 
       {mayManage ? null : <ViewOnlyBanner>{reasons.settings(saved.name)}</ViewOnlyBanner>}
 
