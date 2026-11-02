@@ -13,6 +13,7 @@ import { FactoryBadge } from '../../app/factory-badge';
 import { factoryMark } from '../../shared/marks';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
+import { Checkbox } from '../../ui/checkbox';
 import { cn } from '../../ui/cn';
 import { Field, Input } from '../../ui/field';
 import { agentNamesOf } from '../agents/agents-line';
@@ -212,15 +213,12 @@ export function CreateCredentialCard({ org, slug, factories }: { org: string; sl
               </button>
             );
           })}
-          <label className="ml-2 inline-flex min-h-11 items-center gap-2 text-body text-ink md:min-h-9">
-            <input
-              type="checkbox"
-              checked={all}
-              onChange={(e) => setAll(e.target.checked)}
-              className="size-4 accent-run"
-            />
-            All factories, including new ones
-          </label>
+          <Checkbox
+            checked={all}
+            onCheckedChange={setAll}
+            label="All factories, including new ones"
+            className="ml-2 min-h-11 md:min-h-9"
+          />
         </div>
         {factories.length === 0 && !all ? (
           <p className="m-0 text-secondary text-muted">No factories yet. Choose all factories, including new ones.</p>
@@ -257,18 +255,13 @@ export function CreateCredentialCard({ org, slug, factories }: { org: string; sl
                   ) : (
                     <div className="flex flex-wrap gap-x-5 gap-y-2 px-3 py-2">
                       {names.map((agent) => (
-                        <label
+                        <Checkbox
                           key={agent}
-                          className="inline-flex min-h-11 items-center gap-2 text-body text-ink md:min-h-8"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={(agents[f.id] ?? []).includes(agent)}
-                            onChange={() => toggleAgent(f.id, agent)}
-                            className="size-4 accent-run"
-                          />
-                          {agent}
-                        </label>
+                          checked={(agents[f.id] ?? []).includes(agent)}
+                          onCheckedChange={() => toggleAgent(f.id, agent)}
+                          label={agent}
+                          className="min-h-11 md:min-h-8"
+                        />
                       ))}
                     </div>
                   )}
