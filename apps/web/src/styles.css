@@ -680,6 +680,11 @@
     scroll-behavior: auto;
   }
 
+  /* The skeleton's pulse does not run; its reveal stays a quick fade (MOTION.md, Loading). */
+  .animate-skeleton-pulse {
+    animation: none;
+  }
+
   /* A list ↔ detail switch fades without the slide. */
   .animate-pane-forward,
   .animate-pane-back {
