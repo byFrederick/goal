@@ -40,8 +40,8 @@ describe('Field', () => {
     );
     for (const name of ['Name', 'Kind']) {
       const classes = Array.from(screen.getByLabelText(name).classList);
-      expect(classes).toContain('h-8');
-      expect(classes).not.toEqual(expect.arrayContaining(['h-11']));
+      expect(classes).toEqual(expect.arrayContaining(['h-11', 'md:h-8']));
+      expect(classes).not.toContain('h-8');
       expect(classes).not.toContain('md:h-10');
     }
   });

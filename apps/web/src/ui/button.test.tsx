@@ -115,4 +115,48 @@ describe('Button', () => {
     const unnamed = () => <Button size="icon" />;
     expect(typeof unnamed).toBe('function');
   });
+
+  // jsdom does not apply Tailwind's CSS, so these assert classes, not computed heights.
+  const variantNames = [
+    'primary',
+    'action',
+    'secondary',
+    'raised',
+    'white',
+    'danger',
+    'danger-fill',
+    'approve',
+    'rework',
+    'ghost',
+  ] as const;
+  const desktop = { sm: 'h-7', md: 'h-8', lg: 'h-11' } as const;
+
+  describe.each(variantNames)('variant %s', (variant) => {
+    it.each(['sm', 'md'] as const)('keeps the %s desktop height and is at least 44 px below md', (size) => {
+      render(
+        <Button variant={variant} size={size}>
+          Go
+        </Button>,
+      );
+      expect(classes('Go')).toEqual(expect.arrayContaining([desktop[size], 'max-md:min-h-11']));
+    });
+
+    it('keeps lg at 44 px with no phone override', () => {
+      render(
+        <Button variant={variant} size="lg">
+          Go
+        </Button>,
+      );
+      expect(classes('Go')).toContain('h-11');
+      expect(classes('Go')).not.toContain('max-md:min-h-11');
+    });
+
+    it('keeps icon at 32 px with its coarse-pointer hit area', () => {
+      render(<Button variant={variant} size="icon" aria-label="Go" />);
+      expect(classes('Go')).toEqual(
+        expect.arrayContaining(['size-8', 'pointer-coarse:before:absolute', 'pointer-coarse:before:-inset-2']),
+      );
+      expect(classes('Go')).not.toContain('max-md:min-h-11');
+    });
+  });
 });
