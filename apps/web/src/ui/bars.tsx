@@ -1,5 +1,4 @@
 import { cn } from './cn';
-import { Hatch } from './hatch';
 
 export interface Bar {
   key: string;
@@ -11,8 +10,9 @@ export interface Bar {
 }
 
 /**
- * Vertical bars on one baseline, oldest first: hatched teal, the latest solid; a zero is a flat
- * stub. A dashed ink line marks the target, labelled at its right end. The scale tops out at the
+ * Vertical bars on one baseline, oldest first: every week a solid bar in the rule colour, the latest in
+ * ink; a zero is a flat stub. A dashed ink line marks the target; its label sits above the chart, clear of
+ * the bars. The scale tops out at the
  * target or the tallest bar. Hovering a bar shows its label and detail; the chart is an image
  * named by `summary`, and a visually hidden table (`caption`) carries every value for screen
  * readers. Bars grow without motion under prefers-reduced-motion.
@@ -39,22 +39,18 @@ export function Bars({
   const pct = (n: number) => (max > 0 ? (n / max) * 100 : 0);
   return (
     <figure className={cn('m-0 flex flex-col', className)}>
-      <div role="img" aria-label={summary} className="relative flex h-full min-h-[140px] items-end gap-1.5 md:gap-2">
+      {target && targetLabel ? (
+        <span aria-hidden="true" className="mb-1 self-end text-[13px] text-ink tabular-nums">
+          {targetLabel}
+        </span>
+      ) : null}
+      <div role="img" aria-label={summary} className="relative flex min-h-[140px] flex-1 items-end gap-1.5 md:gap-2">
         {target ? (
-          <>
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-x-0 border-t-[1.5px] border-dashed border-ink"
-              style={{ bottom: `${pct(target)}%` }}
-            />
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute right-0 mb-1 text-[13px] text-ink"
-              style={{ bottom: `${pct(target)}%` }}
-            >
-              {targetLabel}
-            </span>
-          </>
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 z-[1] border-t-[1.5px] border-dashed border-ink"
+            style={{ bottom: `${pct(target)}%` }}
+          />
         ) : null}
         {bars.map((b, i) => {
           const latest = i === bars.length - 1;
@@ -63,15 +59,13 @@ export function Bars({
               {b.value > 0 ? (
                 <div
                   className={cn(
-                    'w-full overflow-hidden rounded-t-[3px] rounded-b-[1px] transition-[height] duration-(--duration-fast) ease-out motion-reduce:transition-none',
-                    latest && 'bg-run',
+                    'w-full rounded-t-[3px] rounded-b-[1px] transition-[height] duration-(--duration-fast) ease-out motion-reduce:transition-none',
+                    latest ? 'bg-ink' : 'bg-rule',
                   )}
                   style={{ height: `${pct(b.value)}%` }}
-                >
-                  {latest ? null : <Hatch tone="run" />}
-                </div>
+                />
               ) : (
-                <div className="h-0.5 w-full rounded-[1px] bg-line" />
+                <div className="h-0.5 w-full rounded-[1px] bg-rule" />
               )}
               <span
                 aria-hidden="true"
