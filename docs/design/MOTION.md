@@ -41,6 +41,7 @@ They live in `apps/web/src/styles.css` under `@theme` and are documented here. T
 | `--duration-slow` | 400ms | sheet open, skeleton → content reveal |
 | `--duration-emphasis` | 500ms | rare: a success check, a number pop-in on a KPI |
 | `--duration-pulse` | 1s | one skeleton pulse, linear (`Skeleton`) |
+| `--duration-shimmer` | 2s | one sweep of an agent's working status line, linear, looping (`thinking` utility) |
 | `--ease-out` | `cubic-bezier(0.22, 1, 0.36, 1)` | entering, opening, moving, resizing |
 | `--ease-in-out` | `cubic-bezier(0.65, 0, 0.35, 1)` | an element moving on screen from A to B (board card, sidebar snap) |
 | `--ease-bounce` | `cubic-bezier(0.34, 1.36, 0.64, 1)` | only the toggle thumb and the count badge pop |

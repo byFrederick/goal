@@ -14,7 +14,7 @@ import {
 } from '../../api/queries';
 import type { Board, Factory, FactoryOverview, FactoryOverviewList, Inbox, Item, OrgSummary } from '../../api/types';
 import { renderOrgPage, type Seed } from '../../test/route';
-import { FactoriesPage, greeting, summary } from './factories-page';
+import { FactoriesPage, summary } from './factories-page';
 
 // The organization's services, faked: the page's queries are seeded, and only the error, loading and
 // decision tests reach these.
@@ -271,15 +271,15 @@ afterEach(() => vi.useRealTimers());
 /** Home rendered and its first paint in place: the router settles before the page's queries are read. */
 async function renderReady(options?: Parameters<typeof renderHome>[0]) {
   const rendered = renderHome(options);
-  await screen.findByRole('heading', { level: 1, name: 'Good afternoon, Freddy' });
+  await screen.findByRole('heading', { level: 1, name: 'Home' });
   return rendered;
 }
 
 describe('Home: the ready state', () => {
-  it('greets the caller and summarises what waits', async () => {
+  it('titles the page Home and summarises what waits', async () => {
     await renderReady();
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Good afternoon, Freddy' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeTruthy();
     expect(screen.getByText('3 factories, 5 things need you, one andon pulled')).toBeTruthy();
   });
 
@@ -309,13 +309,13 @@ describe('Home: the ready state', () => {
     expect(within(sreRow).queryByText('Throughput')).toBeNull();
   });
 
-  it('shows each station of the line with its count and Done today', async () => {
+  it('shows each station of the line with what waits there and what finished', async () => {
     await renderReady();
 
     const line = screen.getByRole('region', { name: 'software line' });
     expect(within(line).getByText('Intake')).toBeTruthy();
-    expect(within(line).getByText('Done today')).toBeTruthy();
-    expect(within(line).getByText('7 items')).toBeTruthy();
+    expect(within(line).getByText('Done')).toBeTruthy();
+    expect(within(line).getByText('7 merged today')).toBeTruthy();
   });
 
   it('lists what needs you, with a type and an action, and never a question', async () => {
@@ -421,12 +421,6 @@ describe('Home: the other states', () => {
 });
 
 describe('Home: copy', () => {
-  it('greets by the time of day and the first name', () => {
-    expect(greeting(new Date(2026, 9, 27, 9), 'Freddy Cruz')).toBe('Good morning, Freddy');
-    expect(greeting(new Date(2026, 9, 27, 14), undefined)).toBe('Good afternoon');
-    expect(greeting(new Date(2026, 9, 27, 20), 'Dana')).toBe('Good evening, Dana');
-  });
-
   it('summarises with the andon clause only when one is pulled', () => {
     expect(summary(3, 5, 1)).toBe('3 factories, 5 things need you, one andon pulled');
     expect(summary(1, 1, 0)).toBe('1 factory, 1 thing needs you');
