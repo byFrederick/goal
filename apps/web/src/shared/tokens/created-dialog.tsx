@@ -4,12 +4,13 @@
 // A key's dialog (docs/design/screens/organization/api-keys.jpg) shows the key's reach and an "I
 // copied it" button; a personal token's dialog (account) asks for a tick first and warns that
 // whoever has it acts as its owner.
-import { Check, Copy } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { type ReactNode, type RefObject, useId, useRef, useState } from 'react';
 import type { CreatedApiKey, CreatedPersonalToken } from '../../api/types';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
+import { CopyButton } from '../../ui/copy-button';
 import { Dialog, DialogContent } from '../../ui/dialog';
 import { formatDay } from '../format';
 import { scopeLabel } from './scopes';
@@ -57,27 +58,22 @@ export function CreatedTokenDialog({
   );
 }
 
-/** Copy the secret, or select it when the clipboard refuses, and say which. */
-function useCopySecret(secret: string, secretRef: RefObject<HTMLElement | null>) {
-  const [copied, setCopied] = useState<'yes' | 'failed' | null>(null);
+/** Select the secret when the clipboard refuses, and say so. */
+function useCopySecret(secretRef: RefObject<HTMLElement | null>) {
+  const [failed, setFailed] = useState(false);
 
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(secret);
-      setCopied('yes');
-    } catch {
-      setCopied('failed');
-      // Select it so the person can copy it themselves.
-      const range = document.createRange();
-      if (secretRef.current) {
-        range.selectNodeContents(secretRef.current);
-        window.getSelection()?.removeAllRanges();
-        window.getSelection()?.addRange(range);
-      }
+  const onFailed = () => {
+    setFailed(true);
+    // Select it so the person can copy it themselves.
+    const range = document.createRange();
+    if (secretRef.current) {
+      range.selectNodeContents(secretRef.current);
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
     }
   };
 
-  return { copied, copy };
+  return { failed, onFailed, onCopy: () => setFailed(false) };
 }
 
 function KeyShown({
@@ -91,7 +87,7 @@ function KeyShown({
 }) {
   const { key, secret } = created;
   const secretRef = useRef<HTMLElement>(null);
-  const { copied, copy } = useCopySecret(secret, secretRef);
+  const { failed, onFailed, onCopy } = useCopySecret(secretRef);
   const factories = key.factories ? key.factories.map((id) => factoryNames.get(id) ?? id).join(', ') : 'All factories';
 
   return (
@@ -118,13 +114,10 @@ function KeyShown({
         >
           {secret}
         </code>
-        <Button variant="primary" size="sm" onClick={() => void copy()}>
-          {copied === 'yes' ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-          {copied === 'yes' ? 'Copied' : 'Copy'}
-        </Button>
+        <CopyButton variant="primary" text={secret} onClick={onCopy} onFailed={onFailed} />
       </div>
       <p aria-live="polite" className="m-0 text-secondary text-muted">
-        {copied === 'failed' ? 'Couldn’t reach the clipboard: the key is selected, copy it with your keyboard.' : ''}
+        {failed ? 'Couldn’t reach the clipboard: the key is selected, copy it with your keyboard.' : ''}
       </p>
       <dl className="m-0 grid grid-cols-[96px_minmax(0,1fr)] items-center gap-x-3 gap-y-2 text-secondary">
         <dt className="text-muted">Can</dt>
@@ -162,7 +155,7 @@ interface ShownProps {
 function Shown({ secret, title, description, what, warning, onDone }: ShownProps) {
   const [stored, setStored] = useState(false);
   const secretRef = useRef<HTMLElement>(null);
-  const { copied, copy } = useCopySecret(secret, secretRef);
+  const { failed, onFailed, onCopy } = useCopySecret(secretRef);
   const id = useId();
 
   return (
@@ -176,15 +169,10 @@ function Shown({ secret, title, description, what, warning, onDone }: ShownProps
           >
             {secret}
           </code>
-          <Button variant="white" size="sm" onClick={() => void copy()}>
-            {copied === 'yes' ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-            {copied === 'yes' ? 'Copied' : 'Copy'}
-          </Button>
+          <CopyButton variant="white" text={secret} onClick={onCopy} onFailed={onFailed} />
         </div>
         <p aria-live="polite" className="m-0 text-secondary text-muted">
-          {copied === 'failed'
-            ? `Couldn’t reach the clipboard: the ${what} is selected, copy it with your keyboard.`
-            : ''}
+          {failed ? `Couldn’t reach the clipboard: the ${what} is selected, copy it with your keyboard.` : ''}
         </p>
       </div>
       {warning ? <Callout tone="rework">{warning}</Callout> : null}

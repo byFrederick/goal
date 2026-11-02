@@ -6,7 +6,7 @@
 // when the factory has no triggers.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Copy, Hash, Plus, SquareTerminal } from 'lucide-react';
+import { Hash, Plus, SquareTerminal } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { connectionsQuery, intakeQuery, versionModelQuery } from '../../api/queries';
 import type { IntakeTrigger } from '../../api/types';
@@ -18,6 +18,7 @@ import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { CopyButton } from '../../ui/copy-button';
 import { GitHubMark } from '../../ui/github-mark';
 import { CardEmpty, CardFailed, CardLoading } from './card-states';
 
@@ -96,7 +97,7 @@ export function WaysInCard() {
           <li key={row.name}>
             <WayLine icon={<GitHubMark className="text-muted" />} text="Label an issue">
               <Chip>{row.label}</Chip>
-              <CopyButton text={row.label} name={`label ${row.label}`} />
+              <CopyButton text={row.label} aria-label={`Copy label ${row.label}`} />
             </WayLine>
           </li>
         ))}
@@ -137,7 +138,7 @@ export function WaysInCard() {
             icon={<SquareTerminal size={14} strokeWidth={1.6} aria-hidden="true" />}
             text={<span className="font-mono text-meta text-ink">{itemCreateCommand}</span>}
           >
-            <CopyButton text={itemCreateCommand} name="command" />
+            <CopyButton text={itemCreateCommand} aria-label="Copy command" />
           </WayLine>
         </li>
       </ul>
@@ -158,19 +159,5 @@ function WayLine({ icon, text, children }: { icon: ReactNode; text: ReactNode; c
         {children}
       </span>
     </div>
-  );
-}
-
-/** Copies the text; a browser that refuses the clipboard leaves the text to be selected by hand. */
-function CopyButton({ text, name }: { text: string; name: string }) {
-  return (
-    <Button
-      size="sm"
-      aria-label={`Copy ${name}`}
-      onClick={() => void navigator.clipboard?.writeText(text).catch(() => undefined)}
-    >
-      <Copy size={12} strokeWidth={1.75} aria-hidden="true" />
-      Copy
-    </Button>
   );
 }
