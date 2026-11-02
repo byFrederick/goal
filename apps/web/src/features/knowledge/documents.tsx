@@ -22,28 +22,36 @@ import { documentStatus, formatBytes, refusalText } from './words';
 
 const pageSize = 100;
 
-/** A document's title (opening its text) and status, as both Knowledge pages list it. */
-export function DocumentLine({
-  source,
-  document: d,
-  now,
-}: {
-  source: string;
-  document: KnowledgeDocument;
-  now: number;
-}) {
+/** Where a document lives, for the mono line under its title: its path at the source, else its type. */
+function documentPath(d: KnowledgeDocument): string {
+  const url = externalUrl(d.url);
+  if (!url) return d.mime;
+  try {
+    const path = decodeURIComponent(new URL(url).pathname).replace(/^\/+/, '');
+    return path.replace(/^[^/]+\/[^/]+\/(?:blob|tree)\/[^/]+\//, '') || url;
+  } catch {
+    return url;
+  }
+}
+
+/** A document's title (opening its text) with its path under it, as the Knowledge source page lists it. */
+export function DocumentLine({ source, document: d }: { source: string; document: KnowledgeDocument }) {
   const org = useOrg();
+  const path = documentPath(d);
   return (
-    <span className="flex min-w-0 flex-col gap-0.5">
+    <span className="flex min-w-0 flex-col">
       <Link
         to="/o/$org/knowledge/$source"
         params={{ org: org.slug, source }}
         search={{ document: d.id }}
-        className="min-w-0 break-words text-[15px] text-ink underline underline-offset-3 hover:text-run"
+        title={d.title}
+        className="min-w-0 truncate font-control text-body text-ink hover:text-run-ink"
       >
         {d.title}
       </Link>
-      <StatusText line={documentStatus(d, now)} className="text-sm" />
+      <span translate="no" title={path} className="min-w-0 truncate font-mono text-meta text-muted">
+        {path}
+      </span>
     </span>
   );
 }
@@ -58,7 +66,7 @@ export function DocumentList({ source, manage }: { source: KnowledgeSource; mana
 
   if (pages.isPending) {
     return (
-      <p aria-busy="true" className="m-0 text-sm text-muted">
+      <p aria-busy="true" className="m-0 text-body text-muted">
         Loading documents…
       </p>
     );
@@ -66,7 +74,7 @@ export function DocumentList({ source, manage }: { source: KnowledgeSource; mana
   if (pages.isError) {
     return (
       <div role="alert" className="flex flex-col items-start gap-2">
-        <p className="m-0 text-sm text-rework-ink">Couldn’t load the documents.</p>
+        <p className="m-0 text-body text-rework-ink">Couldn’t load the documents.</p>
         <Button variant="white" onClick={() => void pages.refetch()}>
           Try again
         </Button>
@@ -75,7 +83,7 @@ export function DocumentList({ source, manage }: { source: KnowledgeSource; mana
   }
   if (documents.length === 0) {
     return (
-      <p className="m-0 text-sm text-muted">
+      <p className="m-0 text-body text-muted">
         {source.kind === 'upload'
           ? 'No documents yet. Uploaded files show here, then agents can search them.'
           : 'No documents yet. They show here once its first sync ends.'}
@@ -88,12 +96,13 @@ export function DocumentList({ source, manage }: { source: KnowledgeSource; mana
         {documents.map((d) => (
           <li
             key={d.id}
-            className="flex items-start justify-between gap-3 border-t border-line py-3 first:border-t-0 first:pt-0"
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-line py-2 first:border-t-0 first:pt-0 md:grid-cols-[minmax(0,1fr)_auto_4.5rem_auto]"
           >
-            <span className="flex min-w-0 flex-col gap-0.5">
-              <DocumentLine source={source.name} document={d} now={now} />
-              <span className="text-[13px] text-muted">{formatBytes(d.bytes)}</span>
-            </span>
+            <DocumentLine source={source.name} document={d} />
+            <div className="order-last col-span-2 flex flex-wrap items-baseline gap-x-3 md:contents">
+              <StatusText line={documentStatus(d, now)} className="text-secondary" />
+              <span className="text-meta text-muted tabular-nums md:text-right">{formatBytes(d.bytes)}</span>
+            </div>
             <DocumentActions
               document={d}
               upload={source.kind === 'upload'}
@@ -106,7 +115,7 @@ export function DocumentList({ source, manage }: { source: KnowledgeSource; mana
       {pages.hasNextPage ? (
         <Button
           variant="white"
-          className="h-11 self-start md:h-10"
+          className="self-start"
           disabled={pages.isFetchingNextPage}
           onClick={() => void pages.fetchNextPage()}
         >
@@ -135,9 +144,9 @@ function DocumentActions({
     return url ? (
       <Button
         asChild
-        variant="white"
+        variant="ghost"
         size="icon"
-        className="size-11 md:size-9"
+        className="size-11 md:size-8"
         aria-label={`Open ${d.title} at its source`}
       >
         <a href={url} target="_blank" rel="noreferrer noopener">
@@ -149,7 +158,7 @@ function DocumentActions({
   return (
     <Menu>
       <MenuTrigger asChild>
-        <Button variant="white" size="icon" className="size-11 md:size-9" aria-label={`Actions for ${d.title}`}>
+        <Button variant="ghost" size="icon" className="size-11 md:size-8" aria-label={`Actions for ${d.title}`}>
           <Ellipsis size={18} strokeWidth={1.5} aria-hidden="true" />
         </Button>
       </MenuTrigger>
@@ -197,7 +206,7 @@ function DeleteDocumentDialog({ document: d, onClose }: { document: KnowledgeDoc
       }}
     >
       {remove.error ? (
-        <p role="alert" className="m-0 text-sm text-rework-ink">
+        <p role="alert" className="m-0 text-body text-rework-ink">
           {refusalText(remove.error)}
         </p>
       ) : null}
@@ -228,33 +237,33 @@ export function DocumentDialog({ source, id }: { source: KnowledgeSource; id: st
           className="max-w-[720px]"
         >
           {read.isPending ? (
-            <p aria-busy="true" className="m-0 text-sm text-muted">
+            <p aria-busy="true" className="m-0 text-body text-muted">
               Loading its text…
             </p>
           ) : read.isError ? (
-            <p role="alert" className="m-0 text-sm text-rework-ink">
+            <p role="alert" className="m-0 text-body text-rework-ink">
               {refusalText(read.error)}
             </p>
           ) : d ? (
             <>
-              <StatusText line={documentStatus(d, Date.now())} className="text-sm" />
+              <StatusText line={documentStatus(d, Date.now())} className="text-body" />
               {text ? (
                 <section
                   // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must be focusable
                   tabIndex={0}
                   aria-label={`Indexed text of ${d.title}`}
-                  className="max-h-[50dvh] overflow-y-auto rounded-control border border-line bg-card p-3 text-sm leading-relaxed break-words whitespace-pre-wrap"
+                  className="max-h-[50dvh] overflow-y-auto rounded-control border border-line bg-card p-3 text-body leading-relaxed break-words whitespace-pre-wrap"
                 >
                   {text}
                 </section>
               ) : (
-                <p className="m-0 text-sm text-muted">
+                <p className="m-0 text-body text-muted">
                   Nothing indexed yet: agents find its text once{' '}
                   {d.status === 'pending' ? 'it is indexed' : 'it has some'}.
                 </p>
               )}
               {text ? (
-                <p className="m-0 text-[13px] text-muted">
+                <p className="m-0 text-secondary text-muted">
                   {plural(text.length, 'character')} indexed.{' '}
                   {source.kind === 'upload'
                     ? 'An agent reads it whole with knowledge__read.'
@@ -263,14 +272,14 @@ export function DocumentDialog({ source, id }: { source: KnowledgeSource; id: st
               ) : null}
               <div className="flex flex-wrap justify-end gap-2">
                 {source.kind === 'upload' ? (
-                  <Button asChild variant="white" className="h-11 md:h-10">
+                  <Button asChild variant="white">
                     <a href={documentContentUrl(org.id, d.id)} download={d.title}>
                       <Download size={16} strokeWidth={1.5} aria-hidden="true" />
                       Download original
                     </a>
                   </Button>
                 ) : externalUrl(d.url) ? (
-                  <Button asChild variant="white" className="h-11 md:h-10">
+                  <Button asChild variant="white">
                     <a href={externalUrl(d.url)} target="_blank" rel="noreferrer noopener">
                       <ExternalLink size={16} strokeWidth={1.5} aria-hidden="true" />
                       Open at its source

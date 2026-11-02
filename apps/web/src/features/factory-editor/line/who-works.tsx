@@ -6,7 +6,7 @@ import { Link } from '@tanstack/react-router';
 import { Users } from 'lucide-react';
 import { useState } from 'react';
 import type { ModelStation } from '../../../shared/definition/model';
-import { cn } from '../../../ui/cn';
+import { Select } from '../../../ui/select';
 import { addAgent, setLibrarian, setRoute, setStationField, slug } from '../draft/ops';
 import { useSection } from '../draft/use-draft';
 import { hasExternalIntake, intakeSummary, stationLabel } from './labels';
@@ -15,12 +15,6 @@ import { LanesDialog, TextDialog } from './station-dialogs';
 
 const routed = '__route';
 const create = '__new';
-
-const select = cn(
-  'h-11 w-full min-w-0 cursor-pointer truncate rounded-control border border-rule bg-card pr-8 pl-2.5 text-base text-ink transition-colors duration-(--duration-quick) md:h-9 md:text-sm',
-  'hover:border-muted aria-[invalid=true]:border-rework',
-  'disabled:cursor-default disabled:border-line disabled:bg-shell disabled:hover:border-line',
-);
 
 export function WhoWorks({
   station,
@@ -70,20 +64,13 @@ export function WhoWorks({
   if (station.kind === 'done') {
     return (
       <span className="flex min-w-0 flex-col gap-1">
-        <select
+        <Select
           aria-label={`Who works at ${label}`}
           value={line.librarian ?? ''}
           disabled={editor.viewOnly}
-          onChange={(e) => editor.edit(setLibrarian(line, e.target.value || null))}
-          className={select}
-        >
-          <option value="">Nobody, items close</option>
-          {agents.map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
-          ))}
-        </select>
+          onValueChange={(next) => editor.edit(setLibrarian(line, next || null))}
+          options={[{ value: '', label: 'Nobody, items close' }, ...agents.map((a) => ({ value: a, label: a }))]}
+        />
         {line.librarian ? (
           <span className="text-[13px] leading-snug text-muted">Runs when the librarian ships</span>
         ) : null}
@@ -98,14 +85,13 @@ export function WhoWorks({
 
   return (
     <>
-      <select
+      <Select
         aria-label={`Who works at ${label}`}
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
         value={value}
         disabled={editor.viewOnly}
-        onChange={(e) => {
-          const v = e.target.value;
+        onValueChange={(v) => {
           if (v === create) setNewAgent(true);
           else if (v === routed) setLanes(true);
           else {
@@ -113,22 +99,22 @@ export function WhoWorks({
             editor.edit(setStationField(cleared, station.id, 'agent', v || undefined));
           }
         }}
-        className={select}
-      >
-        {value === '' ? <option value="">Choose an agent</option> : null}
-        {agents.map((a) => (
-          <option key={a} value={a}>
-            {a === station.agent && count > 1 ? `${a} × ${count}` : a}
-          </option>
-        ))}
-        {station.agent && !taken.has(station.agent) ? (
-          <option value={station.agent}>{station.agent} (not an agent)</option>
-        ) : null}
-        <option value={routed}>
-          {lanesCount > 0 ? `${lanesCount} ${lanesCount === 1 ? 'lane' : 'lanes'}, routed by lane` : 'Routed by lane…'}
-        </option>
-        <option value={create}>+ New agent…</option>
-      </select>
+        options={[
+          ...(value === '' ? [{ value: '', label: 'Choose an agent' }] : []),
+          ...agents.map((a) => ({ value: a, label: a === station.agent && count > 1 ? `${a} × ${count}` : a })),
+          ...(station.agent && !taken.has(station.agent)
+            ? [{ value: station.agent, label: `${station.agent} (not an agent)` }]
+            : []),
+          {
+            value: routed,
+            label:
+              lanesCount > 0
+                ? `${lanesCount} ${lanesCount === 1 ? 'lane' : 'lanes'}, routed by lane`
+                : 'Routed by lane…',
+          },
+          { value: create, label: '+ New agent…' },
+        ]}
+      />
       <TextDialog
         open={newAgent}
         onOpenChange={setNewAgent}

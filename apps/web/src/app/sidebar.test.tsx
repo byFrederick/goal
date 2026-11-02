@@ -336,16 +336,20 @@ describe('the sidebar', () => {
     expect(link.getAttribute('href')).toBe('/o/acme/spend');
   });
 
-  it('links Docs to /docs in the same tab, just above the spend', async () => {
+  it('has no Docs row; Help and docs lives in the account menu', async () => {
     renderSidebar();
     const sidebar = await nav();
 
-    const docs = within(sidebar).getByRole('link', { name: 'Docs' });
-    expect(docs.getAttribute('href')).toBe('/docs');
-    expect(docs.getAttribute('target')).toBeNull();
-    expect(docs.getAttribute('aria-current')).toBeNull();
-    const spend = within(sidebar).getByRole('link', { name: /Spend this week/ });
-    expect(docs.compareDocumentPosition(spend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(sidebar).queryByRole('link', { name: 'Docs' })).toBeNull();
+  });
+
+  it('draws the spend as a plain row with a 4px ink bar', async () => {
+    renderSidebar();
+    const link = within(await nav()).getByRole('link', { name: /Spend this week/ });
+
+    expect(link.className).not.toMatch(/\bborder\b|bg-card/);
+    expect(link.querySelector('.h-1 .bg-ink')).toBeTruthy();
+    expect(link.innerHTML).not.toContain('bg-run');
   });
 
   it('shows the amount alone when no factory has a budget', async () => {
@@ -405,6 +409,7 @@ describe('the sidebar', () => {
 
       expect(button.getAttribute('aria-disabled')).toBeNull();
       expect(button.getAttribute('aria-keyshortcuts')).toBe('C');
+      expect(button.className).not.toContain('bg-run');
       fireEvent.click(button);
       expect(await screen.findByRole('dialog', { name: 'New item' })).toBeTruthy();
       expect(screen.getByRole('combobox', { name: 'Factory' })).toBeTruthy();
@@ -415,8 +420,8 @@ describe('the sidebar', () => {
       await nav();
       fireEvent.keyDown(document.body, { key: 'c' });
 
-      const picker = (await screen.findByRole('combobox', { name: 'Factory' })) as HTMLSelectElement;
-      expect(picker.value).toBe('goal-id');
+      const picker = await screen.findByRole('combobox', { name: 'Factory' });
+      expect(picker.textContent).toBe('goal');
     });
 
     it('starts the picker empty when C is pressed elsewhere', async () => {
@@ -424,8 +429,8 @@ describe('the sidebar', () => {
       await nav();
       fireEvent.keyDown(document.body, { key: 'c' });
 
-      const picker = (await screen.findByRole('combobox', { name: 'Factory' })) as HTMLSelectElement;
-      expect(picker.value).toBe('');
+      const picker = await screen.findByRole('combobox', { name: 'Factory' });
+      expect(picker.textContent).toBe('Choose a factory');
     });
 
     it('opens the composer with C', async () => {

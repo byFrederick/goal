@@ -3,15 +3,18 @@
 // factory's floor. An approval is decided here: Approve runs the item's approve decision, and Deny opens
 // the item, where a send-back takes its reason. Kinds this page does not know get a Review link. There
 // are no Question rows: questions are not built yet.
+
 import { Link } from '@tanstack/react-router';
 import { useId } from 'react';
 import type { Factory, Inbox, InboxEntry, ItemCard, OrgSummary } from '../../api/types';
+import { FactoryBadge } from '../../app/factory-badge';
 import { refParam } from '../../shared/factory';
 import { humanize, plural } from '../../shared/format';
 import { type DecidableItem, useDecision } from '../../shared/item-actions';
 import { holds, reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
+import { NumberRoll } from '../../ui/number-roll';
 
 /** At most this many rows on Home; the rest wait behind "Open all". */
 const shown = 5;
@@ -40,8 +43,9 @@ export function NeedsYouFirst({
         <h2 id="needs-you-first" className="m-0 text-heading">
           Needs you first
         </h2>
-        <span className="rounded-chip bg-you-tint px-2 text-meta text-you-ink tabular-nums">
-          {inbox.entries.length}
+        <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-you px-1 text-meta font-semibold tabular-nums text-white">
+          <NumberRoll value={inbox.entries.length} />
+          <span className="sr-only"> waiting on you</span>
         </span>
         <Link
           to="/o/$org/needs-you"
@@ -94,12 +98,7 @@ function AskRow({
 
   return (
     <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-t border-line py-3 @[480px]:grid-cols-[auto_minmax(0,1fr)_auto]">
-      <span
-        aria-hidden="true"
-        className="flex size-6 items-center justify-center rounded-control bg-run text-meta font-semibold text-white"
-      >
-        {mark}
-      </span>
+      <FactoryBadge mark={mark} />
       <div className="min-w-0">
         <span className={cn('block text-meta font-semibold', kind.tone)}>{kind.label}</span>
         <span className="block text-body break-words">{kind.title}</span>

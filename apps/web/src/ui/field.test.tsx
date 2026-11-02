@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { Field, Input } from './field';
+import { Field, Input, NativeSelect } from './field';
 
 afterEach(cleanup);
 
@@ -29,5 +29,20 @@ describe('Field', () => {
     const input = screen.getByRole('textbox', { name: 'Connection name' });
     expect(input.getAttribute('aria-invalid')).toBeNull();
     expect(input.closest('div')?.classList.contains('motion-safe:animate-error-shake')).toBe(false);
+  });
+
+  it('draws inputs and selects 32 px tall at every width', () => {
+    render(
+      <>
+        <Input aria-label="Name" />
+        <NativeSelect aria-label="Kind" />
+      </>,
+    );
+    for (const name of ['Name', 'Kind']) {
+      const classes = Array.from(screen.getByLabelText(name).classList);
+      expect(classes).toContain('h-8');
+      expect(classes).not.toEqual(expect.arrayContaining(['h-11']));
+      expect(classes).not.toContain('md:h-10');
+    }
   });
 });

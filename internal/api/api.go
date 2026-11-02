@@ -481,34 +481,13 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 
 	it, err := s.engine.Submit(ctx, domain.NewItem{
 		FactoryID: domain.FactoryID(f.Metadata.ID), Type: typ, Title: strings.TrimSpace(b.Title),
-		Body: deref(b.Body), Lane: deref(b.Lane), Priority: deref(b.Priority), Source: submittedFrom(ctx),
+		Body: deref(b.Body), Lane: deref(b.Lane), Priority: deref(b.Priority),
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	return gen.SubmitItem201JSONResponse(s.itemOf(ctx, it)), nil
-}
-
-// submittedFrom is where an item the request submits comes from, for Intake: an API key is the
-// API; a user acting through a personal token or a session that is not a browser one (goal
-// login's) is the CLI; a browser session, and GOAL_AUTH=none's one person, who has neither, are
-// people. "" when the request carries no principal.
-func submittedFrom(ctx context.Context) domain.ItemSource {
-	p, ok := domain.PrincipalFrom(ctx)
-
-	switch {
-	case !ok:
-		return ""
-	case p.Kind == domain.PrincipalService:
-		return domain.ItemFromAPI
-	case p.Kind != domain.PrincipalUser:
-		return ""
-	case p.Token != nil, p.Session != nil && !p.Session.Browser:
-		return domain.ItemFromCLI
-	default:
-		return domain.ItemFromPeople
-	}
 }
 
 func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen.GetItemResponseObject, error) {

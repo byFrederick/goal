@@ -29,12 +29,12 @@ export interface Stat {
 export function StatStrip({ stats, label, className }: { stats: readonly Stat[]; label: string; className?: string }) {
   const shown = stats.slice(0, maxStats);
   return (
-    <section aria-label={label} className={cn('flex flex-wrap gap-y-4 md:flex-nowrap', className)}>
+    <section aria-label={label} className={cn('flex flex-wrap gap-y-4', className)}>
       {shown.map((stat, i) => (
         <div
           key={stat.label}
           className={cn(
-            'flex min-w-36 flex-1 basis-36 flex-col gap-1 px-5 md:min-w-0 md:basis-0 first:pl-0',
+            'flex min-w-36 flex-1 basis-36 flex-col gap-1 px-5 first:pl-0',
             i > 0 && 'border-l border-line',
           )}
         >

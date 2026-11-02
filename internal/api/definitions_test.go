@@ -1010,36 +1010,3 @@ func TestDefinitions_ListFactoriesHidesArchived(t *testing.T) {
 		}
 	}
 }
-
-// Factory settings shows the factory's purpose: metadata.purpose, or its deprecated alias
-// description when only that is set, on the factory and in the list.
-func TestDefinitions_FactoryShowsItsPurpose(t *testing.T) {
-	t.Parallel()
-
-	h := newHarness(t)
-
-	for _, c := range []struct{ field, want string }{
-		{"purpose", "Ships the backend"},
-		{"description", "Ships the old way"},
-	} {
-		h.openDraft(t)
-		h.saveYAML(t, strings.Replace(acme, "title: Acme }", "title: Acme, "+c.field+": "+c.want+" }", 1))
-		h.publish(t, "Say what acme is for")
-
-		if _, err := h.versions.Refresh(t.Context()); err != nil { // as the definitions cache does on a change
-			t.Fatal(err)
-		}
-
-		got := decode[gen.Factory](t, h.request(t, http.MethodGet, acmeFactory, "", nil), http.StatusOK)
-		if got.Description == nil || *got.Description != c.want {
-			t.Errorf("factory with metadata.%s: description = %v, want %q", c.field, got.Description, c.want)
-		}
-
-		list := decode[gen.FactoryList](t, h.request(t, http.MethodGet, "/v1/orgs/acme/factories", "", nil), http.StatusOK)
-		for _, f := range list.Factories {
-			if f.Id == acmeID && (f.Description == nil || *f.Description != c.want) {
-				t.Errorf("listed factory with metadata.%s: description = %v, want %q", c.field, f.Description, c.want)
-			}
-		}
-	}
-}

@@ -45,10 +45,13 @@ The decision behind reviews is ADR 0034 (`docs/adr/0034-jonah-proposals.md` in t
 
 ## Where the review loop stands
 
-goald starts the review loop and sweeps for threshold reviews every minute by default (`GOAL_JONAH_REVIEW_EVERY`). The manual trigger is not available yet: the web app's "Look for improvements now" is disabled, `goal jonah look` refuses, and the API answers a manual review with `review-loop-not-running`. Learned facts, eval cases proposed by a review, and judges proposed by a review are not part of reviews yet.
+goald starts the review loop and sweeps for threshold reviews every minute by default (`GOAL_JONAH_REVIEW_EVERY`). The manual trigger is not available yet: the web app's "Look for improvements now" is not available yet, `goal jonah look` refuses, and the API answers a manual review with `review-loop-not-running`. Learned facts, eval cases proposed by a review, and judges proposed by a review are not part of reviews yet.
+
+A goald without judges or evals shows the Judges, Evals and Bake-offs pages empty, with creating a judge, an eval case or a bake-off not available yet.
 
 ## Where you meet it
 
+- The Jonah overview shows each judge's pass rate over the last 30 days against its pass mark: the latest period in black, the earlier ones in grey, and the pass mark as a dashed line. Each chart opens that judge.
 - `goal jonah` lists proposals. `show` displays the evidence and a unified diff, and `approve`, `edit` and `reject` decide one.
 - `goal judge` and `goal eval` manage judges and eval runs. `goal bake-off` runs the comparisons.
 - `goal spend` shows what runs cost, judges and reviews included.

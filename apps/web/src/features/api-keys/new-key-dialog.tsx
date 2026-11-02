@@ -277,10 +277,10 @@ export function NewKeyDialog({ org, factories, onClose, onCreated }: NewKeyDialo
           </div>
 
           <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="white" size="lg" className="md:h-10" onClick={onClose}>
+            <Button variant="white" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="lg" className="md:h-10" disabled={create.isPending}>
+            <Button type="submit" variant="primary" disabled={create.isPending}>
               {create.isPending ? 'Creating…' : 'Create key'}
             </Button>
           </div>

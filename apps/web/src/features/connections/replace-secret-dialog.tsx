@@ -91,17 +91,9 @@ export function SecretReplaceDialog<Saved>({
           ) : null}
           <div className="flex flex-wrap justify-end gap-2">
             <DialogClose asChild>
-              <Button variant="secondary" size="lg" className="md:h-10 md:text-sm">
-                Cancel
-              </Button>
+              <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              className="md:h-10 md:text-sm"
-              disabled={value === '' || replace.isPending}
-            >
+            <Button type="submit" variant="primary" disabled={value === '' || replace.isPending}>
               {replace.isPending ? pendingLabel : actionLabel}
             </Button>
           </div>

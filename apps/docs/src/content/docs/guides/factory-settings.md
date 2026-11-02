@@ -12,7 +12,7 @@ You end with the factory's repository, runtime, budgets and flow set as you want
 
 ## How Save changes publishes
 
-Save changes is in the top bar, with a line beside it that says which version it publishes, for example "Saving publishes v22". While it publishes the button reads "Saving…", and a check shows once the version is out. Save changes:
+The line above Save changes says which version it publishes, for example "Saving publishes v22". Save changes:
 
 1. saves any change still waiting,
 2. publishes the open draft as that version, and
@@ -22,15 +22,13 @@ The draft is shared with the Definition editor. Saving publishes everything in i
 
 ## Sections
 
-Settings lists its sections in this order. Every section is open; scroll the page or use the "On this page" list at the right, which marks the section in view.
+Settings lists its sections in this order. Each group opens and closes under its title.
 
 ### General
 
-The factory's name, its purpose from the definition, and its Badge: the colour and letter the sidebar shows. All three are read-only here.
+The factory's name and purpose. Read-only here; the factory's name and purpose are not edited by these groups.
 
 ### Repository
-
-The page shows the repository URL with a chip, "Connected with" and the connection's name, and a Change button. Change opens the two fields below in place; edits still save into the draft. With no repository set, the fields show directly.
 
 | Field | Sets | Notes |
 |---|---|---|

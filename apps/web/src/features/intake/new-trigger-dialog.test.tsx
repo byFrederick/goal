@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { connectionsQuery } from '../../api/queries';
 import type { Factory, OrgSummary } from '../../api/types';
+import { connectionFixture } from '../../test/connections-route';
 import { renderFactoryPage } from '../../test/route';
 import { NewTriggerDialog } from './new-trigger-dialog';
 
@@ -25,13 +25,14 @@ const factory: Factory = {
   can: ['definition:edit'],
 } as unknown as Factory;
 
-function renderPicker(connections?: unknown[]) {
+function renderPicker(kinds: string[] = ['github', 'cloudflare']) {
+  const connections = kinds.map((kind) => connectionFixture({ name: `${kind}-acme`, kind }));
   return renderFactoryPage({
     page: () => <NewTriggerDialog />,
     path: 'intake/new',
     org,
     factory,
-    seed: connections ? [[connectionsQuery('acme', { kind: 'github' }).queryKey, connections]] : [],
+    seed: [[connectionsQuery(org.id).queryKey, connections]],
   });
 }
 
@@ -48,6 +49,33 @@ describe('New trigger picker', () => {
     }
     fireEvent.focus(screen.getByRole('button', { name: 'Slack' }));
     expect((await screen.findAllByText('Not available yet')).length).toBeGreaterThan(0);
+  });
+
+  it("groups the sources by the organization's own connections", async () => {
+    renderPicker([]);
+    await screen.findByRole('dialog', { name: 'New trigger' });
+
+    const group = (title: string) => screen.getByRole('heading', { name: title }).parentElement as HTMLElement;
+    expect(within(group('Built in')).getByRole('button', { name: 'Schedule' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Connected' })).toBeNull();
+    const notConnected = group('Not connected');
+    expect(within(notConnected).getByRole('button', { name: 'GitHub' })).toBeTruthy();
+    expect(within(notConnected).getByRole('link', { name: 'Connect GitHub' })).toBeTruthy();
+    // A source that is not built has no Connect: connecting it would do nothing.
+    expect(within(notConnected).getByRole('button', { name: 'Slack' })).toBeTruthy();
+    expect(within(notConnected).queryByRole('link', { name: 'Connect Slack' })).toBeNull();
+  });
+
+  it('puts a source under Connected only when its connection exists and it is built', async () => {
+    renderPicker(['github', 'slack']);
+    await screen.findByRole('dialog', { name: 'New trigger' });
+
+    const connected = screen.getByRole('heading', { name: 'Connected' }).parentElement as HTMLElement;
+    expect(within(connected).getByRole('button', { name: 'GitHub' })).toBeTruthy();
+    expect(within(connected).queryByRole('button', { name: 'Slack' })).toBeNull();
+    const notConnected = screen.getByRole('heading', { name: 'Not connected' }).parentElement as HTMLElement;
+    expect(within(notConnected).getByRole('button', { name: 'Cloudflare' })).toBeTruthy();
+    expect(within(notConnected).getByRole('button', { name: 'Slack' })).toBeTruthy();
   });
 
   it('lists the built-in and connected sources as choosable', async () => {
@@ -128,57 +156,19 @@ describe('New trigger picker', () => {
     expect(router.state.location.pathname).toBe('/o/acme/f/widgets/intake/new');
   });
 
-  it('draws plain source icons with no filled tile', async () => {
-    renderPicker([{ name: 'github' }]);
+  it('groups the sources, links Connect for those not connected and filters them by search', async () => {
+    renderPicker(['github']);
     await screen.findByRole('dialog', { name: 'New trigger' });
-    for (const name of ['Schedule', 'GitHub', 'Slack']) {
-      const button = screen.getByRole('button', { name });
-      expect(button.querySelector('[class*="bg-"]')).toBeNull();
-      expect(button.querySelector('svg')).not.toBeNull();
+
+    for (const title of ['Built in', 'Connected', 'Not connected']) {
+      expect(screen.getByRole('heading', { level: 3, name: title })).toBeTruthy();
     }
-  });
+    expect(screen.getByRole('link', { name: 'Connect Cloudflare' }).getAttribute('href')).toBe('/o/acme/connections');
+    expect(screen.getByRole('list', { name: 'New trigger steps' })).toBeTruthy();
 
-  it('puts the title and the step on one row and lists suggestions one per row', async () => {
-    renderPicker();
-    const dialog = await screen.findByRole('dialog', { name: 'New trigger' });
-    const title = within(dialog).getByText('New trigger', { selector: 'h2' });
-    expect(title.parentElement?.className).toContain('flex-row');
-    expect(title.parentElement?.contains(screen.getByText('Step 1 of 2: what starts it'))).toBe(true);
-    const list = screen.getByText('Fix failing checks on pull requests').closest('ul') as HTMLElement;
-    expect(list.className).toContain('flex-col');
-    expect(list.className).not.toContain('grid-cols');
-  });
-
-  it('keeps GitHub choosable when the organization has a github connection', async () => {
-    renderPicker([{ name: 'github' }]);
-    await screen.findByRole('dialog', { name: 'New trigger' });
-    expect(screen.getByRole('button', { name: 'GitHub' }).getAttribute('aria-disabled')).toBeNull();
-    expect(screen.queryByRole('link', { name: /Connect/ })).toBeNull();
-  });
-
-  it('shows a Connect link to Connections instead of choosing GitHub when there is no connection', async () => {
-    renderPicker([]);
-    await screen.findByRole('dialog', { name: 'New trigger' });
-    expect(screen.getByRole('button', { name: 'GitHub' }).getAttribute('aria-disabled')).toBe('true');
-    expect(screen.getByRole('link', { name: 'Connect GitHub' }).getAttribute('href')).toBe('/o/acme/connections');
-    expect(screen.getByRole('button', { name: 'Continue' }).hasAttribute('disabled')).toBe(true);
-  });
-
-  it('gives the unbuilt sources no Connect link', async () => {
-    renderPicker([]);
-    await screen.findByRole('dialog', { name: 'New trigger' });
-    expect(screen.getAllByRole('link', { name: /Connect/ })).toHaveLength(1);
-    expect(screen.getByRole('button', { name: 'Slack' }).getAttribute('aria-disabled')).toBe('true');
-  });
-
-  it('does not focus the Close button on open, and Tab reaches it', async () => {
-    renderPicker();
-    const dialog = await screen.findByRole('dialog', { name: 'New trigger' });
-    const close = screen.getByRole('button', { name: 'Close' });
-    await waitFor(() => expect(document.activeElement).not.toBe(close));
-    expect(dialog.contains(document.activeElement)).toBe(true);
-    const user = userEvent.setup();
-    for (let i = 0; i < 40 && document.activeElement !== close; i++) await user.tab();
-    expect(document.activeElement).toBe(close);
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search sources' }), { target: { value: 'jir' } });
+    expect(screen.getByRole('button', { name: 'Jira' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'GitHub' })).toBeNull();
+    expect(screen.queryByRole('heading', { level: 3, name: 'Built in' })).toBeNull();
   });
 });

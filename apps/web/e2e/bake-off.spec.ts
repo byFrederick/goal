@@ -13,7 +13,7 @@ test.beforeEach(async ({ request }) => {
 async function expectPicture(page: Page) {
   await expect(page.getByRole('heading', { level: 1, name: 'Which model for frontend-engineer?' })).toBeVisible();
   await expect(
-    page.getByText('3 models on the same 5 frontend cases, 3 tries each. Finished Oct 25 at 18:40, cost $14.20.'),
+    page.getByText(/3 models on the same 5 frontend cases, 3 tries each\. Finished Oct 25 at 18:40/),
   ).toBeVisible();
   await expect(
     page.getByRole('heading', { name: 'claude-haiku-5-5: the same pass rate at a tenth of the cost' }),
@@ -23,12 +23,15 @@ async function expectPicture(page: Page) {
   await expect(page.getByRole('table', { name: 'Results of the bake-off, one row per model' })).toBeVisible();
 }
 
-test('the Bake-offs tab opens the newest bake-off as pictured', async ({ page }) => {
+test('the Bake-offs tab lists the bake-offs and a row opens one', async ({ page }) => {
   await page.goto(url);
-  await expect(page).toHaveURL(/\/jonah\/bake-offs\/bake-off-1$/);
-  await expectPicture(page);
+  await expect(page).toHaveURL(/\/jonah\/bake-offs$/);
+  await expect(page.getByRole('list', { name: 'Bake-offs' })).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
+  await page.getByRole('link', { name: /Which model for frontend-engineer\?/ }).click();
+  await expect(page).toHaveURL(/\/jonah\/bake-offs\/bake-off-1$/);
+  await expectPicture(page);
 });
 
 for (const width of [375, 768, 1440]) {
@@ -71,3 +74,19 @@ test('Apply to the definition writes the model and links to the draft', async ({
     '/o/acme/f/software/definition',
   );
 });
+
+// Screenshots of both screens, for the pull request: 1440 and 375 px, light and dark.
+for (const scheme of ['light', 'dark'] as const) {
+  for (const width of [1440, 375]) {
+    test(`screenshots at ${width} px in ${scheme}`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(url);
+      await expect(page.getByRole('list', { name: 'Bake-offs' })).toBeVisible();
+      await page.screenshot({ path: `test-results/bake-offs-${width}-${scheme}.png`, fullPage: true });
+      await page.goto(`${url}/bake-off-1`);
+      await expectPicture(page);
+      await page.screenshot({ path: `test-results/bake-off-${width}-${scheme}.png`, fullPage: true });
+    });
+  }
+}

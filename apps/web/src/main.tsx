@@ -3,8 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createRouter, RouterProvider } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ApiError } from './api/client';
 import { keys } from './api/queries';
+import { shouldRetry } from './api/retry';
 import { safeNext, setSessionHandlers } from './api/session';
 import { routerOptions } from './app/router-options';
 import { registerServiceWorker } from './pwa/register';
@@ -14,8 +14,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 10_000,
-      // A 4xx will not fix itself; a network blip might.
-      retry: (count, err) => !(err instanceof ApiError && err.status < 500) && count < 2,
+      // A 4xx or a feature goald was built without will not fix itself; a network blip might (api/retry.ts).
+      retry: shouldRetry,
     },
   },
 });

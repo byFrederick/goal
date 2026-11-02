@@ -171,27 +171,6 @@ describe('AgentsPage', () => {
     expect(screen.getAllByText('Constraint')).toHaveLength(1);
   });
 
-  it('names stations in sentence case and marks the constraint the statistics report', async () => {
-    const unnamed = {
-      ...line,
-      line: {
-        flow: { constraint: 'build' },
-        stations: line.line.stations.map(({ name: _name, ...station }) => station),
-      },
-    };
-    const reported = [
-      stats('drafter', { stations: [{ id: 'draft', slots: 1, constraint: true }] }),
-      ...readyStats.slice(1),
-    ];
-    renderPage(seeded(unnamed, reported));
-
-    const draft = (await screen.findByRole('heading', { level: 2, name: /Draft/ })).closest('li') as HTMLElement;
-    expect(screen.getByRole('heading', { level: 2, name: 'Inbox' })).toBeTruthy();
-    expect(screen.getByRole('heading', { level: 2, name: 'Done' })).toBeTruthy();
-    expect(screen.getAllByText('Constraint')).toHaveLength(1);
-    expect(within(draft).getByText('Constraint')).toBeTruthy();
-  });
-
   it("shows each card's model, its default or own model, its cap and its statistics", async () => {
     renderPage(seeded(line, readyStats));
 

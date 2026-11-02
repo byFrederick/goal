@@ -1,5 +1,5 @@
 // Jonah's overview and its Proposals tab (ADR 0034, the Jonah screens in ADR 0016). Overview shows what waits
-// for a person, how Jonah works in this factory, the pass rate by judge (not built yet) and what Jonah noticed
+// for a person, how Jonah works in this factory, the pass rate by judge and what Jonah noticed
 // this week. Proposals lists the factory's proposals in the state the URL names. Both read the Jonah queries
 // and show loading, error, empty and ready. Nothing polls: a `learning` or `definition` event or a resync
 // refreshes them.
@@ -8,8 +8,9 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { Play, Settings } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ApiError } from '../../api/client';
-import { jonahOverviewQuery, proposalsQuery } from '../../api/queries';
+import { jonahOverviewQuery, judgesQuery, proposalsQuery } from '../../api/queries';
 import type { JonahOverview, ProposalState } from '../../api/types';
+import { PendingSkeleton } from '../../app/route-skeletons';
 import { TopBarSlot } from '../../app/top-bar';
 import { useFactory, useFactoryParams } from '../../shared/factory';
 import { formatUsd } from '../../shared/format';
@@ -21,16 +22,62 @@ import { Count } from '../../ui/count';
 import { EmptyState } from '../../ui/empty-state';
 import { NotAvailable } from '../../ui/not-available';
 import { SegmentedControl, type SegmentedOption } from '../../ui/segmented-control';
-import { Skeleton, SkeletonRows } from '../../ui/skeleton';
+import { Skeleton } from '../../ui/skeleton';
 import { modelText, observationChip, proposalStateLabels, proposeAfterText, reviewersText } from './jonah-format';
 import { JonahHeader } from './jonah-header';
 import { proposalStates } from './jonah-search';
+import { PassRateChart } from './pass-rate-chart';
 import { ProposalCard } from './proposal-card';
 
-/** Loading shows the page's rows as a skeleton while the overview waits. */
+const block = 'rounded-control bg-hover';
+
+/** The overview's layout in muted blocks: the header and its tabs, the waiting and policy columns, the pass-rate row. */
+export function JonahShape() {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-5">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <div className={`${block} h-6 w-24`} />
+          <div className={`${block} h-4 w-96 max-w-full`} />
+        </div>
+        <div className={`${block} h-11 w-80 max-w-full md:h-9`} />
+      </div>
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="flex flex-col gap-3">
+          <div className={`${block} h-5 w-48`} />
+          <div className={`${block} h-32`} />
+          <div className={`${block} h-32`} />
+        </div>
+        <div className={`${block} h-64`} />
+      </div>
+      <PassRateShape />
+    </div>
+  );
+}
+
+function PassRateShape() {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className={`${block} h-5 w-64`} />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className={`${block} h-32`} />
+        <div className={`${block} h-32`} />
+        <div className={`${block} h-32`} />
+        <div className={`${block} h-32`} />
+      </div>
+    </div>
+  );
+}
+
+/** The route's pendingComponent: the overview's layout, pulsing until the page arrives. */
+export function JonahPending() {
+  return <PendingSkeleton placeholder={<JonahShape />} />;
+}
+
+/** Loading shows the page's layout as a skeleton while the overview waits. */
 export function Loading() {
   return (
-    <Skeleton ready={false} placeholder={<SkeletonRows rows={4} className="min-h-40" />}>
+    <Skeleton ready={false} placeholder={<JonahShape />}>
       <span />
     </Skeleton>
   );
@@ -54,30 +101,28 @@ export function JonahError({ error, retry }: { error: unknown; retry: () => void
 }
 
 /**
- * The header's "Look for improvements now" stays disabled until Jonah's review loop ships: a review queued
- * now would wait for a loop that never claims it, so this page never calls the review API.
+ * The header's "Look for improvements now" is not available until Jonah's review loop ships: a review queued
+ * now would wait for a loop that never claims it, so this page never calls the review API. On a phone the
+ * two actions show their icons only, so they fit beside the page title.
  */
 function topBarActions(params: { org: string; factory: string }) {
   const settings = (
     <Button key="settings" asChild variant="secondary">
       <Link to="/o/$org/f/$factory/settings" params={params}>
         <Settings aria-hidden="true" />
-        Settings
+        <span className="max-md:sr-only">Settings</span>
       </Link>
     </Button>
   );
   const look = (
-    <Button key="look" variant="primary" disabled aria-describedby="look-meta">
-      <Play aria-hidden="true" />
-      Look for improvements now
-    </Button>
+    <NotAvailable key="look">
+      <Button variant="secondary" disabled>
+        <Play aria-hidden="true" />
+        <span className="max-md:sr-only">Look for improvements now</span>
+      </Button>
+    </NotAvailable>
   );
-  const meta = (
-    <span key="look-meta" id="look-meta" className="text-meta text-muted">
-      Reviews start when Jonah's review loop ships
-    </span>
-  );
-  return [settings, look, meta];
+  return [settings, look];
 }
 
 /** One row of the policy card: a label and its value. */
@@ -133,9 +178,13 @@ function PolicyCard({ overview }: { overview: JonahOverview }) {
   );
 }
 
-/** The pass rate by judge (Judges, not built yet): the section stays, with no numbers in place of the tiles. */
+/** The pass rate by judge over the last 30 days: one chart per enabled judge, each linking to its page. */
 function PassRateSection() {
   const params = useFactoryParams();
+  const org = useOrg();
+  const factory = useFactory();
+  const judges = useQuery(judgesQuery(org.id, factory.id));
+  const enabled = judges.data?.judges.filter((judge) => judge.enabled) ?? [];
   return (
     <section aria-labelledby="pass-rate-h" className="flex min-w-0 flex-col gap-3">
       <div className="flex items-center gap-2">
@@ -145,12 +194,32 @@ function PassRateSection() {
         <Link
           to="/o/$org/f/$factory/jonah/judges"
           params={params}
-          className="ml-auto text-secondary font-control text-run no-underline hover:text-run-ink"
+          className="press ml-auto text-secondary font-control text-run no-underline hover:text-run-ink"
         >
           Judges
         </Link>
       </div>
-      <p className="m-0 rounded-card border border-line bg-card p-4 text-secondary text-muted">Not available yet</p>
+      <Skeleton ready={!judges.isPending} placeholder={<PassRateShape />}>
+        {judges.isError ? (
+          <JonahError error={judges.error} retry={() => void judges.refetch()} />
+        ) : enabled.length === 0 ? (
+          <EmptyState title="No judges are on yet">
+            A judge scores a sample of runs against a rubric you write. Its pass rate appears here once it has scored
+            some.
+          </EmptyState>
+        ) : (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {enabled.map((judge) => (
+                <PassRateChart key={judge.slug} judge={judge} />
+              ))}
+            </div>
+            <p className="m-0 mt-3 text-meta text-muted">
+              Latest period in black; the dashed line is each judge's pass mark.
+            </p>
+          </>
+        )}
+      </Skeleton>
     </section>
   );
 }
@@ -192,7 +261,7 @@ export function JonahOverviewPage() {
   if (overview.isError) {
     return (
       <div className="flex min-w-0 flex-col gap-5">
-        <TopBarSlot crumb="Jonah" actions={actions} />
+        <TopBarSlot actions={actions} />
         <JonahHeader tab="overview" />
         <JonahError error={overview.error} retry={() => void overview.refetch()} />
       </div>
@@ -206,7 +275,7 @@ export function JonahOverviewPage() {
 
   return (
     <div className="@container flex min-w-0 flex-col gap-5">
-      <TopBarSlot crumb="Jonah" actions={actions} />
+      <TopBarSlot actions={actions} />
       <JonahHeader tab="overview" counts={{ proposals: data.waiting }} />
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         {empty ? (
@@ -220,7 +289,7 @@ export function JonahOverviewPage() {
               <h2 id="waiting-h" className="m-0 text-heading">
                 Waiting for your review
               </h2>
-              <Count value={data.waiting} label=" waiting for your review" tone="you" />
+              <Count value={data.waiting} label=" waiting for your review" />
               <Link
                 to="/o/$org/f/$factory/jonah"
                 params={params}
@@ -269,7 +338,7 @@ export function JonahProposalsPage({ state }: { state?: ProposalState | undefine
   if (list.isError) {
     return (
       <div className="flex min-w-0 flex-col gap-5">
-        <TopBarSlot crumb="Jonah" actions={actions} />
+        <TopBarSlot actions={actions} />
         <JonahHeader tab="proposals" counts={counts} />
         <JonahError error={list.error} retry={() => void list.refetch()} />
       </div>
@@ -285,7 +354,7 @@ export function JonahProposalsPage({ state }: { state?: ProposalState | undefine
 
   return (
     <div className="@container flex min-w-0 flex-col gap-5">
-      <TopBarSlot crumb="Jonah" actions={actions} />
+      <TopBarSlot actions={actions} />
       <JonahHeader tab="proposals" counts={counts} />
       <SegmentedControl
         label="Proposal state"

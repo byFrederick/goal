@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, screen, within } from '@testing-library/react';
+import { cleanup, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { listMembers } from '../../api/client';
 import { defKeys, membersQuery, orgQuery } from '../../api/queries';
@@ -56,64 +56,12 @@ async function renderSettings({ can = [], members }: { can?: string[]; members?:
     [defKeys.factory(org.id, factory.id), factory],
   ];
   if (members) seed.push([membersQuery(org.id).queryKey, members]);
-  const rendered = renderFactoryPage({
-    page: () => <FactorySettingsPage />,
-    path: 'settings',
-    org,
-    factory,
-    seed,
-    topBar: true,
-  });
+  const rendered = renderFactoryPage({ page: () => <FactorySettingsPage />, path: 'settings', org, factory, seed });
   await screen.findByRole('heading', { name: 'Settings' });
   return rendered;
 }
 
 describe('Factory settings page', () => {
-  it('shows the purpose and a read-only badge with the sidebar’s letter', async () => {
-    await renderSettings();
-
-    expect((screen.getByLabelText('Purpose') as HTMLTextAreaElement).value).toBe(
-      'Triage, investigate and document production issues.',
-    );
-    const row = screen.getByText('Badge').parentElement as HTMLElement;
-    expect(within(row).getByText('S')).toBeTruthy();
-    expect(within(row).queryByRole('textbox')).toBeNull();
-  });
-
-  it('has flat sections with no disclosure buttons and no Save changes for a caller who cannot edit', async () => {
-    await renderSettings();
-
-    expect(document.querySelector('[aria-expanded]')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
-  });
-
-  it('marks the section in view in the On this page nav', async () => {
-    let notify: IntersectionObserverCallback = () => {};
-    vi.stubGlobal(
-      'IntersectionObserver',
-      class {
-        constructor(cb: IntersectionObserverCallback) {
-          notify = cb;
-        }
-        observe() {}
-        disconnect() {}
-      },
-    );
-    try {
-      await renderSettings();
-      const nav = screen.getByRole('navigation', { name: 'On this page' });
-      expect(within(nav).getByRole('link', { name: 'General' }).getAttribute('aria-current')).toBe('true');
-
-      const target = document.getElementById('flow') as HTMLElement;
-      act(() => notify([{ isIntersecting: true, target } as unknown as IntersectionObserverEntry], {} as never));
-
-      expect(within(nav).getByRole('link', { name: 'Flow' }).getAttribute('aria-current')).toBe('true');
-      expect(within(nav).getByRole('link', { name: 'General' }).getAttribute('aria-current')).toBeNull();
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
   it('shows General, People with access and the Danger zone with its rows', async () => {
     await renderSettings({ can: ['factory:archive', 'factory:delete'], members: [member('Freddy Cruz', 'owner')] });
 

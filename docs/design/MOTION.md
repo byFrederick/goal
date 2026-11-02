@@ -64,7 +64,7 @@ The recipe column names the transitions.dev recipe the implementation follows (f
 |---|---|---|---|
 | Button, icon button, segmented button, nav row: press | `scale(var(--scale-press))` on `:active` (the `press` utility, used by `Button` and `SegmentedControl`) | `--duration-micro` `--ease-out` | — |
 | Hover on anything | background, border and text colour only | `--duration-quick` `ease` | — |
-| Menu, select, popover, combobox (org menu, account menu, factory picker, Move menu, filters) | open: opacity 0→1 and `scale(0.97)`→1 from the trigger; close: opacity and `scale(0.99)` | open `--duration-fast`, close `--duration-quick`, `--ease-out` | menu-dropdown (05) |
+| Menu, select, popover, combobox (org menu, account menu, factory picker, Move menu, filters, `Select`) | open: opacity 0→1 and `scale(0.97)`→1 from the trigger; close: opacity and `scale(0.99)` | open `--duration-fast`, close `--duration-quick`, `--ease-out` | menu-dropdown (05) |
 | Tooltip | delayed 80ms in with fade and `scale(0.98)`; instant out; once one is open, the next opens with no delay (`Tooltip`, `TooltipProvider`) | in `--duration-quick` `ease-out` | tooltip (17) |
 | Dialog (New item, confirm, publish, create organization) | overlay fades; panel opacity and `scale(0.96)`→1 from centre; close is the reverse, faster | open `--duration-fast`, close `--duration-quick`, `--ease-out` | modal (06) |
 | Sheet and phone drawer | slide from its edge with fade | open `--duration-slow`, close `--duration-medium`, `--ease-drawer` | panel-reveal (07) |
@@ -74,16 +74,16 @@ The recipe column names the transitions.dev recipe the implementation follows (f
 | Keyboard shortcuts list, opened from the account menu | as a dialog: overlay fades, panel scales from the centre | dialog row | modal (06) |
 | Route change (any page) | the content area fades in and rises 4px; the shell never moves | `--duration-quick` `--ease-out`; first five blocks staggered by `--duration-stagger` | texts-reveal (18), shortened |
 | List ↔ detail inside a page (Needs you on a phone, a two-pane picker on a phone, onboarding steps) | the incoming pane slides 8px with a 3px blur cross-fade in the direction of travel | `--duration-fast` `--ease-out` | page-side-by-side (08) |
-| Tabs (Item tabs, Jonah tabs, Agent page tabs, Account side nav) and segmented controls (time window, Board/List, Form/YAML) | the selected pill or underline slides to the new tab; the content swaps with a quick fade; a tab changed by keyboard moves the underline at once and the content does not fade | pill `--duration-fast` `--ease-out`; content `--duration-quick` | tabs-sliding (16) |
-| Accordion and disclosure (tool-call details, "Show transcript", sidebar factory groups), built as `ui/disclosure.tsx` | height via `grid-template-rows` 0fr→1fr; chevron rotates | `--duration-fast` `--ease-out` | accordion (21) |
+| Tabs (Item tabs, Jonah tabs, Account side nav) and segmented controls (time window, Board/List, Form/YAML) | the selected pill or underline slides to the new tab; the content swaps with a quick fade | pill `--duration-fast` `--ease-out`; content `--duration-quick` | tabs-sliding (16) |
+| Accordion and disclosure (tool-call details, "Show transcript", settings groups, sidebar factory groups), built as `ui/disclosure.tsx` | height via `grid-template-rows` 0fr→1fr; chevron rotates | `--duration-fast` `--ease-out` | accordion (21) |
 | Switch | thumb travels with a slight overshoot; track colour fades (`Switch`) | thumb `--duration-medium` `--ease-bounce`; track `--duration-quick` | toggle (27) |
 | Checkbox (bulk select, notification matrix) | box fills, then the check draws (`Checkbox`) | box `--duration-quick`, check `--duration-medium` after the box | checkbox-check (25) |
 | Toast (sonner) | rises 8px with fade and `scale(0.97)`; stacked toasts push back | open `--duration-medium`, close `--duration-fast`, `--ease-out` | toast (22), banner-stacking (32) |
 | Board card moves to another column or lane (live update or a person's drag) | the card travels from its old box to its new one (FLIP / View Transitions); other cards in both columns reflow | `--duration-fast` `--ease-in-out` | card-resize (01) |
 | A new item appears in a list or column | fades in and rises 4px; never shifts the list it lands in without a reflow transition | `--duration-fast` `--ease-out` | texts-reveal (18) |
-| The constraint marker moves to another station (Agents) | the yellow dot and "Constraint" fade in at the new station by opacity only; the old one leaves at once; nothing travels, so reduced motion needs no change | in `--duration-fast` `--ease-out` | texts-reveal (18) |
 | A status changes in place ("Running" → "Sent back", a chip) | new text in with a 4px move and 2px blur (`Chip`) | `--duration-quick` `--ease-in-out` | text-states-swap (04) or text-morph (33) |
 | A number changes (KPIs, counts, cost, the needs-you count) | changed digits pop in from below with blur (`NumberRoll`) | `--duration-emphasis` `--ease-bounce`, 40ms per digit | number-pop-in (02) |
+| A chart bar or meter fill changes value (`Bars`, `TargetBar`, `Meter`, the KPI meter, the Spend bars) | the fill scales from its baseline (scaleY for columns, scaleX for rows) inside a clipping track; never `height` or `width`; none under reduced motion | `--duration-fast` `--ease-out` | card-resize (01) |
 | The needs-you count badge appears in the sidebar | slides in and pops | `--duration-emphasis` `--ease-bounce` | notification-badge (03) |
 | Loading: any route or panel waiting on data more than 100ms | a skeleton of the real layout pulses once, then cross-fades with a 2px blur to the content (`Skeleton`) | pulse `--duration-pulse` linear; reveal `--duration-slow` | skeleton-reveal (14) |
 | An agent working (item header, run row, Floor activity) | the status line shimmers ("Writing the spec…") and swaps to the next state | shimmer 2s linear; swap `--duration-quick` | thinking-states (28) |
@@ -92,6 +92,7 @@ The recipe column names the transitions.dev recipe the implementation follows (f
 | Approve, publish, merge succeed | the button's label swaps to a check | `--duration-emphasis` `--ease-out` | success-check (10) + icon-swap (09) |
 | Andon pulled | the red strip slides down from the top bar; the line's stations dim | `--duration-fast` `--ease-out` | panel-reveal (07), shortened |
 | Copy to clipboard | the icon swaps to a check and back after 1.5s | `--duration-fast` | icon-swap (09) |
+| Problems panel rows and count while typing (YAML view) | instant, no transition, because they follow typing (frequency decides) | — | — |
 | Drag (board, definition stations, sidebar width) | the dragged element follows the pointer 1:1 with no easing; on drop it settles | settle `--duration-fast` `--ease-out` | — |
 
 Anything not in this table: pick the closest row, add it to the table in the same pull request, and say why in the PR.

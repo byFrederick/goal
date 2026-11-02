@@ -12,8 +12,8 @@ test('the evals page lists the five cases with their tries, cost and a run for e
   await page.goto('/o/acme/f/software/jonah/evals');
   await expect(page.getByRole('heading', { level: 1, name: 'Jonah' })).toBeVisible();
   await expect(page.getByText('Cases passing every try, v21')).toBeVisible();
-  await expect(page.getByText('3 of 5', { exact: true })).toBeVisible();
-  await expect(page.getByText('87%', { exact: true })).toBeVisible();
+  await expect(page.getByText('of 5', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Last run of all cases' })).toContainText('87');
   await expect(page.getByText('13 of 15 tries')).toBeVisible();
 
   const table = page.getByRole('table');
@@ -57,3 +57,17 @@ test('the Bake-offs tab says it is not available yet', async ({ page }) => {
   await page.getByRole('button', { name: 'Bake-offs' }).hover();
   await expect(page.getByText('Not available yet').first()).toBeVisible();
 });
+
+// Screenshots of the page at 1440 and 375 px in light and dark, for the pull request.
+for (const scheme of ['light', 'dark'] as const) {
+  for (const width of [1440, 375]) {
+    test(`screenshot: evals at ${width} px, ${scheme}`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/o/acme/f/software/jonah/evals');
+      await expect(page.getByRole('heading', { name: 'Cases' })).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      await page.screenshot({ path: `test-results/jonah-evals-${width}-${scheme}.png`, fullPage: true });
+    });
+  }
+}

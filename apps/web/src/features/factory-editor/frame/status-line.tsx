@@ -119,17 +119,17 @@ export function StatusLine({
         </Link>
       ) : null}
       {session.status === 'offline' || session.status === 'retrying' || session.status === 'failed' ? (
-        <Button size="sm" variant="white" onClick={onRetry} className="h-11 md:h-8">
+        <Button size="sm" variant="white" onClick={onRetry}>
           {session.status === 'failed' ? 'Try again' : 'Retry now'}
         </Button>
       ) : null}
       {session.discarded ? (
-        <Button size="sm" variant="white" onClick={onRestart} className="h-11 md:h-8">
+        <Button size="sm" variant="white" onClick={onRestart}>
           Start a new draft
         </Button>
       ) : null}
       {session.status === 'conflict' ? (
-        <Button size="sm" variant="white" onClick={onResolve} className="h-11 md:h-8">
+        <Button size="sm" variant="white" onClick={onResolve}>
           Resolve…
         </Button>
       ) : null}

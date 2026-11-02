@@ -130,13 +130,7 @@ export function NewTokenDialog({ org, orgCan, factories, onClose, onCreated }: N
               <p className="m-0 text-sm font-medium" aria-hidden="true">
                 What it can do
               </p>
-              <Button
-                variant="white"
-                size="sm"
-                className="h-11 md:h-8"
-                aria-pressed={presetOn}
-                onClick={() => set({ scopes: [...cliWork] })}
-              >
+              <Button variant="white" size="sm" aria-pressed={presetOn} onClick={() => set({ scopes: [...cliWork] })}>
                 CLI: work
               </Button>
             </div>
@@ -205,16 +199,10 @@ export function NewTokenDialog({ org, orgCan, factories, onClose, onCreated }: N
           </div>
 
           <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="white" size="lg" className="md:h-10 md:text-sm" onClick={onClose}>
+            <Button variant="white" onClick={onClose}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              className="md:h-10 md:text-sm"
-              disabled={create.isPending}
-            >
+            <Button type="submit" variant="primary" disabled={create.isPending}>
               {create.isPending ? 'Creating…' : 'Create token'}
             </Button>
           </div>

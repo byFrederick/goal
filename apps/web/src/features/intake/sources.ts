@@ -12,8 +12,6 @@ export interface PickerSource {
   icon: LucideIcon;
   /** False: listed and disabled, "Not available yet". */
   available: boolean;
-  /** True: a choice needs a connection of this kind (a Connect link shows when the organization has none). */
-  needsConnection?: string;
   /** Where its choice goes: the trigger's source route segment. */
   route: 'schedule' | 'webhook' | 'github';
 }
@@ -21,7 +19,7 @@ export interface PickerSource {
 export const pickerSources: readonly PickerSource[] = [
   { key: 'schedule', label: 'Schedule', icon: Clock, available: true, route: 'schedule' },
   { key: 'webhook', label: 'Webhook', icon: Webhook, available: true, route: 'webhook' },
-  { key: 'github', label: 'GitHub', icon: GitBranch, available: true, needsConnection: 'github', route: 'github' },
+  { key: 'github', label: 'GitHub', icon: GitBranch, available: true, route: 'github' },
   { key: 'cloudflare', label: 'Cloudflare', icon: Cloud, available: true, route: 'webhook' },
   { key: 'slack', label: 'Slack', icon: CircleDot, available: false, route: 'webhook' },
   { key: 'linear', label: 'Linear', icon: CircleDot, available: false, route: 'webhook' },
@@ -29,12 +27,24 @@ export const pickerSources: readonly PickerSource[] = [
   { key: 'sentry', label: 'Sentry', icon: CircleDot, available: false, route: 'webhook' },
 ];
 
-/** The picker's groups, top to bottom, with the sources of each. */
-export const pickerGroups: readonly { title: string; keys: readonly SourceKey[] }[] = [
-  { title: 'Built in', keys: ['schedule', 'webhook'] },
-  { title: 'Connected', keys: ['github', 'cloudflare'] },
-  { title: 'Not available yet', keys: ['slack', 'linear', 'jira', 'sentry'] },
-];
+/**
+ * The picker's groups, top to bottom. Built in sources need no connection. Another source is Connected when
+ * the organization has a connection of its kind and the source is built; a source not built yet is never
+ * Connected, and only a built one can be connected from here.
+ */
+export function pickerGroups(
+  connectedKinds: ReadonlySet<string>,
+): readonly { title: string; keys: readonly SourceKey[] }[] {
+  const external = pickerSources.filter((s) => s.key !== 'schedule' && s.key !== 'webhook');
+  return [
+    { title: 'Built in', keys: ['schedule', 'webhook'] },
+    { title: 'Connected', keys: external.filter((s) => s.available && connectedKinds.has(s.key)).map((s) => s.key) },
+    {
+      title: 'Not connected',
+      keys: external.filter((s) => !(s.available && connectedKinds.has(s.key))).map((s) => s.key),
+    },
+  ];
+}
 
 /** The same sources by key, for a choice (the picker and a suggestion name one). */
 export const sourceByKey: Record<SourceKey, PickerSource> = Object.fromEntries(

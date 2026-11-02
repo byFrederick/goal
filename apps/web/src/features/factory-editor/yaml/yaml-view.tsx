@@ -11,7 +11,7 @@
 // waits.
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
-import { Copy, Download, WandSparkles } from 'lucide-react';
+import { Copy, Download } from 'lucide-react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '../../../api/client';
@@ -410,7 +410,6 @@ export function YamlView({ search }: SectionViewProps) {
                 <Button
                   size="sm"
                   variant="white"
-                  className="h-11 md:h-8"
                   onClick={() => void download(org, f, hasDraft ? 'draft' : 'current', path)}
                 >
                   <Download size={14} strokeWidth={1.75} aria-hidden="true" />
@@ -448,23 +447,15 @@ export function YamlView({ search }: SectionViewProps) {
                 <Button
                   size="sm"
                   variant="white"
-                  className="h-11 md:h-7"
                   onClick={() => void format()}
                   disabled={unparseable || text === undefined}
                   aria-describedby={unparseable ? formatHint : undefined}
                 >
-                  <WandSparkles size={14} strokeWidth={1.75} aria-hidden="true" />
                   Format
                 </Button>
               ) : null}
               {binary ? null : (
-                <Button
-                  size="sm"
-                  variant="white"
-                  className="h-11 md:h-7"
-                  onClick={() => void copy()}
-                  disabled={text === undefined}
-                >
+                <Button size="sm" variant="white" onClick={() => void copy()} disabled={text === undefined}>
                   <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
                   Copy
                 </Button>

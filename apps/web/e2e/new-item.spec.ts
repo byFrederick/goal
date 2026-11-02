@@ -16,7 +16,7 @@ test('C opens the composer on the open factory and creates the item there', asyn
 
   const dialog = page.getByRole('dialog', { name: 'New item' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('combobox', { name: 'Factory' })).toHaveValue('goal');
+  await expect(dialog.getByRole('combobox', { name: 'Factory' })).toHaveText('goal');
   await dialog.getByRole('textbox', { name: 'Title' }).fill('Check this week’s spend');
   await dialog.getByRole('button', { name: 'Create item' }).click();
 
@@ -29,7 +29,7 @@ test('elsewhere the picker starts empty and asks for a factory', async ({ page }
 
   const dialog = page.getByRole('dialog', { name: 'New item' });
   const picker = dialog.getByRole('combobox', { name: 'Factory' });
-  await expect(picker).toHaveValue('');
+  await expect(picker).toHaveText('Choose a factory');
   await dialog.getByRole('textbox', { name: 'Title' }).fill('Check the budget');
   await dialog.getByRole('button', { name: 'Create item' }).click();
 
@@ -41,7 +41,9 @@ test('the picker leaves out a factory where the person may not add items', async
   await page.keyboard.press('c');
 
   const picker = page.getByRole('dialog', { name: 'New item' }).getByRole('combobox', { name: 'Factory' });
-  await expect(picker.getByRole('option', { name: 'goal' })).toHaveCount(1);
-  await expect(picker.getByRole('option', { name: 'sre' })).toHaveCount(1);
-  await expect(picker.getByRole('option', { name: 'support' })).toHaveCount(0);
+  await picker.click();
+  const list = page.getByRole('listbox');
+  await expect(list.getByRole('option', { name: 'goal' })).toHaveCount(1);
+  await expect(list.getByRole('option', { name: 'sre' })).toHaveCount(1);
+  await expect(list.getByRole('option', { name: 'support' })).toHaveCount(0);
 });

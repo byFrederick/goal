@@ -5,9 +5,10 @@ import type { BakeOff, BakeOffArm } from '../../api/types';
 import { formatDuration, formatPercent, formatUsd } from '../../shared/format';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { NumberRoll } from '../../ui/number-roll';
 import { armDot, judgedHeading, judgedOf } from './bake-off-format';
 
-const cellClass = 'px-3 py-3 text-right tabular-nums first:text-left';
+const cellClass = 'px-3 py-3 text-right tabular-nums first:text-left [&>span]:justify-end';
 const headClass = 'px-3 pb-3 text-right text-meta font-normal text-muted first:text-left';
 
 /** The judge's title that names the Judged column, from the first arm that has a judged share. */
@@ -58,15 +59,15 @@ export function ResultsTable({ bakeOff }: { bakeOff: BakeOff }) {
                 <th scope="row" className="px-3 py-3 text-left font-normal">
                   <span className="inline-flex flex-wrap items-center gap-2">
                     <span className="inline-flex items-center gap-2 font-control text-ink">
-                      <span aria-hidden="true" className={cn('size-2.5 rounded-full', armDot(arm.arm))} />
+                      <span aria-hidden="true" className={cn('size-2.5 rounded-full', armDot(recommended))} />
                       {arm.model}
                     </span>
                     {recommended ? <Chip tone="ok">Recommended</Chip> : null}
                     {arm.is_current ? <Chip>Now</Chip> : null}
                   </span>
                 </th>
-                <td className={cellClass}>{s ? formatPercent(s.pass_rate) : '–'}</td>
-                <td className={cellClass}>{s ? formatUsd(s.cost_per_item_usd) : '–'}</td>
+                <td className={cellClass}>{s ? <NumberRoll value={formatPercent(s.pass_rate)} /> : '–'}</td>
+                <td className={cellClass}>{s ? <NumberRoll value={formatUsd(s.cost_per_item_usd)} /> : '–'}</td>
                 <td className={cellClass}>{s ? formatDuration(s.time_per_item_seconds * 1000) : '–'}</td>
                 <td className={cellClass}>{s ? Math.round(s.turns) : '–'}</td>
                 {judge ? <td className={cellClass}>{s?.judged ? judgedOf(s.judged.share) : '–'}</td> : null}

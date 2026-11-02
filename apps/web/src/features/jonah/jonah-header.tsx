@@ -6,7 +6,7 @@ import { Link } from '@tanstack/react-router';
 import { useFactory, useFactoryParams } from '../../shared/factory';
 import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
-import { TabNav, tabNavItem } from '../../ui/tab-nav';
+import { TabNav, tabNavUnderlineItem } from '../../ui/tab-nav';
 
 export type JonahTab = 'overview' | 'proposals' | 'judges' | 'evals' | 'bake-offs';
 
@@ -31,7 +31,7 @@ const overviewIntro = (factory: string) =>
 /** The intro line under the name, per tab. The tabs without a page keep the evals line, the first Jonah had. */
 const introOf: Record<Exclude<JonahTab, 'overview' | 'proposals'>, string> = {
   judges: 'Judges read a sample of runs and score them against a rubric you write.',
-  evals: evalsIntro,
+  evals: 'Cases replay tasks agents must get right. They run on every publish, and a failing case blocks it.',
   'bake-offs': evalsIntro,
 };
 
@@ -45,7 +45,7 @@ export function JonahHeader({
   const factory = useFactory();
   const intro = tab === 'overview' || tab === 'proposals' ? overviewIntro(factory.title ?? factory.name) : introOf[tab];
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-w-0 flex-col gap-4">
       <header className="flex flex-wrap items-center gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="m-0 text-page-title tracking-display">Jonah</h1>
@@ -67,16 +67,16 @@ export function JonahTabs({
 }) {
   const params = useFactoryParams();
   return (
-    <TabNav label="Jonah">
+    <TabNav label="Jonah" variant="underline">
       {tabOrder.map((t) => {
         const current = t === tab;
-        const classes = tabNavItem;
+        const classes = tabNavUnderlineItem;
         const count = counts[t];
         const label = (
           <>
             {tabLabels[t]}
             {count === undefined ? null : (
-              <span className="ml-2 text-meta font-normal text-muted tabular-nums">{count}</span>
+              <span className="text-meta font-normal text-muted tabular-nums">{count}</span>
             )}
           </>
         );
@@ -88,6 +88,7 @@ export function JonahTabs({
               to="/o/$org/f/$factory/jonah"
               params={params}
               search={t === 'proposals' ? { tab: 'proposals' } : {}}
+              activeOptions={{ exact: true }}
               aria-current={current ? 'page' : undefined}
               className={classes}
             >
@@ -101,6 +102,7 @@ export function JonahTabs({
               key={t}
               to="/o/$org/f/$factory/jonah/judges"
               params={params}
+              activeOptions={{ exact: true }}
               aria-current={current ? 'page' : undefined}
               className={classes}
             >
@@ -114,6 +116,7 @@ export function JonahTabs({
               key={t}
               to="/o/$org/f/$factory/jonah/bake-offs"
               params={params}
+              activeOptions={{ exact: true }}
               aria-current={current ? 'page' : undefined}
               className={classes}
             >
@@ -135,6 +138,7 @@ export function JonahTabs({
             key={t}
             to="/o/$org/f/$factory/jonah/evals"
             params={params}
+            activeOptions={{ exact: true }}
             aria-current={current ? 'page' : undefined}
             className={classes}
           >

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
-import { TabNav, tabNavItem, tabNavUnderlineItem } from './tab-nav';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { TabNav, tabNavItem } from './tab-nav';
 
 afterEach(cleanup);
 
@@ -22,39 +22,56 @@ describe('TabNav', () => {
     expect(nav.querySelector('[aria-hidden="true"]')).not.toBeNull();
   });
 
-  it('draws the underline variant as a rule with a line under the current link', () => {
+  it('draws the underline variant with a 2px ink indicator and a rule under the row', () => {
     render(
-      <TabNav label="Views" variant="underline">
-        <a href="/a" aria-current="page" className={tabNavUnderlineItem}>
+      <TabNav label="Jonah" variant="underline">
+        <a href="/a" aria-current="page" className={tabNavItem}>
           Overview
         </a>
       </TabNav>,
     );
-    const nav = screen.getByRole('navigation', { name: 'Views' });
+    const nav = screen.getByRole('navigation', { name: 'Jonah' });
     expect(nav.className).toContain('border-b');
-    expect(nav.className).not.toContain('bg-panel');
+    expect(nav.querySelector('[aria-hidden="true"]')?.className).toContain('h-0.5');
     expect(nav.querySelector('[aria-hidden="true"]')?.className).toContain('bg-ink');
   });
 
-  it('moves the indicator without a transition when a key changed the link', () => {
-    const tabs = (current: 'a' | 'b') => (
-      <TabNav label="Views" variant="underline">
-        <a href="/a" aria-current={current === 'a' ? 'page' : undefined} className={tabNavUnderlineItem}>
-          A
+  it('places the underline with transform only', () => {
+    const left = vi.spyOn(HTMLElement.prototype, 'offsetLeft', 'get').mockReturnValue(40);
+    const width = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(200);
+    const { container } = render(
+      <TabNav label="Jonah" variant="underline">
+        <a href="/a" aria-current="page" className={tabNavItem}>
+          Overview
         </a>
-        <a href="/b" aria-current={current === 'b' ? 'page' : undefined} className={tabNavUnderlineItem}>
-          B
-        </a>
-      </TabNav>
+      </TabNav>,
     );
-    const { rerender } = render(tabs('a'));
-    const nav = screen.getByRole('navigation', { name: 'Views' });
-    const line = nav.querySelector<HTMLElement>('[aria-hidden="true"]');
-    fireEvent.keyDown(nav.querySelector('a') as Element, { key: 'Enter' });
-    rerender(tabs('b'));
-    expect(line?.style.transition).toBe('none');
-    fireEvent.pointerDown(nav.querySelector('a') as Element);
-    rerender(tabs('a'));
-    expect(line?.style.transition).toBe('');
+    const bar = container.querySelector<HTMLElement>('[aria-hidden="true"]');
+    expect(bar?.style.transform).toBe('translateX(40px) scaleX(2)');
+    expect(bar?.className).toContain('h-0.5');
+    left.mockRestore();
+    width.mockRestore();
+  });
+
+  it('places the pill with transform only', () => {
+    const left = vi.spyOn(HTMLElement.prototype, 'offsetLeft', 'get').mockReturnValue(40);
+    const width = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(200);
+    const { container } = render(
+      <TabNav label="Jonah">
+        <a href="/a" aria-current="page" className={tabNavItem}>
+          Overview
+        </a>
+      </TabNav>,
+    );
+    const pill = container.querySelector<HTMLElement>('[aria-hidden="true"]');
+    expect(pill?.style.transform).toBe('translateX(40px) scaleX(2)');
+    expect(pill?.style.width).toBe('');
+    expect(pill?.style.transition).not.toContain('width');
+    expect(pill?.className).not.toMatch(/width/);
+    expect(Array.from(pill?.classList ?? [])).toEqual(
+      expect.arrayContaining(['transition-transform', 'origin-left', 'duration-(--duration-fast)', 'ease-out']),
+    );
+    left.mockRestore();
+    width.mockRestore();
   });
 });

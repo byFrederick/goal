@@ -37,6 +37,29 @@ describe('Switch', () => {
     expect(onChange).toHaveBeenCalledWith(true);
   });
 
+  it('draws a 32 × 18 track, rule when off and ink when on', () => {
+    const { container } = render(<Toggle />);
+    const track = screen.getByRole('switch', { name: 'Notify me' });
+    const thumb = container.querySelector('[aria-hidden="true"]');
+    expect(Array.from(track.classList)).toEqual(
+      expect.arrayContaining([
+        'w-8',
+        'h-4.5',
+        'bg-rule',
+        'aria-checked:bg-ink',
+        'before:-inset-x-1.5',
+        'before:-inset-y-3.25',
+      ]),
+    );
+    expect(track.className).not.toMatch(/\brun\b|-run\b/);
+    expect(Array.from(thumb?.classList ?? [])).toEqual(
+      expect.arrayContaining(['size-3.5', 'bg-card', 'top-0.5', 'left-0.5']),
+    );
+    expect(thumb?.classList.contains('translate-x-3.5')).toBe(false);
+    fireEvent.click(track);
+    expect(thumb?.classList.contains('translate-x-3.5')).toBe(true);
+  });
+
   it('toggles with the Space key', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
@@ -58,6 +81,22 @@ describe('Switch', () => {
     expect(Array.from(track.classList)).toEqual(
       expect.arrayContaining(['transition-colors', 'duration-(--duration-quick)']),
     );
+  });
+
+  it('draws a 32 x 18 track that is rule when off and ink when on, with a visible thumb', () => {
+    const { container } = render(<Toggle />);
+    const track = screen.getByRole('switch', { name: 'Notify me' });
+    const thumb = container.querySelector('[aria-hidden="true"]') as HTMLElement;
+    expect(Array.from(track.classList)).toEqual(
+      expect.arrayContaining(['w-8', 'h-4.5', 'bg-rule', 'aria-checked:bg-ink']),
+    );
+    expect(track.classList.contains('bg-run')).toBe(false);
+    expect(track.className).not.toContain('bg-run');
+    expect(thumb.classList.contains('bg-card')).toBe(true);
+    expect(thumb.classList.contains('translate-x-3.5')).toBe(false);
+    fireEvent.click(track);
+    expect(thumb.classList.contains('translate-x-3.5')).toBe(true);
+    expect(thumb.classList.contains('bg-card')).toBe(true);
   });
 
   it('does not toggle when disabled, and stays focusable with aria-disabled', async () => {

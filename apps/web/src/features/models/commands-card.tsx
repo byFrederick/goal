@@ -37,7 +37,7 @@ export function CommandsCard({ form, onChange }: { form: PolicyForm; onChange: (
           return (
             <li
               key={pattern}
-              className="inline-flex h-7 items-center gap-1 rounded-control bg-rework-tint pr-1 pl-2 font-mono text-secondary text-rework-ink"
+              className="inline-flex h-7 items-center gap-1 rounded-control border border-rule bg-panel pr-1 pl-2 font-mono text-secondary text-ink"
             >
               {command}
               {shown ? null : (
@@ -47,7 +47,7 @@ export function CommandsCard({ form, onChange }: { form: PolicyForm; onChange: (
                   onClick={() =>
                     onChange({ ...form, denied_commands: form.denied_commands.filter((p) => p !== pattern) })
                   }
-                  className="grid size-5 place-items-center rounded-chip hover:bg-card"
+                  className="grid size-5 place-items-center rounded-chip text-muted transition-colors duration-(--duration-quick) hover:text-ink"
                 >
                   <X size={12} strokeWidth={1.6} aria-hidden="true" />
                 </button>

@@ -4,7 +4,8 @@
 // in plain words, by the code it carries, never by the message.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { ApiError, approveProposal, editProposal, rejectProposal } from '../../api/client';
 import { defKeys, keys } from '../../api/queries';
 import { useFactoryParams } from '../../shared/factory';
@@ -58,6 +59,15 @@ export function rejectFailure(err: unknown): string {
   });
 }
 
+/** The length of --duration-emphasis in milliseconds, read from the token; 0 under reduced motion, where no check plays. */
+function emphasisMs(): number {
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return 0;
+  const value = getComputedStyle(document.documentElement).getPropertyValue('--duration-emphasis').trim();
+  const n = Number.parseFloat(value);
+  if (Number.isNaN(n)) return 0;
+  return value.endsWith('ms') ? n : n * 1000;
+}
+
 /**
  * The page's three decisions. Each refreshes the Jonah keys and the definition keys it changes; Approve and
  * Edit then open the definition, at its versions (published) or its review (the draft).
@@ -77,12 +87,21 @@ export function useProposalDecisions(org: string, factory: string, number: numbe
 
   const approve = useMutation({
     mutationFn: () => approveProposal(org, factory, number),
-    onSuccess: async () => {
-      await refresh();
-      await navigate({ to: '/o/$org/f/$factory/definition/$section', params: { ...params, section: 'versions' } });
-    },
+    onSuccess: refresh,
     onError: refresh,
   });
+
+  // The button's label swaps to a check (MOTION.md, Approve, publish, merge succeed); the page opens the
+  // versions once the check has played, for as long as --duration-emphasis says (0 under reduced motion).
+  const approved = approve.isSuccess;
+  useEffect(() => {
+    if (!approved) return;
+    const timer = window.setTimeout(
+      () => void navigate({ to: '/o/$org/f/$factory/definition/$section', params: { ...params, section: 'versions' } }),
+      emphasisMs(),
+    );
+    return () => window.clearTimeout(timer);
+  }, [approved, navigate, params]);
 
   const edit = useMutation({
     mutationFn: () => editProposal(org, factory, number),
@@ -95,7 +114,10 @@ export function useProposalDecisions(org: string, factory: string, number: numbe
 
   const reject = useMutation({
     mutationFn: (reason: string) => rejectProposal(org, factory, number, reason),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      await refresh();
+      toast.success('Proposal rejected. Jonah reads your reason before it proposes again.');
+    },
   });
 
   return { approve, edit, reject };

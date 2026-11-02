@@ -6,12 +6,13 @@ import { Link } from '@tanstack/react-router';
 import { Plus, Webhook } from 'lucide-react';
 import { intakeQuery } from '../../api/queries';
 import type { Intake } from '../../api/types';
-import { ErrorScreen, PendingScreen } from '../../app/states';
+import { ErrorScreen } from '../../app/states';
 import { TopBarSlot } from '../../app/top-bar';
 import { factoryTitle, useFactory, useFactoryParams } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { EmptyState } from '../../ui/empty-state';
+import { IntakeSkeleton } from './intake-skeleton';
 import { SourcesBar } from './sources-bar';
 import { SuggestedTriggers } from './suggested-triggers';
 import type { SuggestionGroup } from './suggestions';
@@ -28,7 +29,7 @@ export function IntakePage({
   const factory = useFactory();
   const query = useQuery(intakeQuery(org.id, factory.id));
 
-  if (query.isPending) return <PendingScreen />;
+  if (query.isPending) return <IntakeSkeleton />;
   if (query.isError) return <ErrorScreen error={query.error} reset={() => void query.refetch()} />;
   return <Ready intake={query.data} group={group} onGroupChange={onGroupChange} />;
 }
@@ -48,7 +49,7 @@ function Ready({
   return (
     <>
       <IntakeActions />
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-6 px-4 pt-4 pb-10 md:px-7 md:pt-6">
         <Header name={factoryTitle(factory)} />
         {empty ? (
           <EmptyState icon={<Webhook aria-hidden="true" />} title="No triggers yet" actions={<NewTriggerLink />}>

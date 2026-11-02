@@ -16,10 +16,3 @@ export function reasonShare(reason: { count: number }, reasons: readonly { count
   const max = Math.max(0, ...reasons.map((r) => r.count));
   return max > 0 ? reason.count / max : 0;
 }
-
-/** A send-back reason as one line in sentence case: the API sends it lower-cased, so only the first letter is restored. */
-export function reasonLabel(label: string): string {
-  const line = label.split('\n').find((l) => l.trim() !== '') ?? '';
-  const text = line.trim();
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}

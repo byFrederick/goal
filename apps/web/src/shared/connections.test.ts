@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Connection, ConnectionKind } from '../api/types';
-import { monogram, namesText, runEnv, statusLine, testedText, usedText } from './connections';
+import { namesText, runEnv, statusLine, testedText, usedText } from './connections';
 
 const connection = (over: Partial<Connection>): Connection => ({
   id: 'c1',
@@ -66,17 +66,6 @@ describe('runEnv', () => {
     expect(runEnv(kind({}), { fields: { prefix: 'STATUS' } })).toEqual(['STATUS_HEADER', 'STATUS_KEY', 'STATUS_URL']);
     expect(runEnv(kind({}), { fields: {} })).toEqual([]);
     expect(runEnv(undefined, { fields: {} })).toEqual([]);
-  });
-});
-
-describe('monogram', () => {
-  it('takes two letters from a kind’s title', () => {
-    expect(monogram('GitHub')).toBe('gh');
-    expect(monogram('PagerDuty')).toBe('pd');
-    expect(monogram('AWS')).toBe('aw');
-    expect(monogram('Claude subscription')).toBe('cs');
-    expect(monogram('Anthropic API key')).toBe('an');
-    expect(monogram('Jira')).toBe('ji');
   });
 });
 

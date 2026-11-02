@@ -26,8 +26,6 @@ interface ContentProps {
    * shortcuts list on ?, where a fade would only slow a keyboard user down.
    */
   instant?: boolean;
-  /** true: the description sits on the title's line, after it, instead of under it (a step counter). */
-  inlineDescription?: boolean;
 }
 
 /**
@@ -44,7 +42,6 @@ export function DialogContent({
   onCloseAutoFocus,
   dismissible = true,
   instant = false,
-  inlineDescription = false,
 }: ContentProps) {
   const keep = (e: Event) => {
     if (!dismissible) e.preventDefault();
@@ -81,12 +78,7 @@ export function DialogContent({
         {...(description ? {} : ({ 'aria-describedby': undefined } as object))}
       >
         <div className="flex items-start justify-between gap-4">
-          <div
-            className={cn(
-              'flex min-w-0 gap-1',
-              inlineDescription ? 'flex-row flex-wrap items-baseline gap-x-3' : 'flex-col',
-            )}
-          >
+          <div className="flex min-w-0 flex-col gap-1">
             <D.Title className="m-0 text-lg font-medium">{title}</D.Title>
             {description ? <D.Description className="m-0 text-sm text-muted">{description}</D.Description> : null}
           </div>

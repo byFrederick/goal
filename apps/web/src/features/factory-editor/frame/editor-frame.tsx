@@ -8,7 +8,7 @@
 // edits (and whose draft is open), no draft banner, no Discard, no Review or Publish, no status line.
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ChevronRight, Clock } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useState } from 'react';
 import { draftQuery, factoryQuery } from '../../../api/queries';
 import type { Draft } from '../../../api/types';
@@ -27,12 +27,12 @@ import { AskBar } from '../yaml/ask-bar';
 import { ConflictDialog, DiscardedDialog, FileConflictDialog } from './conflict-dialog';
 import { DiscardDialog } from './discard-dialog';
 import { DraftBanner } from './draft-banner';
+import { PageActions } from './page-actions';
 import { SectionTiles } from './section-tiles';
 import { changesSentence } from './state';
 import { StatusLine } from './status-line';
 import { UnsavedGuard } from './unsaved-guard';
 import { useValidation } from './use-editor';
-import { ViewToggle } from './view-toggle';
 
 interface FrameProps {
   /** The section the route shows. */
@@ -132,52 +132,25 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
             <h1 className="m-0 text-heading font-control text-ink">Definition</h1>
             {chip ? <Chip tone="plain">{chip}</Chip> : null}
           </nav>
-          <div className="flex flex-wrap items-center gap-2">
-            {yaml ? null : <ViewToggle section={section} yaml={false} />}
-            <Button asChild variant="white" className="h-11 md:h-10">
-              <Link to="/o/$org/f/$factory/definition/$section" params={{ ...params, section: 'versions' }}>
-                <Clock size={16} strokeWidth={1.5} aria-hidden="true" />
-                Versions
-              </Link>
-            </Button>
-            {viewOnly ? null : (
-              <>
-                <Button asChild variant="white" className="h-11 md:h-10">
-                  <Link
-                    to="/o/$org/f/$factory/definition/$section"
-                    params={{ ...params, section: 'review' }}
-                    aria-describedby={unchanged ? unchangedId : undefined}
-                  >
-                    Review changes
-                  </Link>
-                </Button>
-                {canPublish ? (
-                  <Button asChild variant="primary" className="h-11 md:h-10">
-                    <Link to="/o/$org/f/$factory/definition/$section" params={{ ...params, section: 'review' }}>
-                      Publish v{publishNumber}
-                    </Link>
-                  </Button>
-                ) : (
-                  <Button
-                    variant="primary"
-                    className="h-11 md:h-10"
-                    disabled
-                    aria-describedby={unchanged ? unchangedId : blockedId}
-                  >
-                    Publish v{publishNumber}
-                  </Button>
-                )}
-                <span id={unchangedId} className="sr-only">
-                  No changes yet
-                </span>
-                <span id={blockedId} className="sr-only">
-                  {problemCount > 0
-                    ? `Fix ${plural(problemCount, 'problem')} before you publish`
-                    : 'Nothing to publish'}
-                </span>
-              </>
-            )}
-          </div>
+          <PageActions
+            section={section}
+            yaml={yaml}
+            viewOnly={viewOnly}
+            canPublish={canPublish}
+            publishNumber={publishNumber}
+            describedBy={unchanged ? unchangedId : blockedId}
+            reviewDescribedBy={unchanged ? unchangedId : undefined}
+          />
+          {viewOnly ? null : (
+            <>
+              <span id={unchangedId} className="sr-only">
+                No changes yet
+              </span>
+              <span id={blockedId} className="sr-only">
+                {problemCount > 0 ? `Fix ${plural(problemCount, 'problem')} before you publish` : 'Nothing to publish'}
+              </span>
+            </>
+          )}
         </div>
         {viewOnly ? (
           <ViewOnlyBanner
@@ -232,6 +205,7 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
             changeCount={changeCount}
             problemCount={problemCount}
             hasDraft={s.hasDraft}
+            base={base?.number ?? null}
             yaml={false}
             parseError={s.parseError}
             viewOnly={viewOnly}

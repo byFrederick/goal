@@ -115,15 +115,24 @@ describe('the Judges page, its four states', () => {
     expect(screen.queryByRole('table')).toBeNull();
   });
 
-  it('is an error when the judges cannot be read, and Try again reads them once more', async () => {
-    vi.mocked(listJudges).mockRejectedValueOnce(
+  it('is the empty state at once when goald has no judges, with New judge not available yet', async () => {
+    vi.mocked(listJudges).mockRejectedValue(
       new ApiError({ title: 'Service Unavailable', status: 503, code: 'judges-unavailable' }),
     );
+    renderJudges(editor, []);
+
+    expect(await screen.findByText('No judges yet')).toBeTruthy();
+    expect(screen.queryByText('Judges could not be loaded')).toBeNull();
+    expect(screen.getByRole('button', { name: 'New judge' }).getAttribute('aria-disabled')).toBe('true');
+    expect(listJudges).toHaveBeenCalledTimes(1);
+  });
+
+  it('is an error when the judges cannot be read, and Try again reads them once more', async () => {
+    vi.mocked(listJudges).mockRejectedValueOnce(new ApiError({ title: 'Bad Gateway', status: 502 }));
     vi.mocked(listJudges).mockResolvedValueOnce(list);
     renderJudges(editor, []);
 
     expect(await screen.findByText('Judges could not be loaded')).toBeTruthy();
-    expect(screen.getByText('Judges are not available on this goald yet.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
     expect(await screen.findByRole('table')).toBeTruthy();
@@ -139,14 +148,28 @@ describe('the Judges page, its four states', () => {
 
     const table = screen.getByRole('table');
     expect(within(table).getAllByRole('row')).toHaveLength(5);
-    for (const heading of ['Judge', 'Scores', 'Sample', 'Pass at', 'Last 30 days', 'Cost']) {
+    for (const heading of ['Judge', 'Scores', 'Sample', 'Pass at', 'Last 30 days, latest in black', 'Cost']) {
       expect(within(table).getByRole('columnheader', { name: heading })).toBeTruthy();
     }
     expect(within(table).getByRole('link', { name: 'Review reason actionable' })).toBeTruthy();
     expect(within(table).getByText('$3.20')).toBeTruthy();
     expect(within(table).getByText('81%')).toBeTruthy();
-    expect(screen.getByText('$11.60 in the last 30 days')).toBeTruthy();
+    expect(screen.getByText('$11.60').closest('.text-muted')?.textContent).toContain('in the last 30 days');
     expect(screen.getByText('evals/judges/')).toBeTruthy();
+  });
+});
+
+describe('the 30-day bars', () => {
+  it('draws seven square bars per judge, and only the latest is ink', async () => {
+    renderJudges();
+
+    const table = await screen.findByRole('table');
+    const chart = within(table).getByRole('img', { name: /Review reason actionable: pass rate by period/ });
+    const bars = chart.querySelectorAll('rect');
+    expect(bars).toHaveLength(7);
+    expect(chart.querySelectorAll('rect.fill-ink')).toHaveLength(1);
+    expect(bars[6]?.getAttribute('class')).toBe('fill-ink');
+    expect(chart.querySelector('pattern')).toBeNull();
   });
 });
 

@@ -140,11 +140,9 @@ async function renderSettings({ canEdit = true }: { canEdit?: boolean } = {}) {
     org,
     factory,
     seed,
-    topBar: true,
   });
   await screen.findByRole('region', { name: 'Repository' });
-  await waitFor(() => expect(screen.getByText('https://github.com/acme/sre')).toBeTruthy(), { timeout: 3000 });
-  if (canEdit) fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+  await waitFor(() => expect(screen.getByLabelText('Repository URL')).toBeTruthy(), { timeout: 3000 });
   return rendered;
 }
 
@@ -161,21 +159,6 @@ async function savedSection(section: Section, check: (value: Saved) => boolean =
 }
 
 describe('Repository', () => {
-  it('shows the URL and the connection chip, and Change opens the editor', async () => {
-    await renderSettings({ canEdit: false });
-    expect(screen.getByText('Connected with github')).toBeTruthy();
-    expect(screen.queryByLabelText('Repository URL')).toBeNull();
-    cleanup();
-    await renderSettings();
-    expect(screen.getByLabelText('Repository URL')).toBeTruthy();
-  });
-
-  it('has no accordion buttons: every section is open', async () => {
-    await renderSettings();
-    expect(document.querySelector('[aria-expanded]')).toBeNull();
-    expect(screen.getByLabelText('Each week')).toBeTruthy();
-  });
-
   it('writes the repository URL to basics.repository.url', async () => {
     await renderSettings();
     const url = screen.getByLabelText('Repository URL');
@@ -329,19 +312,6 @@ describe('Save changes', () => {
     );
   });
 
-  it('reads Saving… while the publish is pending, then shows Published', async () => {
-    let finish: (v: never) => void = () => {};
-    vi.mocked(publishDraft).mockImplementationOnce(() => new Promise((resolve) => (finish = resolve as never)));
-    await renderSettings();
-    fireEvent.click(screen.getByRole('radio', { name: 'Stop at once' }));
-    await savedSection('review', (v) => v.budget?.on_exhausted === 'stop');
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save changes' })));
-
-    expect(await screen.findByRole('button', { name: 'Saving…' })).toBeTruthy();
-    await act(async () => finish({ id: 'version-2', number: 2 } as never));
-    expect(await screen.findByText('Published')).toBeTruthy();
-  });
-
   it('shows goald’s refusal when the publish is refused', async () => {
     const { ApiError } = await import('../../api/client');
     vi.mocked(publishDraft).mockRejectedValueOnce(
@@ -366,8 +336,8 @@ describe('Read-only callers', () => {
     await renderSettings({ canEdit: false });
 
     expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
-    expect(screen.getByText('https://github.com/acme/sre')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
+    const url = screen.getByLabelText('Repository URL');
+    expect(url.closest('fieldset')?.disabled).toBe(true);
     expect(screen.getByLabelText('Each week').closest('fieldset')?.disabled).toBe(true);
   });
 });
