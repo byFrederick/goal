@@ -755,9 +755,12 @@
   display: none;
 }
 
-/* Route change (MOTION.md, Route change): the content region fades in and rises; the shell never moves.
-   The sidebar and the top bar carry their own view-transition names, so they are never cross-faded:
-   their images and groups, and the root snapshot that holds the rest of the page, are held still. */
+/* Route change (MOTION.md, Route change): the old content leaves at once and the new content fades in and
+   rises, so two pages are never legible together; the shell never moves. The sidebar and the top bar carry
+   their own view-transition names, so they are never cross-faded: only their new picture shows, with normal
+   blending (the browser's default plus-lighter would add the old and new pictures into one). The root snapshot
+   holds the rest of the page and is held still the same way. The main group does not morph its size, which
+   would stretch both pages when their heights differ. */
 .shell-main {
   view-transition-name: main;
 }
@@ -770,37 +773,30 @@
   view-transition-name: topbar;
 }
 
-::view-transition-old(root),
-::view-transition-new(root),
+::view-transition-group(root),
 ::view-transition-group(sidebar),
-::view-transition-old(sidebar),
-::view-transition-new(sidebar),
 ::view-transition-group(topbar),
-::view-transition-old(topbar),
-::view-transition-new(topbar) {
+::view-transition-group(main) {
   animation: none;
 }
 
-::view-transition-group(main) {
-  animation-duration: var(--duration-quick);
-  animation-timing-function: var(--ease-out);
+::view-transition-old(root),
+::view-transition-old(sidebar),
+::view-transition-old(topbar),
+::view-transition-old(main) {
+  display: none;
 }
 
-::view-transition-old(main) {
-  animation: view-route-out var(--duration-quick) var(--ease-out) both;
+::view-transition-new(root),
+::view-transition-new(sidebar),
+::view-transition-new(topbar) {
+  animation: none;
+  mix-blend-mode: normal;
 }
 
 ::view-transition-new(main) {
   animation: view-route-in var(--duration-quick) var(--ease-out) both;
-}
-
-@keyframes view-route-out {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
+  mix-blend-mode: normal;
 }
 
 @keyframes view-route-in {
@@ -811,15 +807,6 @@
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes view-fade-out {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
   }
 }
 
@@ -834,10 +821,6 @@
 
 /* Reduced motion (MOTION.md, rule 9): the route change keeps its opacity fade and drops the rise. */
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(main) {
-    animation-name: view-fade-out;
-  }
-
   ::view-transition-new(main) {
     animation-name: view-fade-in;
   }
