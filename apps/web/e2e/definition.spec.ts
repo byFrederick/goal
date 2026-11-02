@@ -233,6 +233,31 @@ test('Ask the factory is not built yet: the input is disabled and Ask stays unav
   await expectNoHorizontalScroll(page);
 });
 
+// The Agents and Versions sections at 1440 and 390 px, in both themes (the pictures are the
+// review's evidence; the assertions are what the audit of 2026-11-02 found broken).
+for (const width of [1440, 390]) {
+  for (const scheme of ['light', 'dark'] as const) {
+    test(`Agents and Versions at ${width}px in ${scheme}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+      await page.emulateMedia({ colorScheme: scheme });
+
+      await page.goto('/o/acme/f/goal/definition/agents');
+      const list = page.getByRole('navigation', { name: 'Agents' });
+      await expect(list).toBeVisible();
+      const name = list.getByRole('link').first().locator('[translate="no"]');
+      await expect(name).toBeVisible();
+      expect(await name.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+      await expectNoHorizontalScroll(page);
+      await page.screenshot({ path: `test-results/definition-agents-${width}-${scheme}.png`, fullPage: true });
+
+      await page.goto('/o/acme/f/goal/definition/versions');
+      await expect(page.getByText('v8', { exact: true }).first()).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      await page.screenshot({ path: `test-results/definition-versions-${width}-${scheme}.png`, fullPage: true });
+    });
+  }
+}
+
 test('Review and publish with no draft shows Checks and Versions, and no Budget', async ({ page, request }) => {
   await request.delete(draft, { headers: { 'If-Match': '"42"' } });
   for (const [width, height] of [
