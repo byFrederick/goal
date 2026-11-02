@@ -4,7 +4,7 @@
 // the switch as it was and says why. Nothing polls: the page reads again when its own action or a
 // `definition` event changes what it shows.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChartColumn, Check, Plus, Rows3 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { ApiError, updateJudge } from '../../api/client';
 import { judgeQuery, judgesQuery } from '../../api/queries';
@@ -26,35 +26,7 @@ import { toggleFailure } from './judges-format';
 import { NewJudgeDialog } from './judges-new-dialog';
 import { JudgesTable } from './judges-table';
 
-/** The three cards over the table: what a judge does, in the order it does it. */
-const steps = [
-  { icon: Rows3, title: 'Sample', text: 'Each judge reads a share of the runs of the agents it scores.' },
-  { icon: ChartColumn, title: 'Score', text: 'It picks an outcome from your rubric and says why in one line.' },
-  { icon: Check, title: 'Learn', text: 'Scores under the pass mark go to Jonah, which proposes fixes.' },
-] as const;
-
-function HowJudgesWork() {
-  return (
-    <section className="grid gap-3 sm:grid-cols-3" aria-label="How judges work">
-      {steps.map(({ icon: Icon, title, text }) => (
-        <div key={title} className="flex items-start gap-3 rounded-card bg-panel p-4 text-secondary">
-          <span
-            aria-hidden="true"
-            className="grid size-8 shrink-0 place-items-center rounded-control border border-rule bg-card text-run"
-          >
-            <Icon size={16} strokeWidth={1.75} />
-          </span>
-          <span className="flex flex-col gap-1">
-            <b className="font-control font-semibold">{title}</b>
-            {text}
-          </span>
-        </div>
-      ))}
-    </section>
-  );
-}
-
-/** Loading shows the app background and an empty region for the screen reader, never a placeholder shape. */
+/** Loading shows the table's rows as a skeleton while the judges wait. */
 function Loading() {
   return (
     <Skeleton ready={false} placeholder={<SkeletonRows rows={4} className="min-h-40" />}>
@@ -129,8 +101,6 @@ export function JudgesPage() {
         </EmptyState>
       ) : (
         <>
-          <HowJudgesWork />
-
           <SectionCard
             title={
               <span className="inline-flex items-center gap-2">

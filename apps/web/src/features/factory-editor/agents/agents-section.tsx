@@ -3,7 +3,7 @@
 // rules (ADR 0014) below them. Two columns from
 // 760 px of `main`, one below; on phones the list comes first and `?agent=` opens the detail with
 // a back link. Definition and the wizard share it (`place`).
-import { Bot, ChevronLeft } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { whereLabel } from '../../../shared/definition/where';
 import { useArrivals } from '../../../ui/arrivals';
 import { cn } from '../../../ui/cn';
@@ -51,12 +51,6 @@ export function AgentsSection({ place, search }: SectionViewProps) {
                         arrived(a.name) && 'motion-safe:animate-item-in',
                       )}
                     >
-                      <span
-                        aria-hidden="true"
-                        className="flex size-9 items-center justify-center rounded-control bg-panel text-ink"
-                      >
-                        <Bot size={18} strokeWidth={1.5} />
-                      </span>
                       <span className="min-w-0">
                         <span translate="no" className="block truncate text-[15px] font-medium">
                           {a.name}

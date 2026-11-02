@@ -355,7 +355,7 @@ function AgentCard({
       <span className="flex items-center gap-2">
         <span
           aria-hidden="true"
-          className="grid size-8 shrink-0 place-items-center rounded-control bg-run text-meta font-control text-white"
+          className="grid size-8 shrink-0 place-items-center rounded-full bg-hover text-meta font-control text-ink-soft"
         >
           {initialsOf(agent.name)}
         </span>

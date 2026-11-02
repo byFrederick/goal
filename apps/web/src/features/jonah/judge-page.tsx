@@ -39,7 +39,7 @@ import {
   tryFailure,
 } from './judges-format';
 
-/** Loading shows the app background and an empty region for the screen reader, never a placeholder shape. */
+/** Loading shows the page's rows as a skeleton while the data waits. */
 function Loading() {
   return (
     <Skeleton ready={false} placeholder={<SkeletonRows rows={4} className="min-h-40" />}>

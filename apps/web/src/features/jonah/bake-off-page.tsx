@@ -37,7 +37,7 @@ import { JonahTabs } from './jonah-header';
 /** The breadcrumb's parent crumb: the list of the factory's bake-offs. A constant, so the top bar's effect runs once. */
 const bakeOffsCrumb = { label: 'Bake-offs', to: '/o/$org/f/$factory/jonah/bake-offs' } as const;
 
-/** Loading shows the app background and an empty region for the screen reader, never a placeholder shape. */
+/** Loading shows the page's rows as a skeleton while the data waits. */
 export function BakeOffLoading() {
   return (
     <Skeleton ready={false} placeholder={<SkeletonRows rows={4} className="min-h-40" />}>
