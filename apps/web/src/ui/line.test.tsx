@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Line, type LineStation } from './line';
 
@@ -18,6 +18,12 @@ const stations: LineStation[] = [
   },
   { id: 'done', name: 'Done', count: 7, load: null, done: true, waits: ['7 merged today'], slots: null },
 ];
+
+const pull = { reason: 'Answers cite the wrong runbook', pulledBy: 'a person' };
+
+function stationItems(): HTMLElement[] {
+  return within(screen.getByRole('list', { name: 'Stations from intake to done' })).getAllByRole('listitem');
+}
 
 afterEach(cleanup);
 
@@ -48,13 +54,53 @@ describe('Line', () => {
     expect(within(strip).getByText('Answers cite the wrong runbook')).toBeTruthy();
     expect(within(strip).getByText('Pulled by a person')).toBeTruthy();
     expect(within(strip).getByRole('button', { name: 'Clear the andon' })).toBeTruthy();
-    expect(screen.getByRole('list', { name: 'Stations from intake to done' }).getAttribute('data-dimmed')).toBe('true');
+    expect(screen.getByRole('status').getAttribute('data-initial')).not.toBeNull();
+    for (const li of stationItems()) expect(li.getAttribute('data-dimmed')).toBe('true');
   });
 
   it('shows no strip and leaves the stations bright while the line runs', () => {
     render(<Line title="The line, now" stations={stations} andon={null} />);
 
     expect(screen.queryByRole('status')).toBeNull();
-    expect(screen.getByRole('list', { name: 'Stations from intake to done' }).getAttribute('data-dimmed')).toBeNull();
+    for (const li of stationItems()) expect(li.getAttribute('data-dimmed')).toBeNull();
+  });
+
+  it('slides the strip in and dims each station when the andon is pulled', () => {
+    const { rerender } = render(<Line title="The line, now" stations={stations} andon={null} />);
+    rerender(<Line title="The line, now" stations={stations} andon={pull} />);
+
+    const strip = screen.getByRole('status');
+    expect(strip.getAttribute('data-state')).toBe('open');
+    expect(strip.getAttribute('data-initial')).toBeNull();
+    expect(strip.className).toContain('motion-panel');
+    expect(strip.className).toContain('motion-andon');
+    for (const li of stationItems()) {
+      expect(li.getAttribute('data-dimmed')).toBe('true');
+      expect(li.className).toContain('data-[dimmed=true]:opacity-40');
+    }
+  });
+
+  it('sets the closed state before the strip unmounts on Clear', () => {
+    const { rerender, container } = render(<Line title="The line, now" stations={stations} andon={pull} />);
+    rerender(<Line title="The line, now" stations={stations} andon={null} />);
+
+    const strip = container.querySelector('.motion-andon') as HTMLElement;
+    expect(strip.getAttribute('data-state')).toBe('closed');
+    expect(strip.getAttribute('aria-hidden')).toBe('true');
+    expect(strip.hasAttribute('inert')).toBe(true);
+    expect(strip.textContent).toContain('Answers cite the wrong runbook');
+    for (const li of stationItems()) expect(li.getAttribute('data-dimmed')).toBeNull();
+
+    // jsdom has no CSS animation support, so React listens for the prefixed name here.
+    fireEvent(strip, new Event('webkitAnimationEnd', { bubbles: true }));
+    expect(container.querySelector('.motion-andon')).toBeNull();
+  });
+
+  it('shows the strip without an entrance when the line loads stopped', () => {
+    render(<Line title="The line, now" stations={stations} andon={pull} />);
+
+    const strip = screen.getByRole('status');
+    expect(strip.getAttribute('data-state')).toBe('open');
+    expect(strip.getAttribute('data-initial')).not.toBeNull();
   });
 });
