@@ -284,7 +284,6 @@ function Checks({
         <Button
           variant="white"
           size="sm"
-          className="h-11 md:h-8"
           aria-haspopup="dialog"
           aria-label={`Add check to ${label}`}
           aria-invalid={invalid || undefined}

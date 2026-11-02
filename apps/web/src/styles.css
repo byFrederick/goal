@@ -37,6 +37,9 @@
   --color-action: #171717;
   --color-action-ink: #ffffff;
 
+  /* The Goal mark's square: near-black in both themes (MASTER.md, Colour). */
+  --color-mark: #171717;
+
   /* Meaning: running is blue, waiting on you is orange, sent back and destructive are red, the constraint is yellow, done is green. */
   --color-run: #2b5bd7;
   --color-run-ink: #1e46b0;
@@ -349,6 +352,7 @@
   --color-muted: #8f8f8a;
   --color-action: #ededec;
   --color-action-ink: #111111;
+  --color-mark: #171717;
   --color-run: #3d6be0;
   --color-run-ink: #a9c1fa;
   --color-run-tint: #17213a;
@@ -387,6 +391,7 @@
     --color-muted: #8f8f8a;
     --color-action: #ededec;
     --color-action-ink: #111111;
+    --color-mark: #171717;
     --color-run: #3d6be0;
     --color-run-ink: #a9c1fa;
     --color-run-tint: #17213a;
