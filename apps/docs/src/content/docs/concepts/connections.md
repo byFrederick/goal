@@ -61,4 +61,4 @@ Flags and output are in the [CLI reference](../../reference/).
 
 The connections screen lists each connection with its kind, status and the factories that use it. The factory builder picks connections for an agent from this list.
 
-A connection's page has a Test button until the connection has a test result. After that, the result shows inside the page with a Test again button, which runs the test once more. Each credential type filter on the credentials screen shows how many credentials it holds, and All shows the total.
+A connection's page has a Test button in the top bar. It runs the connection's kind's test, and runs it again whenever you press it. The result shows in the page, under the connection's name. Each credential type filter on the credentials screen shows how many credentials it holds, and All shows the total.
