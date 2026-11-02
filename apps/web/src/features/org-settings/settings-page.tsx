@@ -14,6 +14,8 @@ import { toast } from 'sonner';
 import { ApiError, patchOrgSettings } from '../../api/client';
 import { authConfigQuery, keys, settingsQuery } from '../../api/queries';
 import type { OrgSettings, OrgSettingsPatch, OrgSummary } from '../../api/types';
+import { FactoryBadge } from '../../app/factory-badge';
+import { TopBarSlot } from '../../app/top-bar';
 import { factoryMark } from '../../shared/marks';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { reasons } from '../../shared/permissions';
@@ -28,6 +30,7 @@ import { ViewOnlyBanner } from '../../ui/view-only-banner';
 import { describedBy, SettingsRow, SettingsSection } from './card';
 import { DangerZone } from './danger-zone';
 import { changedFields, type FieldErrors, formOf, type SettingsForm, slotNote, validate } from './form';
+import { SectionNav } from './section-nav';
 
 const formId = 'org-settings';
 
@@ -151,13 +154,17 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
 
   return (
     <>
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      <TopBarSlot
+        actions={
+          mayManage ? (
+            <Button type="submit" form={formId} variant="action" disabled={!dirty || save.isPending}>
+              {save.isPending ? 'Saving…' : 'Save changes'}
+            </Button>
+          ) : undefined
+        }
+      />
+      <header>
         <h1 className="m-0 text-page-title tracking-display">Organization settings</h1>
-        {mayManage ? (
-          <Button type="submit" form={formId} variant="primary" disabled={!dirty || save.isPending}>
-            {save.isPending ? 'Saving…' : 'Save changes'}
-          </Button>
-        ) : null}
       </header>
 
       {mayManage ? null : <ViewOnlyBanner>{reasons.settings(saved.name)}</ViewOnlyBanner>}
@@ -190,7 +197,7 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
                   <div className="flex h-11 items-stretch overflow-hidden rounded-control border border-rule bg-card md:h-10">
                     <span
                       aria-hidden="true"
-                      className="flex min-w-0 items-center border-r border-rule bg-panel px-3 text-secondary text-muted"
+                      className="flex shrink-0 items-center whitespace-nowrap border-r border-rule bg-panel px-3 text-secondary text-muted"
                     >
                       {window.location.host}/o/
                     </span>
@@ -204,7 +211,7 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
                       autoComplete="off"
                       autoCapitalize="off"
                       spellCheck={false}
-                      className="h-full border-0 font-mono hover:border-0 md:text-sm"
+                      className="h-full min-w-0 flex-1 border-0 font-mono hover:border-0 md:text-sm"
                       aria-invalid={shown('slug') ? true : undefined}
                       aria-describedby={describedBy('oslug', { help: true, error: shown('slug') })}
                     />
@@ -220,12 +227,7 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
                   <div className="flex flex-wrap items-center gap-2">
                     {factories.map((f) => (
                       <Chip key={f.factory_id} tone="plain">
-                        <span
-                          aria-hidden="true"
-                          className="grid size-4 place-items-center rounded-chip border border-rule bg-card text-meta font-semibold"
-                        >
-                          {factoryMark(f, factories)}
-                        </span>
+                        <FactoryBadge mark={factoryMark(f, factories)} className="size-4" />
                         {f.name}
                       </Chip>
                     ))}
@@ -381,25 +383,12 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
           ) : null}
         </div>
 
-        <nav
-          aria-label="On this page"
-          className="hidden xl:sticky xl:top-5 xl:flex xl:flex-col xl:gap-1 text-secondary"
-        >
-          {sections.map(([id, label]) => (
-            <a
-              key={id}
-              href={`#${id}`}
-              className="rounded-control px-3 py-1 text-ink-soft hover:bg-hover hover:text-ink"
-            >
-              {label}
-            </a>
-          ))}
-          {mayDelete || mayTransfer ? (
-            <a href="#danger" className="rounded-control px-3 py-1 text-ink-soft hover:bg-hover hover:text-ink">
-              Danger zone
-            </a>
-          ) : null}
-        </nav>
+        <SectionNav
+          links={[
+            ...sections.map(([id, label]) => ({ id, label })),
+            ...(mayDelete || mayTransfer ? [{ id: 'danger', label: 'Danger zone' }] : []),
+          ]}
+        />
       </div>
 
       <ConfirmDialog
