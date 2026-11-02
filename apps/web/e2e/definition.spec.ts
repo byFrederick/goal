@@ -33,8 +33,8 @@ test('the definition frame is accessible and fits the screen', async ({ page }) 
   await expect(page.getByRole('region', { name: 'Draft' })).toContainText('Draft of v9, 3 changes');
   await expect(status(page)).toContainText('Based on v8, the version running now.');
   await expect(page.getByRole('link', { name: '3 changes in 2 sections' })).toBeVisible();
-  await expect(tile(page, /^Basics, No changes$/)).toHaveAttribute('aria-current', 'location');
-  await expect(tile(page, /^Agents, 1 change, 1 problem$/)).toBeAttached();
+  await expect(tile(page, /^Basics, goal, \d+ work types?$/)).toHaveAttribute('aria-current', 'location');
+  await expect(tile(page, /^Agents, 1 change, 1 problem, \d+ agents? on \d+ models?$/)).toBeAttached();
   await expect(tile(page, /^Review and publish, Fix 1 problem first$/)).toBeAttached();
   await expect(page.getByRole('group', { name: 'Editor view' }).getByRole('button', { name: 'Form' })).toHaveAttribute(
     'aria-pressed',
@@ -46,13 +46,42 @@ test('the definition frame is accessible and fits the screen', async ({ page }) 
   await expectNoHorizontalScroll(page);
 
   // Moving between sections focuses the section's heading.
-  await tile(page, /^Line, 2 changes$/).click();
+  await tile(page, /^Line, 2 changes, \d+ stations?/).click();
   await expect(page).toHaveURL(/\/definition\/line$/);
   await expect(page.getByRole('heading', { level: 2, name: 'Line', exact: true })).toBeFocused();
   await expect(page.getByRole('list', { name: 'Stations, in order' })).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
+
+// The pictures for the pull request: attached to the report, not compared; the design exports are the reference.
+for (const colorScheme of ['light', 'dark'] as const) {
+  for (const size of [
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    test(`the definition frame at ${size.width} px, ${colorScheme} theme`, async ({ page }, testInfo) => {
+      await page.emulateMedia({ colorScheme });
+      await page.setViewportSize(size);
+      await openBasics(page);
+      const nav = page.getByRole('navigation', { name: 'Definition sections' });
+      await expect(nav).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      if (size.width < 640) {
+        // One row of actions: Form | YAML, the primary action and More share a top offset.
+        const view = await page.getByRole('group', { name: 'Editor view' }).boundingBox();
+        const more = await page.getByRole('button', { name: 'More actions' }).boundingBox();
+        expect(view && more && Math.abs(view.y + view.height / 2 - (more.y + more.height / 2)) < 4).toBe(true);
+        expect(more?.height).toBeGreaterThanOrEqual(44);
+        await expect(page.getByRole('button', { name: 'More actions' })).toHaveAttribute('aria-haspopup', 'menu');
+      }
+      await testInfo.attach(`definition-frame-${size.width}-${colorScheme}`, {
+        body: await page.screenshot(),
+        contentType: 'image/png',
+      });
+    });
+  }
+}
 
 test('Definition opens the Line from the sidebar or the drawer', async ({ page }) => {
   await page.goto('/o/acme/f/goal');
@@ -82,7 +111,7 @@ test('Basics: changes save on their own, count on the tile and survive a reload'
   await page.getByRole('button', { name: 'Remove work type design' }).click();
 
   await expect(status(page)).toContainText('Autosaved');
-  await expect(tile(page, /^Basics, [2-9] changes$/)).toBeAttached();
+  await expect(tile(page, /^Basics, [2-9] changes, /)).toBeAttached();
   await expect(page.getByRole('link', { name: /^\d+ changes in 3 sections$/ })).toBeVisible();
 
   await page.reload();
@@ -159,7 +188,7 @@ test('discard the draft: the running version shows, and the next change opens a 
   await expect(status(page)).toContainText('v8 runs now. Your first change opens a draft.');
   await expect(page.getByText('Live: v8', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Discard draft', exact: true })).toHaveCount(0);
-  await expect(tile(page, /^Line, No changes$/)).toBeAttached();
+  await expect(tile(page, /^Line, \d+ stations?/)).toBeAttached();
   // Nothing to publish: Review changes is not the page's primary action.
   await expect(review).toHaveAccessibleDescription('No changes yet');
 
@@ -167,7 +196,7 @@ test('discard the draft: the running version shows, and the next change opens a 
   await expect(status(page)).toContainText('Based on v8, the version running now.');
   await expect(status(page)).toContainText('Autosaved');
   await expect(page.getByRole('region', { name: 'Draft' })).toContainText('Draft of v9');
-  await expect(tile(page, /^Basics, 1 change$/)).toBeAttached();
+  await expect(tile(page, /^Basics, 1 change, /)).toBeAttached();
   await expect(review).not.toHaveAccessibleDescription('No changes yet');
 });
 
@@ -181,7 +210,7 @@ test('a draft discarded elsewhere keeps the changes here for a new draft', async
 
   await title(page).fill('After the discard');
   await expect(status(page)).toContainText('Autosaved');
-  await expect(tile(page, /^Basics, 1 change$/)).toBeAttached();
+  await expect(tile(page, /^Basics, 1 change, /)).toBeAttached();
 });
 
 test('the YAML editor at 375 px: the file tree waits behind Files, and the Outline is left out', async ({ page }) => {
