@@ -44,7 +44,7 @@ export function refusalText(err: unknown): string {
 
 /** goald has no master key (503 connections-unavailable). */
 export const unavailableText =
-  'goald has no master key, so it can’t seal or open secrets: connections with secrets can’t be created, tested or changed. Whoever runs goald sets GOAL_MASTER_KEYS and restarts it.';
+  'This installation has no master key, so it can’t seal or open secrets: connections with secrets can’t be created, tested or changed. Whoever runs it sets GOAL_MASTER_KEYS and restarts it.';
 
 const data = (e: AuditEntry, key: string): unknown => (e.data as Record<string, unknown>)[key];
 

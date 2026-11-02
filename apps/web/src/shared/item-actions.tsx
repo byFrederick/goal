@@ -625,7 +625,7 @@ export function mergeRefusal(err: unknown): string | undefined {
   if (!(err instanceof ApiError) || err.status !== 409) return undefined;
   const detail = err.detail ?? err.title;
   if (err.code === 'cannot-merge') {
-    return `goald stopped at a pull request it could not merge: ${detail}. Pull requests merged before it stay merged; fix this one and merge again.`;
+    return `Merging stopped at a pull request it could not merge: ${detail}. Pull requests merged before it stay merged; fix this one and merge again.`;
   }
   if (err.code === 'no-code-host-connection') {
     return `No connection of this factory signs in to that host, so nothing was merged: ${detail}. Add the host’s connection to the factory’s Connections, then merge again.`;
@@ -648,7 +648,7 @@ export function MergeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         title={`Merge ${what}?`}
-        description={`goald squash-merges ${prs.length > 1 ? 'every pull request' : 'the pull request'} of ${item.ref}, deletes ${prs.length > 1 ? 'their branches' : 'its branch'} and approves the item. It refuses a pull request with conflicts or failing checks, and then the item stays here.`}
+        description={`This squash-merges ${prs.length > 1 ? 'every pull request' : 'the pull request'} of ${item.ref}, deletes ${prs.length > 1 ? 'their branches' : 'its branch'} and approves the item. It refuses a pull request with conflicts or failing checks, and then the item stays here.`}
       >
         <form
           className="flex flex-col gap-4"

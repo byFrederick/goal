@@ -94,7 +94,7 @@ export function RuntimeFields({ basics }: { basics: BasicsSection }) {
             value={model}
             onChange={(e) => session.edit(setDefaultModel(agents, e.target.value === '' ? undefined : e.target.value))}
           >
-            <option value="">{fallback ? `goald’s default (${fallback.label})` : 'goald’s default'}</option>
+            <option value="">{fallback ? `Factory default (${fallback.label})` : 'Factory default'}</option>
             {model === '' || models.some((m) => m.id === model) ? null : <option value={model}>{model}</option>}
             {models.map((m) => (
               <option key={m.id} value={m.id}>

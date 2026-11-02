@@ -74,7 +74,7 @@ export function useUploader(org: string) {
 }
 
 export const uploadLimits =
-  'Text, Markdown, HTML, JSON, YAML, each up to goald’s upload limit (25 MiB by default). PDF and Office files come later.';
+  'Text, Markdown, HTML, JSON, YAML, each up to the upload limit (25 MiB by default). PDF and Office files come later.';
 
 /** Drop files on it, or press it (Enter, Space, a tap) to choose them. */
 export function DropZone({ onFiles, disabled = false }: { onFiles: (files: File[]) => void; disabled?: boolean }) {

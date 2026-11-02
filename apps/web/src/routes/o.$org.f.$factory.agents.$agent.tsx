@@ -14,14 +14,14 @@ export const Route = createFileRoute('/o/$org/f/$factory/agents/$agent')({
   // ?view= picks the page's tab (Overview, Prompt, Tools and access, Runs); anything else is Overview.
   validateSearch: (search: Record<string, unknown>): AgentSearch => ({ view: agentViewOf(search.view) }),
   loader: async ({ context: { queryClient, org, factory }, params }) => {
-    const running = queryClient.prefetchQuery(versionModelQuery(org.id, factory.id, 'current'));
+    // Started now, never awaited: the definition's cards show their own loading state.
+    void queryClient.prefetchQuery(versionModelQuery(org.id, factory.id, 'current'));
     try {
       await ensureLoaded(queryClient, agentStatsQuery(org.id, factory.id, params.agent));
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) throw notFound();
       throw err;
     }
-    await running;
   },
   head: ({ match: { context }, params }) => pageTitle(params.agent, context.factory.name, context.org.name),
   component: AgentScreen,
