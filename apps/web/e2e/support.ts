@@ -11,11 +11,16 @@ export async function expectAccessible(page: Page) {
   expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
 }
 
+/** The document is never wider than the window: fails with the overflow in px. */
 export async function expectNoHorizontalScroll(page: Page) {
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
-  expect(overflow).toBeLessThanOrEqual(0);
+  const { scrollWidth, innerWidth } = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    innerWidth: window.innerWidth,
+  }));
+  expect(
+    scrollWidth - innerWidth,
+    `page overflows the viewport by ${scrollWidth - innerWidth}px (scrollWidth ${scrollWidth}, innerWidth ${innerWidth})`,
+  ).toBeLessThanOrEqual(0);
 }
 
 /** The sidebar from 768 px, the drawer below (open): the same landmark, one of them shown. */

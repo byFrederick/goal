@@ -308,6 +308,17 @@ describe('AssemblyPage plan', () => {
     expect(within(wave2).getByRole('link', { name: 'Part 3 title' })).toBeTruthy();
   });
 
+  it('gives every part title link a title attribute with the whole title', async () => {
+    const long = 'A very long part title that the row has to truncate rather than spill into the pull request link';
+    await renderAssembly({
+      parts: { ...parts, parts: parts.parts.map((p) => (p.index === 3 ? { ...p, title: long } : p)) },
+    });
+
+    const links = screen.getAllByRole('link', { name: long });
+    expect(links.length).toBe(2);
+    for (const link of links) expect(link.getAttribute('title')).toBe(long);
+  });
+
   it('shows a merged part as a row, not as work', async () => {
     await renderAssembly();
 

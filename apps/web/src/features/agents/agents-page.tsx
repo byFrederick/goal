@@ -422,6 +422,8 @@ function AgentCard({
   const own = agent.model !== undefined && agent.model !== '';
   const model = stats?.model ?? agent.model ?? defaultModel;
   const sentBack = stats?.sent_back.ratio;
+  const connectionCount = agent.connections?.length ?? 0;
+  const connectionsLabel = `${connectionCount} ${connectionCount === 1 ? 'connection' : 'connections'}`;
   const rework = sentBack !== null && sentBack !== undefined && reworkRate !== undefined && sentBack > reworkRate;
   return (
     <Link
@@ -457,8 +459,9 @@ function AgentCard({
         <span>
           <b className="font-control text-ink">{agent.skills?.length ?? 0}</b> skills
         </span>
-        <span>
-          <b className="font-control text-ink">{agent.connections?.length ?? 0}</b> connections
+        <span className="min-w-0 truncate" title={connectionsLabel}>
+          <b className="font-control text-ink">{connectionCount}</b>{' '}
+          {connectionCount === 1 ? 'connection' : 'connections'}
         </span>
       </span>
     </Link>

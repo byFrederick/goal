@@ -122,4 +122,19 @@ describe('the connection page', () => {
     );
     expect(screen.queryByRole('status')).toBeNull();
   });
+
+  it('names each secret button after its field, as Replace when set and Set when not', async () => {
+    const { getConnection } = await import('../../api/connections');
+    vi.mocked(getConnection).mockResolvedValue(
+      connectionFixture({ name: 'datadog-prod', kind: 'datadog', secrets_set: ['api_key'] }),
+    );
+    renderConnection(connectionFixture({ name: 'datadog-prod', kind: 'datadog', secrets_set: ['api_key'] }));
+    expect(await screen.findByRole('button', { name: 'Replace secret…, API key' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Set secret…, API key' })).toBeNull();
+  });
+
+  it('offers Set secret when the secret is not set', async () => {
+    renderConnection(connectionFixture({ name: 'datadog-prod', kind: 'datadog', secrets_set: [] }));
+    expect(await screen.findByRole('button', { name: 'Set secret…, API key' })).toBeTruthy();
+  });
 });

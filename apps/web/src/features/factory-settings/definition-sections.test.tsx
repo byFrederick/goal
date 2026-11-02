@@ -300,6 +300,28 @@ describe('Flow', () => {
     expect(line.flow.assemblies).toEqual({ overlap: 'allow', fresh_base: 'merge' });
   });
 
+  it('stacks each choice as a labelled radio group below 768 px and still writes the draft', async () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) =>
+      ({
+        matches: query.includes('max-width: 767px'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList) as typeof window.matchMedia;
+    try {
+      await renderSettings();
+      const group = screen.getByRole('group', { name: 'New work enters' });
+      expect(group.getAttribute('aria-describedby')).toBeTruthy();
+      expect(within(group).getAllByRole('radio')).toHaveLength(2);
+      fireEvent.click(within(group).getByRole('radio', { name: 'Pull when the constraint has room' }));
+      const line = await savedSection('line', (v) => v.flow?.release === 'drum-buffer-rope');
+      expect(line.flow.release).toBe('drum-buffer-rope');
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
   it('appends a work type to line.flow.expedite.types', async () => {
     await renderSettings();
     fireEvent.change(screen.getByPlaceholderText('Work type…'), { target: { value: 'incident' } });

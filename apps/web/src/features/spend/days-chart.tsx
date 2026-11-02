@@ -67,7 +67,9 @@ export function SpendDays({ spend }: { spend: OrgSpend }) {
                   </div>
                 ) : null}
                 {label ? (
-                  <b className="absolute -bottom-6 inset-x-0 text-center text-meta font-normal text-muted">{label}</b>
+                  <b className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap text-center text-meta font-normal text-muted">
+                    {label}
+                  </b>
                 ) : null}
               </div>
             );

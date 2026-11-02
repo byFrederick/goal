@@ -72,7 +72,7 @@ function TopBarHost({ children }: { children: ReactNode }) {
   );
 }
 
-function renderPage(url: string) {
+function renderPage(url: string, documents: KnowledgeDocument[] = [doc]) {
   const org: Org = { ...summary, created_at: '2026-09-01T00:00:00Z', can: ['knowledge:manage'] } as Org;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   client.setQueryData(orgQuery(org.id).queryKey, org);
@@ -82,7 +82,7 @@ function renderPage(url: string) {
   client.setQueryData(connectionsQuery(org.id).queryKey, []);
   client.setQueryData(connectionKindsQuery(org.id).queryKey, []);
   client.setQueryData(knowledgeDocumentsQuery(org.id, 'eng-docs').queryKey, {
-    pages: [{ documents: [doc] }],
+    pages: [{ documents }],
     pageParams: [undefined],
   });
   const root = createRootRoute({
@@ -133,7 +133,8 @@ describe('a Knowledge source page', () => {
     const row = within(list).getByRole('listitem');
     const title = within(row).getByRole('link', { name: 'Deploying to production' });
     // MASTER, Phones: the title answers across 44 px on a phone.
-    expect(title.className).toContain('max-md:py-3');
+    expect(title.className).toContain('max-md:min-h-11');
+    expect(title.className).not.toContain('max-md:-my-3');
     const path = within(row).getByText('docs/deploy/production.md');
     expect(path.className).toContain('font-mono');
     expect(path.getAttribute('title')).toBe('docs/deploy/production.md');
@@ -141,6 +142,31 @@ describe('a Knowledge source page', () => {
     expect(within(row).getByText('12 KiB')).toBeTruthy();
     const open = within(row).getByRole('link', { name: 'Open Deploying to production at its source' });
     expect(open.className).toContain('bg-transparent');
+  });
+});
+
+describe('the document rows', () => {
+  it('carry their full path in a title attribute and truncate it', async () => {
+    const paths = [
+      'docs/engineering/frontend.md',
+      'docs/adr/0036-motion-rules-tokens-and-the-catalogue-of-transitions-for-every-screen.md',
+      'docs/design/screens/knowledge/a-source-with-a-very-long-folder-name/index.md',
+    ];
+    const documents = paths.map((path, i) => ({
+      ...doc,
+      id: `d${i}`,
+      title: `Document ${i}`,
+      url: `https://github.com/acme/goal/blob/main/${path}`,
+    })) as KnowledgeDocument[];
+    renderPage('/o/acme/knowledge/eng-docs', documents);
+    const list = await screen.findByRole('list', { name: 'Documents of Engineering docs' });
+    const rows = within(list).getAllByRole('listitem');
+    expect(rows).toHaveLength(paths.length);
+    rows.forEach((row, i) => {
+      const path = within(row).getByText(paths[i] as string);
+      expect(path.getAttribute('title')).toBe(paths[i]);
+      expect(path.className).toContain('truncate');
+    });
   });
 });
 

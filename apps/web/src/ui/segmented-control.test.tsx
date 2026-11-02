@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SegmentedControl } from './segmented-control';
+import { TooltipProvider } from './tooltip';
 
 afterEach(cleanup);
 
@@ -23,6 +24,26 @@ describe('SegmentedControl', () => {
   it('includes the count in the accessible name of its option', () => {
     render(<SegmentedControl label="View" options={options} value="all" onChange={() => {}} />);
     expect(radio('Mine 3').value).toBe('mine');
+  });
+
+  it('keeps the disabled reason outside the option label and wired by aria-describedby', () => {
+    render(
+      <TooltipProvider>
+        <SegmentedControl
+          label="Kind"
+          options={[
+            { value: 'agent', label: 'Agent' },
+            { value: 'done', label: 'Done', disabledReason: 'Only the last station can be Done' },
+          ]}
+          value="agent"
+          onChange={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    const done = radio('Done');
+    const reason = document.getElementById(done.getAttribute('aria-describedby') ?? '');
+    expect(reason?.textContent).toBe('Only the last station can be Done');
+    expect(done.closest('label')?.contains(reason)).toBe(false);
   });
 
   it('calls onChange with the option that was clicked', () => {

@@ -126,6 +126,25 @@ function renderPage(seed: Seed[]) {
 }
 
 describe('AgentsPage', () => {
+  it('reads the connection count with its plural: 0 connections, 1 connection, 3 connections', async () => {
+    const three = {
+      ...line,
+      agents: {
+        ...line.agents,
+        agents: line.agents.agents.map((a) =>
+          a.name === 'checker' ? { ...a, connections: ['github', 'context7', 'slack'] } : a,
+        ),
+      },
+    };
+    renderPage(seeded(three, readyStats));
+
+    await screen.findByRole('heading', { level: 1, name: 'Agents' });
+    expect(screen.getAllByTitle('0 connections').length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle('1 connection')).toHaveLength(1);
+    expect(screen.getAllByTitle('3 connections')).toHaveLength(1);
+    expect(screen.queryByTitle('1 connections')).toBeNull();
+  });
+
   it("shows the line with each station's agents and the factory defaults", async () => {
     renderPage(seeded(line, readyStats));
 

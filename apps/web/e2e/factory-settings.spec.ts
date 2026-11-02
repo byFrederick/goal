@@ -23,6 +23,13 @@ test('factory settings is accessible and fits the screen', async ({ page }) => {
   await expectNoHorizontalScroll(page);
 });
 
+test('factory settings has no sideways scroll at 390 px', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/o/acme/f/goal/settings');
+  await expect(page.getByRole('heading', { name: 'Flow' })).toBeVisible();
+  await expectNoHorizontalScroll(page);
+});
+
 test('Save changes is in the top bar, not in the page', async ({ page }) => {
   await page.goto('/o/acme/f/goal/settings');
   await expect(page.getByRole('banner').first().getByRole('button', { name: 'Save changes' })).toBeDisabled();

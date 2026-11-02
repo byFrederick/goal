@@ -152,15 +152,12 @@ export function ItemTableRow({
           {shortRef(item.ref)}
         </span>
       </td>
-      <td
-        className={cn(cell, 'max-w-sm truncate lg:w-full lg:min-w-40 lg:max-w-0', indent && 'pl-8')}
-        title={item.title}
-      >
+      <td className={cn(cell, 'lg:w-full lg:min-w-40 lg:max-w-0', indent && 'pl-8')} title={item.title}>
         <Link
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
           title={item.title}
-          className="block font-medium text-ink no-underline hover:text-run-ink lg:truncate"
+          className="line-clamp-2 w-64 whitespace-normal break-words font-medium text-ink no-underline hover:text-run-ink lg:line-clamp-none lg:w-auto lg:truncate lg:whitespace-nowrap"
         >
           {item.title}
         </Link>
@@ -275,7 +272,7 @@ export function AssemblyTableRow({
             </span>
           </span>
         </td>
-        <td colSpan={2} className={cn(cell, 'max-w-0')}>
+        <td colSpan={2} className={cn(cell, 'lg:max-w-0')}>
           <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
             <Link
               to="/o/$org/f/$factory/items/$ref"
@@ -287,7 +284,10 @@ export function AssemblyTableRow({
             >
               <LayoutGrid size={14} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ok-ink" />
               <span className="sr-only">Assembly, </span>
-              <span className="truncate" title={title}>
+              <span
+                className="line-clamp-2 w-64 whitespace-normal break-words lg:line-clamp-none lg:w-auto lg:truncate lg:whitespace-nowrap"
+                title={title}
+              >
                 {title}
               </span>
             </Link>

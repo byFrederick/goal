@@ -67,7 +67,9 @@ export function BoardTopBarActions({
   return (
     <div className="flex min-w-0 items-center justify-end gap-2">
       <SearchItems value={q} onChange={onSearch} />
-      <BoardViewControl />
+      <div className="hidden lg:flex">
+        <BoardViewControl />
+      </div>
       <AndonButton factory={factory} andon={andon} />
       <NewItemButton factory={factory} />
     </div>

@@ -55,9 +55,10 @@ const and = (words: string[]) =>
   words.length < 2 ? (words[0] ?? '') : `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`;
 
 /** The table's columns, shared by its header and its rows: handle and number, station, kind, WIP, who, order. */
-export const lineColumns = 'grid grid-cols-[44px_minmax(170px,1.3fr)_268px_132px_minmax(150px,1fr)_112px] gap-x-3';
-/** The table's width: its box scrolls sideways below it. */
-export const lineTableWidth = 'min-w-[960px]';
+export const lineColumns =
+  'grid grid-cols-[44px_minmax(170px,1.3fr)_268px_132px_minmax(150px,1fr)_140px] gap-x-3 md:grid-cols-[44px_minmax(170px,1.3fr)_268px_132px_minmax(150px,1fr)_112px]';
+/** The table's width (the order column fits three 44 px buttons below md): its box scrolls sideways below it. */
+export const lineTableWidth = 'min-w-[988px] md:min-w-[960px]';
 
 const iconButton =
   'inline-flex size-11 shrink-0 items-center justify-center rounded-control border border-line bg-card text-ink transition-colors duration-(--duration-quick) hover:bg-shell md:size-8 aria-disabled:cursor-not-allowed aria-disabled:opacity-45 aria-disabled:hover:bg-card';
