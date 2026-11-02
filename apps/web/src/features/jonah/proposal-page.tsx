@@ -5,10 +5,12 @@
 // through NotAvailable.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import { Check } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ApiError } from '../../api/client';
 import { jonahOverviewQuery, proposalQuery } from '../../api/queries';
 import type { Proposal, ProposalFile, ProposalState } from '../../api/types';
+import { PendingSkeleton } from '../../app/route-skeletons';
 import { TopBarSlot } from '../../app/top-bar';
 import { since } from '../../shared/connections';
 import { useFactory, useFactoryParams } from '../../shared/factory';
@@ -18,14 +20,23 @@ import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { SectionCard } from '../../ui/card';
 import { Chip, type ChipTone } from '../../ui/chip';
+import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
-import { KpiTile } from '../../ui/kpi-tile';
 import { NotAvailable } from '../../ui/not-available';
+import { Skeleton } from '../../ui/skeleton';
+import { type Stat, StatStrip } from '../../ui/stat-strip';
 import { DiffView } from '../factory-editor/review/changes-card';
 import { hunksOf } from '../factory-editor/review/review';
-import { basedOnText, costPerItemText, estimateOf, proposalStateLabels, reviewersText } from './jonah-format';
+import {
+  basedOnText,
+  costPerItemText,
+  estimateDelta,
+  estimateOf,
+  proposalStateLabels,
+  reviewersText,
+} from './jonah-format';
 import { JonahTabs } from './jonah-header';
-import { JonahError, Loading } from './jonah-page';
+import { JonahError } from './jonah-page';
 import {
   approveFailure,
   editFailure,
@@ -76,37 +87,111 @@ function proposalActions(p: Proposal, can: readonly string[], decisions: Proposa
     <Button
       key="approve"
       variant="primary"
-      disabled={!canPublish || decisions.approve.isPending}
+      className="relative"
+      disabled={!canPublish || decisions.approve.isPending || decisions.approve.isSuccess}
       onClick={() => decisions.approve.mutate()}
+      {...(decisions.approve.isSuccess ? { 'aria-label': 'Published' } : {})}
     >
-      Approve and publish v{p.publishes_as_version}
+      <span
+        className={cn('transition-opacity duration-(--duration-quick)', decisions.approve.isSuccess && 'opacity-0')}
+      >
+        Approve and publish v{p.publishes_as_version}
+      </span>
+      {decisions.approve.isSuccess ? (
+        <Check
+          size={16}
+          strokeWidth={1.5}
+          aria-hidden="true"
+          className="absolute inset-0 m-auto motion-safe:animate-success-check"
+        />
+      ) : null}
     </Button>,
   ];
 }
 
-/** One file of the change: its path, the lines it adds, and its diff through the builder's own diff view. */
+/** One file of the change: a bordered block with its path and the lines it adds, then its diff. */
 function FileDiff({ file }: { file: ProposalFile }) {
   const hunks = hunksOf(file.base_content, file.content);
   const added = hunks.reduce((n, hunk) => n + hunk.lines.filter((line) => line.kind === 'added').length, 0);
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <div className="flex min-w-0 items-center gap-3">
-        <span className="min-w-0 break-all font-mono text-secondary">{file.path}</span>
-        <span className="ml-auto font-control text-ok-ink">+{added}</span>
+    <div className="flex min-w-0 flex-col overflow-hidden rounded-control border border-line bg-card">
+      <div className="flex min-w-0 items-center gap-3 border-b border-line bg-panel px-4 py-2">
+        <span className="min-w-0 break-all font-mono text-secondary font-medium">{file.path}</span>
+        <span className="ml-auto font-control text-ok-ink tabular-nums">+{added}</span>
       </div>
-      <DiffView hunks={hunks} label={`Changes to ${file.path}`} />
+      <DiffView hunks={hunks} label={`Changes to ${file.path}`} bare />
     </div>
   );
+}
+
+/** The strip's three figures: the estimate with its change, the new eval case (not built yet) and the cost per item. */
+function expectedEffect(p: Proposal): Stat[] {
+  const figures = p.estimate ? estimateOf(p.estimate) : undefined;
+  const stats: Stat[] = [];
+  if (figures && p.estimate) {
+    stats.push({
+      label: figures.label,
+      value: `about ${figures.after}`,
+      target: `Now ${figures.before}`,
+      delta: estimateDelta(p.estimate),
+    });
+  }
+  stats.push({ label: 'New eval case', value: null, note: 'Not available yet' });
+  if (p.estimate) {
+    stats.push({
+      label: 'Cost per item',
+      value: costPerItemText(p.estimate.cost_per_item_usd),
+      note: basedOnText(p.evidence_count),
+    });
+  }
+  return stats;
 }
 
 /** A row of the details card: its label and its value. */
 function DetailRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex gap-3 text-secondary">
+    <div className="flex gap-3 border-t border-line pt-3 text-secondary first:border-t-0 first:pt-0">
       <dt className="w-28 shrink-0 text-muted">{label}</dt>
       <dd className="m-0 min-w-0">{children}</dd>
     </div>
   );
+}
+
+const block = 'rounded-control bg-hover';
+
+/** The page's layout in muted blocks: chip and title, tabs, the three-figure strip, the diffs and the side cards. */
+export function ProposalShape() {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-5">
+      <div className="flex flex-col gap-2">
+        <div className={`${block} h-5 w-64 max-w-full`} />
+        <div className={`${block} h-6 w-96 max-w-full`} />
+      </div>
+      <div className={`${block} h-11 w-80 max-w-full md:h-9`} />
+      <div className="flex flex-wrap gap-4">
+        <div className={`${block} h-16 min-w-36 flex-1`} />
+        <div className={`${block} h-16 min-w-36 flex-1`} />
+        <div className={`${block} h-16 min-w-36 flex-1`} />
+      </div>
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="flex flex-col gap-3">
+          <div className={`${block} h-5 w-48`} />
+          <div className={`${block} h-40`} />
+          <div className={`${block} h-24`} />
+          <div className={`${block} h-48`} />
+        </div>
+        <div className="flex flex-col gap-5">
+          <div className={`${block} h-56`} />
+          <div className={`${block} h-32`} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The route's pendingComponent: this page's layout, pulsing until the proposal arrives. */
+export function ProposalPending() {
+  return <PendingSkeleton placeholder={<ProposalShape />} />;
 }
 
 /** The proposal page at jonah/proposals/$number. Loading, not found, error and ready each render their own state. */
@@ -119,7 +204,12 @@ export function ProposalPage({ number }: { number: number }) {
   const decisions = useProposalDecisions(org.id, factory.id, number);
   const crumb = `Proposal ${number}`;
 
-  if (proposal.isPending) return <Loading />;
+  if (proposal.isPending)
+    return (
+      <Skeleton ready={false} placeholder={<ProposalShape />}>
+        {null}
+      </Skeleton>
+    );
 
   if (proposal.isError) {
     const missing = proposal.error instanceof ApiError && proposal.error.code === 'proposal-not-found';
@@ -149,9 +239,8 @@ export function ProposalPage({ number }: { number: number }) {
   const p = proposal.data;
   const now = Date.now();
   const waiting = p.state === 'proposed';
-  const figures = p.estimate ? estimateOf(p.estimate) : undefined;
   const reviewers = overview.data ? reviewersText(overview.data.policy.approver_roles) : undefined;
-  const actions = waiting ? proposalActions(p, factory.can, decisions) : [];
+  const actions = waiting || decisions.approve.isSuccess ? proposalActions(p, factory.can, decisions) : [];
   const counts = overview.data ? { proposals: overview.data.waiting } : {};
 
   return (
@@ -175,36 +264,7 @@ export function ProposalPage({ number }: { number: number }) {
         {decisions.edit.isError ? <Callout tone="rework">{editFailure(decisions.edit.error)}</Callout> : null}
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        {figures && p.estimate ? (
-          <KpiTile
-            label={figures.label}
-            value={
-              <span className="flex flex-wrap items-baseline gap-x-2">
-                <s className="text-body font-normal text-muted">{figures.before}</s>
-                <span>about {figures.after}</span>
-              </span>
-            }
-            note={`Estimated from the ${plural(p.evidence_count, 'run', 'runs')} and their reasons`}
-          />
-        ) : null}
-        <NotAvailable label="New eval case">
-          <button
-            type="button"
-            className="flex min-w-0 cursor-not-allowed flex-col gap-2 rounded-card border border-line bg-card px-4 pt-4 pb-3 text-left"
-          >
-            <span className="text-secondary text-ink-soft">New eval case</span>
-            <span className="text-muted">Not available yet</span>
-          </button>
-        </NotAvailable>
-        {p.estimate ? (
-          <KpiTile
-            label="Cost per item"
-            value={costPerItemText(p.estimate.cost_per_item_usd)}
-            note={basedOnText(p.evidence_count)}
-          />
-        ) : null}
-      </div>
+      <StatStrip label="Expected effect" stats={expectedEffect(p)} />
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-5">
