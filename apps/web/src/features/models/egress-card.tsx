@@ -1,23 +1,15 @@
 // "Where agents connect from" (canvas "Models and policies"): the addresses agents' traffic leaves from, as the
 // install lists them (GOAL_EGRESS_ADDRESSES), for the operator to allow in their firewalls. Read only: the
 // install sets them (ADR 0024). "Copy all" copies them one to a line.
-import { toast } from 'sonner';
-import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
+import { CopyButton } from '../../ui/copy-button';
 
 export function EgressCard({ addresses }: { addresses: string[] }) {
-  const copy = async () => {
-    await navigator.clipboard.writeText(addresses.join('\n'));
-    toast.success('Addresses copied');
-  };
-
   return (
     <SectionCard
       title="Where agents connect from"
       aside={
-        <Button size="sm" variant="white" disabled={addresses.length === 0} onClick={() => void copy()}>
-          Copy all
-        </Button>
+        <CopyButton variant="white" label="Copy all" text={addresses.join('\n')} disabled={addresses.length === 0} />
       }
     >
       <p className="m-0 text-secondary text-ink-soft">Allow these addresses in firewalls your agents must reach.</p>
