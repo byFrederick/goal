@@ -89,7 +89,7 @@ export function SaveChangesAction({ state }: { state: SaveChangesState }) {
           'Saving…'
         ) : state.done ? (
           <>
-            <Check size={16} strokeWidth={1.8} aria-hidden="true" />
+            <Check size={16} strokeWidth={1.8} aria-hidden="true" className="motion-safe:animate-success-check" />
             Published
           </>
         ) : (

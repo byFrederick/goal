@@ -329,6 +329,21 @@ describe('Save changes', () => {
     );
   });
 
+  it('reads Saving… while the publish is pending, then shows Published', async () => {
+    let finish: (v: never) => void = () => {};
+    vi.mocked(publishDraft).mockImplementationOnce(
+      () => new Promise((resolve) => (finish = resolve as never)),
+    );
+    await renderSettings();
+    fireEvent.click(screen.getByRole('radio', { name: 'Stop at once' }));
+    await savedSection('review', (v) => v.budget?.on_exhausted === 'stop');
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save changes' })));
+
+    expect(await screen.findByRole('button', { name: 'Saving…' })).toBeTruthy();
+    await act(async () => finish({ id: 'version-2', number: 2 } as never));
+    expect(await screen.findByText('Published')).toBeTruthy();
+  });
+
   it('shows goald’s refusal when the publish is refused', async () => {
     const { ApiError } = await import('../../api/client');
     vi.mocked(publishDraft).mockRejectedValueOnce(
