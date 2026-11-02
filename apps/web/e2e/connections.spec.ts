@@ -44,10 +44,12 @@ test.describe('the Connections page', () => {
 
   test('filters by kind, text and factory in the URL; the factory sidebar opens it filtered', async ({ page }) => {
     await page.goto('/o/acme/connections');
-    await page.getByRole('combobox', { name: 'Kind' }).selectOption({ label: 'GitHub' });
+    await page.getByRole('combobox', { name: 'Kind' }).click();
+    await page.getByRole('option', { name: 'GitHub' }).click();
     await expect(page).toHaveURL(/kind=github/);
     await expect(page.getByRole('heading', { level: 2, name: '1 of 9 connections' })).toBeVisible();
-    await page.getByRole('combobox', { name: 'Kind' }).selectOption({ label: 'All kinds' });
+    await page.getByRole('combobox', { name: 'Kind' }).click();
+    await page.getByRole('option', { name: 'All kinds' }).click();
     await page.getByRole('searchbox', { name: 'Find a connection' }).fill('aws');
     await expect(page.getByRole('heading', { level: 2, name: '1 of 9 connections' })).toBeVisible();
 
@@ -56,14 +58,14 @@ test.describe('the Connections page', () => {
     await page.goto('/o/acme/f/sre');
     await orgNav(page).getByRole('link', { name: 'Connections' }).click();
     await expect(page).toHaveURL(/\/o\/acme\/connections$/);
-    await expect(page.getByRole('combobox', { name: 'Factory' })).toHaveValue('sre');
+    await expect(page.getByRole('combobox', { name: 'Factory' })).toHaveText('sre');
     await fits(page);
   });
 
   test('a factory the organization has no factory of is said, never the unfiltered list', async ({ page }) => {
     await page.goto('/o/acme/connections?factory=nope');
     await expect(page.getByText('Acme has no factory named nope.')).toBeVisible();
-    await expect(page.getByRole('combobox', { name: 'Factory' })).toHaveValue('nope');
+    await expect(page.getByRole('combobox', { name: 'Factory' })).toHaveText('nope');
     await expect(page.getByRole('heading', { level: 2, name: /9 connections/ })).toHaveCount(0);
     await page.getByRole('button', { name: 'Show every connection' }).click();
     await expect(page.getByRole('heading', { level: 2, name: '9 connections' })).toBeVisible();

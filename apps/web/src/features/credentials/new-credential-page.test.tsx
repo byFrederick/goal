@@ -14,6 +14,7 @@ import { ApiError } from '../../api/client';
 import { createCredential, importCredentials, listCredentials } from '../../api/credentials';
 import { factoriesQuery, orgQuery, versionModelQuery } from '../../api/queries';
 import type { Factory, Org, OrgSummary } from '../../api/types';
+import { choose } from '../../test/select';
 import { TooltipProvider } from '../../ui/tooltip';
 import { NewCredentialPage } from './new-credential-page';
 
@@ -111,7 +112,7 @@ describe('creating one credential', () => {
 
     fillCreate();
     fireEvent.change(screen.getByLabelText('Expires'), { target: { value: '2027-10-29' } });
-    fireEvent.change(screen.getByLabelText('Remind me to rotate it'), { target: { value: '7' } });
+    await choose('Remind me to rotate it', '7 days before it expires');
     fireEvent.click(screen.getByRole('button', { name: 'Create credential' }));
 
     await waitFor(() =>
