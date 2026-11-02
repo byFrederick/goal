@@ -25,7 +25,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Field, Input } from '../../ui/field';
-import { descriptionClass, PageHeader } from '../../ui/page-header';
+import { descriptionClass } from '../../ui/page-header';
 import { ReadOnly } from '../../ui/read-only';
 import { EnvNames, ToneText, WriteOnly } from './parts';
 import { ReplaceSecretDialog } from './replace-secret-dialog';
@@ -51,20 +51,6 @@ export function ConnectionPage() {
   const testing = tester.isPending;
   const runTest = () => tester.mutate(connection.name);
 
-  // Before any test, the header offers Test; once there is a result, Test again sits inside that result.
-  const testButton =
-    testable && !connection.last_test ? (
-      <Button variant="white" className="h-11 md:h-10" disabled={testing} onClick={runTest}>
-        <RefreshCw
-          size={16}
-          strokeWidth={1.5}
-          aria-hidden="true"
-          className={cn(testing && 'motion-safe:animate-spin')}
-        />
-        {testing ? 'Testing…' : 'Test'}
-      </Button>
-    ) : null;
-
   // The create answer says it once, as a toast; the id keeps a double run of the effect to one toast.
   useEffect(() => {
     if (!created) return;
@@ -78,36 +64,23 @@ export function ConnectionPage() {
 
   return (
     <>
-      <TopBarSlot crumb={connection.name} />
-      <nav aria-label="Breadcrumb" className="text-sm text-muted">
-        <ol className="m-0 flex list-none gap-2 p-0">
-          <li>
-            <Link
-              to="/o/$org/connections"
-              params={{ org: org.slug }}
-              className="text-muted underline underline-offset-3 hover:text-ink"
-            >
-              Connections
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li aria-current="page" translate="no">
-            {connection.name}
-          </li>
-        </ol>
-      </nav>
-      <PageHeader
-        title={
-          <span className="inline-flex flex-wrap items-center gap-3">
-            <span translate="no">{connection.name}</span>
-            <Chip tone="quiet" className="bg-panel font-normal tracking-normal">
-              {kind?.title ?? connection.kind}
-            </Chip>
-          </span>
-        }
-        description={
-          <p className={cn(descriptionClass, 'flex flex-wrap items-center gap-x-2 gap-y-1')}>
-            {connection.description ? <span>{connection.description}.</span> : null}
+      <TopBarSlot
+        crumb={connection.name}
+        actions={testable ? <TestButton testing={testing} passed={tester.data?.ok} onTest={runTest} /> : undefined}
+      />
+      <header className="flex min-w-0 flex-col gap-1">
+        <h1 className="m-0 flex flex-wrap items-center gap-3 text-page-title">
+          <span translate="no">{connection.name}</span>
+          <Chip tone="quiet" className="bg-panel font-normal tracking-normal">
+            {kind?.title ?? connection.kind}
+          </Chip>
+        </h1>
+        <p className={cn(descriptionClass, 'flex flex-wrap items-center gap-x-2 gap-y-1')}>
+          {connection.description ? <span>{connection.description}.</span> : null}
+          <span
+            key={`${connection.status}-${connection.last_test?.at ?? ''}`}
+            className="inline-flex animate-text-states-swap"
+          >
             <ToneText
               tone={status.tone}
               text={
@@ -117,13 +90,9 @@ export function ConnectionPage() {
               }
               className="text-sm"
             />
-            {testable && connection.last_test ? (
-              <TestAgain testing={testing} passed={tester.data?.ok} onTest={runTest} />
-            ) : null}
-          </p>
-        }
-        actions={<div className="flex flex-wrap gap-2">{testButton}</div>}
-      />
+          </span>
+        </p>
+      </header>
 
       {connection.status === 'failing' && connection.last_test?.error ? (
         <Callout tone="rework">Its last test failed: {connection.last_test.error}.</Callout>
@@ -227,10 +196,10 @@ function FieldsCard({
       noValidate
       className="flex min-w-0 flex-col gap-4 rounded-card border border-line bg-card p-4 md:p-5"
     >
-      <h2 id={`${id}-fields`} className="m-0 text-lg font-medium">
+      <h2 id={`${id}-fields`} className="m-0 text-heading">
         Fields
       </h2>
-      <div className="grid grid-cols-1 gap-x-5 gap-y-4 @[640px]:grid-cols-2">
+      <div className="flex flex-col gap-4">
         <Field
           label="Name"
           error={nameError ?? (refusal?.code === 'connection-name-taken' ? 'Taken' : undefined)}
@@ -319,11 +288,19 @@ function FieldsCard({
   return manage ? form : <ReadOnly>{form}</ReadOnly>;
 }
 
-/** Runs the test again. Its label swaps to Testing…, and a pass swaps the icon to a check (Approve/publish row). */
-function TestAgain({ testing, passed, onTest }: { testing: boolean; passed: boolean | undefined; onTest: () => void }) {
+/** The top bar's Test: its label swaps to Testing…, and a pass swaps the icon to a check (Approve/publish row). */
+function TestButton({
+  testing,
+  passed,
+  onTest,
+}: {
+  testing: boolean;
+  passed: boolean | undefined;
+  onTest: () => void;
+}) {
   const showPass = !testing && passed === true;
   return (
-    <Button variant="white" className="h-11 md:h-8" disabled={testing} onClick={onTest}>
+    <Button variant="white" className="h-11 md:h-9" disabled={testing} onClick={onTest}>
       {showPass ? (
         <Check key="pass" size={16} strokeWidth={1.75} aria-hidden="true" className="animate-fade-in text-ok" />
       ) : (
@@ -336,7 +313,7 @@ function TestAgain({ testing, passed, onTest }: { testing: boolean; passed: bool
         />
       )}
       <span key={testing ? 'testing' : 'idle'} className="animate-text-states-swap">
-        {testing ? 'Testing…' : 'Test again'}
+        {testing ? 'Testing…' : 'Test'}
       </span>
     </Button>
   );
@@ -350,7 +327,7 @@ function UsedByCard({ connection: c }: { connection: Connection }) {
       aria-labelledby={`${id}-used`}
       className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-4 md:p-5"
     >
-      <h2 id={`${id}-used`} className="m-0 text-lg font-medium">
+      <h2 id={`${id}-used`} className="m-0 text-heading">
         Used by
       </h2>
       {c.used_by.factories.length === 0 ? (
@@ -456,7 +433,7 @@ function RunGetsCard({ connection: c, kind }: { connection: Connection; kind: Co
       aria-labelledby={`${id}-gets`}
       className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-4 md:p-5"
     >
-      <h2 id={`${id}-gets`} className="m-0 text-lg font-medium">
+      <h2 id={`${id}-gets`} className="m-0 text-heading">
         What a run gets
       </h2>
       <p className="m-0 text-sm leading-normal text-muted">
@@ -494,7 +471,7 @@ function RecentUse({ org, connection, now }: { org: string; connection: Connecti
       className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-4 md:p-5"
     >
       <div className="flex items-baseline justify-between gap-3">
-        <h2 id={`${id}-use`} className="m-0 text-lg font-medium">
+        <h2 id={`${id}-use`} className="m-0 text-heading">
           Recent use
         </h2>
         <span className="text-secondary text-muted">From the audit log</span>
