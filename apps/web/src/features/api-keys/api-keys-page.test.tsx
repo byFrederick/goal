@@ -189,6 +189,12 @@ describe('API keys page', () => {
     expect(screen.getAllByRole('button', { name: 'New key' }).length).toBeGreaterThan(0);
   });
 
+  it('renders at most one primary button when there are no keys', async () => {
+    await renderPage([]);
+
+    expect(document.querySelectorAll('[data-variant="primary"]').length).toBeLessThanOrEqual(1);
+  });
+
   it('opens the revoke confirmation from a key’s row', async () => {
     await renderPage(pictured);
     // The table and the phone list both render; jsdom applies no breakpoint, so the first is taken.
