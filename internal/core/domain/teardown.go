@@ -26,10 +26,13 @@ import (
 //     inside a send-back's loop adds no time or cost twice.
 
 // TeardownTarget is what an item is set against: its factory's lead-time target for its class
-// and its per-item budget; zero is none (or its factory is not loaded).
+// and its per-item budget; zero is none (or its factory is not loaded). Stations are the ids of
+// its line's stations in the line's order, which orders the teardown's stations; none when its
+// factory is not loaded.
 type TeardownTarget struct {
 	LeadTime  time.Duration
 	BudgetUSD float64
+	Stations  []string
 }
 
 // RunOutcome is how a run ended as a teardown names it: its status, or what its output met.
@@ -131,7 +134,9 @@ type Teardown struct {
 	Target   TeardownTarget
 	// CostUSD is what its runs cost.
 	CostUSD float64
-	// Stations are the stations it spent time at, in the order it first reached them.
+	// Stations are the stations it spent time at, in the line's order (Target.Stations): a
+	// send-back to an earlier station does not move it down. Stations not in the line come after,
+	// in the order it first reached them, and with no line order all do.
 	Stations []TeardownStation
 	Total    TeardownTime
 	Runs     []TeardownRun
@@ -159,7 +164,7 @@ func TeardownOf(spans []Span, runs []Run, events []Event, touches []Touch, targe
 		td.LeadTime = end.Sub(spans[0].EnteredAt)
 	}
 
-	td.Stations, td.Total = stationTimes(spans, end)
+	td.Stations, td.Total = stationTimes(spans, target.Stations, end)
 	td.Runs, td.RunTotal = teardownRuns(runs, events, now)
 	td.CostUSD = td.RunTotal.CostUSD
 
@@ -181,9 +186,9 @@ func TeardownOf(spans []Span, runs []Run, events []Event, touches []Touch, targe
 	return td
 }
 
-// stationTimes sums spans by station, in the order the item first reached each, an open span
-// until end.
-func stationTimes(spans []Span, end time.Time) ([]TeardownStation, TeardownTime) {
+// stationTimes sums spans by station, an open span until end, in the order of line (station ids); a
+// station not in it comes after them, in the order the item first reached it.
+func stationTimes(spans []Span, line []string, end time.Time) ([]TeardownStation, TeardownTime) {
 	var (
 		rows  = []TeardownStation{}
 		total TeardownTime
@@ -211,7 +216,20 @@ func stationTimes(spans []Span, end time.Time) ([]TeardownStation, TeardownTime)
 		total.add(t)
 	}
 
+	slices.SortStableFunc(rows, func(a, b TeardownStation) int {
+		return cmp.Compare(linePlace(line, a.Station), linePlace(line, b.Station))
+	})
+
 	return rows, total
+}
+
+// linePlace is station's place in line, or after every station of it when it is not there.
+func linePlace(line []string, station string) int {
+	if i := slices.Index(line, station); i >= 0 {
+		return i
+	}
+
+	return len(line)
 }
 
 // outcomes are the events that say how a run's output ended, by kind.

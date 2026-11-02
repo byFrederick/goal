@@ -28,6 +28,7 @@ func TestAPI_GetItemTeardown(t *testing.T) {
 
 	expectTeardownTimes(t, got)
 	expectTeardownLoops(t, got)
+	expectTeardownLineOrder(t, h)
 
 	for _, path := range []string{
 		"/v1/orgs/acme/items/acme%2399/teardown",
@@ -103,6 +104,30 @@ func expectTeardownTimes(t *testing.T, got gen.Teardown) {
 		got.Runs[0].Outcome != gen.TeardownRunOutcomeCheckFailed || got.Runs[1].Outcome != gen.TeardownRunOutcomeFinished {
 		t.Errorf("target %v budget %v cost %v runs %+v; want 6 h, $4, $1.50, a failed check then a finished run",
 			got.TargetSeconds, got.BudgetUsd, got.CostUsd, got.Runs)
+	}
+}
+
+// expectTeardownLineOrder checks that an item that reached merge before inbox lists its stations
+// in the line's order: inbox, then merge.
+func expectTeardownLineOrder(t *testing.T, h *harness) {
+	t.Helper()
+
+	it := h.seed(t, stMerge, domain.StateWaitingHuman, h.clock.Now())
+	h.clock.Advance(3 * time.Minute)
+	h.move(t, it, domain.Position{Station: stInbox, State: domain.StateQueued}, nil)
+	h.clock.Advance(2 * time.Minute)
+
+	var got gen.Teardown
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/"+string(it.ID)+"/teardown", "", &got); code != http.StatusOK {
+		t.Fatalf("teardown = %d", code)
+	}
+
+	want := []gen.TeardownStation{
+		{Station: stInbox, WaitingSeconds: 2 * 60, TotalSeconds: 2 * 60},
+		{Station: stMerge, WaitingSeconds: 3 * 60, TotalSeconds: 3 * 60},
+	}
+	if !reflect.DeepEqual(got.Stations, want) {
+		t.Errorf("stations %+v, want the line's order %+v", got.Stations, want)
 	}
 }
 
