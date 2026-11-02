@@ -155,9 +155,11 @@ export interface StationColumnProps {
   finishedThisWeek: number;
   /**
    * The desktop's board grid: the column is a subgrid of its rows (header, expedite, cards), and the expedite
-   * lane is the board's one band behind every column. Without it (the phone) the column draws its own lane.
+   * lane is the board's one band behind every column. It is the column's 1-based grid column: the band fills
+   * its row in every column, so auto-placement would push the columns into new tracks. Without it (the phone)
+   * the column draws its own lane.
    */
-  inBoard?: boolean;
+  inBoard?: number | undefined;
   /** A test for the cards that arrived after the board first had cards. */
   arrived?: ((id: string) => boolean) | undefined;
 }
@@ -171,7 +173,7 @@ export function StationColumn({
   onMove,
   draggable,
   finishedThisWeek,
-  inBoard = false,
+  inBoard,
   arrived,
 }: StationColumnProps) {
   const constraint = station.id === board.constraint;
@@ -199,12 +201,12 @@ export function StationColumn({
   return (
     <DropColumn
       station={station}
-      className={cn('min-w-0', inBoard ? 'grid grid-rows-subgrid' : 'flex flex-col gap-2')}
-      {...(inBoard ? { style: { gridRow: `1 / span ${showExpedite ? 3 : 2}` } } : {})}
+      className={cn('min-w-0', inBoard !== undefined ? 'grid grid-rows-subgrid' : 'flex flex-col gap-2')}
+      {...(inBoard !== undefined ? { style: { gridColumn: inBoard, gridRow: `1 / span ${showExpedite ? 3 : 2}` } } : {})}
     >
       <ColumnHeader station={station} constraint={constraint} decides={decides} finishedThisWeek={finishedThisWeek} />
       {showExpedite ? (
-        inBoard ? (
+        inBoard !== undefined ? (
           // Transparent: the board's band shows through; its label row is reserved above the cards.
           <div data-zone="expedite" className="flex flex-col gap-2 px-2 pt-10 pb-2">
             {expedite.map(card)}

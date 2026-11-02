@@ -95,13 +95,13 @@ function DesktopColumns({ board, onMove, decides, finishedThisWeek, arrived }: C
             <ExpediteLabel className="h-6 px-3" />
           </fieldset>
         ) : null}
-        {board.stations.map((s) => (
+        {board.stations.map((s, i) => (
           <StationColumn
             key={s.id}
             board={board}
             station={s}
             showExpedite={showExpedite}
-            inBoard
+            inBoard={i + 1}
             decides={decides}
             onMove={onMove}
             draggable={Boolean(onMove)}
