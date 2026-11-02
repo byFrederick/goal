@@ -164,7 +164,7 @@ function Members({ org, members, invitations, factories, powers, signIn }: Membe
         description={<p className={descriptionClass}>{countTitle(members.length, invitations.length)}</p>}
         actions={
           powers.manages ? (
-            <Button variant="primary" className="h-11 md:h-10" onClick={() => setInviting(true)}>
+            <Button variant="primary" onClick={() => setInviting(true)}>
               <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
               <span className="md:hidden">Invite</span>
               <span className="hidden md:inline">Invite people</span>

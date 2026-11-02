@@ -45,7 +45,7 @@ export function KnowledgePage() {
   const selected = pickSource(sources);
 
   const addSource = manage ? (
-    <Button asChild variant="primary" className="h-11 md:h-10">
+    <Button asChild variant="primary">
       <Link to="/o/$org/knowledge/new" params={{ org: org.slug }}>
         <Plus size={16} strokeWidth={1.5} aria-hidden="true" />
         Add a source

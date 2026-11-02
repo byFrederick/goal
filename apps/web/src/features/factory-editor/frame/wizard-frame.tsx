@@ -143,12 +143,12 @@ export function DraftSaved({
         ) : null}
       </p>
       {session.status === 'offline' || session.status === 'retrying' || session.status === 'failed' ? (
-        <Button size="sm" variant="white" onClick={onRetry} className="h-11 md:h-8">
+        <Button size="sm" variant="white" onClick={onRetry}>
           {session.status === 'failed' ? 'Try again' : 'Retry now'}
         </Button>
       ) : null}
       {session.status === 'conflict' ? (
-        <Button size="sm" variant="white" onClick={onResolve} className="h-11 md:h-8">
+        <Button size="sm" variant="white" onClick={onResolve}>
           Resolve…
         </Button>
       ) : null}

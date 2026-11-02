@@ -106,7 +106,7 @@ export function DocumentList({ source, manage }: { source: KnowledgeSource; mana
       {pages.hasNextPage ? (
         <Button
           variant="white"
-          className="h-11 self-start md:h-10"
+          className="self-start"
           disabled={pages.isFetchingNextPage}
           onClick={() => void pages.fetchNextPage()}
         >
@@ -263,14 +263,14 @@ export function DocumentDialog({ source, id }: { source: KnowledgeSource; id: st
               ) : null}
               <div className="flex flex-wrap justify-end gap-2">
                 {source.kind === 'upload' ? (
-                  <Button asChild variant="white" className="h-11 md:h-10">
+                  <Button asChild variant="white">
                     <a href={documentContentUrl(org.id, d.id)} download={d.title}>
                       <Download size={16} strokeWidth={1.5} aria-hidden="true" />
                       Download original
                     </a>
                   </Button>
                 ) : externalUrl(d.url) ? (
-                  <Button asChild variant="white" className="h-11 md:h-10">
+                  <Button asChild variant="white">
                     <a href={externalUrl(d.url)} target="_blank" rel="noreferrer noopener">
                       <ExternalLink size={16} strokeWidth={1.5} aria-hidden="true" />
                       Open at its source
