@@ -220,7 +220,7 @@ function PullDialog({ factory, open, onOpenChange, onConfirm, pending }: DialogP
               className={textarea}
             />
             {touched && missing ? (
-              <p id={`${id}-error`} className="m-0 text-sm text-rework">
+              <p id={`${id}-error`} className="m-0 text-sm text-rework-ink">
                 Write why, so whoever clears it knows what to fix.
               </p>
             ) : null}

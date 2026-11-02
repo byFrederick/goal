@@ -88,7 +88,7 @@ export function BuiltinsEditor({ agent, index }: { agent: ModelAgent; index: num
                       <button
                         type="button"
                         onClick={() => setLimiting(true)}
-                        className="min-h-6 text-[13px] text-ink underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-run"
+                        className="min-h-6 text-[13px] text-ink underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-link"
                       >
                         Limit to commands…
                       </button>
@@ -139,7 +139,7 @@ function CustomRules({ agent, index }: { agent: ModelAgent; index: number }) {
       <div className="flex flex-wrap gap-2">
         <SearchLink
           patch={{ mode: 'yaml', ...(line ? { line } : {}) }}
-          className="inline-flex min-h-11 items-center text-ink underline underline-offset-3 hover:text-run md:min-h-8"
+          className="inline-flex min-h-11 items-center text-ink underline underline-offset-3 hover:text-link md:min-h-8"
         >
           Open in YAML
         </SearchLink>

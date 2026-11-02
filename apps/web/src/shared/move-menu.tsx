@@ -239,7 +239,7 @@ function MoveForm({
               className="min-h-20 w-full resize-y rounded-control border border-rule bg-card px-3 py-2.5 text-base text-ink placeholder:text-muted aria-[invalid=true]:border-rework"
             />
             {touched && missing ? (
-              <p id={`${id}-error`} className="m-0 text-sm text-rework">
+              <p id={`${id}-error`} className="m-0 text-sm text-rework-ink">
                 Say why it goes back; the agent reads it first.
               </p>
             ) : null}

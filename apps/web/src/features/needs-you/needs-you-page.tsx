@@ -213,7 +213,7 @@ export function NeedsYouPage() {
             params={{ org: org.slug }}
             search={{ type: search.type, factory: search.factory }}
             aria-label="Back to Needs you"
-            className="text-run no-underline hover:text-run-ink"
+            className="text-link no-underline hover:text-run-ink"
           >
             Back
           </Link>

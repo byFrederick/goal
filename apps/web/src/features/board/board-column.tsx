@@ -224,7 +224,7 @@ export function StationColumn({
                   type="button"
                   aria-expanded={expanded}
                   onClick={() => setExpanded((open) => !open)}
-                  className="press min-h-11 self-start rounded-chip px-1 text-secondary font-medium text-run hover:text-run-ink md:min-h-6"
+                  className="press min-h-11 self-start rounded-chip px-1 text-secondary font-medium text-link hover:text-run-ink md:min-h-6"
                 >
                   {expanded ? 'Show fewer' : `Show ${hidden} more`}
                 </button>

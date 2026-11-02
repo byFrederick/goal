@@ -47,7 +47,8 @@ Tokens keep their names across themes, and components use token names only (`app
 | `--color-preview-light`, `--color-preview-light-side` | `#FFFFFF`, `#F8F8F7` | same | The Light half of an Appearance swatch (content, sidebar); never theme-following |
 | `--color-preview-dark`, `--color-preview-dark-side` | `#0F0F0F`, `#141414` | same | The Dark half of an Appearance swatch (content, sidebar); never theme-following |
 | `--color-action` | `#171717` | `#EDEDEC` | Primary buttons (text `--color-action-ink`: white / `#111111`) |
-| `--color-run` | `#2B5BD7` | `#3D6BE0` | Running, links, focus ring, the selection |
+| `--color-run` | `#2B5BD7` | `#3D6BE0` | Running fills and marks, focus ring, the selection |
+| `--color-link` | `#2B5BD7` | `#7396F2` | Link and action text (`text-link`) |
 | `--color-run-ink` | `#1E46B0` | `#A9C1FA` | Link hover, text on the run tint |
 | `--color-run-tint` | `#EEF2FC` | `#17213A` | Text selection, a running item's highlight |
 | `--color-you` | `#C2410C` | `#B84D1C` | Waiting on a person: counts, the Approve button (white text 5.2:1) |
@@ -62,6 +63,16 @@ Tokens keep their names across themes, and components use token names only (`app
 | `--color-ok` | `#1F8A4C` | `#2E9E5E` | Done and healthy marks (dots, bars) |
 | `--color-ok-tint` | `#EEF7F1` | `#11291B` | Rarely: a merged confirmation |
 | `--color-ok-ink` | `#17663A` | `#7EDBA4` | Healthy text, good deltas |
+
+Text uses the ink and link tokens; fills and marks (dots, bars, borders, rings) use the base tokens. A base token as a text colour fails AA in one theme, and `src/ui/text-tokens.test.ts` rejects it. Measured contrast of each text token, on card then panel (`src/ui/theme-contrast.test.ts` holds each at 4.5:1 or more, also on shell):
+
+| Token | Light (card / panel) | Dark (card / panel) |
+|---|---|---|
+| `--color-link` | 5.87 / 5.62 | 6.73 / 6.29 |
+| `--color-run-ink` | 8.21 / 7.86 | 10.68 / 9.98 |
+| `--color-rework-ink` | 7.32 / 7.01 | 10.10 / 9.45 |
+| `--color-ok-ink` | 7.00 / 6.71 | 11.46 / 10.72 |
+| `--color-you-ink` | 7.31 / 7.00 | 11.53 / 10.78 |
 
 The `--color-andon*` tokens are removed.
 

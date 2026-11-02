@@ -101,7 +101,7 @@ function FactoryConnections({ factory }: { factory: string }) {
           <Link
             to="/o/$org/connections/new"
             params={{ org: org.slug }}
-            className="inline-flex min-h-11 items-center text-sm text-ink underline underline-offset-3 hover:text-run md:min-h-6"
+            className="inline-flex min-h-11 items-center text-sm text-ink underline underline-offset-3 hover:text-link md:min-h-6"
           >
             New connection
           </Link>
@@ -219,7 +219,7 @@ function ConnectionRow({
             <span className="sr-only"> more</span>
           </span>
         ) : null}
-        {summary.minted ? <span className="text-run">minted per run</span> : null}
+        {summary.minted ? <span className="text-link">minted per run</span> : null}
       </span>
     </li>
   );

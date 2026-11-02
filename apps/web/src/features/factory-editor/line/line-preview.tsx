@@ -69,7 +69,7 @@ export function LinePreview() {
         <ul className="m-0 flex list-none flex-col gap-1 p-0">
           {rework.map((r) => (
             <li key={r} className="flex items-center gap-2 text-[13px] text-muted">
-              <span className="block h-2 w-6 shrink-0 overflow-hidden rounded-[2px]">
+              <span className="block h-2 w-6 shrink-0 overflow-hidden rounded-chip">
                 <Hatch tone="rework" />
               </span>
               Rework: {r}

@@ -1,7 +1,7 @@
 import { cn } from '../../ui/cn';
 import type { Delta } from './deltas';
 
-const tones = { worse: 'text-rework', better: 'text-ok-ink', flat: 'text-muted' } as const;
+const tones = { worse: 'text-rework-ink', better: 'text-ok-ink', flat: 'text-muted' } as const;
 
 /**
  * A signed change with an arrow, rust when worse and green when better: a white chip from 768

@@ -77,7 +77,7 @@ describe('BoardCard wait line', () => {
     ) as HTMLElement;
     expect(within(article).getByText('Waits for sre#3')).toBeTruthy();
     expect(article.textContent).not.toMatch(/\*\*|internal\/|same files/);
-    expect(article.querySelector('.text-rework')).toBeNull();
+    expect(article.querySelector('.text-rework-ink')).toBeNull();
     expect(within(article).queryByRole('link', { name: 'sre#3' })).toBeNull();
   });
 

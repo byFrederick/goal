@@ -149,7 +149,7 @@ function WipSlots({ wip, label }: { wip: number | undefined; label: string }) {
     <span className="flex flex-wrap justify-center gap-1">
       <span className="sr-only">{`WIP limit ${wip} at ${label}`}</span>
       {slots.map((slot) => (
-        <span key={slot} aria-hidden="true" className="size-2 rounded-xs border border-line" />
+        <span key={slot} aria-hidden="true" className="size-2 rounded-chip border border-line" />
       ))}
     </span>
   );
