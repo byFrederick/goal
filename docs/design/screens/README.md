@@ -97,13 +97,12 @@ Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jona
 
 ## Mobile (`mobile/`)
 
-`sign-in`, `drawer`, `needs-you`, `approve`, `floor`, `board`, `item`, `intake`: the phone layouts at 390px. Every other screen follows MASTER.md's phone rules: a top bar with the Goal mark, a drawer, a bottom tab bar, one column, and tables that scroll in their own box.
+`sign-in`, `drawer`, `needs-you`, `approve`, `floor`, `board`, `item`, `intake`, `teardown` (+ its loading, empty and error states; the item tabs scroll sideways and Runs becomes a list): the phone layouts at 390px. Every other screen follows MASTER.md's phone rules: a top bar with the Goal mark, a drawer, a bottom tab bar, one column, and tables that scroll in their own box.
 
 ## Added in v3: live pages that had no design
 
 | Screen | Route | Status | Not built yet |
 |---|---|---|---|
-| `teardown` (+ `teardown-loading`, `teardown-empty`, `teardown-error`): the item's Teardown tab on a phone; the item tabs scroll sideways, Runs is a list | `…/items/$ref?tab=teardown` | new | |
 | `daily-work/assembly` | the assembly page (`features/items/assembly-page.tsx`) | restyle | |
 | `daily-work/trace` | an item's Trace tab | new (the tab is "Not available yet" today) | |
 | `build/new-factory` | `/o/$org/new/start`: template, clone, import | restyle | |
