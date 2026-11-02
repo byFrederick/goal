@@ -128,7 +128,7 @@ function Sentence({ segments }: { segments: Segment[] }) {
 }
 
 /** A run's outcome chip. The last run waits on a person when the item does. */
-function outcomeOf(
+export function outcomeOf(
   run: RunEntry,
   last: boolean,
   itemState: ItemState,

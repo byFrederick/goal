@@ -12,8 +12,14 @@ import { itemKey } from '../shared/factory';
 export const Route = createFileRoute('/o/$org/f/$factory/items/$ref')({
   pendingComponent: ItemSkeleton,
   // The selected view. Timeline is the default, so it leaves no `tab` in the URL.
-  validateSearch: (search: Record<string, unknown>): { tab?: ItemTab } =>
-    isItemTab(search.tab) ? { tab: search.tab } : {},
+  // `step` is an event id: the Trace tab opens on that step (the Teardown's "In the trace" link). Anything else is dropped.
+  validateSearch: (search: Record<string, unknown>): { tab?: ItemTab; step?: number } => {
+    const step = Number(search.step);
+    return {
+      ...(isItemTab(search.tab) ? { tab: search.tab } : {}),
+      ...(Number.isInteger(step) && step > 0 ? { step } : {}),
+    };
+  },
   loader: async ({ context: { queryClient, org, factory }, params }) => {
     const key = itemKey(factory.name, params.ref);
     // The run records only refine the trace, the line's touches only the touches card's sentence:

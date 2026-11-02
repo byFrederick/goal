@@ -1,12 +1,10 @@
 // The item's views, in the URL: `?tab=` names the selected one; Timeline is the default and leaves
-// the URL clean. Trace and Teardown are not built yet: they stay in the bar, disabled.
+// the URL clean. Trace is the item's step-by-step record; Teardown is where its time, cost and help went.
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { type KeyboardEvent, useLayoutEffect, useRef } from 'react';
-import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
-import { NotAvailable } from '../../ui/not-available';
 
-export const itemTabs = ['timeline', 'spec', 'changes', 'checks'] as const;
+export const itemTabs = ['timeline', 'spec', 'changes', 'checks', 'trace', 'teardown'] as const;
 export type ItemTab = (typeof itemTabs)[number];
 
 export const isItemTab = (v: unknown): v is ItemTab =>
@@ -17,6 +15,8 @@ const labels: Record<ItemTab, string> = {
   spec: 'Spec',
   changes: 'Changes',
   checks: 'Checks',
+  trace: 'Trace',
+  teardown: 'Teardown',
 };
 
 export const tabId = (t: ItemTab) => `item-tab-${t}`;
@@ -133,21 +133,6 @@ export function ItemTabs({ tab, files, checks, className }: Props) {
           </Link>
         );
       })}
-      {(['Trace', 'Teardown'] as const).map((label) => (
-        <NotAvailable key={label} label={label}>
-          <Button
-            variant="ghost"
-            type="button"
-            role="tab"
-            aria-selected={false}
-            aria-disabled="true"
-            tabIndex={-1}
-            className={cn(tabClass(false), 'rounded-none')}
-          >
-            {label}
-          </Button>
-        </NotAvailable>
-      ))}
     </div>
   );
 }

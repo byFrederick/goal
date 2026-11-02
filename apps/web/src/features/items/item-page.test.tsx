@@ -301,15 +301,15 @@ describe('the item decisions at each width', () => {
     expect(screen.getByText(/ in Build, .* in the line/)).toBeTruthy();
   });
 
-  it('shows Latest in this run with All N events, which opens the full timeline', async () => {
+  it('shows Latest in this run with All N events, which opens the Trace tab', async () => {
     stubWidth(true);
-    renderPage(item());
+    const { router } = renderPage(item());
 
     const latest = await screen.findByRole('heading', { name: 'Latest in this run' });
     const section = latest.closest('section') as HTMLElement;
     fireEvent.click(within(section).getByRole('button', { name: /^All \d+ events$/ }));
-    expect(await screen.findByRole('tabpanel', { name: 'Timeline' })).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Latest in this run' })).toBeNull();
+    expect(await screen.findByRole('tabpanel', { name: 'Trace' })).toBeTruthy();
+    expect(router.state.location.search).toEqual({ tab: 'trace' });
   });
 
   it('shows one Details card on a phone and no separate Cost card', async () => {
@@ -484,10 +484,10 @@ const question = {
   run_id: 'run-147',
 };
 
-function renderTab(location: string, it: Item) {
+function renderTab(location: string, it: Item, events: ItemEvent[] = [approval]) {
   const seed: Seed[] = [
     [keys.item(org.id, key), it],
-    [keys.events(org.id, key), [approval]],
+    [keys.events(org.id, key), events],
     [keys.itemRuns(org.id, key), { runs: [] }],
   ];
   return renderFactoryPage({
@@ -503,6 +503,51 @@ function renderTab(location: string, it: Item) {
     seed,
   });
 }
+
+const runEvent = (id: number, kind: string, data: Record<string, unknown> = {}, at = '2026-10-25T09:00:00Z') =>
+  ({
+    id,
+    item_id: 'item-147',
+    run_id: 'run-1',
+    at,
+    kind,
+    station: 'build',
+    actor: 'builder',
+    data,
+  }) as ItemEvent;
+
+describe('the Trace tab', () => {
+  it('lists the steps of a run, and its Full trace button opens the tab', async () => {
+    const events = [
+      approval,
+      runEvent(2, 'run_started'),
+      runEvent(3, 'tool_call', { id: 't1', tool: 'Read', input: '{"file_path":"src/app.ts"}' }, '2026-10-25T09:00:10Z'),
+      runEvent(4, 'tool_result', { id: 't1', is_error: false, summary: 'Read 40 lines' }, '2026-10-25T09:00:11Z'),
+    ];
+    const { router } = renderTab('items/147', item(), events);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Full trace' }));
+
+    const panel = await screen.findByRole('tabpanel', { name: 'Trace' });
+    expect(router.state.location.search).toEqual({ tab: 'trace' });
+    expect(within(panel).getByRole('list', { name: 'Legend' })).toBeTruthy();
+    expect(within(panel).getByRole('button', { name: /Read\s*src\/app\.ts/ })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Trace' }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('says there are no tool calls for an item with no runs', async () => {
+    renderTab('items/147?tab=trace', item(), []);
+
+    const panel = await screen.findByRole('tabpanel', { name: 'Trace' });
+    expect(await within(panel).findByText('No tool calls yet.')).toBeTruthy();
+  });
+
+  it('no longer holds the trace in the main column of the Timeline tab beyond its run cards', async () => {
+    renderTab('items/147', item());
+    expect(await screen.findByRole('tabpanel', { name: 'Timeline' })).toBeTruthy();
+    expect(screen.queryByRole('list', { name: 'Legend' })).toBeNull();
+  });
+});
 
 describe('the question, the tabs and the spec', () => {
   it('asks the item’s open question on the Timeline tab, with its quick answers', async () => {
@@ -537,5 +582,92 @@ describe('the question, the tabs and the spec', () => {
 
     expect(await screen.findByText('The sidebar shows the week’s spend')).toBeTruthy();
     expect(screen.getByText('It reads in dark mode')).toBeTruthy();
+  });
+});
+
+describe('Watch live', () => {
+  function stubWidth(phone: boolean) {
+    window.matchMedia = (query: string) =>
+      ({
+        matches: phone && query === '(max-width: 767px)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList;
+  }
+
+  afterEach(() => {
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  const running = (): Item => {
+    const base = item();
+    return item({
+      state: 'in_progress',
+      flow: {
+        ...(base.flow as NonNullable<Item['flow']>),
+        current_run: {
+          id: 'run-1',
+          agent: 'builder',
+          slot: 1,
+          model: 'claude-sonnet-5-5',
+          turn: 2,
+          started_at: '2026-10-25T10:00:00Z',
+          output_contract: null,
+          checks: [],
+        },
+      },
+    });
+  };
+
+  it('opens the Trace tab on a running run and scrolls to its newest step', async () => {
+    stubWidth(false);
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    renderPage(running());
+
+    const bar = await screen.findByLabelText('Top bar');
+    const watch = within(bar).getByRole('button', { name: 'Watch live' });
+    expect(watch.getAttribute('aria-disabled')).toBeNull();
+    fireEvent.click(watch);
+
+    expect(await screen.findByRole('tabpanel', { name: 'Trace' })).toBeTruthy();
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+  });
+
+  it('is disabled with its reason when no run is working, and does not open the Trace tab', async () => {
+    stubWidth(false);
+    renderPage(item({ state: 'in_progress' }));
+
+    const bar = await screen.findByLabelText('Top bar');
+    const watch = within(bar).getByRole('button', { name: 'Watch live' });
+    expect(watch.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(watch);
+    fireEvent.keyDown(watch, { key: 'Enter' });
+    fireEvent.keyDown(watch, { key: ' ' });
+    expect(screen.queryByRole('tabpanel', { name: 'Trace' })).toBeNull();
+    watch.focus();
+    expect((await screen.findAllByText('No run is working on this item')).length).toBeGreaterThan(0);
+  });
+
+  it('is disabled when the item is not in progress, even with a run recorded', async () => {
+    stubWidth(false);
+    renderPage({ ...running(), state: 'waiting_human' });
+
+    const bar = await screen.findByLabelText('Top bar');
+    expect(within(bar).getByRole('button', { name: 'Watch live' }).getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('sits centred in its own card on a phone with a 44 px tap target', async () => {
+    stubWidth(true);
+    renderPage(running());
+
+    const watch = await screen.findByRole('button', { name: 'Watch live' });
+    expect(watch.className).toContain('max-md:min-h-11');
+    expect(watch.parentElement?.className).toContain('justify-center');
+    expect(within(screen.getByLabelText('Top bar')).queryByRole('button', { name: 'Watch live' })).toBeNull();
   });
 });

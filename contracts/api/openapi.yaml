@@ -3150,6 +3150,25 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RunList" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/teardown:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+    get:
+      operationId: getItemTeardown
+      x-goal-scope: factory:read
+      summary: Where an item's lead time, cost and human help went
+      description: >-
+        The after-action breakdown of one item (ADR 0019 decision 3), worked out from its spans,
+        runs, events and touches on each request and stored nowhere. On an open item it is the
+        breakdown so far, until now. An unknown item is 404 item-not-found.
+      responses:
+        "200":
+          description: The item's teardown
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Teardown" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/notes:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -6293,6 +6312,112 @@ components:
       properties:
         per_item_usd: { type: number, format: double, nullable: true }
         max_turns_per_task: { type: integer, nullable: true }
+    Teardown:
+      type: object
+      description: >-
+        Where one item's lead time, cost and human help went (ADR 0019 decision 3). Times are whole
+        seconds and costs US dollars. target_seconds and budget_usd are left out when the item has
+        none or its factory is not loaded.
+      required: [open, lead_time_seconds, cost_usd, rework, touch_count, touch_wait_seconds, stations, total, runs, run_total, loops, touches]
+      properties:
+        open: { type: boolean, description: "The item is neither done nor cancelled: the breakdown so far, until now" }
+        lead_time_seconds: { type: integer, format: int64, description: From the item's first span until its last closed, or until now while open }
+        target_seconds: { type: integer, format: int64, description: The factory's lead-time target for the item's class of service }
+        cost_usd: { type: number, format: double, description: What the item's runs cost }
+        budget_usd: { type: number, format: double, description: The per-item budget at the item's station }
+        rework: { $ref: "#/components/schemas/TeardownRework" }
+        touch_count: { type: integer, description: The human touches }
+        touch_wait_seconds: { type: integer, format: int64, description: The time the item waited on people, over its touches }
+        stations:
+          type: array
+          description: The stations the item spent time at, in the order it first reached them
+          items: { $ref: "#/components/schemas/TeardownStation" }
+        total: { $ref: "#/components/schemas/TeardownTime" }
+        runs:
+          type: array
+          description: The item's agent runs, oldest first
+          items: { $ref: "#/components/schemas/TeardownRun" }
+        run_total: { $ref: "#/components/schemas/TeardownRunTotal" }
+        loops:
+          type: array
+          description: Why the item went back, in time order
+          items: { $ref: "#/components/schemas/ReworkLoop" }
+        touches:
+          type: array
+          description: The human touches in time order, each with how long the item waited for it
+          items: { $ref: "#/components/schemas/TeardownTouch" }
+    TeardownTime:
+      type: object
+      description: Time working (in progress) and waiting (any other state)
+      required: [working_seconds, waiting_seconds, total_seconds]
+      properties:
+        working_seconds: { type: integer, format: int64 }
+        waiting_seconds: { type: integer, format: int64 }
+        total_seconds: { type: integer, format: int64 }
+    TeardownStation:
+      type: object
+      description: The time the item spent at one station, over all its visits
+      required: [station, working_seconds, waiting_seconds, total_seconds]
+      properties:
+        station: { type: string }
+        working_seconds: { type: integer, format: int64 }
+        waiting_seconds: { type: integer, format: int64 }
+        total_seconds: { type: integer, format: int64 }
+    TeardownRun:
+      type: object
+      required: [id, station, agent, model, turns, seconds, cost_usd, status, outcome]
+      properties:
+        id: { type: string }
+        station: { type: string }
+        agent: { type: string }
+        model: { type: string }
+        turns: { type: integer }
+        seconds: { type: integer, format: int64, description: How long the run took, until now while it runs }
+        cost_usd: { type: number, format: double }
+        status: { $ref: "#/components/schemas/RunStatus" }
+        outcome:
+          type: string
+          description: "How the run ended: its status, or what its output met (a failed check, a gate's send-back, the merge)"
+          enum: [running, finished, check_failed, sent_back, merged, failed, cancelled]
+    TeardownRunTotal:
+      type: object
+      required: [runs, turns, seconds, cost_usd]
+      properties:
+        runs: { type: integer }
+        turns: { type: integer }
+        seconds: { type: integer, format: int64 }
+        cost_usd: { type: number, format: double }
+    TeardownRework:
+      type: object
+      description: The rework loops, with the time inside any loop and the runs in them each counted once
+      required: [loops, seconds, cost_usd]
+      properties:
+        loops: { type: integer }
+        seconds: { type: integer, format: int64 }
+        cost_usd: { type: number, format: double }
+    ReworkLoop:
+      type: object
+      description: >-
+        One time the item did work again. A send-back (gate_rejected, rejected, or an upstream
+        moved) lasts until the item is back at the station that sent it, and costs the runs in that
+        time; a check_failed or run_retried lasts until the next run at its station ends, and costs
+        that run.
+      required: [cause, station, at, seconds, cost_usd, event_id]
+      properties:
+        cause: { type: string, enum: [gate_rejected, rejected, moved, check_failed, run_retried] }
+        station: { type: string, description: The station that sent the item back, or whose check failed or run was retried }
+        to: { type: string, description: The station a send-back went to; left out for a loop at its station }
+        reason: { type: string, description: "The event's reason, or a failed check's command; left out without one" }
+        at: { type: string, format: date-time }
+        seconds: { type: integer, format: int64 }
+        cost_usd: { type: number, format: double }
+        event_id: { type: integer, format: int64, description: The event that caused the loop, to show it in the trace }
+    TeardownTouch:
+      type: object
+      required: [touch, wait_seconds]
+      properties:
+        touch: { $ref: "#/components/schemas/Touch" }
+        wait_seconds: { type: integer, format: int64, description: From the opening of the span the touch ended (or happened in) until the touch }
     CurrentRun:
       type: object
       required: [id, agent, slot, model, turn, started_at, output_contract, checks]

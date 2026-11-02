@@ -91,6 +91,7 @@ import { orgRunsOf, runsCsvOf } from './runs.ts';
 import { type SearchSource, search } from './search.ts';
 import { createSpend } from './spend.ts';
 import { starterItem } from './starter.ts';
+import { teardownOf } from './teardown.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 import { createViews } from './views.ts';
 import { createWebhooks } from './webhooks.ts';
@@ -1627,6 +1628,25 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       if (cookie) res.setHeader('Set-Cookie', cookie);
       return json(res, 200, { ok: true });
     }
+    // Appends a tool call and its result to an item's running run and puts them on the stream, as a live agent
+    // would: {number} picks the item (default: the first with a run in progress), {tool} and {input} what it ran.
+    if (path === '/__mock/step' && method === 'POST') {
+      const body = await readBody(req);
+      const it = state.items.find((i) => (typeof body.number === 'number' ? i.number === body.number : liveRun(i)));
+      const run = it ? liveRun(it) : null;
+      if (!it?.agent || !run) return problem(res, 409, 'No running run', 'The item has no run in progress.');
+      const n = state.events.length;
+      const tool = typeof body.tool === 'string' ? body.tool : 'Bash';
+      const input = typeof body.input === 'string' ? body.input : 'go test ./...';
+      const base = { id: `step${n}` };
+      emit(it, 'tool_call', it.agent, { ...base, tool, input: JSON.stringify({ arg: input }) });
+      const call = state.events.at(-1);
+      if (call) call.run_id = run.id;
+      emit(it, 'tool_result', it.agent, { ...base, is_error: false, summary: 'ok' });
+      const result = state.events.at(-1);
+      if (result) result.run_id = run.id;
+      return json(res, 200, { ok: true, number: it.number, tool });
+    }
     if (path === '/__mock/fail' && method === 'POST') {
       const fault = parseFault(await readBody(req));
       if (!fault) return problem(res, 400, 'Bad Request', 'a fault names the path it applies to');
@@ -2187,7 +2207,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     }
 
     m = rest.match(
-      /^\/items\/([^/]+)(?:\/(events|runs|parts|notes|approve|reject|merge|retry|move|pause|lane|cancel|answer|tool-approval))?$/,
+      /^\/items\/([^/]+)(?:\/(events|runs|teardown|parts|notes|approve|reject|merge|retry|move|pause|lane|cancel|answer|tool-approval))?$/,
     );
     if (!m) return problem(res, 404, 'Not found', path);
 
@@ -2212,6 +2232,23 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       const runs = state.runs.filter((r) => r.item_id === it.id);
       const body: RunList = { runs: runs.slice(0, 200), truncated: runs.length > 200 };
       return json(res, 200, body);
+    }
+    if (action === 'teardown' && method === 'GET') {
+      const flow = flowOf(it);
+      return json(
+        res,
+        200,
+        teardownOf({
+          spans: it.spans,
+          runs: state.runs.filter((r) => r.item_id === it.id),
+          events: state.events.filter((e) => e.item_id === it.id),
+          touches: itemTouches(it),
+          done: it.state === 'done' || it.state === 'cancelled',
+          now: clock(),
+          targetSeconds: flow.target_seconds,
+          budgetUsd: flow.budget.per_item_usd,
+        }),
+      );
     }
     // The mock has no assemblies: an item has no parts, and adding one is refused as the API refuses it.
     if (action === 'parts' && method === 'GET') {

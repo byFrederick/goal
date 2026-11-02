@@ -33,7 +33,7 @@ The Items page at `/o/<org>/f/<factory>/items` lists the same items as a table, 
 
 Open an item from the Board or the Items page. Its URL is `/o/<org>/f/<factory>/items/<ref>`, where `<ref>` is the item's number.
 
-The page has four tabs. Move between them with the arrow keys; Home and End jump to the first and last. The selected tab is in the URL as `?tab=`, and Timeline leaves it out:
+The page has five tabs. Move between them with the arrow keys; Home and End jump to the first and last. The selected tab is in the URL as `?tab=`, and Timeline leaves it out:
 
 - **Timeline** shows each run's events as grouped steps in plain words: the station, the agent, what it did and how it ended.
 - **Spec** shows the request and the acceptance criteria from the spec the agents wrote.
@@ -42,7 +42,10 @@ The page has four tabs. Move between them with the arrow keys; Home and End jump
 
 The timeline and the note field are the main column on the left. To the right of them, the details column shows the item's details, its cost, the items it overlaps with, and the rules its runs received.
 
-The Trace and Teardown controls on the item page are not available yet; the page shows them disabled.
+- **Trace** shows every run of the item, oldest first, on one time axis. Each run lists its tool calls, checks, notes and human touches as rows. Select a row to see its detail beside the list. On a phone, each run is a list and the detail opens under the row. Open it from **Full trace** on the Latest steps card. It shows "No tool calls yet." before any run, and new steps appear as agents work.
+- **Watch live** (the button in the item's header) opens the Trace tab at the newest step of the run that is working, and keeps new tool calls, results and agent messages in view as they arrive. Scroll up to stop following; select **Watch live** again to jump back to the newest step and follow again. The button is disabled, with the tip "No run is working on this item", when no run is working or the item is not in progress.
+
+- **Teardown** shows where the item's lead time, cost and human help went, worked out from its runs and events each time you open the tab. It has four figures: lead time against the factory's target, cost against the item's budget, the rework loops with their time and cost, and the human touches. Below them, **Time by station** splits each station's time into working and waiting. **Runs** lists each run with its agent, model, turns, time, cost and outcome. **Why it went back** lists each failed check or send-back with its reason, and links to that step in the Trace tab. **Human touches** lists each time a person stepped in and how long the item waited for them, and links to the Timeline. An item no agent has picked up shows "No breakdown yet". Below 1000 px the Waiting column is hidden and Runs is a list.
 
 The same history is available from the CLI:
 
@@ -52,6 +55,35 @@ goal follow acme-line#3
 ```
 
 `goal item` prints the item and its outputs as JSON, and its human touches on standard error. `goal follow` prints the events from the start and keeps following.
+
+`goal item <item> --teardown` prints the item's teardown instead: where its lead time, cost and human help went. It shows the lead time against its class's target and the cost against the item's budget ("no target" or "no budget" when there is none, "so far" while the item is open), then the time by station, the runs, why it went back and the human touches:
+
+```console
+$ goal item acme-line#3 --teardown
+lead time 2h 5m, target 3h; cost $1.20, no budget
+rework: 1 loop, 40m, $0.30
+human touches: 1, waited 12m
+
+Time by station
+STATION  WORKING  WAITING  TOTAL
+build    1h       5m       1h 5m
+review   45s      59m 15s  1h
+total    1h       1h 4m    2h 5m
+
+Runs
+STATION  AGENT     MODEL            TURNS  TOOK  COST   OUTCOME
+build    engineer  claude-opus-5-5  31     50m   $0.90  finished
+build    engineer  claude-opus-5-5  9      10m   $0.30  check failed
+total    2 runs                     40     1h    $1.20
+
+Why it went back
+  rejected at review, to build: the tests do not cover the empty list (40m, $0.30)
+
+Human touches
+  review  2026-10-24 15:05 UTC  waited 12m
+```
+
+An item that does not exist, or that you cannot see, exits with an error and prints nothing.
 
 ## Runs
 
