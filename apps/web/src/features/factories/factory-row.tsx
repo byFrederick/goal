@@ -46,7 +46,7 @@ export function FactoryRow({
       <div className="flex min-w-0 flex-1 items-center gap-3 @[1100px]:w-44 @[1100px]:flex-none">
         <span
           aria-hidden="true"
-          className="flex size-9 shrink-0 items-center justify-center rounded-control bg-run font-numeral text-body font-semibold text-white"
+          className="flex size-9 shrink-0 items-center justify-center rounded-control bg-run text-body font-semibold text-white"
         >
           {mark}
         </span>
@@ -115,24 +115,22 @@ function Figures({
   return (
     <dl className="m-0 grid w-full grid-cols-3 gap-4 @[560px]:flex @[560px]:w-auto @[560px]:shrink-0 @[560px]:gap-6">
       <Figure label="Needs you">
-        <span
-          className={cn('font-numeral text-heading font-semibold', waiting.on_you > 0 ? 'text-you-ink' : 'text-muted')}
-        >
+        <span className={cn('text-heading font-semibold', waiting.on_you > 0 ? 'text-you-ink' : 'text-muted')}>
           {waiting.on_you}
         </span>
       </Figure>
       {worst !== null ? (
         <Figure label="Sent back">
-          <span className="font-numeral text-heading font-semibold text-rework-ink">{formatPercent(worst)}</span>
+          <span className="text-heading font-semibold text-rework-ink">{formatPercent(worst)}</span>
         </Figure>
       ) : (
         <Figure label="Throughput">
-          <span className="font-numeral text-heading font-semibold">{overview.throughput.per_day.toFixed(1)}</span>
+          <span className="text-heading font-semibold">{overview.throughput.per_day.toFixed(1)}</span>
           <span className="text-meta text-muted">{target !== null ? ` of ${target} a day` : ' a day'}</span>
         </Figure>
       )}
       <Figure label="Spend today">
-        <span className="font-numeral text-heading font-semibold">{spent === null ? '…' : formatUsd(spent)}</span>
+        <span className="text-heading font-semibold">{spent === null ? '…' : formatUsd(spent)}</span>
         {spent !== null && budget !== null ? (
           <span className="text-meta text-muted"> of {formatUsd(budget)}</span>
         ) : null}

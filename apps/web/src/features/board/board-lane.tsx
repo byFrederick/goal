@@ -339,7 +339,7 @@ function PlanBar({ plan }: { plan: ItemCard['plan_steps'] }) {
 
 const planTones: Record<PlanSegment, string> = {
   done: 'border-run bg-run',
-  current: 'border-run bg-run-soft',
+  current: 'border-run bg-run',
   todo: 'border-rule bg-card',
 };
 

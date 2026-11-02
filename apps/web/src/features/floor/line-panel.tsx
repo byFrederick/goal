@@ -30,26 +30,26 @@ export function LinePanel({
     <section
       aria-labelledby={headingId}
       className={cn(
-        'flex flex-col gap-4 rounded-andon bg-andon px-4 pt-4 pb-3 text-white md:px-6 md:pt-5 md:pb-4',
+        'flex flex-col gap-4 rounded-dialog bg-panel px-4 pt-4 pb-3 text-ink md:px-6 md:pt-5 md:pb-4',
         className,
       )}
     >
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <h2 id={headingId} className="m-0 text-heading text-white">
+        <h2 id={headingId} className="m-0 text-heading text-ink">
           The line, now
         </h2>
         <ul
           aria-label="Legend"
-          className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 text-secondary text-andon-text"
+          className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 text-secondary text-ink-soft"
         >
-          <Legend swatch="bg-run-soft">Agent working</Legend>
+          <Legend swatch="bg-run">Agent working</Legend>
           <Legend swatch="bg-you">Waiting on you</Legend>
-          <Legend swatch="border border-andon-text">Free</Legend>
+          <Legend swatch="border border-rule">Free</Legend>
         </ul>
       </div>
 
       {stations.length === 0 ? (
-        <p className="m-0 text-secondary text-andon-text">This factory has no stations yet.</p>
+        <p className="m-0 text-secondary text-ink-soft">This factory has no stations yet.</p>
       ) : (
         <div className="relative">
           <span aria-hidden="true" className="absolute inset-x-[10%] top-6 hidden h-1 rounded-full bg-run md:block" />
@@ -68,17 +68,17 @@ export function LinePanel({
                 >
                   <StationNode tone={tone} count={tone === 'done' ? undefined : s.waiting + s.in_progress} />
                   <div className="flex min-w-0 flex-1 flex-col items-start gap-1 md:flex-none md:items-center">
-                    <span className="flex flex-wrap items-center gap-2 text-body font-semibold text-white">
+                    <span className="flex flex-wrap items-center gap-2 text-body font-semibold text-ink">
                       {humanize(s.id)}
                       {tone === 'constraint' ? <Chip tone="constraint">Constraint</Chip> : null}
                     </span>
                     {waitsOf(s, drum, doneThisWeek).map((line) => (
-                      <span key={String(line)} className="text-secondary text-andon-text">
+                      <span key={String(line)} className="text-secondary text-ink-soft">
                         {line}
                       </span>
                     ))}
                     <Slots station={s} />
-                    {busy ? <span className="text-meta text-andon-text tabular-nums">{busy}</span> : null}
+                    {busy ? <span className="text-meta text-ink-soft tabular-nums">{busy}</span> : null}
                   </div>
                 </li>
               );
@@ -87,23 +87,23 @@ export function LinePanel({
         </div>
       )}
 
-      <footer className="flex flex-wrap items-center gap-x-7 gap-y-3 border-t border-andon-line pt-4 text-secondary text-andon-text">
+      <footer className="flex flex-wrap items-center gap-x-7 gap-y-3 border-t border-line pt-4 text-secondary text-ink-soft">
         <span>
           In progress{' '}
-          <strong className="font-semibold text-white">
+          <strong className="font-semibold text-ink">
             {line.wip.limit !== null ? `${line.wip.in_progress} of ${line.wip.limit}` : line.wip.in_progress}
           </strong>
-          , ready <strong className="font-semibold text-white">{line.release.in_buffer}</strong>
+          , ready <strong className="font-semibold text-ink">{line.release.in_buffer}</strong>
         </span>
         {drum ? (
           <span>
-            New work enters <strong className="font-semibold text-white">when {humanize(drum)} has room</strong>
+            New work enters <strong className="font-semibold text-ink">when {humanize(drum)} has room</strong>
           </span>
         ) : null}
         {line.expedite ? (
           <span>
             Expedite lane{' '}
-            <strong className="font-semibold text-white">
+            <strong className="font-semibold text-ink">
               {line.expedite.limit !== null
                 ? `${line.expedite.in_use} of ${line.expedite.limit}`
                 : `${line.expedite.in_use} in use`}
@@ -112,7 +112,7 @@ export function LinePanel({
         ) : null}
         <span className="md:ml-auto">
           Andon{' '}
-          <strong className="font-semibold text-white">{line.andon ? `pulled: ${line.andon.reason}` : 'clear'}</strong>
+          <strong className="font-semibold text-ink">{line.andon ? `pulled: ${line.andon.reason}` : 'clear'}</strong>
         </span>
       </footer>
     </section>
@@ -188,7 +188,7 @@ export function Slots({ station, compact = false }: { station: BoardStation; com
           aria-hidden="true"
           className={cn(
             compact ? 'size-2 rounded-chip' : 'size-3.5 rounded-chip',
-            i < busy ? 'bg-run-soft' : i < busy + waiting ? 'bg-you' : 'border border-andon-text',
+            i < busy ? 'bg-run' : i < busy + waiting ? 'bg-you' : 'border border-rule',
           )}
         />
       ))}

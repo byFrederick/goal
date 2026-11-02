@@ -62,7 +62,7 @@ function usePauseMany(factory: Factory) {
 
 /** Buttons on the navy bar: 44 px on a phone, 32 px from 768 px. */
 const barButton =
-  'inline-flex min-h-11 items-center gap-2 rounded-control border border-andon-line px-3 text-secondary text-white transition-colors hover:bg-andon-raised disabled:opacity-50 md:min-h-8';
+  'inline-flex min-h-11 items-center gap-2 rounded-control border border-line px-3 text-secondary text-ink transition-colors hover:bg-hover disabled:opacity-50 md:min-h-8';
 
 export function BulkActions({
   items,
@@ -85,7 +85,7 @@ export function BulkActions({
   return (
     <section
       aria-label="Bulk actions"
-      className="flex flex-wrap items-center gap-2 rounded-card bg-andon px-4 py-3 text-white"
+      className="flex flex-wrap items-center gap-2 rounded-card bg-panel px-4 py-3 text-ink"
     >
       <span className="mr-2 text-body font-semibold">{items.length} selected</span>
       {canOperate ? (

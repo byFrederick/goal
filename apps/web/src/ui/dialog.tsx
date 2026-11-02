@@ -43,7 +43,7 @@ export function DialogContent({
   const opener = useRef<HTMLElement | null>(null);
   return (
     <D.Portal>
-      <D.Overlay className="fixed inset-0 z-40 bg-ink/45 data-[state=open]:animate-[fade-in_150ms_ease-out]" />
+      <D.Overlay className="fixed inset-0 z-40 bg-ink/45 data-[state=open]:animate-fade-in" />
       <D.Content
         onCloseAutoFocus={(e) => {
           onCloseAutoFocus?.(e);

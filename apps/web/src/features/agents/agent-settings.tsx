@@ -51,7 +51,7 @@ export function AgentSettings({ agent }: { agent: string }) {
           </Setting>
           <Setting label="Turns per run">
             <span className="flex flex-wrap items-center gap-2">
-              <b className="font-numeral">{found.max_turns ?? defaults?.max_turns_per_task ?? none}</b>
+              <b className="">{found.max_turns ?? defaults?.max_turns_per_task ?? none}</b>
               <Origin own={found.max_turns !== undefined} />
               {found.max_turns !== undefined && defaults?.max_turns_per_task !== undefined ? (
                 <span className="text-meta text-muted">Default {defaults.max_turns_per_task}</span>
@@ -60,7 +60,7 @@ export function AgentSettings({ agent }: { agent: string }) {
           </Setting>
           <Setting label="Per item">
             <span className="flex flex-wrap items-center gap-2">
-              <b className="font-numeral">
+              <b className="">
                 {found.per_item_usd !== undefined
                   ? formatUsd(found.per_item_usd)
                   : defaults?.per_item_usd !== undefined

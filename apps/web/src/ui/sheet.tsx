@@ -22,7 +22,7 @@ interface SheetContentProps {
 export function SheetContent({ title, children, initialFocus, onCloseAutoFocus }: SheetContentProps) {
   return (
     <D.Portal>
-      <D.Overlay className="fixed inset-0 z-40 bg-ink/50 data-[state=open]:animate-[fade-in_150ms_ease-out]" />
+      <D.Overlay className="fixed inset-0 z-40 bg-ink/50 data-[state=open]:animate-fade-in" />
       <D.Content
         aria-describedby={undefined}
         onOpenAutoFocus={(e) => {
@@ -31,7 +31,7 @@ export function SheetContent({ title, children, initialFocus, onCloseAutoFocus }
           initialFocus.current.focus();
         }}
         onCloseAutoFocus={onCloseAutoFocus}
-        className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-1 overflow-y-auto rounded-t-[16px] bg-card px-3 pt-2 pb-[max(28px,env(safe-area-inset-bottom))] shadow-pop outline-none data-[state=open]:animate-[fade-in_150ms_ease-out]"
+        className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-1 overflow-y-auto rounded-t-[16px] bg-card px-3 pt-2 pb-[max(28px,env(safe-area-inset-bottom))] shadow-pop outline-none data-[state=open]:animate-fade-in"
       >
         <span aria-hidden="true" className="mx-auto mb-1.5 block h-1 w-10 rounded-sm bg-rule" />
         <div className="flex items-center justify-between pl-2.5">

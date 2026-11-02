@@ -157,7 +157,7 @@ function StationTabs({
             value={s.id}
             data-station={s.id}
             className={cn(
-              'flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-andon border border-line bg-card px-4 text-sm font-medium text-ink-soft',
+              'flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-dialog border border-line bg-card px-4 text-sm font-medium text-ink-soft',
               'data-[state=active]:border-ink data-[state=active]:bg-ink data-[state=active]:text-white',
             )}
           >

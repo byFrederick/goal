@@ -7,7 +7,7 @@ export function FactoryBadge({ mark, className }: { mark: string; className?: st
     <span
       aria-hidden="true"
       className={cn(
-        'flex flex-none items-center justify-center rounded-chip bg-run text-meta font-semibold text-white font-numeral',
+        'flex flex-none items-center justify-center rounded-chip bg-run text-meta font-semibold text-white',
         className ?? 'size-6',
       )}
     >

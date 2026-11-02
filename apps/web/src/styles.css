@@ -1,63 +1,66 @@
-/* Design tokens from docs/design/MASTER.md (the user overrides). Components use these
-   names only: no hex values, no default Tailwind palette (it is cleared below), no gradients. */
+/* Design tokens from docs/design/MASTER.md, version 3 "Plain" (ADR 0036), and the motion tokens from
+   docs/design/MOTION.md. Components use these names only: no hex values, no default Tailwind palette
+   (it is cleared below), no gradients. */
 @import "tailwindcss";
-@import "@fontsource-variable/archivo/wdth.css";
-@import "@fontsource-variable/jetbrains-mono/wght.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans/400-italic.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
 
 @theme {
   --color-*: initial;
-  /* The text on a run, violet or red fill: white in both themes (MASTER.md, Colour). */
+  /* The text on a run or rework fill: white in both themes (MASTER.md, Colour). */
   --color-white: #ffffff;
   --color-transparent: transparent;
   --color-current: currentColor;
-  /* The tint of the one popover and dialog shadow: ink in light, black in dark (see the dark overrides). */
-  --color-shadow: #14182b;
+  /* The tint of the popover and dialog shadow: ink in light, black in dark (see the dark overrides). */
+  --color-shadow: #171717;
 
   /* Surfaces */
   --color-shell: #ffffff;
-  --color-sidebar: #f3f4f9;
-  --color-panel: #f7f8fc;
-  --color-hover: #e9ebf4;
+  --color-sidebar: #f8f8f7;
+  --color-panel: #fafaf9;
+  --color-hover: #f0f0ee;
+  --color-line: #eaeae7;
+  --color-rule: #d6d6d2;
+  /* Cards have no token of their own in MASTER.md: they are the shell. Kept as an alias until the components drop it. */
   --color-card: #ffffff;
-  --color-line: #e3e6ef;
-  --color-rule: #cbd0df;
 
   /* Text */
-  --color-ink: #14182b;
-  --color-ink-soft: #464d6a;
-  --color-muted: #626986;
+  --color-ink: #171717;
+  --color-ink-soft: #4a4a47;
+  --color-muted: #6b6b67;
 
-  /* Meaning: cobalt runs, violet waits on you, red is rework, yellow is the constraint, green is done */
-  --color-run: #2742f5;
-  --color-run-ink: #1b33c9;
-  --color-run-tint: #e8ecff;
-  --color-run-soft: #9aa6ff;
-  --color-you: #7b3fe4;
-  --color-you-tint: #f1ebfe;
-  --color-you-ink: #5a24b8;
-  --color-rework: #d63a1f;
-  --color-rework-tint: #fdece8;
-  --color-rework-ink: #ae2c14;
-  --color-amber: #ffc21a;
-  --color-amber-tint: #fff4d1;
-  --color-amber-ink: #6e4b00;
-  --color-ok: #0fa36b;
-  --color-ok-tint: #e1f5eb;
-  --color-ok-ink: #0a7a4f;
+  /* The primary button: ink fill, its text on top. */
+  --color-action: #171717;
+  --color-action-ink: #ffffff;
 
-  /* The andon panel: the line, now */
-  --color-andon: #121633;
-  --color-andon-raised: #1c2147;
-  --color-andon-line: #262c58;
-  --color-andon-text: #c3c8ea;
+  /* Meaning: running is blue, waiting on you is orange, sent back and destructive are red, the constraint is yellow, done is green. */
+  --color-run: #2b5bd7;
+  --color-run-ink: #1e46b0;
+  --color-run-tint: #eef2fc;
+  --color-you: #c2410c;
+  --color-you-tint: #fdf2ec;
+  --color-you-ink: #9a3412;
+  --color-rework: #c93030;
+  --color-rework-tint: #fdf0f0;
+  --color-rework-ink: #a42525;
+  --color-amber: #eab308;
+  --color-amber-tint: #fef8e1;
+  --color-amber-ink: #6f5000;
+  --color-ok: #1f8a4c;
+  --color-ok-tint: #eef7f1;
+  --color-ok-ink: #17663a;
 
-  --font-sans: "Archivo Variable", "Archivo", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  /* Type: IBM Plex (ADR 0036). Components name the family through these two tokens only. */
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
-  --tracking-display: -0.035em;
-  --tracking-numeral: -0.04em;
+  --tracking-display: -0.01em;
 
-  /* The type scale (MASTER.md Typography), by role. Line heights and weights where MASTER.md is silent are ours. */
+  /* The type scale (MASTER.md, Typography), by role. Line heights are ours where MASTER.md is silent. */
   --text-meta: 12px;
   --text-meta--line-height: 1.5;
   --text-meta--font-weight: 400;
@@ -67,35 +70,64 @@
   --text-body: 14px;
   --text-body--line-height: 1.5;
   --text-body--font-weight: 400;
-  --text-heading: 16px;
+  --text-heading: 14px;
   --text-heading--line-height: 1.3;
-  --text-heading--font-weight: 620;
-  --text-detail-title: 22px;
-  --text-detail-title--line-height: 1.2;
-  --text-detail-title--font-weight: 620;
-  --text-page-title: 26px;
-  --text-page-title--line-height: 1.15;
-  --text-page-title--font-weight: 650;
-  --text-kpi: 28px;
+  --text-heading--font-weight: 600;
+  --text-detail-title: 18px;
+  --text-detail-title--line-height: 1.25;
+  --text-detail-title--font-weight: 600;
+  --text-page-title: 20px;
+  --text-page-title--line-height: 1.2;
+  --text-page-title--font-weight: 600;
+  --text-kpi: 24px;
   --text-kpi--line-height: 1.1;
-  --text-kpi--font-weight: 600;
+  --text-kpi--font-weight: 500;
 
-  /* The weight of buttons, chips and segments (MASTER.md, Components: 520 to 580). One value, not one per control. */
-  --font-weight-control: 580;
+  /* The weight of buttons, chips and segments (MASTER.md, Typography: 500 for controls). One value, not one per control. */
+  --font-weight-control: 500;
 
-  --radius-andon: 18px;
-  --radius-card: 14px;
-  --radius-cell: 10px;
-  --radius-control: 8px;
-  --radius-chip: 6px;
+  /* Radii (MASTER.md, Shape): chips 4px, controls 6px, cells and cards 8px, dialogs and sheets 12px. */
+  --radius-chip: 4px;
+  --radius-control: 6px;
+  --radius-cell: 8px;
+  --radius-card: 8px;
+  --radius-dialog: 12px;
 
-  /* Borders, not shadows, except the one shadow of a popover or dialog (MASTER.md, Shape). */
-  --shadow-pop: 0 20px 44px -18px color-mix(in srgb, var(--color-shadow) 40%, transparent);
+  /* Borders, not shadows, except the one shadow of a popover, menu, dialog or toast (MASTER.md, Shape). */
+  --shadow-pop:
+    0 0 0 1px color-mix(in srgb, var(--color-shadow) 6%, transparent),
+    0 10px 28px -10px color-mix(in srgb, var(--color-shadow) 18%, transparent);
   /* The selected segment of a segmented control lifts off its track: a hairline shadow and its rule. */
   --shadow-raised: 0 1px 2px color-mix(in srgb, var(--color-shadow) 12%, transparent), 0 0 0 1px var(--color-rule);
 
-  /* The pulse of a running status dot: 1.6s, eased, turned off by prefers-reduced-motion (chip.tsx). */
-  --animate-pulse-dot: pulse-dot 1.6s ease infinite;
+  /* Motion (MOTION.md, Tokens). Durations in ms, easings as cubic-bezier, scales and distances as their values. */
+  --duration-stagger: 40ms;
+  --duration-micro: 80ms;
+  --duration-quick: 150ms;
+  --duration-fast: 250ms;
+  --duration-medium: 350ms;
+  --duration-slow: 400ms;
+  --duration-emphasis: 500ms;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --scale-dialog: 0.96;
+  --scale-menu: 0.97;
+  --scale-tooltip: 0.98;
+  --scale-press: 0.97;
+
+  --distance-micro: 4px;
+  --distance-base: 8px;
+
+  --blur-small: 2px;
+
+  /* The running status dot pulses: the one ambient motion (MOTION.md, rule 10). Off under reduced motion (chip.tsx). */
+  --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
+  /* The open and close fade of menus, popovers, dialogs and sheets: opacity only, at the quick duration. */
+  --animate-fade-in: fade-in var(--duration-quick) var(--ease-out);
 
   @keyframes pulse-dot {
     50% {
@@ -120,11 +152,6 @@
   }
 }
 
-/* Numbers and factory letters are set at 112% width (MASTER.md, Typography). */
-@utility font-numeral {
-  font-stretch: 112%;
-}
-
 /* Dark values (docs/design/MASTER.md, Colour): the same tokens, redefined. Two blocks
    with the same declarations: the choice is written to data-theme by theme.js before first paint
    (and by src/shared/theme.ts afterwards); the media query covers a page that has no script yet.
@@ -132,74 +159,75 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --color-white: #ffffff;
-  --color-shell: #0e1120;
-  --color-sidebar: #13172a;
-  --color-panel: #161a2f;
-  --color-hover: #1e2340;
-  --color-card: #0e1120;
-  --color-line: #252a45;
-  --color-rule: #3a4066;
-  --color-ink: #eceef7;
-  --color-ink-soft: #b7bcd4;
-  --color-muted: #9096b3;
-  --color-run: #4a63f5;
-  --color-run-ink: #a3b2ff;
-  --color-run-tint: #1d2556;
-  --color-run-soft: #5b6bc9;
-  --color-you: #9061f5;
-  --color-you-tint: #2a1e4f;
-  --color-you-ink: #cdb4ff;
-  --color-rework: #e2512f;
-  --color-rework-tint: #3b1c16;
-  --color-rework-ink: #ffa08a;
-  --color-amber: #ffc21a;
-  --color-amber-tint: #3a3013;
-  --color-amber-ink: #ffd666;
-  --color-ok: #22c17f;
-  --color-ok-tint: #10301f;
-  --color-ok-ink: #62dda5;
-  --color-andon: #090c1a;
-  --color-andon-raised: #151a36;
-  --color-andon-line: #272d58;
-  --color-andon-text: #c3c8ea;
+  --color-shell: #0f0f0f;
+  --color-sidebar: #141414;
+  --color-panel: #171717;
+  --color-hover: #1f1f1f;
+  --color-card: #0f0f0f;
+  --color-line: #262626;
+  --color-rule: #363636;
+  --color-ink: #ededec;
+  --color-ink-soft: #b4b4b0;
+  --color-muted: #8f8f8a;
+  --color-action: #ededec;
+  --color-action-ink: #111111;
+  --color-run: #3d6be0;
+  --color-run-ink: #a9c1fa;
+  --color-run-tint: #17213a;
+  --color-you: #b84d1c;
+  --color-you-tint: #341c10;
+  --color-you-ink: #fdba94;
+  --color-rework: #c73a3a;
+  --color-rework-tint: #361616;
+  --color-rework-ink: #fca5a5;
+  --color-amber: #eab308;
+  --color-amber-tint: #30270c;
+  --color-amber-ink: #f5d46b;
+  --color-ok: #2e9e5e;
+  --color-ok-tint: #11291b;
+  --color-ok-ink: #7edba4;
   --color-shadow: #000000;
+  /* On dark the ring is white at 8%, not ink (MASTER.md, Shape, elevation). */
+  --shadow-pop:
+    0 0 0 1px color-mix(in srgb, #ffffff 8%, transparent),
+    0 10px 28px -10px color-mix(in srgb, var(--color-shadow) 18%, transparent);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
     --color-white: #ffffff;
-    --color-shell: #0e1120;
-    --color-sidebar: #13172a;
-    --color-panel: #161a2f;
-    --color-hover: #1e2340;
-    --color-card: #0e1120;
-    --color-line: #252a45;
-    --color-rule: #3a4066;
-    --color-ink: #eceef7;
-    --color-ink-soft: #b7bcd4;
-    --color-muted: #9096b3;
-    --color-run: #4a63f5;
-    --color-run-ink: #a3b2ff;
-    --color-run-tint: #1d2556;
-    --color-run-soft: #5b6bc9;
-    --color-you: #9061f5;
-    --color-you-tint: #2a1e4f;
-    --color-you-ink: #cdb4ff;
-    --color-rework: #e2512f;
-    --color-rework-tint: #3b1c16;
-    --color-rework-ink: #ffa08a;
-    --color-amber: #ffc21a;
-    --color-amber-tint: #3a3013;
-    --color-amber-ink: #ffd666;
-    --color-ok: #22c17f;
-    --color-ok-tint: #10301f;
-    --color-ok-ink: #62dda5;
-    --color-andon: #090c1a;
-    --color-andon-raised: #151a36;
-    --color-andon-line: #272d58;
-    --color-andon-text: #c3c8ea;
+    --color-shell: #0f0f0f;
+    --color-sidebar: #141414;
+    --color-panel: #171717;
+    --color-hover: #1f1f1f;
+    --color-card: #0f0f0f;
+    --color-line: #262626;
+    --color-rule: #363636;
+    --color-ink: #ededec;
+    --color-ink-soft: #b4b4b0;
+    --color-muted: #8f8f8a;
+    --color-action: #ededec;
+    --color-action-ink: #111111;
+    --color-run: #3d6be0;
+    --color-run-ink: #a9c1fa;
+    --color-run-tint: #17213a;
+    --color-you: #b84d1c;
+    --color-you-tint: #341c10;
+    --color-you-ink: #fdba94;
+    --color-rework: #c73a3a;
+    --color-rework-tint: #361616;
+    --color-rework-ink: #fca5a5;
+    --color-amber: #eab308;
+    --color-amber-tint: #30270c;
+    --color-amber-ink: #f5d46b;
+    --color-ok: #2e9e5e;
+    --color-ok-tint: #11291b;
+    --color-ok-ink: #7edba4;
     --color-shadow: #000000;
+    --shadow-pop:
+      0 0 0 1px color-mix(in srgb, #ffffff 8%, transparent),
+      0 10px 28px -10px color-mix(in srgb, var(--color-shadow) 18%, transparent);
   }
 }
 
@@ -271,18 +299,25 @@
   }
 }
 
-/* Unlayered, so it wins over every utility without !important. No duration at all, not a tiny
-   one: transition-property defaults to all, so any transition duration here would make every
-   style change of every element a transition, and an animation would start from its first frame
-   (a fade from opacity 0); either way the old look shows until the next frame is drawn. A
-   zero-length animation still ends at once, with its animationend. */
+/* Reduced motion (MOTION.md, rule 9). Unlayered, so it wins over every utility without !important.
+   Movement goes: transforms and blur are not transitioned, and animations run at the quick duration
+   with one iteration. Opacity fades and colour changes stay, at --duration-quick, so every state
+   change still happens. The running dot and the spinners stop altogether. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0s;
+    transition-property:
+      opacity, color, background-color, border-color, outline-color, fill, stroke, text-decoration-color;
+    transition-duration: var(--duration-quick);
+    transition-delay: 0s;
+    animation-duration: var(--duration-quick);
     animation-iteration-count: 1;
-    transition-duration: 0s;
     scroll-behavior: auto;
+  }
+
+  .animate-spin,
+  .animate-pulse-dot {
+    animation-name: none;
   }
 }

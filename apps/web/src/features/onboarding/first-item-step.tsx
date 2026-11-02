@@ -80,7 +80,7 @@ function NoFactory({ org, search, message }: { org: OrgSummary; search: Onboardi
   return (
     <OnboardingLayout step="first-item" org={org} back={<Back org={org} search={search} />}>
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 font-numeral text-kpi tracking-display">Watch your first item</h1>
+        <h1 className="m-0 text-kpi tracking-display">Watch your first item</h1>
       </div>
       <Callout tone="rework">{message}</Callout>
     </OnboardingLayout>
@@ -127,7 +127,7 @@ function Watch({
     return (
       <OnboardingLayout step="first-item" org={org} back={<Back org={org} search={search} factory={factoryId} />}>
         <div className="flex flex-col gap-2">
-          <h1 className="m-0 font-numeral text-kpi tracking-display">Watch your first item</h1>
+          <h1 className="m-0 text-kpi tracking-display">Watch your first item</h1>
         </div>
         <Callout tone="rework">
           <span>The factory can’t be read.</span>
@@ -182,7 +182,7 @@ function Submitted({
     return (
       <OnboardingLayout step="first-item" org={org} back={<Back org={org} search={page.search} factory={factoryId} />}>
         <div className="flex flex-col gap-2">
-          <h1 className="m-0 font-numeral text-kpi tracking-display">Watch your first item</h1>
+          <h1 className="m-0 text-kpi tracking-display">Watch your first item</h1>
         </div>
         <Callout tone="rework">
           <span>The first item can’t be submitted.</span>
@@ -218,7 +218,7 @@ function Empty({ org, search, factoryId, factory, model, intake }: WatchPage) {
       preview={stepPanel({ org, search, factory, model, intake })}
     >
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 font-numeral text-kpi tracking-display">Watch your first item</h1>
+        <h1 className="m-0 text-kpi tracking-display">Watch your first item</h1>
         <p className="m-0 text-heading font-normal text-ink-soft">
           This factory has no starter item, so nothing runs yet. Add an item from the Floor when you are ready.
         </p>
@@ -287,7 +287,7 @@ function StationBars({ stations }: { stations: readonly { id: string; label: str
             aria-hidden="true"
             className={cn(
               'block h-1 rounded-full',
-              s.state === 'done' ? 'bg-run-soft' : s.state === 'current' ? 'bg-run' : 'bg-line',
+              s.state === 'done' ? 'bg-run' : s.state === 'current' ? 'bg-run' : 'bg-line',
             )}
           />
           <span className={cn('truncate', s.state === 'current' ? 'font-semibold text-run-ink' : 'text-ink-soft')}>
@@ -385,7 +385,7 @@ function Ready({
       })}
     >
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 font-numeral text-kpi tracking-display">Watch your first item</h1>
+        <h1 className="m-0 text-kpi tracking-display">Watch your first item</h1>
         <p className="m-0 text-heading font-normal text-ink-soft">
           {`A small, safe change runs through the whole line${repo ? ` on ${repo}` : ''}, so you see every station work before real requests arrive.`}
         </p>

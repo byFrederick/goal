@@ -65,7 +65,7 @@ function NoFactory({ org, search, message }: { org: OrgSummary; search: Onboardi
   return (
     <OnboardingLayout step="budget" org={org} back={<Back org={org} search={search} />}>
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 font-numeral text-kpi tracking-display">Set budgets and targets</h1>
+        <h1 className="m-0 text-kpi tracking-display">Set budgets and targets</h1>
       </div>
       <Callout tone="rework">{message}</Callout>
     </OnboardingLayout>
@@ -234,7 +234,7 @@ function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingS
       }}
     >
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 font-numeral text-kpi tracking-display">Set budgets and targets</h1>
+        <h1 className="m-0 text-kpi tracking-display">Set budgets and targets</h1>
         <p className="m-0 text-heading font-normal text-ink-soft">
           Goal stops starting new work when a budget is spent, so a busy day never surprises you.
         </p>

@@ -35,7 +35,7 @@ export function MenuContent({
         collisionPadding={8}
         className={cn(
           'z-50 flex w-80 max-w-[calc(100vw-16px)] flex-col overflow-y-auto rounded-card border border-rule bg-card p-2 text-ink shadow-pop outline-none',
-          'max-h-[var(--radix-dropdown-menu-content-available-height)] data-[state=open]:animate-[fade-in_150ms_ease-out]',
+          'max-h-[var(--radix-dropdown-menu-content-available-height)] data-[state=open]:animate-fade-in',
           className,
         )}
         {...props}

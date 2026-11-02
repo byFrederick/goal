@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Design system: motion</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#FFFFFF}
+a{color:#2B5BD7}a:hover{color:#1E46B0}
+*{box-sizing:border-box}
+h1,h2,h3,p,ol,ul{margin:0}
+ol,ul{padding:0;list-style:none}
+.g{--bg:#FFFFFF;--side:#F8F8F7;--panel:#FAFAF9;--hover:#F0F0EE;--rule:#EAEAE7;--rule2:#D6D6D2;--ink:#171717;--ink2:#4A4A47;--ink3:#6B6B67;--pri:#2B5BD7;--pri-ink:#1E46B0;--pri-t:#EEF2FC;--you:#C2410C;--you-t:#FDF2EC;--you-ink:#9A3412;--red:#C93030;--red-t:#FDF0F0;--red-ink:#A42525;--yel:#EAB308;--yel-t:#FEF8E1;--yel-ink:#6F5000;--grn:#1F8A4C;--grn-t:#EEF7F1;--grn-ink:#17663A;--navy:#FAFAF9;--navy2:#FFFFFF;--navy3:#EAEAE7;--act:#171717;--act-ink:#FFFFFF;--act-hover:#333331;--shadow-pop:0 0 0 1px rgba(0,0,0,.06),0 10px 28px -10px rgba(0,0,0,.18);--dur-stagger:40ms;--dur-micro:80ms;--dur-quick:150ms;--dur-fast:250ms;--dur-medium:350ms;--dur-slow:400ms;--ease-out:cubic-bezier(.22,1,.36,1);--ease-in-out:cubic-bezier(.65,0,.35,1);--ease-bounce:cubic-bezier(.34,1.36,.64,1);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:14px;line-height:1.5;color:var(--ink);background:var(--bg);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.g.dark{--bg:#0F0F0F;--side:#141414;--panel:#171717;--hover:#1F1F1F;--rule:#262626;--rule2:#363636;--ink:#EDEDEC;--ink2:#B4B4B0;--ink3:#8F8F8A;--pri:#3D6BE0;--pri-ink:#A9C1FA;--pri-t:#17213A;--you:#B84D1C;--you-t:#341C10;--you-ink:#FDBA94;--red:#C73A3A;--red-t:#361616;--red-ink:#FCA5A5;--yel-t:#30270C;--yel-ink:#F5D46B;--grn:#2E9E5E;--grn-t:#11291B;--grn-ink:#7EDBA4;--navy:#171717;--navy2:#0F0F0F;--navy3:#262626;--act:#EDEDEC;--act-ink:#111111;--act-hover:#D4D4D0;--shadow-pop:0 0 0 1px rgba(255,255,255,.08),0 12px 32px -10px rgba(0,0,0,.6)}
+.h1{font-size:20px;line-height:1.25;font-weight:600;letter-spacing:-0.01em}
+.h2{font-size:14px;line-height:1.35;font-weight:600}
+.num{font-weight:500;letter-spacing:-0.01em}
+.m2{color:var(--ink2)}.m3{color:var(--ink3)}.sm{font-size:13px}.xs{font-size:12px}
+.code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px}
+.app{display:flex;flex-wrap:wrap;align-items:stretch;min-height:100vh;background:var(--bg)}
+.side{width:248px;flex:none;background:var(--side);border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:1px;padding:10px 8px 12px;min-height:100vh}
+.srow{display:flex;align-items:center;gap:2px;margin-bottom:6px}
+.orgb{flex:1;min-width:0;display:flex;align-items:center;gap:9px;height:36px;padding:0 6px;border:0;border-radius:6px;background:none;font:inherit;font-weight:600;font-size:14px;color:var(--ink);cursor:pointer;text-align:left}
+.omk{width:24px;height:24px;flex:none;border-radius:6px;background:#171717;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:600}
+.ib{width:30px;height:30px;flex:none;border:0;border-radius:6px;background:none;color:var(--ink3);display:grid;place-items:center;cursor:pointer;padding:0}
+.orgb,.ib,.ni,.fh,.sub a,.me,.newb,.use,.btn,.chip,.seg button,.pk,.in,.inrow,.card,.box{transition:background-color var(--dur-quick) ease,color var(--dur-quick) ease,border-color var(--dur-quick) ease,box-shadow var(--dur-quick) ease,transform var(--dur-quick) var(--ease-out)}
+.orgb:hover,.ib:hover,.ni:hover,.fh:hover,.sub a:hover,.me:hover{background:var(--hover);color:var(--ink)}
+.newb{display:flex;align-items:center;gap:8px;height:34px;padding:0 6px 0 10px;border-radius:6px;background:var(--bg);border:1px solid var(--rule2);color:var(--ink);font-weight:500;text-decoration:none;margin:0 0 8px}
+.newb:hover{border-color:var(--ink3);color:var(--ink)}
+.kb{margin-left:auto;min-width:20px;height:20px;padding:0 5px;border-radius:4px;background:var(--panel);border:1px solid var(--rule);color:var(--ink3);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;font-weight:500;display:grid;place-items:center}
+.ni{display:flex;align-items:center;gap:10px;height:32px;padding:0 8px;border-radius:6px;color:var(--ink2);text-decoration:none;font-weight:500}
+.ni svg{flex:none;color:var(--ink3)}
+.ni.on{background:var(--hover);color:var(--ink)}.ni.on svg{color:var(--ink)}
+.cnt{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;font-size:11.5px;font-weight:600;display:inline-grid;place-items:center;background:var(--you);color:#fff}
+.cnt.n{background:none;color:var(--ink3);font-weight:500}
+.sec{display:flex;align-items:center;justify-content:space-between;height:28px;margin-top:14px;padding:0 2px 0 8px;font-size:12px;font-weight:500;color:var(--ink3)}
+.sec .ib{width:24px;height:24px}
+.fh{display:flex;align-items:center;gap:10px;height:32px;padding:0 8px;border-radius:6px;color:var(--ink);text-decoration:none;font-weight:500}
+.fh .chev{margin-left:auto;color:var(--ink3);flex:none}
+.fb{width:18px;height:18px;flex:none;border-radius:4px;display:grid;place-items:center;color:#fff;font-size:10.5px;font-weight:600}
+.sub{display:flex;flex-direction:column;gap:1px;margin:2px 0 6px 16px;padding-left:8px;border-left:1px solid var(--rule)}
+.sub a{display:flex;align-items:center;height:28px;padding:0 8px;border-radius:6px;color:var(--ink2);text-decoration:none;font-size:13px;font-weight:400}
+.sub a.on{background:var(--hover);color:var(--ink);font-weight:500;box-shadow:none}
+.sdot{width:6px;height:6px;border-radius:50%;flex:none}
+.sbot{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-top:12px}
+.use{display:flex;flex-direction:column;gap:6px;padding:8px 8px;border-radius:6px;border:0;background:none;text-decoration:none;color:var(--ink)}
+.use:hover{background:var(--hover);color:var(--ink)}
+.bar{height:4px;border-radius:2px;background:var(--hover);overflow:hidden;display:flex}
+.bar span{display:block;height:100%}
+.me{display:flex;align-items:center;gap:10px;width:100%;padding:6px;border:0;border-radius:6px;background:none;font:inherit;color:var(--ink);cursor:pointer;text-align:left}
+.av{width:28px;height:28px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:11.5px;font-weight:600;color:#fff;background:#4A5A52}
+.main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 28px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.crumb{display:flex;align-items:center;gap:8px;font-weight:500;color:var(--ink2);min-width:0}
+.crumb a{color:var(--ink3);text-decoration:none}.crumb a:hover{color:var(--ink)}
+.tact{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:6px;border:1px solid var(--rule2);background:var(--bg);color:var(--ink);font:inherit;font-weight:500;font-size:13px;text-decoration:none;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--panel);border-color:var(--ink3);color:var(--ink)}
+.btn:active,.ib:active,.newb:active,.pk:active,.me:active{transform:scale(.97)}
+.btn.pri{background:var(--act);border-color:var(--act);color:var(--act-ink)}.btn.pri:hover{background:var(--act-hover);border-color:var(--act-hover);color:var(--act-ink)}
+.btn.warn{color:var(--red-ink)}
+.btn.sm{height:28px;padding:0 10px;font-size:12.5px}
+.seg{display:inline-flex;padding:2px;border-radius:7px;background:var(--hover);border:0;gap:2px;flex-wrap:wrap}
+.seg button{height:26px;padding:0 10px;border:0;border-radius:5px;background:none;font:inherit;font-size:12.5px;font-weight:500;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px var(--rule)}
+.seg .k{font-size:12px;color:var(--ink3)}
+.page{padding:24px 28px 40px;display:flex;flex-direction:column;gap:20px}
+.page>*{animation:enter var(--dur-fast) var(--ease-out) both}
+.page>*:nth-child(2){animation-delay:var(--dur-stagger)}.page>*:nth-child(3){animation-delay:calc(var(--dur-stagger)*2)}.page>*:nth-child(n+4){animation-delay:calc(var(--dur-stagger)*3)}
+@keyframes enter{from{opacity:0;transform:translateY(4px)}}
+.card{border:1px solid var(--rule);border-radius:8px;background:var(--bg);padding:16px 18px;min-width:0;display:flex;flex-direction:column}
+a.card:hover{border-color:var(--rule2)}
+.chip{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 7px;border-radius:4px;font-size:12px;font-weight:500;background:var(--bg);color:var(--ink2);border:1px solid var(--rule);white-space:nowrap;text-decoration:none}
+.chip.run{color:var(--ink2)}.chip.run .dot{color:var(--pri)}
+.chip.you{background:var(--you-t);color:var(--you-ink);border-color:transparent}
+.chip.red{background:var(--red-t);color:var(--red-ink);border-color:transparent}
+.chip.yel{color:var(--ink2)}.chip.yel .dot{color:var(--yel)}
+.chip.grn{color:var(--ink2)}.chip.grn .dot{color:var(--grn)}
+.chip.big{height:26px;padding:0 9px;font-size:12.5px;border-radius:5px}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.live{animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important}}
+@media (max-width:760px){.side{width:100%;min-height:0;border-right:0;border-bottom:1px solid var(--rule)}.side .navs,.side .sbot{display:none}.top{padding:8px 16px}.page{padding:16px}}
+.g{--dur-emphasis:500ms;--ease-drawer:cubic-bezier(.32,.72,0,1);--scale-dialog:.96;--scale-menu:.97;--scale-tooltip:.98;--scale-press:.97;--dist-micro:4px;--dist-base:8px;--blur-small:2px;--on-fill:#FFFFFF;--scrim:rgba(23,23,23,.22);--mark:#171717;--mark-rule:rgba(255,255,255,.12);--mark-node:#EAB308;--spec-l:#FFFFFF;--spec-l-ink:#171717;--spec-l-rule:#EAEAE7;--spec-d:#0F0F0F;--spec-d-ink:#EDEDEC;--spec-d-rule:#262626;--f-cobalt:#2B5BD7;--f-teal:#0E7C6E;--f-rust:#B4461A;--f-green:#1F7A3A;--f-ocean:#0B6493;--f-ochre:#7E5A00;--f-slate:#55595F;--f-plum:#6B3A5E;min-height:100vh}
+.g.dark{--scrim:rgba(0,0,0,.55)}
+.ds{padding:32px 40px 56px;gap:40px}
+.ds-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-bottom:20px;border-bottom:1px solid var(--rule)}
+.ds-head p{margin-top:2px}
+.ds-nav{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.ds-nav .btn.cur{background:var(--hover);border-color:var(--hover)}
+.mk{width:28px;height:28px;flex:none;border-radius:6px;background:var(--mark);box-shadow:inset 0 0 0 1px var(--mark-rule);display:grid;place-items:center}
+.mk path{stroke:var(--on-fill)}.mk circle{fill:var(--mark-node)}
+.mk.lg{width:56px;height:56px;border-radius:12px}
+.sect{display:flex;flex-direction:column;gap:14px;min-width:0}
+.sh{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.cols2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px 48px}
+.cols3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+.span2{grid-column:span 2}.span3{grid-column:1/-1}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+.fl{display:block;height:8px;border-radius:4px;background:var(--hover)}
+.fbx{width:18px;height:18px;flex:none;border-radius:4px;display:grid;place-items:center;color:var(--on-fill);font-size:10.5px;font-weight:600}
+@media (max-width:900px){.cols2,.cols3{grid-template-columns:minmax(0,1fr)}.span2,.span3{grid-column:auto}.ds{padding:16px}}
+.tt{width:100%;border-collapse:collapse;font-size:13px}
+.tt th{height:28px;text-align:left;font-size:12px;font-weight:400;color:var(--ink3);border-bottom:1px solid var(--rule);padding:0 12px 0 0}
+.tt td{height:30px;border-bottom:1px solid var(--rule);padding:0 12px 0 0;vertical-align:middle}
+.tt td:first-child,.tt td:nth-child(2){font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;white-space:nowrap}
+.tt td:nth-child(3){color:var(--ink2)}
+.tt .gp td{height:34px;padding-top:8px;font-family:inherit;font-size:13px;font-weight:600;color:var(--ink);border-bottom:1px solid var(--rule)}
+.rules{display:flex;flex-direction:column;border-top:1px solid var(--rule);counter-reset:r}
+.rules li{display:grid;grid-template-columns:24px minmax(0,1fr);gap:8px;padding:7px 0;border-bottom:1px solid var(--rule);font-size:13px;color:var(--ink2)}
+.rules li b{font-weight:600;color:var(--ink)}
+.rules .n{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;color:var(--ink3);padding-top:1px}
+.dm{border:1px solid var(--rule);border-radius:8px;background:var(--bg);display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.dm-h{display:flex;align-items:center;gap:10px;min-height:48px;padding:8px 10px 8px 16px;border-bottom:1px solid var(--rule)}
+.dm-h .tact2{margin-left:auto;display:flex;gap:6px}
+.dm-s{position:relative;height:228px;background:var(--panel);overflow:hidden}
+.dm-c{padding:10px 16px 12px;border-top:1px solid var(--rule);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;line-height:1.6;color:var(--ink3)}
+.win{position:absolute;left:24px;top:24px;right:-1px;bottom:-1px;background:var(--bg);border:1px solid var(--rule);border-right:0;border-bottom:0;border-radius:8px 0 0 0;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.win.full{right:24px;border-right:1px solid var(--rule);border-radius:8px 8px 0 0}
+.whd{display:flex;align-items:center;gap:10px;min-height:28px}
+.whd .r{margin-left:auto}
+.fls{display:flex;flex-direction:column;gap:10px}
+.fl.w1{width:62%}.fl.w2{width:45%}.fl.w3{width:70%}.fl.w4{width:52%}.fl.w5{width:34%}
+.btn.yo,.btn.yo:hover{background:var(--you);border-color:var(--you);color:var(--on-fill)}
+.prs{transition:transform var(--dur-micro) var(--ease-out),background-color var(--dur-quick) ease,border-color var(--dur-quick) ease,color var(--dur-quick) ease}
+.prs.is-pr{transform:scale(var(--scale-press))}
+.btn.yo.dn,.btn.yo.dn:hover{background:var(--bg);border-color:var(--rule2);color:var(--ink2)}
+.swp{display:inline-grid;justify-items:start;align-items:center}
+.swp>*{grid-area:1/1;display:inline-flex;align-items:center;gap:6px;transition:opacity var(--dur-quick) var(--ease-in-out),transform var(--dur-quick) var(--ease-in-out),filter var(--dur-quick) var(--ease-in-out)}
+.swp>.b,.swp.on>.a{opacity:0;filter:blur(var(--blur-small));pointer-events:none}
+.swp>.b{transform:translateY(var(--dist-micro))}
+.swp.on>.a{transform:translateY(calc(var(--dist-micro) * -1))}
+.swp.on>.b{opacity:1;transform:none;filter:none;pointer-events:auto}
+.swp.lag>*{transition-delay:var(--dur-micro)}
+.btn .swp{justify-items:center}
+.nyr{display:grid;grid-template-columns:18px 64px minmax(0,1fr) auto;gap:12px;align-items:center;min-height:52px;padding:8px 12px;margin:0 -12px;border-radius:6px;transition:background-color var(--dur-quick) ease var(--dur-quick)}
+.nyr.sel{background:var(--you-t)}
+.nyr .ty2{font-size:13px;font-weight:500;color:var(--you-ink)}
+.nyr .tt2{display:flex;flex-direction:column;min-width:0}
+.nyr .tt2 b{font-size:14px;font-weight:500}
+.sbx{position:absolute;left:0;top:0;bottom:0;width:236px;background:var(--side);border-right:1px solid var(--rule);padding:10px 8px;display:flex;flex-direction:column;gap:2px}
+.sbx-r{position:absolute;left:236px;right:0;top:0;bottom:0;padding:24px;display:flex;flex-direction:column;gap:12px;background:var(--bg)}
+.orgb2{display:flex;align-items:center;gap:9px;height:36px;width:100%;padding:0 6px;border:0;border-radius:6px;background:none;font:inherit;font-weight:600;font-size:14px;color:var(--ink);cursor:pointer;text-align:left;transition:background-color var(--dur-quick) ease,transform var(--dur-micro) var(--ease-out)}
+.orgb2:hover,.orgb2.on{background:var(--hover)}
+.orgb2:active{transform:scale(var(--scale-press))}
+.orgb2 svg.ch{margin-left:auto;color:var(--ink3)}
+.nrow{display:flex;align-items:center;gap:10px;height:32px;padding:0 8px;border-radius:6px;color:var(--ink2);font-weight:500;font-size:14px}
+.nrow .ic2{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--ink3);flex:none;opacity:.6}
+.nrow.on{background:var(--hover);color:var(--ink)}
+.menu{position:absolute;top:50px;left:8px;width:220px;padding:4px;border-radius:8px;background:var(--bg);box-shadow:var(--shadow-pop);transform-origin:top left;opacity:0;transform:scale(var(--scale-menu));visibility:hidden;z-index:2;transition:opacity var(--dur-quick) var(--ease-out),transform var(--dur-quick) var(--ease-out),visibility 0s linear var(--dur-quick)}
+.menu.open{opacity:1;transform:none;visibility:visible;transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out),visibility 0s}
+.menu button{display:flex;align-items:center;gap:8px;width:100%;height:30px;padding:0 8px;border:0;border-radius:6px;background:none;font:inherit;font-size:13px;color:var(--ink);text-align:left;cursor:pointer;transition:background-color var(--dur-quick) ease}
+.menu button:hover{background:var(--hover)}
+.menu button svg{margin-left:auto;color:var(--ink)}
+.menu hr{border:0;border-top:1px solid var(--rule);margin:4px -4px}
+.ov{position:absolute;inset:0;background:var(--scrim);opacity:0;visibility:hidden;z-index:2;transition:opacity var(--dur-quick) ease,visibility 0s linear var(--dur-quick)}
+.ov.open{opacity:1;visibility:visible;transition:opacity var(--dur-fast) ease,visibility 0s}
+.dw{position:absolute;inset:0;display:grid;place-items:center;padding:16px;pointer-events:none;z-index:3}
+.dlg{width:100%;max-width:300px;background:var(--bg);border-radius:12px;box-shadow:var(--shadow-pop);padding:18px;display:flex;flex-direction:column;gap:6px;opacity:0;transform:scale(var(--scale-dialog));visibility:hidden;transition:opacity var(--dur-quick) var(--ease-out),transform var(--dur-quick) var(--ease-out),visibility 0s linear var(--dur-quick)}
+.dlg.open{opacity:1;transform:none;visibility:visible;pointer-events:auto;transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out),visibility 0s}
+.dlg .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.tabs{position:relative;display:inline-flex;padding:2px;border-radius:7px;background:var(--hover);align-self:flex-start}
+.pill{position:absolute;top:2px;left:2px;width:84px;height:26px;border-radius:5px;background:var(--bg);box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px var(--rule);transition:transform var(--dur-fast) var(--ease-out)}
+.tabs button{position:relative;width:84px;height:26px;border:0;border-radius:5px;background:none;font:inherit;font-size:12.5px;font-weight:500;color:var(--ink2);cursor:pointer;transition:color var(--dur-quick) ease,transform var(--dur-micro) var(--ease-out)}
+.tabs button:hover,.tabs button.on{color:var(--ink)}
+.tabs button:active{transform:scale(var(--scale-press))}
+.pane{display:flex;flex-direction:column;gap:10px}
+.pane.fa{animation:panea var(--dur-quick) var(--ease-out) both}
+.pane.fb{animation:paneb var(--dur-quick) var(--ease-out) both}
+@keyframes panea{from{opacity:0;transform:translateY(var(--dist-micro))}}
+@keyframes paneb{from{opacity:0;transform:translateY(var(--dist-micro))}}
+.prow{display:flex;align-items:center;gap:10px;font-size:13px}
+.prow .fl{flex:1}
+.acc-t{display:flex;align-items:center;gap:10px;width:100%;height:36px;padding:0 10px;border:1px solid var(--rule);border-radius:6px;background:var(--bg);font:inherit;font-size:13px;color:var(--ink);cursor:pointer;text-align:left;transition:background-color var(--dur-quick) ease,border-color var(--dur-quick) ease}
+.acc-t:hover{border-color:var(--rule2)}
+.acc-t .chv{margin-left:auto;color:var(--ink3);transition:transform var(--dur-fast) var(--ease-out)}
+.acc-t.open .chv{transform:rotate(180deg)}
+.acc{display:grid;grid-template-rows:0fr;transition:grid-template-rows var(--dur-fast) var(--ease-out)}
+.acc.open{grid-template-rows:1fr}
+.acc>div{min-height:0;overflow:hidden}
+.acc .code2{margin-top:6px;padding:10px 12px;border:1px solid var(--rule);border-radius:6px;background:var(--panel);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;line-height:1.6;color:var(--ink);opacity:0;transition:opacity var(--dur-quick) ease}
+.acc.open .code2{opacity:1;transition-delay:var(--dur-micro)}
+.acc .k2{color:var(--ink3)}
+.evr{display:flex;align-items:center;gap:10px;font-size:13px}
+.evr .t{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;color:var(--ink3);width:60px;flex:none}
+.setr{display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--rule)}
+.setr:last-child{border-bottom:0}
+.setr .lab{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.setr b{font-size:14px;font-weight:500}
+.swt{position:relative;width:32px;height:18px;flex:none;border-radius:9px;border:0;padding:0;background:var(--rule2);cursor:pointer;transition:background-color var(--dur-quick) ease}
+.swt::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--bg);transition:transform var(--dur-medium) var(--ease-bounce)}
+.swt.on{background:var(--ink)}
+.swt.on::after{transform:translateX(14px)}
+.cols{display:flex;gap:12px}
+.col2{width:184px;flex:none;display:flex;flex-direction:column;gap:8px}
+.col2-h{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;height:20px}
+.col2-c{background:var(--panel);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:8px;height:200px}
+.icd{background:var(--bg);border:1px solid var(--rule);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px;height:76px}
+.icd .rf{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;color:var(--ink3)}
+.icd .tl{font-size:12.5px;font-weight:500;line-height:1.3}
+.mover{position:absolute;left:24px;top:136px;width:168px;z-index:2;transition:transform var(--dur-fast) var(--ease-in-out)}
+.mover.moved{transform:translateX(196px)}
+.tst{position:absolute;right:16px;bottom:16px;display:flex;align-items:center;gap:12px;height:40px;padding:0 6px 0 14px;border-radius:8px;background:var(--ink);color:var(--bg);font-size:13px;box-shadow:var(--shadow-pop);z-index:2;opacity:0;transform:translateY(var(--dist-base)) scale(var(--scale-menu));visibility:hidden;transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out),visibility 0s linear var(--dur-fast)}
+.tst.open{opacity:1;transform:none;visibility:visible;transition:opacity var(--dur-medium) var(--ease-out),transform var(--dur-medium) var(--ease-out),visibility 0s}
+.tst button{height:28px;padding:0 8px;border:0;border-radius:6px;background:none;color:var(--bg);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.dep{font-size:12.5px;color:var(--red-ink);opacity:0;transform:translateY(var(--dist-micro));transition:opacity var(--dur-quick) var(--ease-out),transform var(--dur-quick) var(--ease-out)}
+.dep.on{opacity:1;transform:none;transition-delay:var(--dur-micro)}
+.chip .dot{transition:background-color var(--dur-quick) ease}
+.nb{display:inline-flex;align-items:center;height:18px;margin-left:auto;padding:0 5px;border-radius:9px;background:var(--you);color:var(--on-fill);font-size:11.5px;font-weight:600}
+.nb.ba{animation:bumpa var(--dur-emphasis) var(--ease-bounce)}
+.nb.bb{animation:bumpb var(--dur-emphasis) var(--ease-bounce)}
+@keyframes bumpa{30%{transform:scale(1.1)}}
+@keyframes bumpb{30%{transform:scale(1.1)}}
+.dg{display:block;height:var(--rh);overflow:hidden}
+.trk{display:flex;flex-direction:column;transition:transform var(--dur-emphasis) var(--ease-bounce)}
+.trk span{display:block;height:var(--rh);line-height:var(--rh);text-align:center}
+.trk.d2{transition-delay:var(--dur-stagger)}
+.trk.late{transition-delay:var(--dur-fast)}
+.nb .dg{--rh:18px}
+.col2-h .dg{--rh:20px}
+.col2-h .cn2{display:inline-flex;align-items:center;gap:3px;font-weight:400;font-size:12px;color:var(--ink3)}
+.lst{display:flex;flex-direction:column}
+.ir{display:grid;border-bottom:1px solid var(--rule)}
+.ir>div{grid-area:1/1;display:grid;grid-template-columns:72px minmax(0,1fr) 92px;gap:14px;align-items:center;height:42px}
+.ir .ct2{transition:opacity var(--dur-slow) var(--ease-out),filter var(--dur-slow) var(--ease-out)}
+.ir .sk2{opacity:0;transition:opacity var(--dur-slow) var(--ease-out)}
+.ir .sk2 span{display:block;height:10px;border-radius:3px;background:var(--hover)}
+.ir .sk2 span.c{height:22px;width:76px;border-radius:4px}
+.lst.ld .ct2{opacity:0;filter:blur(var(--blur-small));transition-duration:var(--dur-quick)}
+.lst.ld .sk2{opacity:1;transition-duration:var(--dur-quick)}
+.lst.ld .sk2 span{animation:skp 1s linear 1 both}
+.lst:not(.ld) .ir:nth-child(2)>div{transition-delay:calc(var(--dur-stagger) * 2)}
+.lst:not(.ld) .ir:nth-child(3)>div{transition-delay:calc(var(--dur-stagger) * 4)}
+@keyframes skp{50%{opacity:.5}}
+.runr{display:flex;align-items:center;gap:10px;font-size:14px}
+.rdot{width:8px;height:8px;border-radius:50%;background:var(--pri);flex:none;transition:background-color var(--dur-quick) ease}
+.rdot.dn{background:var(--grn)}
+.slots{display:flex;gap:4px}
+.slots span{width:8px;height:8px;border-radius:2px;border:1px solid var(--rule2);transition:background-color var(--dur-quick) ease,border-color var(--dur-quick) ease}
+.slots span.w{background:var(--ink);border-color:var(--ink)}
+</style>
+</helmet>
+<div class="g {{theme}}"><main class="page ds">
+<header class="ds-head"><span class="mk" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9"></circle></svg></span><div><h1 class="h1">Design system: motion</h1><p class="sm m3">Version 3, Plain. Things move because someone acted. Every value below is a token.</p></div><nav class="ds-nav" aria-label="Design system"><a class="btn" href="DS-Foundations.dc.html">Foundations</a><a class="btn" href="DS-Components.dc.html">Components</a><a class="btn cur" href="DS-Motion.dc.html" aria-current="page">Motion</a></nav></header>
+<div class="cols2" style="grid-template-columns: minmax(0, 7fr) minmax(0, 5fr)">
+<section class="sect" aria-labelledby="m-tok"><div class="sh"><h2 class="h2" id="m-tok">Tokens</h2><span class="sm m3">Components name every value with one of these.</span></div>
+<table class="tt">
+<thead><tr><th scope="col">Token</th><th scope="col">Value</th><th scope="col">Use</th></tr></thead>
+<tbody>
+<tr class="gp"><td colspan="3">Durations</td></tr>
+<tr><td>--duration-stagger</td><td>40ms</td><td>Per-item offset in a list entering, first five</td></tr>
+<tr><td>--duration-micro</td><td>80ms</td><td>Press feedback, tooltip delay, shake segment</td></tr>
+<tr><td>--duration-quick</td><td>150ms</td><td>Menu and dialog close, text swap, hover colour</td></tr>
+<tr><td>--duration-fast</td><td>250ms</td><td>Menu and dialog open, tabs pill, card move, accordion</td></tr>
+<tr><td>--duration-medium</td><td>350ms</td><td>Toggle thumb, toast open, sheet close</td></tr>
+<tr><td>--duration-slow</td><td>400ms</td><td>Sheet open, skeleton to content</td></tr>
+<tr><td>--duration-emphasis</td><td>500ms</td><td>Rare: a success check, a number pop-in</td></tr>
+<tr class="gp"><td colspan="3">Easings</td></tr>
+<tr><td>--ease-out</td><td>cubic-bezier(.22, 1, .36, 1)</td><td>Entering, opening, moving</td></tr>
+<tr><td>--ease-in-out</td><td>cubic-bezier(.65, 0, .35, 1)</td><td>A to B on screen: board card, sidebar snap</td></tr>
+<tr><td>--ease-bounce</td><td>cubic-bezier(.34, 1.36, .64, 1)</td><td>Only the toggle thumb and count pops</td></tr>
+<tr><td>--ease-drawer</td><td>cubic-bezier(.32, .72, 0, 1)</td><td>Phone drawer and bottom sheets</td></tr>
+<tr class="gp"><td colspan="3">Scales</td></tr>
+<tr><td>--scale-dialog</td><td>0.96</td><td>Dialog open and close</td></tr>
+<tr><td>--scale-menu</td><td>0.97</td><td>Menu and popover open</td></tr>
+<tr><td>--scale-tooltip</td><td>0.98</td><td>Tooltip open</td></tr>
+<tr><td>--scale-press</td><td>0.97</td><td>Button and icon button while pressed</td></tr>
+<tr class="gp"><td colspan="3">Distances and blur</td></tr>
+<tr><td>--distance-micro</td><td>4px</td><td>Text swap, route content rise</td></tr>
+<tr><td>--distance-base</td><td>8px</td><td>Page slide, toast rise (16px on phones)</td></tr>
+<tr><td>--blur-small</td><td>2px</td><td>Text swap, icon swap, skeleton reveal</td></tr>
+</tbody>
+</table>
+</section>
+<section class="sect" aria-labelledby="m-rules"><div class="sh"><h2 class="h2" id="m-rules">The ten rules</h2></div>
+<ol class="rules">
+<li><span class="n">1</span><span><b>Frequency decides.</b> Hundreds-a-day actions get no animation; hover is colour only.</span></li>
+<li><span class="n">2</span><span><b>Fast.</b> 250ms or less; panels, sheets and toasts up to 400ms; exits faster.</span></li>
+<li><span class="n">3</span><span><b>Ease out on enter, never ease-in.</b> ease for colour, linear for constant motion.</span></li>
+<li><span class="n">4</span><span><b>Transform and opacity only.</b> Blur up to 3px; height through grid rows.</span></li>
+<li><span class="n">5</span><span><b>Nothing appears from nothing.</b> Start at scale .96 to .98 and opacity 0.</span></li>
+<li><span class="n">6</span><span><b>Origin-aware.</b> Menus grow from their trigger, dialogs from the centre.</span></li>
+<li><span class="n">7</span><span><b>Interruptible.</b> Reversible things are transitions on state, not keyframes.</span></li>
+<li><span class="n">8</span><span><b>Name every value with a token.</b> No raw ms, cubic-bezier or transition: all.</span></li>
+<li><span class="n">9</span><span><b>Reduced motion.</b> Drop transforms and blur, keep the state change.</span></li>
+<li><span class="n">10</span><span><b>One ambient motion.</b> The running dot pulses; nothing else moves on its own.</span></li>
+</ol>
+</section>
+</div>
+
+<section class="sect" aria-labelledby="m-demo"><div class="sh"><h2 class="h2" id="m-demo">Demos</h2><span class="sm m3">Each button plays its demo. Every one reverses cleanly mid-way, and under reduced motion keeps the change without the movement.</span></div>
+<div class="cols3">
+
+<article class="dm" aria-labelledby="d1"><div class="dm-h"><h3 class="h2" id="d1">Button press</h3><span class="tact2"><button class="btn sm" type="button" onClick="{{ approvePlay }}">{{ approveLabel }}</button></span></div>
+<div class="dm-s"><div class="win">
+<div class="whd"><span class="h2">Needs you</span><span class="xs m3 r">3 waiting</span></div>
+<div class="nyr {{ apRow }}"><span class="fbx" style="background: var(--f-cobalt)">S</span><span class="ty2">Approval</span><span class="tt2"><b>Merge GOAL-151 into main</b><span class="xs m3">Review, 12m</span></span><button class="btn sm yo prs {{ apBtn }}" type="button" onClick="{{ approve }}"><span class="swp {{ apSwap }}"><span class="a">Approve</span><span class="b"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path></svg>Approved</span></span></button></div>
+<div class="fls" aria-hidden="true"><span class="fl w1"></span><span class="fl w4"></span><span class="fl w2"></span></div>
+</div></div>
+<p class="dm-c">:active scale(--scale-press .97), --duration-micro 80ms --ease-out; label swaps in its own slot, row tint fades a beat later</p></article>
+
+<article class="dm" aria-labelledby="d2"><div class="dm-h"><h3 class="h2" id="d2">Menu from the sidebar</h3><span class="tact2"><button class="btn sm" type="button" onClick="{{ toggleMenu }}">{{ menuLabel }}</button></span></div>
+<div class="dm-s">
+<div class="sbx">
+<button class="orgb2 {{ menuTrig }}" type="button" aria-haspopup="menu" aria-expanded="{{ menuOpen }}" onClick="{{ toggleMenu }}"><span class="mk" aria-hidden="true" style="width: 24px; height: 24px"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9"></circle></svg></span>Goal<svg class="ch" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m4 5.5 3-3 3 3M4 8.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+<div class="nrow on" aria-hidden="true"><span class="ic2"></span>Home</div>
+<div class="nrow" aria-hidden="true"><span class="ic2"></span><span class="fl" style="width: 72px"></span></div>
+<div class="nrow" aria-hidden="true"><span class="ic2"></span><span class="fl" style="width: 52px"></span></div>
+<div class="nrow" aria-hidden="true"><span class="ic2"></span><span class="fl" style="width: 84px"></span></div>
+<div class="menu {{ menuCls }}" role="menu" aria-label="Organizations">
+<button type="button" role="menuitem" onClick="{{ closeMenu }}">Goal<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+<button type="button" role="menuitem" onClick="{{ closeMenu }}">Personal</button>
+<hr>
+<button type="button" role="menuitem" onClick="{{ closeMenu }}">Create organization</button>
+<button type="button" role="menuitem" onClick="{{ closeMenu }}">Organization settings</button>
+</div>
+</div>
+<div class="sbx-r" aria-hidden="true"><span class="fl w2"></span><span class="fl w1"></span><span class="fl w4"></span><span class="fl w5"></span></div>
+</div>
+<p class="dm-c">open 250ms / close 150ms --ease-out; scale .97 to 1 from the trigger (transform-origin top left); transitions, so a quick reopen continues</p></article>
+
+<article class="dm" aria-labelledby="d3"><div class="dm-h"><h3 class="h2" id="d3">Dialog</h3><span class="tact2"><button class="btn sm" type="button" onClick="{{ toggleDlg }}">{{ dlgLabel }}</button></span></div>
+<div class="dm-s"><div class="win">
+<div class="whd"><span class="h2">Definition</span><span class="chip">v36 draft</span><button class="btn sm pri r" type="button" onClick="{{ openDlg }}">Publish</button></div>
+<div class="fls" aria-hidden="true"><span class="fl w3"></span><span class="fl w1"></span><span class="fl w2"></span><span class="fl w4"></span></div>
+</div>
+<div class="ov {{ dlgCls }}" aria-hidden="true" onClick="{{ closeDlg }}"></div>
+<div class="dw"><div class="dlg {{ dlgCls }}" role="dialog" aria-modal="true" aria-labelledby="d3t"><h4 class="h2" id="d3t">Publish v36?</h4><p class="sm m2">Runs that start after this use the new definition.</p><div class="acts"><button class="btn sm" type="button" onClick="{{ closeDlg }}">Cancel</button><button class="btn sm pri" type="button" onClick="{{ closeDlg }}">Publish</button></div></div></div>
+</div>
+<p class="dm-c">overlay fades; panel scale(--scale-dialog .96) to 1 from the centre; open 250ms, close 150ms --ease-out</p></article>
+
+<article class="dm" aria-labelledby="d4"><div class="dm-h"><h3 class="h2" id="d4">Tabs</h3><span class="tact2"><button class="btn sm" type="button" onClick="{{ nextTab }}">Next tab</button></span></div>
+<div class="dm-s"><div class="win">
+<div class="whd"><span class="mono xs m3">GOAL-147</span><span class="h2">Add retry with backoff</span></div>
+<div class="tabs" role="tablist" aria-label="Item"><span class="pill" aria-hidden="true" style="transform: translateX({{ pillX }}px)"></span>
+<sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3"><button class="{{ t.cls }}" type="button" role="tab" aria-selected="{{ t.sel }}" onClick="{{ t.pick }}">{{ t.label }}</button></sc-for>
+</div>
+<div class="pane {{ paneCls }}" role="tabpanel">
+<sc-if value="{{ isT0 }}" hint-placeholder-val="{{ true }}"><div class="prow"><span class="mono xs m3">10:43</span><span>Builder wrote retry.ts</span></div><div class="prow" aria-hidden="true"><span class="mono xs m3">10:42</span><span class="fl"></span></div></sc-if>
+<sc-if value="{{ isT1 }}" hint-placeholder-val="{{ false }}"><div class="prow"><span>Run 3</span><span class="chip red"><span class="dot"></span>Sent back</span><span class="xs m3">6m 12s</span></div><div class="prow" aria-hidden="true"><span>Run 2</span><span class="fl"></span></div></sc-if>
+<sc-if value="{{ isT2 }}" hint-placeholder-val="{{ false }}"><div class="prow"><span>Retries back off 1s, 2s, 4s and honour Retry-After.</span></div><div class="prow" aria-hidden="true"><span class="fl"></span></div></sc-if>
+</div>
+</div></div>
+<p class="dm-c">pill translateX(index x 84px), --duration-fast 250ms --ease-out; content fades in 150ms with a 4px rise</p></article>
+
+<article class="dm" aria-labelledby="d5"><div class="dm-h"><h3 class="h2" id="d5">Accordion</h3><span class="tact2"><button class="btn sm" type="button" onClick="{{ toggleAcc }}">{{ accLabel }}</button></span></div>
+<div class="dm-s"><div class="win">
+<div class="evr"><span class="t">10:43:10</span><span>Builder used a tool</span></div>
+<div><button class="acc-t {{ accCls }}" type="button" aria-expanded="{{ accOpen }}" aria-controls="d5c" onClick="{{ toggleAcc }}"><span class="mono">write_file</span><span class="xs m3 mono">webhooks/retry.ts</span><svg class="chv" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+<div class="acc {{ accCls }}" id="d5c"><div><div class="code2"><span class="k2">path</span> apps/web/src/webhooks/retry.ts<br><span class="k2">lines</span> +84 -12<br><span class="k2">result</span> ok, 212 ms</div></div></div></div>
+<div class="evr" aria-hidden="true"><span class="t">10:46:55</span><span class="fl w2" style="flex: 1"></span></div>
+</div></div>
+<p class="dm-c">grid-template-rows 0fr to 1fr, --duration-fast 250ms --ease-out; chevron rotates; the row below moves with it</p></article>
+
+<article class="dm" aria-labelledby="d6"><div class="dm-h"><h3 class="h2" id="d6">Switch</h3><span class="tact2"><button class="btn sm" type="button" onClick="{{ toggleSw }}">Toggle</button></span></div>
+<div class="dm-s"><div class="win">
+<div class="whd"><span class="h2">Factory settings</span></div>
+<div>
+<div class="setr"><span class="lab"><b>Hands-off</b><span class="swp lag {{ swSwap }}"><span class="a xs m3">Asks you before merging</span><span class="b xs m3">Merges when every check passes</span></span></span><button class="swt {{ swCls }}" type="button" role="switch" aria-checked="{{ swOn }}" aria-label="Hands-off" onClick="{{ toggleSw }}"></button></div>
+<div class="setr" aria-hidden="true"><span class="lab"><span class="fl w4"></span></span><span class="swt"></span></div>
+</div>
+</div></div>
+<p class="dm-c">thumb translateX(14px), --duration-medium 350ms --ease-bounce; track colour 150ms ease; the hint follows 80ms later</p></article>
+
+<article class="dm" aria-labelledby="d7"><div class="dm-h"><h3 class="h2" id="d7">Toast</h3><span class="tact2"><button class="btn sm" type="button" onClick="{{ toggleToast }}">{{ toastLabel }}</button></span></div>
+<div class="dm-s"><div class="win">
+<div class="cols" aria-hidden="true">
+<div class="col2"><span class="col2-h">Build</span><div class="col2-c" style="height: 150px"><div class="icd"><span class="fl w2"></span><span class="fl w1"></span></div></div></div>
+<div class="col2"><span class="col2-h">Review</span><div class="col2-c" style="height: 150px"><div class="icd"><span class="rf">GOAL-147</span><span class="tl">Add retry with backoff</span></div></div></div>
+</div>
+</div>
+<div class="tst {{ toastCls }}" role="status"><span>GOAL-147 moved to Review</span><button type="button" onClick="{{ hideToast }}">Undo</button></div>
+</div>
+<p class="dm-c">rises 8px from scale .97: open --duration-medium 350ms, close --duration-fast 250ms, --ease-out</p></article>
+
+<article class="dm" aria-labelledby="d8"><div class="dm-h"><h3 class="h2" id="d8">Status change</h3><span class="tact2"><button class="btn sm" type="button" onClick="{{ toggleSent }}">{{ sentLabel }}</button></span></div>
+<div class="dm-s"><div class="win">
+<div class="whd"><span class="mono xs m3">GOAL-147</span><span class="swp {{ sentSwap }}" aria-live="polite"><span class="a chip run"><span class="dot live"></span>Running</span><span class="b chip red"><span class="dot"></span>Sent back</span></span></div>
+<span class="h2" style="font-size: 18px">Add retry with backoff to the webhook sender</span>
+<span class="dep {{ sentDep }}">Reviewer: the backoff ignores Retry-After.</span>
+<div class="fls" aria-hidden="true"><span class="fl w1"></span><span class="fl w2"></span></div>
+</div></div>
+<p class="dm-c">old out, new in: 4px move and 2px blur, --duration-quick 150ms --ease-in-out; the reason follows 80ms later</p></article>
+
+<article class="dm" aria-labelledby="d9"><div class="dm-h"><h3 class="h2" id="d9">Number change</h3><span class="tact2"><button class="btn sm" type="button" onClick="{{ countDown }}">Answer one</button><button class="btn sm" type="button" onClick="{{ countUp }}">New question</button></span></div>
+<div class="dm-s">
+<div class="sbx" style="width: 100%; border-right: 0">
+<div class="nrow" aria-hidden="true"><span class="ic2"></span>Home</div>
+<div class="nrow on"><span class="ic2" aria-hidden="true"></span>Needs you<span class="nb {{ bumpCls }}" aria-label="{{ countText }} waiting"><span class="dg"><span class="trk d2" style="transform: translateY({{ c0 }}px)"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span></span></span><span class="dg"><span class="trk" style="transform: translateY({{ c1 }}px)"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span></span></span></span></div>
+<div class="nrow" aria-hidden="true"><span class="ic2"></span>Runs</div>
+<div class="nrow" aria-hidden="true"><span class="ic2"></span><span class="fl" style="width: 84px"></span></div>
+<div class="nrow" aria-hidden="true"><span class="ic2"></span><span class="fl" style="width: 64px"></span></div>
+</div>
+</div>
+<p class="dm-c">changed digits roll in from below, last digit first, 40ms apart; --duration-emphasis 500ms --ease-bounce; unchanged digits stay</p></article>
+
+<article class="dm" aria-labelledby="d10"><div class="dm-h"><h3 class="h2" id="d10">Skeleton to content</h3><span class="tact2"><button class="btn sm" type="button" onClick="{{ refresh }}">Refresh</button></span></div>
+<div class="dm-s"><div class="win">
+<div class="whd"><span class="h2">Items</span><span class="xs m3 r">3 open</span></div>
+<div class="lst {{ listCls }}" aria-busy="{{ loading }}">
+<div class="ir"><div class="ct2"><span class="mono xs m3">GOAL-147</span><span class="sm" style="font-weight: 500">Add retry with backoff</span><span class="chip run"><span class="dot"></span>Running</span></div><div class="sk2" aria-hidden="true"><span style="width: 56px"></span><span style="width: 70%"></span><span class="c"></span></div></div>
+<div class="ir"><div class="ct2"><span class="mono xs m3">GOAL-151</span><span class="sm" style="font-weight: 500">Fix the double charge</span><span class="chip you"><span class="dot"></span>Needs you</span></div><div class="sk2" aria-hidden="true"><span style="width: 56px"></span><span style="width: 52%"></span><span class="c"></span></div></div>
+<div class="ir"><div class="ct2"><span class="mono xs m3">GOAL-139</span><span class="sm" style="font-weight: 500">Rotate the signing key</span><span class="chip grn"><span class="dot"></span>Done</span></div><div class="sk2" aria-hidden="true"><span style="width: 56px"></span><span style="width: 60%"></span><span class="c"></span></div></div>
+</div>
+</div></div>
+<p class="dm-c">skeleton at the rows' geometry pulses once (1s linear); rows resolve top to bottom with a 2px blur, --duration-slow 400ms</p></article>
+
+<article class="dm" aria-labelledby="d11"><div class="dm-h"><h3 class="h2" id="d11">Card to the next column</h3><span class="tact2"><button class="btn sm" type="button" onClick="{{ moveCard }}">{{ moveLabel }}</button></span></div>
+<div class="dm-s">
+<div class="cols" style="position: absolute; left: 16px; top: 16px">
+<div class="col2"><span class="col2-h">Build<span class="cn2"><span class="dg"><span class="trk late" style="transform: translateY({{ bY }}px)"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span></span></span>of 3</span></span><div class="col2-c"><div class="icd" aria-hidden="true"><span class="fl w2"></span><span class="fl w1"></span></div></div></div>
+<div class="col2"><span class="col2-h">Review<span class="cn2"><span class="dg"><span class="trk late" style="transform: translateY({{ rY }}px)"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span></span></span>of 3</span></span><div class="col2-c"><div class="icd" aria-hidden="true"><span class="fl w4"></span><span class="fl w5"></span></div></div></div>
+</div>
+<div class="mover {{ cardCls }}"><div class="icd"><span class="rf">GOAL-147</span><span class="tl">Add retry with backoff</span></div></div>
+</div>
+<p class="dm-c">the card travels translateX(196px), --duration-fast 250ms --ease-in-out; column counts roll after it lands</p></article>
+
+<article class="dm" aria-labelledby="d12"><div class="dm-h"><h3 class="h2" id="d12">Running dot</h3><span class="tact2"><button class="btn sm" type="button" onClick="{{ toggleRun }}">{{ runLabel }}</button></span></div>
+<div class="dm-s"><div class="win">
+<div class="whd"><span class="h2">Build</span><span class="slots" aria-hidden="true"><span class="{{ slotA }}"></span><span class="w"></span><span></span></span></div>
+<div class="runr"><span class="rdot {{ dotCls }}" aria-hidden="true"></span><span class="sm m2">Builder</span><span class="swp {{ runSwap }}" aria-live="polite"><span class="a sm">Writing the patch</span><span class="b sm">Done in 6m 12s</span></span></div>
+<div class="fls" aria-hidden="true"><span class="fl w3"></span><span class="fl w2"></span><span class="fl w4"></span></div>
+</div></div>
+<p class="dm-c">the one ambient motion: opacity pulse, 2s ease-in-out, infinite while running; still under reduced motion</p></article>
+
+</div>
+</section>
+</main></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":2504}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { pressed: false, approved: false, menu: false, dlg: false, tab: 0, tk: 0, acc: false, sw: false, toast: false, sent: false, count: 11, bump: 0, loading: false, moved: false, running: true };
+    this.timers = [];
+  }
+  later(fn, ms) {
+    this.timers.push(setTimeout(fn, ms));
+  }
+  componentWillUnmount() {
+    this.timers.forEach((t) => clearTimeout(t));
+  }
+  renderVals() {
+    const s = this.state;
+    const pad2 = String(Math.max(0, Math.min(99, s.count))).padStart(2, '0');
+    const approve = () => {
+      if (this.state.approved || this.state.pressed) return;
+      this.setState({ pressed: true });
+      this.later(() => this.setState({ pressed: false, approved: true }), 120);
+    };
+    const tabs = ['Activity', 'Runs', 'Spec'].map((label, i) => ({
+      label,
+      sel: s.tab === i,
+      cls: s.tab === i ? 'on' : '',
+      pick: () => { if (this.state.tab !== i) this.setState((p) => ({ tab: i, tk: p.tk + 1 })); }
+    }));
+    const changeCount = (d) => this.setState((p) => {
+      const next = Math.max(0, Math.min(99, p.count + d));
+      return next === p.count ? null : { count: next, bump: p.bump + 1 };
+    });
+    return {
+      theme: this.props.dark ? 'dark' : '',
+      approve,
+      approvePlay: () => { if (this.state.approved) this.setState({ approved: false }); else approve(); },
+      approveLabel: s.approved ? 'Reset' : 'Play',
+      apBtn: (s.pressed ? 'is-pr' : '') + (s.approved ? ' dn' : ''),
+      apSwap: s.approved ? 'on' : '',
+      apRow: s.approved ? '' : 'sel',
+      menuOpen: s.menu,
+      menuCls: s.menu ? 'open' : '',
+      menuTrig: s.menu ? 'on' : '',
+      menuLabel: s.menu ? 'Close' : 'Open',
+      toggleMenu: () => this.setState((p) => ({ menu: !p.menu })),
+      closeMenu: () => this.setState({ menu: false }),
+      dlgCls: s.dlg ? 'open' : '',
+      dlgLabel: s.dlg ? 'Close' : 'Open',
+      toggleDlg: () => this.setState((p) => ({ dlg: !p.dlg })),
+      openDlg: () => this.setState({ dlg: true }),
+      closeDlg: () => this.setState({ dlg: false }),
+      tabs,
+      pillX: s.tab * 84,
+      paneCls: s.tk % 2 ? 'fa' : (s.tk === 0 ? '' : 'fb'),
+      isT0: s.tab === 0,
+      isT1: s.tab === 1,
+      isT2: s.tab === 2,
+      nextTab: () => this.setState((p) => ({ tab: (p.tab + 1) % 3, tk: p.tk + 1 })),
+      accOpen: s.acc,
+      accCls: s.acc ? 'open' : '',
+      accLabel: s.acc ? 'Collapse' : 'Expand',
+      toggleAcc: () => this.setState((p) => ({ acc: !p.acc })),
+      swOn: s.sw,
+      swCls: s.sw ? 'on' : '',
+      swSwap: s.sw ? 'on' : '',
+      toggleSw: () => this.setState((p) => ({ sw: !p.sw })),
+      toastCls: s.toast ? 'open' : '',
+      toastLabel: s.toast ? 'Dismiss' : 'Show',
+      toggleToast: () => this.setState((p) => ({ toast: !p.toast })),
+      hideToast: () => this.setState({ toast: false }),
+      sentSwap: s.sent ? 'on' : '',
+      sentDep: s.sent ? 'on' : '',
+      sentLabel: s.sent ? 'Retry' : 'Send back',
+      toggleSent: () => this.setState((p) => ({ sent: !p.sent })),
+      c0: -Number(pad2[0]) * 18,
+      c1: -Number(pad2[1]) * 18,
+      countText: String(s.count),
+      bumpCls: s.bump === 0 ? '' : (s.bump % 2 ? 'ba' : 'bb'),
+      countUp: () => changeCount(1),
+      countDown: () => changeCount(-1),
+      loading: s.loading,
+      listCls: s.loading ? 'ld' : '',
+      refresh: () => {
+        if (this.state.loading) return;
+        this.setState({ loading: true });
+        this.later(() => this.setState({ loading: false }), 1000);
+      },
+      cardCls: s.moved ? 'moved' : '',
+      moveLabel: s.moved ? 'Move back' : 'Move to Review',
+      bY: -(s.moved ? 1 : 2) * 20,
+      rY: -(s.moved ? 2 : 1) * 20,
+      moveCard: () => this.setState((p) => ({ moved: !p.moved })),
+      dotCls: s.running ? 'live' : 'dn',
+      slotA: s.running ? 'w' : '',
+      runSwap: s.running ? '' : 'on',
+      runLabel: s.running ? 'Finish' : 'Start again',
+      toggleRun: () => this.setState((p) => ({ running: !p.running }))
+    };
+  }
+}
+</script>
+</body>
+</html>

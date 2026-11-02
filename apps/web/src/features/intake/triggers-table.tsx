@@ -24,9 +24,7 @@ export function TriggersTable({ triggers }: { triggers: readonly IntakeTrigger[]
         <h2 id="triggers-heading" className="m-0 text-heading">
           Triggers
         </h2>
-        <span className="rounded-chip bg-hover px-2 text-meta font-semibold text-ink-soft font-numeral">
-          {triggers.length}
-        </span>
+        <span className="rounded-chip bg-hover px-2 text-meta font-semibold text-ink-soft">{triggers.length}</span>
         <p className="m-0 text-secondary text-muted md:ml-auto">New item, the goal CLI and the API are always on</p>
       </div>
       <div className="overflow-x-auto px-2 pb-2 md:px-3">
@@ -136,12 +134,12 @@ function LastWeek({ days, items }: { days: readonly number[]; items: number }) {
             // The seven days are a fixed window: their position is their identity.
             // biome-ignore lint/suspicious/noArrayIndexKey: a day's position is its identity
             key={i}
-            className={cn('w-1.5', i === days.length - 1 ? 'bg-run' : 'bg-run-soft')}
+            className={cn('w-1.5', i === days.length - 1 ? 'bg-run' : 'bg-run')}
             style={{ height: `${(n / top) * 100}%` }}
           />
         ))}
       </span>
-      <span className="font-numeral font-semibold text-ink">
+      <span className="font-semibold text-ink">
         {items}
         <span className="sr-only"> items in the last 7 days</span>
       </span>
