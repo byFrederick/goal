@@ -104,7 +104,7 @@ export function CredentialsPage() {
         value={text}
         placeholder="Search credentials"
         autoComplete="off"
-        className="h-full w-full rounded-control border border-rule bg-card pr-3 pl-9 text-body text-ink placeholder:text-muted hover:border-muted"
+        className="h-full w-full rounded-control border border-rule bg-card pr-3 pl-9 text-body text-ink placeholder:text-muted transition-colors duration-(--duration-quick) hover:border-muted"
         onChange={(e) => {
           setText(e.target.value);
           setSearch({ q: e.target.value.trim() || undefined });

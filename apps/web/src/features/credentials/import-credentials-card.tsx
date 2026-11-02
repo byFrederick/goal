@@ -99,7 +99,7 @@ export function ImportCredentialsCard({ org, slug, focus }: { org: string; slug:
           e.preventDefault();
           void read(e.dataTransfer.files[0]);
         }}
-        className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-control border border-dashed border-rule text-secondary font-control text-ink-soft hover:border-muted"
+        className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-control border border-dashed border-rule text-secondary font-control text-ink-soft transition-colors duration-(--duration-quick) hover:border-muted"
       >
         <input
           type="file"
