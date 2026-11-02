@@ -8,6 +8,8 @@ interface NotAvailableProps {
   /** What the control is. Shown as the tip's first line; "Not available yet" becomes the second. Icon-only controls need it. */
   label?: string;
   /** One focusable control: a button or a link. Its own onClick is never called. */
+  /** The reason, shown instead of "Not available yet" (after the label, when there is one). */
+  detail?: string;
   children: ReactElement<{
     onClick?: (event: MouseEvent<HTMLElement>) => void;
     onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void;
@@ -18,7 +20,7 @@ interface NotAvailableProps {
 /** Enter and Space activate a button or a link; blocking them here keeps the control inert. */
 const activationKeys = new Set(['Enter', ' ']);
 
-export function NotAvailable({ label, children }: NotAvailableProps) {
+export function NotAvailable({ label, detail = 'Not available yet', children }: NotAvailableProps) {
   const control = cloneElement(children, {
     'aria-disabled': 'true',
     onClick: (event: MouseEvent<HTMLElement>) => {
@@ -34,10 +36,10 @@ export function NotAvailable({ label, children }: NotAvailableProps) {
     },
   });
   return label ? (
-    <Tooltip label={label} detail="Not available yet">
+    <Tooltip label={label} detail={detail}>
       {control}
     </Tooltip>
   ) : (
-    <Tooltip label="Not available yet">{control}</Tooltip>
+    <Tooltip label={detail}>{control}</Tooltip>
   );
 }
