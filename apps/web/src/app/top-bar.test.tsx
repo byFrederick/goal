@@ -95,6 +95,11 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
   const itemsIndex = createRoute({ getParentRoute: () => items, path: '/', component: () => <p>Items page</p> });
   const itemRoute = createRoute({ getParentRoute: () => items, path: '$ref', component: ItemStub });
   const intake = createRoute({ getParentRoute: () => factoryRoute, path: 'intake', component: Outlet });
+  const newTrigger = createRoute({
+    getParentRoute: () => intake,
+    path: 'new',
+    component: () => <TopBarSlot crumb="New trigger" />,
+  });
   const intakeIndex = createRoute({ getParentRoute: () => intake, path: '/', component: () => <p>Intake page</p> });
   const webhooks = createRoute({
     getParentRoute: () => intake,
@@ -108,7 +113,7 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
         factoryRoute.addChildren([
           floor,
           items.addChildren([itemsIndex, itemRoute]),
-          intake.addChildren([intakeIndex, webhooks]),
+          intake.addChildren([intakeIndex, webhooks, newTrigger]),
         ]),
       ]),
     ]),
@@ -147,6 +152,15 @@ describe('TopBar', () => {
       .getAllByRole('button')
       .map((b) => b.textContent);
     expect(buttons).toEqual(['Share', 'Publish']);
+  });
+
+  it('shows Software / Intake / New trigger on the New trigger picker', async () => {
+    renderBar({ at: '/o/acme/f/software/intake/new' });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(nav).getByRole('link', { name: 'Software' }).getAttribute('href')).toBe('/o/acme/f/software');
+    expect(within(nav).getByRole('link', { name: 'Intake' }).getAttribute('href')).toBe('/o/acme/f/software/intake');
+    expect(within(nav).getByText('New trigger').getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getAllByRole('listitem')).toHaveLength(3);
   });
 
   it('shows only the page name on an organization page', async () => {
