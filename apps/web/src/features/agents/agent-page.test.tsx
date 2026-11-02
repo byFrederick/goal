@@ -14,6 +14,7 @@ import {
 } from '../../api/queries';
 import type { AgentStats, Factory, OrgSummary } from '../../api/types';
 import { renderFactoryPage, type Seed } from '../../test/route';
+import { TopBarProbe } from '../../test/top-bar-probe';
 import { TooltipProvider } from '../../ui/tooltip';
 import { AgentPage } from './agent-page';
 import type { AgentView } from './views';
@@ -137,21 +138,24 @@ function seeds({
 /** Renders the page and waits for its first render: the router mounts the page after its match. */
 async function renderPage(
   view: AgentView = 'overview',
-  options: Parameters<typeof seeds>[0] & { can?: Factory['can'] } = {},
+  options: Parameters<typeof seeds>[0] & { can?: Factory['can']; probe?: boolean } = {},
 ) {
-  const { can, ...seedOptions } = options;
+  const { can, probe, ...seedOptions } = options;
   const result = renderFactoryPage({
-    page: () => (
-      <TooltipProvider>
-        <AgentPage agent="frontend-engineer" view={view} />
-      </TooltipProvider>
-    ),
+    page: () => {
+      const page = (
+        <TooltipProvider>
+          <AgentPage agent="frontend-engineer" view={view} />
+        </TooltipProvider>
+      );
+      return probe ? <TopBarProbe>{page}</TopBarProbe> : page;
+    },
     path: 'agents/frontend-engineer',
     org,
     factory: can ? { ...factory, can } : factory,
     seed: seeds(seedOptions),
     search: view === 'overview' ? undefined : { view },
-    topBar: true,
+    topBar: !probe,
   });
   await screen.findByRole('heading', { level: 1, name: 'frontend-engineer' });
   return result;
@@ -198,6 +202,21 @@ describe('the Agent page, ready', () => {
     const reason = document.getElementById(bake.getAttribute('aria-describedby') ?? '');
     expect(reason?.textContent).toBeTruthy();
     expect(topBar().contains(reason)).toBe(false);
+  });
+
+  it('has no in-page breadcrumb, and a phone gets Back to Agents in the top bar', async () => {
+    window.matchMedia = ((query: string) =>
+      ({
+        matches: query === '(max-width: 767px)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList) as typeof window.matchMedia;
+    await renderPage('overview', { probe: true });
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
+    const back = within(screen.getByLabelText('Top bar')).getByRole('link', { name: 'Back to Agents' });
+    expect(back.getAttribute('href')).toBe('/o/acme/f/goal/agents');
+    delete (window as { matchMedia?: unknown }).matchMedia;
   });
 
   it('shows the last 7 days and the reasons review sent work back, by role', async () => {

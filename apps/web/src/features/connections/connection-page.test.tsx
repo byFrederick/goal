@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { connectionKindsQuery, connectionQuery } from '../../api/queries';
 import type { Connection, ConnectionTestResult, OrgSummary } from '../../api/types';
 import { connectionFixture, kindFixture, renderConnectionsRoute } from '../../test/connections-route';
+import { TopBarProbe } from '../../test/top-bar-probe';
 import { ConnectionPage } from './connection-page';
 
 // The connection and its kind are seeded; the test request is held until a test releases it.
@@ -50,13 +51,37 @@ function renderConnection(connection: Connection, search?: Record<string, string
       [connectionQuery(org.id, connection.name).queryKey, connection],
       [connectionKindsQuery(org.id).queryKey, [kind]],
     ],
-    components: { list: () => null, add: () => null, connection: ConnectionPage },
+    components: {
+      list: () => null,
+      add: () => null,
+      connection: () => (
+        <TopBarProbe>
+          <ConnectionPage />
+        </TopBarProbe>
+      ),
+    },
   });
 }
 
 const passed = (): ConnectionTestResult => ({ ok: true, status: 200, at: new Date().toISOString() });
 
 describe('the connection page', () => {
+  it('has no in-page breadcrumb, and a phone gets Back to Connections in the top bar', async () => {
+    window.matchMedia = ((query: string) =>
+      ({
+        matches: query === '(max-width: 767px)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList) as typeof window.matchMedia;
+    renderConnection(connectionFixture({ name: 'datadog-prod', kind: 'datadog' }));
+
+    const back = await screen.findByRole('link', { name: 'Back to Connections' });
+    expect(back.getAttribute('href')).toBe('/o/acme/connections');
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
   it('offers Test again inside the last test’s result, and shows Testing… while it runs', async () => {
     const { testConnection } = await import('../../api/connections');
     renderConnection(connectionFixture({ name: 'datadog-prod', kind: 'datadog', last_test: passed() }));

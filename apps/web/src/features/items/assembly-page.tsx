@@ -1,12 +1,12 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
-import { ChevronLeft, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { useMemo } from 'react';
 import { boardQuery, itemQuery, partsQuery } from '../../api/queries';
 import type { AssemblyPart, AssemblyParts, BoardLane, Item } from '../../api/types';
-import { usePhone } from '../../app/phone-chrome';
+import { usePhone, usePhoneBack } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
-import { factoryTitle, itemKey, refParam, useFactory, useFactoryParams } from '../../shared/factory';
+import { itemKey, refParam, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatDuration, formatUsd, humanize } from '../../shared/format';
 import { pullRequestLabel, stateNames } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
@@ -299,31 +299,12 @@ export function AssemblyPage() {
     ),
     [item, key, assembly.parts, factory, stationLanes, phone],
   );
-  const boardName = `${factoryTitle(factory)} board`;
+  const back = usePhoneBack('Back to Board', '/o/$org/f/$factory/board', params);
 
   return (
     <>
-      <TopBarSlot crumb={`#${item.number}`} actions={actions} />
+      <TopBarSlot crumb={`#${item.number}`} actions={actions} back={back} />
       <header className="flex flex-col gap-2.5">
-        <Link
-          to="/o/$org/f/$factory/board"
-          params={params}
-          className="inline-flex min-h-11 items-center gap-1.5 self-start text-[15px] text-muted no-underline md:hidden"
-        >
-          <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
-          {boardName}
-        </Link>
-        <nav aria-label="Breadcrumb" className="hidden text-sm text-muted md:block">
-          <ol className="m-0 flex list-none gap-1.5 p-0">
-            <li>
-              <Link to="/o/$org/f/$factory/board" params={params} className="text-muted hover:text-run">
-                {boardName}
-              </Link>
-            </li>
-            <li aria-hidden="true">/</li>
-            <li aria-current="page">{item.ref}</li>
-          </ol>
-        </nav>
         <div className="flex min-w-0 max-w-[820px] flex-wrap items-center gap-2">
           <Chip tone="plain">Assembly</Chip>
           <span className="text-sm text-muted">{item.ref}</span>

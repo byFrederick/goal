@@ -1,5 +1,5 @@
-// The Definition editor's frame (D §10.3, screens build/definition): the header (the breadcrumb with
-// the Live chip, the Form | YAML toggle in Form, Versions, Review changes and Publish), the draft
+// The Definition editor's frame (D §10.3, screens build/definition): the header (the heading with
+// the running version's chip, the Form | YAML toggle in Form, Versions, Review changes and Publish), the draft
 // banner (the change count, the problem sentence, Review changes and Discard draft), the Ask bar
 // (a request in words, ADR 0021), the status line, the section tiles in Form, then the section (children), and the
 // dialogs a draft can need: discard, conflicts, a discard elsewhere and the unsaved-changes guard.
@@ -8,7 +8,7 @@
 // edits (and whose draft is open), no draft banner, no Discard, no Review or Publish, no status line.
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ChevronRight, Clock } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useMemo, useState } from 'react';
 import { draftQuery, factoryQuery } from '../../../api/queries';
 import type { Draft } from '../../../api/types';
@@ -122,7 +122,7 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
   const hasFileConflicts = Object.keys(s.fileConflicts).length > 0;
   const viewOnly = session.readOnly;
   // The running version, the page's chip (the draft has its own banner).
-  const chip = current ? `Live: v${current.number}` : null;
+  const chip = current ? `v${current.number} running` : null;
   // Someone else's draft, while a viewer sees the running version.
   const elsewhere = viewOnly && current && detail?.draft ? detail.draft : null;
 
@@ -209,20 +209,14 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
       <TopBarSlot actions={actions} />
       <header className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-          <nav aria-label="Breadcrumb" className="flex min-w-0 flex-wrap items-center gap-2">
-            <span
-              aria-hidden="true"
-              className="inline-flex size-5 shrink-0 items-center justify-center rounded-chip bg-run text-meta font-control text-white"
-            >
-              {factory.name.charAt(0).toUpperCase()}
-            </span>
-            <Link to="/o/$org/f/$factory" params={params} className="text-secondary text-ink-soft hover:text-ink">
-              {factory.name}
-            </Link>
-            <ChevronRight size={12} strokeWidth={1.5} aria-hidden="true" className="text-muted" />
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <h1 className="m-0 text-heading font-control text-ink">Definition</h1>
-            {chip ? <Chip tone="plain">{chip}</Chip> : null}
-          </nav>
+            {chip ? (
+              <Chip tone="ok" dot>
+                {chip}
+              </Chip>
+            ) : null}
+          </div>
           {phone ? (
             <div className="flex flex-wrap items-center gap-2">
               {yaml ? null : <ViewToggle section={section} yaml={false} />}

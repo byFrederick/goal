@@ -2,9 +2,10 @@
 // factory", the heading with the draft's chip and where it came from, "Draft saved 14:32",
 // Visual | YAML as pressed buttons and Save and exit), and the footer (Cancel or Back, "Step 2 of
 // 6", Continue to the next step), sticky at the bottom on a phone.
-import { Link } from '@tanstack/react-router';
 import { Check, CircleAlert, Code, LoaderCircle, SlidersHorizontal } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { usePhoneBack } from '../../../app/phone-chrome';
+import { TopBarSlot } from '../../../app/top-bar';
 import { formatClock } from '../../../shared/format';
 import { useOrg } from '../../../shared/org';
 import { Button } from '../../../ui/button';
@@ -25,23 +26,10 @@ export function WizardHeader({
   actions: ReactNode;
 }) {
   const org = useOrg();
+  const back = usePhoneBack('Back to Factories', '/o/$org', { org: org.slug });
   return (
     <header className="flex flex-col gap-2.5">
-      <nav aria-label="Breadcrumb" className="text-sm text-muted">
-        <ol className="m-0 flex list-none gap-1.5 p-0">
-          <li>
-            <Link
-              to="/o/$org"
-              params={{ org: org.slug }}
-              className="text-muted underline underline-offset-3 hover:text-run"
-            >
-              Factories
-            </Link>
-          </li>
-          <li aria-hidden="true">/</li>
-          <li aria-current="page">New factory</li>
-        </ol>
-      </nav>
+      <TopBarSlot back={back} />
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="flex min-w-0 max-w-[72ch] flex-col gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-3">

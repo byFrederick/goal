@@ -399,3 +399,24 @@ test.describe('the builder', () => {
     await expect(page.getByRole('checkbox', { name: 'investigator gets pagerduty' })).toBeChecked();
   });
 });
+
+// The pictures for the pull request: the connection page at the project's width, in both themes. They are
+// attached to the report, not compared; the design exports are the reference.
+for (const [theme, width] of [
+  ['light', 1440],
+  ['dark', 1440],
+  ['light', 390],
+  ['dark', 390],
+] as const) {
+  test(`connection screenshot, ${theme}, ${width}`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+    await page.goto('/o/acme/connections/pagerduty');
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toHaveCount(0);
+    await testInfo.attach(`connection-${theme}-${width}`, {
+      body: await page.screenshot({ fullPage: true }),
+      contentType: 'image/png',
+    });
+  });
+}

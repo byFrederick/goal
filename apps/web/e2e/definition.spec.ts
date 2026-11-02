@@ -168,7 +168,7 @@ test('discard the draft: the running version shows, and the next change opens a 
 
   await expect(dialog).toBeHidden();
   await expect(status(page)).toContainText('v8 runs now. Your first change opens a draft.');
-  await expect(page.getByText('Live: v8', { exact: true })).toBeVisible();
+  await expect(page.getByText('v8 running', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Discard draft', exact: true })).toHaveCount(0);
   await expect(tile(page, /^Line, No changes$/)).toBeAttached();
   // Nothing to publish: Review changes is not the page's primary action.
@@ -217,3 +217,24 @@ test('Ask the factory is not built yet: the input is disabled and Ask stays unav
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
+
+// The pictures for the pull request: the Definition page at the project's width, in both themes. They are
+// attached to the report, not compared; the design exports are the reference.
+for (const [theme, width] of [
+  ['light', 1440],
+  ['dark', 1440],
+  ['light', 390],
+  ['dark', 390],
+] as const) {
+  test(`definition screenshot, ${theme}, ${width}`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+    await page.goto('/o/acme/f/goal/definition/basics');
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toHaveCount(0);
+    await testInfo.attach(`definition-${theme}-${width}`, {
+      body: await page.screenshot({ fullPage: true }),
+      contentType: 'image/png',
+    });
+  });
+}
