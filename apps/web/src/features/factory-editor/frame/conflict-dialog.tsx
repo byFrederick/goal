@@ -17,8 +17,6 @@ import { useDraft, useDraftSession } from '../draft/use-draft';
 import { sectionInfo } from '../sections';
 import { conflictRows } from './state';
 
-const actionButton = 'h-11 md:h-10';
-
 export function ConflictDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const session = useDraftSession();
   const conflicts = useDraft((s) => s.conflicts);
@@ -59,7 +57,7 @@ export function ConflictDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 return (
                   <fieldset
                     key={row.pointer}
-                    className="m-0 flex flex-col gap-2 rounded-control border border-line bg-card p-3"
+                    className="m-0 flex flex-col gap-2 rounded-card border border-line bg-card p-3"
                   >
                     <legend className="float-left mb-1 w-full p-0 text-[15px] leading-snug">
                       <span className="font-medium">{row.label}</span> also changed elsewhere: theirs{' '}
@@ -91,10 +89,10 @@ export function ConflictDialog({ open, onOpenChange }: { open: boolean; onOpenCh
           ))}
         </div>
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="secondary" className={actionButton} onClick={keepAllMine}>
+          <Button variant="secondary" size="lg" className="md:h-10 md:text-sm" onClick={keepAllMine}>
             Keep all mine
           </Button>
-          <Button variant="primary" className={actionButton} onClick={save}>
+          <Button variant="primary" size="lg" className="md:h-10 md:text-sm" onClick={save}>
             Save these choices
           </Button>
         </div>
@@ -139,7 +137,7 @@ export function FileConflictDialog({ open, onOpenChange }: { open: boolean; onOp
           ].map(([label, text]) => (
             <figure key={label} className="m-0 flex min-w-0 flex-col gap-1.5">
               <figcaption className="text-sm font-medium">{label}</figcaption>
-              <pre className="m-0 max-h-72 overflow-auto rounded-control border border-line bg-card p-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap">
+              <pre className="m-0 max-h-72 overflow-auto rounded-card border border-line bg-panel p-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap">
                 {text}
               </pre>
             </figure>
@@ -148,13 +146,19 @@ export function FileConflictDialog({ open, onOpenChange }: { open: boolean; onOp
         <div className="flex flex-wrap justify-end gap-2">
           <Button
             variant="secondary"
-            className={actionButton}
+            size="lg"
+            className="md:h-10 md:text-sm"
             disabled={conflict.theirsSha !== null && theirsText === undefined}
             onClick={() => void takeTheirs()}
           >
             Use theirs
           </Button>
-          <Button variant="primary" className={actionButton} onClick={() => session.resolveFile(conflict.path, 'mine')}>
+          <Button
+            variant="primary"
+            size="lg"
+            className="md:h-10 md:text-sm"
+            onClick={() => session.resolveFile(conflict.path, 'mine')}
+          >
             Overwrite with mine
           </Button>
         </div>
@@ -176,10 +180,10 @@ export function DiscardedDialog({ onLeave }: { onLeave: () => void }) {
         description="Your changes that weren’t saved are still here. Start a new draft with them, or leave without them."
       >
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="secondary" className={actionButton} onClick={onLeave}>
+          <Button variant="secondary" size="lg" className="md:h-10 md:text-sm" onClick={onLeave}>
             Leave
           </Button>
-          <Button variant="primary" className={actionButton} onClick={() => session.restart()}>
+          <Button variant="primary" size="lg" className="md:h-10 md:text-sm" onClick={() => session.restart()}>
             Start a new draft
           </Button>
         </div>
