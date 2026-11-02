@@ -131,10 +131,7 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
         <h1 className="m-0 text-page-title tracking-display">Home</h1>
         {segmented}
         {mayCreate ? (
-          <EmptyState
-            title={`No factories in ${org.name} yet`}
-            actions={<NewFactoryButtons variant="empty" />}
-          >
+          <EmptyState title={`No factories in ${org.name} yet`} actions={<NewFactoryButtons variant="empty" />}>
             Start one blank, from a template or from a factory.yaml.
           </EmptyState>
         ) : (

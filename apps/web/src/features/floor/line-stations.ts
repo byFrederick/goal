@@ -62,7 +62,9 @@ export function busyOf(s: BoardStation): string | null {
  * free. Waiting is capped at the slots that are not busy, so the squares never outnumber the slots. Named by the
  * role, never by a copy.
  */
-export function slotsOf(s: BoardStation): { slots: { total: number; busy: number; waiting: number }; label: string } | null {
+export function slotsOf(
+  s: BoardStation,
+): { slots: { total: number; busy: number; waiting: number }; label: string } | null {
   const agents: BoardLane[] = (s.lanes ?? []).filter((lane) => lane.kind === 'agent');
   const total = agents.find((lane) => lane.slots !== null)?.slots;
   const role = agents[0]?.role;
@@ -74,5 +76,8 @@ export function slotsOf(s: BoardStation): { slots: { total: number; busy: number
   );
   const waiting = Math.min(s.items.filter((it) => it.state === 'waiting_human').length, total - busy);
   const free = total - busy - waiting;
-  return { slots: { total, busy, waiting }, label: `${role}: ${busy} working, ${waiting} waiting on you, ${free} free` };
+  return {
+    slots: { total, busy, waiting },
+    label: `${role}: ${busy} working, ${waiting} waiting on you, ${free} free`,
+  };
 }

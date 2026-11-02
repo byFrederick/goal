@@ -456,8 +456,10 @@ describe('FloorPage', () => {
     };
     renderFloor({ line: stopped });
 
-    expect(await screen.findByText(/Line stopped/)).toBeTruthy();
+    expect(await screen.findByText('Answers cite a retired runbook')).toBeTruthy();
     expect(screen.queryByText('Line running')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Clear the andon' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Pull the andon cord' })).toBeNull();
   });
 
   it('writes the 30-day window to the URL and presses it', async () => {
@@ -467,16 +469,16 @@ describe('FloorPage', () => {
     await waitFor(() => expect(router.state.location.search).toEqual({ from: addDays(todayUtc(), -29) }));
   });
 
-  it('shows the flow figures against their targets, with the change since last week', async () => {
+  it('shows the four flow figures in one strip, with the targets and the change since last week', async () => {
     renderFloor({ flowMetrics: flow });
 
-    const tiles = within(await screen.findByRole('region', { name: 'Flow against targets' }));
-    expect(tiles.getByRole('meter', { name: '76% of the target of 10 a day' })).toBeTruthy();
-    expect(tiles.getByRole('meter', { name: '65% of the 48 hour target' })).toBeTruthy();
-    expect(tiles.getByText('Target 10')).toBeTruthy();
-    expect(tiles.getByText('Target 48 h')).toBeTruthy();
-    expect(tiles.getByText(/−0\.6/)).toBeTruthy();
-    expect(tiles.getByText('No target set')).toBeTruthy();
+    const strip = within(await screen.findByRole('region', { name: 'Flow against targets' }));
+    for (const label of ['Throughput', 'Lead time, p85', 'Sent back', 'Cost per item']) {
+      expect(strip.getByText(label)).toBeTruthy();
+    }
+    expect(strip.getByText('Target 10')).toBeTruthy();
+    expect(strip.getByText('Target 48 h')).toBeTruthy();
+    expect(strip.getByText(/−0\.6/)).toBeTruthy();
   });
 
   it('shows cost per item from the spend over the finished items', async () => {
@@ -485,37 +487,12 @@ describe('FloorPage', () => {
     expect(await screen.findByText('$3.10')).toBeTruthy();
   });
 
-  it('spend today against its budget and the week beside it', async () => {
+  it('drops hands-off and spend today from the Floor, which shows four figures', async () => {
     renderFloor({ flowMetrics: flow });
 
-    expect(await screen.findByRole('meter', { name: "64% of today's budget" })).toBeTruthy();
-    expect(screen.getByText(/^\$96/, { selector: 'p' })).toBeTruthy();
-    expect(screen.getByText('of $150')).toBeTruthy();
-    expect(screen.getByText('Week $412')).toBeTruthy();
-  });
-
-  it('hands-off shows the touchless share, its trend over the week and the change in points', async () => {
-    renderFloor({ flowMetrics: flow });
-
-    const tile = (await screen.findByText('Hands-off')).parentElement as HTMLElement;
-    expect(within(tile).getByText('82')).toBeTruthy();
-    expect(within(tile).getByRole('img', { name: 'Rising from 70% to 82% over 7 days' })).toBeTruthy();
-    expect(within(tile).getByText('No human touch')).toBeTruthy();
-    expect(within(tile).getByText('+5 pts')).toBeTruthy();
-  });
-
-  it('hands-off shows the empty value when no item finished in the range', async () => {
-    renderFloor({ flowMetrics: flow, touches: { ...touchesNow, stats: touchStats(0, 0), daily: [] } });
-
-    const tile = (await screen.findByText('Hands-off')).parentElement as HTMLElement;
-    expect(within(tile).getByText('Not enough data')).toBeTruthy();
-    expect(within(tile).queryByRole('img')).toBeNull();
-  });
-
-  it('spend today shows not enough data when the factory has no overview row', async () => {
-    renderFloor({ flowMetrics: flow, today: overviewList('1d', []) });
-
-    expect(await screen.findByText('Not enough data')).toBeTruthy();
+    await screen.findByRole('region', { name: 'Flow against targets' });
+    expect(screen.queryByText('Hands-off')).toBeNull();
+    expect(screen.queryByText('Spend today')).toBeNull();
   });
 });
 

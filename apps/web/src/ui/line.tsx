@@ -32,7 +32,7 @@ export interface LineStation {
   /** The agent slots, when the station has agents. */
   slots: LineSlots | null;
   /** Named by the role the slots belong to, for a screen reader: "backend-engineer: 2 working, 1 free". */
-  slotsLabel?: string;
+  slotsLabel?: string | undefined;
   /** The busy or send-back share in words: "Busy 94%". */
   share?: string | null;
 }
@@ -76,7 +76,10 @@ export function Line({
   const isDimmed = dimmed ?? stopped;
 
   return (
-    <section aria-label={label ?? title ?? 'The line'} className={cn('flex min-w-0 flex-col gap-3 text-ink', className)}>
+    <section
+      aria-label={label ?? title ?? 'The line'}
+      className={cn('flex min-w-0 flex-col gap-3 text-ink', className)}
+    >
       {title || legend ? (
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           {title ? <h2 className="m-0 text-heading">{title}</h2> : <span />}
@@ -135,7 +138,7 @@ function StationColumn({ station: s, compact }: { station: LineStation; compact:
       <span className="flex flex-wrap items-center gap-2">
         <span className="text-secondary font-medium text-ink">{s.name}</span>
         {s.constraint ? (
-          <span className="flex items-center gap-1.5 text-meta text-amber-ink">
+          <span className="flex items-center gap-1 text-meta text-amber-ink">
             <span aria-hidden="true" className="size-1.5 rounded-full bg-amber" />
             Constraint
           </span>
@@ -165,7 +168,7 @@ function StationColumn({ station: s, compact }: { station: LineStation; compact:
 }
 
 /** The agent slots: ink for working, orange for waiting on a person, an outline for free. Never colour alone: the label says it. */
-export function Slots({ slots, label }: { slots: LineSlots; label?: string }) {
+export function Slots({ slots, label }: { slots: LineSlots; label?: string | undefined }) {
   const { total, busy, waiting } = slots;
   const free = total - busy - waiting;
   const text = label ?? `${busy} working, ${waiting} waiting on you, ${free} free`;
@@ -176,7 +179,10 @@ export function Slots({ slots, label }: { slots: LineSlots; label?: string }) {
           // biome-ignore lint/suspicious/noArrayIndexKey: the squares are fixed by the slot count and never reorder
           key={i}
           aria-hidden="true"
-          className={cn('size-2 rounded-chip', i < busy ? 'bg-ink' : i < busy + waiting ? 'bg-you' : 'border border-rule')}
+          className={cn(
+            'size-2 rounded-chip',
+            i < busy ? 'bg-ink' : i < busy + waiting ? 'bg-you' : 'border border-rule',
+          )}
         />
       ))}
     </span>
@@ -195,7 +201,7 @@ function Legend() {
 
 function LegendItem({ swatch, children }: { swatch: string; children: ReactNode }) {
   return (
-    <li className="inline-flex items-center gap-1.5">
+    <li className="inline-flex items-center gap-1">
       <span aria-hidden="true" className={cn('size-2 rounded-chip', swatch)} />
       {children}
     </li>

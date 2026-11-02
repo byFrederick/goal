@@ -4,7 +4,7 @@
 import type { Board, Factory } from '../../api/types';
 import { AndonButton } from '../../shared/andon';
 import { humanize } from '../../shared/format';
-import { type LineAndon, Line } from '../../ui/line';
+import { Line, type LineAndon } from '../../ui/line';
 import { lineStations } from './line-stations';
 
 export function LineNow({

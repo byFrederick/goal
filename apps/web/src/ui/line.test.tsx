@@ -29,7 +29,9 @@ describe('Line', () => {
     expect(within(line).getByRole('list', { name: 'Stations from intake to done' })).toBeTruthy();
     expect(within(line).getByText('Constraint')).toBeTruthy();
     expect(within(line).getByText('2 ready in buffer')).toBeTruthy();
-    expect(within(line).getByRole('img', { name: 'backend-engineer: 5 working, 1 waiting on you, 0 free' })).toBeTruthy();
+    expect(
+      within(line).getByRole('img', { name: 'backend-engineer: 5 working, 1 waiting on you, 0 free' }),
+    ).toBeTruthy();
   });
 
   it('shows the andon strip with its reason and who pulled it, and dims the stations', () => {

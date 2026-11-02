@@ -4,8 +4,8 @@ import { boardQuery, constraintQuery, metricsQuery, overviewQuery } from '../../
 import { useFactory } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
 import { ActivityCard } from './activity-card';
-import { FlowStats } from './flow-stats';
 import { FloorHeader, floorRoute } from './floor-header';
+import { FlowStats } from './flow-stats';
 import { LineNow } from './line-now';
 import { NeedsYouCard } from './needs-you-card';
 import { rangeOf } from './range';
@@ -42,7 +42,12 @@ export function FloorPage() {
 
       <div className="grid gap-4 md:gap-5 xl:grid-cols-3">
         <div className="flex min-w-0 flex-col gap-4 md:gap-5 xl:col-span-2">
-          <LineNow factory={factory} board={board} constraint={constraint.constraint ?? board.constraint} doneThisWeek={doneThisWeek} />
+          <LineNow
+            factory={factory}
+            board={board}
+            constraint={constraint.constraint ?? board.constraint}
+            doneThisWeek={doneThisWeek}
+          />
           <FlowStats metrics={metrics} />
 
           <div className={grid}>

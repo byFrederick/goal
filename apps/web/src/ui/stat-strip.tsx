@@ -15,15 +15,15 @@ export interface Stat {
   /** The figure. Null while there is nothing to measure: the strip shows an em dash. */
   value: number | string | null;
   /** The unit after the figure, at 13 px in muted: "a day", "%", "h". */
-  unit?: string;
+  unit?: string | undefined;
   /** The target, as the meta text's first part: "Target 10". */
-  target?: string;
+  target?: string | undefined;
   /** The change against the range before, signed and already formatted: "−0.6". */
-  delta?: { text: string; good: boolean };
+  delta?: { text: string; good: boolean } | undefined;
   /** Progress to the target from 0 to 1, drawn as the 2 px bar. Give it only with a target. */
-  progress?: number;
+  progress?: number | undefined;
   /** The meta text when there is no target and no delta: "No target set". */
-  note?: string;
+  note?: string | undefined;
 }
 
 export function StatStrip({ stats, label, className }: { stats: readonly Stat[]; label: string; className?: string }) {
@@ -50,14 +50,14 @@ export function StatStrip({ stats, label, className }: { stats: readonly Stat[];
 function StatFigure({ stat }: { stat: Stat }) {
   if (stat.value === null) {
     return (
-      <span className="flex items-baseline gap-1.5 text-kpi tabular-nums">
+      <span className="flex items-baseline gap-1 text-kpi tabular-nums">
         <span aria-hidden="true">—</span>
         <span className="sr-only">No data yet</span>
       </span>
     );
   }
   return (
-    <span className="flex items-baseline gap-1.5">
+    <span className="flex items-baseline gap-1">
       <NumberRoll value={stat.value} className="text-kpi" />
       {stat.unit ? <span className="text-secondary text-muted">{stat.unit}</span> : null}
     </span>
