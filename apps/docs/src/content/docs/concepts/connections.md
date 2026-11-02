@@ -57,6 +57,6 @@ Flags and output are in the [CLI reference](../../reference/).
 
 ## Where you meet connections
 
-The connections screen lists each connection with its kind, status and the factories that use it. The factory builder picks connections for an agent from this list.
+The connections screen lists each connection with its kind, its status and the factories that use it. A connection that works shows a green dot and “Connected”; one that failed its test or lacks a secret shows a red dot and says so. Under Used by, each factory appears as its letter badge, and knowledge sources keep their name. Search connections, in the top bar, narrows the list by name, description or kind; the screen has no kind or factory filter. The factory builder picks connections for an agent from this list.
 
 A connection's page has a Test button until the connection has a test result. After that, the result shows inside the page with a Test again button, which runs the test once more. Each credential type filter on the credentials screen shows how many credentials it holds, and All shows the total.

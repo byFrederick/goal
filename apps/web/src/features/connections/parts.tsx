@@ -4,7 +4,7 @@
 import { Check, Clock, Info, Lock, TriangleAlert } from 'lucide-react';
 import type { Connection, ConnectionKind } from '../../api/types';
 import { modeLabels, monogram, statusLine, type Tone, toneText } from '../../shared/connections';
-import { Chip } from '../../ui/chip';
+import { Chip, ChipText, Dot } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 
 const toneIcon = { ok: Check, rework: TriangleAlert, muted: Info } as const;
@@ -29,6 +29,30 @@ export function ToneText({ tone, text, className }: { tone: Tone; text: string; 
     <span className={cn('inline-flex items-center gap-2', toneText[tone], className)}>
       <Icon size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
       <span>{text}</span>
+    </span>
+  );
+}
+
+const dotTone: Record<Tone, string> = { ok: 'bg-ok', rework: 'bg-rework', muted: 'bg-muted' };
+
+/** The list's status: a dot in the tone's colour and the words, "Connected" for a connection that works. */
+export function StatusDot({
+  connection,
+  kind,
+  className,
+}: {
+  connection: Connection;
+  kind?: ConnectionKind | undefined;
+  className?: string | undefined;
+}) {
+  const line = statusLine(connection, kind);
+  const text = connection.status === 'ok' ? 'Connected' : line.text;
+  return (
+    <span className={cn('inline-flex items-center gap-2 text-ink', className)}>
+      <Dot className={cn('size-1.5', dotTone[line.tone])} />
+      <span>
+        <ChipText text={text} />
+      </span>
     </span>
   );
 }
