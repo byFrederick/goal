@@ -263,13 +263,13 @@ function Brief({ body }: { body: string }) {
       </p>
     );
   return (
-    <div className="flex max-w-[820px] flex-col items-start gap-1">
+    <div className="flex w-full min-w-0 max-w-[820px] flex-col items-start gap-1">
       <div
         id={id}
         data-state={open ? 'open' : 'closed'}
-        className="motion-disclosure motion-disclosure-peek text-[15px]"
+        className="motion-disclosure motion-disclosure-peek w-full min-w-0 grid-cols-[minmax(0,1fr)] text-[15px]"
       >
-        <div>
+        <div className="min-w-0">
           <p className="m-0 text-[15px] leading-relaxed whitespace-pre-wrap text-muted [overflow-wrap:anywhere]">
             {body}
           </p>

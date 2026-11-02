@@ -88,7 +88,7 @@ function SkillChips({ skills }: { skills: readonly string[] }) {
             aria-controls={restId}
             onClick={() => setOpen((o) => !o)}
             className={cn(
-              'relative max-md:before:absolute max-md:before:-inset-y-3 max-md:before:inset-x-0 max-md:before:content-[""]',
+              'inline-flex items-center max-md:min-h-11',
               'cursor-pointer rounded-chip border border-line px-2 text-meta text-muted hover:text-ink',
             )}
           >

@@ -209,7 +209,8 @@ describe('the Agent page, ready', () => {
     expect(shown()).toHaveLength(7);
     const more = within(settings).getByRole('button', { name: '+ 13 more' });
     expect(more.getAttribute('aria-expanded')).toBe('false');
-    expect(more.className).toContain('max-md:before:-inset-y-3');
+    expect(more.className).toContain('max-md:min-h-11');
+    expect(more.className).not.toContain('before:');
     await user.click(more);
     expect(shown()).toHaveLength(20);
     expect(more.getAttribute('aria-expanded')).toBe('true');

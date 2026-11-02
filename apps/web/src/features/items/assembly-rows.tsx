@@ -289,9 +289,11 @@ export function AssemblyTableRow({
                 {title}
               </span>
             </Link>
-            <span className="text-secondary text-muted" title={stations}>
-              {stations}
-            </span>
+            {stations ? (
+              <span className="text-secondary text-muted" title={stations}>
+                {stations}
+              </span>
+            ) : null}
             <span className="inline-flex items-center gap-2 text-secondary text-ink-soft">
               {summary ? (
                 <span aria-hidden="true" className="inline-flex gap-px" data-testid="assembly-meter">

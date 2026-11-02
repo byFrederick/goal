@@ -406,6 +406,18 @@ const assembly = (over: Partial<ItemCard> = {}): ItemCard =>
     ...over,
   });
 
+describe('Items list assembly row', () => {
+  it('renders no empty stations element when no stations are open', async () => {
+    renderItems([assembly({ parts: { total: 3, merged: 3, in_progress: 0, waiting: 0, stations: [] } })]);
+
+    const row = await rowOf('Migrate billing');
+    const link = within(row).getByRole('link', { name: /Migrate billing/ });
+    expect(link.className).toContain('max-md:min-h-11');
+    expect(row.querySelectorAll('span[title=""]')).toHaveLength(0);
+    expect(link.parentElement?.querySelectorAll(':scope > span:empty')).toHaveLength(0);
+  });
+});
+
 describe('Items list status icons', () => {
   it('gives a long agent name and station a title with the full text', async () => {
     renderItems([
