@@ -42,7 +42,9 @@ function ResetModel({ agent, fallback }: { agent: string; fallback: string | und
   const session = useDraftSession();
   const agents = useSection('agents');
   const label = fallback ? `Reset to default, ${fallback}` : 'Reset to default';
-  const link = cn('self-start max-md:inline-flex max-md:min-h-11 max-md:items-center font-control text-meta text-run-ink hover:text-link');
+  const link = cn(
+    'self-start max-md:inline-flex max-md:min-h-11 max-md:items-center font-control text-meta text-run-ink hover:text-link',
+  );
   if (!holds(factory, 'definition:edit')) {
     return (
       <NotAvailable>
