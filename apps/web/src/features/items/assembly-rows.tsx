@@ -168,7 +168,9 @@ export function ItemTableRow({
       <td className={cn(cell, hideBelowLg)}>
         {item.lane ? <Chip tone="plain">{item.lane}</Chip> : <span className="text-muted">Not set</span>}
       </td>
-      <td className={cn(cell, 'whitespace-nowrap')}>{humanize(item.station)}</td>
+      <td className={cn(cell, 'whitespace-nowrap lg:max-w-28 lg:truncate')} title={humanize(item.station)}>
+        {humanize(item.station)}
+      </td>
       <td className={cell}>
         <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
           <span
@@ -184,16 +186,16 @@ export function ItemTableRow({
           {item.class_of_service === 'expedite' ? <Chip tone="expedite">Expedite</Chip> : null}
         </span>
       </td>
-      <td className={cn(cell, 'whitespace-nowrap', hideBelowXl)}>
+      <td className={cn(cell, 'whitespace-nowrap lg:max-w-28', hideBelowXl)}>
         {item.agent ? (
-          <span className="inline-flex items-center gap-2 text-secondary text-ink-soft">
+          <span className="inline-flex max-w-full items-center gap-2 text-secondary text-ink-soft" title={item.agent}>
             <span
               aria-hidden="true"
-              className="grid size-6 place-items-center rounded-full bg-run-tint text-meta font-semibold text-run-ink"
+              className="grid size-6 flex-none place-items-center rounded-full bg-run-tint text-meta font-semibold text-run-ink"
             >
               {monogram(item.agent)}
             </span>
-            {item.agent}
+            <span className="min-w-0 lg:truncate">{item.agent}</span>
           </span>
         ) : (
           <span className="text-muted">None yet</span>

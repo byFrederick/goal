@@ -387,6 +387,16 @@ const assembly = (over: Partial<ItemCard> = {}): ItemCard =>
   });
 
 describe('Items list status icons', () => {
+  it('gives a long agent name and station a title with the full text', async () => {
+    renderItems([
+      item({ title: 'Long cells', state: 'in_progress', station: 'build', agent: 'a-very-long-agent-name-engineer' }),
+    ]);
+
+    const row = await rowOf('Long cells');
+    expect(within(row).getByTitle('a-very-long-agent-name-engineer')).toBeTruthy();
+    expect(within(row).getByTitle('Build')).toBeTruthy();
+  });
+
   it('shows the working icon for an item in progress', async () => {
     renderItems([item({ title: 'Checkout API latency', state: 'in_progress', agent: 'infra-engineer' })]);
 
