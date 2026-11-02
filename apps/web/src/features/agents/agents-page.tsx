@@ -4,7 +4,7 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ChevronRight, Code, Plus } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type CSSProperties, type ReactNode, useState } from 'react';
 import { agentStatsQuery, boardQuery, versionModelQuery } from '../../api/queries';
 import type { AgentStats } from '../../api/types';
 import { ErrorScreen, PendingScreen } from '../../app/states';
@@ -201,8 +201,13 @@ function Line({
   return (
     <div className="-mx-4 overflow-x-auto px-4 md:-mx-7 md:px-7">
       <ol
-        className="m-0 flex list-none flex-col gap-6 p-0 md:grid md:gap-4"
-        style={{ gridTemplateColumns: columnsOf(stations), minWidth: minWidthOf(stations) }}
+        className="m-0 flex list-none flex-col gap-6 p-0 md:min-w-(--line-min) md:grid-cols-(--line-cols) md:grid md:gap-4"
+        style={
+          {
+            '--line-cols': columnsOf(stations),
+            '--line-min': minWidthOf(stations),
+          } as CSSProperties
+        }
       >
         {stations.map((station, index) => {
           const staffed = staffingOf(station, agents);

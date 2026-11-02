@@ -297,6 +297,21 @@ test('the agents line fits at 1440 without scrolling sideways', async ({ page })
   await expectNoHorizontalScroll(page);
 });
 
+test('the stacked agents line does not scroll sideways at 390', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/o/acme/f/goal/agents');
+  const done = page.getByRole('heading', { level: 2, name: 'Done' });
+  await expect(done).toBeVisible();
+  const box = await page
+    .getByRole('list')
+    .filter({ has: done })
+    .evaluate((el) => {
+      const scroller = el.parentElement as HTMLElement;
+      return { scroll: scroller.scrollWidth, client: scroller.clientWidth };
+    });
+  expect(box.scroll).toBeLessThanOrEqual(box.client);
+});
+
 // The pictures for the pull request: this screen at 1440 and 390 px, in both themes. They are
 // attached to the report, not compared; the design exports are the reference.
 for (const theme of ['light', 'dark'] as const) {

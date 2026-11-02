@@ -204,7 +204,8 @@ func triggerTry(t domain.TriggerTry) gen.TriggerTry {
 	return out
 }
 
-// tallySources fills out's window and source counts from w.
+// tallySources fills out's window and source counts from w. Items of no known source (created
+// before their creator recorded one) are left out, so out.Items is always the sum of the sources.
 func tallySources(out *gen.GetIntake200JSONResponse, w domain.SourceWindow) {
 	counts := map[domain.ItemSource]*int{
 		domain.ItemFromPeople: &out.Sources.People, domain.ItemFromCLI: &out.Sources.Cli, domain.ItemFromAPI: &out.Sources.Api,
@@ -212,10 +213,9 @@ func tallySources(out *gen.GetIntake200JSONResponse, w domain.SourceWindow) {
 	}
 
 	for _, c := range w.Counts {
-		out.Items += c.Items
-
 		if n, ok := counts[c.Source]; ok {
 			*n += c.Items
+			out.Items += c.Items
 		}
 	}
 
