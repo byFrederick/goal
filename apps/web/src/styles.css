@@ -556,6 +556,23 @@
     );
   }
 
+  /* The andon strip slides down from above its place, then back up faster (MOTION.md, Andon pulled). A line that
+     loads stopped sets data-initial, so the strip is there without the entrance. */
+  .motion-andon {
+    --motion-open: var(--duration-fast);
+    --motion-close: var(--duration-quick);
+    --motion-ease: var(--ease-out);
+    --motion-from: translateY(calc(-1 * var(--distance-base)));
+    --motion-to: translateY(calc(-1 * var(--distance-base)));
+  }
+
+  @starting-style {
+    .motion-andon[data-state="open"][data-initial] {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
   /* Dialogs scale from the centre. */
   .motion-dialog {
     --motion-from: scale(var(--scale-dialog));
