@@ -359,7 +359,14 @@ describe('Home: the ready state', () => {
     expect(within(spend).getByText(/\$512/)).toBeTruthy();
     expect(within(spend).getByText(/of \$1,400/)).toBeTruthy();
     expect(within(spend).getByText('Last 7 days')).toBeTruthy();
-    expect(within(spend).getAllByRole('meter')).toHaveLength(3);
+    const meters = within(spend).getAllByRole('meter');
+    expect(meters).toHaveLength(3);
+    for (const m of meters) {
+      expect(m.className).toContain('bg-hover');
+      expect(m.innerHTML).toMatch(/bg-(ink|rework)/);
+      expect(m.innerHTML).not.toContain('bg-run');
+    }
+    expect(spend.querySelector('pattern')).toBeNull();
   });
 
   it('renders Spend and billing as not available, and never navigates', async () => {
