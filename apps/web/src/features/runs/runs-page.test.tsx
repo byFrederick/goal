@@ -183,6 +183,7 @@ describe('the Runs page states', () => {
     const row = (title: RegExp) => within(table).getByText(title).closest('tr') as HTMLElement;
 
     expect(within(row(/Fix flaky TestLeaseExpiry$/)).getByText('Running')).toBeTruthy();
+    expect(within(row(/Fix flaky TestLeaseExpiry$/)).getByText('Running').classList).toContain('thinking');
     expect(within(row(/Split the store package by port$/)).getByText('Running')).toBeTruthy();
     expect(within(row(/Check the budget before each run$/)).getByText('Failed')).toBeTruthy();
     expect(within(row(/Checkout API p95 over 900 ms$/)).getByText('Stopped')).toBeTruthy();
