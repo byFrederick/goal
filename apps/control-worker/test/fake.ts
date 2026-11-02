@@ -36,10 +36,14 @@ export class FakeContainer {
   destroyed = 0;
   /** port answers getTcpPort's fetches. */
   port: (port: number, request: Request) => Response | Promise<Response> = () => new Response('ok');
+  /** startFailures are thrown by the next starts, one each, as Cloudflare does while it has no instance. */
+  startFailures: Error[] = [];
   private readonly live = new Set<() => void>();
 
   start(options?: ContainerStartupOptions): void {
-    if (this.running) throw new Error('already running');
+    if (this.running) throw new Error('start() cannot be called on a container that is already running.');
+    const failure = this.startFailures.shift();
+    if (failure) throw failure;
     this.started.push(options ?? { enableInternet: false });
     this.running = true;
   }

@@ -13,7 +13,8 @@
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { type Env, hosts, ports } from './env.js';
 import { sandboxApi } from './sandbox.js';
-import { auth, goald } from './services.js';
+import { auth, goald, idempotent } from './services.js';
+import { unavailable } from './unavailable.js';
 
 export { BoxIndex, RunBox } from './sandbox.js';
 export { Auth, Goald } from './services.js';
@@ -46,20 +47,45 @@ function isDocs(pathname: string): boolean {
   return pathname === '/docs' || pathname.startsWith('/docs/');
 }
 
+/**
+ * retryable says whether a Durable Object call that threw error may be made again on a new stub:
+ * Cloudflare marks a transient failure, such as an object reset by a deploy, retryable, and an
+ * overloaded object must not get more requests.
+ */
+function retryable(error: unknown): boolean {
+  const e = error as { retryable?: unknown; overloaded?: unknown } | null;
+  return e?.retryable === true && e.overloaded !== true;
+}
+
 export default {
   /**
    * The docs site comes from the static assets, never from goald: Cloudflare serves a file that
    * exists before the Worker runs (run_worker_first excludes /docs), and the rest of /docs lands
    * here, where ASSETS answers it with the site's 404 page. Every other public request goes to
-   * goald, with the client's address as Cloudflare saw it.
+   * goald, with the client's address as Cloudflare saw it. When goald cannot answer, the Worker
+   * logs why and answers 502 itself; an uncaught error would be Cloudflare's 1101 page.
    */
-  fetch(request: Request, env: Env): Promise<Response> {
-    if (isDocs(new URL(request.url).pathname)) return env.ASSETS.fetch(request);
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const { pathname } = new URL(request.url);
+    if (isDocs(pathname)) return env.ASSETS.fetch(request);
     const headers = new Headers(request.headers);
     headers.delete('x-forwarded-for');
     const client = request.headers.get('cf-connecting-ip');
     if (client) headers.set('x-forwarded-for', client);
-    return goald(env).forward(new Request(request, { headers }));
+    const forwarded = new Request(request, { headers });
+    try {
+      try {
+        return await goald(env).forward(forwarded);
+      } catch (error) {
+        if (!idempotent(request) || !retryable(error)) throw error;
+        return await goald(env).forward(forwarded);
+      }
+    } catch (error) {
+      // The method and path only: headers, the query and the body can carry credentials.
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`goald did not answer ${request.method} ${pathname}: ${message}`);
+      return unavailable(request);
+    }
   },
 
   /** The cron trigger keeps goald running: its engine works whether or not anyone is looking. */
