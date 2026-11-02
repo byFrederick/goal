@@ -251,7 +251,7 @@ describe('the Webhooks page states', () => {
     try {
       answers();
       renderPage();
-      const card = await screen.findByRole('region', { name: 'cf-deploys' });
+      const card = await screen.findByRole('region', { name: 'acme-deploys' });
       const day = (d: string) => card.querySelector(`[title^="${d}:"]`);
       expect(day('2026-10-27')?.className).toContain('bg-ink');
       expect(day('2026-10-21')?.className).toContain('bg-rule');
