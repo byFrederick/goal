@@ -100,11 +100,11 @@ test('Bake off this agent starts a bake-off and opens the new one', async ({ pag
 // The pictures for the pull request: this screen at the project's width, in both themes. They are
 // attached to the report, not compared; the design exports are the reference.
 for (const theme of ['light', 'dark'] as const) {
-  test('agent screenshot, ' + theme, async ({ page }, testInfo) => {
+  test(`agent screenshot, ${theme}`, async ({ page }, testInfo) => {
     await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
     await page.goto('/o/acme/f/goal/agents/frontend-engineer');
     await expect(page.getByRole('heading', { level: 1, name: 'frontend-engineer' })).toBeVisible();
-    await testInfo.attach('agent-' + theme, {
+    await testInfo.attach(`agent-${theme}`, {
       body: await page.screenshot({ fullPage: true }),
       contentType: 'image/png',
     });

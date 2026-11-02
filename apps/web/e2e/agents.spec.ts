@@ -282,11 +282,11 @@ test.describe('Agents page', () => {
 // The pictures for the pull request: this screen at the project's width, in both themes. They are
 // attached to the report, not compared; the design exports are the reference.
 for (const theme of ['light', 'dark'] as const) {
-  test('agents screenshot, ' + theme, async ({ page }, testInfo) => {
+  test(`agents screenshot, ${theme}`, async ({ page }, testInfo) => {
     await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
     await page.goto('/o/acme/f/goal/agents');
     await expect(page.getByRole('heading', { level: 1, name: 'Agents' })).toBeVisible();
-    await testInfo.attach('agents-' + theme, {
+    await testInfo.attach(`agents-${theme}`, {
       body: await page.screenshot({ fullPage: true }),
       contentType: 'image/png',
     });
