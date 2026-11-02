@@ -18,7 +18,10 @@ export function CaseGrid({ bakeOff }: { bakeOff: BakeOff }) {
           {bakeOff.arms.map((arm) => (
             <th key={arm.arm} scope="col" className="px-1 pb-1 text-center text-meta font-normal text-muted">
               <span className="inline-flex items-center gap-2">
-                <span aria-hidden="true" className={cn('size-2 rounded-full', armDot(arm.arm))} />
+                <span
+                  aria-hidden="true"
+                  className={cn('size-2 rounded-full', armDot(bakeOff.recommended_arm === arm.arm))}
+                />
                 {modelFamily(arm.model)}
               </span>
             </th>
