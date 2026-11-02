@@ -39,13 +39,13 @@ export function DocumentLine({ source, document: d }: { source: string; document
   const org = useOrg();
   const path = documentPath(d);
   return (
-    <span className="flex min-w-0 flex-col">
+    <span className="flex min-w-0 flex-col overflow-hidden">
       <Link
         to="/o/$org/knowledge/$source"
         params={{ org: org.slug, source }}
         search={{ document: d.id }}
         title={d.title}
-        className="flex min-w-0 items-center font-control text-body text-ink hover:text-run-ink max-md:min-h-11"
+        className="flex min-w-0 max-w-full items-center font-control text-body text-ink hover:text-run-ink max-md:min-h-11"
       >
         <span title={d.title} className="min-w-0 truncate">
           {d.title}
@@ -148,7 +148,7 @@ function DocumentActions({
         asChild
         variant="ghost"
         size="icon"
-        className="size-11 md:size-8"
+        className="size-11 shrink-0 md:size-8"
         aria-label={`Open ${d.title} at its source`}
       >
         <a href={url} target="_blank" rel="noreferrer noopener">

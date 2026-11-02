@@ -131,6 +131,17 @@ test.describe('every phone control has a 44 px hit area at 390 px', () => {
       (p) => p.locator('a[href^="/o/acme/connections/"]:not([href$="/new"]):visible').first(),
     ],
     ['Knowledge document title', '/o/acme/knowledge/goal-docs', (p) => p.locator('a[href*="document="]').first()],
+    [
+      'Knowledge document open at source',
+      '/o/acme/knowledge/goal-docs',
+      (p) => p.getByRole('link', { name: /^Open .* at its source$/ }).first(),
+    ],
+    ['Credential Show the value', '/o/acme/credentials/new', (p) => p.getByRole('button', { name: 'Show the value' })],
+    [
+      'New trigger source choice',
+      '/o/acme/f/software/intake/new',
+      (p) => p.getByRole('button', { name: 'Schedule', exact: true }),
+    ],
     ['Knowledge source title', '/o/acme/knowledge', (p) => p.locator('a:visible', { hasText: 'goal docs' }).first()],
     [
       'Knowledge new kind',
@@ -152,7 +163,32 @@ test.describe('every phone control has a 44 px hit area at 390 px', () => {
       await page.goto(path);
       const area = await hitArea(find(page));
       expect(area.height).toBeGreaterThanOrEqual(43.5);
-      if (name.endsWith('switch') || name.includes('New item')) expect(area.width).toBeGreaterThanOrEqual(43.5);
+      if (name.endsWith('switch') || name.includes('New item') || name.includes('open at source'))
+        expect(area.width).toBeGreaterThanOrEqual(43.5);
     });
   }
+});
+
+test.describe('phone dialogs and rows at 390 px', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test('New trigger Close is 44 x 44', async ({ page }) => {
+    await page.goto('/o/acme/f/software/intake/new');
+    const area = await hitArea(page.getByRole('button', { name: 'Close', exact: true }));
+    expect(area.width).toBeGreaterThanOrEqual(43.5);
+    expect(area.height).toBeGreaterThanOrEqual(43.5);
+  });
+
+  test('a document row title link ends before its open-at-source control', async ({ page }) => {
+    await page.goto('/o/acme/knowledge/goal-docs');
+    const row = page
+      .getByRole('listitem')
+      .filter({ has: page.getByRole('link', { name: /^Open .* at its source$/ }) })
+      .first();
+    const title = await row.locator('a[href*="document="]').first().boundingBox();
+    const control = await row.getByRole('link', { name: /^Open .* at its source$/ }).boundingBox();
+    expect(title).not.toBeNull();
+    expect(control).not.toBeNull();
+    expect((title?.x ?? 0) + (title?.width ?? 0)).toBeLessThanOrEqual((control?.x ?? 0) + 0.5);
+  });
 });
