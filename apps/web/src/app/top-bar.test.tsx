@@ -12,8 +12,9 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { factoriesQuery } from '../api/queries';
 import type { Factory, OrgSummary } from '../api/types';
+import { routeTree } from '../routeTree.gen';
 import { ShellFrame } from './app-shell';
-import { TopBarSlot } from './top-bar';
+import { orgRoutePages, pageLabel, TopBarSlot } from './top-bar';
 
 const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'Ac', factory_count: 1, role: 'owner' };
 
@@ -112,6 +113,11 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
 
 afterEach(cleanup);
 
+/** Every route id of the generated route tree (FileRoutesById's keys). */
+function collectIds(): string[] {
+  return Object.keys(createRouter({ routeTree, context: { queryClient: new QueryClient() } }).routesById);
+}
+
 describe('TopBar', () => {
   it('shows Software / Items / #12 on a factory item page', async () => {
     renderBar({ at: '/o/acme/f/software/items/12', item: { number: 12 } });
@@ -138,11 +144,25 @@ describe('TopBar', () => {
     expect(buttons).toEqual(['Share', 'Publish']);
   });
 
-  it('shows only the page name on an organization page', async () => {
+  it('shows the organization and the page name on an organization page', async () => {
     renderBar({ at: '/o/acme/' });
     const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
     expect(within(nav).getByText('Home').getAttribute('aria-current')).toBe('page');
-    expect(within(nav).queryByRole('link')).toBeNull();
-    expect(within(nav).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(nav).getByRole('link', { name: 'Acme' }).getAttribute('href')).toBe('/o/acme');
+    expect(within(nav).getAllByRole('listitem')).toHaveLength(2);
+  });
+
+  it('names a page for every shell route', () => {
+    const layouts = new Set(['/o/$org/_org', '/o/$org/f/$factory', '/o/$org/f/$factory/definition']);
+    const ids = collectIds();
+    const unnamed = ids.filter(
+      (id) =>
+        (id.startsWith('/o/$org/_org/') || id.startsWith('/o/$org/f/$factory/')) &&
+        !layouts.has(id) &&
+        pageLabel(id) === undefined,
+    );
+    expect(ids.length).toBeGreaterThan(20);
+    expect(unnamed).toEqual([]);
+    expect(Object.keys(orgRoutePages)).toContain('/o/$org/_org/spend');
   });
 });

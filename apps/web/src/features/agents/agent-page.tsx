@@ -5,6 +5,7 @@ import { useSuspenseQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { agentStatsQuery } from '../../api/queries';
 import type { AgentStats } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
 import { DraftChangesNote, SkillsCard, ToolPolicyCard, useRunningModel } from '../../shared/definition/agent-cards';
 import { factoryTitle, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatDuration, formatPercent, formatUsd, humanize } from '../../shared/format';
@@ -130,6 +131,7 @@ function AgentPageBody({ agent, view }: { agent: string; view: AgentView }) {
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
+      <TopBarSlot crumb={agent} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <nav aria-label="Breadcrumb">
           <ol className="m-0 flex list-none flex-wrap items-center gap-2 p-0 text-secondary text-muted">

@@ -1,5 +1,5 @@
 // The top bar (MASTER.md "Top bar"): from 768 px, a 56 px row above main. On the left, a breadcrumb:
-// on a factory page the factory's badge and name, then the page; on an organization page, the page.
+// on a factory page the factory's badge and name, then the page; on an organization page, the organization's name (linking to its Home) and the page.
 // On the right, the page's actions, the primary one last. Below 768 px the phone's top bar takes its
 // place (phone-chrome.tsx): the same page name and actions, without the crumbs.
 //
@@ -23,11 +23,14 @@ import {
   homeScreen,
   knowledgeScreen,
   membersScreen,
+  modelsScreen,
+  needsYouScreen,
   newFactoryScreen,
   type OrgPath,
   runsScreen,
   settingsScreen,
   sidebarFactoryPages,
+  spendScreen,
 } from './screens';
 
 /**
@@ -70,8 +73,12 @@ const factoryRoutePages: Record<string, string> = {
   '/o/$org/f/$factory/agents/$agent': 'agents',
   '/o/$org/f/$factory/definition/': 'definition',
   '/o/$org/f/$factory/definition/$section': 'definition',
+  '/o/$org/f/$factory/intake/': 'intake',
+  '/o/$org/f/$factory/intake/new': 'intake',
+  '/o/$org/f/$factory/intake/webhooks': 'intake',
   '/o/$org/f/$factory/intake/$trigger': 'intake',
   '/o/$org/f/$factory/settings': 'settings',
+  '/o/$org/f/$factory/jonah/': 'jonah',
   '/o/$org/f/$factory/jonah/evals': 'jonah',
   '/o/$org/f/$factory/jonah/judges/': 'jonah',
   '/o/$org/f/$factory/jonah/judges/$judge': 'jonah',
@@ -81,12 +88,15 @@ const factoryRoutePages: Record<string, string> = {
 };
 
 /** The organization page each organization route shows, by route id. */
-const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
+export const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/o/$org/_org/': homeScreen,
   '/account': { label: 'Your account' },
   '/o/$org/_org/api-keys': apiKeysScreen,
   '/o/$org/_org/members': membersScreen,
   '/o/$org/_org/runs': runsScreen,
+  '/o/$org/_org/needs-you': needsYouScreen,
+  '/o/$org/_org/spend': spendScreen,
+  '/o/$org/_org/models': modelsScreen,
   '/o/$org/_org/settings': settingsScreen,
   '/o/$org/_org/connections/': connectionsScreen,
   '/o/$org/_org/connections/$connection': connectionsScreen,
@@ -106,7 +116,7 @@ export function usePageLabel(): string | undefined {
   return useMatches({ select: (matches) => pageLabel(matches.at(-1)?.routeId ?? '') });
 }
 
-function pageLabel(routeId: string): string | undefined {
+export function pageLabel(routeId: string): string | undefined {
   if (routeId.startsWith('/o/$org/f/$factory/')) {
     return sidebarFactoryPages.find((p) => p.id === factoryRoutePages[routeId])?.label;
   }
@@ -200,13 +210,18 @@ function OrgCrumbs({ routeId, crumb }: { routeId: string; crumb: string | undefi
   ) : (
     screen.label
   );
+  const ancestor: Crumb = {
+    key: 'org',
+    node: (
+      <Link to="/o/$org" params={{ org: org.slug }} className={`${crumbLink} truncate`}>
+        {org.name}
+      </Link>
+    ),
+  };
   const items: Crumb[] =
     crumb === undefined
-      ? [{ key: 'page', node: <Current>{screen.label}</Current> }]
-      : [
-          { key: 'page', node: page },
-          { key: 'crumb', node: <Current>{crumb}</Current> },
-        ];
+      ? [ancestor, { key: 'page', node: <Current>{screen.label}</Current> }]
+      : [ancestor, { key: 'page', node: page }, { key: 'crumb', node: <Current>{crumb}</Current> }];
   return <Trail items={items} />;
 }
 

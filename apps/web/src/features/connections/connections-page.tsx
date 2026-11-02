@@ -108,7 +108,7 @@ export function ConnectionsPage() {
 
   return (
     <>
-      <TopBarSlot crumb="Connections" actions={addConnection} />
+      <TopBarSlot actions={addConnection} />
       <header className="flex flex-col gap-1">
         <h1 className="m-0 text-page-title">Connections</h1>
         <p className="m-0 text-body text-muted">What Goal’s agents can reach, for every factory in Goal.</p>
