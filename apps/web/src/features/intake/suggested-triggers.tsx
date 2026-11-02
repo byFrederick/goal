@@ -35,7 +35,7 @@ export function SuggestedTriggers({
 
   return (
     <section aria-labelledby="suggested-heading" className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
         <h2 id="suggested-heading" className="m-0 text-heading">
           Suggested triggers
         </h2>

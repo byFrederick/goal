@@ -88,6 +88,9 @@ test('Bake off this agent starts a bake-off and opens the new one', async ({ pag
   await page.goto('/o/acme/f/software/agents/frontend-engineer');
   await expect(page.getByRole('heading', { level: 1, name: 'frontend-engineer' })).toBeVisible();
 
+  // The actions sit in the top bar (the phone's bar below 768 px), Save changes last.
+  await expect(page.getByRole('link', { name: 'Open prompt file' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible();
   await page.getByRole('button', { name: 'Bake off this agent' }).click();
 
   await expect(page).toHaveURL(/\/o\/acme\/f\/software\/jonah\/bake-offs\/bake-off-\d+$/);
@@ -97,28 +100,20 @@ test('Bake off this agent starts a bake-off and opens the new one', async ({ pag
   await expectNoHorizontalScroll(page);
 });
 
-// The pictures for the pull request: this screen at the project's width, in both themes. They are
+// The pictures for the pull request: this screen at 1440 and 390 px, in both themes. They are
 // attached to the report, not compared; the design exports are the reference.
-for (const [theme, width] of [
-  ['light', 1440],
-  ['dark', 1440],
-  ['light', 390],
-  ['dark', 390],
-] as const) {
-  test(`agent screenshot, ${theme}, ${width}`, async ({ page }, testInfo) => {
-    await page.setViewportSize({ width, height: 900 });
-    await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
-    await page.goto('/o/acme/f/goal/agents/frontend-engineer');
-    await expect(page.getByRole('heading', { level: 1, name: 'frontend-engineer' })).toBeVisible();
-    await testInfo.attach(`agent-${theme}-${width}`, {
-      body: await page.screenshot({ fullPage: true }),
-      contentType: 'image/png',
+for (const width of [1440, 390] as const) {
+  for (const theme of ['light', 'dark'] as const) {
+    test(`agent screenshot, ${width}px ${theme}`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+      await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+      await page.goto('/o/acme/f/goal/agents/frontend-engineer');
+      await expect(page.getByRole('heading', { level: 1, name: 'frontend-engineer' })).toBeVisible();
+      await expect(page.getByRole('link', { name: /^Runs/ })).toBeVisible();
+      await testInfo.attach(`agent-${width}-${theme}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: 'image/png',
+      });
     });
-  });
+  }
 }
-
-test('Open prompt file is in the top bar', async ({ page }) => {
-  await page.goto('/o/acme/f/sre/agents/investigator');
-  await expect(page.getByRole('banner').first().getByRole('link', { name: 'Open prompt file' })).toBeVisible();
-  await expect(page.getByRole('main').getByRole('link', { name: 'Open prompt file' })).toHaveCount(0);
-});

@@ -153,6 +153,37 @@ func TestIntake_SourceTallyEmpty(t *testing.T) {
 	}
 }
 
+// Items whose creator recorded no source are not counted: the window's items are always the sum
+// of its sources, and a window of such items alone has no days.
+func TestIntake_SourceTallySkipsUnknownSources(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	for i := range 3 {
+		h.intakeItem(t, "", "", oct(20, i))
+	}
+
+	var none gen.Intake
+	if code := h.call(t, http.MethodGet, intakePath, "", &none); code != http.StatusOK || none.Items != 0 || none.From != nil || none.To != nil {
+		t.Errorf("intake of items with no source = %d %+v, want no items and no window", code, none)
+	}
+
+	h.intakeItem(t, domain.ItemFromPeople, "", oct(21, 0))
+	h.intakeItem(t, domain.ItemFromCLI, "", oct(21, 1))
+	h.intakeItem(t, domain.ItemFromGitHub, flakyName, oct(21, 2))
+
+	var in gen.Intake
+	if code := h.call(t, http.MethodGet, intakePath, "", &in); code != http.StatusOK {
+		t.Fatalf("intake = %d", code)
+	}
+
+	s := in.Sources
+	if sum := s.People + s.Cli + s.Api + s.Schedule + s.Webhook + s.Github; in.Items != 3 || sum != in.Items || in.From == nil || in.To == nil {
+		t.Errorf("intake = %d items %+v from %v to %v, want 3, the sum of the sources, over a window", in.Items, s, in.From, in.To)
+	}
+}
+
 // A trigger shows the items it created on each of the last 7 UTC days, this week's items, merges
 // and spend, and its events newest first: created, merged or skipped with the reason.
 func TestIntake_TriggerStats(t *testing.T) {

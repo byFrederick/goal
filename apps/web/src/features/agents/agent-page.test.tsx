@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { Problem } from '@goal/api-client';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, startBakeOff } from '../../api/client';
 import { createDraftRequest } from '../../api/definitions';
@@ -14,8 +15,8 @@ import {
 } from '../../api/queries';
 import type { AgentStats, Factory, OrgSummary } from '../../api/types';
 import { renderFactoryPage, type Seed } from '../../test/route';
-import { TopBarProbe } from '../../test/top-bar-probe';
 import { TooltipProvider } from '../../ui/tooltip';
+import { DraftSession } from '../factory-editor/draft/session';
 import { AgentPage } from './agent-page';
 import type { AgentView } from './views';
 
@@ -23,18 +24,6 @@ vi.mock('../../api/client', async (original) => ({
   ...(await original<typeof import('../../api/client')>()),
   startBakeOff: vi.fn(),
 }));
-
-const slotCrumbs = vi.hoisted(() => [] as (string | undefined)[]);
-vi.mock('../../app/top-bar', async (original) => {
-  const real = await original<typeof import('../../app/top-bar')>();
-  return {
-    ...real,
-    TopBarSlot: (props: Parameters<typeof real.TopBarSlot>[0]) => {
-      slotCrumbs.push(props.crumb);
-      return real.TopBarSlot(props);
-    },
-  };
-});
 
 vi.mock('../../api/definitions', async (original) => ({
   ...(await original<typeof import('../../api/definitions')>()),
@@ -138,30 +127,26 @@ function seeds({
 /** Renders the page and waits for its first render: the router mounts the page after its match. */
 async function renderPage(
   view: AgentView = 'overview',
-  options: Parameters<typeof seeds>[0] & { can?: Factory['can']; probe?: boolean } = {},
+  options: Parameters<typeof seeds>[0] & { can?: Factory['can'] } = {},
 ) {
-  const { can, probe, ...seedOptions } = options;
+  const { can, ...seedOptions } = options;
   const result = renderFactoryPage({
-    page: () => {
-      const page = (
-        <TooltipProvider>
-          <AgentPage agent="frontend-engineer" view={view} />
-        </TooltipProvider>
-      );
-      return probe ? <TopBarProbe>{page}</TopBarProbe> : page;
-    },
-    path: 'agents/frontend-engineer',
+    page: () => (
+      <TooltipProvider>
+        <AgentPage agent="frontend-engineer" view={view} />
+      </TooltipProvider>
+    ),
+    path: 'agents/$agent',
+    location: 'agents/frontend-engineer',
     org,
     factory: can ? { ...factory, can } : factory,
     seed: seeds(seedOptions),
     search: view === 'overview' ? undefined : { view },
-    topBar: !probe,
+    topBar: true,
   });
   await screen.findByRole('heading', { level: 1, name: 'frontend-engineer' });
   return result;
 }
-
-const topBar = () => screen.getAllByRole('banner')[0] as HTMLElement;
 
 describe('the Agent page, ready', () => {
   it('names the agent, says where it works and lists the views', async () => {
@@ -177,46 +162,8 @@ describe('the Agent page, ready', () => {
       within(views)
         .getAllByRole('link')
         .map((l) => l.textContent),
-    ).toEqual(['Overview', 'Prompt', 'Tools and access', 'Runs']);
+    ).toEqual(['Overview', 'Prompt', 'Tools and access', 'Runs41 this week']);
     expect(within(views).getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBe('page');
-  });
-
-  it("sets the agent's name as the top bar's last crumb once loaded", async () => {
-    await renderPage();
-    expect(slotCrumbs.at(-1)).toBe('frontend-engineer');
-  });
-
-  it('puts Bake off this agent and Open prompt file in the top bar, the prompt file last', async () => {
-    await renderPage();
-    const bar = within(topBar());
-    const bake = bar.getByRole('button', { name: 'Bake off this agent' });
-    const prompt = bar.getByRole('link', { name: 'Open prompt file' });
-    expect(bake.compareDocumentPosition(prompt)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(screen.getAllByRole('button', { name: 'Bake off this agent' })).toHaveLength(1);
-  });
-
-  it('says why Bake off is disabled in the page, and the top bar button points at it', async () => {
-    await renderPage();
-    const bake = within(topBar()).getByRole('button', { name: 'Bake off this agent' }) as HTMLButtonElement;
-    expect(bake.disabled).toBe(true);
-    const reason = document.getElementById(bake.getAttribute('aria-describedby') ?? '');
-    expect(reason?.textContent).toBeTruthy();
-    expect(topBar().contains(reason)).toBe(false);
-  });
-
-  it('has no in-page breadcrumb, and a phone gets Back to Agents in the top bar', async () => {
-    window.matchMedia = ((query: string) =>
-      ({
-        matches: query === '(max-width: 767px)',
-        media: query,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-      }) as unknown as MediaQueryList) as typeof window.matchMedia;
-    await renderPage('overview', { probe: true });
-    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
-    const back = within(screen.getByLabelText('Top bar')).getByRole('link', { name: 'Back to Agents' });
-    expect(back.getAttribute('href')).toBe('/o/acme/f/goal/agents');
-    delete (window as { matchMedia?: unknown }).matchMedia;
   });
 
   it('shows the last 7 days and the reasons review sent work back, by role', async () => {
@@ -231,6 +178,49 @@ describe('the Agent page, ready', () => {
     expect(screen.queryByText(/copy \d/i)).toBeNull();
     expect(reasons.querySelectorAll('.bg-rework').length).toBeGreaterThan(0);
     expect(reasons.querySelector('[class*="repeating"], [class*="hatch"]')).toBeNull();
+  });
+
+  it('shows each reason in sentence case on one line, with its full text in a tooltip and a solid bar', async () => {
+    const long = 'nothing was delivered. after a fresh `git fetch` the branch had no commits';
+    await renderPage('overview', { agentStats: { ...stats, reasons: [{ label: long, count: 3 }] } });
+    const reasons = screen.getByRole('region', { name: 'Why review sent work back' });
+    const line = within(reasons).getByText(/^Nothing was delivered\./);
+    expect(line.className).toContain('truncate');
+    line.focus();
+    expect((await screen.findAllByText(long)).length).toBeGreaterThan(0);
+    expect(reasons.querySelector('.bg-rework')).not.toBeNull();
+    expect(reasons.querySelector('[class*="hatch"], [style*="repeating"]')).toBeNull();
+  });
+
+  it('shows 7 skills and a + N more chip that reveals the rest', async () => {
+    const user = userEvent.setup();
+    const skills = Array.from({ length: 20 }, (_, i) => `skill-${i + 1}`);
+    const agent = model.agents.agents[0];
+    await renderPage('overview', {
+      version: { model: { ...model, agents: { ...model.agents, agents: [{ ...agent, skills }] } } },
+    });
+    const settings = screen.getByRole('region', { name: 'Settings' });
+    const shown = () =>
+      within(settings)
+        .getAllByText(/^skill-\d+$/)
+        .filter((el) => !el.closest('[inert]'));
+    expect(shown()).toHaveLength(7);
+    const more = within(settings).getByRole('button', { name: '+ 13 more' });
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    await user.click(more);
+    expect(shown()).toHaveLength(20);
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    expect(document.getElementById(more.getAttribute('aria-controls') ?? '')?.getAttribute('data-state')).toBe('open');
+  });
+
+  it('shows no more chip for 7 skills or fewer', async () => {
+    const skills = Array.from({ length: 7 }, (_, i) => `skill-${i + 1}`);
+    const agent = model.agents.agents[0];
+    await renderPage('overview', {
+      version: { model: { ...model, agents: { ...model.agents, agents: [{ ...agent, skills }] } } },
+    });
+    const settings = screen.getByRole('region', { name: 'Settings' });
+    expect(within(settings).queryByRole('button', { name: /more/ })).toBeNull();
   });
 
   it('settles each setting as its own value or the factory default', async () => {
@@ -263,6 +253,89 @@ describe('the Agent page, ready', () => {
     expect(screen.getByRole('region', { name: 'Skills' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Tool policy' })).toBeTruthy();
     expect(screen.getByText('Blocked this week: 2 calls, both aws ssm put-parameter.')).toBeTruthy();
+  });
+});
+
+describe('the top bar', () => {
+  const edit: Factory['can'] = ['item:create', 'factory:manage', 'definition:edit'];
+
+  async function renderWithBar(can?: Factory['can']) {
+    const result = renderFactoryPage({
+      page: () => (
+        <TooltipProvider>
+          <AgentPage agent="frontend-engineer" view="overview" />
+        </TooltipProvider>
+      ),
+      path: 'agents/$agent',
+      location: 'agents/frontend-engineer',
+      org,
+      factory: can ? { ...factory, can } : factory,
+      seed: seeds(),
+      topBar: true,
+    });
+    await screen.findByRole('heading', { level: 1, name: 'frontend-engineer' });
+    return result;
+  }
+
+  it('ends the crumb with the agent and draws no breadcrumb of its own', async () => {
+    await renderWithBar();
+    const crumbs = screen.getAllByRole('navigation', { name: 'Breadcrumb' });
+    expect(crumbs).toHaveLength(1);
+    expect(crumbs[0]?.textContent).toContain('Agents');
+    expect(crumbs[0]?.textContent).toContain('frontend-engineer');
+    expect(
+      screen.getByRole('heading', { level: 1 }).closest('div')?.querySelector('nav[aria-label="Breadcrumb"]'),
+    ).toBeNull();
+  });
+
+  it('holds the actions in order, Save changes last, and not in the page body', async () => {
+    await renderWithBar(edit);
+    const names = ['Bake off this agent', 'Open prompt file', 'Save changes'];
+    const found = names.map((n) => screen.getByRole(n === 'Open prompt file' ? 'link' : 'button', { name: n }));
+    for (let i = 1; i < found.length; i++) {
+      const prev = found[i - 1] as HTMLElement;
+      expect(prev.compareDocumentPosition(found[i] as HTMLElement) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    expect(
+      screen
+        .getByRole('heading', { level: 1 })
+        .closest('header')
+        ?.parentElement?.contains(found[0] as Node),
+    ).toBe(false);
+  });
+
+  it('sends the waiting edit with the session flush, once', async () => {
+    const flush = vi.spyOn(DraftSession.prototype, 'flush').mockResolvedValue();
+    await renderWithBar(edit);
+    const settings = within(screen.getByRole('region', { name: 'Settings' }));
+    fireEvent.click(settings.getByRole('button', { name: 'Reset to default, claude-opus-5-5' }));
+    expect(flush).toHaveBeenCalledTimes(1);
+    const save = screen.getByRole('button', { name: 'Save changes' });
+    await waitFor(() => expect(save.getAttribute('aria-disabled')).toBeNull());
+    fireEvent.click(save);
+    expect(flush).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps Save changes off while nothing waits, and Not available without definition:edit', async () => {
+    await renderWithBar(edit);
+    expect(screen.getByRole('button', { name: 'Save changes' }).getAttribute('aria-disabled')).toBe('true');
+    cleanup();
+    await renderWithBar();
+    const save = screen.getByRole('button', { name: 'Save changes' });
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    save.focus();
+    expect((await screen.findAllByText('Not available yet')).length).toBeGreaterThan(0);
+  });
+});
+
+describe('the tabs', () => {
+  it('are an underline row of four links, the current one marked', async () => {
+    await renderPage('tools');
+    const views = screen.getByRole('navigation', { name: 'Agent views' });
+    expect(within(views).getAllByRole('link')).toHaveLength(4);
+    expect(within(views).getByRole('link', { name: 'Tools and access' }).getAttribute('aria-current')).toBe('page');
+    expect(within(views).getByRole('link', { name: /^Runs/ }).textContent).toContain('41 this week');
+    expect(views.className).toContain('border-b');
   });
 });
 

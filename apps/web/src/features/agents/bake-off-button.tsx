@@ -1,11 +1,10 @@
 // "Bake off this agent" on the Agent page (build/agent). Pressing it queues a bake-off of the agent on the
 // current version and opens the new bake-off's screen. It needs definition:edit, as the API does: without
-// it the button is disabled and says why. A refusal shows in place, under the button. The button sits in
-// the top bar and its reason and refusal in the page, so useBakeOff returns them apart.
+// it the button is disabled and says why. A refusal shows in place, under the button.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { ChartColumn } from 'lucide-react';
-import { type ReactNode, useId, useMemo } from 'react';
+import { useId } from 'react';
 import { ApiError, startBakeOff } from '../../api/client';
 import { bakeOffQuery, keys } from '../../api/queries';
 import { useFactory, useFactoryParams } from '../../shared/factory';
@@ -27,7 +26,7 @@ export function startFailure(err: unknown): string {
   return runFailure(err);
 }
 
-export function useBakeOff(agent: string): { button: ReactNode; notes: ReactNode } {
+export function BakeOffButton({ agent }: { agent: string }) {
   const factory = useFactory();
   const org = useOrg();
   const params = useFactoryParams();
@@ -51,39 +50,29 @@ export function useBakeOff(agent: string): { button: ReactNode; notes: ReactNode
     },
   });
 
-  const { mutate, isPending } = start;
-  const button = useMemo(
-    () => (
+  return (
+    <div className="flex max-w-96 flex-col items-end gap-2">
       <Button
         variant="secondary"
         size="sm"
-        disabled={!canEdit || isPending}
-        aria-busy={isPending || undefined}
+        disabled={!canEdit || start.isPending}
+        aria-busy={start.isPending || undefined}
         aria-describedby={canEdit ? undefined : reasonId}
-        onClick={() => mutate()}
+        onClick={() => start.mutate()}
       >
         <ChartColumn size={15} strokeWidth={1.5} aria-hidden="true" />
         Bake off this agent
       </Button>
-    ),
-    [canEdit, isPending, reasonId, mutate],
+      {canEdit ? null : (
+        <p id={reasonId} className="m-0 text-right text-meta text-muted">
+          {reasons.definition(factory.name)}
+        </p>
+      )}
+      {start.isError ? (
+        <div aria-live="polite">
+          <Callout tone="rework">{startFailure(start.error)}</Callout>
+        </div>
+      ) : null}
+    </div>
   );
-
-  const notes =
-    canEdit && !start.isError ? null : (
-      <div className="flex max-w-96 flex-col gap-2">
-        {canEdit ? null : (
-          <p id={reasonId} className="m-0 text-meta text-muted">
-            {reasons.definition(factory.name)}
-          </p>
-        )}
-        {start.isError ? (
-          <div aria-live="polite">
-            <Callout tone="rework">{startFailure(start.error)}</Callout>
-          </div>
-        ) : null}
-      </div>
-    );
-
-  return { button, notes };
 }

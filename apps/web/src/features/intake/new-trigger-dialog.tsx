@@ -4,8 +4,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { connectionsQuery } from '../../api/queries';
+import { TopBarSlot } from '../../app/top-bar';
 import { useFactoryParams } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
@@ -41,6 +42,7 @@ export function NewTriggerDialog() {
   /** Phones show one pane at a time: the sources, then the chosen source's details. */
   const [detailsShown, setDetailsShown] = useState(false);
 
+  const panel = useRef<HTMLDivElement>(null);
   const leave = () => navigate({ to: '/o/$org/f/$factory/intake', params });
   const chosen = sourceByKey[source];
   const target = continueTo(chosen, event);
@@ -48,8 +50,15 @@ export function NewTriggerDialog() {
 
   return (
     <Dialog open onOpenChange={(open) => !open && void leave()}>
-      <DialogContent title="New trigger" description="Step 1 of 2: what starts it" className="max-w-4xl">
-        <div className="-mx-5 -mb-5 flex flex-col">
+      <DialogContent
+        title="New trigger"
+        description="Step 1 of 2: what starts it"
+        inlineDescription
+        initialFocus={panel}
+        className="max-w-4xl"
+      >
+        <TopBarSlot crumb="New trigger" />
+        <div ref={panel} tabIndex={-1} className="-mx-5 -mb-5 flex flex-col outline-none">
           <div className="px-5 pb-3">
             <Stepper
               label="New trigger steps"

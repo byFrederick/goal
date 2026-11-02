@@ -1,31 +1,42 @@
 // Save changes: publishes the open draft as the factory's next version, the same way the Definition
 // editor's publish does (flush, refuse unsaved edits, publish at the session's revision, close the draft,
 // refetch). The draft is shared: everything in it publishes, not only the settings on this page, so the
-// line beside the button names the version it publishes. The button and the line live in the top bar,
-// which sits outside the draft session's provider, so SaveChanges hands the session down to them; the
-// refusal stays in the page, as a paragraph at its top. goald's refusal is shown as it words it.
+// line beside the button names the version it publishes. The button sits in the top bar, outside the draft
+// provider, so the page calls useSaveChanges inside it and hands the result to SaveChangesAction. goald's
+// refusal is shown as it words it, in the page body.
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useMemo, useState } from 'react';
+import { Check } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '../../api/client';
 import { publishDraft } from '../../api/definitions';
 import { defKeys } from '../../api/queries';
 import type { Factory } from '../../api/types';
-import { usePhone } from '../../app/phone-chrome';
-import { TopBarSlot } from '../../app/top-bar';
 import { Button } from '../../ui/button';
-import { DraftSessionContext, useDraft, useDraftSession } from '../factory-editor/draft/use-draft';
+import { useDraft, useDraftSession } from '../factory-editor/draft/use-draft';
 
-/** Sets the top bar's Save changes and shows goald's refusal at the top of the page. Inside DraftSessionProvider. */
-export function SaveChanges({ org, factory }: { org: string; factory: Factory }) {
+export interface SaveChangesState {
+  save: () => void;
+  pending: boolean;
+  /** True for a moment after a publish succeeds: the button shows a check. */
+  done: boolean;
+  disabled: boolean;
+  next: number;
+  refusal: string | null;
+}
+
+export function useSaveChanges(org: string, factory: Factory): SaveChangesState {
   const session = useDraftSession();
   const client = useQueryClient();
   const hasDraft = useDraft((s) => s.hasDraft);
   const [pending, setPending] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
   const next = (factory.current?.number ?? 0) + 1;
 
-  const save = useCallback(async () => {
+  const save = async () => {
     if (pending) return;
     setPending(true);
     setRefusal(null);
@@ -41,6 +52,9 @@ export function SaveChanges({ org, factory }: { org: string; factory: Factory })
       });
       session.closeDraft();
       toast(`${factory.name} v${version.number} published`);
+      setDone(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setDone(false), 2000);
       await Promise.all(
         [
           defKeys.draft(org, factory.id),
@@ -60,32 +74,37 @@ export function SaveChanges({ org, factory }: { org: string; factory: Factory })
     } finally {
       setPending(false);
     }
-  }, [pending, session, org, factory, client]);
+  };
 
-  const phone = usePhone();
-  const actions = useMemo(
-    () => (
-      <DraftSessionContext.Provider value={session}>
-        <div className="flex min-w-0 items-center justify-end gap-3">
-          {phone ? null : <span className="text-secondary text-muted">Saving publishes v{next}</span>}
-          <Button variant="primary" onClick={() => void save()} disabled={!hasDraft || pending}>
-            Save changes
-          </Button>
-        </div>
-      </DraftSessionContext.Provider>
-    ),
-    [session, phone, next, save, hasDraft, pending],
-  );
+  return { save: () => void save(), pending, done, disabled: !hasDraft || pending, next, refusal };
+}
 
+/** The top bar's actions: the version Save changes publishes, then the button. */
+export function SaveChangesAction({ state }: { state: SaveChangesState }) {
   return (
-    <>
-      <TopBarSlot actions={actions} />
-      {phone ? <p className="m-0 text-secondary text-muted">Saving publishes v{next}</p> : null}
-      {refusal ? (
-        <p role="alert" className="m-0 max-w-md text-secondary text-rework-ink">
-          {refusal}
-        </p>
-      ) : null}
-    </>
+    <div className="flex items-center gap-3">
+      <span className="hidden text-secondary text-muted md:inline">Saving publishes v{state.next}</span>
+      <Button variant="primary" onClick={state.save} disabled={state.disabled}>
+        {state.pending ? (
+          'Saving…'
+        ) : state.done ? (
+          <>
+            <Check size={16} strokeWidth={1.8} aria-hidden="true" className="motion-safe:animate-success-check" />
+            Published
+          </>
+        ) : (
+          'Save changes'
+        )}
+      </Button>
+    </div>
   );
+}
+
+/** goald's refusal of a publish, in the page body. */
+export function SaveRefusal({ refusal }: { refusal: string | null }) {
+  return refusal ? (
+    <p role="alert" className="m-0 text-secondary text-rework-ink">
+      {refusal}
+    </p>
+  ) : null;
 }
