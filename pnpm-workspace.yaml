@@ -41,3 +41,19 @@ overrides:
   # monaco-editor 0.57.0 pins dompurify 3.4.15 (GHSA-cg2g-xh64-v4q7, GHSA-mrv2-3pqr-j5jr and
   # three low advisories); 3.4.17 fixes them all and is a patch release of the same line.
   dompurify: 3.4.17
+  # httpsnippet 3.0.10 (starlight-openapi's snippet generator) pins form-data 4.0.4
+  # (GHSA-hmw2-7cc7-3qxx, high: CRLF injection via unescaped multipart field names and
+  # filenames); 4.0.6 fixes it and is a patch release of the same line.
+  form-data: 4.0.6
+  # miniflare 5.20261012.0-beta (wrangler 4.151.0's and vitest-plugin 1.4.2's test runtime)
+  # pins undici 7.29.1 (four high and four moderate advisories: cross-origin redirect cache
+  # poisoning, TLS certificate validation bypass, TLS 1.2 renegotiation DoS, content-encoding
+  # DoS, EventSource parser DoS, SRI bypass, WebSocket PONG buffering DoS, decompress
+  # interceptor DoS); 7.30.1 fixes them all and is a patch release of the 7.x line. Scoped to
+  # miniflare's own undici, so nothing else's undici moves.
+  miniflare@5.20261012.0-beta>undici: 7.30.1
+  # @cloudflare/vitest-plugin 1.4.2 pins zod 4.6.5 (GHSA-mrhx-c7xc-m3w5, high: memory
+  # exhaustion while validating oversized constrained collections); 4.6.6 fixes it and is a
+  # patch release of the same line. Scoped to vitest-plugin's own zod, so apps/worker's and
+  # better-auth's zod stay.
+  '@cloudflare/vitest-plugin>zod': 4.6.6
