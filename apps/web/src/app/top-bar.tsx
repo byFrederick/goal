@@ -254,7 +254,7 @@ interface Crumb {
 /** The breadcrumb: its crumbs in order, a chevron between each pair. */
 function Trail({ items }: { items: Crumb[] }) {
   return (
-    <nav aria-label="Breadcrumb" className="min-w-0">
+    <nav aria-label="Breadcrumb" className="min-w-0 shrink-[999]">
       <ol className="m-0 flex min-w-0 list-none items-center gap-2 p-0 font-control text-body text-ink-soft">
         {items.map((item, i) => (
           <li key={item.key} className={cn('flex min-w-0 items-center gap-2', item.current ? 'shrink' : 'shrink-[4]')}>

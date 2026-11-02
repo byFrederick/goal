@@ -269,4 +269,13 @@ describe('TopBar', () => {
     expect(button.parentElement?.className).toContain('min-w-0');
     expect(button.parentElement?.className).not.toContain('flex-none');
   });
+
+  it('shrinks the crumbs far ahead of the actions wrapper', async () => {
+    renderBar({ at: '/o/acme/spend' });
+    const banner = await screen.findByRole('banner');
+    const nav = within(banner).getByRole('navigation', { name: 'Breadcrumb' });
+    const button = await within(banner).findByRole('button', { name: 'Export CSV' });
+    expect(nav.className).toContain('shrink-[999]');
+    expect(button.parentElement?.className).toMatch(/(^|\s)shrink(\s|$)/);
+  });
 });
