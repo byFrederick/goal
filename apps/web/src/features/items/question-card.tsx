@@ -79,7 +79,7 @@ export function QuestionCard({ itemKey, factory, question, className }: Props) {
         </h2>
         <span className="ml-auto text-secondary text-muted">{`${when}, the run is paused`}</span>
       </div>
-      <p className="m-0 text-heading leading-normal font-medium text-ink">{question.text}</p>
+      <p className="m-0 text-heading leading-normal font-medium break-words text-ink">{question.text}</p>
       {/* Phones: the quick answers and Write an answer are full-width 44 px targets, one under another. */}
       <div className="flex flex-wrap gap-2 max-md:flex-col">
         {question.choices.map((choice, index) => (
@@ -87,7 +87,7 @@ export function QuestionCard({ itemKey, factory, question, className }: Props) {
             key={choice}
             variant="secondary"
             type="button"
-            className="border-you/40 max-md:h-11"
+            className="h-auto min-h-9 max-w-full border-you/40 break-words whitespace-normal max-md:min-h-11"
             {...decision(() => answer.mutate({ choice: index }))}
           >
             {choice}

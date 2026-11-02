@@ -201,7 +201,7 @@ export function ItemPage() {
   return (
     <>
       <TopBarSlot crumb={`#${item.number}`} actions={actions} back={phone ? back : undefined} />
-      <header className="flex flex-col gap-3">
+      <header className="flex min-w-0 flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-secondary font-semibold text-muted">#{item.number}</span>
           {item.class_of_service === 'expedite' ? <Chip tone="rework">Expedite</Chip> : null}
@@ -220,7 +220,7 @@ export function ItemPage() {
             </Link>
           ) : null}
         </div>
-        <h1 className="m-0 text-page-title tracking-display text-balance">{item.title}</h1>
+        <h1 className="m-0 text-page-title tracking-display break-words text-balance">{item.title}</h1>
         <Stepper label="Progress through the line" steps={steps} waiting={item.state === 'waiting_human'} />
         {phone ? (
           <p className="m-0 text-center text-secondary text-muted">
@@ -229,8 +229,8 @@ export function ItemPage() {
         ) : null}
       </header>
 
-      <div className="flex flex-col gap-3 @[720px]:grid @[720px]:grid-cols-3 @[720px]:items-start @[720px]:gap-4">
-        <div className="contents @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
+      <div className="flex flex-col gap-3 @[720px]:grid @[720px]:grid-cols-[repeat(3,minmax(0,1fr))] @[720px]:items-start @[720px]:gap-4">
+        <div className="contents @[720px]:flex @[720px]:min-w-0 @[720px]:flex-col @[720px]:gap-4">
           {/* Only on a phone: the top bar holds these actions from 768 px, so they never show twice. */}
           {phone ? (
             <ItemDecisionsCard
@@ -263,7 +263,7 @@ export function ItemPage() {
             className="order-4 @[720px]:order-none"
           />
         </div>
-        <div className="contents @[720px]:col-span-2 @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
+        <div className="contents @[720px]:col-span-2 @[720px]:flex @[720px]:min-w-0 @[720px]:flex-col @[720px]:gap-4">
           {item.question ? (
             <QuestionCard
               itemKey={key}
@@ -305,7 +305,7 @@ export function ItemPage() {
             <div className="order-6 flex animate-fade-in flex-col gap-4 @[720px]:order-none">
               {item.body ? (
                 <SectionCard title="Request">
-                  <p className="m-0 text-body leading-relaxed whitespace-pre-wrap">{item.body}</p>
+                  <p className="m-0 text-body leading-relaxed break-words whitespace-pre-wrap">{item.body}</p>
                 </SectionCard>
               ) : null}
               <SpecCriteria criteria={criteriaOf(item.outputs.spec)} />

@@ -150,8 +150,8 @@ export function RunsPage() {
         <Menu>
           <MenuTrigger asChild>
             <Button variant="secondary">
-              {factoryLabel}
-              <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" />
+              <span className="max-w-24 truncate md:max-w-none">{factoryLabel}</span>
+              <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" className="flex-none" />
             </Button>
           </MenuTrigger>
           <MenuContent align="end">
@@ -194,7 +194,7 @@ export function RunsPage() {
           className="aria-busy:cursor-progress"
         >
           {exporting ? <Spinner tone="dark" /> : <Download size={14} strokeWidth={1.75} aria-hidden="true" />}
-          Export CSV
+          <span className="sr-only md:not-sr-only">Export CSV</span>
         </Button>
       </>
     ),

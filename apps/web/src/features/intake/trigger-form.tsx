@@ -223,7 +223,10 @@ export function TriggerForm({ value, set, board, factoryName, problems }: Trigge
           <p className="m-0 flex flex-wrap items-center gap-2 text-secondary text-muted">
             Fields:
             {fields.map((f) => (
-              <code key={f} className="rounded-chip bg-you-tint px-2 py-1 font-mono text-meta text-you-ink">
+              <code
+                key={f}
+                className="max-w-full rounded-chip break-all bg-you-tint px-2 py-1 font-mono text-meta text-you-ink"
+              >
                 {f}
               </code>
             ))}
@@ -249,7 +252,10 @@ export function TriggerForm({ value, set, board, factoryName, problems }: Trigge
           </NotAvailable>
         </div>
         {more ? (
-          <div id={moreId} className="grid gap-3 rounded-cell border border-line bg-panel p-3 sm:grid-cols-2">
+          <div
+            id={moreId}
+            className="grid grid-cols-1 gap-3 rounded-cell border border-line bg-panel p-3 sm:grid-cols-2"
+          >
             <Field label="Paths (globs, comma separated)">
               <Input
                 value={listText(filter.paths)}
