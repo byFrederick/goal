@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { archivedFactoriesQuery, ensureFound, factoriesQuery } from '../api/queries';
 import { ShellFrame } from '../app/app-shell';
 import { ArchivedBanner } from '../app/archived-banner';
+import { ShellPending } from '../app/shell-pending';
 import { NotFoundScreen } from '../app/states';
 import { findFactory, useFactory } from '../shared/factory';
 import { rememberFactory } from '../shared/org';
@@ -24,6 +25,7 @@ export const Route = createFileRoute('/o/$org/f/$factory')({
     if (!factory) throw notFound();
     return { factory };
   },
+  pendingComponent: ShellPending,
   component: FactoryLayout,
   notFoundComponent: FactoryNotFound,
 });
