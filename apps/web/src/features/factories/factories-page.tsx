@@ -2,10 +2,10 @@
 // with New factory and New item, the summary of what waits, one row per factory with its
 // line and three figures, then "Needs you first" and "Spend this week". Everything comes from the
 // overview (7 days and today), the inbox and the attention list, which the organization's stream keeps
-// fresh. The Active | Archived control stays: ?archived=true lists the archived factories instead
-// (ArchivedFactories), with Restore.
+// fresh. A quiet "Archived factories" link under the list opens ?archived=true, which lists the archived
+// factories instead (ArchivedFactories), with Restore.
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
+import { Link } from '@tanstack/react-router';
 import { useId } from 'react';
 import { attentionQuery, inboxQuery, overviewQuery } from '../../api/queries';
 import { TopBarSlot } from '../../app/top-bar';
@@ -16,16 +16,16 @@ import { useOrg, useOrgHolds } from '../../shared/org';
 import { reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { EmptyState } from '../../ui/empty-state';
-import { SegmentedControl } from '../../ui/segmented-control';
+import { Skeleton } from '../../ui/skeleton';
 import { ArchivedFactories } from './archived-factories';
 import { FactoryRow } from './factory-row';
+import { MiniLineShape } from './mini-line';
 import { NeedsYouFirst } from './needs-you-first';
 import { NewFactoryButtons, StartLink } from './new-factory';
 import { SpendWeek } from './spend-week';
 
 export function FactoriesPage({ archived = false }: { archived?: boolean }) {
   const org = useOrg();
-  const navigate = useNavigate();
   const listId = useId();
   const mayCreate = useOrgHolds('factory:create');
   const overview = useQuery(overviewQuery(org.id));
@@ -53,31 +53,18 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
     />
   );
 
-  const segmented = (
-    <SegmentedControl
-      label="Show"
-      className="self-start"
-      options={[
-        { value: 'active', label: 'Active' },
-        { value: 'archived', label: 'Archived' },
-      ]}
-      value={archived ? 'archived' : 'active'}
-      onChange={(value) =>
-        navigate({
-          to: '/o/$org',
-          params: { org: org.slug },
-          search: value === 'archived' ? { archived: true } : {},
-        })
-      }
-    />
-  );
-
   if (archived) {
     return (
       <>
         {topBar}
+        <Link
+          to="/o/$org"
+          params={{ org: org.slug }}
+          className="self-start text-secondary font-control text-run-ink no-underline hover:underline"
+        >
+          Home
+        </Link>
         <h1 className="m-0 text-page-title">Archived factories</h1>
-        {segmented}
         <ArchivedFactories org={org} />
       </>
     );
@@ -105,13 +92,15 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
     );
   }
 
-  // The route's loader fills these before the page renders; the wait shows the app background, not a shape.
+  // The route's loader fills these before the page renders; the wait shows the page's own shape.
   if (!overview.data || !inbox.data) {
     return (
-      <div aria-busy="true" className="min-h-40">
+      <>
         {topBar}
-        <span className="sr-only">Loading</span>
-      </div>
+        <Skeleton ready={false} placeholder={<HomeShape />}>
+          {null}
+        </Skeleton>
+      </>
     );
   }
 
@@ -128,8 +117,7 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
     return (
       <>
         {topBar}
-        <h1 className="m-0 text-page-title tracking-display">Home</h1>
-        {segmented}
+        <Header subtitle={null} />
         {mayCreate ? (
           <EmptyState title={`No factories in ${org.name} yet`} actions={<NewFactoryButtons variant="empty" />}>
             Start one blank, from a template or from a factory.yaml.
@@ -140,6 +128,7 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
             {reasons.newFactory(org.name)}
           </EmptyState>
         )}
+        <ArchivedLink slug={org.slug} />
       </>
     );
   }
@@ -147,17 +136,13 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
   return (
     <>
       {topBar}
-      <div className="flex flex-col gap-1">
-        <h1 className="m-0 text-page-title tracking-display">Home</h1>
-        <p className="m-0 text-secondary text-muted">{summary(factories.length, week.waiting_on_you, andons)}</p>
-      </div>
+      <Header subtitle={summary(factories.length, week.waiting_on_you, andons)} />
 
       <section aria-labelledby={listId} className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 id={listId} className="m-0 text-heading">
             Factories
           </h2>
-          {segmented}
         </div>
         <ul className="m-0 flex list-none flex-col gap-3 p-0">
           {factories.map((o) => {
@@ -168,6 +153,7 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
             );
           })}
         </ul>
+        <ArchivedLink slug={org.slug} />
       </section>
 
       <div className="grid gap-4 @[960px]:grid-cols-2">
@@ -175,6 +161,54 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
         <SpendWeek org={org} overview={week} mark={mark} />
       </div>
     </>
+  );
+}
+
+/** The quiet way to the archived factories. */
+function ArchivedLink({ slug }: { slug: string }) {
+  return (
+    <Link
+      to="/o/$org"
+      params={{ org: slug }}
+      search={{ archived: true }}
+      className="self-start text-secondary font-control text-muted no-underline hover:underline"
+    >
+      Archived factories
+    </Link>
+  );
+}
+
+/** The title with its subtitle inline after it on one baseline; the subtitle wraps under the title on a phone. */
+function Header({ subtitle }: { subtitle: string | null }) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <h1 className="m-0 text-page-title tracking-display">Home</h1>
+      {subtitle ? <p className="m-0 text-secondary text-muted">{subtitle}</p> : null}
+    </div>
+  );
+}
+
+/** Home's skeleton: the header line, three compact factory rows and the two panels. */
+function HomeShape() {
+  const block = 'rounded-card border border-line bg-card';
+  return (
+    <div className="flex flex-col gap-6">
+      <span className="block h-8 w-72 max-w-full rounded-control bg-hover" />
+      <ul className="m-0 flex list-none flex-col gap-3 p-0">
+        {['a', 'b', 'c'].map((k) => (
+          <li key={k} className={`${block} flex flex-wrap items-center gap-4 p-4 md:p-5`}>
+            <span className="block h-9 w-40 rounded-control bg-hover" />
+            <span className="min-w-0 flex-1">
+              <MiniLineShape />
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div className="grid gap-4 @[960px]:grid-cols-2">
+        <span className={`${block} block h-48`} />
+        <span className={`${block} block h-48`} />
+      </div>
+    </div>
   );
 }
 
