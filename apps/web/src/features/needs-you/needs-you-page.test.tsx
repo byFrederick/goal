@@ -162,11 +162,11 @@ function phoneWidth() {
 }
 
 describe('Needs you: the four states', () => {
-  it('shows the app background with a Loading announcement while the inbox loads', async () => {
+  it('shows a Skeleton wrapper, aria-busy and saying Loading, while the inbox loads', async () => {
     vi.mocked(getInbox).mockReturnValue(new Promise(() => {}));
     renderPage({ seed: [] });
 
-    const busy = (await screen.findByText('Loading')).closest('main');
+    const busy = (await screen.findByText('Loading')).closest('[aria-busy]');
     expect(busy?.getAttribute('aria-busy')).toBe('true');
   });
 

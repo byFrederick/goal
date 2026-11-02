@@ -20,6 +20,7 @@ import { EmptyState } from '../../ui/empty-state';
 import { Kbd } from '../../ui/kbd';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '../../ui/menu';
 import { SegmentedControl } from '../../ui/segmented-control';
+import { Skeleton } from '../../ui/skeleton';
 import { alwaysAllowOffered, type DecidedEntry, decisionOf, useEntryDecision } from './actions';
 import { DenyDialog } from './deny-dialog';
 import { Detail } from './detail';
@@ -154,30 +155,6 @@ export function NeedsYouPage() {
   const bar = useMemo(() => <BarActions />, []);
   const topBar = <TopBarSlot actions={phone ? undefined : bar} />;
 
-  if (inbox.isPending) {
-    return (
-      <>
-        {topBar}
-        <main aria-busy="true" className="flex min-h-0 flex-1 flex-col md:flex-row">
-          <span className="sr-only">Loading</span>
-          <div
-            aria-hidden="true"
-            className="flex min-w-0 animate-skeleton-pulse flex-col gap-2 p-4 md:w-72 md:flex-none md:border-r md:border-line lg:w-90"
-          >
-            {['a', 'b', 'c', 'd', 'e'].map((row) => (
-              <div key={row} className="h-14 rounded-control bg-hover" />
-            ))}
-          </div>
-          <div aria-hidden="true" className="hidden min-w-0 flex-1 animate-skeleton-pulse flex-col gap-4 p-7 md:flex">
-            <div className="h-6 w-24 rounded-chip bg-hover" />
-            <div className="h-8 w-2/3 rounded-control bg-hover" />
-            <div className="h-32 rounded-card bg-hover" />
-          </div>
-        </main>
-      </>
-    );
-  }
-
   const header = (
     <>
       {topBar}
@@ -208,7 +185,7 @@ export function NeedsYouPage() {
     );
   }
 
-  if (entries.length === 0 && !held) {
+  if (!inbox.isPending && entries.length === 0 && !held) {
     return (
       <>
         {header}
@@ -229,7 +206,7 @@ export function NeedsYouPage() {
     );
   }
 
-  if (approving && selected) {
+  if (!inbox.isPending && approving && selected) {
     return (
       <div className="flex min-h-0 flex-1 animate-pane-forward flex-col">
         <header className="flex items-center gap-3 border-b border-line px-4 py-3">
@@ -264,42 +241,44 @@ export function NeedsYouPage() {
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col', cameBack && 'animate-pane-back')}>
       {header}
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <section
-          aria-label="Waiting on you"
-          className="flex min-h-0 flex-col min-w-0 md:w-72 md:flex-none md:border-r lg:w-90 md:border-line"
-        >
-          {visible.length === 0 ? (
-            <p className="m-0 px-4 py-5 text-secondary text-muted">Nothing of this type waits on you.</p>
-          ) : (
-            <NeedsList
-              label="Waiting on you, oldest blocking first"
-              entries={visible}
-              selected={selected?.id}
-              search={{ type: search.type, factory: search.factory }}
-              siblings={factoriesOf(entries)}
-            />
-          )}
-          <p className="m-0 hidden flex-wrap items-center gap-1 px-4 py-3 text-meta text-muted md:flex">
-            <Kbd>J</Kbd> <Kbd>K</Kbd> to move, <Kbd>A</Kbd> approve, <Kbd>D</Kbd> deny
-          </p>
-        </section>
-        <div className="min-w-0 flex-1">
-          {selected ? (
-            <Detail
-              entry={selected}
-              factory={factoryOf(selected)}
-              pending={decide.isPending || approvedId === selected.id}
-              approved={approvedId === selected.id}
-              allowAlways={allowAlways}
-              alwaysAllow={alwaysAllow}
-              onAlwaysAllow={setAlwaysAllow}
-              onApprove={approve}
-              onDeny={() => setDenying(true)}
-            />
-          ) : null}
+      <Skeleton ready={!inbox.isPending} placeholder={placeholder} className="min-h-0 flex-1">
+        <div className="flex h-full min-h-0 flex-col md:flex-row">
+          <section
+            aria-label="Waiting on you"
+            className="flex min-h-0 flex-col min-w-0 md:w-72 md:flex-none md:border-r lg:w-90 md:border-line"
+          >
+            {visible.length === 0 ? (
+              <p className="m-0 px-4 py-5 text-secondary text-muted">Nothing of this type waits on you.</p>
+            ) : (
+              <NeedsList
+                label="Waiting on you, oldest blocking first"
+                entries={visible}
+                selected={selected?.id}
+                search={{ type: search.type, factory: search.factory }}
+                siblings={factoriesOf(entries)}
+              />
+            )}
+            <p className="m-0 hidden flex-wrap items-center gap-1 px-4 py-3 text-meta text-muted md:flex">
+              <Kbd>J</Kbd> <Kbd>K</Kbd> to move, <Kbd>A</Kbd> approve, <Kbd>D</Kbd> deny
+            </p>
+          </section>
+          <div className="min-w-0 flex-1">
+            {selected ? (
+              <Detail
+                entry={selected}
+                factory={factoryOf(selected)}
+                pending={decide.isPending || approvedId === selected.id}
+                approved={approvedId === selected.id}
+                allowAlways={allowAlways}
+                alwaysAllow={alwaysAllow}
+                onAlwaysAllow={setAlwaysAllow}
+                onApprove={approve}
+                onDeny={() => setDenying(true)}
+              />
+            ) : null}
+          </div>
         </div>
-      </div>
+      </Skeleton>
       {deny}
     </div>
   );
@@ -310,14 +289,29 @@ function clean(next: NeedsSearch) {
   return Object.fromEntries(Object.entries(next).map(([k, v]) => [k, v === '' ? undefined : v]));
 }
 
+const placeholder = (
+  <div className="flex h-full min-h-0 flex-col md:flex-row">
+    <div className="flex min-w-0 flex-col gap-2 p-4 md:w-72 md:flex-none md:border-r md:border-line lg:w-90">
+      {['a', 'b', 'c', 'd', 'e'].map((row) => (
+        <div key={row} className="h-14 rounded-control bg-hover" />
+      ))}
+    </div>
+    <div className="hidden min-w-0 flex-1 flex-col gap-4 p-7 md:flex">
+      <div className="h-6 w-24 rounded-chip bg-hover" />
+      <div className="h-8 w-2/3 rounded-control bg-hover" />
+      <div className="h-32 rounded-card bg-hover" />
+    </div>
+  </div>
+);
+
 /** The waiting count, the type filter and the factory menu: the top bar's actions, or a phone's row. */
 function BarActions() {
   const org = useOrg();
   const navigate = useNavigate({ from: '/o/$org/needs-you' });
   const search = needsSearch(useSearch({ strict: false }) as Record<string, unknown>);
   const entries = useQuery(inboxQuery(org.id)).data?.entries ?? [];
+  const counts = useMemo(() => tabCounts(entries, search.factory), [entries, search.factory]);
   if (entries.length === 0) return null;
-  const counts = tabCounts(entries, search.factory);
   const setSearch = (next: NeedsSearch) => navigate({ search: (prev) => ({ ...prev, ...clean(next) }) });
   return (
     <>
