@@ -33,12 +33,15 @@ abstract class Service extends DurableObject<Env> {
   /** intercept registers the container's outbound handlers. */
   protected abstract intercept(container: Container): Promise<void>;
 
+  /** booting is the boot in flight, or the last one that finished (booted then says so). */
   private booting: Promise<void> | undefined;
+  private booted = false;
 
   /**
    * forward sends request to the container's port (its main port by default). A container is
    * reached over HTTP only, so an https request keeps its host, path and query, and the scheme it
-   * arrived with goes in X-Forwarded-Proto.
+   * arrived with goes in X-Forwarded-Proto. A GET or HEAD that fails because the container stopped
+   * under it (a deploy's rollover stops the old one) is sent once more after a new boot.
    */
   async forward(request: Request, port?: number): Promise<Response> {
     await this.ensure();
@@ -46,18 +49,39 @@ abstract class Service extends DurableObject<Env> {
     const headers = new Headers(request.headers);
     headers.set('x-forwarded-proto', url.protocol.slice(0, -1));
     url.protocol = 'http:';
-    return this.container()
-      .getTcpPort(port ?? this.port)
-      .fetch(new Request(url, new Request(request, { headers })));
+    const send = () =>
+      this.container()
+        .getTcpPort(port ?? this.port)
+        .fetch(new Request(url, new Request(request, { headers })));
+    try {
+      return await send();
+    } catch (error) {
+      if (!idempotent(request) || this.container().running) throw error;
+      await this.ensure();
+      return send();
+    }
   }
 
-  /** ensure starts the container unless it runs, and waits until it answers its health check. */
+  /**
+   * ensure starts the container unless it runs, and waits until it answers its health check.
+   * Callers that arrive during a boot wait for that boot: the container is not running until
+   * boot() has read the settings and started it, so not running alone does not mean stopped.
+   */
   ensure(): Promise<void> {
-    if (!this.container().running) this.booting = undefined;
-    this.booting ??= this.boot().catch((error: unknown) => {
-      this.booting = undefined;
-      throw error;
-    });
+    if (this.booted && !this.container().running) this.booting = undefined;
+    if (!this.booting) {
+      this.booted = false;
+      const boot: Promise<void> = this.boot().then(
+        () => {
+          if (this.booting === boot) this.booted = true;
+        },
+        (error: unknown) => {
+          if (this.booting === boot) this.booting = undefined;
+          throw error;
+        },
+      );
+      this.booting = boot;
+    }
     return this.booting;
   }
 
@@ -68,12 +92,26 @@ abstract class Service extends DurableObject<Env> {
     return c;
   }
 
+  /**
+   * boot starts the container and waits for its health check, for at most bootMs. Cloudflare
+   * refuses a start while it has no instance for the Durable Object yet ("try again later", seen
+   * during a deploy's rollover), so a failed start is tried again until then.
+   */
   private async boot(): Promise<void> {
+    const until = Date.now() + bootMs;
     const c = this.container();
-    if (!c.running) c.start({ env: await this.environment(), enableInternet: true });
-    await c.setInactivityTimeout(this.idleMs);
-    await this.intercept(c);
-    await healthy(c.getTcpPort(this.port), this.health);
+    for (;;) {
+      try {
+        if (!c.running) c.start({ env: await this.environment(), enableInternet: true });
+        await c.setInactivityTimeout(this.idleMs);
+        await this.intercept(c);
+        break;
+      } catch (error) {
+        if (Date.now() > until) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+    await healthy(c.getTcpPort(this.port), this.health, until);
   }
 }
 
@@ -117,9 +155,13 @@ export function auth(env: Env): DurableObjectStub<Auth> {
   return env.AUTH.get(env.AUTH.idFromName('auth'), { locationHint: near });
 }
 
-/** healthy polls path on the container's port until it answers 2xx, for at most bootMs. */
-async function healthy(port: Fetcher, path: string): Promise<void> {
-  const until = Date.now() + bootMs;
+/** idempotent says whether request can be sent again: a GET or HEAD, which has no body. */
+export function idempotent(request: Request): boolean {
+  return request.method === 'GET' || request.method === 'HEAD';
+}
+
+/** healthy polls path on the container's port until it answers 2xx, until the time until. */
+async function healthy(port: Fetcher, path: string, until: number): Promise<void> {
   let last = 'no answer';
   for (;;) {
     try {
