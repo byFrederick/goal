@@ -28,6 +28,16 @@
   /* Cards have no token of their own in MASTER.md: they are the shell. Kept as an alias until the components drop it. */
   --color-card: #ffffff;
 
+  /* Factory colours (MASTER.md), in order: a categorical series in charts. */
+  --color-factory-1: #2b5bd7;
+  --color-factory-2: #0e7c6e;
+  --color-factory-3: #b4461a;
+  --color-factory-4: #1f7a3a;
+  --color-factory-5: #0b6493;
+  --color-factory-6: #7e5a00;
+  --color-factory-7: #55595f;
+  --color-factory-8: #6b3a5e;
+
   /* Text */
   --color-ink: #171717;
   --color-ink-soft: #4a4a47;
@@ -347,6 +357,14 @@
   --color-card: #0f0f0f;
   --color-line: #262626;
   --color-rule: #363636;
+  --color-factory-1: #6e92f0;
+  --color-factory-2: #3fb5a3;
+  --color-factory-3: #e0825a;
+  --color-factory-4: #4cb36a;
+  --color-factory-5: #4aa6d6;
+  --color-factory-6: #c9a13a;
+  --color-factory-7: #9aa0a8;
+  --color-factory-8: #b87aa8;
   --color-ink: #ededec;
   --color-ink-soft: #b4b4b0;
   --color-muted: #8f8f8a;
@@ -386,6 +404,14 @@
     --color-card: #0f0f0f;
     --color-line: #262626;
     --color-rule: #363636;
+    --color-factory-1: #6e92f0;
+    --color-factory-2: #3fb5a3;
+    --color-factory-3: #e0825a;
+    --color-factory-4: #4cb36a;
+    --color-factory-5: #4aa6d6;
+    --color-factory-6: #c9a13a;
+    --color-factory-7: #9aa0a8;
+    --color-factory-8: #b87aa8;
     --color-ink: #ededec;
     --color-ink-soft: #b4b4b0;
     --color-muted: #8f8f8a;
@@ -524,8 +550,8 @@
     --motion-from: scale(var(--scale-menu));
     --motion-to: scale(var(--scale-menu-close));
     transform-origin: var(
-      --radix-dropdown-menu-content-transform-origin,
-      var(--radix-popover-content-transform-origin, center)
+      --radix-select-content-transform-origin,
+      var(--radix-dropdown-menu-content-transform-origin, var(--radix-popover-content-transform-origin, center))
     );
   }
 

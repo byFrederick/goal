@@ -45,7 +45,7 @@ export function SpendDays({ spend }: { spend: OrgSpend }) {
                     d.by_factory.map((f) => (
                       <span
                         key={f.factory_id}
-                        className={`block ${fillOf.get(f.factory_id) ?? 'bg-run'}`}
+                        className={`block ${fillOf.get(f.factory_id) ?? 'bg-factory-1'}`}
                         style={{ height: `${d.usd > 0 ? (f.usd / d.usd) * 100 : 0}%` }}
                       />
                     ))

@@ -1,5 +1,4 @@
 import { cn } from './cn';
-import { Hatch } from './hatch';
 
 export interface Bar {
   key: string;
@@ -11,11 +10,11 @@ export interface Bar {
 }
 
 /**
- * Vertical bars on one baseline, oldest first: hatched teal, the latest solid; a zero is a flat
- * stub. A dashed ink line marks the target, labelled at its right end. The scale tops out at the
+ * Vertical bars on one baseline, oldest first: ink for the latest, `rule` for the earlier ones, each on a `hover`
+ * track; a zero is an empty track. A dashed `muted` line marks the target, labelled at its right end. The scale tops out at the
  * target or the tallest bar. Hovering a bar shows its label and detail; the chart is an image
  * named by `summary`, and a visually hidden table (`caption`) carries every value for screen
- * readers. Bars grow without motion under prefers-reduced-motion.
+ * readers. The fill grows from the baseline with a scale transform, and not at all under prefers-reduced-motion.
  */
 export function Bars({
   bars,
@@ -44,12 +43,12 @@ export function Bars({
           <>
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute inset-x-0 border-t-[1.5px] border-dashed border-ink"
+              className="pointer-events-none absolute inset-x-0 border-t-[1.5px] border-dashed border-muted"
               style={{ bottom: `${pct(target)}%` }}
             />
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute right-0 mb-1 text-[13px] text-ink"
+              className="pointer-events-none absolute right-0 mb-1 text-[13px] text-muted"
               style={{ bottom: `${pct(target)}%` }}
             >
               {targetLabel}
@@ -60,19 +59,15 @@ export function Bars({
           const latest = i === bars.length - 1;
           return (
             <div key={b.key} className="group relative flex h-full min-w-0 flex-1 items-end">
-              {b.value > 0 ? (
+              <div className="relative h-full w-full overflow-hidden rounded-t-[3px] rounded-b-[1px] bg-hover">
                 <div
                   className={cn(
-                    'w-full overflow-hidden rounded-t-[3px] rounded-b-[1px] transition-[height] duration-(--duration-fast) ease-out motion-reduce:transition-none',
-                    latest && 'bg-run',
+                    'absolute inset-0 origin-bottom transition-transform duration-(--duration-fast) ease-out motion-reduce:transition-none',
+                    latest ? 'bg-ink' : 'bg-rule',
                   )}
-                  style={{ height: `${pct(b.value)}%` }}
-                >
-                  {latest ? null : <Hatch tone="run" />}
-                </div>
-              ) : (
-                <div className="h-0.5 w-full rounded-[1px] bg-line" />
-              )}
+                  style={{ transform: `scaleY(${pct(b.value) / 100})` }}
+                />
+              </div>
               <span
                 aria-hidden="true"
                 className={cn(
