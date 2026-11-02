@@ -263,13 +263,19 @@ func printTeardown(out *printer, t *gen.Teardown) {
 
 	out.printf("\nRuns\n%s", b.String())
 
+	printTeardownLoops(out, t.Loops)
+	printTeardownTouches(out, t.Touches)
+}
+
+// printTeardownLoops writes a teardown's Why it went back: one line per rework loop.
+func printTeardownLoops(out *printer, loops []gen.ReworkLoop) {
 	out.printf("\nWhy it went back\n")
 
-	if len(t.Loops) == 0 {
+	if len(loops) == 0 {
 		out.printf("  it did not go back\n")
 	}
 
-	for _, l := range t.Loops {
+	for _, l := range loops {
 		line := words(string(l.Cause)) + " at " + l.Station
 		if l.To != nil {
 			line += ", to " + *l.To
@@ -281,14 +287,17 @@ func printTeardown(out *printer, t *gen.Teardown) {
 
 		out.printf("  %s (%s, %s)\n", line, span(l.Seconds), usd(l.CostUsd))
 	}
+}
 
+// printTeardownTouches writes a teardown's Human touches: one line per touch with its wait.
+func printTeardownTouches(out *printer, touches []gen.TeardownTouch) {
 	out.printf("\nHuman touches\n")
 
-	if len(t.Touches) == 0 {
+	if len(touches) == 0 {
 		out.printf("  no human touches\n")
 	}
 
-	for _, x := range t.Touches {
+	for _, x := range touches {
 		station := "no station"
 		if x.Touch.Station != nil {
 			station = *x.Touch.Station

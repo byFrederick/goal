@@ -177,6 +177,7 @@ func teardownAPI(t *testing.T, status int, v any) *httptest.Server {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+
 		if status != http.StatusOK {
 			w.Header().Set("Content-Type", "application/problem+json")
 		}
@@ -198,7 +199,7 @@ func teardownAPI(t *testing.T, status int, v any) *httptest.Server {
 func TestShowItem_Teardown(t *testing.T) {
 	t.Parallel()
 
-	target, review, build, why := int64(3*3600), "review", "build", "the tests do not cover the empty list"
+	target, review, build, why := int64(3*3600), "qa", "code", "the tests do not cover the empty list"
 	at := time.Date(2026, 10, 24, 14, 5, 0, 0, time.UTC)
 	td := gen.Teardown{
 		LeadTimeSeconds: 2*3600 + 5*60, TargetSeconds: &target, CostUsd: 1.2, Open: false,
@@ -210,8 +211,8 @@ func TestShowItem_Teardown(t *testing.T) {
 		},
 		Total: gen.TeardownTime{WorkingSeconds: 3600 + 45, WaitingSeconds: 64*60 + 15, TotalSeconds: 2*3600 + 5*60},
 		Runs: []gen.TeardownRun{
-			{Id: "r1", Station: build, Agent: "engineer", Model: "claude-opus-5-5", Turns: 31, Seconds: 50 * 60, CostUsd: 0.9, Outcome: gen.TeardownRunOutcomeFinished},
-			{Id: "r2", Station: build, Agent: "engineer", Model: "claude-opus-5-5", Turns: 9, Seconds: 10 * 60, CostUsd: 0.3, Outcome: gen.TeardownRunOutcomeCheckFailed},
+			{Id: "r1", Station: build, Agent: "engineer", Model: cliOpus, Turns: 31, Seconds: 50 * 60, CostUsd: 0.9, Outcome: gen.TeardownRunOutcomeFinished},
+			{Id: "r2", Station: build, Agent: "engineer", Model: cliOpus, Turns: 9, Seconds: 10 * 60, CostUsd: 0.3, Outcome: gen.TeardownRunOutcomeCheckFailed},
 		},
 		RunTotal: gen.TeardownRunTotal{Runs: 2, Turns: 40, Seconds: 3600, CostUsd: 1.2},
 		Loops: []gen.ReworkLoop{
@@ -237,21 +238,21 @@ func TestShowItem_Teardown(t *testing.T) {
 		"\n" +
 		"Time by station\n" +
 		"STATION  WORKING  WAITING  TOTAL\n" +
-		"build    1h       5m       1h 5m\n" +
-		"review   45s      59m 15s  1h\n" +
+		"code     1h       5m       1h 5m\n" +
+		"qa       45s      59m 15s  1h\n" +
 		"total    1h       1h 4m    2h 5m\n" +
 		"\n" +
 		"Runs\n" +
 		"STATION  AGENT     MODEL            TURNS  TOOK  COST   OUTCOME\n" +
-		"build    engineer  claude-opus-5-5  31     50m   $0.90  finished\n" +
-		"build    engineer  claude-opus-5-5  9      10m   $0.30  check failed\n" +
+		"code     engineer  claude-opus-5-5  31     50m   $0.90  finished\n" +
+		"code     engineer  claude-opus-5-5  9      10m   $0.30  check failed\n" +
 		"total    2 runs                     40     1h    $1.20\n" +
 		"\n" +
 		"Why it went back\n" +
-		"  rejected at review, to build: the tests do not cover the empty list (40m, $0.30)\n" +
+		"  rejected at qa, to code: the tests do not cover the empty list (40m, $0.30)\n" +
 		"\n" +
 		"Human touches\n" +
-		"  review  2026-10-24 15:05 UTC  waited 12m\n"
+		"  qa  2026-10-24 15:05 UTC  waited 12m\n"
 	if stdout.String() != want {
 		t.Errorf("stdout =\n%s; want\n%s", stdout.String(), want)
 	}

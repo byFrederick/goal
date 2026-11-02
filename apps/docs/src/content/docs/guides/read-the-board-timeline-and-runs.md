@@ -53,6 +53,35 @@ goal follow acme-line#3
 
 `goal item` prints the item and its outputs as JSON, and its human touches on standard error. `goal follow` prints the events from the start and keeps following.
 
+`goal item <item> --teardown` prints the item's teardown instead: where its lead time, cost and human help went. It shows the lead time against its class's target and the cost against the item's budget ("no target" or "no budget" when there is none, "so far" while the item is open), then the time by station, the runs, why it went back and the human touches:
+
+```console
+$ goal item acme-line#3 --teardown
+lead time 2h 5m, target 3h; cost $1.20, no budget
+rework: 1 loop, 40m, $0.30
+human touches: 1, waited 12m
+
+Time by station
+STATION  WORKING  WAITING  TOTAL
+build    1h       5m       1h 5m
+review   45s      59m 15s  1h
+total    1h       1h 4m    2h 5m
+
+Runs
+STATION  AGENT     MODEL            TURNS  TOOK  COST   OUTCOME
+build    engineer  claude-opus-5-5  31     50m   $0.90  finished
+build    engineer  claude-opus-5-5  9      10m   $0.30  check failed
+total    2 runs                     40     1h    $1.20
+
+Why it went back
+  rejected at review, to build: the tests do not cover the empty list (40m, $0.30)
+
+Human touches
+  review  2026-10-24 15:05 UTC  waited 12m
+```
+
+An item that does not exist, or that you cannot see, exits with an error and prints nothing.
+
 ## Runs
 
 `/o/<org>/runs` lists the organization's agent runs, newest first, across every factory. Each row shows the factory, the item, the station, the agent, the model, when the run started, how long it took, its turns, its cost and its status.
