@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
+import { connectionsQuery } from '../../api/queries';
 import type { Factory, OrgSummary } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
 import { NewTriggerDialog } from './new-trigger-dialog';
@@ -23,8 +25,14 @@ const factory: Factory = {
   can: ['definition:edit'],
 } as unknown as Factory;
 
-function renderPicker() {
-  return renderFactoryPage({ page: () => <NewTriggerDialog />, path: 'intake/new', org, factory });
+function renderPicker(connections?: unknown[]) {
+  return renderFactoryPage({
+    page: () => <NewTriggerDialog />,
+    path: 'intake/new',
+    org,
+    factory,
+    seed: connections ? [[connectionsQuery('acme', { kind: 'github' }).queryKey, connections]] : [],
+  });
 }
 
 describe('New trigger picker', () => {
@@ -118,5 +126,59 @@ describe('New trigger picker', () => {
     expect(use.disabled).toBe(true);
     fireEvent.click(use);
     expect(router.state.location.pathname).toBe('/o/acme/f/widgets/intake/new');
+  });
+
+  it('draws plain source icons with no filled tile', async () => {
+    renderPicker([{ name: 'github' }]);
+    await screen.findByRole('dialog', { name: 'New trigger' });
+    for (const name of ['Schedule', 'GitHub', 'Slack']) {
+      const button = screen.getByRole('button', { name });
+      expect(button.querySelector('[class*="bg-"]')).toBeNull();
+      expect(button.querySelector('svg')).not.toBeNull();
+    }
+  });
+
+  it('puts the title and the step on one row and lists suggestions one per row', async () => {
+    renderPicker();
+    const dialog = await screen.findByRole('dialog', { name: 'New trigger' });
+    const title = within(dialog).getByText('New trigger', { selector: 'h2' });
+    expect(title.parentElement?.className).toContain('flex-row');
+    expect(title.parentElement?.contains(screen.getByText('Step 1 of 2: what starts it'))).toBe(true);
+    const list = screen.getByText('Fix failing checks on pull requests').closest('ul') as HTMLElement;
+    expect(list.className).toContain('flex-col');
+    expect(list.className).not.toContain('grid-cols');
+  });
+
+  it('keeps GitHub choosable when the organization has a github connection', async () => {
+    renderPicker([{ name: 'github' }]);
+    await screen.findByRole('dialog', { name: 'New trigger' });
+    expect(screen.getByRole('button', { name: 'GitHub' }).getAttribute('aria-disabled')).toBeNull();
+    expect(screen.queryByRole('link', { name: /Connect/ })).toBeNull();
+  });
+
+  it('shows a Connect link to Connections instead of choosing GitHub when there is no connection', async () => {
+    renderPicker([]);
+    await screen.findByRole('dialog', { name: 'New trigger' });
+    expect(screen.getByRole('button', { name: 'GitHub' }).getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByRole('link', { name: 'Connect GitHub' }).getAttribute('href')).toBe('/o/acme/connections');
+    expect(screen.getByRole('button', { name: 'Continue' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('gives the unbuilt sources no Connect link', async () => {
+    renderPicker([]);
+    await screen.findByRole('dialog', { name: 'New trigger' });
+    expect(screen.getAllByRole('link', { name: /Connect/ })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Slack' }).getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('does not focus the Close button on open, and Tab reaches it', async () => {
+    renderPicker();
+    const dialog = await screen.findByRole('dialog', { name: 'New trigger' });
+    const close = screen.getByRole('button', { name: 'Close' });
+    await waitFor(() => expect(document.activeElement).not.toBe(close));
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    const user = userEvent.setup();
+    for (let i = 0; i < 40 && document.activeElement !== close; i++) await user.tab();
+    expect(document.activeElement).toBe(close);
   });
 });

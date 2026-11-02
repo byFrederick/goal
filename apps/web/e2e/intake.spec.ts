@@ -52,6 +52,40 @@ test('the picker is one pane with Back on a phone', async ({ page }) => {
   await expectNoHorizontalScroll(page);
 });
 
+// The picker at the desktop and phone widths in both themes: plain icons, one suggestion per row, the breadcrumb.
+for (const theme of ['light', 'dark'] as const) {
+  for (const size of [
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    test(`the New trigger picker at ${size.width}px, ${theme}`, async ({ page }) => {
+      await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+      await page.setViewportSize(size);
+      await page.goto(`${intake}/new`);
+      const dialog = page.getByRole('dialog', { name: 'New trigger' });
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole('button', { name: 'Close' })).not.toBeFocused();
+
+      const github = dialog.getByRole('button', { name: 'GitHub' });
+      await expect(github.locator('[class*="bg-"]')).toHaveCount(0);
+
+      const rows = dialog.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Use' }) });
+      const first = await rows.nth(0).boundingBox();
+      const second = await rows.nth(1).boundingBox();
+      expect(second?.y ?? 0).toBeGreaterThan((first?.y ?? 0) + (first?.height ?? 0) - 1);
+      expect(second?.x).toBe(first?.x);
+
+      if (size.width >= 1440) {
+        const nav = page.getByRole('navigation', { name: 'Breadcrumb' });
+        await expect(nav.getByText('Intake')).toBeVisible();
+        await expect(nav.getByText('New trigger')).toBeVisible();
+      }
+      await expectAccessible(page);
+      await expectNoHorizontalScroll(page);
+    });
+  }
+}
+
 for (const colorScheme of ['light', 'dark'] as const) {
   for (const width of [1440, 768, 390]) {
     test(`no element is wider than the viewport at ${width} px in ${colorScheme}`, async ({ page }) => {

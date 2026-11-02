@@ -1,9 +1,13 @@
 // New trigger, step 1 of 2: what starts it (intake-new, MASTER.md's two-pane picker). The left pane lists the
 // sources; the right pane has the chosen source's events. Continue goes to the trigger page with the choice in
 // the address. On phones the panes take turns, with Back from the details.
-import { useNavigate } from '@tanstack/react-router';
+
+import { useQuery } from '@tanstack/react-query';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
+import { connectionsQuery } from '../../api/queries';
+import { TopBarSlot } from '../../app/top-bar';
 import { useFactoryParams } from '../../shared/factory';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
@@ -32,20 +36,36 @@ export function NewTriggerDialog() {
   /** Phones show one pane at a time: the sources, then the chosen source's details. */
   const [detailsShown, setDetailsShown] = useState(false);
 
+  /** Phones: true once the user has come back from the details, so the sources pane slides back in. */
+  const [cameBack, setCameBack] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
+  // While the query loads or has failed, GitHub stays choosable (no flash, no block).
+  const github = useQuery(connectionsQuery(params.org, { kind: 'github' }));
+  const unconnected = github.isSuccess && github.data.length === 0;
+
   const leave = () => navigate({ to: '/o/$org/f/$factory/intake', params });
   const chosen = sourceByKey[source];
+  const blocked = chosen.needsConnection !== undefined && unconnected;
   const target = continueTo(chosen, event);
   const href = newTriggerHref(params.org, params.factory, target.route, target.on);
 
   return (
     <Dialog open onOpenChange={(open) => !open && void leave()}>
-      <DialogContent title="New trigger" description="Step 1 of 2: what starts it" className="max-w-4xl">
-        <div className="-mx-5 -mb-5 flex flex-col">
+      <DialogContent
+        title="New trigger"
+        description="Step 1 of 2: what starts it"
+        inlineDescription
+        initialFocus={panel}
+        className="max-w-4xl"
+      >
+        <TopBarSlot crumb="New trigger" />
+        <div ref={panel} tabIndex={-1} className="-mx-5 -mb-5 flex flex-col outline-none">
           <div className="flex min-h-0 flex-col border-t border-line md:flex-row">
             <fieldset
               className={cn(
                 'm-0 flex min-w-0 flex-col gap-1 border-0 bg-panel p-3 md:w-64 md:flex-none md:border-r md:border-line',
                 detailsShown && 'max-md:hidden',
+                cameBack && !detailsShown && 'max-md:animate-pane-back',
               )}
             >
               <legend className="sr-only">Sources</legend>
@@ -73,6 +93,8 @@ export function NewTriggerDialog() {
                       <SourceButton
                         key={s.key}
                         source={s}
+                        org={params.org}
+                        unconnected={s.needsConnection !== undefined && unconnected}
                         pressed={source === s.key}
                         onPick={() => {
                           setSource(s.key);
@@ -86,17 +108,26 @@ export function NewTriggerDialog() {
               })}
             </fieldset>
 
-            <div className={cn('flex min-w-0 flex-1 flex-col gap-4 p-5', !detailsShown && 'max-md:hidden')}>
+            <div
+              className={cn(
+                'flex min-w-0 flex-1 flex-col gap-4 p-5',
+                !detailsShown && 'max-md:hidden',
+                detailsShown && 'max-md:animate-pane-forward',
+              )}
+            >
               <Button
                 variant="ghost"
                 size="sm"
                 className="-ml-2 self-start md:hidden"
-                onClick={() => setDetailsShown(false)}
+                onClick={() => {
+                  setDetailsShown(false);
+                  setCameBack(true);
+                }}
               >
                 Back
               </Button>
               <div className="flex items-center gap-3">
-                <SourceTile source={chosen} />
+                <SourceIcon source={chosen} />
                 <h3 className="m-0 text-heading">{chosen.label}</h3>
               </div>
               {chosen.key === 'github' ? (
@@ -115,7 +146,7 @@ export function NewTriggerDialog() {
               <DialogClose asChild>
                 <Button variant="secondary">Cancel</Button>
               </DialogClose>
-              <Button variant="primary" onClick={() => navigate({ href })}>
+              <Button variant="primary" disabled={blocked} onClick={() => navigate({ href })}>
                 Continue
               </Button>
             </div>
@@ -141,7 +172,7 @@ function SuggestionsBlock() {
       <h3 id="suggestions-heading" className="m-0 text-meta font-semibold text-muted">
         Or start from a suggestion
       </h3>
-      <ul className="m-0 grid list-none gap-2 p-0 md:grid-cols-2">
+      <ul className="m-0 flex list-none flex-col gap-2 p-0">
         {shown.map((suggestion) => (
           <li key={suggestion.id}>
             <SuggestionRow
@@ -182,38 +213,59 @@ function sourceNote(source: PickerSource): string {
   return 'Starts when a webhook endpoint receives a delivery. The endpoint is chosen on the next step.';
 }
 
-function SourceButton({ source, pressed, onPick }: { source: PickerSource; pressed: boolean; onPick: () => void }) {
+function SourceButton({
+  source,
+  pressed,
+  org,
+  unconnected,
+  onPick,
+}: {
+  source: PickerSource;
+  pressed: boolean;
+  org: string;
+  unconnected: boolean;
+  onPick: () => void;
+}) {
+  const usable = source.available && !unconnected;
   const button = (
     <button
       type="button"
       aria-pressed={pressed}
-      aria-disabled={source.available ? undefined : 'true'}
+      aria-disabled={usable ? undefined : 'true'}
       onClick={() => {
-        if (source.available) onPick();
+        if (usable) onPick();
       }}
       className={cn(
-        'flex h-10 items-center gap-3 rounded-control px-2 text-left text-body font-medium text-ink hover:bg-hover',
+        'press flex h-10 min-w-0 flex-1 items-center gap-3 rounded-control px-2 text-left text-body font-medium text-ink hover:bg-hover',
         'aria-pressed:border aria-pressed:border-rule aria-pressed:bg-card',
-        !source.available && 'text-muted',
+        !usable && 'text-muted',
       )}
     >
-      <SourceTile source={source} />
+      <SourceIcon source={source} muted={!usable} />
       {source.label}
     </button>
   );
-  return source.available ? button : <NotAvailable label={source.label}>{button}</NotAvailable>;
+  if (!source.available) return <NotAvailable label={source.label}>{button}</NotAvailable>;
+  if (!unconnected) return button;
+  return (
+    <div className="flex items-center gap-1">
+      {button}
+      <Link
+        to="/o/$org/connections"
+        params={{ org }}
+        aria-label={`Connect ${source.label}`}
+        className="press flex-none rounded-control px-2 py-2 text-secondary font-medium text-ink underline-offset-2 hover:bg-hover hover:underline"
+      >
+        Connect
+      </Link>
+    </div>
+  );
 }
 
-function SourceTile({ source }: { source: PickerSource }) {
+/** The source's icon, plain: ink, or ink-soft when the source cannot be chosen. */
+function SourceIcon({ source, muted = false }: { source: PickerSource; muted?: boolean }) {
   const Icon = source.icon;
-  return (
-    <span
-      aria-hidden="true"
-      className={cn('flex size-6 flex-none items-center justify-center rounded-cell text-white', source.tile)}
-    >
-      <Icon className="size-3.5" />
-    </span>
-  );
+  return <Icon aria-hidden="true" className={cn('size-5 flex-none', muted ? 'text-ink-soft' : 'text-ink')} />;
 }
 
 /** The GitHub events the picture lists; only the two the schema accepts can be chosen. */
