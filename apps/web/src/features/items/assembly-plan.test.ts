@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AssemblyPart, BoardLane } from '../../api/types';
 import {
   agentLabel,
+  agentRole,
   barSegments,
   hasOpenParts,
   openPartCount,
@@ -164,5 +165,15 @@ describe('pauseAction', () => {
 
   it('offers nothing when no part is open', () => {
     expect(pauseAction([part(1, { state: 'done' }), part(2, { state: 'cancelled' })])).toBeNull();
+  });
+});
+
+describe('agentRole', () => {
+  it('names the lane role alone, or the agent as words without a lane', () => {
+    const lanes = [
+      { kind: 'agent', key: 'infra-engineer', role: 'Infra engineer', model_label: 'Opus 5.5' },
+    ] as BoardLane[];
+    expect(agentRole('infra-engineer', lanes)).toBe('Infra engineer');
+    expect(agentRole('infra-engineer', [])).toBe('Infra engineer');
   });
 });

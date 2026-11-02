@@ -124,9 +124,10 @@ const lanes: BoardLane[] = [
 ] as BoardLane[];
 const board = { stations: [{ id: 'build', items: [], lanes }] } as unknown as Board;
 
-/** The value of a stat in the progress card, by its label. */
+/** The text of one figure in the progress card's strip, by its label (the strip's column holds label, figure and meta). */
 function stat(label: string) {
-  return within(screen.getByRole('region', { name: 'Progress' })).getByText(label).nextElementSibling;
+  const column = within(screen.getByRole('region', { name: 'Assembly figures' })).getByText(label).parentElement;
+  return column?.textContent?.replace(label, '') ?? '';
 }
 
 /** Renders the page once the router has mounted it (the route resolves asynchronously). */
@@ -156,6 +157,51 @@ describe('AssemblyPage header', () => {
   });
 });
 
+describe('AssemblyPage v3 header', () => {
+  it('has one back link and no breadcrumb with the ref', async () => {
+    await renderAssembly();
+
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
+    expect(screen.getAllByRole('link', { name: /Goal board/ })).toHaveLength(1);
+  });
+
+  it('puts the actions in the title row, after the heading', async () => {
+    await renderAssembly();
+
+    const heading = screen.getByRole('heading', { level: 1 });
+    const add = screen.getByRole('button', { name: 'Pause' });
+    expect(heading.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(heading.parentElement?.parentElement).toBe(add.parentElement?.parentElement);
+  });
+
+  it('collapses a long brief under Show more and opens it', async () => {
+    await renderAssembly({ item: { ...assembly, body: 'A long brief. '.repeat(40) } });
+
+    const more = screen.getByRole('button', { name: 'Show more' });
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(more);
+    const less = screen.getByRole('button', { name: 'Show less' });
+    expect(less.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('shows a short brief whole, with no button', async () => {
+    await renderAssembly();
+
+    expect(screen.queryByRole('button', { name: /Show (more|less)/ })).toBeNull();
+  });
+
+  it('shows a done assembly with its parts view and none of the actions', async () => {
+    await renderAssembly({ item: { ...assembly, state: 'done' } });
+
+    expect(screen.getByRole('region', { name: 'Progress' })).toBeTruthy();
+    expect(screen.getByRole('table')).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Plan' })).toBeTruthy();
+    for (const name of ['Add a part', 'Pause', 'Resume', 'Cancel assembly']) {
+      expect(screen.queryByRole('button', { name })).toBeNull();
+    }
+  });
+});
+
 describe('AssemblyPage progress', () => {
   it('counts the merged parts, shows the budget and the human touches', async () => {
     await renderAssembly();
@@ -163,12 +209,17 @@ describe('AssemblyPage progress', () => {
     expect(
       within(screen.getByRole('region', { name: 'Progress' })).getByRole('img', { name: '1 of 4 parts merged' }),
     ).toBeTruthy();
-    expect(stat('Lead time')?.textContent).toBe('3 d');
+    const strip = within(screen.getByRole('region', { name: 'Assembly figures' }));
+    for (const label of ['Lead time', 'Spend', 'Human touches', 'Time to finish']) {
+      expect(strip.getByText(label)).toBeTruthy();
+    }
+    expect(stat('Lead time')).toContain('3 d');
     // The assembly's $0.50 plus the parts' $2, $1, $1 and $1, against $4 for each of 4 parts.
-    expect(stat('Spend')?.textContent).toBe('$5.50 of $16.00');
-    expect(stat('Human touches')?.textContent).toBe('3');
+    expect(stat('Spend')).toContain('$5.50');
+    expect(stat('Spend')).toContain('of $16.00');
+    expect(stat('Human touches')).toContain('3');
     // Merged parts took 2 days; the two waves still open take 2 days each.
-    expect(stat('Time to finish')?.textContent).toBe('About 4 d');
+    expect(stat('Time to finish')).toContain('About 4 d');
   });
 
   it('shows no budget when the factory sets none', async () => {
@@ -178,19 +229,20 @@ describe('AssemblyPage progress', () => {
     };
     await renderAssembly({ item: unbudgeted });
 
-    expect(stat('Spend')?.textContent).toBe('$5.50');
+    expect(stat('Spend')).toContain('$5.50');
+    expect(stat('Spend')).not.toContain('of $');
   });
 });
 
 describe('AssemblyPage plan', () => {
-  it('groups parts into waves: a work card names the role and model, waiting rows name their needs', async () => {
+  it('groups parts into waves: a work row names the station and role, waiting rows name their needs', async () => {
     await renderAssembly();
 
     const wave1 = screen.getByRole('region', { name: 'Wave 1' });
     expect(within(wave1).getByRole('link', { name: 'Part 2 title' }).getAttribute('href')).toBe(
       '/o/acme/f/goal/items/42',
     );
-    expect(within(wave1).getByText('Build · Infra engineer · Opus 5.5')).toBeTruthy();
+    expect(within(wave1).getByText('Build, Infra engineer')).toBeTruthy();
 
     const wave2 = screen.getByRole('region', { name: 'Wave 2' });
     expect(within(wave2).getByText('Waiting for goal#41, goal#42').getAttribute('title')).toBe(

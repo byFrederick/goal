@@ -1,23 +1,11 @@
-import { useSuspenseQuery } from '@tanstack/react-query';
-import { createFileRoute, notFound, useParams } from '@tanstack/react-router';
+import { createFileRoute, notFound } from '@tanstack/react-router';
 import { ApiError } from '../api/client';
 import { ensureLoaded, eventsQuery, itemQuery, itemRunsQuery, partsQuery, touchesQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
 import { NotFoundScreen, PendingScreen } from '../app/states';
-import { AssemblyPage } from '../features/items/assembly-page';
-import { ItemPage } from '../features/items/item-page';
+import { ItemRoute } from '../features/items/item-route';
 import { type ItemTab, isItemTab } from '../features/items/item-tabs';
-import { itemKey, useFactory } from '../shared/factory';
-import { useOrg } from '../shared/org';
-
-/** An item in state assembly is its own page (its parts); every other item keeps the item page. */
-function ItemRoute() {
-  const org = useOrg();
-  const factory = useFactory();
-  const { ref } = useParams({ from: '/o/$org/f/$factory/items/$ref' });
-  const { data: item } = useSuspenseQuery(itemQuery(org.id, itemKey(factory.name, ref)));
-  return item.state === 'assembly' ? <AssemblyPage /> : <ItemPage />;
-}
+import { itemKey } from '../shared/factory';
 
 // $ref is the item's number in the factory ("12"), a full ref ("goal#12") or its id.
 export const Route = createFileRoute('/o/$org/f/$factory/items/$ref')({
@@ -31,12 +19,12 @@ export const Route = createFileRoute('/o/$org/f/$factory/items/$ref')({
     // fetched alongside, never waited for.
     void queryClient.prefetchQuery(itemRunsQuery(org.id, key));
     void queryClient.prefetchQuery(touchesQuery(org.id, factory.id));
-    // An assembly's parts, for the page an assembly opens on; an item that is not one has none.
-    void queryClient.prefetchQuery(partsQuery(org.id, key));
     try {
       await Promise.all([
         ensureLoaded(queryClient, itemQuery(org.id, key)),
         ensureLoaded(queryClient, eventsQuery(queryClient, org.id, key)),
+        // An item with parts is an assembly, in any state; one that is not has none (total 0).
+        ensureLoaded(queryClient, partsQuery(org.id, key)).catch(() => undefined),
       ]);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) throw notFound();
