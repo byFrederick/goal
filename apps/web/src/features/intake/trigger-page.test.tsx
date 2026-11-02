@@ -11,6 +11,7 @@ import * as definitions from '../../api/definitions';
 import * as intake from '../../api/intake';
 import { defKeys } from '../../api/queries';
 import type { DefinitionProblem, Factory, IntakeTriggerDetail, Problem } from '../../api/types';
+import { TriggerSkeleton } from '../../app/route-skeletons';
 import { TooltipProvider } from '../../ui/tooltip';
 import { TriggerPage } from './trigger-page';
 import { keyLines } from './trigger-yaml';
@@ -196,6 +197,13 @@ function renderPage() {
   return { ...view, client };
 }
 
+/** What a screen reader reads: the text without the aria-hidden copies NumberRoll draws. */
+const spokenText = (el: Element | null) => {
+  const copy = el?.cloneNode(true) as HTMLElement;
+  for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
+  return copy.textContent?.replace(/\s+/g, ' ').trim();
+};
+
 const saveButton = () => screen.getByRole('button', { name: 'Save changes' });
 
 describe('the ready page', () => {
@@ -203,7 +211,9 @@ describe('the ready page', () => {
     renderPage();
     expect(await screen.findByRole('heading', { level: 1, name: 'Flaky test on main' })).toBeTruthy();
     expect(screen.getByRole('switch', { name: 'Flaky test on main on' }).getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByText('Created 3 items this week, 2 merged, $7.80 in all')).toBeTruthy();
+    expect(spokenText(screen.getByText(/this week/).closest('p'))).toBe(
+      'Created 3 items this week, 2 merged, $7.80 in all',
+    );
 
     const when = screen.getByRole('region', { name: 'When' });
     expect(within(when).getByText('GitHub')).toBeTruthy();
@@ -248,6 +258,30 @@ describe('the ready page', () => {
     expect(within(definition).getByText('Open file')).toBeTruthy();
     expect(within(definition).getByText("Saving publishes a new version of Software's definition.")).toBeTruthy();
     expect(definition.querySelector('pre')?.textContent).toContain('- name: flaky-test-on-main');
+  });
+
+  it('shows template variables as orange tokens in the Title and the YAML, and the YAML on the panel surface', async () => {
+    renderPage();
+    await screen.findByRole('heading', { level: 1 });
+    const create = screen.getByRole('region', { name: 'Create' });
+    const token = within(create).getByText('check.name');
+    expect(token.className).toContain('text-you-ink');
+    expect(token.className).toContain('font-mono');
+    const pre = screen.getByRole('region', { name: 'In the definition' }).querySelector('pre');
+    expect(pre?.className).toContain('bg-panel');
+    expect(pre?.className).not.toContain('bg-andon');
+    expect(within(pre as HTMLElement).getByText('{{check.name}}').className).toContain('text-you-ink');
+    expect(pre?.textContent).toContain('title: "Fix flaky {{check.name}} on main"');
+  });
+
+  it('opens More filters in place', async () => {
+    renderPage();
+    await screen.findByRole('heading', { level: 1 });
+    const more = screen.getByRole('button', { name: /More filters: paths, authors, skip bots/ });
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(more);
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('textbox', { name: /Paths/ })).toBeTruthy();
   });
 
   it('disables only the controls that are not built yet, with the tooltip that says so', async () => {
@@ -585,3 +619,18 @@ describe('the try and the model check', () => {
 });
 
 const yamlCard = () => screen.getByRole('region', { name: 'In the definition' });
+
+describe('the route while it loads', () => {
+  it('shows the page skeleton, announced as loading', () => {
+    render(<TriggerSkeleton />);
+    expect(screen.getByText('Loading')).toBeTruthy();
+    expect(document.querySelector('[aria-busy="true"]')).toBeTruthy();
+  });
+
+  it('sets the skeleton as pendingComponent with pendingMs 100 and pendingMinMs 300', async () => {
+    const source = (await import('../../routes/o.$org.f.$factory.intake.$trigger.tsx?raw')).default;
+    expect(source).toMatch(/pendingComponent: TriggerSkeleton/);
+    expect(source).toMatch(/pendingMs: 100/);
+    expect(source).toMatch(/pendingMinMs: 300/);
+  });
+});

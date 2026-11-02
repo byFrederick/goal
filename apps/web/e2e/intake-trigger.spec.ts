@@ -84,6 +84,10 @@ test.describe('the trigger page', () => {
         await page.goto(url);
         await expect(page.getByRole('heading', { level: 1, name: 'Flaky test on main' })).toBeVisible();
         await fits(page);
+        // The pull request's screenshots: 1440 and 375 px, light and dark (the Playwright output directory).
+        if (width === 1440 || width === 375) {
+          await page.screenshot({ path: `test-results/intake-trigger-${width}-${scheme}.png`, fullPage: true });
+        }
       }
     });
   }

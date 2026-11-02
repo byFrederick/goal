@@ -13,6 +13,12 @@
   --color-*: initial;
   /* The text on a run or rework fill: white in both themes (MASTER.md, Colour). */
   --color-white: #ffffff;
+  /* Theme-stable: the source tiles' near-black square, and the account page's theme previews. Neither dark block redefines them. */
+  --color-mark: #171717;
+  --color-preview-light: #ffffff;
+  --color-preview-light-side: #f8f8f7;
+  --color-preview-dark: #0f0f0f;
+  --color-preview-dark-side: #141414;
   --color-transparent: transparent;
   --color-current: currentColor;
   /* The tint of the popover and dialog shadow: ink in light, black in dark (see the dark overrides). */
