@@ -103,3 +103,23 @@ test('keeps every item title inside its cell with long titles at 768 and 390', a
   );
   expect(spills).toEqual([]);
 });
+
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`keeps each assembly row's content inside its row at 390 px, ${colorScheme}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme });
+    await lengthenTitles(page, /\/v1\/orgs\/[^/]+\/factories\/[^/]+\/items(\?|$)/);
+    await page.goto(items);
+    const links = page.getByRole('table', { name: 'Items' }).getByRole('link', { name: /^Assembly,/ });
+    const count = await links.count();
+    for (let i = 0; i < count; i++) {
+      const link = links.nth(i);
+      const link$ = await link.boundingBox();
+      const row$ = await link.locator('xpath=ancestor::tr[1]').boundingBox();
+      expect(link$ && row$ && link$.y >= row$.y - 0.5 && link$.y + link$.height <= row$.y + row$.height + 0.5).toBe(
+        true,
+      );
+      expect(link$?.height ?? 0).toBeGreaterThanOrEqual(43.5);
+    }
+  });
+}
