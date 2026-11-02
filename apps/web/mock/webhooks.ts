@@ -1,7 +1,7 @@
 // A factory's webhook endpoints and their deliveries for the mock API (ADR 0026, the Webhooks screen):
 // GET and POST /v1/orgs/{org}/factories/{factory}/webhooks, POST …/webhooks/{endpoint}/rotate, GET
 // …/webhooks/{endpoint}/deliveries and …/deliveries/{delivery}. The software factory starts with the
-// picture's two endpoints: cf-deploys (two refused deliveries and one created item this week, one
+// picture's two endpoints: acme-deploys (two refused deliveries and one created item this week, one
 // accepted with no trigger matched, and the trigger "Deploy failed") and uptime (feeds nothing; three
 // deliveries kept). A created or rotated secret is answered once and kept nowhere.
 import { randomBytes } from 'node:crypto';
@@ -95,7 +95,7 @@ function seedCfDeploys(now: number, endpointId: string): MockEndpoint {
     delivery(now, `${endpointId}-d9`, 118, 'accepted', { event: 'deploy.succeeded' }),
   ];
   return {
-    endpoint: endpointOf(now, endpointId, 'cf-deploys', 'generic', ['Deploy failed'], null, deliveries),
+    endpoint: endpointOf(now, endpointId, 'acme-deploys', 'generic', ['Deploy failed'], null, deliveries),
     deliveries,
   };
 }

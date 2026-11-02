@@ -16,9 +16,9 @@ const options: readonly SegmentedOption<ThemeChoice>[] = [
 
 /** The account page's cards: the label is the picture's, and each swatch is a light and a dark half. */
 const cards: readonly { value: ThemeChoice; label: string; halves: [string, string] }[] = [
-  { value: 'system', label: 'Match device', halves: ['bg-hover', 'bg-panel'] },
-  { value: 'light', label: 'Light', halves: ['bg-hover', 'bg-white'] },
-  { value: 'dark', label: 'Dark', halves: ['bg-panel', 'bg-hover'] },
+  { value: 'system', label: 'Match device', halves: ['bg-preview-light', 'bg-preview-dark'] },
+  { value: 'light', label: 'Light', halves: ['bg-preview-light-side', 'bg-preview-light'] },
+  { value: 'dark', label: 'Dark', halves: ['bg-preview-dark-side', 'bg-preview-dark'] },
 ];
 
 export function AppearanceChoice({ layout = 'inline' }: { layout?: 'inline' | 'cards' }) {
@@ -42,7 +42,8 @@ export function AppearanceChoice({ layout = 'inline' }: { layout?: 'inline' | 'c
             >
               <span aria-hidden="true" className="flex h-12 w-full overflow-hidden rounded-chip border border-line">
                 <span className={cn('flex-1', card.halves[0])} />
-                <span className={cn('flex-1', card.halves[1])} />
+                {card.value !== 'system' && <span aria-hidden="true" className="w-px bg-line" />}
+                <span className={cn(card.value === 'system' ? 'flex-1' : 'flex-2', card.halves[1])} />
               </span>
               {card.label}
             </button>

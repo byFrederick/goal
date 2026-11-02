@@ -5,7 +5,7 @@
 // when the URL carries the event the New trigger picker chose (?on=<event key>).
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useSearch } from '@tanstack/react-router';
-import { MoreHorizontal } from 'lucide-react';
+import { Check, MoreHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { ApiError } from '../../api/client';
 import { definitionFile } from '../../api/intake';
@@ -18,6 +18,7 @@ import {
   intakeTriggerQuery,
 } from '../../api/queries';
 import type { DefinitionProblem, Factory, IntakeTriggerDetail } from '../../api/types';
+import { TriggerSkeleton } from '../../app/route-skeletons';
 import { TopBarSlot } from '../../app/top-bar';
 import type { Trigger } from '../../shared/definition/model';
 import { factoryTitle, useFactory } from '../../shared/factory';
@@ -29,7 +30,8 @@ import { EmptyState } from '../../ui/empty-state';
 import { NotAvailable } from '../../ui/not-available';
 import { Skeleton, SkeletonRows } from '../../ui/skeleton';
 import { Switch } from '../../ui/switch';
-import { RecentEvents, weekLine } from './trigger-events';
+import { HighlightedYaml } from './template-text';
+import { RecentEvents, WeekSummary } from './trigger-events';
 import { type BlockProblems, TriggerForm } from './trigger-form';
 import { saveTrigger } from './trigger-save';
 import { notStoredReason, TryWithPastEvent } from './trigger-try';
@@ -271,6 +273,9 @@ function TriggerEditor({ org, factory, text, saved, blank, board, detail }: Edit
         </Button>
       </NotAvailable>
       <Button variant="primary" disabled={!dirty || busy || blocked || hasErrors || !valid} onClick={() => void save()}>
+        {notice?.tone === 'ok' && !dirty && !busy ? (
+          <Check size={16} strokeWidth={1.5} aria-hidden="true" className="motion-safe:animate-success-check" />
+        ) : null}
         {busy ? 'Saving…' : 'Save changes'}
       </Button>
     </>
@@ -290,7 +295,7 @@ function TriggerEditor({ org, factory, text, saved, blank, board, detail }: Edit
             />
             <span>{value.enabled === false ? 'Off' : 'On'}</span>
           </div>
-          {detail ? <p className="m-0 ml-auto text-secondary text-muted">{weekLine(detail.week)}</p> : null}
+          {detail ? <WeekSummary week={detail.week} className="m-0 ml-auto text-secondary text-ink-soft" /> : null}
         </div>
         {tryReason ? <p className="m-0 -mt-2 text-meta text-muted">{tryReason}</p> : null}
 
@@ -350,8 +355,8 @@ function TriggerEditor({ org, factory, text, saved, blank, board, detail }: Edit
                 </Link>
               </div>
               {saved ? (
-                <pre className="m-0 overflow-x-auto rounded-cell bg-panel p-3 font-mono text-meta leading-relaxed text-ink-soft">
-                  {triggerYaml(saved)}
+                <pre className="m-0 overflow-x-auto rounded-cell border border-line bg-panel p-3 font-mono text-meta leading-relaxed text-ink">
+                  <HighlightedYaml text={triggerYaml(saved)} />
                 </pre>
               ) : (
                 <p className="m-0 text-secondary text-muted">Not in the definition yet. Save to add it.</p>
@@ -368,11 +373,7 @@ function TriggerEditor({ org, factory, text, saved, blank, board, detail }: Edit
 }
 
 function Loading() {
-  return (
-    <Skeleton ready={false} placeholder={<SkeletonRows rows={4} className="min-h-40" />}>
-      <span />
-    </Skeleton>
-  );
+  return <TriggerSkeleton />;
 }
 
 function Failure({ what, error, onRetry }: { what: string; error: unknown; onRetry: () => void }) {

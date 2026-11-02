@@ -157,16 +157,10 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
     return (
       <SectionCard title="Publish">
         {published !== null ? (
-          // The Publish button's label swaps for a check (MOTION.md, Approve, publish, merge succeed).
-          <>
-            <Button variant="primary" size="lg" className="w-full justify-center" aria-disabled="true">
-              <Check size={16} strokeWidth={1.5} aria-hidden="true" className="motion-safe:animate-success-check" />
-              Published
-            </Button>
-            <p role="status" className="m-0 text-body">
-              v{published} is published and running.
-            </p>
-          </>
+          <p role="status" className="m-0 flex items-center gap-2 text-body">
+            <Check size={16} strokeWidth={1.5} aria-hidden="true" className="motion-safe:animate-success-check" />v
+            {published} is published and running.
+          </p>
         ) : (
           <p className="m-0 text-body">
             {current ? `No draft. v${current.number} is running.` : 'Nothing to publish yet.'}

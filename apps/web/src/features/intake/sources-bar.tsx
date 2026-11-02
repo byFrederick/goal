@@ -16,7 +16,7 @@ function seriesOf({ sources }: Intake): Series[] {
     { label: 'GitHub', value: sources.github, tone: 'bg-run' },
     { label: 'People, with New item', value: sources.people, tone: 'bg-ok' },
     { label: 'CLI and API', value: sources.cli + sources.api, tone: 'bg-ink-soft' },
-    { label: 'Schedules', value: sources.schedule, tone: 'bg-run' },
+    { label: 'Schedules', value: sources.schedule, tone: 'bg-you' },
     { label: 'Webhooks', value: sources.webhook, tone: 'bg-muted' },
   ];
 }

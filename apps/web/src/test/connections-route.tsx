@@ -11,11 +11,23 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import { render } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { factoriesQuery, orgQuery } from '../api/queries';
 import type { Connection, ConnectionKind, Org, OrgSummary } from '../api/types';
+import { TopBarSetContext, type TopBarState } from '../app/top-bar';
 import { newConnectionSearch } from '../features/connections/search';
 import { TooltipProvider } from '../ui/tooltip';
+
+/** Stands in for the shell's top bar: draws the actions a page's TopBarSlot sets. */
+function TopBarHost({ children }: { children: ReactNode }) {
+  const [top, setTop] = useState<TopBarState | null>(null);
+  return (
+    <TopBarSetContext.Provider value={setTop}>
+      <div data-testid="top-bar">{top?.actions}</div>
+      {children}
+    </TopBarSetContext.Provider>
+  );
+}
 
 /** A query's key and the data the page reads from it, so the page's first render has it. */
 export type Seed = readonly [key: QueryKey, data: unknown];
@@ -31,6 +43,7 @@ export function renderConnectionsRoute({
   can = [],
   seed = [],
   search,
+  withTopBar = false,
   connection: openConnection,
   components,
 }: {
@@ -39,6 +52,8 @@ export function renderConnectionsRoute({
   can?: string[];
   seed?: readonly Seed[];
   search?: Record<string, string> | undefined;
+  /** Draws the page's top bar actions (its search field) beside the page, as the shell does. */
+  withTopBar?: boolean;
   /** Opens the connection page of this connection instead of the list. */
   connection?: string;
   /** The pages the routes mount: the list's and the add page's, and the connection page a create opens. */
@@ -50,7 +65,16 @@ export function renderConnectionsRoute({
   queryClient.setQueryData(factoriesQuery(org.id).queryKey, []);
   for (const [key, data] of seed) queryClient.setQueryData(key, data);
 
-  const rootRoute = createRootRoute();
+  const rootRoute = createRootRoute({
+    component: () =>
+      withTopBar ? (
+        <TopBarHost>
+          <Outlet />
+        </TopBarHost>
+      ) : (
+        <Outlet />
+      ),
+  });
   const orgRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/o/$org',

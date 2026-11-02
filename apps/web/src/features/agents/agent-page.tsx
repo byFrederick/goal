@@ -9,12 +9,14 @@ import { DraftChangesNote, SkillsCard, ToolPolicyCard, useRunningModel } from '.
 import { factoryTitle, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatDuration, formatPercent, formatUsd, humanize } from '../../shared/format';
 import { useOrg } from '../../shared/org';
+import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { Meter } from '../../ui/hatch';
 import { StatStrip } from '../../ui/stat-strip';
 import { TabNav, tabNavItem } from '../../ui/tab-nav';
+import { DraftSessionProvider } from '../factory-editor/draft/use-draft';
 import { PromptFull, PromptPreview } from './agent-prompt';
 import { AgentSettings } from './agent-settings';
 import { AskJonahButton } from './ask-jonah-button';
@@ -107,6 +109,18 @@ function BlockedCalls({ stats }: { stats: AgentStats }) {
 }
 
 export function AgentPage({ agent, view }: { agent: string; view: AgentView }) {
+  const factory = useFactory();
+  const org = useOrg();
+  // The draft session "Reset to default" writes to; a viewer sees the running version and no working control.
+  const canEdit = holds(factory, 'definition:edit');
+  return (
+    <DraftSessionProvider key={`${factory.id}:${canEdit}`} org={org.id} factory={factory.id} readOnly={!canEdit}>
+      <AgentPageBody agent={agent} view={view} />
+    </DraftSessionProvider>
+  );
+}
+
+function AgentPageBody({ agent, view }: { agent: string; view: AgentView }) {
   const factory = useFactory();
   const org = useOrg();
   const params = useFactoryParams();

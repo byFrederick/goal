@@ -30,6 +30,7 @@ import { createPortal } from 'react-dom';
 import schema from '../../../../../../contracts/definitions/factory.schema.json';
 import type { CodeEditorProps } from './code-editor';
 import './monaco-editor.css';
+import { goalTheme } from './monaco-theme';
 import YamlWorker from './yaml.worker.ts?worker';
 
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
@@ -75,43 +76,13 @@ configureMonacoYaml(yamlMonaco as never, {
 
 /** A design token's value as the page has it now: the light or the dark one, by data-theme. */
 const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
-/** Monaco's token rules take the hex digits without the '#'. */
-const hex = (name: string) => token(name).replace('#', '');
-
-/**
- * The editor's theme from the design tokens (MASTER.md), read from the page so the dark theme
- * needs no copy of the colours here. Syntax takes the status and identity tokens.
- */
-function goalTheme(): monaco.editor.IStandaloneThemeData {
-  return {
-    base: 'vs',
-    inherit: true,
-    rules: [
-      { token: 'keyword', foreground: hex('run-ink') },
-      { token: 'type', foreground: hex('run-ink') },
-      { token: 'string', foreground: hex('ok-ink') },
-      { token: 'number', foreground: hex('amber-ink') },
-      { token: 'comment', foreground: hex('muted'), fontStyle: 'italic' },
-      { token: 'variable', foreground: hex('you-ink') },
-    ],
-    colors: {
-      'editor.background': token('panel'),
-      'editor.foreground': token('ink'),
-      'editorLineNumber.foreground': token('muted'),
-      'editorLineNumber.activeForeground': token('ink'),
-      'editorCursor.foreground': token('run'),
-      'editor.selectionBackground': token('run-tint'),
-      'editor.lineHighlightBackground': token('hover'),
-      'editorIndentGuide.background1': token('line'),
-      'editorError.foreground': token('rework'),
-      'editorWarning.foreground': token('rework'),
-    },
-  };
-}
 
 /** Defines the theme again and applies it: on load, and whenever the page switches theme. */
 function applyGoalTheme() {
-  monaco.editor.defineTheme('goal', goalTheme());
+  monaco.editor.defineTheme(
+    'goal',
+    goalTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light', token),
+  );
   monaco.editor.setTheme('goal');
 }
 
