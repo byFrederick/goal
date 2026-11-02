@@ -64,7 +64,7 @@ export function DateRange({
         <button
           type="button"
           className={cn(
-            'inline-flex h-9 items-center gap-2 rounded-control bg-card px-3 text-sm text-ink transition-colors duration-200 hover:bg-shell',
+            'inline-flex h-9 items-center gap-2 rounded-control bg-card px-3 text-sm text-ink transition-colors duration-(--duration-quick) hover:bg-shell',
             className,
           )}
         >
