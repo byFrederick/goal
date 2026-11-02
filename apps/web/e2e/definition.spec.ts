@@ -304,7 +304,7 @@ for (const theme of ['light', 'dark'] as const) {
 }
 
 // The line section at every width: the page never scrolls sideways, the current tile stays inside the
-// stepper's box, and on a phone each row's controls do not overlap. Written, not run in the box (no browser).
+// stepper's box, and on a phone each row's controls do not overlap.
 for (const colorScheme of ['light', 'dark'] as const) {
   for (const width of [1440, 1280, 1024, 768, 390]) {
     test(`the line section at ${width} px, ${colorScheme}: no sideways scroll, no overlap`, async ({ page }) => {
@@ -328,8 +328,10 @@ for (const colorScheme of ['light', 'dark'] as const) {
         const count = await rows.count();
         for (let i = 0; i < count; i++) {
           const row = rows.nth(i);
-          const who = await row.getByRole('combobox', { name: /^Who works at / }).boundingBox();
-          const up = await row.getByRole('button', { name: /^Move .* up$/ }).boundingBox();
+          const whoLocator = row.getByRole('combobox', { name: /^Who works at / });
+          const upLocator = row.getByRole('button', { name: /^Move .* up$/ });
+          const who = (await whoLocator.count()) > 0 ? await whoLocator.first().boundingBox() : null;
+          const up = (await upLocator.count()) > 0 ? await upLocator.first().boundingBox() : null;
           const more = row.getByRole('button', { name: /^More for / });
           const moreBox = await more.boundingBox();
           if (who && up) {

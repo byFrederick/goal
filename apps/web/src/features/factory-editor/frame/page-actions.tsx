@@ -1,6 +1,6 @@
 // The header's actions (screens build/definition): Form | YAML, Versions, Review changes and
 // Publish. From 640 px up they sit in one wrapping row. Below it they are one row that never
-// wraps: Form | YAML, the primary action and a More menu holding Versions and Review changes.
+// wraps: Form | YAML, the primary action (Review, named Review changes) and a More menu holding Versions and Review changes.
 import { Link } from '@tanstack/react-router';
 import { Clock, Ellipsis } from 'lucide-react';
 import { useSyncExternalStore } from 'react';
@@ -103,8 +103,9 @@ function NarrowActions({
               to="/o/$org/f/$factory/definition/$section"
               params={{ ...params, section: 'review' }}
               aria-describedby={reviewDescribedBy}
+              aria-label="Review changes"
             >
-              Review changes
+              Review
             </Link>
           </Button>
         )}
