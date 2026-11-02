@@ -94,7 +94,7 @@ for (const scheme of ['light', 'dark'] as const) {
   }
 }
 
-for (const width of [375, 768, 1440]) {
+for (const width of [375, 390, 768, 1440]) {
   test(`fits ${width} px with the table in its own scroll box`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await openRuns(page);

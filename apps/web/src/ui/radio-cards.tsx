@@ -29,6 +29,8 @@ interface RadioGroupProps<T extends string> {
   className?: string;
   /** The cards' grid columns, when the default (2, then 4) does not fit the number of options. */
   gridClassName?: string;
+  /** The id of the text that describes the whole group. */
+  describedBy?: string;
 }
 
 const radio =
@@ -95,9 +97,10 @@ export function RadioList<T extends string>({
   value,
   onChange,
   className,
+  describedBy,
 }: RadioGroupProps<T>) {
   return (
-    <fieldset className={cn('m-0 min-w-0 border-0 p-0', className)}>
+    <fieldset aria-describedby={describedBy} className={cn('m-0 min-w-0 border-0 p-0', className)}>
       <legend className={showLegend ? 'mb-2 p-0 text-sm font-medium' : 'sr-only'}>{legend}</legend>
       <div className="@container flex flex-col gap-2">
         {options.map((o) => (
