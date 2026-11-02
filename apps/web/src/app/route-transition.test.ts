@@ -16,6 +16,17 @@ function rule(selector: string, from = 0): string {
 const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce) {', css.indexOf('view-fade-in')));
 
 describe('route change view transition', () => {
+  it('applies only to router transitions, so a board card move leaves the page around its cards alone', () => {
+    const start = css.indexOf('.shell-topbar {');
+    const block = css.slice(start, css.indexOf('@keyframes view-route-in'));
+    const selectors = block.match(/[^{}]*::view-transition-[^{}]*(?=\{)/g) ?? [];
+    expect(selectors.length).toBeGreaterThan(0);
+    for (const sel of selectors.join(',').split(',')) {
+      expect(sel.trim()).toMatch(/^:root:active-view-transition-type\(route\)::view-transition-/);
+    }
+    expect(reduced).toContain(':root:active-view-transition-type(route)::view-transition-new(main)');
+  });
+
   it('hides the old picture of the content and the shell', () => {
     for (const name of ['root', 'sidebar', 'topbar', 'main']) {
       expect(rule(`::view-transition-old(${name})`)).toContain('display: none');

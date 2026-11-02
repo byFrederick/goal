@@ -760,7 +760,9 @@
    their own view-transition names, so they are never cross-faded: only their new picture shows, with normal
    blending (the browser's default plus-lighter would add the old and new pictures into one). The root snapshot
    holds the rest of the page and is held still the same way. The main group does not morph its size, which
-   would stretch both pages when their heights differ. */
+   would stretch both pages when their heights differ. The rules apply only to a router transition (type
+   route, set in router-options.ts): a board card move (card-move.ts) is another view transition, and the page
+   around its cards must stay put. */
 .shell-main {
   view-transition-name: main;
 }
@@ -773,28 +775,28 @@
   view-transition-name: topbar;
 }
 
-::view-transition-group(root),
-::view-transition-group(sidebar),
-::view-transition-group(topbar),
-::view-transition-group(main) {
+:root:active-view-transition-type(route)::view-transition-group(root),
+:root:active-view-transition-type(route)::view-transition-group(sidebar),
+:root:active-view-transition-type(route)::view-transition-group(topbar),
+:root:active-view-transition-type(route)::view-transition-group(main) {
   animation: none;
 }
 
-::view-transition-old(root),
-::view-transition-old(sidebar),
-::view-transition-old(topbar),
-::view-transition-old(main) {
+:root:active-view-transition-type(route)::view-transition-old(root),
+:root:active-view-transition-type(route)::view-transition-old(sidebar),
+:root:active-view-transition-type(route)::view-transition-old(topbar),
+:root:active-view-transition-type(route)::view-transition-old(main) {
   display: none;
 }
 
-::view-transition-new(root),
-::view-transition-new(sidebar),
-::view-transition-new(topbar) {
+:root:active-view-transition-type(route)::view-transition-new(root),
+:root:active-view-transition-type(route)::view-transition-new(sidebar),
+:root:active-view-transition-type(route)::view-transition-new(topbar) {
   animation: none;
   mix-blend-mode: normal;
 }
 
-::view-transition-new(main) {
+:root:active-view-transition-type(route)::view-transition-new(main) {
   animation: view-route-in var(--duration-quick) var(--ease-out) both;
   mix-blend-mode: normal;
 }
@@ -821,7 +823,7 @@
 
 /* Reduced motion (MOTION.md, rule 9): the route change keeps its opacity fade and drops the rise. */
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-new(main) {
+  :root:active-view-transition-type(route)::view-transition-new(main) {
     animation-name: view-fade-in;
   }
 }

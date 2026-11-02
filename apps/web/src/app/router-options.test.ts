@@ -9,7 +9,7 @@ describe('the router defaults', () => {
   });
 
   it('animates route changes with the View Transitions API', () => {
-    expect(routerOptions.defaultViewTransition).toBe(true);
+    expect(routerOptions.defaultViewTransition).toEqual({ types: ['route'] });
   });
 
   it('shows the page skeleton as the pending component of every route', () => {
