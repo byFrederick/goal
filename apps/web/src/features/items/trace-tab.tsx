@@ -58,6 +58,9 @@ const legend: { label: string; tone: StepTone }[] = [
   { label: 'A person', tone: 'you' },
 ];
 
+/** The waterfall's columns: the span, the time axis and the duration. */
+const waterfallColumns = { gridTemplateColumns: 'minmax(0, 280px) minmax(0, 1fr) 72px' };
+
 const ms = (at: string) => Date.parse(at);
 
 /** The steps of each run, in the order they happened; events before any run come first, without a run row. */
@@ -131,7 +134,9 @@ function label(step: Step): ReactNode {
       return (
         <>
           <Chip tone="plain">{humanize(step.run.station)}</Chip>
-          <span className="truncate font-medium">{runRole(step.run)}</span>
+          <span title={runRole(step.run)} className="truncate font-medium">
+            {runRole(step.run)}
+          </span>
         </>
       );
     case 'tool':
@@ -139,16 +144,28 @@ function label(step: Step): ReactNode {
         <>
           <span className="shrink-0 font-mono text-secondary text-ink">{step.call.tool}</span>
           {step.call.argument ? (
-            <span className="truncate font-mono text-secondary text-muted">{step.call.argument}</span>
+            <span title={step.call.argument} className="truncate font-mono text-secondary text-muted">
+              {step.call.argument}
+            </span>
           ) : null}
         </>
       );
     case 'check': {
-      const s = checkStep(step.check);
-      return <span className="truncate">{s.segments.map((x) => x.text).join('')}</span>;
+      const text = checkStep(step.check)
+        .segments.map((x) => x.text)
+        .join('');
+      return (
+        <span title={text} className="truncate">
+          {text}
+        </span>
+      );
     }
     case 'note':
-      return <span className="truncate">{step.note.text}</span>;
+      return (
+        <span title={step.note.text} className="truncate">
+          {step.note.text}
+        </span>
+      );
   }
 }
 
@@ -226,15 +243,16 @@ function StepDetail({ step, now, className }: { step: Step; now: number; classNa
   return (
     <aside aria-labelledby={id} className={cn('min-w-0 rounded-card border border-line bg-card', className)}>
       <header className="flex min-h-11 items-center gap-2 border-b border-line px-4 py-2">
-        <h2 id={id} className={cn('m-0 min-w-0 truncate text-body font-semibold', step.kind === 'tool' && 'font-mono')}>
+        <h2
+          id={id}
+          title={title}
+          className={cn('m-0 min-w-0 truncate text-body font-semibold', step.kind === 'tool' && 'font-mono')}
+        >
           {title}
         </h2>
         {status ? (
           <span
-            className={cn(
-              'ml-auto flex items-center gap-1.5 text-secondary',
-              failed ? 'text-rework-ink' : 'text-muted',
-            )}
+            className={cn('ml-auto flex items-center gap-2 text-secondary', failed ? 'text-rework-ink' : 'text-muted')}
           >
             <Dot tone={step.tone} />
             {status}
@@ -246,7 +264,7 @@ function StepDetail({ step, now, className }: { step: Step; now: number; classNa
         {step.kind === 'note' && step.note.detail ? (
           <p className="m-0 text-secondary text-muted">“{step.note.detail}”</p>
         ) : null}
-        <dl className="m-0 grid grid-cols-[88px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-secondary">
+        <dl style={{ gridTemplateColumns: '88px minmax(0, 1fr)' }} className="m-0 grid gap-x-3 gap-y-1 text-secondary">
           {rows.map(([k, v]) => (
             <div key={k} className="contents">
               <dt className="text-muted">{k}</dt>
@@ -275,8 +293,8 @@ function Legend() {
   return (
     <ul aria-label="Legend" className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 text-meta text-muted">
       {legend.map((l) => (
-        <li key={l.label} className="inline-flex items-center gap-1.5">
-          <i aria-hidden="true" className={cn('block h-1.5 w-3.5 rounded-chip', barTone[l.tone])} />
+        <li key={l.label} className="inline-flex items-center gap-2">
+          <i aria-hidden="true" className={cn('block h-1.5 w-4 rounded-chip', barTone[l.tone])} />
           {l.label}
         </li>
       ))}
@@ -291,9 +309,10 @@ function Axis({ spanMs }: { spanMs: number }) {
   return (
     <div
       aria-hidden="true"
-      className="grid grid-cols-[minmax(0,280px)_minmax(0,1fr)_72px] items-center border-b border-line bg-panel text-meta text-muted"
+      style={waterfallColumns}
+      className="grid items-center border-b border-line bg-panel text-meta text-muted"
     >
-      <span className="px-3 py-1.5">Span</span>
+      <span className="px-3 py-2">Span</span>
       <span className="relative h-full min-h-7 overflow-hidden border-l border-line">
         {ticks.map((s) => (
           <span
@@ -455,10 +474,9 @@ function StepRow({
       className={cn(
         'w-full cursor-pointer border-0 text-left text-body transition-colors duration-(--duration-quick) hover:bg-hover',
         selected ? 'bg-run-tint' : isRun ? 'bg-panel' : 'bg-transparent',
-        phone
-          ? 'flex min-h-11 items-center gap-3 px-3 py-2'
-          : 'grid min-h-8 grid-cols-[minmax(0,280px)_minmax(0,1fr)_72px] items-center p-0',
+        phone ? 'flex min-h-11 items-center gap-3 px-3 py-2' : 'grid min-h-8 items-center p-0',
       )}
+      style={phone ? undefined : waterfallColumns}
     >
       {phone ? (
         <>

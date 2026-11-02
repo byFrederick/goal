@@ -50,6 +50,14 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
     },
   },
   {
+    name: 'Item trace',
+    open: async (page) => {
+      await page.goto('/o/acme/f/goal/items/12?tab=trace');
+      await expect(page.getByRole('tabpanel', { name: 'Trace' })).toBeVisible();
+      await expect(page.getByRole('list', { name: 'Legend' })).toBeVisible();
+    },
+  },
+  {
     name: 'New trigger',
     open: async (page) => {
       await page.goto('/o/acme/f/software/intake/new');
