@@ -179,6 +179,29 @@ describe('AgentsPage', () => {
     ).toBe('/o/acme/f/widgets/agents/coder-one');
   });
 
+  it('shows an agent once per station, with every lane it takes and no blank lane label', async () => {
+    const shared = {
+      ...line,
+      line: {
+        ...line.line,
+        stations: line.line.stations.map((station) =>
+          station.id === 'build'
+            ? { ...station, route: { alpha: 'coder-one', beta: 'coder-two', '': 'coder-one' } }
+            : station,
+        ),
+      },
+    };
+    renderPage(seeded(shared, readyStats));
+
+    const build = (await screen.findByRole('heading', { level: 2, name: /Build/ })).closest('li') as HTMLElement;
+    expect(within(build).getAllByRole('link', { name: /coder-one/ })).toHaveLength(1);
+    expect(within(build).getByText('alpha, no lane')).toBeTruthy();
+    expect(within(build).getByText('beta')).toBeTruthy();
+    expect(
+      screen.getByText("4 roles and 4 agents staff Widgets's line. Each station decides who works on an item."),
+    ).toBeTruthy();
+  });
+
   it('shows the live count at each station head and the Constraint marker only on the constraint', async () => {
     renderPage(seeded(line, readyStats));
 
