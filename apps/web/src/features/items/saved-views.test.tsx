@@ -181,6 +181,18 @@ describe('the saved views nav', () => {
     }
   });
 
+  it('has one ink underline that slides on the fast token and stands still under reduced motion', async () => {
+    renderItems();
+    await screen.findByRole('link', { name: /^Open/ });
+    const nav = screen.getByRole('navigation', { name: 'Saved views' });
+    const underline = nav.querySelector('span[aria-hidden="true"]');
+    expect(underline).toBeTruthy();
+    expect(underline?.className).toContain('bg-ink');
+    expect(underline?.className).toContain('duration-(--duration-fast)');
+    expect(underline?.className).toContain('motion-reduce:transition-none');
+    for (const link of nav.querySelectorAll('a')) expect(link.className).not.toContain('border-b');
+  });
+
   it('shows Try again when the views fail to load, and the built-in tabs still render', async () => {
     vi.mocked(listSavedViews).mockRejectedValueOnce(new Error('The server is busy'));
     renderItems();

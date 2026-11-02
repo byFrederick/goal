@@ -48,12 +48,18 @@ export function activityWords(event: ActivityEvent): { head: string; rest: strin
   }
 }
 
-/** The avatar's letters for an actor's role: "Rv" for reviewer, "Fe" for frontend-engineer, "Goal" for the engine. */
-export function avatarOf(actor: string): string {
-  const role = actorRole(actor);
-  if (!role) return 'G';
-  const words = role.split(/[-_]+/).filter(Boolean);
-  return words.length > 1
-    ? `${words[0]?.[0] ?? ''}${words[1]?.[0] ?? ''}`.toUpperCase()
-    : role.slice(0, 2).toUpperCase();
+/** The colour of an event's dot: merged is ok, sent back is rework, a run opened is run, any other kind is muted. */
+export function activityTone(kind: string): 'ok' | 'rework' | 'run' | 'muted' {
+  switch (kind) {
+    case 'merged':
+    case 'done':
+      return 'ok';
+    case 'gate_rejected':
+    case 'rejected':
+      return 'rework';
+    case 'created':
+      return 'run';
+    default:
+      return 'muted';
+  }
 }

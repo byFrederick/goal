@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronDown } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { itemsQuery, viewsQuery } from '../../api/queries';
 import type { ItemState } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
@@ -31,7 +31,7 @@ import {
   stateChoices,
 } from './items-filters';
 import { SaveViewDialog } from './save-view-dialog';
-import { SavedViewLinks, tabLink } from './saved-views';
+import { SavedViewLinks, tabLink, tabUnderline, useTabUnderline } from './saved-views';
 
 /** The value a filter menu shows for "any": no filter in the URL. */
 const any = '*';
@@ -119,6 +119,9 @@ export function ItemsPage() {
   const actions = useMemo(() => <ItemsActions />, []);
   const savedViews = useQuery(viewsQuery(org.id, factory.id));
   const [saving, setSaving] = useState(false);
+  const tabsNav = useRef<HTMLElement>(null);
+  const tabsUnderline = useRef<HTMLSpanElement>(null);
+  useTabUnderline(tabsNav, tabsUnderline);
 
   const canOperate = holds(factory, 'item:operate');
   const decides = holds(factory, 'item:decide');
@@ -245,8 +248,10 @@ export function ItemsPage() {
       <nav
         aria-label="Saved views"
         aria-busy={savedViews.isPending || undefined}
-        className="-mx-4 flex gap-1 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0"
+        ref={tabsNav}
+        className="relative -mx-4 flex gap-1 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0"
       >
+        <span ref={tabsUnderline} aria-hidden="true" className={tabUnderline} />
         {/* A tab is active by its whole search, and inactive tabs take their aria-current from the view. */}
         {views.map((v) => (
           <Link
@@ -256,11 +261,7 @@ export function ItemsPage() {
             search={v.search}
             activeOptions={{ exact: true, includeSearch: true }}
             inactiveProps={{ 'aria-current': v.current ? 'page' : 'false' }}
-            className={cn(
-              tabLink,
-              '-mb-px',
-              v.current ? 'border-ink font-semibold text-ink' : 'border-transparent text-ink-soft hover:text-ink',
-            )}
+            className={cn(tabLink, v.current ? 'font-semibold text-ink' : 'text-ink-soft hover:text-ink')}
           >
             {v.label}
             <span className="text-meta text-muted tabular-nums">{v.count}</span>
@@ -276,11 +277,7 @@ export function ItemsPage() {
           onRetry={() => void savedViews.refetch()}
         />
         {savedViews.isPending ? <span className="sr-only">Loading</span> : null}
-        <button
-          type="button"
-          className={cn(tabLink, 'border-transparent text-run-ink')}
-          onClick={() => setSaving(true)}
-        >
+        <button type="button" className={cn(tabLink, 'text-run-ink')} onClick={() => setSaving(true)}>
           + Save view
         </button>
       </nav>
@@ -324,7 +321,7 @@ export function ItemsPage() {
           type="button"
           aria-pressed={!flat}
           onClick={() => setSearch({ show: flat ? undefined : 'flat' })}
-          className="ml-auto rounded-chip text-secondary text-muted hover:text-ink"
+          className="ml-auto rounded-chip text-secondary text-muted transition-colors duration-(--duration-quick) hover:text-ink motion-reduce:transition-none"
         >
           Grouped by assembly
         </button>

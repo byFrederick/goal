@@ -1,8 +1,9 @@
 // "Needs you first" on Home (ADR 0016, wave 2): what waits on a person across the organization, from
 // GET /inbox, at most five rows. An alert (a stopped line, a rework warning, a blocked item) opens its
 // factory's floor. An approval is decided here: Approve runs the item's approve decision, and Deny opens
-// the item, where a send-back takes its reason. Kinds this page does not know get a Review link. There
-// are no Question rows: questions are not built yet.
+// the item, where a send-back takes its reason. A tool approval is decided here with Deny and Approve, as on
+// the Needs you page. A question opens the Needs you page to be answered. Kinds this page does not know get a
+// Review link.
 import { Link } from '@tanstack/react-router';
 import { useId } from 'react';
 import type { Factory, Inbox, InboxEntry, ItemCard, OrgSummary } from '../../api/types';
@@ -12,6 +13,9 @@ import { type DecidableItem, useDecision } from '../../shared/item-actions';
 import { holds, reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
+import { NumberRoll } from '../../ui/number-roll';
+import { useEntryDecision } from '../needs-you/actions';
+import { typeLabel, typeOf } from '../needs-you/types';
 
 /** At most this many rows on Home; the rest wait behind "Open all". */
 const shown = 5;
@@ -40,13 +44,13 @@ export function NeedsYouFirst({
         <h2 id="needs-you-first" className="m-0 text-heading">
           Needs you first
         </h2>
-        <span className="rounded-chip bg-you-tint px-2 text-meta text-you-ink tabular-nums">
-          {inbox.entries.length}
+        <span className="flex size-6 items-center justify-center rounded-full bg-you text-meta font-semibold text-white tabular-nums">
+          <NumberRoll value={inbox.entries.length} />
         </span>
         <Link
           to="/o/$org/needs-you"
           params={{ org: org.slug }}
-          className="ml-auto text-secondary font-control text-run-ink underline"
+          className="ml-auto text-secondary font-control text-run-ink no-underline hover:underline"
         >
           Open all
         </Link>
@@ -93,7 +97,7 @@ function AskRow({
   const item = entry.item;
 
   return (
-    <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-t border-line py-3 @[480px]:grid-cols-[auto_minmax(0,1fr)_auto]">
+    <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center motion-safe:animate-item-in gap-x-3 gap-y-2 border-t border-line py-3 @[480px]:grid-cols-[auto_minmax(0,1fr)_auto]">
       <span
         aria-hidden="true"
         className="flex size-6 items-center justify-center rounded-control bg-run text-meta font-semibold text-white"
@@ -107,6 +111,14 @@ function AskRow({
       <div className="col-span-2 flex flex-wrap gap-2 @[480px]:col-span-1 @[480px]:justify-end">
         {entry.kind === 'decision' && item ? (
           <Decision org={org} factory={entry.factory} item={item} canDecide={canDecide} />
+        ) : entry.kind === 'tool_approval' && item ? (
+          <ToolApproval entry={{ ...entry, item }} canDecide={canDecide} />
+        ) : entry.kind === 'question' ? (
+          <Button asChild size="sm">
+            <Link to="/o/$org/needs-you" params={{ org: org.slug }}>
+              Reply
+            </Link>
+          </Button>
         ) : (
           <Button asChild size="sm">
             <Link {...floor}>{kind.action}</Link>
@@ -163,6 +175,43 @@ function Decision({
   );
 }
 
+/** A tool call's approval, decided in place: Deny without a note, Approve for this call only. */
+function ToolApproval({ entry, canDecide }: { entry: InboxEntry & { item: ItemCard }; canDecide: boolean }) {
+  const decide = useEntryDecision();
+  const pending = decide.isPending;
+  const reasonId = useId();
+  const reason = reasons.decide(entry.factory.name);
+
+  return (
+    <>
+      <Button
+        size="sm"
+        disabled={!canDecide || pending}
+        aria-describedby={canDecide ? undefined : reasonId}
+        onClick={() => decide.mutate({ entry, decision: { kind: 'tool_deny', reason: '' } })}
+      >
+        Deny
+      </Button>
+      <Button
+        variant="primary"
+        size="sm"
+        className="border-you bg-you hover:bg-you/90"
+        disabled={!canDecide || pending}
+        aria-describedby={canDecide ? undefined : reasonId}
+        title={canDecide ? undefined : reason}
+        onClick={() => decide.mutate({ entry, decision: { kind: 'tool_approve', always_allow: false } })}
+      >
+        {pending ? 'Approving…' : 'Approve'}
+      </Button>
+      {canDecide ? null : (
+        <span id={reasonId} className="sr-only">
+          {reason}
+        </span>
+      )}
+    </>
+  );
+}
+
 /** The item as the decision hook takes it: the ref is the key the API accepts here. */
 function decidable(item: ItemCard): DecidableItem {
   return { key: item.ref, ref: item.ref, title: item.title, state: item.state, pull_requests: item.pull_requests };
@@ -171,18 +220,16 @@ function decidable(item: ItemCard): DecidableItem {
 /** The type, its colour, the title and the action for each row. Unknown kinds say what they are. */
 function describeEntry(entry: InboxEntry): { label: string; tone: string; title: string; action: string } {
   const item = entry.item;
+  const type = typeOf(entry);
+  const label = typeLabel[type];
+  const tone = type === 'alert' ? 'text-rework-ink' : type === 'generic' ? 'text-muted' : 'text-you-ink';
   switch (entry.kind) {
     case 'andon':
-      return {
-        label: 'Alert',
-        tone: 'text-rework-ink',
-        title: `Line stopped: ${entry.andon?.reason ?? 'no reason given'}`,
-        action: 'Open floor',
-      };
+      return { label, tone, title: `Line stopped: ${entry.andon?.reason ?? 'no reason given'}`, action: 'Open floor' };
     case 'rework_warning':
       return {
-        label: 'Alert',
-        tone: 'text-rework-ink',
+        label,
+        tone,
         title: entry.rework
           ? `${humanize(entry.rework.station ?? entry.station ?? 'review')} sent back ${entry.rework.rejected} of the last ${entry.rework.verdicts}`
           : 'Rework is climbing',
@@ -190,23 +237,23 @@ function describeEntry(entry: InboxEntry): { label: string; tone: string; title:
       };
     case 'blocked':
       return {
-        label: 'Alert',
-        tone: 'text-rework-ink',
+        label,
+        tone,
         title: item ? `${item.title}: ${entry.blocked?.reason ?? 'blocked'}` : 'An item is blocked',
         action: 'Open floor',
       };
     case 'decision':
       return {
-        label: 'Approval',
-        tone: 'text-you-ink',
+        label,
+        tone,
         title: item?.title ?? entry.approval?.summary ?? 'Waiting for a decision',
         action: 'Review',
       };
     default:
       return {
-        label: humanize(entry.kind),
-        tone: 'text-muted',
-        title: item?.title ?? humanize(entry.kind),
+        label: type === 'generic' ? humanize(entry.kind) : label,
+        tone,
+        title: item?.title ?? entry.approval?.summary ?? humanize(entry.kind),
         action: 'Review',
       };
   }

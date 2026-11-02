@@ -5,7 +5,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Ellipsis } from 'lucide-react';
-import { useState } from 'react';
+import { type RefObject, useLayoutEffect, useRef, useState } from 'react';
 import { deleteSavedView } from '../../api/client';
 import { keys } from '../../api/queries';
 import type { Factory, OrgSummary, SavedView, SavedViewFilters } from '../../api/types';
@@ -21,7 +21,44 @@ import { failureOf, SaveViewDialog } from './save-view-dialog';
 
 /** A tab of the nav: 44 px on a phone. Shared with the page's built-in tabs. */
 export const tabLink =
-  'inline-flex min-h-11 flex-none items-center gap-2 whitespace-nowrap border-b-2 px-3 text-body no-underline transition-colors md:min-h-9';
+  'inline-flex min-h-11 flex-none items-center gap-2 whitespace-nowrap px-3 text-body no-underline transition-colors duration-(--duration-quick) motion-reduce:transition-none md:min-h-9';
+
+/** Classes of the nav's sliding underline: one ink bar that follows the current tab (MOTION.md, Tabs). */
+export const tabUnderline =
+  'pointer-events-none absolute bottom-0 left-0 h-0.5 bg-ink transition-[transform,width] duration-(--duration-fast) ease-out motion-reduce:transition-none';
+
+/**
+ * Places the underline under the nav's `aria-current="page"` link. It is placed at once on the first paint
+ * and on a resize, and slides when the current tab changes. Hidden when no tab is current.
+ */
+export function useTabUnderline(nav: RefObject<HTMLElement | null>, underline: RefObject<HTMLElement | null>) {
+  const placed = useRef(false);
+  // Runs after every render: saved views load after the page, and move the current tab.
+  useLayoutEffect(() => {
+    const place = (animate: boolean) => {
+      const el = underline.current;
+      if (!el) return;
+      const chosen = nav.current?.querySelector<HTMLElement>('[aria-current="page"]');
+      if (!chosen) {
+        el.style.opacity = '0';
+        return;
+      }
+      el.style.opacity = '1';
+      if (!animate) el.style.transition = 'none';
+      el.style.width = `${chosen.offsetWidth}px`;
+      el.style.transform = `translateX(${chosen.offsetLeft}px)`;
+      if (!animate) {
+        void el.offsetWidth;
+        el.style.transition = '';
+      }
+    };
+    place(placed.current);
+    placed.current = true;
+    const onResize = () => place(false);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  });
+}
 
 interface RowProps {
   org: OrgSummary;
@@ -47,11 +84,7 @@ function SavedViewRow({ org, factory, view, current }: RowProps) {
         search={searchOf(view.filters)}
         activeProps={{ 'aria-current': aria }}
         inactiveProps={{ 'aria-current': aria }}
-        className={cn(
-          tabLink,
-          '-mb-px',
-          current ? 'border-ink font-semibold text-ink' : 'border-transparent text-ink-soft hover:text-ink',
-        )}
+        className={cn(tabLink, current ? 'font-semibold text-ink' : 'text-ink-soft hover:text-ink')}
       >
         {view.name}
       </Link>
