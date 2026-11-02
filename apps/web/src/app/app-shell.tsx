@@ -54,7 +54,8 @@ export function ShellFrame({ tabs = true, children }: FrameProps) {
 
   return (
     <TopBarSetContext.Provider value={setTopBar}>
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* overflow-x: clip, not hidden, so the sticky bars keep working: a button's coarse-pointer hit area at the edge never widens the page. */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
         {phone ? (
           <PhoneTopBar
             title={topBar?.crumb ?? pageTitle}
