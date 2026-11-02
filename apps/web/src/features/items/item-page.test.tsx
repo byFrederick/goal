@@ -584,3 +584,90 @@ describe('the question, the tabs and the spec', () => {
     expect(screen.getByText('It reads in dark mode')).toBeTruthy();
   });
 });
+
+describe('Watch live', () => {
+  function stubWidth(phone: boolean) {
+    window.matchMedia = (query: string) =>
+      ({
+        matches: phone && query === '(max-width: 767px)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList;
+  }
+
+  afterEach(() => {
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  const running = (): Item => {
+    const base = item();
+    return item({
+      state: 'in_progress',
+      flow: {
+        ...(base.flow as NonNullable<Item['flow']>),
+        current_run: {
+          id: 'run-1',
+          agent: 'builder',
+          slot: 1,
+          model: 'claude-sonnet-5-5',
+          turn: 2,
+          started_at: '2026-10-25T10:00:00Z',
+          output_contract: null,
+          checks: [],
+        },
+      },
+    });
+  };
+
+  it('opens the Trace tab on a running run and scrolls to its newest step', async () => {
+    stubWidth(false);
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    renderPage(running());
+
+    const bar = await screen.findByLabelText('Top bar');
+    const watch = within(bar).getByRole('button', { name: 'Watch live' });
+    expect(watch.getAttribute('aria-disabled')).toBeNull();
+    fireEvent.click(watch);
+
+    expect(await screen.findByRole('tabpanel', { name: 'Trace' })).toBeTruthy();
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+  });
+
+  it('is disabled with its reason when no run is working, and does not open the Trace tab', async () => {
+    stubWidth(false);
+    renderPage(item({ state: 'in_progress' }));
+
+    const bar = await screen.findByLabelText('Top bar');
+    const watch = within(bar).getByRole('button', { name: 'Watch live' });
+    expect(watch.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(watch);
+    fireEvent.keyDown(watch, { key: 'Enter' });
+    fireEvent.keyDown(watch, { key: ' ' });
+    expect(screen.queryByRole('tabpanel', { name: 'Trace' })).toBeNull();
+    watch.focus();
+    expect((await screen.findAllByText('No run is working on this item')).length).toBeGreaterThan(0);
+  });
+
+  it('is disabled when the item is not in progress, even with a run recorded', async () => {
+    stubWidth(false);
+    renderPage({ ...running(), state: 'waiting_human' });
+
+    const bar = await screen.findByLabelText('Top bar');
+    expect(within(bar).getByRole('button', { name: 'Watch live' }).getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('sits centred in its own card on a phone with a 44 px tap target', async () => {
+    stubWidth(true);
+    renderPage(running());
+
+    const watch = await screen.findByRole('button', { name: 'Watch live' });
+    expect(watch.className).toContain('max-md:min-h-11');
+    expect(watch.parentElement?.className).toContain('justify-center');
+    expect(within(screen.getByLabelText('Top bar')).queryByRole('button', { name: 'Watch live' })).toBeNull();
+  });
+});

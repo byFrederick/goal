@@ -40,3 +40,18 @@ test('an item with no runs shows the empty state', async ({ page }) => {
 
   await expect(page.getByText('No tool calls yet.')).toBeVisible();
 });
+
+test('Watch live opens the Trace tab and keeps a new step in view', async ({ page, request }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/o/acme/f/goal/items/9');
+  await page.getByRole('button', { name: 'Watch live' }).click();
+
+  await expect(page).toHaveURL(/tab=trace/);
+  const panel = page.getByRole('tabpanel', { name: 'Trace' });
+  await expect(panel.getByRole('list', { name: 'Legend' })).toBeVisible();
+
+  await request.post('/__mock/step', { data: { number: 9, tool: 'Grep', input: 'watch-live-marker' } });
+  const added = panel.getByRole('button', { name: /Grep\s*watch-live-marker/ });
+  await expect(added).toBeVisible();
+  await expect(added).toBeInViewport();
+});

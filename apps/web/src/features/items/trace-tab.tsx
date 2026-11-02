@@ -3,7 +3,7 @@
 // row shows its detail in the side panel. On a phone the axis drops and each run is a list, the detail under
 // the row. The data is the item's events and runs (`buildTrace`); new steps arrive when the item stream
 // invalidates the item's queries, so nothing here polls.
-import { type ReactNode, useId, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ItemState } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
 import { formatClock, formatDuration, formatUsd, humanize, plural } from '../../shared/format';
@@ -329,17 +329,81 @@ function Axis({ spanMs }: { spanMs: number }) {
   );
 }
 
+/** The keys of steps first seen while following; the first render and steps seen before never rise. */
+function useRiseKeys(steps: Step[], following: boolean): Set<string> {
+  const seen = useRef<Set<string> | null>(null);
+  const [rise, setRise] = useState<Set<string>>(() => new Set());
+  useLayoutEffect(() => {
+    const known = seen.current;
+    seen.current = new Set(steps.map((s) => s.key));
+    if (!known || !following) return;
+    const fresh = steps.filter((s) => !known.has(s.key)).map((s) => s.key);
+    if (fresh.length > 0) setRise((was) => new Set([...was, ...fresh]));
+  }, [steps, following]);
+  return rise;
+}
+
+/**
+ * While following, keeps the end of the trace in view and stops when the person scrolls up. Any scroll
+ * container counts: scroll events do not bubble, so the capture phase on the document hears them all.
+ * Our own scrolls only go down, so a decrease in scrollTop is the person.
+ */
+function useFollowScroll(
+  end: { current: HTMLElement | null },
+  following: boolean,
+  trigger: string,
+  watchSeq: number,
+  onStop: (() => void) | undefined,
+) {
+  const lastSeq = useRef(watchSeq);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `trigger` re-runs the scroll when a step arrives
+  useEffect(() => {
+    if (!following) return;
+    const pressed = lastSeq.current !== watchSeq;
+    lastSeq.current = watchSeq;
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    // A press jumps; steps that arrive afterwards glide, unless motion is reduced.
+    end.current?.scrollIntoView({ block: 'end', behavior: pressed || reduced ? 'auto' : 'smooth' });
+  }, [following, trigger, watchSeq, end]);
+  const stop = useRef(onStop);
+  stop.current = onStop;
+  useEffect(() => {
+    if (!following) return;
+    const tops = new WeakMap<object, number>();
+    const onScroll = (event: Event) => {
+      const target = event.target;
+      const el = target instanceof Document ? (target.scrollingElement ?? target.documentElement) : target;
+      if (!(el instanceof Element)) return;
+      const top = el.scrollTop;
+      const before = tops.get(el);
+      tops.set(el, top);
+      if (before !== undefined && top < before - 1) stop.current?.();
+    };
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    return () => document.removeEventListener('scroll', onScroll, { capture: true });
+  }, [following]);
+}
+
 /** The trace of an item: its runs and their steps, and the live line of the run that is working. */
 export function TraceTab({
   trace,
   itemState,
   status = 'ready',
   now = Date.now(),
+  following = false,
+  watchSeq = 0,
+  onStopFollowing,
 }: {
   trace: Trace;
   itemState: ItemState;
   status?: TimelineStatus;
   now?: number;
+  /** Watch live is on: new steps are kept in view and rise in. */
+  following?: boolean;
+  /** Counts presses of Watch live; each one scrolls to the newest step again. */
+  watchSeq?: number;
+  /** Called when the person scrolls up. */
+  onStopFollowing?: () => void;
 }) {
   const phone = usePhone();
   const groups = useMemo(() => groupsOf(trace.entries), [trace.entries]);
@@ -357,6 +421,11 @@ export function TraceTab({
   const current = steps.find((s) => s.key === selected) ?? steps.at(-1);
   // A phone's row closes when tapped again; a wide screen always has a step selected.
   const pick = (key: string) => setSelected((was) => (phone && was === key ? undefined : key));
+
+  const end = useRef<HTMLDivElement>(null);
+  const newestKey = steps.at(-1)?.key;
+  const rise = useRiseKeys(steps, following);
+  useFollowScroll(end, following, `${watchSeq}:${newestKey ?? ''}`, watchSeq, onStopFollowing);
 
   const placeholder = <SkeletonRows rows={6} />;
   const ready = status !== 'loading';
@@ -417,11 +486,14 @@ export function TraceTab({
                           onSelect={pick}
                           last={g.run === lastRun}
                           itemState={itemState}
+                          rising={rise.has(s.key)}
                         />
                       ))}
                     </ol>
                   </section>
                 ))}
+                {/* Where following scrolls to: just past the newest step. */}
+                <div ref={end} aria-hidden="true" className="h-px" />
               </div>
               {phone || !current ? null : (
                 <StepDetail step={current} now={now} className="@[900px]:sticky @[900px]:top-4" />
@@ -446,6 +518,7 @@ function StepRow({
   onSelect,
   last,
   itemState,
+  rising,
 }: {
   step: Step;
   phone: boolean;
@@ -459,6 +532,8 @@ function StepRow({
   onSelect: (key: string) => void;
   last: boolean;
   itemState: ItemState;
+  /** The step arrived while following: it rises in (MOTION.md, a new item in a list). */
+  rising: boolean;
 }) {
   const isRun = step.kind === 'run';
   const took = tookOf(step, now);
@@ -509,7 +584,12 @@ function StepRow({
     </button>
   );
   return (
-    <li className="border-t border-line first:border-t-0">
+    <li
+      className={cn(
+        'border-t border-line first:border-t-0',
+        rising && 'motion-safe:animate-row-in motion-reduce:animate-fade-in',
+      )}
+    >
       {button}
       {phone && open ? <StepDetail step={step} now={now} className="m-2" /> : null}
     </li>

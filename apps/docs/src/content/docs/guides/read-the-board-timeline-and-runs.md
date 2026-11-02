@@ -43,6 +43,7 @@ The page has five tabs. Move between them with the arrow keys; Home and End jump
 The timeline and the note field are the main column on the left. To the right of them, the details column shows the item's details, its cost, the items it overlaps with, and the rules its runs received.
 
 - **Trace** shows every run of the item, oldest first, on one time axis. Each run lists its tool calls, checks, notes and human touches as rows. Select a row to see its detail beside the list. On a phone, each run is a list and the detail opens under the row. Open it from **Full trace** on the Latest steps card. It shows "No tool calls yet." before any run, and new steps appear as agents work.
+- **Watch live** (the button in the item's header) opens the Trace tab at the newest step of the run that is working, and keeps new tool calls, results and agent messages in view as they arrive. Scroll up to stop following; select **Watch live** again to jump back to the newest step and follow again. The button is disabled, with the tip "No run is working on this item", when no run is working or the item is not in progress.
 
 The Teardown control on the item page is not available yet; the page shows it disabled.
 
