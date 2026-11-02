@@ -21,7 +21,7 @@ import { failureOf, SaveViewDialog } from './save-view-dialog';
 
 /** A tab of the nav: 44 px on a phone. Shared with the page's built-in tabs. */
 export const tabLink =
-  'inline-flex min-h-11 items-center gap-2 border-b-2 px-3 text-body no-underline transition-colors md:min-h-9';
+  'inline-flex min-h-11 flex-none items-center gap-2 whitespace-nowrap border-b-2 px-3 text-body no-underline transition-colors md:min-h-9';
 
 interface RowProps {
   org: OrgSummary;
@@ -40,7 +40,7 @@ function SavedViewRow({ org, factory, view, current }: RowProps) {
   const aria = current ? 'page' : 'false';
 
   return (
-    <div className="flex items-center">
+    <div className="flex flex-none items-center">
       <Link
         to="/o/$org/f/$factory/items"
         params={params}
@@ -50,7 +50,7 @@ function SavedViewRow({ org, factory, view, current }: RowProps) {
         className={cn(
           tabLink,
           '-mb-px',
-          current ? 'border-run font-semibold text-ink' : 'border-transparent text-ink-soft hover:text-ink',
+          current ? 'border-ink font-semibold text-ink' : 'border-transparent text-ink-soft hover:text-ink',
         )}
       >
         {view.name}

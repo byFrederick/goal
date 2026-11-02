@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronDown } from 'lucide-react';
-import { useId, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { itemsQuery, viewsQuery } from '../../api/queries';
 import type { ItemState } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
@@ -16,8 +16,7 @@ import { Menu, MenuChoice, MenuContent, MenuRadioGroup, MenuTrigger } from '../.
 import { NotAvailable } from '../../ui/not-available';
 import { descriptionClass } from '../../ui/page-header';
 import { Skeleton } from '../../ui/skeleton';
-import { Switch } from '../../ui/switch';
-import { AssemblyTableRow, ItemTableRow, listRows } from './assembly-rows';
+import { AssemblyTableRow, hideBelowLg, hideBelowXl, ItemTableRow, listRows } from './assembly-rows';
 import { BulkActions } from './bulk-actions';
 import {
   applyFilters,
@@ -113,7 +112,6 @@ export function ItemsPage() {
   const { state, show, view, type, lane, assembly, sel } = useSearch({ from: '/o/$org/f/$factory/items/' });
   const org = useOrg();
   const navigate = useNavigate({ from: '/o/$org/f/$factory/items/' });
-  const groupedId = useId();
   // The Done this week view lists the done items; its seven-day window is applied in the browser.
   const listState = view === 'done-week' ? 'done' : state;
   const everything = useQuery(itemsQuery(org.id, factory.id, { limit: 200 }));
@@ -261,7 +259,7 @@ export function ItemsPage() {
             className={cn(
               tabLink,
               '-mb-px',
-              v.current ? 'border-run font-semibold text-ink' : 'border-transparent text-ink-soft hover:text-ink',
+              v.current ? 'border-ink font-semibold text-ink' : 'border-transparent text-ink-soft hover:text-ink',
             )}
           >
             {v.label}
@@ -322,14 +320,14 @@ export function ItemsPage() {
             <ChevronDown size={12} strokeWidth={1.75} aria-hidden="true" />
           </button>
         </NotAvailable>
-        <div className="ml-auto flex items-center gap-2 text-secondary text-muted">
-          <span id={groupedId}>Grouped by assembly</span>
-          <Switch
-            checked={!flat}
-            aria-labelledby={groupedId}
-            onCheckedChange={(on) => setSearch({ show: on ? undefined : 'flat' })}
-          />
-        </div>
+        <button
+          type="button"
+          aria-pressed={!flat}
+          onClick={() => setSearch({ show: flat ? undefined : 'flat' })}
+          className="ml-auto rounded-chip text-secondary text-muted hover:text-ink"
+        >
+          Grouped by assembly
+        </button>
       </fieldset>
 
       {saving ? (
@@ -355,7 +353,7 @@ export function ItemsPage() {
       ) : (
         <>
           <div className="overflow-x-auto rounded-card border border-line bg-card">
-            <table aria-label="Items" className="w-full min-w-max border-collapse text-body">
+            <table aria-label="Items" className="w-full min-w-[1060px] border-collapse text-body">
               <thead className="bg-panel text-secondary font-medium text-muted">
                 <tr>
                   <th scope="col" className="w-px px-3 py-2 text-left">
@@ -368,6 +366,8 @@ export function ItemsPage() {
                       className={cn(
                         'px-3 py-2 text-left font-medium whitespace-nowrap',
                         column === 'Cost' && 'text-right',
+                        (column === 'Agent' || column === 'Age') && hideBelowXl,
+                        (column === 'Lane' || column === 'Cost') && hideBelowLg,
                       )}
                     >
                       {column}
@@ -422,6 +422,7 @@ function ItemsPlaceholder() {
   return (
     <div className="flex flex-col gap-5">
       <span className="block h-10 w-40 rounded-control bg-hover" />
+      <span className="block h-11 w-full max-w-lg rounded-control bg-hover md:h-9" />
       <span className="block h-8 w-full max-w-md rounded-control bg-hover" />
       <div className="flex flex-col gap-2">
         {Array.from({ length: 8 }, (_, i) => (

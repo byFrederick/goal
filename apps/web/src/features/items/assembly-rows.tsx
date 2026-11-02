@@ -96,6 +96,18 @@ export function SelectBox({
 /** The table cell's padding, shared by every row. */
 const cell = 'px-3 py-2 align-middle';
 
+/** Columns that give way below 1280 px, lowest priority first: Agent and Age below xl, Lane and Cost below lg. */
+export const hideBelowXl = 'hidden xl:table-cell';
+export const hideBelowLg = 'hidden lg:table-cell';
+
+/** The ref as the design shows it: the number after the factory prefix ('software#390' is '#390'). */
+export function shortRef(ref: string): string {
+  const at = ref.lastIndexOf('#');
+  return at >= 0 ? ref.slice(at) : ref;
+}
+
+const refClass = 'font-mono text-[12.5px] text-ink-soft tabular-nums';
+
 /** An agent's initials on a small round square: the role's first letters, two at most. */
 function monogram(agent: string): string {
   return agent
@@ -134,8 +146,12 @@ export function ItemTableRow({
       <td className={cn(cell, 'w-px')}>
         <SelectBox label={`Select ${item.ref}`} checked={selected} onChange={() => onSelect(item.id)} />
       </td>
-      <td className={cn(cell, 'whitespace-nowrap text-muted tabular-nums')}>{item.ref}</td>
-      <td className={cn(cell, indent && 'pl-8')}>
+      <td className={cn(cell, 'whitespace-nowrap')}>
+        <span className={refClass} title={item.ref}>
+          {shortRef(item.ref)}
+        </span>
+      </td>
+      <td className={cn(cell, 'max-w-[26rem] truncate', indent && 'pl-8')} title={item.title}>
         <Link
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
@@ -144,8 +160,8 @@ export function ItemTableRow({
           {item.title}
         </Link>
       </td>
-      <td className={cell}>{item.type ? <Chip tone="plain">{humanize(item.type)}</Chip> : null}</td>
-      <td className={cell}>
+      <td className={cell}>{item.type ? <Chip tone="plain">{item.type}</Chip> : null}</td>
+      <td className={cn(cell, hideBelowLg)}>
         {item.lane ? <Chip tone="plain">{item.lane}</Chip> : <span className="text-muted">Not set</span>}
       </td>
       <td className={cn(cell, 'whitespace-nowrap')}>{humanize(item.station)}</td>
@@ -161,7 +177,7 @@ export function ItemTableRow({
           {item.class_of_service === 'expedite' ? <Chip tone="expedite">Expedite</Chip> : null}
         </span>
       </td>
-      <td className={cn(cell, 'whitespace-nowrap')}>
+      <td className={cn(cell, 'whitespace-nowrap', hideBelowXl)}>
         {item.agent ? (
           <span className="inline-flex items-center gap-2 text-secondary text-ink-soft">
             <span
@@ -176,10 +192,12 @@ export function ItemTableRow({
           <span className="text-muted">None yet</span>
         )}
       </td>
-      <td className={cn(cell, 'whitespace-nowrap text-right text-muted tabular-nums')}>
+      <td className={cn(cell, 'whitespace-nowrap text-right text-muted tabular-nums', hideBelowXl)}>
         {formatAge(item.age_seconds)}
       </td>
-      <td className={cn(cell, 'whitespace-nowrap text-right font-medium tabular-nums')}>{formatUsd(item.cost_usd)}</td>
+      <td className={cn(cell, 'whitespace-nowrap text-right font-medium tabular-nums', hideBelowLg)}>
+        {formatUsd(item.cost_usd)}
+      </td>
     </tr>
   );
 }
@@ -208,7 +226,6 @@ export function AssemblyTableRow({
   const ref = card?.ref ?? partOf?.ref ?? '';
   const title = card?.title ?? partOf?.title ?? '';
   const summary = card?.parts ?? null;
-  const percent = summary && summary.total > 0 ? Math.round((summary.merged / summary.total) * 100) : 0;
   const count = summary
     ? `${summary.merged} of ${summary.total} parts merged`
     : `${partOf?.parts ?? parts.length} parts`;
@@ -243,10 +260,12 @@ export function AssemblyTableRow({
                 className={cn('transition-transform duration-200', !open && '-rotate-90')}
               />
             </button>
-            <span className="text-muted tabular-nums">{ref}</span>
+            <span className={refClass} title={ref}>
+              {shortRef(ref)}
+            </span>
           </span>
         </td>
-        <td colSpan={6} className={cell}>
+        <td colSpan={6} className={cn(cell, 'max-w-0')}>
           <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
             <Link
               to="/o/$org/f/$factory/items/$ref"
@@ -264,22 +283,28 @@ export function AssemblyTableRow({
             </span>
             <span className="inline-flex items-center gap-2 text-secondary text-ink-soft">
               {summary ? (
-                <span
-                  aria-hidden="true"
-                  className="relative h-1.5 w-20 flex-none overflow-hidden rounded-full bg-hover"
-                >
-                  <span
-                    className={cn('absolute inset-y-0 left-0 rounded-full', percent === 100 ? 'bg-ok' : 'bg-run')}
-                    style={{ width: `${percent}%` }}
-                  />
+                <span aria-hidden="true" className="inline-flex gap-0.5" data-testid="assembly-meter">
+                  {Array.from({ length: summary.total }, (_, i) => (
+                    <span
+                      // biome-ignore lint/suspicious/noArrayIndexKey: segments are fixed in number and never reorder
+                      key={i}
+                      data-done={i < summary.merged}
+                      className={cn(
+                        'h-1 w-3.5 flex-none rounded-[1px] transition-colors duration-(--duration-quick) ease-out motion-reduce:transition-none',
+                        i < summary.merged ? 'bg-ink' : 'bg-rule',
+                      )}
+                    />
+                  ))}
                 </span>
               ) : null}
               <span>{count}</span>
             </span>
           </div>
         </td>
-        <td className={cn(cell, 'text-right text-muted tabular-nums')} aria-hidden="true" />
-        <td className={cn(cell, 'whitespace-nowrap text-right font-medium tabular-nums')}>{formatUsd(cost)}</td>
+        <td className={cn(cell, 'text-right text-muted tabular-nums', hideBelowXl)} aria-hidden="true" />
+        <td className={cn(cell, 'whitespace-nowrap text-right font-medium tabular-nums', hideBelowLg)}>
+          {formatUsd(cost)}
+        </td>
       </tr>
       {open
         ? parts.map((part) => (

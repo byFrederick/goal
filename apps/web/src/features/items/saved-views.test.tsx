@@ -166,6 +166,21 @@ describe('the saved views nav', () => {
     expect(link.getAttribute('aria-current')).toBe('page');
   });
 
+  it('keeps every tab and the Save view button on one line', async () => {
+    api.views = [view({ id: 'v-own', name: 'Morning' })];
+    renderItems();
+    const tabs = [
+      await screen.findByRole('link', { name: /^Waiting on you/ }),
+      screen.getByRole('link', { name: /^Done this week/ }),
+      screen.getByRole('link', { name: 'Morning' }),
+      screen.getByRole('button', { name: '+ Save view' }),
+    ];
+    for (const tab of tabs) {
+      expect(tab.className).toContain('whitespace-nowrap');
+      expect(tab.className).toContain('flex-none');
+    }
+  });
+
   it('shows Try again when the views fail to load, and the built-in tabs still render', async () => {
     vi.mocked(listSavedViews).mockRejectedValueOnce(new Error('The server is busy'));
     renderItems();
