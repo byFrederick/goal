@@ -15,6 +15,13 @@ describe('Button', () => {
     );
   });
 
+  it('draws the ink action with the action tokens, not cobalt', () => {
+    render(<Button variant="action">Save changes</Button>);
+    const list = classes('Save changes');
+    expect(list).toEqual(expect.arrayContaining(['bg-action', 'text-action-ink']));
+    expect(list).not.toContain('bg-run');
+  });
+
   it('draws the action variant in ink, never cobalt', () => {
     render(<Button variant="action">Invite</Button>);
     const c = classes('Invite');
