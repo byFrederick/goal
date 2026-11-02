@@ -10,6 +10,7 @@ import {
   problemPlace,
   reviewTile,
   saveSentence,
+  sectionSummary,
   sectionTile,
   viewTileText,
   yamlTileText,
@@ -31,12 +32,75 @@ describe('section tiles', () => {
     expect(parseErrorTile('review', error)).toEqual({ state: 'problem', text: 'Fix factory.yaml first' });
   });
 
-  test('say a problem first, then changes, then nothing', () => {
-    expect(sectionTile(summary('connections', 1, 1))).toEqual({ state: 'problem', text: '1 change, 1 problem' });
-    expect(sectionTile(summary('agents', 0, 2))).toEqual({ state: 'problem', text: '2 problems' });
-    expect(sectionTile(summary('line', 2, 0))).toEqual({ state: 'edited', text: '2 changes' });
-    expect(sectionTile(summary('basics', 0, 0))).toEqual({ state: 'unchanged', text: 'No changes' });
-    expect(sectionTile(undefined)).toEqual({ state: 'unchanged', text: 'No changes' });
+  const model = {
+    basics: { name: 'acme', work_types: ['feature', 'bug'], knowledge_sources: ['docs', 'wiki'] },
+    line: {
+      stations: [
+        { id: 'inbox', name: 'Inbox', kind: 'queue' },
+        { id: 'build', name: 'Build', kind: 'agent' },
+      ],
+      flow: { constraint: 'build' },
+    },
+    agents: { default_model: 'm1', agents: [{ name: 'a', model: 'm2' }, { name: 'b' }, { name: 'c', model: 'm2' }] },
+    connections: [{ name: 'github' }, { name: 'slack' }],
+    review: {},
+  } as unknown as Model;
+
+  test('sectionSummary says what each section holds, from the model only', () => {
+    expect(sectionSummary('basics', model)).toBe('acme, 2 work types');
+    expect(sectionSummary('line', model)).toBe('2 stations, constraint Build');
+    expect(sectionSummary('agents', model)).toBe('3 agents on 2 models');
+    expect(sectionSummary('connections', model)).toBe('github, slack, 2 sources');
+  });
+
+  test('sectionSummary uses singular forms and copes with an empty model', () => {
+    const one = {
+      basics: { name: 'zed', work_types: ['x'], knowledge_sources: ['k'] },
+      line: { stations: [{ id: 's', kind: 'queue' }] },
+      agents: { agents: [{ name: 'a', model: 'q' }] },
+      connections: [{ name: 'only' }],
+      review: {},
+    } as unknown as Model;
+    expect(sectionSummary('basics', one)).toBe('zed, 1 work type');
+    expect(sectionSummary('line', one)).toBe('1 station');
+    expect(sectionSummary('agents', one)).toBe('1 agent on 1 model');
+    expect(sectionSummary('connections', one)).toBe('only, 1 source');
+    const empty = { basics: {}, line: {}, agents: {}, connections: [], review: {} } as unknown as Model;
+    expect(sectionSummary('basics', empty)).toBe('0 work types');
+    expect(sectionSummary('line', empty)).toBe('0 stations');
+    expect(sectionSummary('agents', empty)).toBe('0 agents on 0 models');
+    expect(sectionSummary('connections', empty)).toBe('0 sources');
+  });
+
+  test('sectionSummary never depends on names in the source', () => {
+    const odd = {
+      basics: { name: 'qzx-1' },
+      line: { stations: [{ id: 'k9', name: 'Zork' }], flow: { constraint: 'k9' } },
+    };
+    expect(sectionSummary('basics', odd as unknown as Model)).toBe('qzx-1, 0 work types');
+    expect(sectionSummary('line', odd as unknown as Model)).toBe('1 station, constraint Zork');
+  });
+
+  test('a tile keeps the summary and puts problems and changes in the badge', () => {
+    expect(sectionTile(summary('connections', 1, 1), 'connections', model)).toEqual({
+      state: 'problem',
+      text: 'github, slack, 2 sources',
+      badge: '1 change, 1 problem',
+    });
+    expect(sectionTile(summary('agents', 0, 2), 'agents', model)).toMatchObject({
+      state: 'problem',
+      badge: '2 problems',
+    });
+    expect(sectionTile(summary('line', 2, 0), 'line', model)).toEqual({
+      state: 'edited',
+      text: '2 stations, constraint Build',
+      badge: '2 changes',
+    });
+    expect(sectionTile(summary('basics', 0, 0), 'basics', model)).toEqual({
+      state: 'unchanged',
+      text: 'acme, 2 work types',
+    });
+    expect(sectionTile(undefined, 'basics', model)).toEqual({ state: 'unchanged', text: 'acme, 2 work types' });
   });
 
   test('say what each section holds when the editor is view only', () => {
@@ -67,10 +131,18 @@ describe('section tiles', () => {
       state: 'ready',
       text: 'Ready to publish',
     });
-    expect(reviewTile({ problems: 0, changes: 0, hasDraft: true })).toEqual({ state: 'unchanged', text: 'No changes' });
+    expect(reviewTile({ problems: 0, changes: 3, hasDraft: true, base: 12 })).toEqual({
+      state: 'ready',
+      text: '3 changes from v12',
+    });
+    expect(reviewTile({ problems: 0, changes: 1, hasDraft: true, base: 12 }).text).toBe('1 change from v12');
+    expect(reviewTile({ problems: 0, changes: 0, hasDraft: true })).toEqual({
+      state: 'unchanged',
+      text: 'Nothing to publish',
+    });
     expect(reviewTile({ problems: 0, changes: 0, hasDraft: false })).toEqual({
       state: 'unchanged',
-      text: 'No changes',
+      text: 'Nothing to publish',
     });
   });
 });
