@@ -25,7 +25,7 @@ export function AskBar() {
         Becomes an item, reviewed like any change
       </span>
       <NotAvailable>
-        <Button type="submit" size="icon" variant="ghost" aria-label="Send" className="text-muted">
+        <Button type="submit" size="icon" variant="ghost" aria-label="Send" className="text-muted max-md:size-11">
           <ArrowUp size={16} strokeWidth={1.75} aria-hidden="true" />
         </Button>
       </NotAvailable>

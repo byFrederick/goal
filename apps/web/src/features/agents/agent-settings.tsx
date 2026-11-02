@@ -11,7 +11,9 @@ import { formatUsd } from '../../shared/format';
 import { holds } from '../../shared/permissions';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
+import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
+import { touchLink, touchTarget } from '../../ui/touch-target';
 import { setAgentField } from '../factory-editor/draft/ops';
 import { useDraftSession, useSection } from '../factory-editor/draft/use-draft';
 
@@ -41,7 +43,7 @@ function ResetModel({ agent, fallback }: { agent: string; fallback: string | und
   const session = useDraftSession();
   const agents = useSection('agents');
   const label = fallback ? `Reset to default, ${fallback}` : 'Reset to default';
-  const link = 'self-start font-control text-meta text-run-ink hover:text-link';
+  const link = cn(touchLink, 'self-start font-control text-meta text-run-ink hover:text-link');
   if (!holds(factory, 'definition:edit')) {
     return (
       <NotAvailable>
@@ -84,7 +86,10 @@ function SkillChips({ skills }: { skills: readonly string[] }) {
             aria-expanded={open}
             aria-controls={restId}
             onClick={() => setOpen((o) => !o)}
-            className="cursor-pointer rounded-chip border border-line px-2 text-meta text-muted hover:text-ink"
+            className={cn(
+              touchTarget,
+              'cursor-pointer rounded-chip border border-line px-2 text-meta text-muted hover:text-ink',
+            )}
           >
             {open ? 'Show fewer' : `+ ${rest.length} more`}
           </button>

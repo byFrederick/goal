@@ -143,6 +143,17 @@ test.describe('every phone control has a 44 px hit area at 390 px', () => {
       '/o/acme/f/goal',
       (p) => p.getByRole('banner').getByRole('button', { name: 'Pull the andon cord' }),
     ],
+    [
+      'Agent Reset to default',
+      '/o/acme/f/goal/agents/frontend-engineer',
+      (p) => p.getByRole('button', { name: /^Reset to default/ }),
+    ],
+    [
+      'Agent more skills',
+      '/o/acme/f/goal/agents/frontend-engineer',
+      (p) => p.getByRole('button', { name: /^\+ \d+ more$/ }),
+    ],
+    ['Definition line Send', '/o/acme/f/goal/definition/line', (p) => p.getByRole('button', { name: 'Send' })],
     ['Members switch', '/o/acme/members', (p) => p.getByRole('switch').first()],
     ['Floor Add a build agent', '/o/acme/f/goal', (p) => p.getByRole('button', { name: 'Add a build agent' })],
   ];
@@ -152,7 +163,49 @@ test.describe('every phone control has a 44 px hit area at 390 px', () => {
       await page.goto(path);
       const area = await hitArea(find(page));
       expect(area.height).toBeGreaterThanOrEqual(43.5);
-      if (name.endsWith('switch') || name.includes('New item')) expect(area.width).toBeGreaterThanOrEqual(43.5);
+      if (name.endsWith('switch') || name.includes('New item') || name.endsWith('Send'))
+        expect(area.width).toBeGreaterThanOrEqual(43.5);
     });
   }
+});
+
+test.describe('phone fixes on the Assembly, Agent and Definition line pages at 390 px', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test('the assembly brief stays inside its box', async ({ page }) => {
+    await page.goto('/o/acme/f/goal/items');
+    await page
+      .locator('a[href*="/items/"]')
+      .filter({ hasText: /assembly/i })
+      .first()
+      .click();
+    const brief = page.locator('p', { hasText: 'A check of main' }).first();
+    const fit = await brief.evaluate((el) => ({
+      scroll: el.scrollWidth,
+      client: el.clientWidth,
+      right: el.getBoundingClientRect().right,
+      parentRight: el.parentElement?.getBoundingClientRect().right ?? 0,
+    }));
+    expect(fit.scroll).toBeLessThanOrEqual(fit.client);
+    expect(fit.right).toBeLessThanOrEqual(fit.parentRight + 0.5);
+  });
+
+  test('a rejection reason carries its full text in a title', async ({ page }) => {
+    await page.goto('/o/acme/f/goal/agents/frontend-engineer');
+    const reasons = page.getByRole('region', { name: 'Why review sent work back' });
+    const first = reasons.getByRole('button').first();
+    const title = await first.getAttribute('title');
+    expect(title).toBeTruthy();
+    expect(title).toBe((await first.textContent())?.trim());
+  });
+
+  test('the More actions icon is centred in its button', async ({ page }) => {
+    await page.goto('/o/acme/f/goal/definition/line');
+    const gaps = await page.getByRole('button', { name: 'More actions' }).evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      const icon = (el.querySelector('svg') as SVGElement).getBoundingClientRect();
+      return { left: icon.left - box.left, right: box.right - icon.right };
+    });
+    expect(Math.abs(gaps.left - gaps.right)).toBeLessThanOrEqual(1);
+  });
 });

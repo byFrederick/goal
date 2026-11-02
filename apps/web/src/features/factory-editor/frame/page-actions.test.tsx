@@ -45,6 +45,7 @@ describe('PageActions on a phone', () => {
     expect(screen.queryByRole('link', { name: 'Versions' })).toBeNull();
     const more = screen.getByRole('button', { name: 'More actions' });
     expect(more.getAttribute('aria-haspopup')).toBe('menu');
+    expect(more.className).toContain('justify-center');
     expect(screen.getByRole('radiogroup', { name: 'Editor view' })).toBeTruthy();
   });
 
