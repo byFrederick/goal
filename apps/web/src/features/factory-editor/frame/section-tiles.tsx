@@ -122,7 +122,7 @@ function Tile({
       className={cn(
         // relative: the screen-reader name stays inside the tile, not past the scrolling row.
         'relative flex min-h-11 items-center gap-2.5 rounded-control border px-3 py-1.5 text-sm no-underline transition-colors duration-(--duration-quick)',
-        current ? 'border-ink bg-ink text-white' : 'border-line bg-card text-ink hover:border-rule hover:bg-card',
+        current ? 'border-line bg-hover text-ink' : 'border-line bg-card text-ink hover:border-rule hover:bg-hover',
       )}
     >
       {children}
@@ -130,14 +130,7 @@ function Tile({
       <span className="sr-only">{state ? `${label}, ${text}, ${state}` : `${label}, ${text}`}</span>
       <span aria-hidden="true" className="flex min-w-0 flex-col leading-tight">
         <span className="truncate font-medium">{label}</span>
-        <span
-          className={cn(
-            'truncate text-xs',
-            current ? (problem ? 'text-rework-tint' : 'text-white/80') : problem ? 'text-rework-ink' : 'text-muted',
-          )}
-        >
-          {text}
-        </span>
+        <span className={cn('truncate text-xs', problem ? 'text-rework-ink' : 'text-muted')}>{text}</span>
       </span>
     </a>
   );

@@ -71,7 +71,7 @@ export function TriggersTable({ triggers }: { triggers: readonly IntakeTrigger[]
 function TriggerRow({ trigger, arrived }: { trigger: IntakeTrigger; arrived: boolean }) {
   const params = useFactoryParams();
   const toggle = useTriggerToggle(trigger.name, trigger.enabled);
-  const { icon: Icon, tile } = sourceIcon[trigger.source];
+  const { icon: Icon } = sourceIcon[trigger.source];
   const items = trigger.days.reduce((sum, n) => sum + n, 0);
 
   return (
@@ -83,10 +83,7 @@ function TriggerRow({ trigger, arrived }: { trigger: IntakeTrigger; arrived: boo
     >
       <td className="block py-1 md:table-cell md:px-3 md:py-3 md:align-middle">
         <div className="flex min-w-0 items-start gap-3">
-          <span
-            aria-hidden="true"
-            className={cn('mt-px flex size-8 flex-none items-center justify-center rounded-cell text-white', tile)}
-          >
+          <span aria-hidden="true" className="mt-px flex size-4 flex-none items-center justify-center text-muted">
             <Icon className="size-4" />
           </span>
           <div className="flex min-w-0 flex-col gap-px">

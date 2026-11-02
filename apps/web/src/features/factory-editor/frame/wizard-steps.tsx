@@ -38,7 +38,7 @@ export function WizardSteps({ current, done, factory }: StepsProps) {
                 aria-hidden="true"
                 className={cn(
                   'flex size-[22px] shrink-0 items-center justify-center rounded-chip text-xs font-medium',
-                  isCurrent ? 'bg-card text-ink' : isDone ? 'bg-ok-tint text-ok' : 'bg-panel text-ink-soft',
+                  isCurrent ? 'bg-shell text-ink' : isDone ? 'bg-ok-tint text-ok' : 'bg-panel text-ink-soft',
                 )}
               >
                 {isDone ? <Check size={14} strokeWidth={2} /> : i + 1}
@@ -49,7 +49,7 @@ export function WizardSteps({ current, done, factory }: StepsProps) {
           );
           const tile = cn(
             'flex h-11 min-w-0 items-center gap-2.5 rounded-control border px-3.5 text-sm no-underline transition-colors duration-(--duration-quick)',
-            isCurrent ? 'border-ink bg-ink font-medium text-white' : 'border-line bg-card text-ink-soft',
+            isCurrent ? 'border-line bg-hover font-medium text-ink' : 'border-line bg-card text-ink-soft',
           );
           const linked = factory !== undefined && step !== 'start' && !isCurrent;
           return (
