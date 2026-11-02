@@ -40,7 +40,7 @@ An item is `<factory>#<number>`, its id, or a bare number when only one factory 
 
 ## Submit from the web app
 
-Open the factory's Board and choose New item. The sidebar's New item does the same from any page, and the keyboard shortcut is `C`. Choose the factory, fill in the brief and choose Create item. The new item opens on the Board in the station where it entered the line.
+Open the factory's Board and choose New item. The sidebar's New item does the same from any page, and the keyboard shortcut is `C` (every shortcut is listed in [Navigate and use shortcuts](./navigate-and-shortcuts/)). Choose the factory, fill in the brief and choose Create item. The new item opens on the Board in the station where it entered the line.
 
 ## Create items from events and schedules
 
