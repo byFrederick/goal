@@ -343,17 +343,9 @@ function AddSkillDialog({
           ) : null}
           <div className="flex flex-wrap justify-end gap-2">
             <DialogClose asChild>
-              <Button variant="secondary" size="lg" className="md:h-10 md:text-sm">
-                Cancel
-              </Button>
+              <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button
-              variant="primary"
-              size="lg"
-              className="md:h-10 md:text-sm"
-              disabled={!files.data || error !== undefined}
-              onClick={add}
-            >
+            <Button variant="primary" disabled={!files.data || error !== undefined} onClick={add}>
               Add skill
             </Button>
           </div>

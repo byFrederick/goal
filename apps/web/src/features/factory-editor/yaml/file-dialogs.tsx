@@ -135,11 +135,9 @@ function NameDialog({
           </Field>
           <div className="flex flex-wrap justify-end gap-2">
             <DialogClose asChild>
-              <Button variant="secondary" size="lg" className="md:h-10 md:text-sm">
-                Cancel
-              </Button>
+              <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" size="lg" className="md:h-10 md:text-sm" disabled={pending}>
+            <Button type="submit" variant="primary" disabled={pending}>
               {action}
             </Button>
           </div>

@@ -29,6 +29,8 @@ interface Setup {
   me?: Me | 'pending' | 'error';
   /** The permissions the caller holds in the organization. */
   can?: string[];
+  /** The trigger's size: the sidebar row or the collapsed rail's avatar. */
+  size?: 'sidebar' | 'rail';
 }
 
 /** jsdom has no matchMedia, which the theme reads to follow the system. */
@@ -47,7 +49,7 @@ function stubMatchMedia() {
 }
 
 /** The account menu at the sidebar's bottom, inside the account's provider, as the app mounts it. */
-function renderAccount({ me = session, can = ['personal_token:read'] }: Setup = {}) {
+function renderAccount({ me = session, can = ['personal_token:read'], size = 'sidebar' }: Setup = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   const grants = { ...org, created_at: '2026-09-01T00:00:00Z', can } as Org;
   client.setQueryData(orgQuery(org.id).queryKey, grants);
@@ -64,7 +66,7 @@ function renderAccount({ me = session, can = ['personal_token:read'] }: Setup = 
     beforeLoad: () => ({ org }),
     component: () => (
       <AccountProvider>
-        <AccountMenu org={org} size="sidebar" />
+        <AccountMenu org={org} size={size} />
         <Outlet />
       </AccountProvider>
     ),
@@ -132,6 +134,7 @@ describe('the account menu', () => {
       'Personal tokens',
       'Connected apps',
       'Keyboard shortcuts',
+      'Help and docs',
       'Sign out',
       'Sign out everywhere',
     ];
@@ -144,6 +147,29 @@ describe('the account menu', () => {
         .getAttribute('aria-disabled'),
     ).toBe('true');
     expect(within(panel).getByRole('button', { name: /^Keyboard shortcuts/ }).textContent).toContain('?');
+  });
+
+  it('links Help and docs to /docs in the same tab', async () => {
+    renderAccount();
+    const panel = await openPanel();
+    const link = within(panel).getByRole('link', { name: 'Help and docs' });
+
+    expect(link.getAttribute('href')).toBe('/docs');
+    expect(link.getAttribute('target')).toBeNull();
+  });
+
+  it('ends the sidebar person row with a chevron', async () => {
+    renderAccount();
+    const trigger = await screen.findByRole('button', { name: /account$/ });
+
+    expect(trigger.querySelector('svg.lucide-chevrons-up-down')).toBeTruthy();
+  });
+
+  it('draws no chevron on the rail avatar', async () => {
+    renderAccount({ size: 'rail' });
+    const trigger = await screen.findByRole('button', { name: /account$/ });
+
+    expect(trigger.querySelector('svg.lucide-chevrons-up-down')).toBeNull();
   });
 
   it('links Notifications to the notifications section of the account page', async () => {
@@ -220,5 +246,6 @@ describe('the account menu', () => {
     const panel = await openPanel();
     expect(within(panel).getByText('Local user')).toBeTruthy();
     expect(within(panel).queryByRole('button', { name: 'Sign out' })).toBeNull();
+    expect(within(panel).getByRole('link', { name: 'Help and docs' }).getAttribute('href')).toBe('/docs');
   });
 });

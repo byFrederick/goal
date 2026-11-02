@@ -56,15 +56,16 @@ test('the item lists its touches, and a reason set on one stays', async ({ page 
   if (!isPhone(page)) await expect(page.getByText('1 human touch', { exact: true })).toBeVisible();
 
   const reason = card.getByRole('combobox', { name: /^Reason for the .+ touch$/ });
-  await expect(reason).toHaveValue('');
+  await expect(reason).toHaveText('Choose a reason');
   await expectAccessible(page);
 
   const saved = page.waitForResponse((r) => r.url().includes('/touches/') && r.request().method() === 'PUT');
-  await reason.selectOption({ label: 'Missing knowledge' });
+  await reason.click();
+  await page.getByRole('option', { name: 'Missing knowledge' }).click();
   expect((await saved).status()).toBe(204);
 
   await page.reload();
-  await expect(page.getByRole('combobox', { name: /^Reason for the .+ touch$/ })).toHaveValue('missing_knowledge');
+  await expect(page.getByRole('combobox', { name: /^Reason for the .+ touch$/ })).toHaveText('Missing knowledge');
   await expectNoHorizontalScroll(page);
 });
 
@@ -75,7 +76,7 @@ test('two quick reason changes end on the second, never flipping back to the fir
   await request.post('/__mock/fail', { data: { path: '/touches/', method: 'PUT', delay_ms: 2500 } });
   await page.goto('/o/acme/f/sre/items/8');
   const reason = page.getByRole('combobox', { name: /^Reason for the .+ touch$/ });
-  await expect(reason).toHaveValue('');
+  await expect(reason).toHaveText('Choose a reason');
 
   const put = (n: number) => {
     let seen = 0;
@@ -83,16 +84,18 @@ test('two quick reason changes end on the second, never flipping back to the fir
   };
   const first = put(1);
   const second = put(2);
-  await reason.selectOption({ label: 'Missing knowledge' });
-  await reason.selectOption({ label: 'Other' });
+  await reason.click();
+  await page.getByRole('option', { name: 'Missing knowledge' }).click();
+  await reason.click();
+  await page.getByRole('option', { name: 'Other' }).click();
   await first;
   // What a refetch after the first would have put back shows by now, if it ran.
   await page.waitForTimeout(400);
-  expect(await reason.inputValue()).toBe('other');
+  await expect(reason).toHaveText('Other');
   await second;
-  await expect(reason).toHaveValue('other');
+  await expect(reason).toHaveText('Other');
   await page.reload();
-  await expect(page.getByRole('combobox', { name: /^Reason for the .+ touch$/ })).toHaveValue('other');
+  await expect(page.getByRole('combobox', { name: /^Reason for the .+ touch$/ })).toHaveText('Other');
 });
 
 test('a refused reason says why and goes back to what goald has', async ({ page, request }) => {
@@ -103,9 +106,10 @@ test('a refused reason says why and goes back to what goald has', async ({ page,
   await page.goto('/o/acme/f/sre/items/8');
 
   const reason = page.getByRole('combobox', { name: /^Reason for the .+ touch$/ });
-  await reason.selectOption({ label: 'Other' });
+  await reason.click();
+  await page.getByRole('option', { name: 'Other' }).click();
   await expect(page.getByRole('alert').filter({ hasText: /^Not saved: / })).toBeVisible();
-  await expect(reason).toHaveValue('');
+  await expect(reason).toHaveText('Choose a reason');
 });
 
 test('the board and the floor work while the touch metrics fail', async ({ page, request }) => {

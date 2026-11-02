@@ -26,9 +26,9 @@ import {
 } from './assembly-plan';
 
 const segmentTone: Record<PartTone, string> = {
-  done: 'bg-ok',
-  working: 'bg-run',
-  waiting: 'bg-muted',
+  done: 'bg-ink',
+  working: 'bg-rule',
+  waiting: 'bg-hover',
   cancelled: 'bg-line',
 };
 

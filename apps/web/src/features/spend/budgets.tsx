@@ -57,7 +57,7 @@ function BudgetRow({ budget: b }: { budget: SpendBudget }) {
   return (
     <li className="flex flex-col gap-3 border-t border-line py-3 md:flex-row md:items-center">
       <div className="flex w-full min-w-0 items-center gap-3 md:w-60 md:shrink-0">
-        <FactoryBadge mark={b.factory.name.slice(0, 1).toUpperCase()} className="size-6" />
+        <FactoryBadge mark={b.factory.name.slice(0, 1).toUpperCase()} />
         <div className="flex min-w-0 flex-col leading-snug">
           <b className="font-semibold text-ink">{title}</b>
           <span className="text-meta text-muted">

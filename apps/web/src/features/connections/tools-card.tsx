@@ -51,7 +51,6 @@ export function ToolsCard({ connection: c, manage }: { connection: Connection; m
           <Callout tone="rework">{refusalText(save.error)}</Callout>
           <Button
             variant="white"
-            className="h-11 md:h-10"
             disabled={!manage || save.isPending}
             onClick={() => save.variables && save.mutate(save.variables)}
           >

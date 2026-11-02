@@ -74,7 +74,7 @@ export function UsedBy({ source }: { source: KnowledgeSource }) {
     <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-secondary text-ink-soft">
       {named.map((f) => (
         <span key={f.id} className="inline-flex items-center gap-2">
-          <FactoryBadge mark={factoryMark(f, siblings)} className="size-4" />
+          <FactoryBadge mark={factoryMark(f, siblings)} />
           <span translate="no">{f.name}</span>
         </span>
       ))}

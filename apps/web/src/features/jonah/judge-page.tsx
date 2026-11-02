@@ -6,7 +6,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Play, Plus, X } from 'lucide-react';
-import { type ChangeEvent, type FormEvent, useState } from 'react';
+import { type FormEvent, useState } from 'react';
 import { ApiError, tryJudge, updateJudge } from '../../api/client';
 import { builderMetaQuery, judgeQuery, versionModelQuery } from '../../api/queries';
 import type { Judge, JudgeScore, JudgeSummary } from '../../api/types';
@@ -23,6 +23,7 @@ import { Chip, type ChipTone } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
 import { Field, Input, useFieldControl } from '../../ui/field';
+import { Select } from '../../ui/select';
 import { Skeleton } from '../../ui/skeleton';
 import { Switch } from '../../ui/switch';
 import { formErrors, formOf, type JudgeForm, type JudgeFormErrors, judgeWrite } from './judge-form';
@@ -241,24 +242,17 @@ function JudgeEditor({
                   </Chip>
                 ))}
                 {addingAgent ? (
-                  <select
+                  <Select
                     aria-label="Agent to add"
-                    ref={(el) => el?.focus()}
-                    className="h-10 rounded-control border border-rule bg-card px-2 text-secondary text-ink"
-                    onChange={(e: ChangeEvent<HTMLSelectElement>) => {
-                      if (e.target.value !== '') set({ agents: [...form.agents, e.target.value] });
-                      setAddingAgent(false);
+                    defaultOpen
+                    placeholder="Choose an agent"
+                    className="w-56"
+                    onOpenChange={(open) => {
+                      if (!open) setAddingAgent(false);
                     }}
-                    onBlur={() => setAddingAgent(false)}
-                    defaultValue=""
-                  >
-                    <option value="">Choose an agent</option>
-                    {addable.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={(name) => set({ agents: [...form.agents, name] })}
+                    options={addable.map((name) => ({ value: name, label: name }))}
+                  />
                 ) : (
                   <Button
                     size="sm"
@@ -453,23 +447,14 @@ function ModelSelect({
 }) {
   const field = useFieldControl();
   return (
-    <select
+    <Select
       id={field?.id}
       aria-describedby={field?.describedBy}
       value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn(
-        'h-11 w-full max-w-sm min-w-0 rounded-control border border-rule bg-card px-3 text-base text-ink md:h-10',
-        'hover:border-muted',
-      )}
-    >
-      <option value="">Factory default</option>
-      {options.map((m) => (
-        <option key={m.id} value={m.id}>
-          {m.label}
-        </option>
-      ))}
-    </select>
+      onValueChange={onChange}
+      className="max-w-sm"
+      options={[{ value: '', label: 'Factory default' }, ...options.map((m) => ({ value: m.id, label: m.label }))]}
+    />
   );
 }
 

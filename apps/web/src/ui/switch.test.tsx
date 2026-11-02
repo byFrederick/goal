@@ -83,6 +83,22 @@ describe('Switch', () => {
     );
   });
 
+  it('draws a 32 x 18 track that is rule when off and ink when on, with a visible thumb', () => {
+    const { container } = render(<Toggle />);
+    const track = screen.getByRole('switch', { name: 'Notify me' });
+    const thumb = container.querySelector('[aria-hidden="true"]') as HTMLElement;
+    expect(Array.from(track.classList)).toEqual(
+      expect.arrayContaining(['w-8', 'h-4.5', 'bg-rule', 'aria-checked:bg-ink']),
+    );
+    expect(track.classList.contains('bg-run')).toBe(false);
+    expect(track.className).not.toContain('bg-run');
+    expect(thumb.classList.contains('bg-card')).toBe(true);
+    expect(thumb.classList.contains('translate-x-3.5')).toBe(false);
+    fireEvent.click(track);
+    expect(thumb.classList.contains('translate-x-3.5')).toBe(true);
+    expect(thumb.classList.contains('bg-card')).toBe(true);
+  });
+
   it('does not toggle when disabled, and stays focusable with aria-disabled', async () => {
     const onChange = vi.fn();
     render(<Toggle disabled onChange={onChange} />);

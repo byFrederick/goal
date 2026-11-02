@@ -168,17 +168,9 @@ export function InviteDialog({ open, onOpenChange, org, role, factories, invite 
           </div>
           <div className="flex flex-wrap justify-end gap-2">
             <DialogClose asChild>
-              <Button variant="white" size="lg" className="md:h-10 md:text-sm">
-                Cancel
-              </Button>
+              <Button variant="white">Cancel</Button>
             </DialogClose>
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              className="md:h-10 md:text-sm"
-              disabled={invite.isPending}
-            >
+            <Button type="submit" variant="primary" disabled={invite.isPending}>
               {invite.isPending ? 'Sending…' : 'Send invitations'}
             </Button>
           </div>

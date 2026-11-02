@@ -89,6 +89,24 @@ describe('the spend screen, ready', () => {
     expect(ninety.container.querySelectorAll('[data-day]')).toHaveLength(90);
   });
 
+  it('draws the charts in ink on a hover track and the days in factory colours, with no pattern', async () => {
+    const { container } = renderSpend();
+
+    await screen.findByText('Spend this week');
+    const rows = screen.getAllByRole('meter').filter((m) => /: \$/.test(m.getAttribute('aria-label') ?? ''));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const m of rows) {
+      expect(m.className).toContain('bg-hover');
+      expect(m.innerHTML).toMatch(/bg-ink/);
+    }
+    expect(container.querySelector('[class*="bg-factory-"]')).not.toBeNull();
+    expect(container.querySelector('pattern')).toBeNull();
+    for (const name of ['Spend by day', 'By agent', 'By model']) {
+      const card = screen.queryByRole('region', { name });
+      if (card) expect(card.innerHTML).not.toContain('bg-run');
+    }
+  });
+
   it('lists the factories with their budgets, the stop and the rules', async () => {
     renderSpend();
 
