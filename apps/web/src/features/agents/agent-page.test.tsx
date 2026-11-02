@@ -26,9 +26,9 @@ vi.mock('../../api/client', async (original) => ({
 const slotCrumbs = vi.hoisted(() => [] as (string | undefined)[]);
 vi.mock('../../app/top-bar', async (original) => ({
   ...(await original<typeof import('../../app/top-bar')>()),
-  TopBarSlot: ({ crumb }: { crumb?: string }) => {
+  TopBarSlot: ({ crumb, back }: { crumb?: string; back?: React.ReactNode }) => {
     slotCrumbs.push(crumb);
-    return null;
+    return back ?? null;
   },
 }));
 
@@ -174,6 +174,21 @@ describe('the Agent page, ready', () => {
   it("sets the agent's name as the top bar's last crumb once loaded", async () => {
     await renderPage();
     expect(slotCrumbs.at(-1)).toBe('frontend-engineer');
+  });
+
+  it('has no in-page breadcrumb, and a phone gets Back to Agents in the top bar', async () => {
+    window.matchMedia = ((query: string) =>
+      ({
+        matches: query === '(max-width: 767px)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList) as typeof window.matchMedia;
+    await renderPage();
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
+    const back = screen.getByRole('link', { name: 'Back to Agents' });
+    expect(back.getAttribute('href')).toBe('/o/acme/f/goal/agents');
+    delete (window as { matchMedia?: unknown }).matchMedia;
   });
 
   it('shows the last 7 days and the reasons review sent work back, by role', async () => {
