@@ -76,6 +76,21 @@ describe('animateCardMove', () => {
     expect(el.style.getPropertyValue('view-transition-name')).toBe('');
   });
 
+  it('leaves a skipped transition no unhandled rejection and still clears the names', async () => {
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    const el = element('a', 'sre#1', { left: 0, top: 0 });
+    const abort = () => Promise.reject(new DOMException('Transition was skipped', 'AbortError'));
+    const start = vi.fn(() => ({ ready: abort(), finished: abort(), updateCallbackDone: abort() }));
+
+    animateCardMove(() => {}, deps({ startViewTransition: start }));
+    await new Promise((r) => setTimeout(r, 20));
+    process.off('unhandledRejection', unhandled);
+
+    expect(unhandled).not.toHaveBeenCalled();
+    expect(el.style.getPropertyValue('view-transition-name')).toBe('');
+  });
+
   it('names a ref once, so two cards never share a name', () => {
     const one = element('a', 'sre#1', { left: 0, top: 0 });
     const two = element('b', 'sre#1', { left: 0, top: 0 });

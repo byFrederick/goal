@@ -7,6 +7,7 @@ import { keys } from './api/queries';
 import { shouldRetry } from './api/retry';
 import { safeNext, setSessionHandlers } from './api/session';
 import { routerOptions } from './app/router-options';
+import { handleSkippedTransitions } from './app/view-transition';
 import { registerServiceWorker } from './pwa/register';
 import { routeTree } from './routeTree.gen';
 
@@ -19,6 +20,8 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+handleSkippedTransitions();
 
 const router = createRouter({
   routeTree,

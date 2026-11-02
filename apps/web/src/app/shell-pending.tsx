@@ -122,7 +122,7 @@ export function ShellPending() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const inside = useContext(InsideShellContext);
   const body = (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
       <header className="shell-topbar hidden h-14 flex-none items-center gap-2 border-b border-rule bg-shell px-7 md:flex">
         <Crumbs />
       </header>
