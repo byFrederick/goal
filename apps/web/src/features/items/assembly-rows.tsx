@@ -135,7 +135,7 @@ export function ItemTableRow({
         <SelectBox label={`Select ${item.ref}`} checked={selected} onChange={() => onSelect(item.id)} />
       </td>
       <td className={cn(cell, 'whitespace-nowrap text-muted tabular-nums')}>{item.ref}</td>
-      <td className={cn(cell, 'lg:w-full lg:min-w-40 lg:max-w-0', indent && 'pl-8')}>
+      <td className={cn(cell, 'lg:w-full lg:min-w-32 lg:max-w-0', indent && 'pl-8')}>
         <Link
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
@@ -149,7 +149,9 @@ export function ItemTableRow({
       <td className={cell}>
         {item.lane ? <Chip tone="plain">{item.lane}</Chip> : <span className="text-muted">Not set</span>}
       </td>
-      <td className={cn(cell, 'whitespace-nowrap')}>{humanize(item.station)}</td>
+      <td className={cn(cell, 'whitespace-nowrap lg:max-w-28 lg:truncate')} title={humanize(item.station)}>
+        {humanize(item.station)}
+      </td>
       <td className={cn(cell, 'whitespace-nowrap')}>
         <span className="inline-flex items-center gap-2">
           <span
@@ -162,16 +164,16 @@ export function ItemTableRow({
           {item.class_of_service === 'expedite' ? <Chip tone="expedite">Expedite</Chip> : null}
         </span>
       </td>
-      <td className={cn(cell, 'whitespace-nowrap')}>
+      <td className={cn(cell, 'whitespace-nowrap lg:max-w-28')}>
         {item.agent ? (
-          <span className="inline-flex items-center gap-2 text-secondary text-ink-soft">
+          <span className="inline-flex max-w-full items-center gap-2 text-secondary text-ink-soft" title={item.agent}>
             <span
               aria-hidden="true"
-              className="grid size-6 place-items-center rounded-full bg-run-tint text-meta font-semibold text-run-ink"
+              className="grid size-6 flex-none place-items-center rounded-full bg-run-tint text-meta font-semibold text-run-ink"
             >
               {monogram(item.agent)}
             </span>
-            {item.agent}
+            <span className="min-w-0 lg:truncate">{item.agent}</span>
           </span>
         ) : (
           <span className="text-muted">None yet</span>
