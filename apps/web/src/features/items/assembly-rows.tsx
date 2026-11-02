@@ -100,13 +100,13 @@ const cell = 'px-3 py-2 align-middle';
 export const hideBelowXl = 'hidden xl:table-cell';
 export const hideBelowLg = 'hidden lg:table-cell';
 
-/** The ref as the design shows it: the number after the factory prefix ('software#390' is '#390'). */
+/** The ref as the design shows it: the number after the factory prefix, with the hash kept. */
 export function shortRef(ref: string): string {
   const at = ref.lastIndexOf('#');
   return at >= 0 ? ref.slice(at) : ref;
 }
 
-const refClass = 'font-mono text-[12.5px] text-ink-soft tabular-nums';
+const refClass = 'font-mono text-meta text-ink-soft tabular-nums';
 
 /** An agent's initials on a small round square: the role's first letters, two at most. */
 function monogram(agent: string): string {
@@ -151,7 +151,7 @@ export function ItemTableRow({
           {shortRef(item.ref)}
         </span>
       </td>
-      <td className={cn(cell, 'max-w-[26rem] truncate', indent && 'pl-8')} title={item.title}>
+      <td className={cn(cell, 'max-w-sm truncate', indent && 'pl-8')} title={item.title}>
         <Link
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
@@ -283,14 +283,14 @@ export function AssemblyTableRow({
             </span>
             <span className="inline-flex items-center gap-2 text-secondary text-ink-soft">
               {summary ? (
-                <span aria-hidden="true" className="inline-flex gap-0.5" data-testid="assembly-meter">
+                <span aria-hidden="true" className="inline-flex gap-px" data-testid="assembly-meter">
                   {Array.from({ length: summary.total }, (_, i) => (
                     <span
                       // biome-ignore lint/suspicious/noArrayIndexKey: segments are fixed in number and never reorder
                       key={i}
                       data-done={i < summary.merged}
                       className={cn(
-                        'h-1 w-3.5 flex-none rounded-[1px] transition-colors duration-(--duration-quick) ease-out motion-reduce:transition-none',
+                        'h-1 w-4 flex-none rounded-chip transition-colors duration-(--duration-quick) ease-out motion-reduce:transition-none',
                         i < summary.merged ? 'bg-ink' : 'bg-rule',
                       )}
                     />
