@@ -50,7 +50,7 @@ export type ButtonProps =
 
 export function Button({ variant = 'secondary', size = 'md', asChild, className, type, ...props }: ButtonProps) {
   const classes = cn(
-    'relative inline-flex shrink-0 items-center gap-2 rounded-control border font-control no-underline whitespace-nowrap transition-colors duration-200',
+    'press relative inline-flex shrink-0 items-center gap-2 rounded-control border font-control no-underline whitespace-nowrap',
     'pointer-coarse:before:absolute pointer-coarse:before:-inset-2 pointer-coarse:before:content-[""]',
     'disabled:cursor-not-allowed disabled:opacity-55 aria-disabled:cursor-not-allowed aria-disabled:opacity-55 [&_svg]:shrink-0',
     variants[variant],

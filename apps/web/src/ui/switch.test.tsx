@@ -36,6 +36,18 @@ describe('Switch', () => {
     expect(onChange).toHaveBeenCalledWith(true);
   });
 
+  it('travels the thumb at the medium bounce and fades the track at the quick duration', () => {
+    const { container } = render(<Toggle />);
+    const track = screen.getByRole('switch', { name: 'Notify me' });
+    const thumb = container.querySelector('[aria-hidden="true"]');
+    expect(Array.from(thumb?.classList ?? [])).toEqual(
+      expect.arrayContaining(['transition-transform', 'duration-(--duration-medium)', 'ease-bounce']),
+    );
+    expect(Array.from(track.classList)).toEqual(
+      expect.arrayContaining(['transition-colors', 'duration-(--duration-quick)']),
+    );
+  });
+
   it('does not toggle when disabled, and stays focusable with aria-disabled', () => {
     const onChange = vi.fn();
     render(<Toggle disabled onChange={onChange} />);

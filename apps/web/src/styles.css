@@ -108,11 +108,15 @@
   --duration-medium: 350ms;
   --duration-slow: 400ms;
   --duration-emphasis: 500ms;
+  /* One skeleton pulse, linear (MOTION.md, Loading). */
+  --duration-pulse: 1s;
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-bounce: cubic-bezier(0.34, 1.36, 0.64, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Colour changes (hover, a track fading) use the plain `ease` curve (MOTION.md, Hover). */
+  --default-transition-timing-function: ease;
 
   --scale-dialog: 0.96;
   --scale-menu: 0.97;
@@ -128,6 +132,14 @@
   --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
   /* The open and close fade of menus, popovers, dialogs and sheets: opacity only, at the quick duration. */
   --animate-fade-in: fade-in var(--duration-quick) var(--ease-out);
+  /* A tooltip opens with a fade and a small scale from its trigger (MOTION.md, Tooltip). */
+  --animate-tooltip-in: tooltip-in var(--duration-quick) var(--ease-out);
+  /* A status changes in place: the new text rises in with a blur (MOTION.md, A status changes in place). */
+  --animate-text-states-swap: text-states-swap var(--duration-quick) ease-in-out;
+  /* A changed digit pops in from below with a blur (MOTION.md, A number changes). */
+  --animate-number-pop-in: number-pop-in var(--duration-emphasis) var(--ease-bounce) both;
+  /* A skeleton pulses once while it waits (MOTION.md, Loading). */
+  --animate-skeleton-pulse: skeleton-pulse var(--duration-pulse) linear;
 
   @keyframes pulse-dot {
     50% {
@@ -141,6 +153,35 @@
     }
   }
 
+  @keyframes tooltip-in {
+    from {
+      opacity: 0;
+      transform: scale(var(--scale-tooltip));
+    }
+  }
+
+  @keyframes text-states-swap {
+    from {
+      opacity: 0;
+      transform: translateY(var(--distance-micro));
+      filter: blur(var(--blur-small));
+    }
+  }
+
+  @keyframes number-pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--distance-base));
+      filter: blur(var(--blur-small));
+    }
+  }
+
+  @keyframes skeleton-pulse {
+    50% {
+      opacity: 0.5;
+    }
+  }
+
   /* The first-load line at the top of the viewport (PendingScreen): a third of the width, sliding across. */
   @keyframes progress-slide {
     from {
@@ -150,6 +191,33 @@
       transform: translateX(300%);
     }
   }
+}
+
+/* A pressable control (MOTION.md, Button press and Hover): colour changes at the quick duration, and the
+   press scales the control at the micro duration with the entering ease. Movement only on :active. */
+@utility press {
+  transition:
+    color var(--duration-quick) ease,
+    background-color var(--duration-quick) ease,
+    border-color var(--duration-quick) ease,
+    transform var(--duration-micro) var(--ease-out);
+
+  &:active {
+    transform: scale(var(--scale-press));
+  }
+}
+
+/* The check of a checkbox (MOTION.md, Checkbox): the box fills at the quick duration, then the check
+   draws at the medium one. The path has pathLength 1 (checkbox.tsx), so one dash covers the whole path. */
+.check-box svg path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset var(--duration-quick) ease;
+}
+
+.check-box[data-checked] svg path {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset var(--duration-medium) var(--ease-out) var(--duration-quick);
 }
 
 /* Dark values (docs/design/MASTER.md, Colour): the same tokens, redefined. Two blocks
@@ -323,5 +391,16 @@
   .animate-spin,
   .animate-pulse-dot {
     animation-name: none;
+  }
+
+  /* A pressed control keeps its colour, and does not scale (the press utility). */
+  .press:active {
+    transform: none;
+  }
+
+  /* The check appears with its box, without the draw. */
+  .check-box svg path,
+  .check-box[data-checked] svg path {
+    transition: none;
   }
 }

@@ -38,6 +38,11 @@ describe('raw motion values', () => {
     expect(found).toEqual([]);
   });
 
+  it('keeps the tooltip delay on the micro token: tooltip.tsx OPEN_DELAY_MS is 80 ms, as --duration-micro is', () => {
+    const css = readFileSync(join(srcDir, 'styles.css'), 'utf8');
+    expect(css).toMatch(/--duration-micro:\s*80ms;/);
+  });
+
   it('keeps the allow-list honest: each allowed file exists and still has a raw motion value', () => {
     for (const file of allowed) {
       const text = readFileSync(join(srcDir, file), 'utf8');

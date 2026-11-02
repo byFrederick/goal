@@ -31,6 +31,22 @@ describe('SegmentedControl', () => {
     expect(onChange).toHaveBeenCalledWith('mine');
   });
 
+  it('moves one sliding pill to the chosen option, with the fast ease-out slide', () => {
+    const { container, rerender } = render(
+      <SegmentedControl label="View" options={options} value="all" onChange={() => {}} />,
+    );
+    const pill = container.querySelector('[aria-hidden="true"]');
+    expect(Array.from(pill?.classList ?? [])).toEqual(
+      expect.arrayContaining(['transition-[transform,width]', 'duration-(--duration-fast)', 'ease-out']),
+    );
+    expect(Array.from(radio('All').closest('label')?.classList ?? [])).toEqual(expect.arrayContaining(['text-ink']));
+    expect(Array.from(radio('All').closest('label')?.classList ?? [])).not.toContain('bg-card');
+
+    rerender(<SegmentedControl label="View" options={options} value="mine" onChange={() => {}} />);
+    expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(1);
+    expect(radio('Mine 3').checked).toBe(true);
+  });
+
   it('shows the choice only when readOnly, and does not call onChange', () => {
     const onChange = vi.fn();
     render(<SegmentedControl label="View" options={options} value="mine" onChange={onChange} readOnly />);
