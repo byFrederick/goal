@@ -13,6 +13,7 @@ import { useStreamStatus } from '../shared/stream';
 import { cn } from '../ui/cn';
 import { AccountProvider } from './account-menu';
 import { PhoneDrawer, PhoneTabBar, PhoneTopBar, usePhone } from './phone-chrome';
+import { InsideShellContext } from './shell-pending';
 import { Sidebar } from './sidebar';
 import { TopBar, TopBarSetContext, type TopBarState, usePageLabel } from './top-bar';
 
@@ -27,7 +28,7 @@ export function AppShell({ org, children }: { org: OrgSummary; children: ReactNo
           Skip to content
         </a>
         <Sidebar org={org} />
-        {children}
+        <InsideShellContext value>{children}</InsideShellContext>
         <ReconnectingBanner />
       </div>
     </AccountProvider>

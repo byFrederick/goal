@@ -95,7 +95,9 @@ export function JonahError({ error, retry }: { error: unknown; retry: () => void
         </Button>
       }
     >
-      {unavailable ? 'Jonah is not available on this goald yet.' : 'goald is not answering. Try again in a moment.'}
+      {unavailable
+        ? 'Jonah is not turned on for this installation yet.'
+        : 'goald is not answering. Try again in a moment.'}
     </EmptyState>
   );
 }

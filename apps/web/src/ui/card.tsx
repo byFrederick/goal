@@ -1,5 +1,6 @@
 import { type ComponentProps, type ReactNode, useId } from 'react';
 import { cn } from './cn';
+import { sectionHeadingClass } from './page-header';
 
 interface SectionCardProps extends Omit<ComponentProps<'section'>, 'title'> {
   title: ReactNode;
@@ -28,7 +29,7 @@ export function SectionCard({
     >
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
         <div className="min-w-0 max-w-full">
-          <H id={id} className="m-0 text-base font-medium md:text-lg">
+          <H id={id} className={sectionHeadingClass}>
             {title}
           </H>
           {description ? <p className="m-0 mt-1 text-sm text-muted">{description}</p> : null}

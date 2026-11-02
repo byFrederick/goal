@@ -12,7 +12,8 @@ export const routerOptions = {
   defaultPendingComponent: PendingScreen,
   defaultPendingMs: 100,
   defaultPendingMinMs: 300,
-  defaultViewTransition: true,
+  // The type scopes the route-change rules in styles.css to router transitions, not board card moves.
+  defaultViewTransition: { types: ['route'] as string[] },
   defaultErrorComponent: ErrorScreen,
   defaultNotFoundComponent: () => createElement(NotFoundScreen),
   scrollRestoration: true,

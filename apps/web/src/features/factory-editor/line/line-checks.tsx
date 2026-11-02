@@ -5,6 +5,7 @@
 import { Check, CircleAlert, Info, TriangleAlert } from 'lucide-react';
 import { useId } from 'react';
 import type { CheckResult } from '../../../api/types';
+import { sectionHeadingClass } from '../../../ui/page-header';
 import { useValidation } from '../frame/use-editor';
 import { noMergeHint, stationLabel } from './labels';
 import { useLineEditor } from './line-editor';
@@ -74,7 +75,7 @@ export function LineChecks() {
   return (
     <section aria-labelledby={id} className="min-w-0 overflow-hidden rounded-control border border-line bg-card">
       <header className="border-b border-line px-4 py-3">
-        <h2 id={id} className="m-0 text-base font-semibold">
+        <h2 id={id} className={sectionHeadingClass}>
           Checks on this line
         </h2>
       </header>

@@ -67,7 +67,7 @@ export function caseLabel(entry: EvalCaseEntry): string {
 /** Why starting a run failed, in the page's words. */
 export function runFailure(err: unknown): string {
   if (!(err instanceof ApiError)) return 'goald is not answering. Nothing started; try again once it is.';
-  if (err.code === 'evals-unavailable') return 'Not started: evals are not available on this goald.';
+  if (err.code === 'evals-unavailable') return 'Not started: evals are not turned on for this installation.';
   return `Not started: ${err.detail ?? err.title}`;
 }
 
@@ -84,7 +84,7 @@ export function addCaseFailure(err: unknown): string {
     case 'evals-failing':
       return 'An eval run failed, so the draft stays open. Fix the case that failed, then publish the draft.';
     case 'evals-unavailable':
-      return 'Evals are not available on this goald. Nothing was added.';
+      return 'Evals are not turned on for this installation. Nothing was added.';
     default:
       return `Not added: ${err.detail ?? err.title}`;
   }

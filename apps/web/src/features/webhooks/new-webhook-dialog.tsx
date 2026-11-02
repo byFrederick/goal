@@ -25,7 +25,7 @@ interface NewWebhookDialogProps {
 function failure(err: Error): string {
   if (!(err instanceof ApiError)) return 'goald is not answering. The webhook is not created; try again once it is.';
   if (err.code === 'webhook-name-taken') return 'Another webhook in this factory has this name.';
-  if (err.code === 'webhook-invalid') return 'goald does not accept this name or kind. Check both and try again.';
+  if (err.code === 'webhook-invalid') return 'This name or kind is not accepted. Check both and try again.';
   return `Not created: ${err.detail ?? err.title}`;
 }
 

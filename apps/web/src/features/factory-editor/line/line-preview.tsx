@@ -7,6 +7,7 @@ import { useId } from 'react';
 import { lineSlots, slotsSentence } from '../../../shared/definition/slots';
 import { cn } from '../../../ui/cn';
 import { Hatch } from '../../../ui/hatch';
+import { sectionHeadingClass } from '../../../ui/page-header';
 import { previewDetail, reworkSentence, stationLabel } from './labels';
 import { useLineEditor } from './line-editor';
 
@@ -22,7 +23,7 @@ export function LinePreview() {
       className="@container flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-4 md:p-5"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id={id} className="m-0 text-lg font-medium">
+        <h2 id={id} className={sectionHeadingClass}>
           Line preview
         </h2>
         {slots ? <span className="text-[13px] text-muted">{slotsSentence(used, slots.cap)}</span> : null}

@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { boardQuery, ensureLoaded, itemsQuery } from '../api/queries';
 import type { ItemState } from '../api/types';
 import { pageTitle } from '../app/route-focus';
-import { ListPageSkeleton } from '../app/route-skeletons';
+import { ItemsSkeleton } from '../app/route-skeletons';
 import { ItemsPage } from '../features/items/items-page';
 import { stateNames } from '../shared/item-state';
 
@@ -24,7 +24,7 @@ const isState = (v: unknown): v is ItemState => typeof v === 'string' && v in st
 const nonEmpty = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined);
 
 export const Route = createFileRoute('/o/$org/f/$factory/items/')({
-  pendingComponent: ListPageSkeleton,
+  pendingComponent: ItemsSkeleton,
   validateSearch: (search: Record<string, unknown>): ItemsSearch => ({
     ...(isState(search.state) ? { state: search.state } : {}),
     ...(search.show === 'flat' ? { show: 'flat' as const } : {}),
@@ -38,15 +38,17 @@ export const Route = createFileRoute('/o/$org/f/$factory/items/')({
   loaderDeps: ({ search }) => ({ state: search.view === 'done-week' ? ('done' as const) : search.state }),
   // The saved views' counts and the filter menus read every item, so the unfiltered list is always
   // loaded; it holds the assemblies too, whose progress heads the parts a state filter keeps (the
-  // page's listRows). The board is loaded for the Move menu's optimistic update.
-  loader: ({ context: { queryClient, org, factory }, deps }) =>
-    Promise.all([
+  // page's listRows). The board serves the Move menu's optimistic update only, so it is started
+  // here and not awaited.
+  loader: ({ context: { queryClient, org, factory }, deps }) => {
+    void queryClient.prefetchQuery(boardQuery(org.id, factory.id));
+    return Promise.all([
       ensureLoaded(queryClient, itemsQuery(org.id, factory.id, { limit: 200 })),
       ...(deps.state
         ? [ensureLoaded(queryClient, itemsQuery(org.id, factory.id, { state: deps.state, limit: 200 }))]
         : []),
-      ensureLoaded(queryClient, boardQuery(org.id, factory.id)),
-    ]),
+    ]);
+  },
   head: ({ match: { context } }) => pageTitle('Items', context.factory.name, context.org.name),
   component: ItemsPage,
 });

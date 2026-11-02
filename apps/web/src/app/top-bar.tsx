@@ -24,11 +24,13 @@ import {
   knowledgeScreen,
   membersScreen,
   modelsScreen,
+  needsYouScreen,
   newFactoryScreen,
   type OrgPath,
   runsScreen,
   settingsScreen,
   sidebarFactoryPages,
+  spendScreen,
 } from './screens';
 
 /**
@@ -86,15 +88,16 @@ const factoryRoutePages: Record<string, string> = {
 };
 
 /** The organization page each organization route shows, by route id. */
-const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
+export const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/o/$org/_org/': homeScreen,
   '/account': { label: 'Your account' },
   '/o/$org/_org/api-keys': apiKeysScreen,
   '/o/$org/_org/members': membersScreen,
   '/o/$org/_org/models': modelsScreen,
   '/o/$org/_org/runs': runsScreen,
+  '/o/$org/_org/needs-you': needsYouScreen,
   '/o/$org/_org/settings': settingsScreen,
-  '/o/$org/_org/spend': { label: 'Spend and billing' },
+  '/o/$org/_org/spend': spendScreen,
   '/o/$org/_org/connections/': connectionsScreen,
   '/o/$org/_org/connections/$connection': connectionsScreen,
   '/o/$org/_org/connections/new': connectionsScreen,
@@ -113,7 +116,7 @@ export function usePageLabel(): string | undefined {
   return useMatches({ select: (matches) => pageLabel(matches.at(-1)?.routeId ?? '') });
 }
 
-function pageLabel(routeId: string): string | undefined {
+export function pageLabel(routeId: string): string | undefined {
   if (routeId.startsWith('/o/$org/f/$factory/')) {
     return sidebarFactoryPages.find((p) => p.id === factoryRoutePages[routeId])?.label;
   }

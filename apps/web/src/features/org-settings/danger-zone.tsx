@@ -54,7 +54,7 @@ function DeleteOrganization({ org, name, onLeave }: { org: OrgSummary; name: str
     onSuccess: async ({ purge_after }) => {
       onLeave();
       client.setQueryData<OrgSummary[]>(keys.orgs, (orgs) => orgs?.filter((o) => o.id !== org.id));
-      toast.success(`Deleted ${name}`, { description: `goald purges its data after ${formatDay(purge_after)}.` });
+      toast.success(`Deleted ${name}`, { description: `Its data is purged after ${formatDay(purge_after)}.` });
       await navigate({ to: '/', replace: true });
       client.removeQueries({ queryKey: keys.org(org.id) });
       void client.invalidateQueries({ queryKey: keys.orgs });
