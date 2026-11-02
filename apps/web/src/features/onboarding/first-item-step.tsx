@@ -410,7 +410,7 @@ function Ready({
                 {clockOf(Date.parse(e.at) - created)}
               </span>
               {decidedKinds.has(e.kind) ? (
-                <Check aria-hidden="true" className="size-3.5 flex-none text-run" />
+                <Check aria-hidden="true" className="size-3.5 flex-none text-link" />
               ) : (
                 <span aria-hidden="true" className="size-1.5 flex-none rounded-full bg-muted" />
               )}

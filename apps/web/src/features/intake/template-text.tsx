@@ -48,7 +48,7 @@ export function HighlightedYaml({ text }: { text: string }): ReactNode {
       );
     else
       out.push(
-        <span key={at} className="text-run">
+        <span key={at} className="text-link">
           {m[3]}
         </span>,
       );

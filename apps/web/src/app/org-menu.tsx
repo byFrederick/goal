@@ -70,7 +70,7 @@ const rowClass = cn(menuRow, 'cursor-pointer text-body hover:bg-hover data-[high
 
 /** The check on the current organization; its label is what a screen reader hears for it. */
 function CurrentCheck() {
-  return <Check role="img" aria-label="Current" size={16} strokeWidth={1.75} className="shrink-0 text-run" />;
+  return <Check role="img" aria-label="Current" size={16} strokeWidth={1.75} className="shrink-0 text-link" />;
 }
 
 /** The member count, from the members list. It mounts only while the menu is open and the caller may read members. */

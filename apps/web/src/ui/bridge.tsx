@@ -129,12 +129,12 @@ export function Bridge({
                   ) : null}
                   {b.kind === 'actual' ? (
                     <div
-                      className="absolute top-0 h-5 w-[3%] min-w-7 -translate-x-full rounded-[4px] bg-run"
+                      className="absolute top-0 h-5 w-[3%] min-w-7 -translate-x-full rounded-chip bg-run"
                       style={{ left: `${b.end}%` }}
                     />
                   ) : (
                     <div
-                      className="absolute top-0 h-5 min-w-1.5 overflow-hidden rounded-[3px]"
+                      className="absolute top-0 h-5 min-w-1.5 overflow-hidden rounded-chip"
                       style={{ left: `${b.left}%`, width: `${Math.max(b.width, 1.8)}%` }}
                     >
                       <Hatch tone={b.kind === 'target' ? 'target' : 'rework'} />

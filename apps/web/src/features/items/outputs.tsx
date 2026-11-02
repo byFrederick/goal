@@ -45,7 +45,7 @@ function Value({ name, value }: { name: string; value: unknown }) {
     <div className="flex items-baseline justify-between gap-3 border-t border-line pt-2 text-body">
       <span className="text-muted">{humanize(name)}</span>
       {url ? (
-        <a href={text} target="_blank" rel="noreferrer" className="[overflow-wrap:anywhere] hover:text-run">
+        <a href={text} target="_blank" rel="noreferrer" className="[overflow-wrap:anywhere] hover:text-link">
           {text}
         </a>
       ) : (

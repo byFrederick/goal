@@ -165,7 +165,7 @@ export function History({
       <SectionLink
         section="versions"
         patch={{}}
-        className="block border-t border-line py-3 text-secondary font-medium underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-run"
+        className="block border-t border-line py-3 text-secondary font-medium underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-link"
       >
         {allVersionsText(versions)}
       </SectionLink>

@@ -96,6 +96,13 @@ describe('the Connections list', () => {
     }
   });
 
+  it('gives a truncated description its full text as a title', async () => {
+    renderList();
+    await screen.findByRole('heading', { level: 2, name: 'Code hosts' });
+    const description = within(group('Code hosts')).getAllByText('acme-bot')[0] as HTMLElement;
+    expect(description.getAttribute('title')).toBe('acme-bot');
+  });
+
   it('hides a group with no connection in it', async () => {
     api.connections = connections.filter((c) => c.kind !== 'mcp-server');
     renderConnectionsRoute({

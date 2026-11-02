@@ -405,7 +405,7 @@ describe('Items list status icons', () => {
     expect(within(row).getAllByText('Infra engineer working').length).toBeGreaterThan(0);
     const icons = statusIcons(row);
     expect(icons.length).toBeGreaterThan(0);
-    expect(icons.every((c) => c.includes('text-run'))).toBe(true);
+    expect(icons.every((c) => c.includes('text-link'))).toBe(true);
   });
 
   it('shows the clock for a queued item', async () => {
@@ -421,7 +421,7 @@ describe('Items list status icons', () => {
 
     const icons = statusIcons(await rowOf('Rotate the keys'));
     expect(icons.length).toBeGreaterThan(0);
-    expect(icons.every((c) => c.includes('text-ok'))).toBe(true);
+    expect(icons.every((c) => c.includes('text-ok-ink'))).toBe(true);
   });
 
   it('shows no icon for a blocked item, whose words say it', async () => {
@@ -478,7 +478,7 @@ describe('Items list assemblies', () => {
     expect(within(row).getAllByText('Done').length).toBeGreaterThan(0);
     const icons = statusIcons(row);
     expect(icons.length).toBeGreaterThan(0);
-    expect(icons.every((c) => c.includes('text-ok'))).toBe(true);
+    expect(icons.every((c) => c.includes('text-ok-ink'))).toBe(true);
   });
 
   it('collapses and expands its parts', async () => {

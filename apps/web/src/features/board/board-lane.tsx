@@ -242,7 +242,7 @@ function Slots({ slots, busy }: { slots: number; busy: number }) {
           // biome-ignore lint/suspicious/noArrayIndexKey: the boxes are fixed by the slot count and never reorder
           key={i}
           aria-hidden="true"
-          className={cn('size-2.5 rounded-[2px] border', i < filled ? 'border-run bg-run' : 'border-rule')}
+          className={cn('size-2.5 rounded-chip border', i < filled ? 'border-run bg-run' : 'border-rule')}
         />
       ))}
     </span>
@@ -331,7 +331,7 @@ function PlanBar({ plan }: { plan: ItemCard['plan_steps'] }) {
           // biome-ignore lint/suspicious/noArrayIndexKey: the segments are fixed by the todo count and never reorder
           key={i}
           data-state={state}
-          className={cn('h-1.5 min-w-0 flex-1 rounded-[2px] border', planTones[state])}
+          className={cn('h-1.5 min-w-0 flex-1 rounded-full border', planTones[state])}
         />
       ))}
     </div>

@@ -130,7 +130,7 @@ export function NewItemFromSidebar({
       }}
       trigger={
         shown && button ? (
-          <Button variant="secondary" aria-keyshortcuts="C" className="w-full pr-2">
+          <Button variant="secondary" aria-keyshortcuts="C" className="w-full">
             <Plus size={16} strokeWidth={1.5} aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate text-left text-body">New item</span>
             <kbd className="grid size-5 flex-none place-items-center rounded-chip border border-rule font-mono text-meta font-semibold text-ink-soft">
@@ -255,7 +255,7 @@ function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle }
               className={`${field} h-11`}
             />
             {missing ? (
-              <p id={`${id}-error`} className="m-0 text-sm text-rework">
+              <p id={`${id}-error`} className="m-0 text-sm text-rework-ink">
                 Give the item a title.
               </p>
             ) : null}
@@ -306,7 +306,7 @@ function FactoryField({ id, picker, missing }: { id: string; picker: Picker; mis
     return (
       <div className="flex flex-col gap-1">
         <p className="m-0 text-sm text-muted">Factory</p>
-        <p role="alert" className="m-0 text-sm text-rework">
+        <p role="alert" className="m-0 text-sm text-rework-ink">
           Could not load your factories.
         </p>
         <Button variant="secondary" className="self-start" onClick={picker.onRetry}>
@@ -348,7 +348,7 @@ function FactoryField({ id, picker, missing }: { id: string; picker: Picker; mis
         }
       />
       {missing ? (
-        <p id={`${id}-factory-error`} className="m-0 text-sm text-rework">
+        <p id={`${id}-factory-error`} className="m-0 text-sm text-rework-ink">
           Choose a factory for the item.
         </p>
       ) : null}

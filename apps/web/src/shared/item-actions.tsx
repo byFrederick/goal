@@ -362,7 +362,7 @@ export function ItemDecisions({
               </MenuItem>
             ) : null}
             {cancelHere ? (
-              <MenuItem disabled={cancel.isPending} className="text-rework" onSelect={() => setCancelOpen(true)}>
+              <MenuItem disabled={cancel.isPending} className="text-rework-ink" onSelect={() => setCancelOpen(true)}>
                 <Ban size={16} strokeWidth={1.75} aria-hidden="true" />
                 Cancel item
               </MenuItem>
@@ -571,7 +571,7 @@ export function RejectDialog({
               className="min-h-28 w-full resize-y rounded-control border border-rule bg-card px-3 py-3 text-base text-ink placeholder:text-muted aria-[invalid=true]:border-rework"
             />
             {touched && missing ? (
-              <p id={`${id}-error`} className="m-0 text-sm text-rework">
+              <p id={`${id}-error`} className="m-0 text-sm text-rework-ink">
                 Write a reason so the agent knows what to fix.
               </p>
             ) : null}
@@ -686,7 +686,7 @@ export function MergeDialog({
                     href={pr}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-2 text-sm hover:text-run"
+                    className="inline-flex items-center gap-2 text-sm hover:text-link"
                   >
                     Review {pullRequestLabel(pr, prs.length > 1)} first
                     <ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />

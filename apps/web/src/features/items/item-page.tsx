@@ -213,7 +213,7 @@ export function ItemPage() {
               to="/o/$org/f/$factory/items/$ref"
               params={{ ...params, ref: refParam(item.assembly.ref) }}
               aria-label={`${item.assembly.title}, part ${item.assembly.part} of ${item.assembly.parts}`}
-              className="min-w-0 max-w-full no-underline hover:text-run"
+              className="min-w-0 max-w-full no-underline hover:text-link"
             >
               <Chip tone="plain" className="max-w-full">
                 <LayoutGrid size={12} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
@@ -268,7 +268,7 @@ export function ItemPage() {
                 !fullTrace && 'hidden @[720px]:flex',
               )}
             >
-              <p aria-live="polite" className="m-0 inline-flex items-center gap-2 text-sm text-run">
+              <p aria-live="polite" className="m-0 inline-flex items-center gap-2 text-sm text-link">
                 {run ? (
                   <>
                     <span aria-hidden="true" className="size-2 rounded-full bg-run ring-4 ring-run-tint" />

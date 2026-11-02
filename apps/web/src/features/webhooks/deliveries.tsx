@@ -106,7 +106,7 @@ function DeliveryRow({
             <Link
               to="/o/$org/f/$factory/items/$ref"
               params={{ org: scope.orgSlug, factory: scope.factoryName, ref: String(delivery.item.number) }}
-              className="font-medium text-run underline-offset-2 hover:underline"
+              className="font-medium text-link underline-offset-2 hover:underline"
             >
               #{delivery.item.number}
             </Link>

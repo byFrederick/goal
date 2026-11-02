@@ -30,11 +30,11 @@ export function ToolRow({ call }: { call: ToolCall }) {
         call.isError ? 'border-rework-tint' : 'border-line',
       )}
     >
-      <span className="font-mono text-secondary [overflow-wrap:anywhere] text-run">
+      <span className="font-mono text-secondary [overflow-wrap:anywhere] text-link">
         {call.tool}
         {call.argument ? <span className="text-muted"> {call.argument}</span> : null}
       </span>
-      <span className={cn('[overflow-wrap:anywhere]', call.isError && 'text-rework')}>
+      <span className={cn('[overflow-wrap:anywhere]', call.isError && 'text-rework-ink')}>
         {call.summary ?? <span className="text-muted">Waiting for the result…</span>}
       </span>
     </li>
@@ -307,7 +307,7 @@ function RunCard({
           </Button>
         ) : null}
         {run.reply ? <ReplyLine reply={run.reply} /> : null}
-        {run.error ? <p className="m-0 text-sm text-rework">{run.error}</p> : null}
+        {run.error ? <p className="m-0 text-sm text-rework-ink">{run.error}</p> : null}
         {version || run.model ? (
           <p className="m-0 text-meta text-muted">
             {[run.model ? modelOf(run.model) : undefined, version].filter(Boolean).join(', ')}

@@ -149,7 +149,9 @@ export function ApiKeysPage() {
                           <td>
                             <Scopes scopes={k.scopes} />
                           </td>
-                          <td className="max-w-40 truncate">{where(k)}</td>
+                          <td className="max-w-40 truncate" title={where(k)}>
+                            {where(k)}
+                          </td>
                           <td>{roleLabel(k.role_ceiling)}</td>
                           <td className="whitespace-nowrap">{k.created_by.name}</td>
                           {k.revoked_at ? (
@@ -257,7 +259,9 @@ export function ApiKeysPage() {
                 Agents outside Goal can create items and read the board through Goal’s MCP server.
               </p>
               <div className="flex h-9 items-center gap-2 rounded-control border border-rule bg-panel pr-2 pl-3">
-                <span className="min-w-0 flex-1 truncate font-mono text-secondary">{mcpAddress}</span>
+                <span title={mcpAddress} className="min-w-0 flex-1 truncate font-mono text-secondary">
+                  {mcpAddress}
+                </span>
                 <NotAvailable>
                   <CopyButton variant="white" text={mcpAddress} />
                 </NotAvailable>
@@ -320,7 +324,9 @@ function revokedText(k: ApiKey): string {
 function KeyName({ apiKey }: { apiKey: ApiKey }) {
   return (
     <span className="flex min-w-0 flex-col">
-      <span className="truncate font-semibold">{apiKey.name}</span>
+      <span className="truncate font-semibold" title={apiKey.name}>
+        {apiKey.name}
+      </span>
       <span className="font-mono text-meta text-muted">{apiKey.hint}…</span>
     </span>
   );

@@ -151,7 +151,7 @@ function PolicyCard({ overview }: { overview: JonahOverview }) {
           to="/o/$org/f/$factory/definition/$section"
           params={{ ...params, section: 'basics' }}
           search={{ mode: 'yaml', file: 'factory.yaml' }}
-          className="text-secondary font-control text-run no-underline hover:text-run-ink"
+          className="text-secondary font-control text-link no-underline hover:text-run-ink"
         >
           Change
         </Link>
@@ -198,7 +198,7 @@ function PassRateSection() {
         <Link
           to="/o/$org/f/$factory/jonah/judges"
           params={params}
-          className="press ml-auto text-secondary font-control text-run no-underline hover:text-run-ink"
+          className="press ml-auto text-secondary font-control text-link no-underline hover:text-run-ink"
         >
           Judges
         </Link>
@@ -298,7 +298,7 @@ export function JonahOverviewPage() {
                 to="/o/$org/f/$factory/jonah"
                 params={params}
                 search={{ tab: 'proposals' }}
-                className="text-secondary font-control text-run no-underline hover:text-run-ink"
+                className="text-secondary font-control text-link no-underline hover:text-run-ink"
               >
                 All proposals
               </Link>

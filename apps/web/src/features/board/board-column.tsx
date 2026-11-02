@@ -98,7 +98,9 @@ function ColumnHeader({
   return (
     <header className="flex flex-col gap-2 px-1">
       <div className="flex min-h-6 items-center gap-2">
-        <h2 className="m-0 min-w-0 truncate text-heading font-semibold">{humanize(station.id)}</h2>
+        <h2 className="m-0 min-w-0 truncate text-heading font-semibold" title={humanize(station.id)}>
+          {humanize(station.id)}
+        </h2>
         {constraint ? (
           <span className="inline-flex items-center gap-2 text-meta font-medium text-ink-soft">
             <i aria-hidden="true" className="block size-1.5 rounded-none bg-amber" />
@@ -111,7 +113,9 @@ function ColumnHeader({
       </div>
       <WipMeter station={station} />
       <div className="flex items-baseline justify-between gap-2 text-meta text-muted">
-        <span className="min-w-0 truncate">{left}</span>
+        <span className="min-w-0 truncate" title={left}>
+          {left}
+        </span>
         <span className="shrink-0 whitespace-nowrap tabular-nums">{right}</span>
       </div>
     </header>
@@ -220,7 +224,7 @@ export function StationColumn({
                   type="button"
                   aria-expanded={expanded}
                   onClick={() => setExpanded((open) => !open)}
-                  className="press min-h-11 self-start rounded-chip px-1 text-secondary font-medium text-run hover:text-run-ink md:min-h-6"
+                  className="press min-h-11 self-start rounded-chip px-1 text-secondary font-medium text-link hover:text-run-ink md:min-h-6"
                 >
                   {expanded ? 'Show fewer' : `Show ${hidden} more`}
                 </button>

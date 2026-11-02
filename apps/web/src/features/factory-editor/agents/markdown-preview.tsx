@@ -11,7 +11,7 @@ const components: Components = {
   h5: ({ node: _n, ...props }) => <h6 className="mt-3 mb-1 text-[15px] font-medium first:mt-0" {...props} />,
   h6: ({ node: _n, ...props }) => <h6 className="mt-3 mb-1 text-[15px] font-medium first:mt-0" {...props} />,
   a: ({ node: _n, ...props }) => (
-    <a className="text-ink underline underline-offset-3 hover:text-run" target="_blank" rel="noreferrer" {...props} />
+    <a className="text-ink underline underline-offset-3 hover:text-link" target="_blank" rel="noreferrer" {...props} />
   ),
 };
 

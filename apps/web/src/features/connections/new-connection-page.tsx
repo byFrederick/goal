@@ -66,7 +66,7 @@ export function NewConnectionPage() {
               params={{ org: org.slug }}
               search={{ next }}
               replace
-              className="text-run no-underline transition-colors duration-(--duration-quick) hover:text-run-ink"
+              className="text-link no-underline transition-colors duration-(--duration-quick) hover:text-run-ink"
             >
               Back
             </Link>
@@ -310,7 +310,9 @@ function CatalogItem({
       <ConnectionGlyph kind={kind.name} title={kind.title} />
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="font-control text-body">{kind.title}</span>
-        <span className="truncate text-secondary text-muted">{kindSummary(kind)}</span>
+        <span className="truncate text-secondary text-muted" title={kindSummary(kind)}>
+          {kindSummary(kind)}
+        </span>
       </span>
       {added ? (
         <span className="inline-flex shrink-0 items-center gap-2 text-meta font-control text-muted">

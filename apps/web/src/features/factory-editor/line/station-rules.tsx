@@ -58,7 +58,7 @@ const smallInput = cn(
 function BasicsLink({ children }: { children: string }) {
   const editor = useLineEditor();
   const params = useParams({ strict: false }) as { org?: string; factory?: string };
-  const className = 'text-ink underline underline-offset-3 hover:text-run';
+  const className = 'text-ink underline underline-offset-3 hover:text-link';
   if (editor.place === 'wizard') {
     return (
       <Link

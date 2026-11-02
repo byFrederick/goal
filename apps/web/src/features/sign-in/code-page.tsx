@@ -97,7 +97,7 @@ export function CodePage({ email, next }: { email: string; next: string | undefi
         <Link
           to="/sign-in"
           search={next ? { next } : {}}
-          className="inline-flex min-h-11 items-center font-control text-run transition-colors duration-200 hover:text-run-ink md:min-h-6"
+          className="inline-flex min-h-11 items-center font-control text-link transition-colors duration-200 hover:text-run-ink md:min-h-6"
         >
           Use a different email
         </Link>
