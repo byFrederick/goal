@@ -32,8 +32,8 @@ export const pickerSources: readonly PickerSource[] = [
 /** The picker's groups, top to bottom, with the sources of each. */
 export const pickerGroups: readonly { title: string; keys: readonly SourceKey[] }[] = [
   { title: 'Built in', keys: ['schedule', 'webhook'] },
-  { title: 'Connected', keys: ['github', 'cloudflare'] },
-  { title: 'Not available yet', keys: ['slack', 'linear', 'jira', 'sentry'] },
+  { title: 'Connected', keys: ['github', 'slack', 'cloudflare'] },
+  { title: 'Not connected', keys: ['linear', 'jira', 'sentry'] },
 ];
 
 /** The same sources by key, for a choice (the picker and a suggestion name one). */

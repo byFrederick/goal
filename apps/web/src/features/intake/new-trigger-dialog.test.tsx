@@ -119,4 +119,20 @@ describe('New trigger picker', () => {
     fireEvent.click(use);
     expect(router.state.location.pathname).toBe('/o/acme/f/widgets/intake/new');
   });
+
+  it('groups the sources, links Connect for those not connected and filters them by search', async () => {
+    renderPicker();
+    await screen.findByRole('dialog', { name: 'New trigger' });
+
+    for (const title of ['Built in', 'Connected', 'Not connected']) {
+      expect(screen.getByRole('heading', { level: 3, name: title })).toBeTruthy();
+    }
+    expect(screen.getByRole('link', { name: 'Connect Linear' }).getAttribute('href')).toBe('/o/acme/connections');
+    expect(screen.getByRole('list', { name: 'New trigger steps' })).toBeTruthy();
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search sources' }), { target: { value: 'jir' } });
+    expect(screen.getByRole('button', { name: 'Jira' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'GitHub' })).toBeNull();
+    expect(screen.queryByRole('heading', { level: 3, name: 'Built in' })).toBeNull();
+  });
 });
