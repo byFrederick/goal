@@ -382,6 +382,8 @@ describe('the Knowledge page', () => {
       ['testing.md', '33', '▲ 14', '▼ 0'],
     ];
     expect(rows).toHaveLength(counts.length);
+    expect(usage.querySelectorAll('.bg-ink').length).toBeGreaterThan(0);
+    expect(usage.querySelector('.bg-run')).toBeNull();
     counts.forEach(([name, runs, helped, misled], i) => {
       const row = rows[i];
       if (!row) return;
