@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import { ensureLoaded, meQuery, orgsQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
+import { PendingScreen } from '../app/states';
 import { defaultOrg } from '../shared/org';
 import { LogoMark } from '../ui/logo';
 
@@ -8,6 +9,7 @@ import { LogoMark } from '../ui/logo';
 // onboarding, where step 1 creates one (ADR 0032 decision 1); without sign-in, a page saying how to
 // make one.
 export const Route = createFileRoute('/')({
+  pendingComponent: PendingScreen,
   loader: async ({ context }) => {
     const org = defaultOrg(await ensureLoaded(context.queryClient, orgsQuery));
     if (org) throw redirect({ to: '/o/$org', params: { org: org.slug }, replace: true });
