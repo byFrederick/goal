@@ -118,11 +118,9 @@ function NameDialog({
           </Field>
           <div className="flex flex-wrap justify-end gap-2">
             <DialogClose asChild>
-              <Button variant="secondary" size="lg" className="md:h-10 md:text-sm">
-                Cancel
-              </Button>
+              <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" size="lg" className="md:h-10 md:text-sm" disabled={pending}>
+            <Button type="submit" variant="primary" disabled={pending}>
               {pending ? 'Saving…' : submitLabel}
             </Button>
           </div>
@@ -132,7 +130,7 @@ function NameDialog({
   );
 }
 
-const listButton = 'h-11 w-full justify-center md:h-10';
+const listButton = 'w-full justify-center';
 
 /**
  * Add agent: the name dialog for the draft's agents, shared by the definition's agents list and the Agents
@@ -279,9 +277,7 @@ export function RemoveAgentDialog({
           </ul>
           <div className="flex justify-end">
             <DialogClose asChild>
-              <Button variant="secondary" size="lg" className="md:h-10 md:text-sm">
-                Close
-              </Button>
+              <Button variant="secondary">Close</Button>
             </DialogClose>
           </div>
         </DialogContent>
@@ -453,17 +449,9 @@ export function CopyAgentButton() {
             ) : null}
             <div className="flex flex-wrap justify-end gap-2">
               <DialogClose asChild>
-                <Button variant="secondary" size="lg" className="md:h-10 md:text-sm">
-                  Cancel
-                </Button>
+                <Button variant="secondary">Cancel</Button>
               </DialogClose>
-              <Button
-                variant="primary"
-                size="lg"
-                className="md:h-10 md:text-sm"
-                disabled={!picked || pending}
-                onClick={() => void copy()}
-              >
+              <Button variant="primary" disabled={!picked || pending} onClick={() => void copy()}>
                 {pending ? 'Copying…' : 'Copy'}
               </Button>
             </div>

@@ -47,7 +47,7 @@ export function NewConnectionPage() {
       <TopBarSlot
         crumb="Add connection"
         actions={
-          <Button asChild variant="white" className="h-11 md:h-8.5">
+          <Button asChild variant="white">
             <Link to="/o/$org/connections" params={{ org: org.slug }}>
               Cancel
             </Link>
@@ -416,7 +416,7 @@ function ConnectionForm({
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5">
         <p className="m-0 text-secondary text-muted">Agents get it on their next run</p>
-        <Button type="submit" variant="primary" className="h-11 md:h-8.5" disabled={create.isPending}>
+        <Button type="submit" variant="primary" disabled={create.isPending}>
           {create.isPending ? 'Adding…' : `Add ${kind.title}`}
         </Button>
       </div>

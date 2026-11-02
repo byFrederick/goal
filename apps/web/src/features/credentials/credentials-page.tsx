@@ -65,7 +65,7 @@ export function CredentialsPage() {
     manage ? (
       <Menu>
         <MenuTrigger asChild>
-          <Button variant={variant} className="h-11 md:h-10">
+          <Button variant={variant}>
             <span aria-hidden="true">+</span> New credential
           </Button>
         </MenuTrigger>

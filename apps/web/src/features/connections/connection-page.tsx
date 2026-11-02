@@ -54,7 +54,7 @@ export function ConnectionPage() {
   // Before any test, the header offers Test; once there is a result, Test again sits inside that result.
   const testButton =
     testable && !connection.last_test ? (
-      <Button variant="white" className="h-11 md:h-10" disabled={testing} onClick={runTest}>
+      <Button variant="white" disabled={testing} onClick={runTest}>
         <RefreshCw
           size={16}
           strokeWidth={1.5}
@@ -309,7 +309,7 @@ function FieldsCard({
       ) : null}
       {manage ? (
         <div className="flex justify-end border-t border-line pt-4">
-          <Button type="submit" variant="primary" className="h-11 md:h-10" disabled={!dirty || save.isPending}>
+          <Button type="submit" variant="primary" disabled={!dirty || save.isPending}>
             {save.isPending ? 'Saving…' : 'Save changes'}
           </Button>
         </div>
@@ -323,7 +323,7 @@ function FieldsCard({
 function TestAgain({ testing, passed, onTest }: { testing: boolean; passed: boolean | undefined; onTest: () => void }) {
   const showPass = !testing && passed === true;
   return (
-    <Button variant="white" className="h-11 md:h-8" disabled={testing} onClick={onTest}>
+    <Button variant="white" disabled={testing} onClick={onTest}>
       {showPass ? (
         <Check key="pass" size={16} strokeWidth={1.75} aria-hidden="true" className="animate-fade-in text-ok" />
       ) : (
@@ -413,7 +413,6 @@ function DeleteCard({ connection: c }: { connection: Connection }) {
       </div>
       <Button
         variant="rework"
-        className="h-11 md:h-10"
         aria-disabled={users.length > 0 || undefined}
         aria-describedby={reasonId}
         onClick={() => {
