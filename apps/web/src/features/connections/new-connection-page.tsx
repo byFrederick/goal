@@ -8,7 +8,7 @@
 // are cleared after it. A `next` path in the URL (the onboarding's Code step) takes the person back there instead.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useRouter, useSearch } from '@tanstack/react-router';
-import { Info, Plus, Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { type FormEvent, type ReactNode, useDeferredValue, useId, useState } from 'react';
 import { ApiError } from '../../api/client';
 import { createConnection } from '../../api/connections';
@@ -23,6 +23,7 @@ import { Callout } from '../../ui/callout';
 import { cn } from '../../ui/cn';
 import { Field, Input } from '../../ui/field';
 import { NotAvailable } from '../../ui/not-available';
+import { Skeleton } from '../../ui/skeleton';
 import { DefineKindDialog } from './define-kind-dialog';
 import { Monogram, WriteOnly } from './parts';
 import { SecretInput } from './secret-input';
@@ -56,11 +57,17 @@ export function NewConnectionPage() {
       <h1 className="m-0 text-page-title">Add a connection</h1>
 
       {kindsQuery.isPending ? (
-        <div aria-busy="true" className="rounded-card border border-line bg-card p-4">
-          <span role="status" className="sr-only">
-            Loading connection kinds
-          </span>
-        </div>
+        <Skeleton
+          ready={false}
+          placeholder={
+            <div className="flex flex-col gap-3 rounded-card border border-line bg-card p-4">
+              <div className="h-10 rounded-control bg-hover" />
+              <div className="h-24 rounded-control bg-hover" />
+            </div>
+          }
+        >
+          <span />
+        </Skeleton>
       ) : kindsQuery.isError ? (
         <div
           className="flex max-w-xl flex-col items-start gap-3 rounded-card border border-line bg-card p-4"
@@ -406,15 +413,6 @@ function ConnectionForm({
           <Callout tone="rework">{refusalText(create.error)}</Callout>
         </div>
       ) : null}
-
-      <p role="status" className="m-0 flex items-center gap-3 rounded-control bg-panel p-3 text-body text-ink-soft">
-        <Info size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
-        <span>
-          {kind.testable
-            ? 'Once it exists, Test sends the kind’s check from goald with these values.'
-            : 'This kind has no test: runs show whether it works.'}
-        </span>
-      </p>
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5">
         <p className="m-0 text-secondary text-muted">Agents get it on their next run</p>
