@@ -47,7 +47,9 @@ export function DocumentLine({ source, document: d }: { source: string; document
         title={d.title}
         className="flex min-w-0 items-center font-control text-body text-ink hover:text-run-ink max-md:min-h-11"
       >
-        <span className="min-w-0 truncate">{d.title}</span>
+        <span title={d.title} className="min-w-0 truncate">
+          {d.title}
+        </span>
       </Link>
       <span translate="no" title={path} className="min-w-0 truncate font-mono text-meta text-muted">
         {path}
