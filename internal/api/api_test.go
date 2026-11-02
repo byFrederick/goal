@@ -876,8 +876,8 @@ func TestAPI_SubmitRecordsItsSource(t *testing.T) {
 	}{
 		{"a browser session", h.harness, cookie(ownerToken), domain.ItemFromPeople},
 		{"goal login's session", h.harness, bearer(freshCLIToken), domain.ItemFromCLI},
-		{"a personal token", h.harness, bearer(pat.Secret), domain.ItemFromCLI},
-		{"an API key", h.harness, bearer(key.Secret), domain.ItemFromAPI},
+		{"a personal token of the owner", h.harness, bearer(pat.Secret), domain.ItemFromCLI},
+		{"the ci-deploy API key", h.harness, bearer(key.Secret), domain.ItemFromAPI},
 		{"the local user of GOAL_AUTH=none", newHarness(t), nil, domain.ItemFromPeople},
 	}
 

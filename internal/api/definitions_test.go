@@ -1037,7 +1037,7 @@ func TestDefinitions_FactoryShowsItsPurpose(t *testing.T) {
 
 		list := decode[gen.FactoryList](t, h.request(t, http.MethodGet, "/v1/orgs/acme/factories", "", nil), http.StatusOK)
 		for _, f := range list.Factories {
-			if f.Name == "acme" && (f.Description == nil || *f.Description != c.want) {
+			if f.Id == acmeID && (f.Description == nil || *f.Description != c.want) {
 				t.Errorf("listed factory with metadata.%s: description = %v, want %q", c.field, f.Description, c.want)
 			}
 		}
