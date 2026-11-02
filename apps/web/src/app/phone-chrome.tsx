@@ -185,7 +185,7 @@ export function PhoneTabBar({ org, onMore }: PhoneTabBarProps) {
   );
 }
 
-/** Needs you: the organization's page, with the count of what waits on a person in a orange badge. */
+/** Needs you: the organization's page, with the count of what waits on a person in an orange badge. */
 function NeedsYouTab({ org }: { org: OrgSummary }) {
   const waiting = useQuery(attentionQuery(org.id)).data?.waiting_on_you ?? 0;
   return (

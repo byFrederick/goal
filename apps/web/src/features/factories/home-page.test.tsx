@@ -328,6 +328,17 @@ describe('Home: the ready state', () => {
     expect(screen.queryByText('Question')).toBeNull();
   });
 
+  it('draws the Needs you first count as an orange 18px pill', async () => {
+    await renderReady();
+
+    const needs = screen.getByRole('region', { name: 'Needs you first' });
+    const pill = within(needs).getByText('waiting on you').parentElement as HTMLElement;
+    expect(pill.className).toContain('rounded-full');
+    expect(pill.className).toContain('bg-you');
+    expect(pill.className).toContain('h-[18px]');
+    expect(pill.className).not.toContain('rounded-chip');
+  });
+
   it('leads Open all from Needs you first to the Needs you page', async () => {
     await renderReady();
 
