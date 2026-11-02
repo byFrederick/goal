@@ -1,9 +1,10 @@
 // The Cases table: each case's name and description, the agent that runs it, what checks it, its last
-// three tries as dots, what its tries cost and a Run for that one case. A wide table scrolls sideways
+// three tries as squares, what its tries cost and a Run for that one case. A wide table scrolls sideways
 // inside its card; the page never does.
 import { ChartColumn, Check, FileText, type LucideIcon } from 'lucide-react';
 import type { EvalCaseEntry, EvalCheckedBy } from '../../api/types';
 import { formatUsd } from '../../shared/format';
+import { useArrivals } from '../../ui/arrivals';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
@@ -34,24 +35,25 @@ export function EvalsTable({
   running: boolean;
   onRun: (name: string) => void;
 }) {
+  const arrived = useArrivals(cases.map((entry) => entry.name));
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-xl border-collapse text-secondary">
+      <table className="w-full min-w-xl border-separate border-spacing-0 text-secondary">
         <thead>
           <tr className="text-left text-meta text-muted">
-            <th scope="col" className="border-b border-line px-4 pb-2 font-control font-semibold">
+            <th scope="col" className="border-b border-line px-4 pb-2 font-control font-medium whitespace-nowrap">
               Case
             </th>
-            <th scope="col" className="border-b border-line px-4 pb-2 font-control font-semibold">
+            <th scope="col" className="border-b border-line px-4 pb-2 font-control font-medium whitespace-nowrap">
               Agent
             </th>
-            <th scope="col" className="border-b border-line px-4 pb-2 font-control font-semibold">
+            <th scope="col" className="border-b border-line px-4 pb-2 font-control font-medium whitespace-nowrap">
               Checked by
             </th>
-            <th scope="col" className="border-b border-line px-4 pb-2 font-control font-semibold">
+            <th scope="col" className="border-b border-line px-4 pb-2 font-control font-medium whitespace-nowrap">
               Last 3 tries
             </th>
-            <th scope="col" className="border-b border-line px-4 pb-2 font-control font-semibold">
+            <th scope="col" className="border-b border-line px-4 pb-2 font-control font-medium whitespace-nowrap">
               Cost
             </th>
             <th scope="col" className="border-b border-line px-4 pb-2">
@@ -60,27 +62,29 @@ export function EvalsTable({
           </tr>
         </thead>
         <tbody>
-          {cases.map((entry) => {
+          {cases.map((entry, index) => {
+            const edge = index === cases.length - 1 ? '' : 'border-b border-line';
+            const cell = `${edge} px-4 py-3 align-middle transition-colors duration-(--duration-quick) ease-in-out group-hover:bg-panel`;
             const Icon = checkedByIcon[entry.checked_by.kind];
             const dots = dotsOf(entry.last_tries);
             return (
-              <tr key={entry.name} className="hover:bg-panel">
-                <td className="border-b border-line px-4 py-3 align-middle">
+              <tr key={entry.name} className={cn('group', arrived(entry.name) && 'motion-safe:animate-item-in')}>
+                <td className={cell}>
                   <div className="flex min-w-0 flex-col gap-1">
-                    <span className="font-mono text-secondary text-ink">{entry.name}</span>
+                    <span className="font-mono text-secondary font-medium text-ink">{entry.name}</span>
                     <span className="text-meta text-muted">{entry.description}</span>
                   </div>
                 </td>
-                <td className="border-b border-line px-4 py-3 align-middle">
+                <td className={cell}>
                   <Chip>{entry.agent}</Chip>
                 </td>
-                <td className="border-b border-line px-4 py-3 align-middle">
+                <td className={cell}>
                   <span className="inline-flex items-center gap-2 whitespace-nowrap text-secondary text-ink-soft">
                     <Icon aria-hidden="true" size={14} strokeWidth={1.75} className="shrink-0 text-muted" />
                     {checkedByText(entry.checked_by)}
                   </span>
                 </td>
-                <td className="border-b border-line px-4 py-3 align-middle">
+                <td className={cell}>
                   {dots.length === 0 ? (
                     <span className="text-muted">{none}</span>
                   ) : (
@@ -90,16 +94,16 @@ export function EvalsTable({
                           // biome-ignore lint/suspicious/noArrayIndexKey: a fixed row of at most three dots, by place only
                           key={`${entry.name}-${i}`}
                           aria-hidden="true"
-                          className={cn('size-2 rounded-full', dotTone[tone])}
+                          className={cn('block size-2 rounded-xs', dotTone[tone])}
                         />
                       ))}
                     </span>
                   )}
                 </td>
-                <td className="border-b border-line px-4 py-3 align-middle tabular-nums text-ink-soft">
+                <td className={cn(cell, 'tabular-nums text-ink-soft')}>
                   {entry.cost_usd === undefined ? none : formatUsd(entry.cost_usd)}
                 </td>
-                <td className="border-b border-line px-4 py-3 align-middle">
+                <td className={cell}>
                   <Button
                     size="sm"
                     variant="secondary"
