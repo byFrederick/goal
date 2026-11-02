@@ -5,6 +5,8 @@
 # The production deploy builds and pushes it reproducibly (deploy/cloudflare/scripts/deploy.sh):
 # keep the slow steps (pnpm and go mod download from the manifests) before the source COPYs.
 # Its settings and secrets come from the container's environment, never from the image.
+# An identical image keeps the running instance, so a commit here is how an operator rolls goald
+# over when it must restart (2026-11-02: its engine had stopped pulling work).
 
 ARG NODE_IMAGE=node:22-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d
 ARG GO_IMAGE=golang:1.26.10-alpine@sha256:27f2d3b83cfc5803c8078f8e730af0f7c431bf067afaec8f60a36fb763187cba
