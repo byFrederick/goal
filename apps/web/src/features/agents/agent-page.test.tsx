@@ -15,6 +15,7 @@ import {
 import type { AgentStats, Factory, OrgSummary } from '../../api/types';
 import { renderFactoryPage, type Seed } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
+import { DraftSession } from '../factory-editor/draft/session';
 import { AgentPage } from './agent-page';
 import type { AgentView } from './views';
 
@@ -134,11 +135,13 @@ async function renderPage(
         <AgentPage agent="frontend-engineer" view={view} />
       </TooltipProvider>
     ),
-    path: 'agents/frontend-engineer',
+    path: 'agents/$agent',
+    location: 'agents/frontend-engineer',
     org,
     factory: can ? { ...factory, can } : factory,
     seed: seeds(seedOptions),
     search: view === 'overview' ? undefined : { view },
+    topBar: true,
   });
   await screen.findByRole('heading', { level: 1, name: 'frontend-engineer' });
   return result;
@@ -158,7 +161,7 @@ describe('the Agent page, ready', () => {
       within(views)
         .getAllByRole('link')
         .map((l) => l.textContent),
-    ).toEqual(['Overview', 'Prompt', 'Tools and access', 'Runs']);
+    ).toEqual(['Overview', 'Prompt', 'Tools and access', 'Runs41 this week']);
     expect(within(views).getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBe('page');
   });
 
@@ -204,6 +207,89 @@ describe('the Agent page, ready', () => {
     expect(screen.getByRole('region', { name: 'Skills' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Tool policy' })).toBeTruthy();
     expect(screen.getByText('Blocked this week: 2 calls, both aws ssm put-parameter.')).toBeTruthy();
+  });
+});
+
+describe('the top bar', () => {
+  const edit: Factory['can'] = ['item:create', 'factory:manage', 'definition:edit'];
+
+  async function renderWithBar(can?: Factory['can']) {
+    const result = renderFactoryPage({
+      page: () => (
+        <TooltipProvider>
+          <AgentPage agent="frontend-engineer" view="overview" />
+        </TooltipProvider>
+      ),
+      path: 'agents/$agent',
+      location: 'agents/frontend-engineer',
+      org,
+      factory: can ? { ...factory, can } : factory,
+      seed: seeds(),
+      topBar: true,
+    });
+    await screen.findByRole('heading', { level: 1, name: 'frontend-engineer' });
+    return result;
+  }
+
+  it('ends the crumb with the agent and draws no breadcrumb of its own', async () => {
+    await renderWithBar();
+    const crumbs = screen.getAllByRole('navigation', { name: 'Breadcrumb' });
+    expect(crumbs).toHaveLength(1);
+    expect(crumbs[0]?.textContent).toContain('Agents');
+    expect(crumbs[0]?.textContent).toContain('frontend-engineer');
+    expect(
+      screen.getByRole('heading', { level: 1 }).closest('div')?.querySelector('nav[aria-label="Breadcrumb"]'),
+    ).toBeNull();
+  });
+
+  it('holds the actions in order, Save changes last, and not in the page body', async () => {
+    await renderWithBar(edit);
+    const names = ['Bake off this agent', 'Open prompt file', 'Save changes'];
+    const found = names.map((n) => screen.getByRole(n === 'Open prompt file' ? 'link' : 'button', { name: n }));
+    for (let i = 1; i < found.length; i++) {
+      const prev = found[i - 1] as HTMLElement;
+      expect(prev.compareDocumentPosition(found[i] as HTMLElement) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    expect(
+      screen
+        .getByRole('heading', { level: 1 })
+        .closest('header')
+        ?.parentElement?.contains(found[0] as Node),
+    ).toBe(false);
+  });
+
+  it('sends the waiting edit with the session flush, once', async () => {
+    const flush = vi.spyOn(DraftSession.prototype, 'flush').mockResolvedValue();
+    await renderWithBar(edit);
+    const settings = within(screen.getByRole('region', { name: 'Settings' }));
+    fireEvent.click(settings.getByRole('button', { name: 'Reset to default, claude-opus-5-5' }));
+    expect(flush).toHaveBeenCalledTimes(1);
+    const save = screen.getByRole('button', { name: 'Save changes' });
+    await waitFor(() => expect(save.getAttribute('aria-disabled')).toBeNull());
+    fireEvent.click(save);
+    expect(flush).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps Save changes off while nothing waits, and Not available without definition:edit', async () => {
+    await renderWithBar(edit);
+    expect(screen.getByRole('button', { name: 'Save changes' }).getAttribute('aria-disabled')).toBe('true');
+    cleanup();
+    await renderWithBar();
+    const save = screen.getByRole('button', { name: 'Save changes' });
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    save.focus();
+    expect((await screen.findAllByText('Not available yet')).length).toBeGreaterThan(0);
+  });
+});
+
+describe('the tabs', () => {
+  it('are an underline row of four links, the current one marked', async () => {
+    await renderPage('tools');
+    const views = screen.getByRole('navigation', { name: 'Agent views' });
+    expect(within(views).getAllByRole('link')).toHaveLength(4);
+    expect(within(views).getByRole('link', { name: 'Tools and access' }).getAttribute('aria-current')).toBe('page');
+    expect(within(views).getByRole('link', { name: /^Runs/ }).textContent).toContain('41 this week');
+    expect(views.className).toContain('border-b');
   });
 });
 
