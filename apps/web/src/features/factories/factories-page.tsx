@@ -1,14 +1,13 @@
 // Home, the organization's page (ADR 0016, wave 2; docs/design/screens/daily-work/home.jpg): the top bar
-// with New factory and New item, a greeting with a summary of what waits, one row per factory with its
-// navy line and three figures, then "Needs you first" and "Spend this week". Everything comes from the
+// with New factory and New item, the summary of what waits, one row per factory with its
+// line and three figures, then "Needs you first" and "Spend this week". Everything comes from the
 // overview (7 days and today), the inbox and the attention list, which the organization's stream keeps
 // fresh. The Active | Archived control stays: ?archived=true lists the archived factories instead
 // (ArchivedFactories), with Restore.
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Factory as FactoryIcon } from 'lucide-react';
 import { useId } from 'react';
-import { attentionQuery, inboxQuery, meQuery, overviewQuery } from '../../api/queries';
+import { attentionQuery, inboxQuery, overviewQuery } from '../../api/queries';
 import { TopBarSlot } from '../../app/top-bar';
 import { plural } from '../../shared/format';
 import { factoryMark } from '../../shared/marks';
@@ -33,7 +32,6 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
   const today = useQuery(overviewQuery(org.id, '1d'));
   const inbox = useQuery(inboxQuery(org.id));
   const attention = useQuery(attentionQuery(org.id));
-  const me = useQuery(meQuery);
 
   // The top bar's actions: New factory only for whoever may create one, and once a factory exists to
   // show; New item always, except on the archived list.
@@ -130,19 +128,17 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
     return (
       <>
         {topBar}
-        <h1 className="m-0 text-page-title">{greeting(new Date(), me.data?.user?.name)}</h1>
+        <h1 className="m-0 text-page-title tracking-display">Home</h1>
         {segmented}
         {mayCreate ? (
           <EmptyState
-            icon={<FactoryIcon size={20} strokeWidth={1.5} />}
             title={`No factories in ${org.name} yet`}
             actions={<NewFactoryButtons variant="empty" />}
           >
-            A factory runs from a definition: its line, agents and connections. Start one blank, from a template or from
-            a factory.yaml.
+            Start one blank, from a template or from a factory.yaml.
           </EmptyState>
         ) : (
-          <EmptyState icon={<FactoryIcon size={20} strokeWidth={1.5} />} title="No factories to show yet">
+          <EmptyState title="No factories to show yet">
             You see a factory once an owner or admin of {org.name} gives you a role on it.{' '}
             {reasons.newFactory(org.name)}
           </EmptyState>
@@ -155,7 +151,7 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
     <>
       {topBar}
       <div className="flex flex-col gap-1">
-        <h1 className="m-0 text-page-title">{greeting(new Date(), me.data?.user?.name)}</h1>
+        <h1 className="m-0 text-page-title tracking-display">Home</h1>
         <p className="m-0 text-secondary text-muted">{summary(factories.length, week.waiting_on_you, andons)}</p>
       </div>
 
@@ -183,14 +179,6 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
       </div>
     </>
   );
-}
-
-/** "Good morning", "Good afternoon" or "Good evening", then the first word of the caller's name. */
-export function greeting(now: Date, name: string | undefined): string {
-  const hour = now.getHours();
-  const part = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
-  const first = name?.trim().split(/\s+/)[0];
-  return first ? `Good ${part}, ${first}` : `Good ${part}`;
 }
 
 /** "3 factories, 5 things need you, one andon pulled": the clause for andons is left out when none is pulled. */
