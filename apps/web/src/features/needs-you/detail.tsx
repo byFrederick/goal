@@ -6,7 +6,6 @@
 // one column (mobile/approve).
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Check } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { eventsQuery } from '../../api/queries';
 import type { Factory, InboxEntry, ToolApproval } from '../../api/types';
@@ -16,6 +15,7 @@ import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
+import { SuccessLabel } from '../../ui/success-label';
 import { QuestionCard } from '../items/question-card';
 import { decisionOf } from './actions';
 import { ageOf, approvalTitle } from './rows';
@@ -232,10 +232,6 @@ function ToolCall({ call }: { call: ToolApproval }) {
   );
 }
 
-/** The label and the check swap places: opacity, a little scale and a small blur (MOTION.md, Approve succeeds). */
-const swap = 'transition-[opacity,transform,filter] duration-(--duration-emphasis) ease-out';
-const swapOut = 'scale-90 opacity-0 blur-(--blur-small)';
-
 /**
  * Approve (orange, A), Edit then approve (not built yet) and Deny (D). An Approval also gets the
  * Always allow checkbox when the API offers it to this caller (ADR 0031, decision 8).
@@ -269,21 +265,10 @@ function ActionBar({
   return (
     <div className={phone ? 'flex flex-col gap-2' : 'flex flex-wrap items-center gap-2'}>
       <Button variant="approve" onClick={onApprove} disabled={pending} className={full}>
-        <span className="relative inline-flex items-center gap-2">
-          <span className={cn(swap, approved && swapOut)}>
-            {merge ? 'Merge' : 'Approve'}
-            <kbd className="ml-2 font-control text-meta opacity-80">A</kbd>
-          </span>
-          <Check
-            size={16}
-            strokeWidth={2}
-            aria-hidden="true"
-            className={cn('absolute inset-x-0 mx-auto', swap, !approved && swapOut)}
-          />
-          <span role="status" className="sr-only">
-            {approved ? (merge ? 'Merged' : 'Approved') : ''}
-          </span>
-        </span>
+        <SuccessLabel done={approved} doneLabel={merge ? 'Merged' : 'Approved'}>
+          {merge ? 'Merge' : 'Approve'}
+          <kbd className="ml-2 font-control text-meta opacity-80">A</kbd>
+        </SuccessLabel>
       </Button>
       <NotAvailable label="Edit, then approve">
         <Button variant="secondary" className={full}>

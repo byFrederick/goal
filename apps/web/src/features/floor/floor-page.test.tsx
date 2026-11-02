@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, approveItem, getFactoryActivity, rejectItem } from '../../api/client';
+import { ApiError, approveItem, getFactoryActivity, getInbox, rejectItem } from '../../api/client';
 import { getDraftModel, openDraft, saveDraftSection } from '../../api/definitions';
 import {
   activityQuery,
@@ -41,6 +41,7 @@ vi.mock('../../api/client', async (importOriginal) => ({
   approveItem: vi.fn(),
   rejectItem: vi.fn(),
   getFactoryActivity: vi.fn(),
+  getInbox: vi.fn(() => new Promise(() => {})),
 }));
 
 // The add-agent flow saves the line through the definitions API; the tests answer it.
@@ -543,6 +544,35 @@ describe('the cards below the figures', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Approve sre#4' }));
     await waitFor(() => expect(approveItem).toHaveBeenCalledWith('org-1', 'sre#4'));
     expect(screen.queryByText(/asked a question/)).toBeNull();
+  });
+
+  it('Approve swaps its label for a check once approved, and the row leaves after the hold', async () => {
+    vi.mocked(approveItem).mockResolvedValue({ ...item({ ref: 'sre#4' }), state: 'queued', station: 'merge' } as never);
+    // The refetch after the approval no longer lists the entry.
+    vi.mocked(getInbox).mockResolvedValue({ entries: [], truncated: false } as never);
+    renderFloor({ entries: [deciding] });
+
+    const card = await screen.findByRole('region', { name: 'Needs you' });
+    const button = within(card).getByRole('button', { name: 'Approve sre#4' });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button.querySelector('svg')?.getAttribute('class')).toContain('animate-success-check'));
+    expect(within(button).queryByText('Approve')).toBeNull();
+    await waitFor(() => expect(getInbox).toHaveBeenCalled());
+    expect(within(card).getByText('Add the audit log')).toBeTruthy();
+    await waitFor(() => expect(within(card).queryByText('Add the audit log')).toBeNull(), { timeout: 3000 });
+  });
+
+  it('Approve brings its label back when approveItem fails', async () => {
+    vi.mocked(approveItem).mockRejectedValue(new Error('goald is down'));
+    renderFloor({ entries: [deciding] });
+
+    const button = await screen.findByRole('button', { name: 'Approve sre#4' });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(approveItem).toHaveBeenCalled());
+    await waitFor(() => expect(within(button).getByText('Approve')).toBeTruthy());
+    expect(button.querySelector('svg')).toBeNull();
   });
 
   it('Deny asks for a reason and then calls rejectItem', async () => {
