@@ -7,16 +7,19 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronDown, Inbox } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { factoriesQuery, inboxQuery } from '../../api/queries';
 import type { InboxEntry } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
+import { TopBarSlot } from '../../app/top-bar';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
 import { Count } from '../../ui/count';
 import { EmptyState } from '../../ui/empty-state';
+import { Kbd } from '../../ui/kbd';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '../../ui/menu';
+import { SegmentedControl } from '../../ui/segmented-control';
 import { alwaysAllowOffered, type DecidedEntry, decisionOf, useEntryDecision } from './actions';
 import { DenyDialog } from './deny-dialog';
 import { Detail } from './detail';
@@ -39,7 +42,6 @@ export function NeedsYouPage() {
   const org = useOrg();
   const navigate = useNavigate({ from: '/o/$org/needs-you' });
   const search = needsSearch(useSearch({ strict: false }) as Record<string, unknown>);
-  const tab = search.type ?? 'all';
   const phone = usePhone();
   const inbox = useQuery(inboxQuery(org.id));
   // The factories carry each one's grants (`can`); an entry's own factory does not, so the question's answers read them here.
@@ -74,7 +76,6 @@ export function NeedsYouPage() {
   useEffect(() => {
     wasApproving.current = approving;
   }, [approving]);
-  const counts = tabCounts(entries, search.factory);
   const approvedId = held?.id;
   const factoryOf = (entry: InboxEntry) => factories.data?.find((f) => f.id === entry.factory.id);
 
@@ -148,35 +149,43 @@ export function NeedsYouPage() {
     // The handler reads the visible list and the selection; both change with the URL and the data.
   });
 
+  // From 768 px the count and the filters are the top bar's actions; a phone's bar is too narrow for
+  // five segments, so they sit in a row under it. One element keeps the bar from re-setting each render.
+  const bar = useMemo(() => <BarActions />, []);
+  const topBar = <TopBarSlot actions={phone ? undefined : bar} />;
+
   if (inbox.isPending) {
     return (
-      <main aria-busy="true" className="flex min-h-0 flex-1 flex-col">
-        <p className="sr-only">Loading</p>
-      </main>
+      <>
+        {topBar}
+        <main aria-busy="true" className="flex min-h-0 flex-1 flex-col md:flex-row">
+          <span className="sr-only">Loading</span>
+          <div
+            aria-hidden="true"
+            className="flex min-w-0 animate-skeleton-pulse flex-col gap-2 p-4 md:w-72 md:flex-none md:border-r md:border-line lg:w-90"
+          >
+            {['a', 'b', 'c', 'd', 'e'].map((row) => (
+              <div key={row} className="h-14 rounded-control bg-hover" />
+            ))}
+          </div>
+          <div aria-hidden="true" className="hidden min-w-0 flex-1 animate-skeleton-pulse flex-col gap-4 p-7 md:flex">
+            <div className="h-6 w-24 rounded-chip bg-hover" />
+            <div className="h-8 w-2/3 rounded-control bg-hover" />
+            <div className="h-32 rounded-card bg-hover" />
+          </div>
+        </main>
+      </>
     );
   }
 
   const header = (
-    <header className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 md:px-7 md:py-4">
-      <div className="flex items-center gap-2">
-        <h1 className="m-0 text-page-title font-semibold text-ink">Needs you</h1>
-        {entries.length > 0 ? <Count value={counts.all} label=" waiting on you" tone="you" /> : null}
-      </div>
-      {entries.length > 0 ? (
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <TabGroup
-            counts={counts}
-            value={tab}
-            onChange={(type) => setSearch({ type: type === 'all' ? undefined : type })}
-          />
-          <FactoryMenu
-            entries={entries}
-            value={search.factory}
-            onChange={(factory) => setSearch({ factory, entry: undefined })}
-          />
-        </div>
+    <>
+      {topBar}
+      <h1 className="sr-only">Needs you</h1>
+      {phone && entries.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">{bar}</div>
       ) : null}
-    </header>
+    </>
   );
 
   if (inbox.isError) {
@@ -258,7 +267,7 @@ export function NeedsYouPage() {
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <section
           aria-label="Waiting on you"
-          className="flex min-h-0 flex-col md:w-90 md:flex-none md:border-r md:border-line"
+          className="flex min-h-0 flex-col min-w-0 md:w-72 md:flex-none md:border-r lg:w-90 md:border-line"
         >
           {visible.length === 0 ? (
             <p className="m-0 px-4 py-5 text-secondary text-muted">Nothing of this type waits on you.</p>
@@ -271,7 +280,7 @@ export function NeedsYouPage() {
               siblings={factoriesOf(entries)}
             />
           )}
-          <p className="m-0 hidden px-4 py-3 text-meta text-muted md:block">
+          <p className="m-0 hidden flex-wrap items-center gap-1 px-4 py-3 text-meta text-muted md:flex">
             <Kbd>J</Kbd> <Kbd>K</Kbd> to move, <Kbd>A</Kbd> approve, <Kbd>D</Kbd> deny
           </p>
         </section>
@@ -301,11 +310,33 @@ function clean(next: NeedsSearch) {
   return Object.fromEntries(Object.entries(next).map(([k, v]) => [k, v === '' ? undefined : v]));
 }
 
-function Kbd({ children }: { children: ReactNode }) {
-  return <kbd className="font-control text-meta text-ink-soft">{children}</kbd>;
+/** The waiting count, the type filter and the factory menu: the top bar's actions, or a phone's row. */
+function BarActions() {
+  const org = useOrg();
+  const navigate = useNavigate({ from: '/o/$org/needs-you' });
+  const search = needsSearch(useSearch({ strict: false }) as Record<string, unknown>);
+  const entries = useQuery(inboxQuery(org.id)).data?.entries ?? [];
+  if (entries.length === 0) return null;
+  const counts = tabCounts(entries, search.factory);
+  const setSearch = (next: NeedsSearch) => navigate({ search: (prev) => ({ ...prev, ...clean(next) }) });
+  return (
+    <>
+      <Count value={counts.all} label=" waiting on you" tone="you" />
+      <TabGroup
+        counts={counts}
+        value={search.type ?? 'all'}
+        onChange={(type) => setSearch({ type: type === 'all' ? undefined : type })}
+      />
+      <FactoryMenu
+        entries={entries}
+        value={search.factory}
+        onChange={(factory) => setSearch({ factory, entry: undefined })}
+      />
+    </>
+  );
 }
 
-/** The tabs: All, Approvals, Decisions, Questions, Alerts, each with its count. */
+/** The type filter: All, Approvals, Decisions, Questions, Alerts, each with its count. */
 function TabGroup({
   counts,
   value,
@@ -315,29 +346,19 @@ function TabGroup({
   value: NeedsTab;
   onChange: (tab: NeedsTab) => void;
 }) {
+  const options = useMemo(
+    () => tabs.map((t) => ({ value: t.value, label: t.label, count: counts[t.value] })),
+    [counts],
+  );
   return (
-    <fieldset className="m-0 inline-flex flex-wrap gap-1 rounded-control bg-hover p-1">
-      <legend className="sr-only">Show</legend>
-      {tabs.map((tab) => {
-        const pressed = value === tab.value;
-        return (
-          <button
-            key={tab.value}
-            type="button"
-            aria-pressed={pressed}
-            onClick={() => onChange(tab.value)}
-            className={cn(
-              'inline-flex h-11 items-center gap-2 rounded-chip px-3 font-control text-secondary whitespace-nowrap text-ink-soft hover:text-ink md:h-7',
-              pressed && 'bg-card text-ink shadow-raised',
-              'transition-colors duration-(--duration-quick)',
-            )}
-          >
-            {tab.label}
-            <span className="text-meta text-muted tabular-nums">{counts[tab.value]}</span>
-          </button>
-        );
-      })}
-    </fieldset>
+    <SegmentedControl
+      label="Show"
+      size="compact"
+      options={options}
+      value={value}
+      onChange={onChange}
+      className="max-w-full"
+    />
   );
 }
 

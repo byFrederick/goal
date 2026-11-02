@@ -139,6 +139,7 @@ function renderPage({
   vi.mocked(listItemEvents).mockResolvedValue({ events: [], next_after: 0 } as never);
   return renderOrgPage({
     path: '/needs-you',
+    topBar: true,
     page: () => (
       <TooltipProvider>
         <NeedsYouPage />
@@ -190,7 +191,7 @@ describe('Needs you: the four states', () => {
 
     expect(await screen.findByRole('heading', { name: 'Needs you' })).toBeTruthy();
     expect(screen.getByRole('list', { name: /Waiting on you/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^All\s*3$/ }).getAttribute('aria-pressed')).toBe('true');
+    expect((screen.getByRole('radio', { name: /^All\s*3$/ }) as HTMLInputElement).checked).toBe(true);
   });
 });
 
@@ -198,7 +199,7 @@ describe('Needs you: filters live in the URL', () => {
   it('selects the Decisions tab and writes it to the URL, leaving alerts out of the list', async () => {
     const { router } = renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: /Decisions/ }));
+    fireEvent.click(await screen.findByRole('radio', { name: /Decisions/ }));
 
     await waitFor(() => expect(router.state.location.href).toContain('type=decision'));
     expect(screen.queryByText('Pages keep firing')).toBeNull();
@@ -215,9 +216,9 @@ describe('Needs you: filters live in the URL', () => {
   it('shows each tab with its count', async () => {
     renderPage();
 
-    expect(await screen.findByRole('button', { name: /Decisions\s*2/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Alerts\s*1/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /All\s*3/ })).toBeTruthy();
+    expect(await screen.findByRole('radio', { name: /Decisions\s*2/ })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /Alerts\s*1/ })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /All\s*3/ })).toBeTruthy();
   });
 
   it('narrows the list to one factory the URL names', async () => {
@@ -504,7 +505,7 @@ describe('Needs you: Approvals', () => {
     const list = await screen.findByRole('list', { name: /Waiting on you/ });
     expect(within(list).getByText('architect wants to call add_issue_comment')).toBeTruthy();
     expect(within(list).queryByText('Ship the retry fix')).toBeNull();
-    expect(screen.getByRole('button', { name: /^Approvals/ }).getAttribute('aria-disabled')).toBeNull();
+    expect(screen.getByRole('radio', { name: /^Approvals/ }).hasAttribute('disabled')).toBe(false);
   });
 });
 
@@ -532,7 +533,7 @@ describe('Needs you on a phone', () => {
     renderPage();
 
     expect(await screen.findByRole('list', { name: /Waiting on you/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Alerts/ })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /Alerts/ })).toBeTruthy();
   });
 });
 
@@ -586,9 +587,9 @@ describe('Needs you: questions', () => {
       ],
     });
 
-    const tab = await screen.findByRole('button', { name: /^Questions/ });
-    expect(tab.getAttribute('aria-disabled')).toBeNull();
-    expect(tab.textContent).toContain('1');
+    const tab = await screen.findByRole('radio', { name: /^Questions/ });
+    expect(tab.hasAttribute('disabled')).toBe(false);
+    expect(tab.closest('label')?.textContent).toContain('1');
   });
 
   it('draws a question row with its type, its agent and question, and its item and station', async () => {
@@ -656,5 +657,21 @@ describe('Needs you: questions', () => {
     expect(approveItem).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(answerItem).not.toHaveBeenCalled();
+  });
+});
+
+describe('Needs you: the keycap hint and the type chip', () => {
+  it('draws J, K, A and D as keycaps in the hint', async () => {
+    renderPage();
+    const hint = (await screen.findByText(/to move,/)).closest('p') as HTMLElement;
+    expect(Array.from(hint.querySelectorAll('kbd')).map((k) => k.textContent)).toEqual(['J', 'K', 'A', 'D']);
+    expect(hint.textContent).toBe('J K to move, A approve, D deny');
+  });
+
+  it('shows a dot in the detail chip', async () => {
+    renderPage();
+    const detail = await screen.findByRole('article');
+    const chip = within(detail).getByText('Decision').closest('span.rounded-chip') as HTMLElement;
+    expect(chip.querySelector('[aria-hidden="true"]')).toBeTruthy();
   });
 });

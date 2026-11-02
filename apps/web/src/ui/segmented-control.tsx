@@ -30,6 +30,8 @@ interface SegmentedControlProps<T extends string> {
   describedBy?: string | undefined;
   /** Shows the choice only. */
   readOnly?: boolean;
+  /** `compact` is the top bar's size: 28 px segments in a 32 px control (1 px padding inside the border) from 768 px; phones keep 44 px segments. */
+  size?: 'default' | 'compact';
   className?: string;
 }
 
@@ -40,6 +42,7 @@ export function SegmentedControl<T extends string>({
   onChange,
   describedBy,
   readOnly = false,
+  size = 'default',
   className,
 }: SegmentedControlProps<T>) {
   const name = useId();
@@ -77,7 +80,8 @@ export function SegmentedControl<T extends string>({
     <fieldset
       aria-describedby={describedBy}
       className={cn(
-        'relative m-0 inline-flex shrink-0 gap-px rounded-control border border-line bg-panel p-1',
+        'relative m-0 inline-flex shrink-0 gap-px rounded-control border border-line bg-panel',
+        size === 'compact' ? 'p-1 md:p-px' : 'p-1',
         className,
       )}
     >
@@ -85,7 +89,10 @@ export function SegmentedControl<T extends string>({
       <span
         ref={pill}
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-1 left-0 rounded-chip bg-card opacity-0 shadow-raised transition-[transform,width] duration-(--duration-fast) ease-out"
+        className={cn(
+          'pointer-events-none absolute left-0 rounded-chip bg-card opacity-0 shadow-raised transition-[transform,width] duration-(--duration-fast) ease-out',
+          size === 'compact' ? 'inset-y-1 md:inset-y-px' : 'inset-y-1',
+        )}
       />
       {options.map((o, i) => {
         const checked = o.value === value;
@@ -97,7 +104,8 @@ export function SegmentedControl<T extends string>({
               labels.current[i] = el;
             }}
             className={cn(
-              'relative inline-flex h-11 items-center gap-1 rounded-chip px-3 text-secondary whitespace-nowrap text-muted md:h-7.5',
+              'relative inline-flex h-11 items-center gap-1 rounded-chip px-3 text-secondary whitespace-nowrap text-muted',
+              size === 'compact' ? 'md:h-7' : 'md:h-7.5',
               readOnly ? 'cursor-default' : 'press cursor-pointer hover:text-ink',
               'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-run',
               !readOnly &&
