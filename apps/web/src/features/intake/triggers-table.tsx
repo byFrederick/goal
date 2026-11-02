@@ -1,6 +1,7 @@
 // The Triggers table (intake): each trigger of the running definition with its source, when it fires, what
 // it creates, its last 7 days and its switch. A problem is named in red under the name. The table is a
 // table from 768 px; below it each row stacks its cells, with no column headings.
+import { Link } from '@tanstack/react-router';
 import type { LucideIcon } from 'lucide-react';
 import { Clock, GitBranch, Webhook } from 'lucide-react';
 import type { IntakeTrigger } from '../../api/types';
@@ -96,12 +97,13 @@ function TriggerRow({ trigger, arrived }: { trigger: IntakeTrigger; arrived: boo
             {trigger.problem?.kind === 'missing_connection' ? (
               <span className="text-meta text-muted">
                 Needs the {connectionName(trigger)} connection.{' '}
-                <a
-                  href={`/o/${params.org}/connections`}
+                <Link
+                  to="/o/$org/f/$factory/intake/webhooks"
+                  params={{ org: params.org, factory: params.factory }}
                   className="font-medium text-ink underline-offset-2 hover:underline"
                 >
                   Connect
-                </a>
+                </Link>
               </span>
             ) : trigger.problem ? (
               <span className="text-meta font-semibold text-rework-ink">{trigger.problem.message}</span>

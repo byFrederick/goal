@@ -141,7 +141,9 @@ describe('IntakePage', () => {
 
     const triggers = await screen.findByRole('region', { name: 'Triggers' });
     expect(within(triggers).getByText(/Needs the sentry connection\./)).toBeTruthy();
-    expect(within(triggers).getByRole('link', { name: 'Connect' }).getAttribute('href')).toBe('/o/acme/connections');
+    expect(within(triggers).getByRole('link', { name: 'Connect' }).getAttribute('href')).toBe(
+      '/o/acme/f/widgets/intake/webhooks',
+    );
     expect(within(triggers).getByText('Off')).toBeTruthy();
   });
 });
