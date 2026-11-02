@@ -3,7 +3,7 @@
 // field and what a run gets.
 import { Check, Clock, Info, Lock, TriangleAlert } from 'lucide-react';
 import type { Connection, ConnectionKind } from '../../api/types';
-import { modeLabels, monogram, statusLine, type Tone, toneText } from '../../shared/connections';
+import { modeLabels, statusLine, type Tone, toneText } from '../../shared/connections';
 import { Chip, ChipText, Dot } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 
@@ -53,21 +53,6 @@ export function StatusDot({
       <span>
         <ChipText text={text} />
       </span>
-    </span>
-  );
-}
-
-/** A 36 px square with two letters: a connection's or a kind's mark. */
-export function Monogram({ name, className }: { name: string; className?: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        'flex size-9 shrink-0 items-center justify-center rounded-control bg-panel text-secondary font-control text-ink',
-        className,
-      )}
-    >
-      {monogram(name)}
     </span>
   );
 }

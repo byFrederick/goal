@@ -53,6 +53,7 @@ const kinds: ConnectionKind[] = [
     testable: false,
     fields: [{ name: 'url', title: 'URL', required: true, secret: false }],
   }),
+  kindFixture({ name: 'github', title: 'GitHub', description: 'Repositories' }),
   kindFixture({ name: 'slack', title: 'Slack', platform: false, description: 'Our Slack bot' }),
 ];
 
@@ -68,7 +69,56 @@ function renderAdd({ kind, next, can = manage }: { kind?: string; next?: string;
   });
 }
 
+/** Pretends the viewport is a phone (below 768 px). */
+function stubPhone() {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: true,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+}
+
 describe('the Add a connection page', () => {
+  afterEach(() => {
+    // @ts-expect-error restoring the jsdom default, which has no matchMedia
+    delete window.matchMedia;
+  });
+
+  it('picks the first catalog entry when the URL names none, with no explanatory sentence', async () => {
+    renderAdd();
+    const catalog = await screen.findByRole('navigation', { name: 'Catalog' });
+    expect(
+      within(catalog)
+        .getByRole('button', { name: /^Datadog/ })
+        .getAttribute('aria-current'),
+    ).toBe('true');
+    expect(await screen.findByRole('heading', { level: 2, name: 'Datadog' })).toBeTruthy();
+    expect(screen.queryByText(/Choose an app or an MCP server/)).toBeNull();
+  });
+
+  it('shows a brand glyph for github and the uppercase initial for another kind', async () => {
+    renderAdd();
+    const catalog = await screen.findByRole('navigation', { name: 'Catalog' });
+    const github = within(catalog).getByRole('button', { name: /^GitHub/ });
+    expect(github.querySelector('svg')).not.toBeNull();
+    const slack = within(catalog).getByRole('button', { name: /^Slack/ });
+    expect(slack.querySelector('svg')).toBeNull();
+    expect(slack.textContent?.startsWith('S')).toBe(true);
+  });
+
+  it('on a phone shows the catalog alone, then the details sliding in once one is picked', async () => {
+    stubPhone();
+    const { router } = renderAdd();
+    const catalog = await screen.findByRole('navigation', { name: 'Catalog' });
+    expect(screen.queryByRole('heading', { level: 2, name: 'Datadog' })).toBeNull();
+    fireEvent.click(within(catalog).getByRole('button', { name: /^Datadog/ }));
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ kind: 'datadog' }));
+    const heading = await screen.findByRole('heading', { level: 2, name: 'Datadog' });
+    expect(heading.closest('.animate-pane-forward')).not.toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'Catalog' })).toBeNull();
+  });
+
   it('lists the catalog and shows the chosen kind’s title, description and fields', async () => {
     const { router } = renderAdd();
     const catalog = await screen.findByRole('navigation', { name: 'Catalog' });

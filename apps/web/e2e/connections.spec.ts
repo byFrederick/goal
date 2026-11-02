@@ -433,3 +433,34 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 }
+
+// The add screen at 1440 and 390 px in both themes, and the phone's tab bar below the catalog.
+for (const theme of ['light', 'dark'] as const) {
+  for (const width of [1440, 390]) {
+    test(`add connection screenshot, ${theme}, ${width} px`, async ({ page }) => {
+      await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/o/acme/connections/new');
+      await expect(page.getByRole('heading', { level: 1, name: 'Add a connection' })).toBeVisible();
+      await expect(page).toHaveScreenshot(`connection-add-${theme}-${width}.png`, { fullPage: true });
+    });
+  }
+}
+
+test('add connection at 390 px keeps the tab bar fully visible below the catalog', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/connections/new');
+  const catalog = page.getByRole('navigation', { name: 'Catalog' });
+  await expect(catalog).toBeVisible();
+  await catalog.getByRole('button').last().scrollIntoViewIfNeeded();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const tabs = page.getByRole('navigation', { name: 'Tabs' });
+  const bar = await tabs.boundingBox();
+  const last = await catalog.getByRole('button').last().boundingBox();
+  expect(bar).not.toBeNull();
+  expect(last).not.toBeNull();
+  if (!bar || !last) return;
+  expect(bar.y).toBeGreaterThanOrEqual(0);
+  expect(bar.y + bar.height).toBeLessThanOrEqual(844);
+  expect(last.y + last.height).toBeLessThanOrEqual(bar.y);
+});
