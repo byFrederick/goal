@@ -33,8 +33,8 @@ interface SidebarResizeHandleProps {
   column: RefObject<HTMLDivElement | null>;
   /** A key or a double-click changed the size: no motion (MOTION.md rule 1). */
   onChange: (size: SidebarSize) => void;
-  /** A drag was released at a new size; the sidebar animates a fold or expand from it. */
-  onRelease: (size: SidebarSize) => void;
+  /** A drag was released at a new size, with the width the column showed under the pointer; a fold or expand animates from it. */
+  onRelease: (size: SidebarSize, releasedWidth: number) => void;
   /** The drag began: nothing animates until its release. */
   onDragStart: () => void;
 }
@@ -91,7 +91,7 @@ export function SidebarResizeHandle({ size, column, onChange, onRelease, onDragS
     if (!state.moved) return;
     const next = settle(state.x, size.width);
     column.current?.style.setProperty(sidebarWidthVar, `${shownWidth(next)}px`);
-    onRelease(next);
+    onRelease(next, previewWidth(state.x));
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {

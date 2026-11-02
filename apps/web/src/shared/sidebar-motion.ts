@@ -15,9 +15,9 @@ export function reducedMotion(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-/** The motion for a change of the shown width, or null when the width stays or the change is not a collapse or expand. */
-export function sidebarMotion(from: number, to: number): SidebarMotion | null {
-  return from === to ? null : { from, to, reduced: reducedMotion() };
+/** The motion for a fold or expand; the labels fade even when the width is the same (a release at the final width). */
+export function sidebarMotion(from: number, to: number): SidebarMotion {
+  return { from, to, reduced: reducedMotion() };
 }
 
 /** The wrapper's starting scale: the width it had over the width it now fills. */

@@ -55,15 +55,14 @@ export function Sidebar({ org }: { org: OrgSummary }) {
   // Set by a click or a drag release that folds or expands the column; a key, and a drag, leave it null.
   const [motion, setMotion] = useState<SidebarMotion | null>(null);
   const change = useCallback(
-    (next: SidebarSize, animate: boolean) => {
-      setMotion(
-        animate && next.collapsed !== size.collapsed ? sidebarMotion(shownWidth(size), shownWidth(next)) : null,
-      );
+    (next: SidebarSize, animate: boolean, from = shownWidth(size)) => {
+      setMotion(animate && next.collapsed !== size.collapsed ? sidebarMotion(from, shownWidth(next)) : null);
       setSize(next);
     },
     [size, setSize],
   );
-  const dragged = useCallback((next: SidebarSize) => change(next, true), [change]);
+  // A drag release starts from the width under the pointer, not the width before the drag.
+  const dragged = useCallback((next: SidebarSize, released: number) => change(next, true, released), [change]);
   const keyed = useCallback((next: SidebarSize) => change(next, false), [change]);
   const stopMotion = useCallback(() => setMotion(null), []);
 
