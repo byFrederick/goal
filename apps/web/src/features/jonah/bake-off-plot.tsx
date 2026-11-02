@@ -45,7 +45,14 @@ function placeOf(point: Point, scale: Scale): { left: number; top: number } {
   return { left, top };
 }
 
-export function PassCostPlot({ arms }: { arms: readonly BakeOffArm[] }) {
+export function PassCostPlot({
+  arms,
+  recommendedArm = null,
+}: {
+  arms: readonly BakeOffArm[];
+  /** The arm the report recommends: its dot is ink, the others rule2. */
+  recommendedArm?: number | null;
+}) {
   const points: Point[] = [];
   for (const arm of arms) {
     const pass = passRateOf(arm);
@@ -92,10 +99,13 @@ export function PassCostPlot({ arms }: { arms: readonly BakeOffArm[] }) {
           return (
             <span
               key={p.arm.arm}
-              className="absolute size-5 -translate-x-1/2 -translate-y-1/2"
+              className="absolute flex size-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center"
               style={{ left: `${left}%`, top: `${top}%` }}
             >
-              <span className={cn('block size-full rounded-full', armDot(p.arm.arm))} />
+              <span
+                data-testid="plot-dot"
+                className={cn('block size-3 rounded-full', armDot(p.arm.arm === recommendedArm))}
+              />
               <span
                 className={cn(
                   'absolute top-1/2 -translate-y-1/2 whitespace-nowrap',
@@ -112,7 +122,7 @@ export function PassCostPlot({ arms }: { arms: readonly BakeOffArm[] }) {
         })}
       </div>
 
-      <span aria-hidden="true" className="absolute right-4 bottom-0 left-12 text-center text-meta text-ink-soft">
+      <span aria-hidden="true" className="absolute right-4 bottom-0 left-12 text-center text-meta text-muted">
         Cost per item
       </span>
     </div>

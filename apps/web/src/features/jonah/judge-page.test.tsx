@@ -208,6 +208,18 @@ describe('editing and saving', () => {
     expect(screen.queryByLabelText('Outcome 4 label')).toBeNull();
   });
 
+  it('swaps an outcome between Passes and Fails when the pass mark moves past its score', async () => {
+    renderJudge();
+
+    const row = (await screen.findByLabelText('Outcome 2 label')).closest('div') as HTMLElement;
+    const mark = screen.getByRole('slider', { name: 'Pass mark' });
+    expect(within(row.parentElement as HTMLElement).getByText('Fails')).toBeTruthy();
+    fireEvent.change(mark, { target: { value: '0.5' } });
+    expect(within(row.parentElement as HTMLElement).getByText('Passes')).toBeTruthy();
+    fireEvent.change(mark, { target: { value: '0.8' } });
+    expect(within(row.parentElement as HTMLElement).getByText('Fails')).toBeTruthy();
+  });
+
   it('tries the judge on the 10 newest runs and says so', async () => {
     vi.mocked(tryJudge).mockResolvedValue({ tries: [] });
     vi.mocked(getJudge).mockResolvedValue(review);

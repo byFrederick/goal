@@ -51,6 +51,7 @@ A goald without judges or evals shows the Judges, Evals and Bake-offs pages empt
 
 ## Where you meet it
 
+- The Jonah overview shows each judge's pass rate over the last 30 days against its pass mark: the latest period in black, the earlier ones in grey, and the pass mark as a dashed line. Each chart opens that judge.
 - `goal jonah` lists proposals. `show` displays the evidence and a unified diff, and `approve`, `edit` and `reject` decide one.
 - `goal judge` and `goal eval` manage judges and eval runs. `goal bake-off` runs the comparisons.
 - `goal spend` shows what runs cost, judges and reviews included.

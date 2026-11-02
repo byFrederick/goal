@@ -10,6 +10,7 @@ import { updateJudge } from '../../api/client';
 import { judgeQuery, judgesQuery } from '../../api/queries';
 import { isUnavailable } from '../../api/retry';
 import type { JudgeListEntry } from '../../api/types';
+import { PendingSkeleton } from '../../app/route-skeletons';
 import { TopBarSlot } from '../../app/top-bar';
 import { useFactory, useFactoryParams } from '../../shared/factory';
 import { formatUsd } from '../../shared/format';
@@ -20,7 +21,8 @@ import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { EmptyState } from '../../ui/empty-state';
 import { NotAvailable } from '../../ui/not-available';
-import { Skeleton, SkeletonRows } from '../../ui/skeleton';
+import { NumberRoll } from '../../ui/number-roll';
+import { Skeleton } from '../../ui/skeleton';
 import { JonahHeader } from './jonah-header';
 import { judgeToggle } from './judge-form';
 import { refreshAfterPublish } from './judges-cache';
@@ -28,10 +30,41 @@ import { toggleFailure } from './judges-format';
 import { NewJudgeDialog } from './judges-new-dialog';
 import { JudgesTable } from './judges-table';
 
-/** Loading shows the table's rows as a skeleton while the judges wait. */
+const block = 'rounded-control bg-hover';
+
+/** The judges page's layout in muted blocks: the header and its tabs, then the card with its table rows. */
+export function JudgesShape() {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-5">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <div className={`${block} h-6 w-24`} />
+          <div className={`${block} h-4 w-96 max-w-full`} />
+        </div>
+        <div className={`${block} h-11 w-80 max-w-full md:h-9`} />
+      </div>
+      <div className="flex flex-col gap-3 rounded-card border border-line p-4">
+        <div className="flex items-center justify-between">
+          <div className={`${block} h-5 w-28`} />
+          <div className={`${block} h-4 w-40`} />
+        </div>
+        {[0, 1, 2, 3].map((n) => (
+          <div key={n} className={`${block} h-10`} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The route's pendingComponent: the page's layout, pulsing until it arrives. */
+export function JudgesPending() {
+  return <PendingSkeleton placeholder={<JudgesShape />} />;
+}
+
+/** Loading shows the page's layout as a skeleton while the judges wait. */
 function Loading() {
   return (
-    <Skeleton ready={false} placeholder={<SkeletonRows rows={4} className="min-h-40" />}>
+    <Skeleton ready={false} placeholder={<JudgesShape />}>
       <span />
     </Skeleton>
   );
@@ -117,10 +150,16 @@ export function JudgesPage() {
             title={
               <span className="inline-flex items-center gap-2">
                 Judges
-                <Chip>{entries.length}</Chip>
+                <Chip>
+                  <NumberRoll value={entries.length} />
+                </Chip>
               </span>
             }
-            aside={<span className="text-secondary text-muted">{formatUsd(cost)} in the last 30 days</span>}
+            aside={
+              <span className="text-secondary text-muted">
+                <NumberRoll value={formatUsd(cost)} /> in the last 30 days
+              </span>
+            }
           >
             {toggle.isError ? (
               <div aria-live="polite">

@@ -4,9 +4,17 @@ import { useSearch } from '@tanstack/react-router';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, getJonahOverview, listProposals, queueJonahReview } from '../../api/client';
-import { jonahOverviewQuery, proposalsQuery } from '../../api/queries';
-import type { Factory, JonahOverview, OrgSummary, ProposalEntry, ProposalPage, ProposalState } from '../../api/types';
+import { ApiError, getJonahOverview, listJudges, listProposals, queueJonahReview } from '../../api/client';
+import { jonahOverviewQuery, judgesQuery, proposalsQuery } from '../../api/queries';
+import type {
+  Factory,
+  JonahOverview,
+  JudgeList,
+  OrgSummary,
+  ProposalEntry,
+  ProposalPage,
+  ProposalState,
+} from '../../api/types';
 import { TopBar, TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { renderFactoryPage, type Seed } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
@@ -15,6 +23,7 @@ import { JonahOverviewPage, JonahProposalsPage } from './jonah-page';
 vi.mock('../../api/client', async (original) => ({
   ...(await original<typeof import('../../api/client')>()),
   getJonahOverview: vi.fn(),
+  listJudges: vi.fn(),
   listProposals: vi.fn(),
   queueJonahReview: vi.fn(),
 }));
@@ -108,6 +117,40 @@ const overview: JonahOverview = {
 
 const empty: JonahOverview = { ...overview, waiting: 0, observations: [], month_cost_usd: 0 };
 
+// Two judges: one that scored on the first and the last day of the window, one that is off.
+const day = (daysAgo: number, scored: number, passed: number) => ({
+  day: new Date(Date.now() - daysAgo * 86_400_000).toISOString().slice(0, 10),
+  scored,
+  passed,
+  pass_rate: passed / scored,
+});
+const judges: JudgeList = {
+  version: 21,
+  judge_cost_usd: 1.2,
+  judges: [
+    {
+      slug: 'spec-testable',
+      title: 'Spec criteria testable',
+      criterion: 'Every criterion can be tested',
+      agents: ['architect'],
+      sample: 0.25,
+      pass_mark: 0.7,
+      enabled: true,
+      summary: { scored: 10, passed: 9, pass_rate: 0.9, cost_usd: 0.4, days: [day(28, 5, 4), day(0, 5, 5)] },
+    },
+    {
+      slug: 'efficiency',
+      title: 'Efficiency',
+      criterion: 'No wasted work',
+      agents: [],
+      sample: 0.5,
+      pass_mark: 0.6,
+      enabled: false,
+      summary: { scored: 0, passed: 0, pass_rate: 0, cost_usd: 0, days: [] },
+    },
+  ],
+};
+
 function listOf(proposals: ProposalEntry[]): ProposalPage {
   return { proposals };
 }
@@ -116,6 +159,7 @@ function seeds(data: JonahOverview = overview, factory: Factory = editor): Seed[
   return [
     [jonahOverviewQuery(org.id, factory.id).queryKey, data],
     [proposalsQuery(org.id, factory.id, 'proposed').queryKey, listOf([proposal8, proposal7])],
+    [judgesQuery(org.id, factory.id).queryKey, judges],
   ];
 }
 
@@ -236,7 +280,7 @@ describe('the Jonah overview, its four states', () => {
     expect(within(noticed).getByText('Watching, 3 of 5')).toBeTruthy();
   });
 
-  it('links each proposal to its page, shows the Evals control as not available, and no pass rates', async () => {
+  it('links each proposal to its page', async () => {
     vi.mocked(getJonahOverview).mockResolvedValue(overview);
     vi.mocked(listProposals).mockResolvedValue(listOf([proposal8, proposal7]));
     renderOverview();
@@ -246,12 +290,81 @@ describe('the Jonah overview, its four states', () => {
     expect(review).toHaveLength(2);
     expect(review[0]?.getAttribute('href')).toContain('/jonah/proposals/8');
     expect(review[1]?.getAttribute('href')).toContain('/jonah/proposals/7');
+  });
+});
+
+describe('the Jonah header', () => {
+  it('draws the tabs as links on an underline row: the current one has aria-current', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    renderOverview();
+
+    const nav = await screen.findByRole('navigation', { name: 'Jonah' });
+    const links = within(nav).getAllByRole('link');
+    expect(links.map((l) => l.textContent?.replace(/\d+$/, ''))).toEqual([
+      'Overview',
+      'Proposals',
+      'Judges',
+      'Evals',
+      'Bake-offs',
+    ]);
+    expect(links.filter((l) => l.getAttribute('aria-current') === 'page').map((l) => l.textContent)).toEqual([
+      'Overview',
+    ]);
     expect(
-      screen.getAllByRole('button', { name: 'Evals' }).every((b) => b.getAttribute('aria-disabled') === 'true'),
-    ).toBe(true);
-    expect(screen.getByText('Pass rate by judge, last 30 days')).toBeTruthy();
-    expect(screen.getByText('Not available yet', { selector: 'p' })).toBeTruthy();
-    expect(screen.queryByText(/\d+%/, { selector: '.num' })).toBeNull();
+      within(nav)
+        .getByRole('link', { name: /Proposals/ })
+        .getAttribute('href'),
+    ).toBe('/o/acme/f/software/jonah?tab=proposals');
+    expect(within(nav).getByRole('link', { name: 'Judges' }).getAttribute('href')).toBe(
+      '/o/acme/f/software/jonah/judges',
+    );
+    expect(nav.className).toMatch(/border-b/);
+  });
+});
+
+describe('the pass rate by judge', () => {
+  it('shows a chart per enabled judge: its figure, its pass mark, a link and a table for screen readers', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    renderOverview();
+
+    const section = await screen.findByRole('region', { name: 'Pass rate by judge, last 30 days' });
+    const charts = within(section).getAllByRole('article');
+    expect(charts).toHaveLength(1);
+    const chart = charts[0] as HTMLElement;
+    expect(within(chart).getByRole('link', { name: 'Spec criteria testable' }).getAttribute('href')).toBe(
+      '/o/acme/f/software/jonah/judges/spec-testable',
+    );
+    expect(within(chart).getByText('90%')).toBeTruthy();
+    expect(within(chart).getByText('+20 pts')).toBeTruthy();
+    expect(within(chart).getByText('architect, pass at 0.7')).toBeTruthy();
+    expect(within(chart).getByRole('img').getAttribute('aria-label')).toBe('From 80% to 100%, pass mark 70%');
+    const rects = chart.querySelectorAll('rect');
+    expect(rects).toHaveLength(9);
+    expect(rects[8]?.getAttribute('class')).toBe('fill-ink');
+    expect(rects[0]?.getAttribute('class')).toBe('fill-rule');
+    expect(chart.querySelector('line')?.getAttribute('stroke-dasharray')).toBe('4 3');
+    expect(within(chart).getByRole('table')).toBeTruthy();
+    expect(within(chart).getAllByText('Nothing scored', { selector: 'td' })).toBeTruthy();
+    expect(within(section).queryByText('Efficiency')).toBeNull();
+  });
+
+  it('is empty without judges', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    renderOverview(editor, [
+      ...seeds().filter((entry) => entry[0][2] !== 'list' || entry[0][0] !== 'judges'),
+      [judgesQuery(org.id, editor.id).queryKey, { ...judges, judges: [] }],
+    ]);
+
+    expect(await screen.findByText('No judges are on yet')).toBeTruthy();
+  });
+
+  it('says so when the judges cannot be loaded, and offers Try again', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    vi.mocked(listJudges).mockRejectedValue(new Error('down'));
+    renderOverview(editor, seeds().slice(0, 2));
+
+    const section = await screen.findByRole('region', { name: 'Pass rate by judge, last 30 days' });
+    expect(await within(section).findByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 });
 

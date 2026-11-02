@@ -10,52 +10,81 @@ import { startEvalRun } from '../../api/client';
 import { evalEstimateQuery, evalsQuery, keys } from '../../api/queries';
 import { isUnavailable } from '../../api/retry';
 import type { EvalSummary } from '../../api/types';
+import { PendingSkeleton } from '../../app/route-skeletons';
 import { TopBarSlot } from '../../app/top-bar';
 import { useFactory } from '../../shared/factory';
-import { formatPercent, formatUsd } from '../../shared/format';
+import { formatUsd } from '../../shared/format';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
-import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { EmptyState } from '../../ui/empty-state';
-import { KpiTile } from '../../ui/kpi-tile';
 import { NotAvailable } from '../../ui/not-available';
-import { Skeleton, SkeletonRows } from '../../ui/skeleton';
+import { NumberRoll } from '../../ui/number-roll';
+import { Skeleton } from '../../ui/skeleton';
+import { type Stat, StatStrip } from '../../ui/stat-strip';
 import { AddCaseDialog } from './add-case-dialog';
-import { firstTryMeta, lastRunMeta, none, runFailure } from './evals-format';
+import { firstTryMeta, lastRunMeta, runFailure } from './evals-format';
 import { EvalsTable } from './evals-table';
 import { JonahHeader } from './jonah-header';
 
-/** The three tiles over the summary: the cases that passed every try, the first-try rate, and when a publish runs them. */
-function EvalTiles({ summary }: { summary: EvalSummary }) {
+/** The two stats over the summary: the cases that passed every try, and the first-try rate. */
+function EvalStats({ summary }: { summary: EvalSummary }) {
   const passingLabel =
     summary.version === undefined ? 'Cases passing every try' : `Cases passing every try, v${summary.version}`;
+  const stats: Stat[] = [
+    {
+      label: passingLabel,
+      value: summary.cases_passing,
+      unit: `of ${summary.cases}`,
+      note: lastRunMeta(summary.latest_run_at, summary.latest_tries_per_case),
+    },
+    {
+      label: 'Pass on first try',
+      value: summary.first_try_pass_rate === undefined ? null : Math.round(summary.first_try_pass_rate * 100),
+      unit: '%',
+      note: firstTryMeta(summary.tries, summary.tries_passed),
+    },
+  ];
+  return <StatStrip label="Last run of all cases" stats={stats} />;
+}
+
+const block = 'rounded-control bg-hover';
+
+/** The page's layout in muted blocks: the header and its tabs, the stat strip, the cases card. */
+export function EvalsShape() {
   return (
-    <section aria-label="Last run of all cases" className="grid gap-3 @md:grid-cols-3">
-      <KpiTile
-        label={passingLabel}
-        value={`${summary.cases_passing} of ${summary.cases}`}
-        target={lastRunMeta(summary.latest_run_at, summary.latest_tries_per_case)}
-      />
-      <KpiTile
-        label="Pass on first try"
-        value={summary.first_try_pass_rate === undefined ? none : formatPercent(summary.first_try_pass_rate)}
-        target={firstTryMeta(summary.tries, summary.tries_passed)}
-      />
-      <KpiTile
-        label="Runs on"
-        value={<span className="text-heading">Every publish</span>}
-        target="A failing case blocks the publish"
-      />
-    </section>
+    <div className="flex w-full min-w-0 flex-col gap-5">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <div className={`${block} h-6 w-24`} />
+          <div className={`${block} h-4 w-96 max-w-full`} />
+        </div>
+        <div className={`${block} h-11 w-80 max-w-full md:h-9`} />
+      </div>
+      <div className="flex gap-6">
+        <div className={`${block} h-16 w-48`} />
+        <div className={`${block} h-16 w-48`} />
+      </div>
+      <div className="flex flex-col gap-3 rounded-card border border-line p-4">
+        <div className={`${block} h-5 w-40`} />
+        <div className={`${block} h-12`} />
+        <div className={`${block} h-12`} />
+        <div className={`${block} h-12`} />
+      </div>
+    </div>
   );
 }
 
-/** Loading shows the page's rows as a skeleton while the data waits. */
+/** The route's pendingComponent: the page's layout, pulsing until it arrives. */
+export function EvalsPending() {
+  return <PendingSkeleton placeholder={<EvalsShape />} />;
+}
+
+/** Loading shows the page's layout as a skeleton while the data waits. */
 function Loading() {
   return (
-    <Skeleton ready={false} placeholder={<SkeletonRows rows={4} className="min-h-40" />}>
+    <Skeleton ready={false} placeholder={<EvalsShape />}>
       <span />
     </Skeleton>
   );
@@ -141,33 +170,32 @@ export function EvalsPage() {
         </EmptyState>
       ) : (
         <>
-          <EvalTiles summary={summary} />
+          <EvalStats summary={summary} />
 
-          <SectionCard
-            title={
-              <span className="inline-flex items-center gap-2">
+          <section
+            aria-labelledby="evals-cases-h"
+            className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card px-1 pt-4 pb-1"
+          >
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4">
+              <h2 id="evals-cases-h" className="m-0 text-heading font-semibold">
                 Cases
-                <Chip>{entries.length}</Chip>
-              </span>
-            }
-            aside={
-              <span className="text-secondary text-muted">
+              </h2>
+              <Chip>
+                <NumberRoll value={entries.length} />
+              </Chip>
+              <span className="text-secondary text-muted @md:ml-auto">
                 In the definition under <span className="font-mono">evals/cases/</span>
               </span>
-            }
-          >
+            </div>
             {run.isError ? (
-              <div aria-live="polite">
+              <div aria-live="polite" className="px-4">
                 <Callout tone="rework">{runFailure(run.error)}</Callout>
               </div>
             ) : null}
             <EvalsTable cases={entries} canRun={canRun} running={run.isPending} onRun={(name) => run.mutate(name)} />
-          </SectionCard>
+          </section>
 
-          <p className="m-0 text-meta text-muted">
-            Green passed, red failed. Add a case from any run where an agent got something wrong, and it is tested
-            before every publish.
-          </p>
+          <p className="m-0 text-meta text-muted">Green passed, red failed.</p>
         </>
       )}
 
