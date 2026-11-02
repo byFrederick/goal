@@ -12,6 +12,7 @@ import { type DecidableItem, useDecision } from '../../shared/item-actions';
 import { holds, reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
+import { NumberRoll } from '../../ui/number-roll';
 
 /** At most this many rows on Home; the rest wait behind "Open all". */
 const shown = 5;
@@ -40,8 +41,9 @@ export function NeedsYouFirst({
         <h2 id="needs-you-first" className="m-0 text-heading">
           Needs you first
         </h2>
-        <span className="rounded-chip bg-you-tint px-2 text-meta text-you-ink tabular-nums">
-          {inbox.entries.length}
+        <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-you px-1 text-meta font-semibold tabular-nums text-white">
+          <NumberRoll value={inbox.entries.length} />
+          <span className="sr-only"> waiting on you</span>
         </span>
         <Link
           to="/o/$org/needs-you"

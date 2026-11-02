@@ -153,7 +153,7 @@ function FactoryCrumbs({
       key: 'factory',
       node: (
         <>
-          <FactoryBadge mark={mark} className="size-5" />
+          <FactoryBadge mark={mark} />
           <Link to="/o/$org/f/$factory" params={params} className={crumbLink}>
             {factoryTitle(factory)}
           </Link>

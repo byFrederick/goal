@@ -23,7 +23,7 @@ interface MarkProps {
   size?: keyof typeof sizes;
   /** The current organization page or factory: a ring on the org mark, an ink fill on a factory. */
   current?: boolean;
-  /** A violet count: what waits on you. Decorative; the trigger's name carries it. */
+  /** An orange count: what waits on you. Decorative; the trigger's name carries it. */
   badge?: number;
   /** A rust dot: blocked or andon pulled. Decorative; the trigger's name carries it. */
   dot?: boolean;
@@ -55,7 +55,7 @@ export function Mark({ kind, size = 'phone', current = false, badge = 0, dot = f
         <span
           data-count={badge}
           className={cn(
-            'absolute box-border flex items-center justify-center rounded-chip border-2 border-shell bg-you text-meta font-semibold text-white after:content-[attr(data-count)]',
+            'absolute box-border flex items-center justify-center rounded-full border-2 border-shell bg-you text-meta font-semibold text-white after:content-[attr(data-count)]',
             badgeAt[size],
           )}
         />

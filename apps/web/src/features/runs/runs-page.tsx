@@ -410,10 +410,7 @@ export function RunsPage() {
                         )}
                       >
                         <td className="px-3 py-2">
-                          <FactoryBadge
-                            mark={factoryMark(run.factory, factories.data ?? [run.factory])}
-                            className="size-5 text-meta"
-                          />
+                          <FactoryBadge mark={factoryMark(run.factory, factories.data ?? [run.factory])} />
                           <span className="sr-only">{run.factory.title || humanize(run.factory.name)}</span>
                         </td>
                         <td className="px-3 py-2">
