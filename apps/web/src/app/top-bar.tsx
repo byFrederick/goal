@@ -193,7 +193,8 @@ function FactoryCrumbs({
 function OrgCrumbs({ routeId, crumb }: { routeId: string; crumb: string | undefined }) {
   const org = useOrg();
   const screen: { label: string; to?: OrgPath } | undefined = orgRoutePages[routeId];
-  if (!screen) return null;
+  if (!screen)
+    return crumb === undefined ? null : <Trail items={[{ key: 'crumb', node: <Current>{crumb}</Current> }]} />;
   const page = screen.to ? (
     <Link to={screen.to} params={{ org: org.slug }} className={crumbLink}>
       {screen.label}
