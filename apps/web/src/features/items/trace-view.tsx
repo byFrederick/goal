@@ -6,6 +6,7 @@ import { Button } from '../../ui/button';
 import { Chip, type ChipTone } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Disclosure } from '../../ui/disclosure';
+import { WorkingLine } from '../../ui/working-line';
 import { outputLead } from './outputs';
 import {
   type CheckEntry,
@@ -251,7 +252,7 @@ function RunCard({
           {label}
         </h3>
         <Chip tone={outcome.tone} dot={outcome.dot}>
-          {outcome.label}
+          <WorkingLine text={outcome.label} running={outcome.label === 'Running'} />
         </Chip>
         <span className="ml-auto flex flex-wrap gap-x-3 text-secondary text-muted tabular-nums">
           {duration ? <span>{duration}</span> : null}
