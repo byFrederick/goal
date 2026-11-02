@@ -399,3 +399,23 @@ test.describe('the builder', () => {
     await expect(page.getByRole('checkbox', { name: 'investigator gets pagerduty' })).toBeChecked();
   });
 });
+
+// The pictures for the pull request: the connection page at the desktop and phone widths, in both
+// themes. They are attached to the report, not compared; the design export is the reference.
+for (const theme of ['light', 'dark'] as const) {
+  for (const [name, size] of [
+    ['1440', { width: 1440, height: 900 }],
+    ['390', { width: 390, height: 844 }],
+  ] as const) {
+    test(`connection page screenshot, ${name} px, ${theme}`, async ({ page }, testInfo) => {
+      await page.setViewportSize(size);
+      await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+      await page.goto('/o/acme/connections/pagerduty');
+      await expect(page.getByRole('heading', { level: 1, name: /pagerduty/ })).toBeVisible();
+      await testInfo.attach(`connection-${name}-${theme}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: 'image/png',
+      });
+    });
+  }
+}
