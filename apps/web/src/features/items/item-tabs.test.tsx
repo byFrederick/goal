@@ -83,33 +83,42 @@ describe('ItemTabs', () => {
     expect(document.activeElement).toBe(within(list).getByRole('tab', { name: 'Spec' }));
   });
 
-  it('keeps the URL clean when Home returns to Timeline, and skips Trace and Teardown at End', async () => {
+  it('keeps the URL clean when Home returns to Timeline, and ends at Trace, skipping Teardown', async () => {
     const { router } = renderTabs('spec');
 
     const list = await screen.findByRole('tablist', { name: 'Item views' });
     const spec = within(list).getByRole('tab', { name: 'Spec' });
     fireEvent.keyDown(spec, { key: 'End' });
-    await waitFor(() => expect(router.state.location.search).toEqual({ tab: 'checks' }));
-    fireEvent.keyDown(within(list).getByRole('tab', { name: /^Checks/ }), { key: 'Home' });
+    await waitFor(() => expect(router.state.location.search).toEqual({ tab: 'trace' }));
+    fireEvent.keyDown(within(list).getByRole('tab', { name: 'Trace' }), { key: 'Home' });
     await waitFor(() => expect(router.state.location.search).toEqual({}));
   });
 
-  it('keeps Trace and Teardown inert until they are built', async () => {
+  it('never disables Trace, and keeps Teardown inert until it is built', async () => {
     renderTabs('timeline');
 
     const list = await screen.findByRole('tablist', { name: 'Item views' });
-    for (const name of ['Trace', 'Teardown']) {
-      const tab = within(list).getByRole('tab', { name });
-      expect(tab.getAttribute('aria-disabled')).toBe('true');
-      expect(tab.getAttribute('aria-selected')).toBe('false');
-    }
+    const trace = within(list).getByRole('tab', { name: 'Trace' });
+    expect(trace.getAttribute('aria-disabled')).toBeNull();
+    expect(trace.getAttribute('href')).toContain('tab=trace');
+    const teardown = within(list).getByRole('tab', { name: 'Teardown' });
+    expect(teardown.getAttribute('aria-disabled')).toBe('true');
+    expect(teardown.getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('reaches Trace with ArrowRight from Checks', async () => {
+    const { router } = renderTabs('checks');
+
+    const list = await screen.findByRole('tablist', { name: 'Item views' });
+    fireEvent.keyDown(within(list).getByRole('tab', { name: /^Checks/ }), { key: 'ArrowRight' });
+    await waitFor(() => expect(router.state.location.search).toEqual({ tab: 'trace' }));
   });
 });
 
 describe('isItemTab', () => {
-  it('accepts the four views and nothing else', () => {
-    expect(['timeline', 'spec', 'changes', 'checks'].every(isItemTab)).toBe(true);
-    expect(isItemTab('trace')).toBe(false);
+  it('accepts the five views and nothing else', () => {
+    expect(['timeline', 'spec', 'changes', 'checks', 'trace'].every(isItemTab)).toBe(true);
+    expect(isItemTab('teardown')).toBe(false);
     expect(isItemTab(undefined)).toBe(false);
   });
 });
