@@ -23,6 +23,7 @@ import { EmptyState } from '../../ui/empty-state';
 import { Field, Input, NativeSelect } from '../../ui/field';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../ui/menu';
 import { Skeleton } from '../../ui/skeleton';
+import { touchLink } from '../../ui/touch-target';
 import { Monogram, Status } from './parts';
 import { ReplaceSecretDialog } from './replace-secret-dialog';
 import { useTestConnection } from './use-test';
@@ -437,7 +438,7 @@ function ConnectionName({
           to="/o/$org/connections/$connection"
           params={{ org, connection: c.name }}
           translate="no"
-          className="truncate font-control text-body text-ink underline-offset-3 hover:underline"
+          className={cn(touchLink, 'truncate font-control text-body text-ink underline-offset-3 hover:underline')}
         >
           {c.name}
         </Link>

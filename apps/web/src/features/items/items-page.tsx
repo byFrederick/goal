@@ -17,6 +17,7 @@ import { NotAvailable } from '../../ui/not-available';
 import { descriptionClass } from '../../ui/page-header';
 import { Skeleton } from '../../ui/skeleton';
 import { Switch } from '../../ui/switch';
+import { touchTarget } from '../../ui/touch-target';
 import { AssemblyTableRow, ItemTableRow, listRows } from './assembly-rows';
 import { BulkActions } from './bulk-actions';
 import {
@@ -88,14 +89,20 @@ function ItemsActions() {
         <Link
           to="/o/$org/f/$factory/board"
           params={params}
-          className="inline-flex min-h-9 items-center rounded-chip px-3 text-secondary font-medium text-ink-soft no-underline hover:text-ink md:min-h-7"
+          className={cn(
+            touchTarget,
+            'inline-flex min-h-9 items-center rounded-chip px-3 text-secondary font-medium text-ink-soft no-underline hover:text-ink md:min-h-7',
+          )}
         >
           Board
         </Link>
         <button
           type="button"
           aria-pressed="true"
-          className="inline-flex min-h-9 items-center rounded-chip border border-line bg-card px-3 text-secondary font-semibold text-ink md:min-h-7"
+          className={cn(
+            touchTarget,
+            'inline-flex min-h-9 items-center rounded-chip border border-line bg-card px-3 text-secondary font-semibold text-ink md:min-h-7',
+          )}
         >
           List
         </button>
