@@ -113,6 +113,7 @@ var operationScopes = map[string]string{
 	"getIntake":                   "intake:read",
 	"getIntakeTrigger":            "intake:read",
 	"getItem":                     "factory:read",
+	"getItemTeardown":             "factory:read",
 	"getJonahOverview":            "factory:read",
 	"getJudge":                    "factory:read",
 	"getKnowledgeDocument":        "knowledge:read",

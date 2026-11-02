@@ -1431,6 +1431,33 @@ func (e RepositoryOwnerKind) Valid() bool {
 	}
 }
 
+// Defines values for ReworkLoopCause.
+const (
+	ReworkLoopCauseCheckFailed  ReworkLoopCause = "check_failed"
+	ReworkLoopCauseGateRejected ReworkLoopCause = "gate_rejected"
+	ReworkLoopCauseMoved        ReworkLoopCause = "moved"
+	ReworkLoopCauseRejected     ReworkLoopCause = "rejected"
+	ReworkLoopCauseRunRetried   ReworkLoopCause = "run_retried"
+)
+
+// Valid indicates whether the value is a known member of the ReworkLoopCause enum.
+func (e ReworkLoopCause) Valid() bool {
+	switch e {
+	case ReworkLoopCauseCheckFailed:
+		return true
+	case ReworkLoopCauseGateRejected:
+		return true
+	case ReworkLoopCauseMoved:
+		return true
+	case ReworkLoopCauseRejected:
+		return true
+	case ReworkLoopCauseRunRetried:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RunStatus.
 const (
 	RunStatusCancelled RunStatus = "cancelled"
@@ -1575,6 +1602,39 @@ func (e StationKind) Valid() bool {
 	case StationKindHuman:
 		return true
 	case StationKindQueue:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TeardownRunOutcome.
+const (
+	TeardownRunOutcomeCancelled   TeardownRunOutcome = "cancelled"
+	TeardownRunOutcomeCheckFailed TeardownRunOutcome = "check_failed"
+	TeardownRunOutcomeFailed      TeardownRunOutcome = "failed"
+	TeardownRunOutcomeFinished    TeardownRunOutcome = "finished"
+	TeardownRunOutcomeMerged      TeardownRunOutcome = "merged"
+	TeardownRunOutcomeRunning     TeardownRunOutcome = "running"
+	TeardownRunOutcomeSentBack    TeardownRunOutcome = "sent_back"
+)
+
+// Valid indicates whether the value is a known member of the TeardownRunOutcome enum.
+func (e TeardownRunOutcome) Valid() bool {
+	switch e {
+	case TeardownRunOutcomeCancelled:
+		return true
+	case TeardownRunOutcomeCheckFailed:
+		return true
+	case TeardownRunOutcomeFailed:
+		return true
+	case TeardownRunOutcomeFinished:
+		return true
+	case TeardownRunOutcomeMerged:
+		return true
+	case TeardownRunOutcomeRunning:
+		return true
+	case TeardownRunOutcomeSentBack:
 		return true
 	default:
 		return false
@@ -5898,6 +5958,29 @@ type RevertRequest struct {
 	Pointers []string `json:"pointers"`
 }
 
+// ReworkLoop One time the item did work again. A send-back (gate_rejected, rejected, or an upstream moved) lasts until the item is back at the station that sent it, and costs the runs in that time; a check_failed or run_retried lasts until the next run at its station ends, and costs that run.
+type ReworkLoop struct {
+	At      time.Time       `json:"at"`
+	Cause   ReworkLoopCause `json:"cause"`
+	CostUsd float64         `json:"cost_usd"`
+
+	// EventId The event that caused the loop
+	EventId int64 `json:"event_id"`
+
+	// Reason The event's reason, or a failed check's command; left out without one
+	Reason  *string `json:"reason,omitempty"`
+	Seconds int64   `json:"seconds"`
+
+	// Station The station that sent the item back
+	Station string `json:"station"`
+
+	// To The station a send-back went to; left out for a loop at its station
+	To *string `json:"to,omitempty"`
+}
+
+// ReworkLoopCause defines model for ReworkLoop.Cause.
+type ReworkLoopCause string
+
 // ReworkWarning defines model for ReworkWarning.
 type ReworkWarning struct {
 	// Rejected Rejections among its last verdicts since the last andon clear
@@ -6304,6 +6387,108 @@ type Targets struct {
 	// LeadTimeHours The p85 lead time to stay under
 	LeadTimeHours    *float64 `json:"lead_time_hours"`
 	ThroughputPerDay *float64 `json:"throughput_per_day"`
+}
+
+// Teardown Where one item's lead time, cost and human help went (ADR 0019 decision 3). Times are whole seconds and costs US dollars. target_seconds and budget_usd are left out when the item has none or its factory is not loaded.
+type Teardown struct {
+	// BudgetUsd The per-item budget at the item's station
+	BudgetUsd *float64 `json:"budget_usd,omitempty"`
+
+	// CostUsd What the item's runs cost
+	CostUsd float64 `json:"cost_usd"`
+
+	// LeadTimeSeconds From the item's first span until its last closed
+	LeadTimeSeconds int64 `json:"lead_time_seconds"`
+
+	// Loops Why the item went back, in time order
+	Loops []ReworkLoop `json:"loops"`
+
+	// Open The item is neither done nor cancelled: the breakdown so far, until now
+	Open bool `json:"open"`
+
+	// Rework The rework loops, with the time inside any loop and the runs in them each counted once
+	Rework   TeardownRework   `json:"rework"`
+	RunTotal TeardownRunTotal `json:"run_total"`
+
+	// Runs The item's agent runs, oldest first
+	Runs []TeardownRun `json:"runs"`
+
+	// Stations The stations the item spent time at, in the order it first reached them
+	Stations []TeardownStation `json:"stations"`
+
+	// TargetSeconds The factory's lead-time target for the item's class of service
+	TargetSeconds *int64 `json:"target_seconds,omitempty"`
+
+	// Total Time working (in progress) and waiting (any other state)
+	Total TeardownTime `json:"total"`
+
+	// TouchCount The human touches
+	TouchCount int `json:"touch_count"`
+
+	// TouchWaitSeconds The time the item waited on people
+	TouchWaitSeconds int64 `json:"touch_wait_seconds"`
+
+	// Touches The human touches in time order, each with how long the item waited for it
+	Touches []TeardownTouch `json:"touches"`
+}
+
+// TeardownRework The rework loops, with the time inside any loop and the runs in them each counted once
+type TeardownRework struct {
+	CostUsd float64 `json:"cost_usd"`
+	Loops   int     `json:"loops"`
+	Seconds int64   `json:"seconds"`
+}
+
+// TeardownRun defines model for TeardownRun.
+type TeardownRun struct {
+	Agent   string  `json:"agent"`
+	CostUsd float64 `json:"cost_usd"`
+	Id      string  `json:"id"`
+	Model   string  `json:"model"`
+
+	// Outcome How the run ended: its status, or what its output met (a failed check, a gate's send-back, the merge)
+	Outcome TeardownRunOutcome `json:"outcome"`
+
+	// Seconds How long the run took
+	Seconds int64     `json:"seconds"`
+	Station string    `json:"station"`
+	Status  RunStatus `json:"status"`
+	Turns   int       `json:"turns"`
+}
+
+// TeardownRunOutcome How the run ended: its status, or what its output met (a failed check, a gate's send-back, the merge)
+type TeardownRunOutcome string
+
+// TeardownRunTotal defines model for TeardownRunTotal.
+type TeardownRunTotal struct {
+	CostUsd float64 `json:"cost_usd"`
+	Runs    int     `json:"runs"`
+	Seconds int64   `json:"seconds"`
+	Turns   int     `json:"turns"`
+}
+
+// TeardownStation The time the item spent at one station, over all its visits
+type TeardownStation struct {
+	Station        string `json:"station"`
+	TotalSeconds   int64  `json:"total_seconds"`
+	WaitingSeconds int64  `json:"waiting_seconds"`
+	WorkingSeconds int64  `json:"working_seconds"`
+}
+
+// TeardownTime Time working (in progress) and waiting (any other state)
+type TeardownTime struct {
+	TotalSeconds   int64 `json:"total_seconds"`
+	WaitingSeconds int64 `json:"waiting_seconds"`
+	WorkingSeconds int64 `json:"working_seconds"`
+}
+
+// TeardownTouch defines model for TeardownTouch.
+type TeardownTouch struct {
+	// Touch One action by a person on an item, named by its most specific event
+	Touch Touch `json:"touch"`
+
+	// WaitSeconds From the opening of the span the touch ended (or happened in) until the touch
+	WaitSeconds int64 `json:"wait_seconds"`
 }
 
 // Template defines model for Template.
@@ -9298,6 +9483,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 	ListItemRuns(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetItemTeardown Where an item's lead time, cost and human help went
+	//
+	// The after-action breakdown of one item (ADR 0019 decision 3), worked out from its spans, runs, events and touches on each request and stored nowhere. On an open item it is the breakdown so far, until now. An unknown item is 404 item-not-found.
+	//
+	// Corresponds with GET /v1/orgs/{org}/items/{item}/teardown (the `GetItemTeardown` operationId).
+	GetItemTeardown(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DecideToolApprovalWithBody Approve or deny the tool call an item's agent asked to make
 	//
@@ -12974,6 +13166,23 @@ func (c *Client) RetryItem(ctx context.Context, org OrgRef, item ItemRef, reqEdi
 // Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 func (c *Client) ListItemRuns(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListItemRunsRequest(c.Server, org, item)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetItemTeardown Where an item's lead time, cost and human help went
+//
+// The after-action breakdown of one item (ADR 0019 decision 3), worked out from its spans, runs, events and touches on each request and stored nowhere. On an open item it is the breakdown so far, until now. An unknown item is 404 item-not-found.
+//
+// Corresponds with GET /v1/orgs/{org}/items/{item}/teardown (the `GetItemTeardown` operationId).
+func (c *Client) GetItemTeardown(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetItemTeardownRequest(c.Server, org, item)
 	if err != nil {
 		return nil, err
 	}
@@ -21302,6 +21511,47 @@ func NewListItemRunsRequest(server string, org OrgRef, item ItemRef) (*http.Requ
 	return req, nil
 }
 
+// NewGetItemTeardownRequest constructs an http.Request for the GetItemTeardown method
+func NewGetItemTeardownRequest(server string, org OrgRef, item ItemRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/teardown", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewDecideToolApprovalRequest calls the generic DecideToolApproval builder with application/json body
 func NewDecideToolApprovalRequest(server string, org OrgRef, item ItemRef, body DecideToolApprovalJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -25597,6 +25847,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 	ListItemRunsWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ListItemRunsResponse, error)
+
+	// GetItemTeardownWithResponse Where an item's lead time, cost and human help went
+	//
+	// The after-action breakdown of one item (ADR 0019 decision 3), worked out from its spans, runs, events and touches on each request and stored nowhere. On an open item it is the breakdown so far, until now. An unknown item is 404 item-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/items/{item}/teardown (the `GetItemTeardown` operationId).
+	GetItemTeardownWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*GetItemTeardownResponse, error)
 
 	// DecideToolApprovalWithBodyWithResponse Approve or deny the tool call an item's agent asked to make
 	//
@@ -32679,6 +32938,54 @@ func (r ListItemRunsResponse) ContentType() string {
 	return ""
 }
 
+type GetItemTeardownResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Teardown
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetItemTeardownResponse) GetJSON200() *Teardown {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetItemTeardownResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetItemTeardownResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetItemTeardownResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetItemTeardownResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetItemTeardownResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type DecideToolApprovalResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -37728,6 +38035,21 @@ func (c *ClientWithResponses) ListItemRunsWithResponse(ctx context.Context, org 
 		return nil, err
 	}
 	return ParseListItemRunsResponse(rsp)
+}
+
+// GetItemTeardownWithResponse Where an item's lead time, cost and human help went
+//
+// The after-action breakdown of one item (ADR 0019 decision 3), worked out from its spans, runs, events and touches on each request and stored nowhere. On an open item it is the breakdown so far, until now. An unknown item is 404 item-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/items/{item}/teardown (the `GetItemTeardown` operationId).
+func (c *ClientWithResponses) GetItemTeardownWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*GetItemTeardownResponse, error) {
+	rsp, err := c.GetItemTeardown(ctx, org, item, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetItemTeardownResponse(rsp)
 }
 
 // DecideToolApprovalWithBodyWithResponse Approve or deny the tool call an item's agent asked to make
@@ -43223,6 +43545,39 @@ func ParseListItemRunsResponse(rsp *http.Response) (*ListItemRunsResponse, error
 	return response, nil
 }
 
+// ParseGetItemTeardownResponse parses an HTTP response from a GetItemTeardownWithResponse call
+func ParseGetItemTeardownResponse(rsp *http.Response) (*GetItemTeardownResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetItemTeardownResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Teardown
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseDecideToolApprovalResponse parses an HTTP response from a DecideToolApprovalWithResponse call
 func ParseDecideToolApprovalResponse(rsp *http.Response) (*DecideToolApprovalResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -45336,6 +45691,9 @@ type ServerInterface interface {
 	// ListItemRuns An item's agent runs, oldest first (at most 200)
 	// (GET /v1/orgs/{org}/items/{item}/runs)
 	ListItemRuns(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// GetItemTeardown Where an item's lead time, cost and human help went
+	// (GET /v1/orgs/{org}/items/{item}/teardown)
+	GetItemTeardown(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// DecideToolApproval Approve or deny the tool call an item's agent asked to make
 	// (POST /v1/orgs/{org}/items/{item}/tool-approval)
 	DecideToolApproval(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
@@ -51133,6 +51491,41 @@ func (siw *ServerInterfaceWrapper) ListItemRuns(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// GetItemTeardown operation middleware
+func (siw *ServerInterfaceWrapper) GetItemTeardown(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetItemTeardown(w, r, org, item)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // DecideToolApproval operation middleware
 func (siw *ServerInterfaceWrapper) DecideToolApproval(w http.ResponseWriter, r *http.Request) {
 
@@ -53394,6 +53787,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/parts", wrapper.ListItemParts)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/parts", wrapper.AddItemPart)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/runs", wrapper.ListItemRuns)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/teardown", wrapper.GetItemTeardown)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/notes", wrapper.NoteItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/needs", wrapper.LinkItem)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/needs/{need}", wrapper.UnlinkItem)
@@ -59147,6 +59541,46 @@ func (response ListItemRunsdefaultApplicationProblemPlusJSONResponse) VisitListI
 	return err
 }
 
+type GetItemTeardownRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+}
+
+type GetItemTeardownResponseObject interface {
+	VisitGetItemTeardownResponse(w http.ResponseWriter) error
+}
+
+type GetItemTeardown200JSONResponse Teardown
+
+func (response GetItemTeardown200JSONResponse) VisitGetItemTeardownResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetItemTeardowndefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetItemTeardowndefaultApplicationProblemPlusJSONResponse) VisitGetItemTeardownResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DecideToolApprovalRequestObject struct {
 	Org  OrgRef  `json:"org"`
 	Item ItemRef `json:"item"`
@@ -61672,6 +62106,9 @@ type StrictServerInterface interface {
 	// ListItemRuns An item's agent runs, oldest first (at most 200)
 	// (GET /v1/orgs/{org}/items/{item}/runs)
 	ListItemRuns(ctx context.Context, request ListItemRunsRequestObject) (ListItemRunsResponseObject, error)
+	// GetItemTeardown Where an item's lead time, cost and human help went
+	// (GET /v1/orgs/{org}/items/{item}/teardown)
+	GetItemTeardown(ctx context.Context, request GetItemTeardownRequestObject) (GetItemTeardownResponseObject, error)
 	// DecideToolApproval Approve or deny the tool call an item's agent asked to make
 	// (POST /v1/orgs/{org}/items/{item}/tool-approval)
 	DecideToolApproval(ctx context.Context, request DecideToolApprovalRequestObject) (DecideToolApprovalResponseObject, error)
@@ -65860,6 +66297,33 @@ func (sh *strictHandler) ListItemRuns(w http.ResponseWriter, r *http.Request, or
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListItemRunsResponseObject); ok {
 		if err := validResponse.VisitListItemRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetItemTeardown operation middleware
+func (sh *strictHandler) GetItemTeardown(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
+	var request GetItemTeardownRequestObject
+
+	request.Org = org
+	request.Item = item
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetItemTeardown(ctx, request.(GetItemTeardownRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetItemTeardown")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetItemTeardownResponseObject); ok {
+		if err := validResponse.VisitGetItemTeardownResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

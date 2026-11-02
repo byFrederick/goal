@@ -2651,6 +2651,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/items/{item}/teardown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Where an item's lead time, cost and human help went
+         * @description The after-action breakdown of one item (ADR 0019 decision 3), worked out from its spans, runs, events and touches on each request and stored nowhere. On an open item it is the breakdown so far, until now. An unknown item is 404 item-not-found.
+         */
+        get: operations["getItemTeardown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/items/{item}/notes": {
         parameters: {
             query?: never;
@@ -5062,6 +5087,134 @@ export interface components {
             /** Format: double */
             per_item_usd: number | null;
             max_turns_per_task: number | null;
+        };
+        /** @description Where one item's lead time, cost and human help went (ADR 0019 decision 3). Times are whole seconds and costs US dollars. target_seconds and budget_usd are left out when the item has none or its factory is not loaded. */
+        Teardown: {
+            /** @description The item is neither done nor cancelled: the breakdown so far, until now */
+            open: boolean;
+            /**
+             * Format: int64
+             * @description From the item's first span until its last closed
+             */
+            lead_time_seconds: number;
+            /**
+             * Format: int64
+             * @description The factory's lead-time target for the item's class of service
+             */
+            target_seconds?: number;
+            /**
+             * Format: double
+             * @description What the item's runs cost
+             */
+            cost_usd: number;
+            /**
+             * Format: double
+             * @description The per-item budget at the item's station
+             */
+            budget_usd?: number;
+            rework: components["schemas"]["TeardownRework"];
+            /** @description The human touches */
+            touch_count: number;
+            /**
+             * Format: int64
+             * @description The time the item waited on people
+             */
+            touch_wait_seconds: number;
+            /** @description The stations the item spent time at, in the order it first reached them */
+            stations: components["schemas"]["TeardownStation"][];
+            total: components["schemas"]["TeardownTime"];
+            /** @description The item's agent runs, oldest first */
+            runs: components["schemas"]["TeardownRun"][];
+            run_total: components["schemas"]["TeardownRunTotal"];
+            /** @description Why the item went back, in time order */
+            loops: components["schemas"]["ReworkLoop"][];
+            /** @description The human touches in time order, each with how long the item waited for it */
+            touches: components["schemas"]["TeardownTouch"][];
+        };
+        /** @description Time working (in progress) and waiting (any other state) */
+        TeardownTime: {
+            /** Format: int64 */
+            working_seconds: number;
+            /** Format: int64 */
+            waiting_seconds: number;
+            /** Format: int64 */
+            total_seconds: number;
+        };
+        /** @description The time the item spent at one station, over all its visits */
+        TeardownStation: {
+            station: string;
+            /** Format: int64 */
+            working_seconds: number;
+            /** Format: int64 */
+            waiting_seconds: number;
+            /** Format: int64 */
+            total_seconds: number;
+        };
+        TeardownRun: {
+            id: string;
+            station: string;
+            agent: string;
+            model: string;
+            turns: number;
+            /**
+             * Format: int64
+             * @description How long the run took
+             */
+            seconds: number;
+            /** Format: double */
+            cost_usd: number;
+            status: components["schemas"]["RunStatus"];
+            /**
+             * @description How the run ended: its status, or what its output met (a failed check, a gate's send-back, the merge)
+             * @enum {string}
+             */
+            outcome: "running" | "finished" | "check_failed" | "sent_back" | "merged" | "failed" | "cancelled";
+        };
+        TeardownRunTotal: {
+            runs: number;
+            turns: number;
+            /** Format: int64 */
+            seconds: number;
+            /** Format: double */
+            cost_usd: number;
+        };
+        /** @description The rework loops, with the time inside any loop and the runs in them each counted once */
+        TeardownRework: {
+            loops: number;
+            /** Format: int64 */
+            seconds: number;
+            /** Format: double */
+            cost_usd: number;
+        };
+        /** @description One time the item did work again. A send-back (gate_rejected, rejected, or an upstream moved) lasts until the item is back at the station that sent it, and costs the runs in that time; a check_failed or run_retried lasts until the next run at its station ends, and costs that run. */
+        ReworkLoop: {
+            /** @enum {string} */
+            cause: "gate_rejected" | "rejected" | "moved" | "check_failed" | "run_retried";
+            /** @description The station that sent the item back */
+            station: string;
+            /** @description The station a send-back went to; left out for a loop at its station */
+            to?: string;
+            /** @description The event's reason, or a failed check's command; left out without one */
+            reason?: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: int64 */
+            seconds: number;
+            /** Format: double */
+            cost_usd: number;
+            /**
+             * Format: int64
+             * @description The event that caused the loop
+             */
+            event_id: number;
+        };
+        TeardownTouch: {
+            touch: components["schemas"]["Touch"];
+            /**
+             * Format: int64
+             * @description From the opening of the span the touch ended (or happened in) until the touch
+             */
+            wait_seconds: number;
         };
         CurrentRun: {
             id: string;
@@ -11622,6 +11775,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getItemTeardown: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The item's teardown */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Teardown"];
                 };
             };
             default: components["responses"]["Problem"];
