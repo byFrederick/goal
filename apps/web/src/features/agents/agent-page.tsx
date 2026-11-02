@@ -98,7 +98,11 @@ function SendBackReasons({ stats }: { stats: AgentStats }) {
               className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-t border-line py-3 md:grid-cols-[minmax(0,1fr)_150px_auto]"
             >
               <Tooltip label={r.label} side="top">
-                <button type="button" className={cn(touchLink, 'min-w-0 cursor-default truncate text-left text-body')}>
+                <button
+                  type="button"
+                  title={r.label}
+                  className={cn(touchLink, 'min-w-0 cursor-default truncate text-left text-body')}
+                >
                   {reasonLabel(r.label)}
                 </button>
               </Tooltip>

@@ -181,7 +181,17 @@ describe('New trigger phone tap targets', () => {
       const source = screen.getByRole('button', { name });
       expect(source.classList.contains('h-11')).toBe(true);
       expect(source.classList.contains('md:h-10')).toBe(true);
+      expect(source.classList.contains('shrink-0')).toBe(true);
+      expect(source.classList.contains('flex-1')).toBe(false);
     }
+  });
+
+  it('makes Close 44 px below md and 40 px from md', async () => {
+    renderPicker();
+    const dialog = await screen.findByRole('dialog', { name: 'New trigger' });
+    const close = within(dialog).getByRole('button', { name: 'Close' });
+    expect(close.classList.contains('max-md:size-11')).toBe(true);
+    expect(close.classList.contains('size-10')).toBe(true);
   });
 
   it('makes each GitHub event row at least 44 px below md and 40 px from md', async () => {

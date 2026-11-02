@@ -11,7 +11,6 @@ import { describeState, itemStatus, toneText } from '../../shared/item-state';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { StatusIcon } from '../../ui/status-icon';
-import { touchLink } from '../../ui/touch-target';
 
 type PartOf = NonNullable<ItemCard['assembly']>;
 
@@ -278,8 +277,7 @@ export function AssemblyTableRow({
               to="/o/$org/f/$factory/items/$ref"
               params={{ ...params, ref: refParam(ref) }}
               className={cn(
-                touchLink,
-                'inline-flex min-w-0 items-center gap-2 font-semibold text-ink no-underline hover:text-run-ink',
+                'inline-flex min-w-0 items-center gap-2 max-md:min-h-11 font-semibold text-ink no-underline hover:text-run-ink',
               )}
             >
               <LayoutGrid size={14} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ok-ink" />

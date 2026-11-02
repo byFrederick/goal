@@ -75,6 +75,30 @@ test.describe('the phone shell at 390 px', () => {
     }
   });
 
+  test('the top-bar action keeps a 16 px gutter on Home and Board', async ({ page }) => {
+    for (const path of ['/o/acme', '/o/acme/f/goal/board']) {
+      await page.goto(path);
+      const bar = page.getByRole('banner');
+      const mark = await bar.getByRole('button', { name: 'Open menu' }).boundingBox();
+      expect(mark?.x ?? 0).toBeCloseTo(16, 0);
+      const last = bar.getByRole('button').last();
+      const box = await last.boundingBox();
+      expect(390 - ((box?.x ?? 0) + (box?.width ?? 0))).toBeCloseTo(16, 0);
+    }
+  });
+
+  test('Home shows New item as a compact 44 px button inside the screen, with no keycap', async ({ page }) => {
+    await page.goto('/o/acme');
+    const bar = page.getByRole('banner');
+    const button = bar.getByRole('button', { name: 'New item' });
+    await expect(button).toBeVisible();
+    await expect(bar.locator('kbd')).toHaveCount(0);
+    const box = await button.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThanOrEqual(43.5);
+    expect(box?.x ?? -1).toBeGreaterThanOrEqual(0);
+    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(390);
+  });
+
   test('nothing scrolls sideways on a factory page', async ({ page }) => {
     await page.goto('/o/acme/f/goal/board');
     await expectNoHorizontalScroll(page);
@@ -89,6 +113,16 @@ test.describe('the phone shell is gone at 768 px', () => {
     await expect(page.getByRole('navigation', { name: 'Tabs' })).toBeHidden();
     await expect(page.getByRole('button', { name: 'Open menu' })).toBeHidden();
     await expect(orgNav(page).filter({ visible: true })).toBeVisible();
+  });
+
+  test('Home keeps the labelled New item button with its C keycap', async ({ page }) => {
+    await page.goto('/o/acme');
+    const button = page
+      .getByRole('button', { name: /New item/ })
+      .filter({ visible: true })
+      .first();
+    await expect(button).toContainText('New item');
+    await expect(button.locator('kbd')).toHaveText('C');
   });
 });
 
@@ -131,6 +165,17 @@ test.describe('every phone control has a 44 px hit area at 390 px', () => {
       (p) => p.locator('a[href^="/o/acme/connections/"]:not([href$="/new"]):visible').first(),
     ],
     ['Knowledge document title', '/o/acme/knowledge/goal-docs', (p) => p.locator('a[href*="document="]').first()],
+    [
+      'Knowledge document open at source',
+      '/o/acme/knowledge/goal-docs',
+      (p) => p.getByRole('link', { name: /^Open .* at its source$/ }).first(),
+    ],
+    ['Credential Show the value', '/o/acme/credentials/new', (p) => p.getByRole('button', { name: 'Show the value' })],
+    [
+      'New trigger source choice',
+      '/o/acme/f/software/intake/new',
+      (p) => p.getByRole('button', { name: 'Schedule', exact: true }),
+    ],
     ['Knowledge source title', '/o/acme/knowledge', (p) => p.locator('a:visible', { hasText: 'goal docs' }).first()],
     [
       'Knowledge new kind',
@@ -143,6 +188,17 @@ test.describe('every phone control has a 44 px hit area at 390 px', () => {
       '/o/acme/f/goal',
       (p) => p.getByRole('banner').getByRole('button', { name: 'Pull the andon cord' }),
     ],
+    [
+      'Agent Reset to default',
+      '/o/acme/f/goal/agents/frontend-engineer',
+      (p) => p.getByRole('button', { name: /^Reset to default/ }),
+    ],
+    [
+      'Agent more skills',
+      '/o/acme/f/goal/agents/frontend-engineer',
+      (p) => p.getByRole('button', { name: /^\+ \d+ more$/ }),
+    ],
+    ['Definition line Send', '/o/acme/f/goal/definition/line', (p) => p.getByRole('button', { name: 'Send' })],
     ['Members switch', '/o/acme/members', (p) => p.getByRole('switch').first()],
     ['Floor Add a build agent', '/o/acme/f/goal', (p) => p.getByRole('button', { name: 'Add a build agent' })],
   ];
@@ -152,7 +208,79 @@ test.describe('every phone control has a 44 px hit area at 390 px', () => {
       await page.goto(path);
       const area = await hitArea(find(page));
       expect(area.height).toBeGreaterThanOrEqual(43.5);
-      if (name.endsWith('switch') || name.includes('New item')) expect(area.width).toBeGreaterThanOrEqual(43.5);
+      if (
+        name.endsWith('switch') ||
+        name.includes('New item') ||
+        name.endsWith('Send') ||
+        name.includes('open at source')
+      )
+        expect(area.width).toBeGreaterThanOrEqual(43.5);
     });
   }
+});
+
+test.describe('phone fixes on the Assembly, Agent and Definition line pages at 390 px', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test('the assembly brief stays inside its box', async ({ page }) => {
+    await page.goto('/o/acme/f/goal/items');
+    await page
+      .locator('a[href*="/items/"]')
+      .filter({ hasText: /assembly/i })
+      .first()
+      .click();
+    const brief = page.locator('p', { hasText: 'A check of main' }).first();
+    const fit = await brief.evaluate((el) => ({
+      scroll: el.scrollWidth,
+      client: el.clientWidth,
+      right: el.getBoundingClientRect().right,
+      parentRight: el.parentElement?.getBoundingClientRect().right ?? 0,
+    }));
+    expect(fit.scroll).toBeLessThanOrEqual(fit.client);
+    expect(fit.right).toBeLessThanOrEqual(fit.parentRight + 0.5);
+  });
+
+  test('a rejection reason carries its full text in a title', async ({ page }) => {
+    await page.goto('/o/acme/f/goal/agents/frontend-engineer');
+    const reasons = page.getByRole('region', { name: 'Why review sent work back' });
+    const first = reasons.getByRole('button').first();
+    const title = await first.getAttribute('title');
+    expect(title).toBeTruthy();
+    const shown = (await first.textContent())?.trim() ?? '';
+    expect(title?.toLowerCase().startsWith(shown.toLowerCase())).toBe(true);
+  });
+
+  test('the More actions icon is centred in its button', async ({ page }) => {
+    await page.goto('/o/acme/f/goal/definition/line');
+    const gaps = await page.getByRole('button', { name: 'More actions' }).evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      const icon = (el.querySelector('svg') as SVGElement).getBoundingClientRect();
+      return { left: icon.left - box.left, right: box.right - icon.right };
+    });
+    expect(Math.abs(gaps.left - gaps.right)).toBeLessThanOrEqual(1);
+  });
+});
+
+test.describe('phone dialogs and rows at 390 px', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test('New trigger Close is 44 x 44', async ({ page }) => {
+    await page.goto('/o/acme/f/software/intake/new');
+    const area = await hitArea(page.getByRole('button', { name: 'Close', exact: true }));
+    expect(area.width).toBeGreaterThanOrEqual(43.5);
+    expect(area.height).toBeGreaterThanOrEqual(43.5);
+  });
+
+  test('a document row title link ends before its open-at-source control', async ({ page }) => {
+    await page.goto('/o/acme/knowledge/goal-docs');
+    const row = page
+      .getByRole('listitem')
+      .filter({ has: page.getByRole('link', { name: /^Open .* at its source$/ }) })
+      .first();
+    const title = await row.locator('a[href*="document="]').first().boundingBox();
+    const control = await row.getByRole('link', { name: /^Open .* at its source$/ }).boundingBox();
+    expect(title).not.toBeNull();
+    expect(control).not.toBeNull();
+    expect((title?.x ?? 0) + (title?.width ?? 0)).toBeLessThanOrEqual((control?.x ?? 0) + 0.5);
+  });
 });
