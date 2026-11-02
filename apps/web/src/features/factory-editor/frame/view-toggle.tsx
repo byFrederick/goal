@@ -7,13 +7,16 @@ import { laterText } from '../../../app/screens';
 import { placeAtLine } from '../../../shared/definition/place';
 import { useFactoryParams } from '../../../shared/factory';
 import { cn } from '../../../ui/cn';
+import { touchTarget } from '../../../ui/touch-target';
 import { useDraft, useModel } from '../draft/use-draft';
 import { yamlView } from '../section-views';
 import type { EditorSection } from '../sections';
 import { validateDefinitionSearch } from '../sections';
 
-const segment =
-  'inline-flex h-7 items-center rounded-chip px-3 text-secondary font-control transition-colors duration-(--duration-quick)';
+const segment = cn(
+  touchTarget,
+  'inline-flex h-7 items-center rounded-chip px-3 text-secondary font-control transition-colors duration-(--duration-quick)',
+);
 
 export function ViewToggle({ section, yaml }: { section: EditorSection; yaml: boolean }) {
   const params = useFactoryParams();

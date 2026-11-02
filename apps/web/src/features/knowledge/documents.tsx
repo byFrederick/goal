@@ -14,9 +14,11 @@ import { plural } from '../../shared/format';
 import { externalUrl } from '../../shared/knowledge';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
+import { cn } from '../../ui/cn';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Dialog, DialogContent } from '../../ui/dialog';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../ui/menu';
+import { touchLink } from '../../ui/touch-target';
 import { StatusText } from './parts';
 import { documentStatus, formatBytes, refusalText } from './words';
 
@@ -39,7 +41,10 @@ export function DocumentLine({
         to="/o/$org/knowledge/$source"
         params={{ org: org.slug, source }}
         search={{ document: d.id }}
-        className="min-w-0 break-words text-[15px] text-ink underline underline-offset-3 hover:text-run"
+        className={cn(
+          touchLink,
+          'min-w-0 break-words text-[15px] text-ink underline underline-offset-3 hover:text-run',
+        )}
       >
         {d.title}
       </Link>

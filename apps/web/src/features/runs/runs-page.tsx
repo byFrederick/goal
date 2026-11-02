@@ -27,6 +27,7 @@ import { NotAvailable } from '../../ui/not-available';
 import { Skeleton } from '../../ui/skeleton';
 import { Spinner } from '../../ui/spinner';
 import { StatStrip } from '../../ui/stat-strip';
+import { touchTarget } from '../../ui/touch-target';
 import { type RunsRange, type RunsSearch, rangeWord, runsWindow } from './search';
 
 /** The rows one page asks for: the footer counts what is shown, and paging is not built yet. */
@@ -265,7 +266,10 @@ export function RunsPage() {
                     <NotAvailable key={o.label} label={o.label}>
                       <button
                         type="button"
-                        className="inline-flex h-8 items-center gap-2 rounded-control border border-rule bg-card px-3 text-secondary font-control text-ink-soft"
+                        className={cn(
+                          touchTarget,
+                          'inline-flex h-8 items-center gap-2 rounded-control border border-rule bg-card px-3 text-secondary font-control text-ink-soft',
+                        )}
                       >
                         <span className="size-2 rounded-full bg-you" aria-hidden="true" />
                         {o.label}
@@ -289,6 +293,7 @@ export function RunsPage() {
                     aria-pressed={active}
                     onClick={() => setSearch({ status: o.status })}
                     className={cn(
+                      touchTarget,
                       'inline-flex h-8 items-center gap-2 rounded-control border px-3 text-secondary font-control',
                       active ? 'border-ink bg-ink text-shell' : 'border-rule bg-card text-ink-soft hover:bg-panel',
                     )}

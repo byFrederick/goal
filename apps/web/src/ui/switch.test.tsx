@@ -23,6 +23,11 @@ function Toggle({ disabled = false, onChange }: { disabled?: boolean; onChange?:
 }
 
 describe('Switch', () => {
+  it('answers across 44 px or more below 768 px: its 22 px inner box plus 12 px each side', () => {
+    render(<Toggle />);
+    expect(screen.getByRole('switch').className).toContain('before:-inset-3');
+  });
+
   it('is a switch named by its label', () => {
     render(<Toggle />);
     expect(screen.getByRole('switch', { name: 'Notify me' }).getAttribute('aria-checked')).toBe('false');

@@ -15,6 +15,8 @@ import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
+import { cn } from '../../ui/cn';
+import { touchLink } from '../../ui/touch-target';
 
 /** The card's grid: the document, its bar (from md), the runs and the verdicts. */
 const row =
@@ -125,13 +127,16 @@ function UsageRow({ doc, width }: { doc: KnowledgeDocumentUsage; width: number }
   const id = useId();
   return (
     <li className="border-t border-line">
-      <div className={`${row} py-2`}>
+      <div className={`${row} py-2 max-md:py-3`}>
         <button
           type="button"
           aria-expanded={open}
           aria-controls={id}
           onClick={() => setOpen((o) => !o)}
-          className="min-w-0 break-all text-left font-mono text-secondary text-ink underline-offset-3 hover:underline"
+          className={cn(
+            touchLink,
+            'min-w-0 break-all text-left font-mono text-secondary text-ink underline-offset-3 hover:underline',
+          )}
         >
           {doc.title}
         </button>
