@@ -98,7 +98,8 @@ export function SetupCard() {
     factoryName: factory.name,
   });
   const done = doneCount(rows);
-  if (done === setupTotal) return null;
+  // The checklist is for a new factory: it is gone once an item has merged (the Floor's rule), and at nine of nine.
+  if (done === setupTotal || (finished.data?.items.length ?? 0) > 0) return null;
 
   return (
     <section aria-labelledby="setup-h" className={card}>

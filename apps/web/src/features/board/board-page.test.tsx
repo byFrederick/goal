@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Board, BoardLane, BoardStation, Factory, ItemCard, OrgSummary } from '../../api/types';
 import { ShellFrame } from '../../app/app-shell';
 import { renderBoardPage } from '../../test/route';
-import { choose, shownChoice } from '../../test/select';
 import { TooltipProvider } from '../../ui/tooltip';
 import { BoardPage } from './board-page';
 
@@ -22,6 +21,15 @@ vi.mock(import('../../api/client'), async (original) => ({
   ...(await original()),
   getInbox: vi.fn(async () => ({ entries: [], truncated: false })),
 }));
+
+/** Opens a filter's dropdown button and picks a choice by its label ("Any work type" clears it). */
+async function pick(name: string, label: string) {
+  fireEvent.keyDown(screen.getByRole('button', { name: new RegExp(`^${name}`) }), { key: 'Enter' });
+  fireEvent.click(await screen.findByRole('menuitemradio', { name: label }));
+}
+
+/** A filter button's text: "Lane" while unset, "Lane: Backend" once chosen. */
+const filterText = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}`) }).textContent;
 
 afterEach(() => {
   cleanup();
@@ -194,9 +202,13 @@ describe('BoardPage', () => {
     renderBoardPage({ page: ShellBoard, org, factory, board: board() });
 
     const columns = await screen.findByRole('region', { name: 'Stations' });
-    // The chip, and the card's own Expedite label.
-    expect(within(columns).getAllByText('Expedite')).toHaveLength(2);
-    expect(within(columns).getByText('1 of 1 in use, jumps every queue')).toBeTruthy();
+    // The tinted row's caption, and the card's own Expedite label; the old chip is gone.
+    expect(within(columns).getByText('Expedite, 1 of 1 in use, jumps every queue')).toBeTruthy();
+    expect(within(columns).getAllByText('Expedite')).toHaveLength(1);
+    // Every column has the row, tinted amber.
+    for (const column of within(columns).getAllByRole('region')) {
+      expect(column.querySelector('[data-zone="expedite"]')?.classList).toContain('bg-amber-tint');
+    }
   });
 
   it('leaves the expedite lane out when the line has no lane and no expedite item', async () => {
@@ -206,6 +218,7 @@ describe('BoardPage', () => {
     await screen.findByRole('region', { name: 'Stations' });
     expect(screen.queryByText(/jumps every queue/)).toBeNull();
     expect(screen.queryByText('Expedite')).toBeNull();
+    expect(document.querySelector('[data-zone="expedite"]')).toBeNull();
   });
 
   it('a queue column has no header, and the agent, human and done columns keep theirs', async () => {
@@ -355,7 +368,7 @@ describe('BoardPage', () => {
     };
     const expectDoneCard = (card: HTMLElement) => {
       // The same card serves the phone and the columns: its ref and age sit on its top line.
-      expect(within(card).getByText(/sre#30/)).toBeTruthy();
+      expect(card.textContent).toMatch(/#30/);
       expect(within(card).getByText(/2 h/)).toBeTruthy();
       expect(within(card).getByRole('link', { name: REDIS })).toBeTruthy();
       expect(
@@ -412,12 +425,36 @@ describe('the desktop Board, as the screen draws it', () => {
 
     await screen.findByRole('region', { name: 'Stations' });
     const search = () => router.state.location.search as Record<string, unknown>;
-    await choose('Work type', 'Incident');
+    await pick('Work type', 'Incident');
     await waitFor(() => expect(search().type).toBe('incident'));
-    await choose('Lane', 'Backend');
+    await pick('Lane', 'Backend');
     await waitFor(() => expect(search().lane).toBe('backend'));
     expect(search().type).toBe('incident');
-    expect(shownChoice('Lane')).toBe('Backend');
+    expect(filterText('Lane')).toBe('Lane: Backend');
+  });
+
+  it('puts the search and Board | List in the top bar, and the four filters as dropdown buttons by the title', async () => {
+    renderBoardPage({ page: ShellBoard, org, factory, board: board() });
+
+    await screen.findByRole('region', { name: 'Stations' });
+    const topBar = document.querySelector('.shell-topbar') as HTMLElement;
+    expect(within(topBar).getByRole('searchbox', { name: 'Search items' })).toBeTruthy();
+    expect(within(topBar).getByRole('radio', { name: 'List' })).toBeTruthy();
+    const header = screen.getByRole('heading', { level: 1, name: 'Board' }).closest('header') as HTMLElement;
+    for (const name of ['Work type', 'Lane', 'Assembly', 'Agent role']) {
+      expect(within(header).getByRole('button', { name: new RegExp(`^${name}`) })).toBeTruthy();
+    }
+    expect(screen.queryByRole('combobox')).toBeNull();
+  });
+
+  it('reads ?type and ?lane back from the URL and shows only the matching cards', async () => {
+    const lanes = board({}, [expediteItem, { ...standardItem, lane: 'backend' }]);
+    renderBoardPage({ page: ShellBoard, org, factory, board: lanes, search: { type: 'incident', lane: 'backend' } });
+
+    await screen.findByRole('region', { name: 'Stations' });
+    expect(filterText('Work type')).toBe('Work type: Incident');
+    expect(filterText('Lane')).toBe('Lane: Backend');
+    expect(screen.queryByRole('link', { name: EXPEDITE })).toBeNull();
   });
 
   it('heads the Done column with Merged pull requests and the week’s count', async () => {
@@ -592,40 +629,32 @@ describe('board filters and grouping', () => {
   const expectShown = (titles: string[], region?: HTMLElement) =>
     expect([...shownTitles(region)].sort()).toEqual([...titles].sort());
 
-  /** A filter's chosen option, as the select shows it. */
-  const choice = shownChoice;
-  /** The label a filter shows for each value the tests use. */
-  const labels: Record<string, string> = {
-    '': 'Any',
-    [ASM1]: ASM1_TITLE,
-    working: 'Working',
-    waiting: 'Waiting for another item',
-    'same-files': 'Waiting for same files',
-  };
+  /** A filter's chosen value: the option's value, '' for Any. */
+  const choice = (name: string) => filterText(name);
 
   it('filters the cards by assembly, agent role and status, in every station', async () => {
     renderBoardPage({ page: ShellBoard, org, factory, board: filterBoard() });
     await screen.findByRole('region', { name: 'Stations' });
-    const filter = async (name: string, value: string, titles: string[]) => {
-      await choose(name, labels[value] ?? value);
+    const filter = async (name: string, label: string, titles: string[]) => {
+      await pick(name, label);
       await waitFor(() => expectShown(titles));
     };
-    await filter('Assembly', ASM1, [ADD, WIRE]);
+    await filter('Assembly', ASM1_TITLE, [ADD, WIRE]);
     expect(screen.queryByRole('link', { name: DRAFT })).toBeNull();
 
-    await filter('Assembly', '', [ADD, DRAFT, TRIAGE, WIRE, ROTATE, SHIP]);
+    await filter('Assembly', 'Any assembly', [ADD, DRAFT, TRIAGE, WIRE, ROTATE, SHIP]);
     await filter('Agent role', 'Builder', [SHIP]);
-    await filter('Agent role', '', [ADD, DRAFT, TRIAGE, WIRE, ROTATE, SHIP]);
-    await filter('Status', 'working', [ADD, SHIP]);
-    await filter('Status', 'waiting', [DRAFT, TRIAGE, WIRE, ROTATE]);
-    await filter('Status', 'same-files', []);
+    await filter('Agent role', 'Any agent role', [ADD, DRAFT, TRIAGE, WIRE, ROTATE, SHIP]);
+    await filter('Status', 'Working', [ADD, SHIP]);
+    await filter('Status', 'Waiting for another item', [DRAFT, TRIAGE, WIRE, ROTATE]);
+    await filter('Status', 'Waiting for same files', []);
   });
 
   it('says Empty in a column the filter leaves no card in, and keeps the column', async () => {
     renderBoardPage({ page: ShellBoard, org, factory, board: filterBoard() });
     await screen.findByRole('region', { name: 'Stations' });
 
-    await choose('Agent role', 'Triager');
+    await pick('Agent role', 'Triager');
     await waitFor(() => expectShown([ROTATE]));
     const build = within(screen.getByRole('region', { name: 'Stations' })).getByRole('region', { name: 'Build' });
     expect(within(build).getByRole('heading', { name: 'Build' })).toBeTruthy();
@@ -660,14 +689,14 @@ describe('board filters and grouping', () => {
     });
     await screen.findByRole('region', { name: 'Stations' });
     const search = () => router.state.location.search as Record<string, unknown>;
-    expect(choice('Assembly')).toBe(ASM1_TITLE);
+    expect(choice('Assembly')).toBe(`Assembly: ${ASM1_TITLE}`);
     expectShown([ADD, WIRE]);
 
-    await choose('Status', 'Waiting for another item');
+    await pick('Status', 'Waiting for another item');
     await waitFor(() => expect(search().status).toBe('waiting'));
     expect(search().assembly).toBe(ASM1);
 
-    await choose('Assembly', 'Any');
+    await pick('Assembly', 'Any assembly');
     await waitFor(() => expect(search().assembly).toBeUndefined());
     expect(search().group).toBe('assembly');
 
@@ -684,11 +713,11 @@ describe('board filters and grouping', () => {
       search: { assembly: 'item-gone', role: 'Infra engineer', status: 'blocked', group: 'lane', type: 'nope' },
     });
     await screen.findByRole('region', { name: 'Stations' });
-    expect(choice('Assembly')).toBe('Any');
-    expect(choice('Agent role')).toBe('Any');
-    expect(choice('Status')).toBe('Any');
-    expect(choice('Work type')).toBe('Any');
-    expect(choice('Lane')).toBe('Any');
+    expect(choice('Assembly')).toBe('Assembly');
+    expect(choice('Agent role')).toBe('Agent role');
+    expect(choice('Status')).toBe('Status');
+    expect(choice('Work type')).toBe('Work type');
+    expect(choice('Lane')).toBe('Lane');
     expect(screen.getByRole('searchbox', { name: 'Search items' })).toHaveProperty('value', '');
     expect(screen.getByRole('radio', { name: 'None' })).toHaveProperty('checked', true);
     expectShown([ADD, DRAFT, TRIAGE, WIRE, ROTATE, SHIP]);
