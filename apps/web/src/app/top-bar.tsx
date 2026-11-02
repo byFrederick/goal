@@ -88,6 +88,7 @@ const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/o/$org/_org/members': membersScreen,
   '/o/$org/_org/runs': runsScreen,
   '/o/$org/_org/settings': settingsScreen,
+  '/o/$org/_org/spend': { label: 'Spend and billing' },
   '/o/$org/_org/connections/': connectionsScreen,
   '/o/$org/_org/connections/$connection': connectionsScreen,
   '/o/$org/_org/connections/new': connectionsScreen,
