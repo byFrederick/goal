@@ -67,8 +67,8 @@ function EventRow({
   output?: string[] | undefined;
 }) {
   return (
-    <li className="grid grid-cols-[44px_12px_minmax(0,1fr)] items-start gap-x-2 py-2 text-body md:grid-cols-[44px_12px_minmax(0,1fr)_auto]">
-      <time dateTime={at} className="pt-1 font-mono text-meta text-muted tabular-nums">
+    <li className="grid grid-cols-[96px_12px_minmax(0,1fr)] items-start gap-x-2 py-2 text-body md:grid-cols-[96px_12px_minmax(0,1fr)_auto]">
+      <time dateTime={at} className="pt-1 font-mono text-meta whitespace-nowrap text-muted tabular-nums">
         {formatClock(at)}
       </time>
       <span
@@ -103,7 +103,7 @@ function OutputDisclosure({ lines }: { lines: string[] }) {
   );
 }
 
-/** A sentence's segments: plain words, and code on one line that truncates, its full text in a title. */
+/** A sentence's segments: plain words, and code wrapping so its full text stays readable. */
 function Sentence({ segments }: { segments: Segment[] }) {
   return (
     <>
@@ -113,7 +113,7 @@ function Sentence({ segments }: { segments: Segment[] }) {
             // biome-ignore lint/suspicious/noArrayIndexKey: segments are a fixed list for one sentence
             key={i}
             title={s.text}
-            className="inline-block max-w-full truncate align-bottom font-mono text-secondary"
+            className="font-mono text-secondary wrap-anywhere"
           >
             {s.text}
           </code>

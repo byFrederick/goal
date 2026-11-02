@@ -105,3 +105,30 @@ export function ListPageSkeleton() {
 export function BoardSkeleton() {
   return <PendingSkeleton placeholder={<BoardShape />} />;
 }
+
+/** The item page: the header and stepper, the tabs and timeline on the left, the details column on the right. */
+export function ItemShape() {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-5">
+      <Heading />
+      <div className={cn(block, 'h-10')} />
+      <div className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,1fr)_336px]">
+        <div className="flex flex-col gap-4">
+          <div className={cn(block, 'h-11')} />
+          <div className={cn(block, 'h-16')} />
+          <div className={cn(block, 'h-16')} />
+          <div className={cn(block, 'h-16')} />
+        </div>
+        <div className="flex flex-col gap-4">
+          <div className={cn(block, 'h-40')} />
+          <div className={cn(block, 'h-28')} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The pending component of the item route. */
+export function ItemSkeleton() {
+  return <PendingSkeleton placeholder={<ItemShape />} />;
+}

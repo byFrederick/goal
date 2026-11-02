@@ -50,9 +50,9 @@ export function commonDirectory(paths: string[]): string {
   return common.join('/');
 }
 
-/** A shell command's first word: "git" for "git diff --stat". */
-function firstWord(command: string): string {
-  return command.trim().split(/\s+/)[0] ?? '';
+/** A shell command on one line, whole: the row wraps it, so a long command stays readable. */
+function oneLine(command: string): string {
+  return command.trim().replace(/\s+/g, ' ');
 }
 
 /** The sentence of one step: the calls it groups, in the words a person reads. */
@@ -63,8 +63,8 @@ function sentenceOf(calls: ToolCall[]): Segment[] {
   const args = calls.map((c) => c.argument).filter(Boolean);
 
   if (first.tool === 'Bash') {
-    const word = firstWord(first.argument);
-    return word ? [{ text: 'Ran ' }, code(`${word}…`)] : [{ text: 'Ran a shell command' }];
+    const command = oneLine(first.argument);
+    return command ? [{ text: 'Ran ' }, code(command)] : [{ text: 'Ran a shell command' }];
   }
 
   switch (kindOf(first.tool)) {

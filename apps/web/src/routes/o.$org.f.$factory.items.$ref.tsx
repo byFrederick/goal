@@ -3,7 +3,8 @@ import { createFileRoute, notFound, useParams } from '@tanstack/react-router';
 import { ApiError } from '../api/client';
 import { ensureLoaded, eventsQuery, itemQuery, itemRunsQuery, partsQuery, touchesQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
-import { NotFoundScreen, PendingScreen } from '../app/states';
+import { ItemSkeleton } from '../app/route-skeletons';
+import { NotFoundScreen } from '../app/states';
 import { AssemblyPage } from '../features/items/assembly-page';
 import { ItemPage } from '../features/items/item-page';
 import { type ItemTab, isItemTab } from '../features/items/item-tabs';
@@ -21,7 +22,7 @@ function ItemRoute() {
 
 // $ref is the item's number in the factory ("12"), a full ref ("goal#12") or its id.
 export const Route = createFileRoute('/o/$org/f/$factory/items/$ref')({
-  pendingComponent: PendingScreen,
+  pendingComponent: ItemSkeleton,
   // The selected view. Timeline is the default, so it leaves no `tab` in the URL.
   validateSearch: (search: Record<string, unknown>): { tab?: ItemTab } =>
     isItemTab(search.tab) ? { tab: search.tab } : {},
