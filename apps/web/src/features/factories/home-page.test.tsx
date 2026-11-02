@@ -326,6 +326,17 @@ describe('Home: the ready state', () => {
     expect(screen.getAllByRole('link', { name: 'New factory' })).toHaveLength(1);
   });
 
+  it('keeps the line inside its card: its wrapper has a zero-minimum track and the strip scrolls itself', async () => {
+    await renderReady();
+
+    const line = within(screen.getByRole('article', { name: 'software' })).getByRole('region', {
+      name: 'software line',
+    });
+    expect(line.className).toContain('overflow-x-auto');
+    const wrapper = line.closest('[aria-busy], .grid');
+    expect(wrapper?.className).toContain('grid-cols-[minmax(0,1fr)]');
+  });
+
   it('lists each factory with its health, its line and its three figures', async () => {
     await renderReady();
 

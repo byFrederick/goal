@@ -233,4 +233,39 @@ describe('TopBar', () => {
     expect(within(nav).getByText('Webhooks').getAttribute('aria-current')).toBe('page');
     expect(within(nav).getAllByRole('listitem')).toHaveLength(3);
   });
+
+  it('truncates each crumb with an ellipsis and gives it its full label as a title', async () => {
+    renderBar({ at: '/o/acme/f/software/items/12', item: { number: 12 } });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    for (const [name, text] of [
+      ['Software', 'Software'],
+      ['Items', 'Items'],
+    ] as const) {
+      const link = within(nav).getByRole('link', { name });
+      expect(link.className).toContain('truncate');
+      expect(link.getAttribute('title')).toBe(text);
+    }
+    const current = within(nav).getByText('#12');
+    expect(current.className).toContain('truncate');
+    expect(current.getAttribute('title')).toBe('#12');
+    for (const li of within(nav).getAllByRole('listitem')) expect(li.className).toContain('min-w-0');
+    expect(nav.className).toContain('min-w-0');
+  });
+
+  it('truncates the crumbs of an organization page and keeps its actions from shrinking', async () => {
+    renderBar({ at: '/o/acme/connections/c1' });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    for (const name of ['Acme', 'Connections']) {
+      const link = within(nav).getByRole('link', { name });
+      expect(link.className).toContain('truncate');
+      expect(link.getAttribute('title')).toBe(name);
+    }
+    expect(within(nav).getByText('Deploy key').getAttribute('title')).toBe('Deploy key');
+  });
+
+  it('does not let the actions shrink', async () => {
+    renderBar({ at: '/o/acme/spend' });
+    const button = await within(await screen.findByRole('banner')).findByRole('button', { name: 'Export CSV' });
+    expect(button.parentElement?.className).toContain('flex-none');
+  });
 });
