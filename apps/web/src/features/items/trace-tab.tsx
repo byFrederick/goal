@@ -60,7 +60,7 @@ const legend: { label: string; tone: StepTone }[] = [
 ];
 
 /** The waterfall's columns: the span, the time axis and the duration. */
-const waterfallColumns = { gridTemplateColumns: 'minmax(0, 280px) minmax(0, 1fr) 96px' };
+const waterfallColumns = { gridTemplateColumns: 'minmax(0, 280px) minmax(0, 1fr) 136px' };
 
 const ms = (at: string) => Date.parse(at);
 

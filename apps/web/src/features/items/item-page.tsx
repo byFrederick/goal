@@ -393,7 +393,7 @@ export function ItemPage() {
           {phone ? (
             <LatestInRun trace={trace} onShowAll={showTrace} className="order-7 @[720px]:hidden" />
           ) : (
-            <LatestSteps trace={trace} onShowAll={showTrace} className={cn('order-7', '@[720px]:hidden')} />
+            <LatestSteps trace={trace} onShowAll={showTrace} className={'order-7 @[720px]:hidden'} />
           )}
           <NoteComposer
             itemKey={key}
