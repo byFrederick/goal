@@ -62,6 +62,19 @@ test("Look for improvements now is not available, with no sentence beside it, un
   await expect(page.getByText("Reviews start when Jonah's review loop ships")).toHaveCount(0);
 });
 
+test('on a phone the review button keeps its name, is 44 px and its text does not spill', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto('/o/acme/f/software/jonah');
+  const look = page.getByRole('button', { name: 'Look for improvements now' });
+  const box = await look.boundingBox();
+  expect(box?.width).toBeGreaterThanOrEqual(44);
+  expect(box?.height).toBeGreaterThanOrEqual(44);
+  const spills = await look.evaluate((el) =>
+    [...el.querySelectorAll('*')].some((c) => c.scrollWidth > c.clientWidth && c.clientWidth > 0),
+  );
+  expect(spills).toBe(false);
+});
+
 test('the Proposals tab filters by the state in the URL', async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah?tab=proposals');
   await expect(
