@@ -36,6 +36,12 @@ const mdColumns: Record<number, string> = {
   4: 'md:grid-cols-4',
 };
 
+/** Columns from `2xl` up, for a narrow strip: three or four figures. */
+const twoXlColumns: Record<number, string> = {
+  3: '2xl:grid-cols-3',
+  4: '2xl:grid-cols-4',
+};
+
 export function StatStrip({
   stats,
   label,
@@ -49,7 +55,7 @@ export function StatStrip({
   narrow?: boolean;
 }) {
   const shown = stats.slice(0, maxStats);
-  const columns = narrow && shown.length > 2 ? `2xl:${mdColumns[shown.length]}` : mdColumns[shown.length];
+  const columns = narrow && shown.length > 2 ? twoXlColumns[shown.length] : mdColumns[shown.length];
   const rule = narrow ? '2xl:border-l 2xl:border-line 2xl:pl-5' : 'md:border-l md:border-line md:pl-5';
   return (
     <section aria-label={label} className={cn('grid grid-cols-2 gap-y-4', columns, className)}>
