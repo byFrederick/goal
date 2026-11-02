@@ -41,17 +41,17 @@ test.describe('the Knowledge page', () => {
     await expect(page).toHaveTitle('Knowledge · Acme · Goal');
     await expect(page.getByRole('heading', { level: 1, name: 'Knowledge' })).toBeVisible();
     await expect(sourcesCard(page)).toBeVisible();
-    await expect(sourceRow(page, 'Dashboards')).toContainText('Sync failed');
-    await expect(sourceRow(page, 'goal docs')).toContainText('Synced');
-    await expect(sourceRow(page, 'Support macros')).toContainText('Synced');
+    await expect(sourceRow(page, 'dashboards')).toContainText('Sync failed');
+    await expect(sourceRow(page, 'goal-docs')).toContainText('Synced');
+    await expect(sourceRow(page, 'support-macros')).toContainText('Synced');
     if (await page.getByRole('table').isVisible()) {
-      await expect(sourceRow(page, 'Dashboards')).toContainText('sre');
-      await expect(sourceRow(page, 'Dashboards')).toContainText('the server refused the token');
-      await expect(sourceRow(page, 'goal docs')).toContainText('github, acme/goal main, docs/**/*.md');
-      await expect(sourceRow(page, 'goal docs')).toContainText(/Next in 1[45] min/);
+      await expect(sourceRow(page, 'dashboards')).toContainText('sre');
+      await expect(sourceRow(page, 'dashboards')).toContainText('the server refused the token');
+      await expect(sourceRow(page, 'goal-docs')).toContainText('github, acme/goal main, docs/**/*.md');
+      await expect(sourceRow(page, 'goal-docs')).toContainText(/Next in 1[45] min/);
       // The documents of a source are on its own page; the list only counts them.
     } else {
-      await expect(sourceRow(page, 'Dashboards')).toContainText('Used by sre');
+      await expect(sourceRow(page, 'dashboards')).toContainText('Read by sre');
     }
     await fits(page);
   });
@@ -71,9 +71,9 @@ test.describe('the Knowledge page', () => {
   test('a factory the organization has no factory of is said, never the unfiltered list', async ({ page }) => {
     await page.goto('/o/acme/knowledge?factory=nope');
     await expect(page.getByText('Acme has no factory named nope.')).toBeVisible();
-    await expect(sourceRow(page, 'Dashboards')).toHaveCount(0);
+    await expect(sourceRow(page, 'dashboards')).toHaveCount(0);
     await page.getByRole('link', { name: 'Show every source' }).click();
-    await expect(sourceRow(page, 'Dashboards')).toBeVisible();
+    await expect(sourceRow(page, 'dashboards')).toBeVisible();
     await fits(page);
   });
 
@@ -83,7 +83,7 @@ test.describe('the Knowledge page', () => {
     await page.goto('/o/acme/knowledge');
     await expect(sourcesCard(page)).toBeVisible();
     test.skip(!(await page.getByRole('table').isVisible()), 'Upload… is on the table’s rows; narrower, on the source');
-    await sourceRow(page, 'Handbook').getByRole('button', { name: 'Upload…, Handbook' }).click();
+    await sourceRow(page, 'handbook').getByRole('button', { name: 'Upload…, Handbook' }).click();
     const dialog = page.getByRole('dialog', { name: 'Upload to Handbook' });
     const chooser = page.waitForEvent('filechooser');
     await dialog.getByRole('button', { name: /Drop files here/ }).click();
@@ -102,11 +102,11 @@ test.describe('the Knowledge page', () => {
 
   test('Retry now makes a failed source due, and the stream brings its new status', async ({ page }) => {
     await page.goto('/o/acme/knowledge');
-    await expect(sourceRow(page, 'Dashboards')).toContainText('Sync failed');
-    await sourceRow(page, 'Dashboards').getByRole('button', { name: 'Retry now, Dashboards' }).click();
+    await expect(sourceRow(page, 'dashboards')).toContainText('Sync failed');
+    await sourceRow(page, 'dashboards').getByRole('button', { name: 'Retry now, Dashboards' }).click();
     await expectToast(page, 'Runbooks syncs now');
-    await expect(sourceRow(page, 'Dashboards')).not.toContainText('Sync failed');
-    await expect(sourceRow(page, 'Dashboards')).toContainText('Synced');
+    await expect(sourceRow(page, 'dashboards')).not.toContainText('Sync failed');
+    await expect(sourceRow(page, 'dashboards')).toContainText('Synced');
   });
 
   test('looks something up: ranked snippets with their words marked and links', async ({ page }) => {
@@ -412,3 +412,24 @@ test('the builder lists the organization’s sources to tick for the factory', a
   ).toBeChecked();
   await fits(page);
 });
+
+// The pictures of the list, a source and New source at 1440 and 390 px in both themes. The Playwright
+// suite cannot run in the build box, so the baselines are made by the first CI run with --update-snapshots.
+for (const theme of ['light', 'dark'] as const) {
+  for (const width of [1440, 390]) {
+    const screens = [
+      { name: 'list', path: '/o/acme/knowledge', heading: 'Knowledge' },
+      { name: 'source', path: '/o/acme/knowledge/goal-docs', heading: 'goal docs' },
+      { name: 'new', path: '/o/acme/knowledge/new', heading: 'New source' },
+    ];
+    for (const { name, path, heading } of screens) {
+      test(`knowledge ${name} screenshot, ${theme}, ${width} px`, async ({ page }) => {
+        await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(path);
+        await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+        await expect(page).toHaveScreenshot(`knowledge-${name}-${theme}-${width}.png`, { fullPage: true });
+      });
+    }
+  }
+}
