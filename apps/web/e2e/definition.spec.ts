@@ -303,6 +303,61 @@ for (const theme of ['light', 'dark'] as const) {
   }
 }
 
+// The line section at every width: the page never scrolls sideways, the current tile stays inside the
+// stepper's box, and on a phone each row's controls do not overlap.
+for (const colorScheme of ['light', 'dark'] as const) {
+  for (const width of [1440, 1280, 1024, 768, 390]) {
+    test(`the line section at ${width} px, ${colorScheme}: no sideways scroll, no overlap`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme });
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/o/acme/f/goal/definition/line');
+      await expect(page.getByRole('list', { name: 'Stations, in order' })).toBeVisible();
+      await expectNoHorizontalScroll(page);
+
+      const nav = page.getByRole('navigation', { name: 'Definition sections' });
+      const navBox = await nav.boundingBox();
+      const current = await nav.locator('[aria-current]').boundingBox();
+      expect(navBox && current).toBeTruthy();
+      if (navBox && current) {
+        expect(current.x).toBeGreaterThanOrEqual(navBox.x - 1);
+        expect(current.x + current.width).toBeLessThanOrEqual(navBox.x + navBox.width + 1);
+      }
+
+      if (width < 640) {
+        const rows = page.getByRole('list', { name: 'Stations, in order' }).getByRole('listitem');
+        const count = await rows.count();
+        for (let i = 0; i < count; i++) {
+          const row = rows.nth(i);
+          const whoLocator = row.getByRole('combobox', { name: /^Who works at / });
+          const upLocator = row.getByRole('button', { name: /^Move .* up$/ });
+          const who = (await whoLocator.count()) > 0 ? await whoLocator.first().boundingBox() : null;
+          const up = (await upLocator.count()) > 0 ? await upLocator.first().boundingBox() : null;
+          const more = row.getByRole('button', { name: /^More for / });
+          const moreBox = await more.boundingBox();
+          if (who && up) {
+            const apart =
+              who.x + who.width <= up.x ||
+              up.x + up.width <= who.x ||
+              who.y + who.height <= up.y ||
+              up.y + up.height <= who.y;
+            expect(apart).toBe(true);
+          }
+          if (moreBox) {
+            expect(moreBox.width).toBeGreaterThanOrEqual(44);
+            expect(moreBox.height).toBeGreaterThanOrEqual(44);
+            const icon = await more.locator('svg').boundingBox();
+            if (icon) {
+              const left = icon.x - moreBox.x;
+              const right = moreBox.x + moreBox.width - (icon.x + icon.width);
+              expect(Math.abs(left - right)).toBeLessThanOrEqual(1);
+            }
+          }
+        }
+      }
+    });
+  }
+}
+
 for (const theme of ['light', 'dark'] as const) {
   for (const [name, size] of [
     ['1440', { width: 1440, height: 900 }],

@@ -83,7 +83,7 @@ function Stations({ selected }: { selected: string | undefined }) {
             No stations yet. Add a queue where work arrives, the stations that work on it, then Done.
           </p>
         ) : (
-          <div className="min-w-0 overflow-x-auto rounded-control border border-line">
+          <div className="relative min-w-0 overflow-x-auto rounded-control border border-line">
             <div className={lineTableWidth}>
               <div
                 aria-hidden="true"

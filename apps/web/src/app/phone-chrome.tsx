@@ -120,7 +120,7 @@ function TopBarActions({ children }: { children: ReactNode }) {
   const primary = actions[actions.length - 1];
   const more = actions.slice(0, -1);
   return (
-    <div className="flex min-w-0 flex-none items-center gap-1 [&_a]:min-h-11 [&_button]:min-h-11 [&_kbd]:hidden">
+    <div className="flex min-w-0 shrink items-center gap-1 [&_a]:min-h-11 [&_button]:min-h-11 [&_kbd]:hidden">
       {more.length > 0 ? (
         <Menu>
           <MenuTrigger asChild>
