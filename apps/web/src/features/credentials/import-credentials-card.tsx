@@ -4,6 +4,7 @@
 // component's state only: the mutations are not kept in the cache (gcTime 0) and nothing reaches the URL.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
+import { Download } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { importCredentials } from '../../api/credentials';
@@ -106,6 +107,7 @@ export function ImportCredentialsCard({ org, slug, focus }: { org: string; slug:
           className="sr-only"
           onChange={(e) => void read(e.target.files?.[0])}
         />
+        <Download size={16} strokeWidth={1.5} aria-hidden="true" />
         Drop a file, or paste below
       </label>
 
