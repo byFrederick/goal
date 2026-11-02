@@ -190,9 +190,9 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
                   <div className="flex h-11 items-stretch overflow-hidden rounded-control border border-rule bg-card md:h-10">
                     <span
                       aria-hidden="true"
-                      className="flex max-w-[45%] shrink-0 items-center truncate border-r border-rule bg-panel px-3 text-secondary text-muted"
+                      className="flex max-w-[45%] shrink-0 items-center border-r border-rule bg-panel px-3 text-secondary text-muted"
                     >
-                      {window.location.host}/o/
+                      <span className="min-w-0 truncate">{window.location.host}/o/</span>
                     </span>
                     <Input
                       id="oslug"
