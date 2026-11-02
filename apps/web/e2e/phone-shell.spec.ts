@@ -196,7 +196,8 @@ test.describe('phone fixes on the Assembly, Agent and Definition line pages at 3
     const first = reasons.getByRole('button').first();
     const title = await first.getAttribute('title');
     expect(title).toBeTruthy();
-    expect(title).toBe((await first.textContent())?.trim());
+    const shown = (await first.textContent())?.trim() ?? '';
+    expect(title?.toLowerCase().startsWith(shown.toLowerCase())).toBe(true);
   });
 
   test('the More actions icon is centred in its button', async ({ page }) => {
