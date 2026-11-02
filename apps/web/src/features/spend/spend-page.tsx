@@ -10,6 +10,7 @@ import { exportFailure, saveCsv } from '../../api/download';
 import { spendQuery } from '../../api/queries';
 import { exportOrgSpend } from '../../api/spend';
 import type { OrgSpend } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
@@ -62,15 +63,16 @@ export function SpendPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-4 p-4 md:p-7">
-      <PageHeader
-        title="Spend and billing"
+      <PageHeader title="Spend and billing" />
+      <TopBarSlot
         actions={
           <>
-            {windowControl}
+            <div className="hidden md:flex">{windowControl}</div>
             {exportCsv}
           </>
         }
       />
+      <div className="flex md:hidden">{windowControl}</div>
       {exportSpend.isError ? (
         <div role="alert">
           <Callout tone="rework">{exportFailure(exportSpend.error, 'spend')}</Callout>

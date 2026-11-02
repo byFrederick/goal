@@ -7,6 +7,12 @@ import type { AuthConfig, Member, OrgSettings, OrgSummary } from '../../api/type
 import { TooltipProvider } from '../../ui/tooltip';
 import { OrgSettingsPage } from './settings-page';
 
+// The top bar is the app's shell: here the page's actions render in a region named Top bar, where the page puts them.
+vi.mock('../../app/top-bar', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../app/top-bar')>()),
+  TopBarSlot: ({ actions }: { actions?: React.ReactNode }) => <section aria-label="Top bar">{actions}</section>,
+}));
+
 // The API client, the router and the permission hooks are replaced, so each state is exact and no
 // request leaves the test.
 const api = vi.hoisted(() => ({
@@ -152,6 +158,7 @@ describe('Organization settings page', () => {
   it('is read-only without org:manage, with who changes it', () => {
     renderPage({ held: [] });
     expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Top bar' })).queryByRole('button')).toBeNull();
     expect(screen.getByLabelText('Name').hasAttribute('readonly')).toBe(true);
     expect(screen.queryByRole('heading', { name: 'Danger zone' })).toBeNull();
   });
@@ -199,9 +206,18 @@ describe('controls the API does not have yet', () => {
 });
 
 describe('saving General and Slots', () => {
+  it('puts Save changes in the top bar, once, disabled until the form changes', () => {
+    renderPage();
+    const save = within(screen.getByRole('region', { name: 'Top bar' })).getByRole('button', { name: 'Save changes' });
+    expect(screen.getAllByRole('button', { name: 'Save changes' })).toHaveLength(1);
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Acme Robotics' } });
+    expect((save as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('sends only the changed name', async () => {
     renderPage();
-    const save = screen.getByRole('button', { name: 'Save changes' });
+    const save = within(screen.getByRole('region', { name: 'Top bar' })).getByRole('button', { name: 'Save changes' });
     expect((save as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Acme Robotics' } });
     fireEvent.click(save);

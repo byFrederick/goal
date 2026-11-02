@@ -10,6 +10,12 @@ import { renderOrgPage } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
 import { CredentialsPage } from './credentials-page';
 
+// The top bar is the app's shell: here the page's actions render in a region named Top bar, where the page puts them.
+vi.mock('../../app/top-bar', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../app/top-bar')>()),
+  TopBarSlot: ({ actions }: { actions?: React.ReactNode }) => <section aria-label="Top bar">{actions}</section>,
+}));
+
 // The list the page reads, and which requests fail. The clock is fixed so the expiry days and the
 // "expires this week" count do not depend on the day the test runs.
 const state = vi.hoisted(() => ({
@@ -218,6 +224,24 @@ describe('the Credentials page', () => {
 
     expect(await screen.findByText('No credentials yet')).toBeTruthy();
     expect(screen.getAllByRole('button', { name: /New credential/ }).length).toBeGreaterThan(0);
+  });
+
+  it('puts New credential in the top bar, and nowhere else on the page when there are credentials', async () => {
+    state.rows = picture();
+    renderPage();
+
+    await screen.findByRole('table', { name: /Credentials of Acme/ });
+    const bar = screen.getByRole('region', { name: 'Top bar' });
+    expect(within(bar).getByRole('button', { name: /New credential/ })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /New credential/ })).toHaveLength(1);
+  });
+
+  it('leaves the top bar empty for a member who only reads', async () => {
+    state.rows = picture();
+    renderPage({ can: ['credential:read'] });
+
+    await screen.findByRole('table', { name: /Credentials of Acme/ });
+    expect(within(screen.getByRole('region', { name: 'Top bar' })).queryByRole('button')).toBeNull();
   });
 
   it('shows the picture’s seven rows with their type, factories, users, last use and expiry', async () => {

@@ -9,6 +9,7 @@ import { BookOpen, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { factoriesQuery, knowledgeSourcesQuery } from '../../api/queries';
 import type { KnowledgeSource } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
 import { plural } from '../../shared/format';
 import { sourceKinds, sourceSummary } from '../../shared/knowledge';
 import { useOrg, useOrgHolds } from '../../shared/org';
@@ -62,8 +63,8 @@ export function KnowledgePage() {
             What agents can look up before they act: synced documents, searched on every run.
           </p>
         </div>
-        {addSource}
       </header>
+      <TopBarSlot actions={sources.length === 0 && !search.factory && !list.isError ? null : addSource} />
 
       {list.isPending && !missing ? (
         <div aria-busy="true" className="rounded-card border border-line bg-card">

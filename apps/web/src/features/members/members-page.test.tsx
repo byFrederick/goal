@@ -24,6 +24,12 @@ import type { Factory, Invitation, Member, Org, OrgSettings, OrgSummary, SignupD
 import { TooltipProvider } from '../../ui/tooltip';
 import { MembersPage } from './members-page';
 
+// The top bar is the app's shell: here the page's actions render in a region named Top bar, where the page puts them.
+vi.mock('../../app/top-bar', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../app/top-bar')>()),
+  TopBarSlot: ({ actions }: { actions?: React.ReactNode }) => <section aria-label="Top bar">{actions}</section>,
+}));
+
 /** The settings the mocked API serves: a failure or a hang makes the switch's query fail or wait. */
 const served = vi.hoisted(() => ({
   settings: undefined as OrgSettings | undefined,
@@ -300,6 +306,14 @@ describe('members and roles, ready', () => {
     await waitFor(() => expect(setFactoryRole).toHaveBeenCalledWith(org.id, 'u3', 'f-goal', 'viewer'));
   });
 
+  it('puts Invite in the top bar, once, for an owner', async () => {
+    renderMembers();
+    expect(await screen.findByText('4 members, 2 invites waiting')).toBeTruthy();
+    const bar = screen.getByRole('region', { name: 'Top bar' });
+    expect(within(bar).getByRole('button', { name: /^Invite/ })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /^Invite/ })).toHaveLength(1);
+  });
+
   it('hides invitation and invite link controls from a member', async () => {
     renderMembers({
       role: 'member',
@@ -308,6 +322,7 @@ describe('members and roles, ready', () => {
     });
     expect(await screen.findByText('4 members')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Invite/ })).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Top bar' })).queryByRole('button')).toBeNull();
     expect(screen.queryByRole('region', { name: 'Invite link' })).toBeNull();
     expect(screen.queryByRole('region', { name: /Waiting to join/ })).toBeNull();
   });
