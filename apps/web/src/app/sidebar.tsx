@@ -16,7 +16,8 @@ import { formatUsdCompact } from '../shared/format';
 import { NewItemFromSidebar } from '../shared/new-item';
 import { useOrgGrants } from '../shared/org';
 import { useSidebarSize } from '../shared/sidebar-choice';
-import { shownWidth } from '../shared/sidebar-width';
+import { type SidebarMotion, sidebarMotion, startScale } from '../shared/sidebar-motion';
+import { type SidebarSize, shownWidth } from '../shared/sidebar-width';
 import { Count } from '../ui/count';
 import { GoalMark } from '../ui/goal-mark';
 import { Menu, MenuTrigger } from '../ui/menu';
@@ -51,53 +52,85 @@ export function Sidebar({ org }: { org: OrgSummary }) {
   const [composeRequest, setComposeRequest] = useState<{ title: string } | null>(null);
   const composed = useCallback(() => setComposeRequest(null), []);
 
+  // Set by a click or a drag release that folds or expands the column; a key, and a drag, leave it null.
+  const [motion, setMotion] = useState<SidebarMotion | null>(null);
+  const change = useCallback(
+    (next: SidebarSize, animate: boolean) => {
+      setMotion(
+        animate && next.collapsed !== size.collapsed ? sidebarMotion(shownWidth(size), shownWidth(next)) : null,
+      );
+      setSize(next);
+    },
+    [size, setSize],
+  );
+  const dragged = useCallback((next: SidebarSize) => change(next, true), [change]);
+  const keyed = useCallback((next: SidebarSize) => change(next, false), [change]);
+  const stopMotion = useCallback(() => setMotion(null), []);
+
+  // Command K (search) is a key: it expands without motion. The Expand button is a click.
   const expand = useCallback(
     (search: boolean) => {
       focus.current = 'top';
       setSearchOnExpand(search);
-      setSize({ ...size, collapsed: false });
+      change({ ...size, collapsed: false }, !search);
     },
-    [size, setSize],
+    [size, change],
   );
   const collapse = useCallback(() => {
     focus.current = 'rail';
     setSearchOnExpand(false);
-    setSize({ ...size, collapsed: true });
-  }, [size, setSize]);
+    change({ ...size, collapsed: true }, true);
+  }, [size, change]);
+  const labels = motion !== null;
 
   return (
     <>
       {/* C keeps working with the rail shown, and on phones where the sidebar is hidden. */}
       {size.collapsed ? <NewItemFromSidebar button={false} openWith={composeRequest} onOpened={composed} /> : null}
-      {/* The column's width changes at once; the body inside it moves and fades (styles.css, .motion-sidebar). */}
+      {/* The column's width changes at once; the wrapper inside it scales from the old width and the labels fade (styles.css). */}
       <div
         ref={column}
         className="shell-sidebar sticky top-0 hidden h-dvh shrink-0 md:flex"
         style={{ width: `var(${sidebarWidthVar})`, [sidebarWidthVar]: `${shownWidth(size)}px` } as CSSProperties}
       >
-        {size.collapsed ? (
-          <SidebarRail
-            org={org}
-            busy={busy}
-            focusOnMount={focus.current === 'rail'}
-            onExpand={expand}
-            onNewItem={() => setComposeRequest({ title: '' })}
-          />
-        ) : (
-          <nav
-            aria-label="Organization and factories"
-            aria-busy={busy}
-            className="motion-sidebar flex h-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto border-r border-line bg-sidebar px-2 pt-2 pb-3"
-          >
-            <SidebarContent
+        {/* Keyed by what it holds, so each swap mounts a new wrapper that starts scaled (styles.css, .motion-sidebar-resize). */}
+        <div
+          key={size.collapsed ? 'rail' : 'nav'}
+          data-sidebar-motion={motion ? 'animate' : undefined}
+          className={`flex h-full min-w-0 flex-1 overflow-hidden${motion && !motion.reduced ? ' motion-sidebar-resize' : ''}`}
+          style={motion ? ({ '--sidebar-from-scale': startScale(motion) } as CSSProperties) : undefined}
+        >
+          {size.collapsed ? (
+            <SidebarRail
+              animated={labels}
               org={org}
-              onCollapse={collapse}
-              focusCollapse={focus.current === 'top'}
-              startSearching={searchOnExpand}
+              busy={busy}
+              focusOnMount={focus.current === 'rail'}
+              onExpand={expand}
+              onNewItem={() => setComposeRequest({ title: '' })}
             />
-          </nav>
-        )}
-        <SidebarResizeHandle size={size} column={column} onChange={setSize} />
+          ) : (
+            <nav
+              aria-label="Organization and factories"
+              aria-busy={busy}
+              className={`${labels ? 'motion-sidebar ' : ''}flex h-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto border-r border-line bg-sidebar px-2 pt-2 pb-3`}
+            >
+              <SidebarContent
+                org={org}
+                onCollapse={collapse}
+                focusCollapse={focus.current === 'top'}
+                startSearching={searchOnExpand}
+              />
+            </nav>
+          )}
+        </div>
+        <SidebarResizeHandle
+          size={size}
+          column={column}
+          onChange={keyed}
+          onRelease={dragged}
+          onDragStart={stopMotion}
+        />
       </div>
     </>
   );

@@ -31,10 +31,15 @@ interface SidebarResizeHandleProps {
   size: SidebarSize;
   /** The column whose --sidebar-width the drag writes. */
   column: RefObject<HTMLDivElement | null>;
+  /** A key or a double-click changed the size: no motion (MOTION.md rule 1). */
   onChange: (size: SidebarSize) => void;
+  /** A drag was released at a new size; the sidebar animates a fold or expand from it. */
+  onRelease: (size: SidebarSize) => void;
+  /** The drag began: nothing animates until its release. */
+  onDragStart: () => void;
 }
 
-export function SidebarResizeHandle({ size, column, onChange }: SidebarResizeHandleProps) {
+export function SidebarResizeHandle({ size, column, onChange, onRelease, onDragStart }: SidebarResizeHandleProps) {
   const handle = useRef<HTMLDivElement>(null);
   const drag = useRef<Drag | null>(null);
 
@@ -58,6 +63,7 @@ export function SidebarResizeHandle({ size, column, onChange }: SidebarResizeHan
     document.body.style.userSelect = 'none';
     e.currentTarget.setAttribute('data-dragging', '');
     if (column.current) column.current.style.transition = 'none';
+    onDragStart();
   };
 
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
@@ -85,7 +91,7 @@ export function SidebarResizeHandle({ size, column, onChange }: SidebarResizeHan
     if (!state.moved) return;
     const next = settle(state.x, size.width);
     column.current?.style.setProperty(sidebarWidthVar, `${shownWidth(next)}px`);
-    onChange(next);
+    onRelease(next);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {

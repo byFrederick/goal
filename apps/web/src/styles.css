@@ -628,31 +628,34 @@
     transform: rotate(180deg);
   }
 
-  /* The sidebar's body (the expanded sidebar or the rail) enters with its labels: it slides in from the left edge
-     and fades, on the in-out curve. The column's width changes at once, so no layout animates (MOTION.md, Sidebar
-     collapse). Under reduced motion only the fade remains, at the quick duration. */
+  /* Sidebar collapse, expand and the snap to the rail: the column's width changes at once, and its inner wrapper
+     starts scaled to the width it had (--sidebar-from-scale, from the left edge) and eases to none, while the labels
+     fade. Set only by a click or a drag release, never by a key or during a drag. Under reduced motion the wrapper
+     does not scale and the labels fade at the quick duration. */
+  .motion-sidebar-resize {
+    transform-origin: left;
+    transition: transform var(--duration-fast) var(--ease-in-out);
+  }
+
+  @starting-style {
+    .motion-sidebar-resize {
+      transform: scaleX(var(--sidebar-from-scale, 1));
+    }
+  }
+
   .motion-sidebar {
-    transition:
-      opacity var(--duration-fast) var(--ease-in-out),
-      transform var(--duration-fast) var(--ease-in-out);
+    transition: opacity var(--duration-fast) var(--ease-in-out);
   }
 
   @starting-style {
     .motion-sidebar {
       opacity: 0;
-      transform: translateX(calc(var(--distance-base) * -1));
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
     .motion-sidebar {
       transition: opacity var(--duration-quick) var(--ease-out);
-    }
-
-    @starting-style {
-      .motion-sidebar {
-        transform: none;
-      }
     }
   }
 }
