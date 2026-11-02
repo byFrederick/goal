@@ -195,8 +195,8 @@ describe('API keys page', () => {
     const prompts = [...document.querySelectorAll('pre span')];
     expect(prompts).toHaveLength(2);
     for (const prompt of prompts) {
-      expect(prompt.className).toContain('text-muted');
-      expect(prompt.className).not.toContain('text-run');
+      expect(prompt.className.split(/\s+/)).toContain('text-muted');
+      expect(prompt.className.split(/\s+/).filter((c) => c.startsWith('text-') && c !== 'text-muted')).toEqual([]);
     }
   });
 
