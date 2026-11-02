@@ -4,12 +4,19 @@ import { describe, expect, it } from 'vitest';
 // A route sets its own pendingComponent (the page skeleton, or a list or Board one: route-skeletons.tsx).
 // A layout only renders an Outlet, and the router's default pending component (the page skeleton) covers
 // it. Such a file must be listed here, with its reason, so a new layout is a decision and not an oversight.
+// The organization and factory layouts draw the shell's frame instead: they set ShellPending.
 const layouts = new Map<string, string>([
   ['__root.tsx', 'the root route: renders the Outlet of every page'],
-  ['o.$org.tsx', 'the organization layout: renders an Outlet'],
-  ['o.$org._org.tsx', 'the organization pages layout: renders ShellFrame and an Outlet'],
-  ['o.$org.f.$factory.tsx', 'the factory layout: renders an Outlet'],
   ['o.$org.f.$factory.definition.tsx', 'the definition layout: renders an Outlet'],
+]);
+
+const shellLayouts = ['o.$org.tsx', 'o.$org._org.tsx', 'o.$org.f.$factory.tsx'];
+
+const ownSkeletons = new Map([
+  ['o.$org._org.index.tsx', 'HomeSkeleton'],
+  ['o.$org.f.$factory.agents.index.tsx', 'AgentsSkeleton'],
+  ['o.$org.f.$factory.agents.$agent.tsx', 'AgentSkeleton'],
+  ['o.$org.f.$factory.items.index.tsx', 'ItemsSkeleton'],
 ]);
 
 const routes = import.meta.glob<string>(['../routes/*.tsx', '!../routes/*.test.tsx'], {
@@ -38,5 +45,19 @@ describe('route pending components', () => {
       .map(({ file }) => file);
 
     expect(missing, `these route files set no pendingComponent: ${missing.join(', ')}`).toEqual([]);
+  });
+
+  it('draws the shell frame while the organization and factory layouts load', () => {
+    for (const file of shellLayouts) {
+      const source = routes[`../routes/${file}`] ?? '';
+      expect(source, file).toMatch(/pendingComponent:\s*ShellPending/);
+    }
+  });
+
+  it('gives Home, Agents, an agent and Items their own skeleton', () => {
+    for (const [file, name] of ownSkeletons) {
+      const source = routes[`../routes/${file}`] ?? '';
+      expect(source, file).toMatch(new RegExp(`pendingComponent:\\s*${name}\\b`));
+    }
   });
 });
