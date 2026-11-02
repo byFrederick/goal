@@ -8,11 +8,11 @@ export type Tone = 'run' | 'you' | 'rework' | 'muted' | 'ok';
 
 /** Text colour for a tone. */
 export const toneText: Record<Tone, string> = {
-  run: 'text-run',
+  run: 'text-link',
   you: 'text-you',
-  rework: 'text-rework',
+  rework: 'text-rework-ink',
   muted: 'text-muted',
-  ok: 'text-ok',
+  ok: 'text-ok-ink',
 };
 
 export interface StateLabel {

@@ -17,9 +17,9 @@ interface Row {
 }
 
 const icons = {
-  ok: { Icon: Check, label: 'Passed', className: 'text-ok' },
+  ok: { Icon: Check, label: 'Passed', className: 'text-ok-ink' },
   info: { Icon: Info, label: 'Note', className: 'text-ink' },
-  rework: { Icon: TriangleAlert, label: 'Problem', className: 'text-rework' },
+  rework: { Icon: TriangleAlert, label: 'Problem', className: 'text-rework-ink' },
 } as const;
 
 const toneOf = (c: CheckResult): Row['tone'] =>

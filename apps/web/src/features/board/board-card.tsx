@@ -199,7 +199,7 @@ export function PrLink({ item }: { item: Pick<ItemCard, 'pr_url'> }) {
       href={item.pr_url}
       target="_blank"
       rel="noreferrer"
-      className="relative z-10 inline-flex items-center gap-1 text-xs text-ink underline-offset-2 hover:text-run"
+      className="relative z-10 inline-flex items-center gap-1 text-xs text-ink underline-offset-2 hover:text-link"
     >
       {pullRequestLabel(item.pr_url)}
       <ExternalLink size={12} strokeWidth={1.5} aria-hidden="true" />
@@ -231,7 +231,7 @@ export function AssemblyLine({
       draggable={false}
       aria-label={`Part ${assembly.part} of ${assembly.parts} of ${assembly.title}`}
       className={cn(
-        'relative z-10 flex min-w-0 items-center no-underline hover:text-run',
+        'relative z-10 flex min-w-0 items-center no-underline hover:text-link',
         parts ? 'gap-2 text-meta font-medium text-ink-soft' : 'gap-1 text-xs text-muted',
       )}
     >
@@ -323,7 +323,7 @@ export function AssemblyHeader({ assembly, compact }: { assembly: OpenAssembly; 
         params={{ ...params, ref: refParam(assembly.ref) }}
         draggable={false}
         className={cn(
-          'flex min-w-0 flex-1 items-center gap-2 rounded-control text-ink no-underline hover:text-run',
+          'flex min-w-0 flex-1 items-center gap-2 rounded-control text-ink no-underline hover:text-link',
           'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run',
           compact ? 'min-h-11' : 'min-h-8',
         )}

@@ -163,7 +163,7 @@ function SourcesCard({
             <Link
               to="/o/$org/knowledge"
               params={{ org: org.slug }}
-              className="ml-auto text-secondary text-ink underline underline-offset-3 hover:text-run"
+              className="ml-auto text-secondary text-ink underline underline-offset-3 hover:text-link"
             >
               Show every source
             </Link>
@@ -239,7 +239,7 @@ function SourcesCard({
                         <Link
                           to="/o/$org/knowledge/$source"
                           params={{ org: org.slug, source: s.name }}
-                          className="tabular-nums text-ink underline underline-offset-3 hover:text-run"
+                          className="tabular-nums text-ink underline underline-offset-3 hover:text-link"
                         >
                           {s.documents}
                           <span className="sr-only"> documents of {s.title}, open the source</span>

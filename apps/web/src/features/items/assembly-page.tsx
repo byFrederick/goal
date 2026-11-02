@@ -229,7 +229,7 @@ function PartsTable({
                       href={part.pr_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-ink underline-offset-2 hover:text-run"
+                      className="inline-flex items-center gap-1 text-ink underline-offset-2 hover:text-link"
                     >
                       {pullRequestLabel(part.pr_url)}
                       <ExternalLink size={12} strokeWidth={1.5} aria-hidden="true" />

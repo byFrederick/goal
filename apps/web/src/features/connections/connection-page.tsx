@@ -246,7 +246,7 @@ function FieldsCard({
               </span>
               <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-control border border-line bg-shell py-2 pr-2 pl-3">
                 <span className={cn('inline-flex items-center gap-2 text-body', set ? 'text-ink' : 'text-rework-ink')}>
-                  {set ? <Check size={16} strokeWidth={1.75} aria-hidden="true" className="text-ok" /> : null}
+                  {set ? <Check size={16} strokeWidth={1.75} aria-hidden="true" className="text-ok-ink" /> : null}
                   {set ? 'Set' : f.required ? 'Not set: runs that get it fail' : 'Not set'}
                 </span>
                 {manage ? (
@@ -302,7 +302,7 @@ function TestButton({
   return (
     <Button variant="white" className="h-11 md:h-9" disabled={testing} onClick={onTest}>
       {showPass ? (
-        <Check key="pass" size={16} strokeWidth={1.75} aria-hidden="true" className="animate-fade-in text-ok" />
+        <Check key="pass" size={16} strokeWidth={1.75} aria-hidden="true" className="animate-fade-in text-ok-ink" />
       ) : (
         <RefreshCw
           key="idle"
@@ -339,7 +339,7 @@ function UsedByCard({ connection: c }: { connection: Connection }) {
               <Link
                 to="/o/$org/f/$factory/definition/$section"
                 params={{ org: org.slug, factory: f.name, section: 'connections' }}
-                className="text-ink underline underline-offset-3 hover:text-run"
+                className="text-ink underline underline-offset-3 hover:text-link"
                 translate="no"
               >
                 {f.name}

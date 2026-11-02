@@ -48,7 +48,7 @@ export function WizardPage({ step, search }: { step: WizardStep; search: WizardS
             <Link
               to="/o/$org"
               params={{ org: org.slug }}
-              className="text-ink underline underline-offset-3 hover:text-run"
+              className="text-ink underline underline-offset-3 hover:text-link"
             >
               Back to the factories
             </Link>
@@ -82,7 +82,7 @@ function Resume({ factory }: { factory: string }) {
       >
         <h1 className="m-0 text-xl font-medium text-rework-ink">This draft factory can’t be opened</h1>
         <p className="m-0 text-[15px] leading-relaxed">{failed.detail ?? failed.title}</p>
-        <Link to="/o/$org" params={{ org: org.slug }} className="text-ink underline underline-offset-3 hover:text-run">
+        <Link to="/o/$org" params={{ org: org.slug }} className="text-ink underline underline-offset-3 hover:text-link">
           Back to the factories
         </Link>
       </div>

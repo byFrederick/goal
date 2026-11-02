@@ -108,7 +108,7 @@ function SetLaneForm({ items, factory, onDone }: { items: Movable[]; factory: Fa
         </div>
       ) : model.isError ? (
         <div className="flex flex-col items-start gap-3">
-          <p className="m-0 text-body text-rework">The lanes could not be read. Try again.</p>
+          <p className="m-0 text-body text-rework-ink">The lanes could not be read. Try again.</p>
           <Button variant="secondary" onClick={() => void model.refetch()}>
             Try again
           </Button>

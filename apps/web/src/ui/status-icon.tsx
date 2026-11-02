@@ -8,10 +8,10 @@ import { cn } from './cn';
 export type StatusKind = 'working' | 'waiting' | 'same-files' | 'ready';
 
 const tones: Record<StatusKind, string> = {
-  working: 'text-run',
+  working: 'text-link',
   waiting: 'text-amber',
   'same-files': 'text-muted',
-  ready: 'text-ok',
+  ready: 'text-ok-ink',
 };
 
 export function StatusIcon({ status, className }: { status: StatusKind; className?: string }) {

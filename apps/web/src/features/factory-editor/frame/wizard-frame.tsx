@@ -117,11 +117,11 @@ export function DraftSaved({
         {text ? (
           <>
             {session.status === 'saved' ? (
-              <Check size={16} strokeWidth={1.8} aria-hidden="true" className="text-ok" />
+              <Check size={16} strokeWidth={1.8} aria-hidden="true" className="text-ok-ink" />
             ) : session.status === 'saving' ? (
               <LoaderCircle size={16} strokeWidth={1.8} aria-hidden="true" className="motion-safe:animate-spin" />
             ) : (
-              <CircleAlert size={16} strokeWidth={1.8} aria-hidden="true" className="text-rework" />
+              <CircleAlert size={16} strokeWidth={1.8} aria-hidden="true" className="text-rework-ink" />
             )}
             {text}
           </>

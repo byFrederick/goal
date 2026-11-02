@@ -165,7 +165,7 @@ function CodeStep({ email, onSignedIn, onCancel }: { email: string; onSignedIn: 
         <button
           type="button"
           onClick={onCancel}
-          className="inline-flex min-h-11 items-center border-0 bg-transparent p-0 text-sm md:min-h-6 text-ink underline underline-offset-[3px] transition-colors duration-200 hover:text-run"
+          className="inline-flex min-h-11 items-center border-0 bg-transparent p-0 text-sm md:min-h-6 text-ink underline underline-offset-[3px] transition-colors duration-200 hover:text-link"
         >
           Cancel
         </button>

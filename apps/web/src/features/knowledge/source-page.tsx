@@ -279,7 +279,7 @@ function UsedByCard({ source: s }: { source: KnowledgeSource }) {
               <Link
                 to="/o/$org/f/$factory/definition/$section"
                 params={{ org: org.slug, factory: f.name, section: 'connections' }}
-                className="text-ink underline underline-offset-3 hover:text-run"
+                className="text-ink underline underline-offset-3 hover:text-link"
                 translate="no"
               >
                 {f.name}
@@ -295,7 +295,7 @@ function UsedByCard({ source: s }: { source: KnowledgeSource }) {
           <Link
             to="/o/$org/connections/$connection"
             params={{ org: org.slug, connection: s.connection }}
-            className="font-mono text-ink underline underline-offset-3 hover:text-run"
+            className="font-mono text-ink underline underline-offset-3 hover:text-link"
             translate="no"
           >
             {s.connection}

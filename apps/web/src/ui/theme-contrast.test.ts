@@ -48,6 +48,11 @@ const pairs: [string, string, string][] = [
   ['white', 'rework', 'text on a rework fill'],
 ];
 
+// Text tokens: body text on each surface it sits on.
+const textPairs: [string, string][] = ['link', 'rework-ink', 'ok-ink', 'you-ink', 'ink-soft'].flatMap((fg) =>
+  ['card', 'panel', 'shell'].map((bg): [string, string] => [fg, bg]),
+);
+
 describe.each([
   ['light', light],
   ['dark', dark],
@@ -58,11 +63,31 @@ describe.each([
     expect(t[bg], bg).toBeDefined();
     expect(contrast(t[fg] as string, t[bg] as string)).toBeGreaterThanOrEqual(4.5);
   });
+
+  it.each(textPairs)('text %s on %s reaches 4.5:1', (fg, bg) => {
+    expect(theme[fg], fg).toBeDefined();
+    expect(theme[bg], bg).toBeDefined();
+    expect(contrast(theme[fg] as string, theme[bg] as string)).toBeGreaterThanOrEqual(4.5);
+  });
 });
 
 describe('the prefers-color-scheme dark block', () => {
   it('has the same values as the data-theme dark block for the checked tokens', () => {
-    for (const name of ['action', 'action-ink', 'ink', 'hover', 'muted', 'run', 'you', 'rework']) {
+    for (const name of [
+      'action',
+      'action-ink',
+      'ink',
+      'hover',
+      'muted',
+      'run',
+      'you',
+      'rework',
+      'link',
+      'rework-ink',
+      'ok-ink',
+      'you-ink',
+      'ink-soft',
+    ]) {
       expect(media[name], name).toBe(dark[name]);
     }
   });
