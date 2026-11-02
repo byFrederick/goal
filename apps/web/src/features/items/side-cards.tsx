@@ -172,15 +172,22 @@ function CostBar({
     <span
       role="img"
       aria-label={`${legend.join(', ')} of a ${formatUsdCompact(cap)} cap`}
-      className={cn('flex h-1.5 overflow-hidden rounded-full bg-hover', className)}
+      className={cn('relative flex h-1.5 overflow-hidden rounded-full bg-hover', className)}
     >
-      {segments.map((s, i) => (
-        <span
-          key={s.id}
-          className={cn('h-full', i % 2 === 0 ? 'bg-run' : 'bg-run-ink')}
-          style={{ width: `${(s.cost / cap) * 100}%` }}
-        />
-      ))}
+      {segments.map((s, i) => {
+        const share = Math.min(1, s.cost / cap);
+        const offset = segments.slice(0, i).reduce((sum, p) => sum + Math.min(1, p.cost / cap), 0);
+        return (
+          <span
+            key={s.id}
+            className={cn(
+              'absolute inset-0 origin-left transition-transform duration-(--duration-fast) ease-out motion-reduce:transition-none',
+              i % 2 === 0 ? 'bg-ink' : 'bg-rule',
+            )}
+            style={{ transform: `translateX(${offset * 100}%) scaleX(${share})` }}
+          />
+        );
+      })}
     </span>
   );
 }

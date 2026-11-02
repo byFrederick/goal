@@ -15,6 +15,7 @@ import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
+import { Meter } from '../../ui/meter';
 
 /** The card's grid: the document, its bar (from md), the runs and the verdicts. */
 const row =
@@ -135,9 +136,7 @@ function UsageRow({ doc, width }: { doc: KnowledgeDocumentUsage; width: number }
         >
           {doc.title}
         </button>
-        <span aria-hidden="true" className="hidden h-2 overflow-hidden rounded-chip bg-panel md:block">
-          <span className="block h-full bg-run" style={{ width: `${width}%` }} />
-        </span>
+        <Meter value={width} max={100} className="hidden h-2 md:block" />
         <span className="text-right tabular-nums text-body text-ink">{doc.runs}</span>
         <span className="flex gap-2 text-secondary tabular-nums">
           <span className="text-ok-ink">▲ {doc.agents_helped}</span>
