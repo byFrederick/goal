@@ -38,6 +38,7 @@ import { useFactory } from '../../../shared/factory';
 import { formatClock } from '../../../shared/format';
 import { Button } from '../../../ui/button';
 import { cn } from '../../../ui/cn';
+import { Skeleton } from '../../../ui/skeleton';
 import { useDraft, useDraftSession, useModel, useViewOnly } from '../draft/use-draft';
 import { useValidation } from '../frame/use-editor';
 import { ViewToggle } from '../frame/view-toggle';
@@ -59,6 +60,17 @@ import {
 } from './files';
 import { outlineOf } from './outline';
 import { Outline, ProblemBlock, ProblemsPanel } from './panels';
+
+/** The editor's place while a file loads: lines of code in muted blocks (MOTION.md, Loading). */
+function FileShape() {
+  return (
+    <div className="flex h-64 flex-col gap-3 p-5">
+      {['w-2/3', 'w-1/2', 'w-3/4', 'w-1/3', 'w-3/5'].map((w) => (
+        <div key={w} className={cn('h-3 rounded-control bg-hover', w)} />
+      ))}
+    </div>
+  );
+}
 
 /** A value that settles `ms` after its last change. */
 function useDebounced<T>(value: T, ms: number): T {
@@ -330,7 +342,7 @@ export function YamlView({ search }: SectionViewProps) {
       <h2 className="sr-only" data-route-focus="" tabIndex={-1}>
         YAML of the {version}
       </h2>
-      <div className="grid min-h-180 min-w-0 overflow-hidden rounded-card border border-line @[640px]:grid-cols-[250px_minmax(0,1fr)] @[1024px]:grid-cols-[250px_minmax(0,1fr)_260px]">
+      <div className="grid min-h-180 min-w-0 overflow-hidden rounded-card border border-rule @[640px]:grid-cols-[250px_minmax(0,1fr)] @[1024px]:grid-cols-[250px_minmax(0,1fr)_260px]">
         <div id={treeId} className={cn(filesOpen ? 'flex' : 'hidden', '@[640px]:flex', 'min-w-0 border-r border-line')}>
           <FileTree
             nodes={tree}
@@ -347,7 +359,7 @@ export function YamlView({ search }: SectionViewProps) {
         </div>
 
         <div className="flex min-w-0 flex-col">
-          <div className="flex flex-wrap items-stretch justify-between gap-x-3 gap-y-2 border-b border-line bg-panel">
+          <div className="flex flex-wrap items-stretch justify-between gap-x-3 gap-y-2 border-b border-rule bg-card">
             <div className="flex min-w-0 items-stretch">
               <button
                 type="button"
@@ -365,7 +377,7 @@ export function YamlView({ search }: SectionViewProps) {
                   aria-selected="true"
                   aria-controls={panelId}
                   tabIndex={0}
-                  className="inline-flex h-10 min-w-0 items-center gap-2 border-t-2 border-run bg-shell px-4 font-mono text-secondary text-ink"
+                  className="inline-flex h-10 min-w-0 items-center gap-2 border-b-2 border-ink bg-panel px-4 font-control font-mono text-secondary text-ink"
                 >
                   <span className="truncate">{path}</span>
                 </button>
@@ -400,9 +412,12 @@ export function YamlView({ search }: SectionViewProps) {
                   </button>
                 </p>
               ) : (
-                <div aria-busy="true" className="h-64">
+                <>
                   <span className="sr-only">Loading {path}</span>
-                </div>
+                  <Skeleton ready={false} placeholder={<FileShape />}>
+                    {null}
+                  </Skeleton>
+                </>
               )
             ) : binary ? (
               <div className="flex flex-wrap items-center justify-between gap-3 p-5 text-secondary">

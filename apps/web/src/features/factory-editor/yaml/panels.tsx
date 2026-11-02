@@ -6,6 +6,7 @@
 import { CircleAlert, Info } from 'lucide-react';
 import type { DefinitionProblem } from '../../../api/types';
 import { plural } from '../../../shared/format';
+import { Chip } from '../../../ui/chip';
 import { cn } from '../../../ui/cn';
 import { QuickFixes } from '../frame/problem-fixes';
 import { usePhoneEditor } from './code-editor';
@@ -23,7 +24,7 @@ const fixesOf = (p: DefinitionProblem) => p.fixes.filter((f) => f.section !== 'p
 
 function ProblemIcon({ severity }: { severity: DefinitionProblem['severity'] }) {
   return severity === 'info' ? (
-    <Info size={14} strokeWidth={1.75} aria-hidden="true" className="mt-px shrink-0 text-run" />
+    <Info size={14} strokeWidth={1.75} aria-hidden="true" className="mt-px shrink-0 text-muted" />
   ) : (
     <CircleAlert size={14} strokeWidth={1.75} aria-hidden="true" className="mt-px shrink-0 text-rework-ink" />
   );
@@ -60,19 +61,14 @@ export function ProblemsPanel({ problems, onGo, headingId }: ProblemsPanelProps)
   const phone = usePhoneEditor();
   const counted = problems.filter((p) => p.severity !== 'info').length;
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-2 border-t border-line bg-panel px-4 py-3">
+    <section aria-labelledby={headingId} className="flex flex-col gap-2 border-t border-rule bg-card px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <h3 id={headingId} className="m-0 text-secondary font-control">
           Problems
         </h3>
-        <span
-          className={cn(
-            'rounded-chip px-1 text-meta font-medium tabular-nums',
-            counted > 0 ? 'bg-rework text-white' : 'bg-hover text-muted',
-          )}
-        >
+        <Chip tone={counted > 0 ? 'rework' : 'plain'} className="tabular-nums">
           {counted}
-        </span>
+        </Chip>
         <span className="ml-auto text-meta text-muted">Checked as you type, the same checks as publish</span>
       </div>
       {problems.length === 0 ? (
@@ -89,7 +85,7 @@ export function ProblemsPanel({ problems, onGo, headingId }: ProblemsPanelProps)
                   <button
                     type="button"
                     onClick={() => onGo(p)}
-                    className="text-run underline underline-offset-3 hover:text-run-ink"
+                    className="text-ink-soft underline underline-offset-3 hover:text-ink"
                   >
                     {problemLocation(p)}
                   </button>
@@ -114,7 +110,7 @@ export function Outline({ items, onGo }: { items: readonly OutlineItem[]; onGo: 
   return (
     <aside
       aria-label="Outline"
-      className="hidden min-w-0 flex-col gap-px border-l border-line bg-shell p-3 @[1024px]:flex"
+      className="hidden min-w-0 flex-col gap-px border-l border-rule bg-sidebar p-3 @[1024px]:flex"
     >
       <p className="m-0 p-2 text-secondary font-control">Outline</p>
       <ul className="m-0 flex list-none flex-col gap-px p-0">
