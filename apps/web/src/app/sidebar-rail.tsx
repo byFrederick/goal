@@ -151,7 +151,7 @@ function RailEntry({
       {needs ? (
         <span
           aria-hidden="true"
-          className="absolute top-0.5 right-0 flex h-4 min-w-4 items-center justify-center rounded-chip border-2 border-sidebar bg-you px-1 text-meta leading-none font-semibold text-white motion-safe:animate-notification-badge motion-reduce:animate-fade-in"
+          className="absolute top-0.5 right-0 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-sidebar bg-you px-1 text-meta leading-none font-semibold text-white motion-safe:animate-notification-badge motion-reduce:animate-fade-in"
         >
           <NumberRoll value={waiting} />
         </span>
