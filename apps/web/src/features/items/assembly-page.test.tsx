@@ -138,9 +138,30 @@ async function renderAssembly(over: { item?: Item; parts?: AssemblyParts; factor
     item: over.item ?? assembly,
     parts: over.parts ?? parts,
     board,
+    topBar: true,
   });
   await screen.findByRole('heading', { level: 1 });
 }
+
+describe('AssemblyPage actions in the top bar', () => {
+  it('draws Add a part, Pause and Cancel assembly in the top bar and none in the page', async () => {
+    await renderAssembly({ factory: { ...factory, can: ['item:create', 'item:operate', 'item:decide'] } });
+
+    const bar = within(screen.getAllByRole('banner')[0] as HTMLElement);
+    for (const name of ['Add a part', 'Pause', 'Cancel assembly']) {
+      expect(bar.getByRole('button', { name })).toBeTruthy();
+      expect(screen.getAllByRole('button', { name })).toHaveLength(1);
+    }
+  });
+
+  it('puts Resume, the primary action, last', async () => {
+    await renderAssembly({ parts: pausedParts });
+
+    const bar = within(screen.getAllByRole('banner')[0] as HTMLElement);
+    const names = bar.getAllByRole('button').map((b) => b.textContent);
+    expect(names.at(-1)).toBe('Resume');
+  });
+});
 
 describe('AssemblyPage header', () => {
   it('shows the assembly label, the key, the title and the brief, and no Add a part without item:create', async () => {

@@ -23,7 +23,7 @@ import { Button } from '../../../ui/button';
 import { Chip } from '../../../ui/chip';
 import { ViewOnlyBanner } from '../../../ui/view-only-banner';
 import type { DraftSession, SessionState } from '../draft/session';
-import { useDraft, useDraftOpen, useDraftSession } from '../draft/use-draft';
+import { DraftSessionContext, useDraft, useDraftOpen, useDraftSession } from '../draft/use-draft';
 import type { EditorSection } from '../sections';
 import { AskBar } from '../yaml/ask-bar';
 import { ConflictDialog, DiscardedDialog, FileConflictDialog } from './conflict-dialog';
@@ -163,27 +163,30 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
         </span>
       </>
     );
+    // The top bar sits outside the draft session's provider; the toggle reads the session, so hand it down.
     return (
-      <div className="flex min-w-0 items-center justify-end gap-2">
-        {phone ? null : (
-          <>
-            {yaml ? null : <ViewToggle section={section} yaml={false} />}
-            {versionsButton}
-            {viewOnly ? null : (
-              <Button asChild variant="white" className="h-11 md:h-10">
-                <Link
-                  to="/o/$org/f/$factory/definition/$section"
-                  params={{ org: orgSlug, factory: factoryName, section: 'review' }}
-                  aria-describedby={unchanged ? unchangedId : undefined}
-                >
-                  Review changes
-                </Link>
-              </Button>
-            )}
-          </>
-        )}
-        {publish}
-      </div>
+      <DraftSessionContext.Provider value={session}>
+        <div className="flex min-w-0 items-center justify-end gap-2">
+          {phone ? null : (
+            <>
+              {yaml ? null : <ViewToggle section={section} yaml={false} />}
+              {versionsButton}
+              {viewOnly ? null : (
+                <Button asChild variant="white" className="h-11 md:h-10">
+                  <Link
+                    to="/o/$org/f/$factory/definition/$section"
+                    params={{ org: orgSlug, factory: factoryName, section: 'review' }}
+                    aria-describedby={unchanged ? unchangedId : undefined}
+                  >
+                    Review changes
+                  </Link>
+                </Button>
+              )}
+            </>
+          )}
+          {publish}
+        </div>
+      </DraftSessionContext.Provider>
     );
   }, [
     phone,
@@ -198,6 +201,7 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
     blockedId,
     problemCount,
     publishNumber,
+    session,
   ]);
 
   return (

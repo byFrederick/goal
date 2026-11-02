@@ -12,13 +12,13 @@ You end with the factory's repository, runtime, budgets and flow set as you want
 
 ## How Save changes publishes
 
-The line above Save changes says which version it publishes, for example "Saving publishes v22". Save changes:
+Save changes is in the top bar, on the right. The line beside it says which version it publishes, for example "Saving publishes v22". On a phone, that line sits under the page title. Save changes:
 
 1. saves any change still waiting,
 2. publishes the open draft as that version, and
 3. closes the draft.
 
-The draft is shared with the Definition editor. Saving publishes everything in it, including edits you made there, not only the fields on this page. If goald refuses the publish, the page shows its reason and the draft stays open.
+The draft is shared with the Definition editor. Saving publishes everything in it, including edits you made there, not only the fields on this page. If goald refuses the publish, the page shows its reason at the top and the draft stays open.
 
 ## Sections
 

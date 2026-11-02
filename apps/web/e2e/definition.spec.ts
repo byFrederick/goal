@@ -27,6 +27,17 @@ async function openBasics(page: Page) {
   await expect(title(page)).toHaveValue('Goal');
 }
 
+test('Publish is in the top bar, disabled while a problem stands', async ({ page }) => {
+  await openBasics(page);
+  const publish = page
+    .getByRole('banner')
+    .first()
+    .getByRole('button', { name: /^Publish v\d+$/ });
+  await expect(publish).toBeDisabled();
+  await expect(publish).toHaveAccessibleDescription(/^Fix \d+ problems? before you publish$/);
+  await expect(page.getByRole('main').getByRole('button', { name: /^Publish v\d+$/ })).toHaveCount(0);
+});
+
 test('the definition frame is accessible and fits the screen', async ({ page }) => {
   await openBasics(page);
   await expect(page).toHaveTitle('Basics · Definition · goal · Acme · Goal');

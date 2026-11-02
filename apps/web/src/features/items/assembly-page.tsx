@@ -1,8 +1,10 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 import { ChevronLeft, ExternalLink } from 'lucide-react';
+import { useMemo } from 'react';
 import { boardQuery, itemQuery, partsQuery } from '../../api/queries';
 import type { AssemblyPart, AssemblyParts, BoardLane, Item } from '../../api/types';
+import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { factoryTitle, itemKey, refParam, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatDuration, formatUsd, humanize } from '../../shared/format';
@@ -277,12 +279,31 @@ export function AssemblyPage() {
   const board = useQuery({ ...boardQuery(org.id, factory.id), enabled: false }).data;
   const lanes = board?.stations.flatMap((s) => s.lanes ?? []) ?? [];
   // The station the assembly was planned at: the part Add a part queues there names its agents.
-  const stationLanes = board?.stations.find((s) => s.id === item.station)?.lanes ?? [];
+  const stationLanes = useMemo(
+    () => board?.stations.find((s) => s.id === item.station)?.lanes ?? [],
+    [board, item.station],
+  );
+  const phone = usePhone();
+  // From 768 px the top bar holds every action. The phone's bar keeps the primary one (Resume, else Add a part)
+  // and the others sit under the brief.
+  const actions = useMemo(
+    () => (
+      <AssemblyActions
+        item={item}
+        itemKey={key}
+        parts={assembly.parts}
+        factory={factory}
+        stationLanes={stationLanes}
+        part={phone ? 'primary' : 'all'}
+      />
+    ),
+    [item, key, assembly.parts, factory, stationLanes, phone],
+  );
   const boardName = `${factoryTitle(factory)} board`;
 
   return (
     <>
-      <TopBarSlot crumb={`#${item.number}`} />
+      <TopBarSlot crumb={`#${item.number}`} actions={actions} />
       <header className="flex flex-col gap-2.5">
         <Link
           to="/o/$org/f/$factory/board"
@@ -313,13 +334,16 @@ export function AssemblyPage() {
         {item.body ? (
           <p className="m-0 max-w-[820px] text-[15px] leading-relaxed whitespace-pre-wrap text-muted">{item.body}</p>
         ) : null}
-        <AssemblyActions
-          item={item}
-          itemKey={key}
-          parts={assembly.parts}
-          factory={factory}
-          stationLanes={stationLanes}
-        />
+        {phone ? (
+          <AssemblyActions
+            item={item}
+            itemKey={key}
+            parts={assembly.parts}
+            factory={factory}
+            stationLanes={stationLanes}
+            part="rest"
+          />
+        ) : null}
       </header>
 
       <div className="flex flex-col gap-4 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:items-start">

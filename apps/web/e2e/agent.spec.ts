@@ -110,3 +110,9 @@ for (const theme of ['light', 'dark'] as const) {
     });
   });
 }
+
+test('Open prompt file is in the top bar', async ({ page }) => {
+  await page.goto('/o/acme/f/sre/agents/investigator');
+  await expect(page.getByRole('banner').first().getByRole('link', { name: 'Open prompt file' })).toBeVisible();
+  await expect(page.getByRole('main').getByRole('link', { name: 'Open prompt file' })).toHaveCount(0);
+});
