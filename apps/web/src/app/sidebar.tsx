@@ -48,6 +48,9 @@ export function Sidebar({ org }: { org: OrgSummary }) {
   const focus = useRef<'rail' | 'top' | null>(null);
   // Command K on the rail expands the sidebar straight into search.
   const [searchOnExpand, setSearchOnExpand] = useState(false);
+  // The rail's New item asks the composer, which stays mounted while the rail shows, to open.
+  const [composeRequest, setComposeRequest] = useState<{ title: string } | null>(null);
+  const composed = useCallback(() => setComposeRequest(null), []);
 
   const expand = useCallback(
     (search: boolean) => {
@@ -66,19 +69,26 @@ export function Sidebar({ org }: { org: OrgSummary }) {
   return (
     <>
       {/* C keeps working with the rail shown, and on phones where the sidebar is hidden. */}
-      {size.collapsed ? <NewItemFromSidebar button={false} /> : null}
+      {size.collapsed ? <NewItemFromSidebar button={false} openWith={composeRequest} onOpened={composed} /> : null}
+      {/* The column's width changes at once; the body inside it moves and fades (styles.css, .motion-sidebar). */}
       <div
         ref={column}
-        className="shell-sidebar sticky top-0 hidden h-dvh shrink-0 transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex"
+        className="shell-sidebar sticky top-0 hidden h-dvh shrink-0 md:flex"
         style={{ width: `var(${sidebarWidthVar})`, [sidebarWidthVar]: `${shownWidth(size)}px` } as CSSProperties}
       >
         {size.collapsed ? (
-          <SidebarRail org={org} busy={busy} focusOnMount={focus.current === 'rail'} onExpand={expand} />
+          <SidebarRail
+            org={org}
+            busy={busy}
+            focusOnMount={focus.current === 'rail'}
+            onExpand={expand}
+            onNewItem={() => setComposeRequest({ title: '' })}
+          />
         ) : (
           <nav
             aria-label="Organization and factories"
             aria-busy={busy}
-            className="flex h-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto border-r border-line bg-sidebar px-2 pt-2 pb-3"
+            className="motion-sidebar flex h-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto border-r border-line bg-sidebar px-2 pt-2 pb-3"
           >
             <SidebarContent
               org={org}

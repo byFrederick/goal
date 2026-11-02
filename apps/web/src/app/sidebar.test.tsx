@@ -215,12 +215,15 @@ describe('the sidebar', () => {
     ).toBe('/o/acme/runs');
   });
 
-  it('shows the not-available tooltip on hover', async () => {
-    renderSidebar();
+  it("opens the composer from the rail's New item", async () => {
+    renderSidebar({ list: [factory('goal', { can: ['item:create'] }), factory('sre'), factory('support')] });
     await collapse();
-    fireEvent.focus(within(await nav()).getByRole('button', { name: /^New item/ }));
+    const button = within(await nav()).getByRole('button', { name: 'New item' });
+    expect(button.getAttribute('aria-disabled')).toBeNull();
+    fireEvent.click(button);
 
-    expect(await screen.findByText('Not available yet')).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'New item' })).toBeTruthy();
+    expect(screen.queryByText('Not available yet')).toBeNull();
   });
 
   it('lists Intake as a link and Jonah as a link in the open factory', async () => {
@@ -481,7 +484,10 @@ describe('the sidebar', () => {
 
 describe('the collapsed rail', () => {
   it('lists its entries in order with accessible names', async () => {
-    renderSidebar({ can: ['connection:read', 'credential:read', 'knowledge:read', 'factory:create'] });
+    renderSidebar({
+      can: ['connection:read', 'credential:read', 'knowledge:read', 'factory:create'],
+      list: [factory('goal', { can: ['item:create'] }), factory('sre'), factory('support')],
+    });
     await collapse();
     const names = railNames(await nav());
 
@@ -537,17 +543,6 @@ describe('the collapsed rail', () => {
 
     expect(link.getAttribute('href')).toMatch(/\/needs-you$/);
     expect(link.getAttribute('aria-disabled')).toBeNull();
-  });
-
-  it.each(['New item'])('keeps %s disabled, and says what it is and why', async (name) => {
-    renderSidebar();
-    await collapse();
-    const control = within(await nav()).getByRole('button', { name: new RegExp(`^${name}`) });
-
-    expect(control.getAttribute('aria-disabled')).toBe('true');
-    fireEvent.focus(control);
-    expect(await screen.findByText(name)).toBeTruthy();
-    expect(await screen.findByText('Not available yet')).toBeTruthy();
   });
 
   it('gives each enabled entry a tooltip with its label', async () => {
