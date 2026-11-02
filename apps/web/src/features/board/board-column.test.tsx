@@ -147,6 +147,36 @@ describe('a column with a buffer', () => {
   });
 });
 
+describe('the constraint mark and the zone labels', () => {
+  const items = [item(1, { state: 'queued', in_buffer: true }), item(2)];
+
+  it('marks only the drum’s column with a square yellow mark and Constraint, and labels only its zones', async () => {
+    const withTwo = board(items);
+    withTwo.stations = [{ ...withTwo.stations[0], id: 'spec', items: [item(5)] } as BoardStation, ...withTwo.stations];
+    renderBoardPage({ page: ShellBoard, org, factory, board: withTwo });
+    const build = await buildColumn();
+    const spec = within(screen.getByRole('region', { name: 'Stations' })).getByRole('region', { name: 'Spec' });
+
+    expect(within(build).getByText('Constraint')).toBeTruthy();
+    const mark = within(build).getByText('Constraint').querySelector('i');
+    expect(mark?.className).toContain('bg-amber');
+    expect(mark?.className).not.toContain('rounded-chip');
+    expect(within(spec).queryByText('Constraint')).toBeNull();
+    expect(within(spec).queryByText('In progress')).toBeNull();
+    expect(within(spec).queryByText(/^Ready, buffer/)).toBeNull();
+  });
+
+  it('on a phone, the drum’s tab is marked and its column holds In progress, then Ready, buffer', async () => {
+    stubPhone();
+    renderBoardPage({ page: ShellBoard, org, factory, board: board(items), search: { station: 'build' } });
+    const [build] = await screen.findAllByRole('region', { name: 'Build' });
+    const text = (build as HTMLElement).textContent ?? '';
+    expect(text.indexOf('In progress')).toBeGreaterThanOrEqual(0);
+    expect(text.indexOf('In progress')).toBeLessThan(text.indexOf('Ready, buffer 1 of 2'));
+    expect(within(build as HTMLElement).getByText('Constraint')).toBeTruthy();
+  });
+});
+
 describe('Show N more', () => {
   const many = Array.from({ length: columnLimit + 3 }, (_, i) => item(i + 10));
   const ready = item(1, { state: 'queued', in_buffer: true });

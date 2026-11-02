@@ -149,3 +149,24 @@ test('the setup checklist hides when closed and stays hidden after a reload', as
   await expect(page.getByRole('heading', { name: 'Floor' })).toBeVisible();
   await expect(checklist).toHaveCount(0);
 });
+
+// The pictures for the pull request: the Floor at 1440 and 390 px in both themes, against the mock API.
+// They are attached to the report, not compared; docs/design/screens/daily-work/floor.jpg is the reference.
+for (const theme of ['light', 'dark'] as const) {
+  for (const [name, width, height] of [
+    ['1440', 1440, 900],
+    ['390', 390, 844],
+  ] as const) {
+    test(`floor screenshot at ${name}, ${theme}`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height });
+      await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+      await page.goto('/o/acme/f/sre');
+      await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Activity' })).toBeVisible();
+      await testInfo.attach(`floor-${name}-${theme}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: 'image/png',
+      });
+    });
+  }
+}

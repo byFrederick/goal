@@ -1,7 +1,7 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 import { ExternalLink } from 'lucide-react';
-import { useMemo } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { boardQuery, itemQuery, partsQuery } from '../../api/queries';
 import type { AssemblyPart, AssemblyParts, BoardLane, Item } from '../../api/types';
 import { usePhone, usePhoneBack } from '../../app/phone-chrome';
@@ -10,13 +10,14 @@ import { itemKey, refParam, useFactory, useFactoryParams } from '../../shared/fa
 import { formatDuration, formatUsd, humanize } from '../../shared/format';
 import { pullRequestLabel, stateNames } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
-import { SectionCard, Stat, StatGrid } from '../../ui/card';
+import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { StatStrip } from '../../ui/stat-strip';
 import { StatusIcon } from '../../ui/status-icon';
 import { AssemblyActions } from './assembly-actions';
 import {
-  agentLabel,
+  agentRole,
   barSegments,
   hasOpenParts,
   type PartTone,
@@ -54,33 +55,18 @@ function ProgressCard({ item, assembly, className }: { item: Item; assembly: Ass
         ))}
       </div>
       <p className="m-0 text-[15px] tabular-nums">{merged}</p>
-      <StatGrid>
-        <Stat label="Lead time">
-          <dd
-            className="m-0 truncate text-[17px] tabular-nums"
-            title={formatDuration(assembly.lead_time_seconds * 1000)}
-          >
-            {formatDuration(assembly.lead_time_seconds * 1000)}
-          </dd>
-        </Stat>
-        <Stat label="Spend">
-          <dd
-            className="m-0 truncate text-[17px] tabular-nums"
-            title={budget ? `${formatUsd(spent)} of ${formatUsd(budget)}` : formatUsd(spent)}
-          >
-            {formatUsd(spent)}
-            {budget ? <span className="text-muted"> of {formatUsd(budget)}</span> : null}
-          </dd>
-        </Stat>
-        <Stat label="Human touches">
-          <dd className="m-0 text-[17px] tabular-nums">{item.touches?.count ?? 0}</dd>
-        </Stat>
-        <Stat label="Time to finish">
-          <dd className="m-0 truncate text-[17px] tabular-nums">
-            {!hasOpenParts(parts) ? null : finish === null ? '—' : `About ${formatDuration(finish)}`}
-          </dd>
-        </Stat>
-      </StatGrid>
+      <StatStrip
+        label="Assembly figures"
+        stats={[
+          { label: 'Lead time', value: formatDuration(assembly.lead_time_seconds * 1000) },
+          { label: 'Spend', value: formatUsd(spent), ...(budget ? { unit: `of ${formatUsd(budget)}` } : {}) },
+          { label: 'Human touches', value: item.touches?.count ?? 0 },
+          {
+            label: 'Time to finish',
+            value: !hasOpenParts(parts) ? null : finish === null ? null : `About ${formatDuration(finish)}`,
+          },
+        ]}
+      />
     </SectionCard>
   );
 }
@@ -89,7 +75,7 @@ function ProgressCard({ item, assembly, className }: { item: Item; assembly: Ass
 function WorkCard({ part, sub }: { part: AssemblyPart; sub: string }) {
   const link = usePartLink();
   return (
-    <li className="flex min-w-0 items-start gap-2.5 rounded-control border border-line bg-card p-3">
+    <li className="flex min-w-0 items-start gap-2.5">
       <StatusIcon status="working" className="mt-0.5" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Link
@@ -149,11 +135,11 @@ function PlanCard({
       {waves.map((w) => (
         <section key={w.wave} aria-label={`Wave ${w.wave + 1}`} className="flex flex-col gap-2">
           <h3 className="m-0 text-[13px] font-normal text-muted">Wave {w.wave + 1}</h3>
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+          <ul className="m-0 flex list-none flex-col gap-3 p-0">
             {w.parts.map((part) => {
               if (partTone(part) === 'working') {
                 const sub = part.agent
-                  ? `${humanize(part.station)} · ${agentLabel(part.agent, lanes)}`
+                  ? `${humanize(part.station)}, ${agentRole(part.agent, lanes)}`
                   : humanize(part.station);
                 return <WorkCard key={part.id} part={part} sub={sub} />;
               }
@@ -261,8 +247,42 @@ function PartsTable({
   );
 }
 
+/** The longest brief shown whole; a longer one is clamped to three lines under a Show more button. */
+const briefLimit = 240;
+
+/** The brief, collapsed by default (MOTION.md, Accordion and disclosure: the full text opens under the clamp). */
+function Brief({ body }: { body: string }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const long = body.length > briefLimit || body.split('\n').length > 3;
+  if (!long)
+    return <p className="m-0 max-w-[820px] text-[15px] leading-relaxed whitespace-pre-wrap text-muted">{body}</p>;
+  return (
+    <div className="flex max-w-[820px] flex-col items-start gap-1">
+      <div
+        id={id}
+        data-state={open ? 'open' : 'closed'}
+        className="motion-disclosure motion-disclosure-peek text-[15px]"
+      >
+        <div>
+          <p className="m-0 text-[15px] leading-relaxed whitespace-pre-wrap text-muted">{body}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex min-h-11 cursor-pointer items-center text-[15px] text-ink underline-offset-2 hover:underline"
+      >
+        {open ? 'Show less' : 'Show more'}
+      </button>
+    </div>
+  );
+}
+
 /**
- * An item in state assembly: the request split into parts (ADR 0012). The header offers Add a part
+ * An assembly: an item whose parts exist, in any state: the request split into parts (ADR 0012). The header offers Add a part
  * (AddPartDialog: one more part, queued at the assembly's station), Pause (Resume once every open part
  * is blocked) and Cancel assembly, the last two acting on the open parts (AssemblyActions).
  */
@@ -312,9 +332,7 @@ export function AssemblyPage() {
         <h1 title={item.title} className="line-clamp-2 m-0 max-w-[820px] text-detail-title tracking-display">
           {item.title}
         </h1>
-        {item.body ? (
-          <p className="m-0 max-w-[820px] text-[15px] leading-relaxed whitespace-pre-wrap text-muted">{item.body}</p>
-        ) : null}
+        {item.body ? <Brief body={item.body} /> : null}
         {phone ? (
           <AssemblyActions
             item={item}

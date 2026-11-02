@@ -11,7 +11,7 @@ export interface Bar {
 
 /**
  * Vertical bars on one baseline, oldest first: ink for the latest, `rule` for the earlier ones, each on a `hover`
- * track; a zero is an empty track. A dashed `muted` line marks the target, labelled at its right end. The scale tops out at the
+ * track; a zero is an empty track. A dashed `muted` line marks the target; its label sits above the chart, clear of the bars. The scale tops out at the
  * target or the tallest bar. Hovering a bar shows its label and detail; the chart is an image
  * named by `summary`, and a visually hidden table (`caption`) carries every value for screen
  * readers. The fill grows from the baseline with a scale transform, and not at all under prefers-reduced-motion.
@@ -38,22 +38,18 @@ export function Bars({
   const pct = (n: number) => (max > 0 ? (n / max) * 100 : 0);
   return (
     <figure className={cn('m-0 flex flex-col', className)}>
-      <div role="img" aria-label={summary} className="relative flex h-full min-h-[140px] items-end gap-1.5 md:gap-2">
+      {target && targetLabel ? (
+        <span aria-hidden="true" className="mb-1 self-end text-[13px] text-muted tabular-nums">
+          {targetLabel}
+        </span>
+      ) : null}
+      <div role="img" aria-label={summary} className="relative flex min-h-[140px] flex-1 items-end gap-1.5 md:gap-2">
         {target ? (
-          <>
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-x-0 border-t-[1.5px] border-dashed border-muted"
-              style={{ bottom: `${pct(target)}%` }}
-            />
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute right-0 mb-1 text-[13px] text-muted"
-              style={{ bottom: `${pct(target)}%` }}
-            >
-              {targetLabel}
-            </span>
-          </>
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 z-[1] border-t-[1.5px] border-dashed border-muted"
+            style={{ bottom: `${pct(target)}%` }}
+          />
         ) : null}
         {bars.map((b, i) => {
           const latest = i === bars.length - 1;
