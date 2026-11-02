@@ -14,6 +14,13 @@ const popping = (container: HTMLElement) =>
   characters(container).map((el) => el.classList.contains('motion-safe:animate-number-pop-in'));
 
 describe('NumberRoll', () => {
+  it('keeps a space between characters visible', () => {
+    const { container } = render(<NumberRoll value="2 loops" />);
+    const space = characters(container)[1];
+    expect(space?.textContent).toBe(' ');
+    expect(space?.classList.contains('whitespace-pre')).toBe(true);
+  });
+
   it('shows the value to a screen reader, and draws the first value without animation', () => {
     const { container } = render(<NumberRoll value="1,299" />);
     expect(screen.getByText('1,299')).toBeTruthy();

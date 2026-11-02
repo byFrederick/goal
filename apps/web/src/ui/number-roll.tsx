@@ -49,13 +49,13 @@ export function NumberRoll({ value, className }: NumberRollProps) {
       <span aria-hidden="true" className="inline-flex">
         {cells.map((cell) =>
           cell.delay === undefined ? (
-            <span key={cell.key} className="inline-block">
+            <span key={cell.key} className="inline-block whitespace-pre">
               {cell.character}
             </span>
           ) : (
             <span
               key={cell.key}
-              className="inline-block motion-safe:animate-number-pop-in motion-reduce:animate-fade-in"
+              className="inline-block whitespace-pre motion-safe:animate-number-pop-in motion-reduce:animate-fade-in"
               style={{ animationDelay: `calc(var(--duration-stagger) * ${cell.delay})` }}
             >
               {cell.character}

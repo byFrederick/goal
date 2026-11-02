@@ -8,7 +8,14 @@ import { useEffect, useState } from 'react';
 import { teardownQuery } from '../../api/queries';
 import type { ReworkLoop, Teardown, TeardownRun, TeardownStation, TeardownTouch } from '../../api/types';
 import { itemKey, useFactory } from '../../shared/factory';
-import { formatClock, formatDuration, formatUsd, formatUsdCompact, humanize, plural } from '../../shared/format';
+import {
+  formatClock,
+  formatDurationCompact,
+  formatUsdCompact,
+  formatUsdCost,
+  humanize,
+  plural,
+} from '../../shared/format';
 import { useModelLabel } from '../../shared/models';
 import { useOrg } from '../../shared/org';
 import { kindLabel } from '../../shared/touches';
@@ -21,12 +28,12 @@ import { Skeleton } from '../../ui/skeleton';
 import { type Stat, StatStrip } from '../../ui/stat-strip';
 import { touchSentence } from './touch-words';
 
-const span = (seconds: number) => formatDuration(seconds * 1000);
+const span = (seconds: number) => formatDurationCompact(seconds * 1000);
 
 const cardClass = 'min-w-0 overflow-hidden rounded-card border border-line bg-card';
 const cardHeader = 'flex min-h-11 flex-wrap items-center gap-x-2 border-b border-line px-4 py-2';
 const cardTitle = 'm-0 text-body font-semibold text-ink';
-const cardAside = 'ml-auto text-meta text-muted';
+const cardAside = 'ml-auto whitespace-nowrap text-meta tabular-nums text-muted';
 const listItem = 'flex min-w-0 flex-col gap-1 border-t border-line px-4 py-3 text-secondary first:border-t-0';
 const linkClass =
   'ml-auto inline-flex min-h-11 items-center font-medium text-link no-underline hover:text-link-ink md:min-h-6';
@@ -82,7 +89,7 @@ function statsOf(td: Teardown): Stat[] {
   };
   const cost: Stat = {
     label: 'Cost',
-    value: formatUsd(td.cost_usd),
+    value: formatUsdCost(td.cost_usd),
     ...(td.budget_usd
       ? { target: `of a ${formatUsdCompact(td.budget_usd)} budget`, progress: td.cost_usd / td.budget_usd }
       : { note: 'No budget set' }),
@@ -93,7 +100,7 @@ function statsOf(td: Teardown): Stat[] {
     note:
       td.rework.loops === 0
         ? 'Nothing went back'
-        : `${span(td.rework.seconds)} and ${formatUsd(td.rework.cost_usd)} of the total`,
+        : `${span(td.rework.seconds)} and ${formatUsdCost(td.rework.cost_usd)} of the total`,
   };
   const touches: Stat = {
     label: 'Human touches',
@@ -139,7 +146,7 @@ function StationBar({ station, total }: { station: TeardownStation; total: numbe
 }
 
 const th = 'h-9 px-2 text-right text-meta font-medium text-muted first:pl-4 last:pr-4';
-const td = 'h-11 border-t border-line px-2 text-right tabular-nums first:pl-4 last:pr-4';
+const td = 'h-11 whitespace-nowrap border-t border-line px-2 text-right tabular-nums first:pl-4 last:pr-4';
 const waiting = 'max-[1000px]:hidden';
 
 function TimeByStation({ td: data }: { td: Teardown }) {
@@ -222,7 +229,7 @@ function Runs({ td: data }: { td: Teardown }) {
           Runs
         </h2>
         <span className={cardAside}>
-          {plural(total.runs, 'run')}, {plural(total.turns, 'turn')}, {formatUsd(total.cost_usd)}
+          {plural(total.runs, 'run')}, {plural(total.turns, 'turn')}, {formatUsdCost(total.cost_usd)}
         </span>
       </header>
       <div className="overflow-x-auto max-[1000px]:hidden">
@@ -266,7 +273,7 @@ function Runs({ td: data }: { td: Teardown }) {
                   {span(r.seconds)}
                 </td>
                 <td className="h-11 whitespace-nowrap border-t border-line px-4 text-right tabular-nums">
-                  {formatUsd(r.cost_usd)}
+                  {formatUsdCost(r.cost_usd)}
                 </td>
                 <td className="h-11 whitespace-nowrap border-t border-line px-4">
                   <RunOutcome run={r} />
@@ -279,9 +286,13 @@ function Runs({ td: data }: { td: Teardown }) {
               <td className="h-11 border-t border-line px-4">Total</td>
               <td className="border-t border-line" />
               <td className="border-t border-line" />
-              <td className="border-t border-line px-4 text-right tabular-nums">{total.turns}</td>
-              <td className="border-t border-line px-4 text-right tabular-nums">{span(total.seconds)}</td>
-              <td className="border-t border-line px-4 text-right tabular-nums">{formatUsd(total.cost_usd)}</td>
+              <td className="whitespace-nowrap border-t border-line px-4 text-right tabular-nums">{total.turns}</td>
+              <td className="whitespace-nowrap border-t border-line px-4 text-right tabular-nums">
+                {span(total.seconds)}
+              </td>
+              <td className="whitespace-nowrap border-t border-line px-4 text-right tabular-nums">
+                {formatUsdCost(total.cost_usd)}
+              </td>
               <td className="border-t border-line" />
             </tr>
           </tfoot>
@@ -295,13 +306,13 @@ function Runs({ td: data }: { td: Teardown }) {
               <span className="min-w-0 truncate font-semibold" title={r.agent}>
                 {r.agent}
               </span>
-              <span className="ml-auto font-medium tabular-nums">{formatUsd(r.cost_usd)}</span>
+              <span className="ml-auto whitespace-nowrap font-medium tabular-nums">{formatUsdCost(r.cost_usd)}</span>
             </div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-muted">
               <RunOutcome run={r} />
               <span>{model(r.model)}</span>
-              <span>{plural(r.turns, 'turn')}</span>
-              <span>{span(r.seconds)}</span>
+              <span className="whitespace-nowrap tabular-nums">{plural(r.turns, 'turn')}</span>
+              <span className="whitespace-nowrap tabular-nums">{span(r.seconds)}</span>
             </div>
           </li>
         ))}
@@ -326,7 +337,7 @@ function WhyItWentBack({ loops, number }: { loops: ReworkLoop[]; number: number 
           Why it went back
         </h2>
         <span className={cardAside}>
-          {plural(loops.length, 'loop')}, {span(seconds)}, {formatUsd(cost)}
+          {plural(loops.length, 'loop')}, {span(seconds)}, {formatUsdCost(cost)}
         </span>
       </header>
       <ol aria-label={`Why #${number} went back`} className="m-0 list-none p-0">
@@ -339,8 +350,8 @@ function WhyItWentBack({ loops, number }: { loops: ReworkLoop[]; number: number 
             {l.reason ? <p className="m-0 text-ink-soft [overflow-wrap:anywhere]">{l.reason}</p> : null}
             <div className="flex flex-wrap items-center gap-x-2 text-meta text-muted">
               <span>{formatClock(l.at)}</span>
-              <span>
-                cost {span(l.seconds)}, {formatUsd(l.cost_usd)}
+              <span className="whitespace-nowrap tabular-nums">
+                cost {span(l.seconds)}, {formatUsdCost(l.cost_usd)}
               </span>
               <Link
                 to="/o/$org/f/$factory/items/$ref"
@@ -382,7 +393,7 @@ function HumanTouches({ touches, count }: { touches: TeardownTouch[]; count: num
                 {touch.station ? `${humanize(touch.station)}, ` : ''}
                 {formatClock(touch.at)}
               </span>
-              <span>waited {span(wait_seconds)}</span>
+              <span className="whitespace-nowrap tabular-nums">waited {span(wait_seconds)}</span>
               <Link to="/o/$org/f/$factory/items/$ref" params={params} search={{}} className={linkClass}>
                 In the timeline
               </Link>
@@ -438,6 +449,9 @@ export function TeardownTab({ number }: { number: number }) {
     );
   }
 
+  // With nothing went back and nobody stepped in, Runs takes the full row.
+  const hasSide = Boolean(data && (data.loops.length > 0 || data.touches.length > 0));
+
   return (
     <Skeleton ready={Boolean(data)} placeholder={<TeardownPlaceholder />}>
       {data ? (
@@ -445,12 +459,20 @@ export function TeardownTab({ number }: { number: number }) {
           <p className="m-0 max-w-[72ch] text-secondary text-ink-soft">{lede(data, number)}</p>
           <StatStrip stats={statsOf(data)} label="Totals" />
           <TimeByStation td={data} />
-          <div className="grid min-w-0 items-start gap-4 min-[1180px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+          <div
+            data-testid="runs-row"
+            className={cn(
+              'grid min-w-0 items-start gap-4',
+              hasSide && 'min-[1180px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]',
+            )}
+          >
             <Runs td={data} />
-            <div className="flex min-w-0 flex-col gap-4">
-              {data.loops.length > 0 ? <WhyItWentBack loops={data.loops} number={number} /> : null}
-              {data.touches.length > 0 ? <HumanTouches touches={data.touches} count={data.touch_count} /> : null}
-            </div>
+            {hasSide ? (
+              <div className="flex min-w-0 flex-col gap-4">
+                {data.loops.length > 0 ? <WhyItWentBack loops={data.loops} number={number} /> : null}
+                {data.touches.length > 0 ? <HumanTouches touches={data.touches} count={data.touch_count} /> : null}
+              </div>
+            ) : null}
           </div>
           <p className="m-0 text-meta text-muted">{footer}</p>
         </div>
