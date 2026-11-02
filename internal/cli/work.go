@@ -450,11 +450,13 @@ func str(e gen.Event, key string) string {
 	return s
 }
 
-// showItem prints an item: goal item <item> [--factory F]. Its JSON goes to stdout, its human
-// touches, for the person reading it, to stderr.
+// showItem prints an item: goal item <item> [--factory F] [--teardown]. Its JSON goes to stdout,
+// its human touches, for the person reading it, to stderr. With --teardown it prints the item's
+// teardown as text instead (printTeardown).
 func showItem(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs := newFlags("item")
 	factory := fs.String("factory", "", "the factory of a bare item number")
+	teardown := fs.Bool("teardown", false, "print where the item's lead time, cost and human help went")
 	org := addOrgFlag(fs)
 
 	pos, err := parseInterspersed(fs, args)
@@ -470,6 +472,21 @@ func showItem(ctx context.Context, out *printer, getenv func(string) string, arg
 	ref, err := itemRef(ctx, c, pos[0], *factory)
 	if err != nil {
 		return err
+	}
+
+	if *teardown {
+		td, err := c.GetItemTeardownWithResponse(ctx, c.org, ref)
+		if err != nil {
+			return apiDown(err)
+		}
+
+		if td.JSON200 == nil {
+			return problem(td.HTTPResponse, td.ApplicationproblemJSONDefault)
+		}
+
+		printTeardown(out, td.JSON200)
+
+		return nil
 	}
 
 	res, err := c.GetItemWithResponse(ctx, c.org, ref)
