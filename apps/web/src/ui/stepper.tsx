@@ -60,12 +60,12 @@ export function Stepper({
               />
             </div>
             <div className="flex min-w-0 flex-col gap-1 pr-2">
-              <span className="text-secondary font-medium text-ink">
+              <span className="text-secondary font-medium break-words text-ink">
                 {step.name}
                 <span className="sr-only">, {state}</span>
               </span>
               {step.detail ? (
-                <span className={cn('text-meta text-muted', waits && 'text-you-ink')}>{step.detail}</span>
+                <span className={cn('text-meta break-words text-muted', waits && 'text-you-ink')}>{step.detail}</span>
               ) : null}
             </div>
           </li>

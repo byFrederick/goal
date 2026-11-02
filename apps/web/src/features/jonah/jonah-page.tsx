@@ -62,18 +62,18 @@ function topBarActions(params: { org: string; factory: string }) {
     <Button key="settings" asChild variant="secondary">
       <Link to="/o/$org/f/$factory/settings" params={params}>
         <Settings aria-hidden="true" />
-        Settings
+        <span className="sr-only md:not-sr-only">Settings</span>
       </Link>
     </Button>
   );
   const look = (
     <Button key="look" variant="primary" disabled aria-describedby="look-meta">
       <Play aria-hidden="true" />
-      Look for improvements now
+      <span className="sr-only md:not-sr-only">Look for improvements now</span>
     </Button>
   );
   const meta = (
-    <span key="look-meta" id="look-meta" className="text-meta text-muted">
+    <span key="look-meta" id="look-meta" className="text-meta text-muted max-md:sr-only">
       Reviews start when Jonah's review loop ships
     </span>
   );
@@ -166,8 +166,8 @@ function NoticedSection({ observations }: { observations: JonahOverview['observa
             className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-line py-3 first:border-t-0"
           >
             <span className="min-w-0">
-              <span className="block font-control text-ink">{observation.summary}</span>
-              <span className="block text-secondary text-muted">{observation.detail}</span>
+              <span className="block font-control break-words text-ink">{observation.summary}</span>
+              <span className="block text-secondary break-words text-muted">{observation.detail}</span>
             </span>
             <Chip tone={observation.state === 'proposed' ? 'you' : 'plain'}>
               {observationChip(observation.state, observation.count, observation.propose_after)}
@@ -208,7 +208,7 @@ export function JonahOverviewPage() {
     <div className="@container flex min-w-0 flex-col gap-5">
       <TopBarSlot crumb="Jonah" actions={actions} />
       <JonahHeader tab="overview" counts={{ proposals: data.waiting }} />
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         {empty ? (
           <EmptyState title="Jonah has nothing to review yet">
             Jonah reads the runs that were sent back. When a pattern repeats, its proposal and what it noticed appear

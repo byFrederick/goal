@@ -141,9 +141,9 @@ function SuggestionsBlock() {
       <h3 id="suggestions-heading" className="m-0 text-meta font-semibold text-muted">
         Or start from a suggestion
       </h3>
-      <ul className="m-0 grid list-none gap-2 p-0 md:grid-cols-2">
+      <ul className="m-0 grid list-none grid-cols-1 gap-2 p-0 md:grid-cols-2">
         {shown.map((suggestion) => (
-          <li key={suggestion.id}>
+          <li key={suggestion.id} className="min-w-0">
             <SuggestionRow
               suggestion={suggestion}
               onUse={() => navigate({ href: suggestionHref(params.org, params.factory, suggestion) })}
@@ -160,7 +160,7 @@ function SuggestionRow({ suggestion, onUse }: { suggestion: Suggestion; onUse: (
   return (
     <div className="flex min-h-10 items-center gap-3 rounded-cell border border-line px-3 py-2">
       <Chip>{suggestion.station}</Chip>
-      <span className="min-w-0 flex-1 text-secondary text-ink">{suggestion.title}</span>
+      <span className="min-w-0 flex-1 text-secondary break-words text-ink">{suggestion.title}</span>
       <Button size="sm" disabled={!choosable} onClick={onUse}>
         Use
       </Button>
@@ -223,7 +223,7 @@ function GithubEvents({ event, onChange }: { event: string; onChange: (event: st
       {githubEventGroups.map((group) => (
         <fieldset key={group.title} className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
           <legend className="mb-2 p-0 text-meta font-semibold text-muted">{group.title}</legend>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {group.events.map((ev) => (
               <EventOption
                 key={ev.label}
