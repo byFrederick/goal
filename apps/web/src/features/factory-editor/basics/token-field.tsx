@@ -96,7 +96,7 @@ export function TokenField({
                 type="button"
                 aria-label={`Remove ${noun} ${value}`}
                 onClick={() => onRemove(value)}
-                className="inline-flex size-6 items-center justify-center rounded-chip text-muted transition-colors duration-(--duration-quick) hover:bg-shell hover:text-ink"
+                className="inline-flex size-11 md:size-6 items-center justify-center rounded-chip text-muted transition-colors duration-(--duration-quick) hover:bg-shell hover:text-ink"
               >
                 <X size={14} strokeWidth={1.5} aria-hidden="true" />
               </button>

@@ -194,3 +194,13 @@ describe('the merge step with a problem', () => {
     expect(mergeSwitch(/merge step/i).getAttribute('aria-describedby')).toContain('problems-7');
   });
 });
+
+describe('phone tap targets of the check chips', () => {
+  it('makes Remove check 44 px below md and 24 px from md', async () => {
+    renderRules({ ...build, checks: ['lint passes'] });
+    const button = await screen.findByRole('button', { name: 'Remove check lint passes from Build' });
+    expect(button.classList.contains('size-11')).toBe(true);
+    expect(button.classList.contains('md:size-6')).toBe(true);
+    expect(button.classList.contains('size-6')).toBe(false);
+  });
+});

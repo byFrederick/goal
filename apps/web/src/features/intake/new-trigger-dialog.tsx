@@ -232,7 +232,7 @@ function SourceButton({
         if (source.available) onPick();
       }}
       className={cn(
-        'flex h-10 min-w-0 flex-1 items-center gap-3 rounded-control px-2 text-left text-body font-medium text-ink hover:bg-hover',
+        'flex min-h-11 min-w-0 md:h-10 flex-1 items-center gap-3 rounded-control px-2 text-left text-body font-medium text-ink hover:bg-hover',
         'aria-pressed:bg-hover',
         !source.available && 'text-muted',
       )}
@@ -318,7 +318,7 @@ function EventOption({
   return (
     <div
       className={cn(
-        'flex min-h-10 items-center gap-3 rounded-cell border border-line px-3 text-secondary text-ink',
+        'flex min-h-11 items-center gap-3 rounded-cell md:min-h-10 border border-line px-3 text-secondary text-ink',
         checked && 'border-ink bg-card text-ink',
         disabled && 'text-muted',
       )}

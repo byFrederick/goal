@@ -22,6 +22,7 @@ import { attentionQuery, factoriesQuery } from '../../api/queries';
 import type { OrgRunList, OrgSummary } from '../../api/types';
 import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { TooltipProvider } from '../../ui/tooltip';
+import { touchTarget } from '../../ui/touch-target';
 import { RunsPage } from './runs-page';
 import { runsSearch } from './search';
 
@@ -371,5 +372,20 @@ describe('the controls that are not built yet', () => {
       fireEvent.click(control);
     }
     expect(router.state.location.href).toBe(before);
+  });
+});
+
+describe('phone tap targets on the failed row', () => {
+  it('gives Open transcript and Send to Jonah the touchTarget classes', async () => {
+    renderRuns();
+    const table = await screen.findByRole('table');
+    const failed = within(table)
+      .getByText(/Check the budget before each run$/)
+      .closest('tr') as HTMLElement;
+    const detail = failed.nextElementSibling as HTMLElement;
+    for (const name of ['Open transcript', 'Send to Jonah']) {
+      const control = within(detail).getByRole('button', { name });
+      for (const cls of touchTarget.split(' ')) expect(control.classList.contains(cls)).toBe(true);
+    }
   });
 });

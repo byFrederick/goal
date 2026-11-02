@@ -16,6 +16,7 @@ import {
 import type { AgentStats, Factory, OrgSummary } from '../../api/types';
 import { renderFactoryPage, type Seed } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
+import { touchTarget } from '../../ui/touch-target';
 import { DraftSession } from '../factory-editor/draft/session';
 import { AgentPage } from './agent-page';
 import type { AgentView } from './views';
@@ -531,5 +532,14 @@ describe('Bake off this agent', () => {
     fireEvent.click(button());
 
     expect(await screen.findByText('goald is not answering. Nothing started; try again once it is.')).toBeTruthy();
+  });
+});
+
+describe('phone tap targets on the agent page', () => {
+  it('gives each rejection-reason button the touchTarget classes', async () => {
+    await renderPage('overview');
+    const reasons = screen.getByRole('region', { name: 'Why review sent work back' });
+    const button = within(reasons).getByRole('button', { name: /No test for a new empty or error state/ });
+    for (const cls of touchTarget.split(' ')) expect(button.classList.contains(cls)).toBe(true);
   });
 });

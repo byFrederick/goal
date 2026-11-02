@@ -28,6 +28,7 @@ import { NotAvailable } from '../../ui/not-available';
 import { Skeleton } from '../../ui/skeleton';
 import { Spinner } from '../../ui/spinner';
 import { StatStrip } from '../../ui/stat-strip';
+import { touchTarget } from '../../ui/touch-target';
 import { WorkingLine } from '../../ui/working-line';
 import { type RunsRange, type RunsSearch, rangeWord, runsWindow } from './search';
 
@@ -490,12 +491,12 @@ export function RunsPage() {
                               {run.error ? <span className="text-rework-ink">{run.error}</span> : null}
                               <span className="ml-auto flex gap-3">
                                 <NotAvailable label="Open transcript">
-                                  <button type="button" className="text-run-ink font-control">
+                                  <button type="button" className={cn(touchTarget, 'text-run-ink font-control')}>
                                     Open transcript
                                   </button>
                                 </NotAvailable>
                                 <NotAvailable label="Send to Jonah">
-                                  <button type="button" className="text-run-ink font-control">
+                                  <button type="button" className={cn(touchTarget, 'text-run-ink font-control')}>
                                     Send to Jonah
                                   </button>
                                 </NotAvailable>

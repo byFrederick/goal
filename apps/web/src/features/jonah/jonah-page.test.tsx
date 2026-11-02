@@ -18,6 +18,7 @@ import type {
 import { TopBar, TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { renderFactoryPage, type Seed } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
+import { touchTarget } from '../../ui/touch-target';
 import { JonahOverviewPage, JonahProposalsPage } from './jonah-page';
 
 vi.mock('../../api/client', async (original) => ({
@@ -419,5 +420,18 @@ describe('the Proposals tab', () => {
     });
 
     expect(await screen.findByText('No proposals in this state')).toBeTruthy();
+  });
+});
+
+describe('phone tap targets on the Jonah policy', () => {
+  it('gives both Not available yet buttons the touchTarget classes', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    vi.mocked(listProposals).mockResolvedValue(listOf([proposal8, proposal7]));
+    renderOverview();
+    const policy = await screen.findByRole('region', { name: 'How Jonah works here' });
+    const buttons = within(policy).getAllByRole('button', { name: 'Not available yet' });
+    expect(buttons).toHaveLength(2);
+    for (const button of buttons)
+      for (const cls of touchTarget.split(' ')) expect(button.classList.contains(cls)).toBe(true);
   });
 });

@@ -18,11 +18,13 @@ import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
+import { cn } from '../../ui/cn';
 import { Count } from '../../ui/count';
 import { EmptyState } from '../../ui/empty-state';
 import { NotAvailable } from '../../ui/not-available';
 import { SegmentedControl, type SegmentedOption } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
+import { touchTarget } from '../../ui/touch-target';
 import { modelText, observationChip, proposalStateLabels, proposeAfterText, reviewersText } from './jonah-format';
 import { JonahHeader } from './jonah-header';
 import { proposalStates } from './jonah-search';
@@ -159,7 +161,7 @@ function PolicyCard({ overview }: { overview: JonahOverview }) {
         <PolicyRow label="Reads">Judged runs, sent-back reasons and eval results</PolicyRow>
         <PolicyRow label="Judges">
           <NotAvailable label="Judges">
-            <button type="button" className="text-left text-muted">
+            <button type="button" className={cn(touchTarget, 'text-left text-muted')}>
               Not available yet
             </button>
           </NotAvailable>
@@ -167,7 +169,7 @@ function PolicyCard({ overview }: { overview: JonahOverview }) {
         <PolicyRow label="Proposes after">{proposeAfterText(policy)}</PolicyRow>
         <PolicyRow label="Tests with">
           <NotAvailable label="Tests with">
-            <button type="button" className="text-left text-muted">
+            <button type="button" className={cn(touchTarget, 'text-left text-muted')}>
               Not available yet
             </button>
           </NotAvailable>
