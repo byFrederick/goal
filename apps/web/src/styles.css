@@ -33,6 +33,12 @@
   --color-ink-soft: #4a4a47;
   --color-muted: #6b6b67;
 
+  /* Theme swatches draw each theme whatever the current one is, so no dark block overrides them. */
+  --color-swatch-light: #ffffff;
+  --color-swatch-light-panel: #f8f8f7;
+  --color-swatch-dark: #0f0f0f;
+  --color-swatch-dark-panel: #141414;
+
   /* The primary button: ink fill, its text on top. */
   --color-action: #171717;
   --color-action-ink: #ffffff;
