@@ -12,7 +12,7 @@ The sidebar sits on the left of every organization page, from 768 px wide up.
 - **Organization menu.** Choose the organization's name at the top. The menu switches organizations, creates one (platform admins, or everyone when sign-in is off), and opens the organization's pages: Members and roles, Spend and billing, Models and policies, API keys (where you may read them) and Organization settings.
 - **Search.** Choose the search icon, or press `⌘K` (`Ctrl K` on Windows and Linux). See [Search](#search).
 - **Collapse.** Choose the collapse icon, or drag the sidebar's right edge narrower than about 160 px, to fold it into the rail. Drag it back wider, or choose the expand icon, to open it again. Double-click the edge to reset its width.
-- **New item.** Choose New item, or press `C`, to open the composer. See [Submit and follow items](./submit-and-follow-items/).
+- **New item.** Choose New item, or press `C`, to open the composer. See [Submit and follow items](../submit-and-follow-items/).
 - **Organization pages.** Home, Needs you (with the number of items waiting on you), Runs, Connections, Credentials and Knowledge. Pages you may not open are not listed.
 - **Factories.** Each factory opens to its pages: Floor, Board, Items, Agents, Intake, Jonah, Definition and Settings. A factory's count shows the items waiting on you. A red dot means a connection or the line needs attention.
 - **Account.** The person at the bottom of the sidebar opens the account menu.
@@ -66,4 +66,4 @@ These are the shortcuts the web app binds. A shortcut never works while you type
 
 `?` opens the list from anywhere, except from inside a text field or another dialog or menu. The list opens at once, without animation. From the account menu, Keyboard shortcuts opens the same list with the usual dialog motion. `Esc` closes it.
 
-For what the terms on these pages mean, read the [concepts](/docs/concepts/). For the screens each page holds, read the [guides](./).
+For what the terms on these pages mean, read the [concepts](/docs/concepts/). For the screens each page holds, read the [guides](../).
