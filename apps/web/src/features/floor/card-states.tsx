@@ -1,10 +1,16 @@
-// The states every Floor card shares (rules: web.md, the four states). Loading is the card's sr-only
-// "Loading" with aria-busy and no placeholder shape; a failure says what failed and offers Retry.
+// The states every Floor card shares (rules: web.md, the four states). Loading is the card's skeleton: a
+// muted block that pulses once, then gives way to the content (MOTION.md, Loading). A failure says what failed
+// and offers Retry.
 import type { ReactNode } from 'react';
 import { Button } from '../../ui/button';
+import { Skeleton } from '../../ui/skeleton';
 
 export function CardLoading() {
-  return <span className="sr-only">Loading</span>;
+  return (
+    <Skeleton ready={false} placeholder={<span className="block h-20 rounded-control bg-hover" />}>
+      {null}
+    </Skeleton>
+  );
 }
 
 export function CardFailed({ what, onRetry }: { what: string; onRetry: () => void }) {
