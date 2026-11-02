@@ -1,22 +1,33 @@
 // The Agent page (build/agent): who the agent is, the tab the URL names (?view=), and how its work went
 // over the last 7 days. The statistics come from agentStatsQuery; the definition's facts (description,
 // model, skills, prompt) come from the version that runs (shared/definition/agent-cards.tsx).
+
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import { useRef } from 'react';
 import { agentStatsQuery } from '../../api/queries';
 import type { AgentStats } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
 import { DraftChangesNote, SkillsCard, ToolPolicyCard, useRunningModel } from '../../shared/definition/agent-cards';
-import { factoryTitle, useFactory, useFactoryParams } from '../../shared/factory';
+import { useFactory, useFactoryParams } from '../../shared/factory';
 import { formatDuration, formatPercent, formatUsd, humanize } from '../../shared/format';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
+import { cn } from '../../ui/cn';
 import { Meter } from '../../ui/hatch';
+import { NotAvailable } from '../../ui/not-available';
 import { StatStrip } from '../../ui/stat-strip';
-import { TabNav, tabNavItem } from '../../ui/tab-nav';
-import { DraftSessionProvider } from '../factory-editor/draft/use-draft';
+import { TabNav, tabNavUnderlineItem } from '../../ui/tab-nav';
+import { Tooltip } from '../../ui/tooltip';
+import {
+  DraftSessionContext,
+  DraftSessionProvider,
+  useDraft,
+  useDraftSession,
+} from '../factory-editor/draft/use-draft';
 import { PromptFull, PromptPreview } from './agent-prompt';
 import { AgentSettings } from './agent-settings';
 import { AskJonahButton } from './ask-jonah-button';
@@ -108,6 +119,39 @@ function BlockedCalls({ stats }: { stats: AgentStats }) {
   return <p className="m-0 text-secondary text-muted">{blockedSentence(stats.denied_tool_calls)}</p>;
 }
 
+/**
+ * "Save changes", the page's primary action: it sends what the page's draft session still holds (the
+ * Reset to default edits) by the session's own flush(). It adds no write path. Resets save as they are
+ * made, so it is mostly off, and its tooltip says why.
+ */
+function SaveChangesButton() {
+  const session = useDraftSession();
+  const factory = useFactory();
+  const status = useDraft((s) => s.status);
+  if (!holds(factory, 'definition:edit')) {
+    return (
+      <NotAvailable>
+        <Button variant="primary">Save changes</Button>
+      </NotAvailable>
+    );
+  }
+  const waiting = status !== 'saved';
+  return (
+    <Tooltip label={waiting ? 'Save the changes waiting in the draft' : 'Nothing is waiting to be saved'}>
+      <Button
+        variant="primary"
+        aria-disabled={!waiting || undefined}
+        aria-busy={status === 'saving' || undefined}
+        onClick={() => {
+          if (waiting) void session.flush();
+        }}
+      >
+        Save changes
+      </Button>
+    </Tooltip>
+  );
+}
+
 export function AgentPage({ agent, view }: { agent: string; view: AgentView }) {
   const factory = useFactory();
   const org = useOrg();
@@ -127,28 +171,16 @@ function AgentPageBody({ agent, view }: { agent: string; view: AgentView }) {
   const { data: stats } = useSuspenseQuery(agentStatsQuery(org.id, factory.id, agent));
   const description = useRunningModel().data?.agents.agents?.find((a) => a.name === agent)?.description;
   const agentParams = { ...params, agent };
+  const byKeyboard = useRef(false);
+  const session = useDraftSession();
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <nav aria-label="Breadcrumb">
-          <ol className="m-0 flex list-none flex-wrap items-center gap-2 p-0 text-secondary text-muted">
-            <li>
-              <Link to="/o/$org/f/$factory" params={params} className="hover:text-ink">
-                {factoryTitle(factory)}
-              </Link>
-            </li>
-            <li aria-hidden="true">›</li>
-            <li>Agents</li>
-            <li aria-hidden="true">›</li>
-            <li aria-current="page" className="font-control text-ink">
-              {agent}
-            </li>
-          </ol>
-        </nav>
-        <div className="flex flex-wrap gap-2">
-          <BakeOffButton agent={agent} />
-          <Button asChild variant="secondary" size="sm">
+      <TopBarSlot
+        crumb={agent}
+        actions={[
+          <BakeOffButton key="bake-off" agent={agent} />,
+          <Button key="prompt" asChild variant="secondary" size="sm">
             <Link
               to="/o/$org/f/$factory/definition/$section"
               params={{ ...params, section: 'agents' }}
@@ -156,9 +188,13 @@ function AgentPageBody({ agent, view }: { agent: string; view: AgentView }) {
             >
               Open prompt file
             </Link>
-          </Button>
-        </div>
-      </div>
+          </Button>,
+          // The bar draws the actions outside the page's provider, so the button gets the session by hand.
+          <DraftSessionContext.Provider key="save" value={session}>
+            <SaveChangesButton />
+          </DraftSessionContext.Provider>,
+        ]}
+      />
 
       <header className="flex flex-wrap items-start gap-4">
         <span
@@ -182,55 +218,71 @@ function AgentPageBody({ agent, view }: { agent: string; view: AgentView }) {
         ) : null}
       </header>
 
-      <TabNav label="Agent views">
-        {agentViews.map((v) => {
-          const current = v === view;
-          return (
-            <Link
-              key={v}
-              to="/o/$org/f/$factory/agents/$agent"
-              params={agentParams}
-              search={{ view: v }}
-              aria-current={current ? 'page' : undefined}
-              className={tabNavItem}
-            >
-              {tabLabels[v]}
-            </Link>
-          );
-        })}
-      </TabNav>
+      <div
+        onKeyDownCapture={() => {
+          byKeyboard.current = true;
+        }}
+        onPointerDownCapture={() => {
+          byKeyboard.current = false;
+        }}
+      >
+        <TabNav label="Agent views" variant="underline">
+          {agentViews.map((v) => {
+            const current = v === view;
+            return (
+              <Link
+                key={v}
+                to="/o/$org/f/$factory/agents/$agent"
+                params={agentParams}
+                search={{ view: v }}
+                aria-current={current ? 'page' : undefined}
+                className={tabNavUnderlineItem}
+              >
+                {tabLabels[v]}
+                {v === 'runs' ? <span className="font-body text-muted">{stats.tasks_finished} this week</span> : null}
+              </Link>
+            );
+          })}
+        </TabNav>
+      </div>
 
       <DraftChangesNote agent={agent} />
 
-      {view === 'overview' ? (
-        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
-          <div className="flex min-w-0 flex-col gap-5">
+      {/* The content fades in when a click or tap changed the tab, and does not move when a key did. */}
+      <div
+        key={view}
+        className={cn('flex min-w-0 flex-col gap-5', !byKeyboard.current && 'motion-safe:animate-fade-in')}
+      >
+        {view === 'overview' ? (
+          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
+            <div className="flex min-w-0 flex-col gap-5">
+              <AgentMeasures stats={stats} />
+              <SendBackReasons stats={stats} />
+              <PromptPreview agent={agent} />
+            </div>
+            <AgentSettings agent={agent} />
+          </div>
+        ) : null}
+
+        {view === 'prompt' ? <PromptFull agent={agent} /> : null}
+
+        {view === 'tools' ? (
+          <div className="grid items-start gap-5 md:grid-cols-2">
+            <SkillsCard agent={agent} />
+            <ToolPolicyCard agent={agent}>
+              <BlockedCalls stats={stats} />
+            </ToolPolicyCard>
+          </div>
+        ) : null}
+
+        {view === 'runs' ? (
+          <div className="flex flex-col gap-5">
             <AgentMeasures stats={stats} />
             <SendBackReasons stats={stats} />
-            <PromptPreview agent={agent} />
+            <p className="m-0 text-secondary text-muted">A list of this agent’s runs is not built yet.</p>
           </div>
-          <AgentSettings agent={agent} />
-        </div>
-      ) : null}
-
-      {view === 'prompt' ? <PromptFull agent={agent} /> : null}
-
-      {view === 'tools' ? (
-        <div className="grid items-start gap-5 md:grid-cols-2">
-          <SkillsCard agent={agent} />
-          <ToolPolicyCard agent={agent}>
-            <BlockedCalls stats={stats} />
-          </ToolPolicyCard>
-        </div>
-      ) : null}
-
-      {view === 'runs' ? (
-        <div className="flex flex-col gap-5">
-          <AgentMeasures stats={stats} />
-          <SendBackReasons stats={stats} />
-          <p className="m-0 text-secondary text-muted">A list of this agent’s runs is not built yet.</p>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   );
 }

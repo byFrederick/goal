@@ -8,6 +8,7 @@ This page lists the changes a person using Goal would notice, newest first, grou
 ## Week of 2026-11-02
 
 - Factory settings has Save changes in the top bar, shows every section open, adds a read-only Badge row, shows the repository with its connection and a Change button, and marks the section in view in the "On this page" list.
+- The agent's page shows the agent's name in the top bar, with Bake off this agent, Open prompt file and Save changes there, and its tabs are an underline row with the tasks finished this week on Runs.
 - New trigger shows its sources as plain icons, keeps its title and step on one line, lists suggestions one per row, and shows a Connect link to Connections for GitHub when the organization has no GitHub connection. The top bar reads Intake > New trigger.
 - Intake and Webhooks show their place in the top bar, Intake uses the same page width as the other pages, and neither scrolls sideways on a phone. The Webhooks empty state no longer repeats New webhook.
 - Factory settings shows the factory's purpose (metadata.purpose). Intake records where each submitted item came from: people in the browser, the CLI or a personal token, or an API key. Its headline counts only items with a known source, so older items submitted before this change drop out of it ([#415](https://github.com/byFrederick/goal/pull/415)).
