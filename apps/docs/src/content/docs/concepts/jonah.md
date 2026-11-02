@@ -25,7 +25,7 @@ Before a version is published, the cases run on the draft. The publish gate publ
 
 ## Bake-offs
 
-A bake-off runs one agent's eval cases on two to four models, and by default one of them is the agent's current model. It compares the models by pass rate, then by cost per item. Applying the result writes the winning model into the draft. `goal bake-off run <agent>` starts one.
+A bake-off runs one agent's eval cases on two to four models, and by default one of them is the agent's current model. It compares the models by pass rate, then by cost per item. Applying the result writes the winning model into the draft. `goal bake-off run <agent>` starts one. The Bake-offs tab lists the factory's bake-offs, newest first; each opens its own page.
 
 ## Reviews and proposals
 

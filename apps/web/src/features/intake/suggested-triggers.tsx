@@ -70,11 +70,7 @@ function SuggestionCard({ suggestion }: { suggestion: Suggestion }) {
   return (
     <article className="flex h-full flex-col gap-2 rounded-card border border-line p-4">
       <div className="flex items-center gap-2 text-muted" aria-hidden="true">
-        {Icon ? (
-          <span className="flex size-6 items-center justify-center rounded-cell bg-panel text-ink-soft">
-            <Icon className="size-3.5" />
-          </span>
-        ) : null}
+        {Icon ? <Icon className="size-3.5" /> : null}
         <ArrowRight className="size-3.5" />
         <Chip>{suggestion.station}</Chip>
       </div>
