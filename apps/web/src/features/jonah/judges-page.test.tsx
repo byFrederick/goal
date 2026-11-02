@@ -139,14 +139,28 @@ describe('the Judges page, its four states', () => {
 
     const table = screen.getByRole('table');
     expect(within(table).getAllByRole('row')).toHaveLength(5);
-    for (const heading of ['Judge', 'Scores', 'Sample', 'Pass at', 'Last 30 days', 'Cost']) {
+    for (const heading of ['Judge', 'Scores', 'Sample', 'Pass at', 'Last 30 days, latest in black', 'Cost']) {
       expect(within(table).getByRole('columnheader', { name: heading })).toBeTruthy();
     }
     expect(within(table).getByRole('link', { name: 'Review reason actionable' })).toBeTruthy();
     expect(within(table).getByText('$3.20')).toBeTruthy();
     expect(within(table).getByText('81%')).toBeTruthy();
-    expect(screen.getByText('$11.60 in the last 30 days')).toBeTruthy();
+    expect(screen.getByText('$11.60').closest('.text-muted')?.textContent).toContain('in the last 30 days');
     expect(screen.getByText('evals/judges/')).toBeTruthy();
+  });
+});
+
+describe('the 30-day bars', () => {
+  it('draws seven square bars per judge, and only the latest is ink', async () => {
+    renderJudges();
+
+    const table = await screen.findByRole('table');
+    const chart = within(table).getByRole('img', { name: /Review reason actionable: pass rate by period/ });
+    const bars = chart.querySelectorAll('rect');
+    expect(bars).toHaveLength(7);
+    expect(chart.querySelectorAll('rect.fill-ink')).toHaveLength(1);
+    expect(bars[6]?.getAttribute('class')).toBe('fill-ink');
+    expect(chart.querySelector('pattern')).toBeNull();
   });
 });
 

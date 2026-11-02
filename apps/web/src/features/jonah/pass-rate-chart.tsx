@@ -20,15 +20,22 @@ const left = 4;
 const stub = 2;
 const msPerDay = 86_400_000;
 
-/** The pass rate of each period, oldest first, or null where nothing was scored. The window ends on `today`'s UTC day. */
-export function periodRates(days: JudgeListEntry['summary']['days'], today: Date): (number | null)[] {
+/**
+ * The pass rate of each of `count` periods (nine by default), oldest first, or null where nothing was scored.
+ * The window ends on `today`'s UTC day. The judges table calls it with seven.
+ */
+export function periodRates(
+  days: JudgeListEntry['summary']['days'],
+  today: Date,
+  count: number = periods,
+): (number | null)[] {
   const end = Math.floor(today.getTime() / msPerDay);
-  const scored = new Array<number>(periods).fill(0);
-  const passed = new Array<number>(periods).fill(0);
+  const scored = new Array<number>(count).fill(0);
+  const passed = new Array<number>(count).fill(0);
   for (const day of days) {
     const age = end - Math.floor(Date.parse(`${day.day}T00:00:00Z`) / msPerDay);
     if (age < 0 || age >= windowDays) continue;
-    const period = Math.floor(((windowDays - 1 - age) * periods) / windowDays);
+    const period = Math.floor(((windowDays - 1 - age) * count) / windowDays);
     scored[period] = (scored[period] ?? 0) + day.scored;
     passed[period] = (passed[period] ?? 0) + day.passed;
   }
