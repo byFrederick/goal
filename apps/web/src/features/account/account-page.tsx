@@ -72,7 +72,7 @@ function AccountContent({ me, org }: { me: Me; org: OrgSummary }) {
     <>
       <TopBarSlot actions={person ? <SaveChanges pending={update.isPending || save.isPending} /> : undefined} />
       <h1 className="m-0 text-page-title tracking-display">Your account</h1>
-      <div className="grid gap-8 md:grid-cols-[200px_minmax(0,1fr)]">
+      <div className="grid gap-8 lg:grid-cols-[200px_minmax(0,1fr)]">
         <SectionNav active={active} />
 
         <div className="flex min-w-0 flex-col gap-4">
@@ -107,7 +107,8 @@ const SectionLink = createLink(function SectionAnchor({
 });
 
 /**
- * The left section nav. The current section sits on one `hover` pill that slides to the new one
+ * The section nav: a horizontal row above the content below 1024 px, the left column from there up.
+ * The current section sits on one `hover` pill that slides to the new one
  * (MOTION.md, Tabs). It is measured from the links, so it is placed without a slide on first paint
  * and on resize; reduced motion removes the slide (styles.css).
  */
@@ -128,7 +129,14 @@ function SectionNav({ active }: { active: string }) {
       if (!animate) el.style.transition = 'none';
       el.style.opacity = '1';
       el.style.height = `${current.offsetHeight}px`;
-      el.style.transform = `translateY(${current.offsetTop}px)`;
+      if (getComputedStyle(nav.current as HTMLElement).flexDirection === 'row') {
+        // Transform only: a 100 px pill stretched to the link's width.
+        el.style.width = '100px';
+        el.style.transform = `translate(${current.offsetLeft}px, ${current.offsetTop}px) scaleX(${current.offsetWidth / 100})`;
+      } else {
+        el.style.width = '100%';
+        el.style.transform = `translate(0px, ${current.offsetTop}px)`;
+      }
       if (!animate) {
         void el.offsetHeight;
         el.style.transition = '';
@@ -142,11 +150,15 @@ function SectionNav({ active }: { active: string }) {
   });
 
   return (
-    <nav ref={nav} aria-label="Account sections" className="relative flex flex-col gap-1 self-start">
+    <nav
+      ref={nav}
+      aria-label="Account sections"
+      className="relative flex min-w-0 flex-row gap-1 self-start overflow-x-auto lg:flex-col lg:overflow-visible"
+    >
       <span
         ref={pill}
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 rounded-control bg-hover opacity-0 transition-[transform,height] duration-(--duration-fast) ease-out motion-reduce:transition-none"
+        className="pointer-events-none absolute left-0 top-0 origin-left rounded-control bg-hover opacity-0 transition-[transform,height] duration-(--duration-fast) ease-out motion-reduce:transition-none"
       />
       {sections.map((s) => (
         <SectionLink
@@ -154,7 +166,7 @@ function SectionNav({ active }: { active: string }) {
           to="/account"
           hash={s.id}
           current={active === s.id}
-          className="press relative flex h-10 items-center rounded-control px-3 text-body text-ink-soft no-underline hover:text-ink aria-[current=true]:font-semibold aria-[current=true]:text-ink"
+          className="press relative flex h-11 shrink-0 items-center whitespace-nowrap lg:h-10 rounded-control px-3 text-body text-ink-soft no-underline hover:text-ink aria-[current=true]:font-semibold aria-[current=true]:text-ink"
         >
           {s.label}
         </SectionLink>

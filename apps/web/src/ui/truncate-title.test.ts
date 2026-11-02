@@ -19,7 +19,6 @@ const allowed: Record<string, { count: number; reason: string }> = {
   'app/sidebar-factories.tsx': { count: 3, reason: shown },
   'app/sidebar-search.tsx': { count: 8, reason: shown },
   'app/sidebar.tsx': { count: 4, reason: shown },
-  'features/board/board-card.tsx': { count: 1, reason: shown },
   'features/board/board-lane.tsx': { count: 2, reason: shown },
   'features/board/board-page.tsx': { count: 1, reason: shown },
   'features/credentials/import-credentials-card.tsx': { count: 1, reason: shown },

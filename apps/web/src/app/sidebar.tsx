@@ -334,7 +334,6 @@ function OrgEntry({
     <>
       {screen.icon ? <screen.icon {...iconProps} className="flex-none" /> : null}
       <span className="min-w-0 flex-1 truncate">{screen.label}</span>
-      {screen.id === 'needs-you' && waiting > 0 ? ' ' : null}
       {screen.id === 'needs-you' && waiting > 0 ? <Count value={waiting} label=" waiting on you" /> : null}
       {screen.id === 'connections' && trouble > 0 ? <TroubleDot count={trouble} /> : null}
     </>

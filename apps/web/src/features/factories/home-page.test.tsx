@@ -326,6 +326,15 @@ describe('Home: the ready state', () => {
     expect(screen.getAllByRole('link', { name: 'New factory' })).toHaveLength(1);
   });
 
+  it("draws the top bar New item as the normal top-bar button, not the sidebar's full-width row", async () => {
+    await renderReady();
+
+    const button = within(screen.getByRole('banner')).getByRole('button', { name: /New item/ });
+    expect(button.className).not.toContain('w-full');
+    expect(button.querySelector('kbd')).toBeNull();
+    expect(button.getAttribute('aria-keyshortcuts')).toBe('C');
+  });
+
   it('keeps the line inside its card: its wrapper has a zero-minimum track and the strip scrolls itself', async () => {
     await renderReady();
 

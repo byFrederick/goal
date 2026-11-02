@@ -68,6 +68,14 @@ const renderMovable = (item: ItemCard, assemblyParts?: PartsSummary) =>
     factory,
   });
 
+describe('BoardCard agent', () => {
+  it('carries the full agent name as a title where it truncates', async () => {
+    renderCard(card({ state: 'waiting_human', agent: 'frontend-engineer' }));
+
+    expect((await screen.findByText('frontend-engineer')).getAttribute('title')).toBe('frontend-engineer');
+  });
+});
+
 describe('BoardCard wait line', () => {
   it('shows one wait line for one needed item, with no path or glob on the card', async () => {
     renderCard(card({ waiting: shared(['sre#3']) }));

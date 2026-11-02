@@ -1,4 +1,4 @@
-// What every flow checks: axe at WCAG 2.2 AA, no horizontal scroll, which chrome the width shows.
+// What every flow checks: axe at WCAG 2.2 AA, no horizontal scroll, nothing clipped past the right edge, which chrome the width shows.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Locator, type Page } from '@playwright/test';
 
@@ -25,6 +25,42 @@ export async function expectNoHorizontalScroll(page: Page) {
     scrollWidth - clientWidth,
     `page overflows the viewport by ${scrollWidth - clientWidth}px (scrollWidth ${scrollWidth}, clientWidth ${clientWidth})`,
   ).toBeLessThanOrEqual(0);
+}
+
+/**
+ * No visible element reaches past the right edge of the window, outside a horizontal scroller. The shell
+ * clips horizontal overflow, so scrollWidth no longer shows content that is cut off. Fails naming each
+ * element and its overflow in px. Skips what is not drawn (hidden, zero-size, sr-only, aria-hidden) and
+ * what sits inside an ancestor that scrolls horizontally (overflow-x auto or scroll).
+ */
+export async function expectNoClippedElements(page: Page) {
+  const clipped = await page.evaluate(() => {
+    const edge = document.documentElement.clientWidth;
+    const label = (el: Element) => {
+      const name = el.getAttribute('aria-label') ?? (el.textContent ?? '').trim().slice(0, 30);
+      return `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''} "${name}"`;
+    };
+    const scrolls = (el: Element | null) => {
+      for (let node = el; node && node !== document.body; node = node.parentElement) {
+        const x = getComputedStyle(node).overflowX;
+        if (x === 'auto' || x === 'scroll') return true;
+      }
+      return false;
+    };
+    const found: string[] = [];
+    for (const el of document.body.querySelectorAll('*')) {
+      const box = el.getBoundingClientRect();
+      if (box.width === 0 || box.height === 0 || box.right <= edge + 0.5) continue;
+      const style = getComputedStyle(el);
+      if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) === 0) continue;
+      if (el.closest('[aria-hidden="true"], [inert], .sr-only')) continue;
+      if (style.position === 'fixed' && box.left >= edge) continue;
+      if (scrolls(el.parentElement) || scrolls(el)) continue;
+      found.push(`${label(el)} ends ${Math.round((box.right - edge) * 10) / 10}px past the right edge`);
+    }
+    return found.slice(0, 10);
+  });
+  expect(clipped, 'elements past the right edge of the window').toEqual([]);
 }
 
 /** The sidebar from 768 px, the drawer below (open): the same landmark, one of them shown. */
