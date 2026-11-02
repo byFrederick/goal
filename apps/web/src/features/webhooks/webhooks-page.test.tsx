@@ -205,11 +205,11 @@ describe('the Webhooks page states', () => {
     expect(await screen.findByRole('heading', { name: 'cf-deploys' })).toBeTruthy();
   });
 
-  it('shows the empty state with New webhook when the factory has no endpoints', async () => {
+  it('shows the empty state with only the top bar New webhook when the factory has no endpoints', async () => {
     renderPage(software, seeds([]));
 
     expect(await screen.findByText('No webhooks yet')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: 'New webhook' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'New webhook' })).toHaveLength(1);
   });
 
   it('keeps New webhook out of the empty state for someone who cannot manage webhooks', async () => {

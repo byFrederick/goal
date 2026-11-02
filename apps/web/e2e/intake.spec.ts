@@ -51,3 +51,15 @@ test('the picker is one pane with Back on a phone', async ({ page }) => {
   await expect(dialog.getByRole('button', { name: 'Schedule' })).toBeVisible();
   await expectNoHorizontalScroll(page);
 });
+
+for (const colorScheme of ['light', 'dark'] as const) {
+  for (const width of [1440, 768, 390]) {
+    test(`no element is wider than the viewport at ${width} px in ${colorScheme}`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme });
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(intake);
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+      await expectNoHorizontalScroll(page);
+    });
+  }
+}
