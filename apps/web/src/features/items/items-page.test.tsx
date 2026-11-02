@@ -650,6 +650,8 @@ describe('phone tap targets on the items page', () => {
     const grouped = await screen.findByRole('button', { name: 'Grouped by assembly' });
     for (const cls of touchLink.split(' ')) expect(grouped.classList.contains(cls)).toBe(true);
     const title = screen.getByRole('link', { name: /^Assembly,/ });
-    for (const cls of touchLink.split(' ')) expect(title.classList.contains(cls)).toBe(true);
+    // The title link keeps a 44 px height on phones without a negative margin, so the row grows to fit it.
+    expect(title.classList.contains('max-md:min-h-11')).toBe(true);
+    expect(title.classList.contains('max-md:-my-3')).toBe(false);
   });
 });

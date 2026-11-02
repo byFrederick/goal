@@ -75,6 +75,30 @@ test.describe('the phone shell at 390 px', () => {
     }
   });
 
+  test('the top-bar action keeps a 16 px gutter on Home and Board', async ({ page }) => {
+    for (const path of ['/o/acme', '/o/acme/f/goal/board']) {
+      await page.goto(path);
+      const bar = page.getByRole('banner');
+      const mark = await bar.getByRole('button', { name: 'Open menu' }).boundingBox();
+      expect(mark?.x ?? 0).toBeCloseTo(16, 0);
+      const last = bar.getByRole('button').last();
+      const box = await last.boundingBox();
+      expect(390 - ((box?.x ?? 0) + (box?.width ?? 0))).toBeCloseTo(16, 0);
+    }
+  });
+
+  test('Home shows New item as a compact 44 px button inside the screen, with no keycap', async ({ page }) => {
+    await page.goto('/o/acme');
+    const bar = page.getByRole('banner');
+    const button = bar.getByRole('button', { name: 'New item' });
+    await expect(button).toBeVisible();
+    await expect(bar.locator('kbd')).toHaveCount(0);
+    const box = await button.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThanOrEqual(43.5);
+    expect(box?.x ?? -1).toBeGreaterThanOrEqual(0);
+    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(390);
+  });
+
   test('nothing scrolls sideways on a factory page', async ({ page }) => {
     await page.goto('/o/acme/f/goal/board');
     await expectNoHorizontalScroll(page);
@@ -89,6 +113,16 @@ test.describe('the phone shell is gone at 768 px', () => {
     await expect(page.getByRole('navigation', { name: 'Tabs' })).toBeHidden();
     await expect(page.getByRole('button', { name: 'Open menu' })).toBeHidden();
     await expect(orgNav(page).filter({ visible: true })).toBeVisible();
+  });
+
+  test('Home keeps the labelled New item button with its C keycap', async ({ page }) => {
+    await page.goto('/o/acme');
+    const button = page
+      .getByRole('button', { name: /New item/ })
+      .filter({ visible: true })
+      .first();
+    await expect(button).toContainText('New item');
+    await expect(button.locator('kbd')).toHaveText('C');
   });
 });
 
