@@ -6,8 +6,8 @@
 // audit log. A rename is refused while it is used (the field says so). Members read it all.
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { Check, Clock, RefreshCw } from 'lucide-react';
-import { type FormEvent, useId, useState } from 'react';
+import { Check, RefreshCw } from 'lucide-react';
+import { type FormEvent, useEffect, useId, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '../../api/client';
 import { deleteConnection, updateConnection } from '../../api/connections';
@@ -49,13 +49,32 @@ export function ConnectionPage() {
   const status = statusLine(connection, kind);
   const testable = manage && (kind?.testable ?? false);
   const testing = tester.isPending;
+  const runTest = () => tester.mutate(connection.name);
 
-  const testButton = testable ? (
-    <Button variant="white" className="h-11 md:h-10" disabled={testing} onClick={() => tester.mutate(connection.name)}>
-      <RefreshCw size={16} strokeWidth={1.5} aria-hidden="true" className={cn(testing && 'motion-safe:animate-spin')} />
-      {testing ? 'Testing…' : 'Test'}
-    </Button>
-  ) : null;
+  // Before any test, the header offers Test; once there is a result, Test again sits inside that result.
+  const testButton =
+    testable && !connection.last_test ? (
+      <Button variant="white" className="h-11 md:h-10" disabled={testing} onClick={runTest}>
+        <RefreshCw
+          size={16}
+          strokeWidth={1.5}
+          aria-hidden="true"
+          className={cn(testing && 'motion-safe:animate-spin')}
+        />
+        {testing ? 'Testing…' : 'Test'}
+      </Button>
+    ) : null;
+
+  // The create answer says it once, as a toast; the id keeps a double run of the effect to one toast.
+  useEffect(() => {
+    if (!created) return;
+    toast.success(`${connection.name} is created`, {
+      id: `created-${connection.name}`,
+      description: kind?.testable
+        ? 'Test it to check what you entered works.'
+        : 'Factories can name it in their Connections now.',
+    });
+  }, [created, connection.name, kind?.testable]);
 
   return (
     <>
@@ -98,36 +117,19 @@ export function ConnectionPage() {
               }
               className="text-sm"
             />
+            {testable && connection.last_test ? (
+              <TestAgain testing={testing} passed={tester.data?.ok} onTest={runTest} />
+            ) : null}
           </p>
         }
         actions={<div className="flex flex-wrap gap-2">{testButton}</div>}
       />
 
-      {created ? (
-        <div role="status">
-          <Callout tone="ok">
-            {connection.name} is created.{' '}
-            {kind?.testable
-              ? 'Test it to check what you entered works.'
-              : 'Factories can name it in their Connections now.'}
-          </Callout>
-        </div>
-      ) : null}
       {connection.status === 'failing' && connection.last_test?.error ? (
         <Callout tone="rework">Its last test failed: {connection.last_test.error}.</Callout>
       ) : null}
       {connection.status === 'missing-secret' ? (
         <Callout tone="rework">A required secret isn’t set: runs that get this connection fail until it is.</Callout>
-      ) : null}
-      {kind?.mint ? (
-        <section className="flex items-start gap-3 rounded-card border border-line bg-card px-4 py-3 text-body leading-normal">
-          <Clock size={18} strokeWidth={1.5} aria-hidden="true" className="mt-0 shrink-0 text-run" />
-          <p className="m-0">
-            <strong className="font-medium">Agents get short-lived credentials per run.</strong> When a run starts, Goal
-            mints credentials from the stored keys that last the run’s timeout plus 15 minutes, and passes only those.
-            The stored keys never reach a run; the IAM policy decides what they may do.
-          </p>
-        </section>
       ) : null}
 
       <div className="grid items-start gap-4 @[960px]:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
@@ -315,6 +317,29 @@ function FieldsCard({
     </form>
   );
   return manage ? form : <ReadOnly>{form}</ReadOnly>;
+}
+
+/** Runs the test again. Its label swaps to Testing…, and a pass swaps the icon to a check (Approve/publish row). */
+function TestAgain({ testing, passed, onTest }: { testing: boolean; passed: boolean | undefined; onTest: () => void }) {
+  const showPass = !testing && passed === true;
+  return (
+    <Button variant="white" className="h-11 md:h-8" disabled={testing} onClick={onTest}>
+      {showPass ? (
+        <Check key="pass" size={16} strokeWidth={1.75} aria-hidden="true" className="animate-fade-in text-ok" />
+      ) : (
+        <RefreshCw
+          key="idle"
+          size={16}
+          strokeWidth={1.5}
+          aria-hidden="true"
+          className={cn(testing && 'motion-safe:animate-spin')}
+        />
+      )}
+      <span key={testing ? 'testing' : 'idle'} className="animate-text-states-swap">
+        {testing ? 'Testing…' : 'Test again'}
+      </span>
+    </Button>
+  );
 }
 
 function UsedByCard({ connection: c }: { connection: Connection }) {

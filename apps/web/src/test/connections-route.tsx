@@ -31,6 +31,7 @@ export function renderConnectionsRoute({
   can = [],
   seed = [],
   search,
+  connection: openConnection,
   components,
 }: {
   page: 'list' | 'new';
@@ -38,6 +39,8 @@ export function renderConnectionsRoute({
   can?: string[];
   seed?: readonly Seed[];
   search?: Record<string, string> | undefined;
+  /** Opens the connection page of this connection instead of the list. */
+  connection?: string;
   /** The pages the routes mount: the list's and the add page's, and the connection page a create opens. */
   components: { list: () => ReactNode; add: () => ReactNode; connection: () => ReactNode };
 }) {
@@ -77,7 +80,11 @@ export function renderConnectionsRoute({
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({
-      initialEntries: [`/o/${org.slug}/connections${page === 'new' ? '/new' : ''}${query}`],
+      initialEntries: [
+        openConnection
+          ? `/o/${org.slug}/connections/${openConnection}${query}`
+          : `/o/${org.slug}/connections${page === 'new' ? '/new' : ''}${query}`,
+      ],
     }),
   });
 

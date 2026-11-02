@@ -143,6 +143,8 @@
   --animate-number-pop-in: number-pop-in var(--duration-emphasis) var(--ease-bounce) both;
   /* A skeleton pulses once while it waits (MOTION.md, Loading). */
   --animate-skeleton-pulse: skeleton-pulse var(--duration-pulse) linear;
+  /* An invalid field shakes once, side to side, in five micro segments (MOTION.md, Invalid form field). */
+  --animate-error-shake: error-state-shake calc(var(--duration-micro) * 5) var(--ease-in-out);
   /* A new row in a list fades in and rises 4px (MOTION.md, A new item appears in a list or column). */
   --animate-row-in: row-in var(--duration-fast) var(--ease-out) both;
   /* The sweep across an agent's working status line (MOTION.md, An agent working). See the thinking utility below. */
@@ -186,6 +188,21 @@
   @keyframes skeleton-pulse {
     50% {
       opacity: 0.5;
+    }
+  }
+
+  @keyframes error-state-shake {
+    20% {
+      transform: translateX(calc(var(--distance-micro) * -1));
+    }
+    40% {
+      transform: translateX(var(--distance-micro));
+    }
+    60% {
+      transform: translateX(calc(var(--distance-micro) * -0.75));
+    }
+    80% {
+      transform: translateX(calc(var(--distance-micro) * 0.75));
     }
   }
 
@@ -576,7 +593,8 @@
   }
 
   .animate-spin,
-  .animate-pulse-dot {
+  .animate-pulse-dot,
+  .animate-error-shake {
     animation-name: none;
   }
 

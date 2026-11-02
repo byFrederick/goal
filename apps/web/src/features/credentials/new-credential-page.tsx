@@ -8,6 +8,7 @@ import { TopBarSlot } from '../../app/top-bar';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
+import { Skeleton } from '../../ui/skeleton';
 import { CreateCredentialCard } from './create-credential-card';
 import { ImportCredentialsCard } from './import-credentials-card';
 
@@ -35,11 +36,17 @@ export function NewCredentialPage() {
       {!manage ? (
         <Callout tone="note">Owners and admins of {org.name} add credentials.</Callout>
       ) : factories.isPending ? (
-        <div aria-busy="true" className="rounded-card border border-line bg-card p-5">
-          <span role="status" className="sr-only">
-            Loading factories
-          </span>
-        </div>
+        <Skeleton
+          ready={false}
+          placeholder={
+            <div className="flex flex-col gap-3 rounded-card border border-line bg-card p-5">
+              <div className="h-12 rounded-control bg-hover" />
+              <div className="h-12 rounded-control bg-hover" />
+            </div>
+          }
+        >
+          <span />
+        </Skeleton>
       ) : factories.isError ? (
         <div
           className="flex max-w-xl flex-col items-start gap-3 rounded-card border border-line bg-card p-5"
