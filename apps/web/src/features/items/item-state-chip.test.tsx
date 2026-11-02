@@ -21,7 +21,7 @@ describe('ItemStateChip', () => {
     );
 
     expect(screen.getByText('In progress')).toBeTruthy();
-    expect(iconClass(container)).toContain('text-run');
+    expect(iconClass(container)).toContain('text-link');
   });
 
   it('shows the clock for an item waiting on you', () => {
@@ -42,7 +42,7 @@ describe('ItemStateChip', () => {
     );
 
     expect(screen.getByText('Ready')).toBeTruthy();
-    expect(iconClass(container)).toContain('text-ok');
+    expect(iconClass(container)).toContain('text-ok-ink');
   });
 
   it('shows no icon for a blocked item', () => {
@@ -72,6 +72,6 @@ describe('ItemStateChip for a waiting item', () => {
 
     expect(screen.getByText('Waiting')).toBeTruthy();
     expect(iconClass(container)).toContain('text-muted');
-    expect(iconClass(container)).not.toContain('text-rework');
+    expect(iconClass(container)).not.toContain('text-rework-ink');
   });
 });

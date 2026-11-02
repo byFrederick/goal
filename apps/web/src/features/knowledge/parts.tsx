@@ -130,7 +130,7 @@ export function SyncNowButton({
       onClick={() => sync.mutate(source)}
     >
       {done && !pending ? (
-        <Check size={16} strokeWidth={1.75} aria-hidden="true" className="animate-success-check text-ok" />
+        <Check size={16} strokeWidth={1.75} aria-hidden="true" className="animate-success-check text-ok-ink" />
       ) : null}
       <span key={pending ? 'asking' : 'idle'} className="animate-text-states-swap">
         {pending ? 'Asking…' : label}

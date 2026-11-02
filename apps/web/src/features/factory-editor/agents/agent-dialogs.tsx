@@ -268,7 +268,7 @@ export function RemoveAgentDialog({
                 <SectionLink
                   section="line"
                   patch={{ station: s.id, agent: undefined, add: undefined }}
-                  className="text-ink underline underline-offset-3 hover:text-run"
+                  className="text-ink underline underline-offset-3 hover:text-link"
                 >
                   {s.name || s.id}
                 </SectionLink>

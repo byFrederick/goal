@@ -66,12 +66,12 @@ export function DraftChangesNote({ agent, className }: { agent: string; classNam
         className,
       )}
     >
-      <Info size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-run" />
+      <Info size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-link" />
       <span>The draft changes this agent. These cards show the version that runs.</span>
       <Link
         to="/o/$org/f/$factory/definition/$section"
         params={{ ...params, section: 'review' }}
-        className="inline-flex min-h-11 items-center text-ink underline underline-offset-3 transition-colors duration-200 hover:text-run md:min-h-6"
+        className="inline-flex min-h-11 items-center text-ink underline underline-offset-3 transition-colors duration-200 hover:text-link md:min-h-6"
       >
         Review the draft
       </Link>
@@ -202,7 +202,7 @@ export function SkillsCard({ agent, className }: { agent: string; className?: st
         to="/o/$org/f/$factory/definition/$section"
         params={{ ...params, section: 'agents' }}
         search={{ agent, add: 'skill' }}
-        className="inline-flex min-h-11 items-center self-start text-body text-ink underline underline-offset-3 transition-colors duration-200 hover:text-run md:min-h-6"
+        className="inline-flex min-h-11 items-center self-start text-body text-ink underline underline-offset-3 transition-colors duration-200 hover:text-link md:min-h-6"
       >
         Add a skill from skills.sh
       </Link>

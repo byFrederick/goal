@@ -94,7 +94,7 @@ export function WizardEditor({
         <Link
           to="/o/$org/f/$factory/definition"
           params={{ org: org.slug, factory: detail.data.name }}
-          className="text-ink underline underline-offset-3 hover:text-run"
+          className="text-ink underline underline-offset-3 hover:text-link"
         >
           Definition
         </Link>

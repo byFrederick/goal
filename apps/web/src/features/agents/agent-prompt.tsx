@@ -113,7 +113,7 @@ function PromptActions({ agent }: { agent: string }) {
         to="/o/$org/f/$factory/definition/$section"
         params={{ ...params, section: 'agents' }}
         search={{ agent }}
-        className="font-control text-body text-run-ink hover:text-run"
+        className="font-control text-body text-run-ink hover:text-link"
       >
         Edit prompt
       </Link>
@@ -140,7 +140,7 @@ export function PromptPreview({ agent }: { agent: string }) {
           to="/o/$org/f/$factory/agents/$agent"
           params={{ ...params, agent }}
           search={{ view: 'prompt' }}
-          className="self-start font-control text-body text-run-ink hover:text-run"
+          className="self-start font-control text-body text-run-ink hover:text-link"
         >
           Show the full prompt
         </Link>

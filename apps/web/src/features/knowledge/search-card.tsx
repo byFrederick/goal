@@ -88,7 +88,7 @@ export function SearchCard({ sources }: { sources: KnowledgeSource[] }) {
 function Hit({ hit, q, source }: { hit: KnowledgeHit; q: string; source: KnowledgeSource | undefined }) {
   const org = useOrg();
   const title = hit.heading && hit.heading !== hit.title ? `${hit.title} › ${hit.heading}` : hit.title;
-  const link = 'font-mono text-secondary text-ink underline-offset-3 hover:text-run hover:underline min-w-0 truncate';
+  const link = 'font-mono text-secondary text-ink underline-offset-3 hover:text-link hover:underline min-w-0 truncate';
   const url = externalUrl(hit.url);
   return (
     <li className="grid min-w-0 grid-cols-[minmax(0,1fr)_120px] gap-x-4 gap-y-1 border-t border-line py-3 first:border-t-0 first:pt-0">

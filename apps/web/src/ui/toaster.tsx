@@ -18,8 +18,8 @@ export function Toaster({ theme }: { theme: NonNullable<ToasterProps['theme']> }
           description: '!text-action-ink/70',
           // The toast's action: the inverse of the toast, so it reads as a button on the ink fill.
           actionButton: '!rounded-control !bg-action-ink !font-sans !text-action hover:!bg-action-ink/90',
-          success: '[&_[data-icon]]:!text-ok',
-          error: '[&_[data-icon]]:!text-rework',
+          success: '[&_[data-icon]]:!text-ok-ink',
+          error: '[&_[data-icon]]:!text-rework-ink',
         },
       }}
     />

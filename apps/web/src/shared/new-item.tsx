@@ -255,7 +255,7 @@ function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle }
               className={`${field} h-11`}
             />
             {missing ? (
-              <p id={`${id}-error`} className="m-0 text-sm text-rework">
+              <p id={`${id}-error`} className="m-0 text-sm text-rework-ink">
                 Give the item a title.
               </p>
             ) : null}
@@ -306,7 +306,7 @@ function FactoryField({ id, picker, missing }: { id: string; picker: Picker; mis
     return (
       <div className="flex flex-col gap-1">
         <p className="m-0 text-sm text-muted">Factory</p>
-        <p role="alert" className="m-0 text-sm text-rework">
+        <p role="alert" className="m-0 text-sm text-rework-ink">
           Could not load your factories.
         </p>
         <Button variant="secondary" className="self-start" onClick={picker.onRetry}>
@@ -348,7 +348,7 @@ function FactoryField({ id, picker, missing }: { id: string; picker: Picker; mis
         }
       />
       {missing ? (
-        <p id={`${id}-factory-error`} className="m-0 text-sm text-rework">
+        <p id={`${id}-factory-error`} className="m-0 text-sm text-rework-ink">
           Choose a factory for the item.
         </p>
       ) : null}
