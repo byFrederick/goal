@@ -26,6 +26,11 @@ test('the account page lists its six sections in order, and keeps the name, them
     'Connected apps',
     'Sessions',
   ]);
+  // The current section is marked on the hover fill, and following a link moves the mark.
+  await expect(nav.getByRole('link', { name: 'Profile' })).toHaveAttribute('aria-current', 'true');
+  await nav.getByRole('link', { name: 'Appearance' }).click();
+  await expect(nav.getByRole('link', { name: 'Appearance' })).toHaveAttribute('aria-current', 'true');
+  await expect(nav.getByRole('link', { name: 'Profile' })).not.toHaveAttribute('aria-current', /.*/);
   await expect(page.getByRole('textbox', { name: 'Name' })).toHaveValue('F. Cruz');
   await expect(page.getByRole('group', { name: 'Theme' }).getByRole('button', { name: 'Dark' })).toBeVisible();
   await expect(page.locator('#personal-tokens')).toBeVisible();
