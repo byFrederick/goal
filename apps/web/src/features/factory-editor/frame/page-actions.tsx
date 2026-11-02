@@ -81,7 +81,15 @@ function WideActions({
   );
 }
 
-function NarrowActions({ section, yaml, viewOnly, canPublish, publishNumber, describedBy }: PageActionsProps) {
+function NarrowActions({
+  section,
+  yaml,
+  viewOnly,
+  canPublish,
+  publishNumber,
+  describedBy,
+  reviewDescribedBy,
+}: PageActionsProps) {
   const params = useFactoryParams();
   return (
     <div className="flex w-full flex-nowrap items-center justify-between gap-2">
@@ -91,7 +99,11 @@ function NarrowActions({ section, yaml, viewOnly, canPublish, publishNumber, des
           <Publish canPublish number={publishNumber} describedBy={describedBy} />
         ) : (
           <Button asChild variant="primary" className="h-11">
-            <Link to="/o/$org/f/$factory/definition/$section" params={{ ...params, section: 'review' }}>
+            <Link
+              to="/o/$org/f/$factory/definition/$section"
+              params={{ ...params, section: 'review' }}
+              aria-describedby={reviewDescribedBy}
+            >
               Review changes
             </Link>
           </Button>
@@ -109,9 +121,13 @@ function NarrowActions({ section, yaml, viewOnly, canPublish, publishNumber, des
                 Versions
               </Link>
             </MenuItem>
-            {viewOnly ? null : (
+            {viewOnly || !canPublish ? null : (
               <MenuItem asChild>
-                <Link to="/o/$org/f/$factory/definition/$section" params={{ ...params, section: 'review' }}>
+                <Link
+                  to="/o/$org/f/$factory/definition/$section"
+                  params={{ ...params, section: 'review' }}
+                  aria-describedby={reviewDescribedBy}
+                >
                   Review changes
                 </Link>
               </MenuItem>

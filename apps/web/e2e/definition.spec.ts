@@ -36,10 +36,7 @@ test('the definition frame is accessible and fits the screen', async ({ page }) 
   await expect(tile(page, /^Basics, goal, \d+ work types?$/)).toHaveAttribute('aria-current', 'location');
   await expect(tile(page, /^Agents, 1 change, 1 problem, \d+ agents? on \d+ models?$/)).toBeAttached();
   await expect(tile(page, /^Review and publish, Fix 1 problem first$/)).toBeAttached();
-  await expect(page.getByRole('group', { name: 'Editor view' }).getByRole('button', { name: 'Form' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  await expect(page.getByRole('radio', { name: 'Form' })).toBeChecked();
   await expect(page.getByRole('textbox', { name: 'Name' })).toHaveValue('goal');
   await expect(page.getByText('6f0c2a7e-3d1b-4c55-9a7e-1f2b3c4d5e60')).toBeVisible();
   await expectAccessible(page);
