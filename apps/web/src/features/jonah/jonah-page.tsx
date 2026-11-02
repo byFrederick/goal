@@ -118,9 +118,9 @@ function topBarActions(params: { org: string; factory: string }) {
   );
   const look = (
     <NotAvailable key="look">
-      <Button variant="secondary" disabled>
+      <Button variant="secondary" disabled aria-label="Look for improvements now" className="max-md:min-w-11">
         <Play aria-hidden="true" />
-        <span className="max-md:sr-only">Look for improvements now</span>
+        <span className="max-md:hidden">Look for improvements now</span>
       </Button>
     </NotAvailable>
   );

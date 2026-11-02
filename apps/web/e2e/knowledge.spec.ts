@@ -199,6 +199,37 @@ test.describe('a source', () => {
     await expect(files.getByRole('listitem').filter({ hasText: 'small.md' })).toContainText('Uploaded');
   });
 
+  test('on a phone no two document rows overlap, and a row keeps its title above its path', async ({
+    page,
+    request,
+  }) => {
+    await createUploadSource(request, 'handbook', 'Handbook');
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.goto('/o/acme/knowledge/handbook');
+    await page
+      .getByRole('region', { name: 'Upload' })
+      .locator('input[type=file]')
+      .setInputFiles(
+        ['one', 'two', 'three'].map((n) => ({
+          name: `${n}.md`,
+          mimeType: 'text/markdown',
+          buffer: Buffer.from(`# ${n}`),
+        })),
+      );
+    const rows = page.getByRole('list', { name: 'Documents of Handbook' }).getByRole('listitem');
+    await expect(rows).toHaveCount(3, { timeout: 10_000 });
+    const boxes = await rows.evaluateAll((els) =>
+      els.map((el) => {
+        const r = el.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom };
+      }),
+    );
+    boxes.sort((a, b) => a.top - b.top);
+    for (let i = 1; i < boxes.length; i++) {
+      expect((boxes[i] as { top: number }).top).toBeGreaterThanOrEqual((boxes[i - 1] as { bottom: number }).bottom);
+    }
+  });
+
   test('a document opens its indexed text; an uploaded one downloads and deletes', async ({ page, request }) => {
     await createUploadSource(request, 'handbook', 'Handbook');
     await page.goto('/o/acme/knowledge/handbook');

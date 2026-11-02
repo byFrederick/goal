@@ -36,6 +36,15 @@ for (const width of [375, 768, 1440]) {
       await expectNoHorizontalScroll(page);
     });
 
+    test('the Today label stays inside its box', async ({ page }) => {
+      await page.goto('/o/acme/spend');
+      await expect(heading(page)).toBeVisible();
+      const today = page.locator('[data-today] b').first();
+      await expect(today).toHaveText('Today');
+      const spills = await today.evaluate((el) => el.scrollWidth > el.clientWidth);
+      expect(spills).toBe(false);
+    });
+
     test('keeps the window in the URL', async ({ page }) => {
       await page.goto('/o/acme/spend');
       await page.getByRole('radio', { name: 'This month' }).check();
