@@ -72,4 +72,10 @@ describe('PageActions on wider screens', () => {
     expect(screen.getByRole('link', { name: 'Versions' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull();
   });
+
+  it('switches to the narrow row below 1280 px, where the full row does not fit beside the crumbs', () => {
+    setNarrow(false);
+    render(<PageActions {...props} />);
+    expect(window.matchMedia).toHaveBeenCalledWith('(max-width: 1279px)');
+  });
 });

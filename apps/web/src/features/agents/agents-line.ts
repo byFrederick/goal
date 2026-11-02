@@ -15,10 +15,10 @@ export function agentNamesOf(model: FactoryModel): string[] {
 
 /** One agent's place at a station: the station's own agent, or the agent a lane routes to. */
 export interface Staffing {
-  /** Unique within the line: the station's id, with the lane when the station routes by lane. */
+  /** Unique within the line: the station's id, with the agent when the station routes by lane. */
   key: string;
-  /** The lane the agent takes work from, when the station routes by lane. */
-  lane?: string;
+  /** The lanes the agent takes work from, in route order, when the station routes by lane. "" is items with no lane. */
+  lanes?: string[];
   agent: ModelAgent;
 }
 
@@ -26,13 +26,23 @@ export interface Staffing {
 export function staffingOf(station: ModelStation, agents: ModelAgent[]): Staffing[] {
   const find = (name: string | undefined) => agents.find((agent) => agent.name === name);
   if (station.route) {
-    return Object.entries(station.route).flatMap(([lane, name]) => {
+    const places = new Map<string, Staffing>();
+    for (const [lane, name] of Object.entries(station.route)) {
       const agent = find(name);
-      return agent ? [{ key: `${station.id}/${lane}`, lane, agent }] : [];
-    });
+      if (!agent) continue;
+      const place = places.get(agent.name);
+      if (place) place.lanes?.push(lane);
+      else places.set(agent.name, { key: `${station.id}/${agent.name}`, lanes: [lane], agent });
+    }
+    return [...places.values()];
   }
   const agent = find(station.agent);
   return agent ? [{ key: station.id, agent }] : [];
+}
+
+/** The label for a place's lanes: "frontend, no lane"; the empty lane reads "no lane", never blank. */
+export function laneLabel(lanes: string[]): string {
+  return lanes.map((lane) => (lane === '' ? 'no lane' : lane)).join(', ');
 }
 
 /** The line's stations, in line order, as the definition declares them. */

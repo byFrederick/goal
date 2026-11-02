@@ -294,7 +294,9 @@ function WorkCard({
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className={cn('flex min-w-0 items-center gap-1.5 text-xs', toneText[doing.tone])} title={doing.text}>
             <StatusIcon status="working" />
-            <span className="truncate">{doing.text}</span>
+            <span className="truncate" title={doing.text}>
+              {doing.text}
+            </span>
           </span>
           <PlanBar plan={item.plan_steps} />
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -394,7 +396,9 @@ function WaitingRow({
         ) : (
           <span className={cn('flex min-w-0 items-center gap-1.5 text-xs', toneText[reason.tone])} title={reason.text}>
             {status ? <StatusIcon status={status} /> : null}
-            <span className="truncate">{reason.text}</span>
+            <span className="truncate" title={reason.text}>
+              {reason.text}
+            </span>
           </span>
         )}
       </div>

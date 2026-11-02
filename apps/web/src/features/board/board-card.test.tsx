@@ -76,6 +76,18 @@ describe('BoardCard agent', () => {
   });
 });
 
+describe('BoardCard title', () => {
+  it('clamps to two lines, breaks a long unbroken token and keeps the full title as a title', async () => {
+    const long = 'Add domain.Teardown and GET /v1/orgs/{org}/items/{item}/domain.TeardownAndDeleteEverything';
+    renderCard(card({ title: long }));
+
+    const link = await screen.findByRole('link', { name: long });
+    expect(link.getAttribute('title')).toBe(long);
+    expect(link.className).toContain('line-clamp-2');
+    expect(link.className).toContain('overflow-wrap:anywhere');
+  });
+});
+
 describe('BoardCard wait line', () => {
   it('shows one wait line for one needed item, with no path or glob on the card', async () => {
     renderCard(card({ waiting: shared(['sre#3']) }));
