@@ -140,3 +140,50 @@ test('fits the top bar at 768 with New item inside the viewport', async ({ page 
   expect(box && box.x >= 0 && box.x + box.width <= width).toBe(true);
   await expectNoHorizontalScroll(page);
 });
+
+// The expedite lane is one band: it starts at the first column's left edge, ends at the last column's right
+// edge, and every column's expedite cell has its top and height. Nothing reaches past the viewport.
+for (const width of [1440, 1280, 1024, 768]) {
+  test(`the expedite band spans every column at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/o/acme/f/goal/board');
+    await expect(page.getByRole('region', { name: 'Stations', exact: true })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+
+    const geometry = await page.evaluate(() => {
+      const stations = document.querySelector<HTMLElement>('section[aria-label="Stations"]');
+      const band = stations?.querySelector<HTMLElement>('[aria-label="Expedite lane"]')?.getBoundingClientRect();
+      const columns = Array.from(stations?.querySelectorAll<HTMLElement>(':scope > div > section') ?? []);
+      return {
+        band: band ? { left: band.left, right: band.right, top: band.top, height: band.height } : null,
+        first: columns[0]?.getBoundingClientRect().left ?? 0,
+        last: columns[columns.length - 1]?.getBoundingClientRect().right ?? 0,
+        cells: columns.map((column) => {
+          const cell = column.querySelector('[data-zone="expedite"]')?.getBoundingClientRect();
+          return cell ? { top: cell.top, height: cell.height } : null;
+        }),
+        overflowing: Array.from(document.querySelectorAll<HTMLElement>('body *'))
+          .filter((el) => !stations?.contains(el) && el.getBoundingClientRect().right > window.innerWidth + 1)
+          .map((el) => el.tagName),
+      };
+    });
+
+    expect(geometry.band).not.toBeNull();
+    expect(geometry.band?.left).toBeCloseTo(geometry.first, 0);
+    expect(geometry.band?.right).toBeCloseTo(geometry.last, 0);
+    for (const cell of geometry.cells) {
+      expect(cell?.top).toBeCloseTo(geometry.band ? geometry.band.top + 0 : 0, 0);
+      expect(cell?.height).toBeCloseTo(geometry.band?.height ?? 0, 0);
+    }
+    expect(geometry.overflowing).toEqual([]);
+  });
+}
+
+test('on a phone the expedite lane shows only its chip and nothing reaches past the edge', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/f/sre/board?station=investigate');
+  const lane = page.getByRole('tabpanel').getByRole('group', { name: 'Expedite lane' });
+  await expect(lane).toContainText('Expedite');
+  await expect(lane).not.toContainText('in use');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});

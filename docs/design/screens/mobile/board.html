@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Software board on a phone</title>
+
 </head>
 <body>
 <x-dc>
@@ -156,7 +157,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 
 </style>
 </helmet>
-<div class="g ph {{theme}}" style="height: 1470px">
+<div class="g ph " style="height: 1470px">
   <header class="tb">
     <a class="hb" href="V2-M-Drawer.dc.html" aria-label="Open menu"><span class="omk" aria-hidden="true"><svg width="19" height="19" viewBox="0 0 24 24"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#EAB308"></circle></svg></span></a>
     <h1 class="ttl"><span class="fb" style="background: #2B5BD7" aria-hidden="true">S</span> Board</h1>
@@ -175,7 +176,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
       <div class="wip" aria-label="6 of 6 in progress, 1 waiting on you"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="y"></i></div>
       <div class="sm m3" style="display: flex; justify-content: space-between"><span>6 engineers by lane</span><span>Busy 94%</span></div>
     </section>
-    <div class="zone"><span style="display: inline-flex; align-items: center; gap: 6px"><span class="chip yel" style="height: 20px"><span class="dot"></span>Expedite</span>1 of 1</span></div>
+    <div class="zone"><span style="display: inline-flex; align-items: center; gap: 6px"><span class="chip yel" style="height: 20px"><span class="dot"></span>Expedite</span></span></div>
       <a class="kc " href="V2-M-Item.dc.html" style="background: var(--yel-t); border-color: transparent"><span class="kr"><span>#150</span><span class="chip" style="height: 20px">fix</span><span class="chip" style="height: 20px">backend</span><span class="age">22 min</span></span><span class="kt">Fix flaky TestLeaseExpiry on main</span><span class="ag"><span class="a" style="background: #2B5BD7">BE</span>backend-engineer<span class="c">$0.70</span></span><span class="xs" style="display: inline-flex; align-items: center; gap: 6px; color: var(--pri-ink)"><span class="dot live" style="color: var(--pri)"></span>Running checks</span></a>
     <div class="zone"><span>In progress</span><span class="m3" style="font-weight: 500">5</span></div>
       <a class="kc you" href="V2-M-Item.dc.html"><span class="kr"><span>#147</span><span class="chip" style="height: 20px">feature</span><span class="chip" style="height: 20px">frontend</span><span class="age">3 h</span></span><span class="kt">Show this week's spend in the sidebar</span><span class="asm"><svg width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"></rect><rect x="8" y="1.5" width="4.5" height="4.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"></rect><rect x="1.5" y="8" width="4.5" height="4.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"></rect><rect x="8" y="8" width="4.5" height="4.5" rx="1" fill="currentColor"></rect></svg><span>Usage and budgets</span><span class="pp" aria-hidden="true"><i class="d"></i><i></i><i></i><i></i></span><span class="of">4 of 4</span></span><span class="ag"><span class="a" style="background: #2B5BD7">FE</span>frontend-engineer<span class="c">$2.38</span></span><span class="chip you" style="align-self: flex-start"><span class="dot"></span>Asked you a question</span></a>
@@ -196,12 +197,6 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
   </nav>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":390,"height":1470}}'>
-class Component extends DCLogic {
-  renderVals() {
-    return { theme: this.props.dark ? 'dark' : '' };
-  }
-}
-</script>
+
 </body>
 </html>
