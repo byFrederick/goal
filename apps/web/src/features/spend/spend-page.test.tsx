@@ -73,6 +73,9 @@ describe('the spend screen, ready', () => {
     expect(slots).toHaveLength(7);
     expect(slots[0]?.getAttribute('data-today')).toBe('true');
     expect(within(slots[0] as HTMLElement).getByText('Today')).toBeTruthy();
+    const todayLabel = within(slots[0] as HTMLElement).getByText('Today');
+    expect(todayLabel.className).toContain('whitespace-nowrap');
+    expect(todayLabel.className).not.toContain('inset-x-0');
     expect(slots[0]?.querySelector('.max-w-12.opacity-45')).not.toBeNull();
     expect(container.querySelectorAll('.max-w-12')).toHaveLength(1);
     expect(screen.getAllByRole('row')).toHaveLength(2);

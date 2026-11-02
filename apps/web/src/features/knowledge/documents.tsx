@@ -14,11 +14,9 @@ import { plural } from '../../shared/format';
 import { externalUrl } from '../../shared/knowledge';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
-import { cn } from '../../ui/cn';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Dialog, DialogContent } from '../../ui/dialog';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../ui/menu';
-import { touchLink } from '../../ui/touch-target';
 import { StatusText } from './parts';
 import { documentStatus, formatBytes, refusalText } from './words';
 
@@ -47,9 +45,9 @@ export function DocumentLine({ source, document: d }: { source: string; document
         params={{ org: org.slug, source }}
         search={{ document: d.id }}
         title={d.title}
-        className={cn(touchLink, 'min-w-0 truncate font-control text-body text-ink hover:text-run-ink')}
+        className="flex min-w-0 items-center font-control text-body text-ink hover:text-run-ink max-md:min-h-11"
       >
-        {d.title}
+        <span className="min-w-0 truncate">{d.title}</span>
       </Link>
       <span translate="no" title={path} className="min-w-0 truncate font-mono text-meta text-muted">
         {path}
