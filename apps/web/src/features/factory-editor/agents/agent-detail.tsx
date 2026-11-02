@@ -67,11 +67,7 @@ export function AgentDetail({ agent, place, openPicker }: AgentDetailProps) {
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-[1_1_260px]">
-          <h3
-            id="agent-detail-name"
-            translate="no"
-            className="m-0 text-[28px] leading-tight font-normal tracking-display break-words"
-          >
+          <h3 id="agent-detail-name" translate="no" className="m-0 text-detail-title tracking-display break-words">
             {agent.name}
           </h3>
           <p className="m-0 mt-1 text-sm text-muted">

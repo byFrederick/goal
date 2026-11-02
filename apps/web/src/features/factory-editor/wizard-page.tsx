@@ -42,7 +42,7 @@ export function WizardPage({ step, search }: { step: WizardStep; search: WizardS
         <StartStep search={search} />
       ) : (
         <main id="main" className="flex flex-col gap-4">
-          <h1 className="m-0 text-[34px] leading-[1.05] font-normal tracking-display md:text-5xl">New factory</h1>
+          <h1 className="m-0 text-page-title tracking-display">New factory</h1>
           <EmptyState title="Only owners and admins start factories">
             {reasons.newFactory(org.name)}{' '}
             <Link

@@ -105,3 +105,138 @@ export function ListPageSkeleton() {
 export function BoardSkeleton() {
   return <PendingSkeleton placeholder={<BoardShape />} />;
 }
+
+function Panel({ className }: { className?: string }) {
+  return <div className={cn('rounded-card border border-line bg-card', className)} />;
+}
+
+function HomeShape() {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-5">
+      <Heading />
+      <div className="flex flex-col gap-3">
+        <Panel className="h-[86px]" />
+        <Panel className="h-[86px]" />
+        <Panel className="h-[86px]" />
+      </div>
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <Panel className="h-72" />
+        <Panel className="h-72" />
+      </div>
+    </div>
+  );
+}
+
+/** The pending component of Home: the factory rows, then Needs you first beside Spend this week. */
+export function HomeSkeleton() {
+  return <PendingSkeleton placeholder={<HomeShape />} />;
+}
+
+function AgentsShape() {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-5">
+      <Heading />
+      <Panel className="h-16" />
+      <div className="flex min-w-0 gap-4 overflow-hidden">
+        <div className="flex w-64 flex-none flex-col gap-3">
+          <div className={cn(block, 'h-5 w-24')} />
+          <div className={cn(block, 'h-10 w-16')} />
+          <Panel className="h-28" />
+        </div>
+        <div className="flex w-64 flex-none flex-col gap-3">
+          <div className={cn(block, 'h-5 w-24')} />
+          <div className={cn(block, 'h-10 w-16')} />
+          <Panel className="h-44" />
+        </div>
+        <div className="flex w-64 flex-none flex-col gap-3">
+          <div className={cn(block, 'h-5 w-24')} />
+          <div className={cn(block, 'h-10 w-16')} />
+          <Panel className="h-28" />
+          <Panel className="h-28" />
+        </div>
+        <div className="flex w-64 flex-none flex-col gap-3">
+          <div className={cn(block, 'h-5 w-24')} />
+          <div className={cn(block, 'h-10 w-16')} />
+          <Panel className="h-44" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The pending component of Agents: the factory defaults strip, then one column of cards per station. */
+export function AgentsSkeleton() {
+  return <PendingSkeleton placeholder={<AgentsShape />} />;
+}
+
+function AgentShape() {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-5">
+      <div className="flex items-start gap-4">
+        <div className="size-10 flex-none rounded-full bg-hover" />
+        <div className="flex-1">
+          <Heading />
+        </div>
+      </div>
+      <div className="flex gap-6 border-b border-line pb-3">
+        <div className={cn(block, 'h-5 w-20')} />
+        <div className={cn(block, 'h-5 w-16')} />
+        <div className={cn(block, 'h-5 w-28')} />
+        <div className={cn(block, 'h-5 w-20')} />
+      </div>
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+        <div className="flex flex-col gap-5">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div className={cn(block, 'h-16')} />
+            <div className={cn(block, 'h-16')} />
+            <div className={cn(block, 'h-16')} />
+            <div className={cn(block, 'h-16')} />
+          </div>
+          <Panel className="h-48" />
+          <Panel className="h-56" />
+        </div>
+        <Panel className="h-96" />
+      </div>
+    </div>
+  );
+}
+
+/** The pending component of an agent: its header and tabs, the stats and sections, the settings panel. */
+export function AgentSkeleton() {
+  return <PendingSkeleton placeholder={<AgentShape />} />;
+}
+
+function ItemsShape() {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-5">
+      <Heading />
+      <div className="flex gap-6 border-b border-line pb-3">
+        <div className={cn(block, 'h-5 w-16')} />
+        <div className={cn(block, 'h-5 w-28')} />
+        <div className={cn(block, 'h-5 w-20')} />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className={cn(block, 'h-9 w-20')} />
+        <div className={cn(block, 'h-9 w-20')} />
+        <div className={cn(block, 'h-9 w-28')} />
+        <div className={cn(block, 'h-9 w-24')} />
+      </div>
+      <div className="flex flex-col rounded-card border border-line bg-card">
+        <div className="h-10 border-b border-line" />
+        <ListRow />
+        <ListRow />
+        <ListRow />
+        <ListRow />
+        <ListRow />
+        <ListRow />
+        <ListRow />
+        <ListRow />
+      </div>
+    </div>
+  );
+}
+
+/** The pending component of Items: the title, the view tabs, the filters, then the table's rows. */
+export function ItemsSkeleton() {
+  return <PendingSkeleton placeholder={<ItemsShape />} />;
+}

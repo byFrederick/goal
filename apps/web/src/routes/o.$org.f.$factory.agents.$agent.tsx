@@ -2,7 +2,8 @@ import { createFileRoute, notFound } from '@tanstack/react-router';
 import { ApiError } from '../api/client';
 import { agentStatsQuery, ensureLoaded, versionModelQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
-import { NotFoundScreen, PendingScreen } from '../app/states';
+import { AgentSkeleton } from '../app/route-skeletons';
+import { NotFoundScreen } from '../app/states';
 import { AgentScreen } from '../features/agents/agent-screen';
 import { type AgentSearch, agentViewOf } from '../features/agents/views';
 
@@ -10,7 +11,7 @@ import { type AgentSearch, agentViewOf } from '../features/agents/views';
 // here; the definition's cards (skills, tool policy) read the version that runs and show their own
 // errors, so they never block the page.
 export const Route = createFileRoute('/o/$org/f/$factory/agents/$agent')({
-  pendingComponent: PendingScreen,
+  pendingComponent: AgentSkeleton,
   // ?view= picks the page's tab (Overview, Prompt, Tools and access, Runs); anything else is Overview.
   validateSearch: (search: Record<string, unknown>): AgentSearch => ({ view: agentViewOf(search.view) }),
   loader: async ({ context: { queryClient, org, factory }, params }) => {

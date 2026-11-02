@@ -2,6 +2,7 @@ import { createFileRoute, notFound, Outlet } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { ensureFound, ensureLoaded, factoriesQuery, meQuery, orgQuery, orgsQuery } from '../api/queries';
 import { AppShell } from '../app/app-shell';
+import { ShellPending } from '../app/shell-pending';
 import { NotFoundScreen } from '../app/states';
 import { findOrg, OrgContext, rememberOrg } from '../shared/org';
 import { OrgStream } from '../shared/stream';
@@ -23,6 +24,7 @@ export const Route = createFileRoute('/o/$org')({
       ensureLoaded(queryClient, orgQuery(org.id)),
       ensureLoaded(queryClient, meQuery).catch(() => undefined),
     ]),
+  pendingComponent: ShellPending,
   component: OrgLayout,
   notFoundComponent: () => (
     <main id="main" className="p-6">

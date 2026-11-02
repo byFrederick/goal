@@ -174,6 +174,14 @@ describe('the Credentials page', () => {
     expect(loading.closest('[aria-busy="true"]')).not.toBeNull();
   });
 
+  it('shows only the title in the page header, without the organization name above it', async () => {
+    state.rows = picture();
+    renderPage();
+
+    const h1 = await screen.findByRole('heading', { level: 1, name: 'Credentials' });
+    expect(h1.parentElement?.firstElementChild).toBe(h1);
+  });
+
   it('shows each kind’s count on its filter, All included, and the counts stay with the whole list', async () => {
     state.rows = [
       row({ name: 'key-a', type: 'api_key' }),
