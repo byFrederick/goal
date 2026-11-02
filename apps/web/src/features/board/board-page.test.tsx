@@ -261,7 +261,9 @@ describe('BoardPage', () => {
     const tabs = await screen.findByRole('tablist', { name: 'Stations' });
     const build = within(tabs).getByRole('tab', { name: /^Build/ });
     expect(build.getAttribute('data-state')).toBe('active');
-    expect(build.classList).toContain('data-[state=active]:bg-ink');
+    expect(build.classList).toContain('data-[state=active]:bg-hover');
+    expect(build.classList).toContain('data-[state=active]:text-ink');
+    expect(build.classList).not.toContain('data-[state=active]:bg-ink');
     expect(build.classList).toContain('min-h-11');
     // The constraint's tab carries an amber dot before its name; the count is the station's load.
     expect(build.querySelector('.bg-amber')).not.toBeNull();

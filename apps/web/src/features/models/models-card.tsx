@@ -82,7 +82,7 @@ export function HarnessCard() {
       title="Harness"
       aside={<span className="text-secondary text-muted">The program that runs the model in a box</span>}
     >
-      <div role="radiogroup" aria-label="Harness" className="grid gap-2 md:grid-cols-2">
+      <div role="radiogroup" aria-label="Harness" className="grid gap-2 xl:grid-cols-2">
         <label className={harnessCard}>
           <input type="radio" name="harness" aria-label="Claude Code" defaultChecked className="mt-1 accent-ink" />
           <HarnessText title="Claude Code" detail="Skills, rules, MCP tools and tool permissions from the definition" />

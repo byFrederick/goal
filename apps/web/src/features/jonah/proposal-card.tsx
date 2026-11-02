@@ -60,14 +60,14 @@ export function ProposalCard({
           <Chip key={agent}>{agent}</Chip>
         ))}
         {paths.map((path) => (
-          <Chip key={path} className="font-mono">
+          <Chip key={path} className="max-w-full font-mono break-all whitespace-normal">
             {path}
           </Chip>
         ))}
         <span className="ml-auto text-meta text-muted">{since(created_at, now)}</span>
       </div>
 
-      <h3 id={headingId} className="m-0 text-heading">
+      <h3 id={headingId} className="m-0 text-heading break-words">
         {title}
       </h3>
 
