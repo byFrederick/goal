@@ -160,6 +160,15 @@ describe('BoardCard as the screen draws it', () => {
     expect(button.className).toMatch(/md:focus-visible:opacity-100/);
   });
 
+  it('keeps the Move button in the status row on a phone and reserves room for it from md', async () => {
+    renderMovable(card({ state: 'queued' }));
+
+    const button = within(await article()).getByRole('button', { name: /move/i });
+    expect(button.className).not.toMatch(/(^|\s)absolute(\s|$)/);
+    expect(button.className).toMatch(/md:absolute/);
+    expect(button.parentElement?.className).toMatch(/md:pr-10/);
+  });
+
   it('shows the assembly line: the part, one pip per part with the merged ones filled', async () => {
     renderMovable(
       card({

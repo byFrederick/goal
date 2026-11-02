@@ -142,19 +142,19 @@ export function BoardCard({
           <CardTitle item={item} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
           {item.assembly ? <AssemblyLine item={item} parts={assemblyParts} /> : null}
           {item.agent ? <AgentLine item={item} /> : null}
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <div className={cn('flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1', onMove && 'md:pr-10')}>
             {stateLine}
             {prLink}
             {touches}
+            {onMove ? (
+              <MoveButton
+                item={item}
+                onMove={onMove}
+                size="lg"
+                className="ml-auto md:absolute md:right-2 md:bottom-2 md:ml-0 md:size-8 md:opacity-0 md:focus-visible:opacity-100 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+              />
+            ) : null}
           </div>
-          {onMove ? (
-            <MoveButton
-              item={item}
-              onMove={onMove}
-              size="lg"
-              className="absolute right-2 bottom-2 md:size-8 md:opacity-0 md:focus-visible:opacity-100 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
-            />
-          ) : null}
         </>
       )}
     </article>
