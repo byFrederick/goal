@@ -147,6 +147,10 @@ ${goalRules.map(([name]) => `    - { name: ${name}, source: ./rules/${name}.md }
       skills: [${goalSkills.join(', ')}]
       connections: [playwright]
       builtins: { read: allowed, edit: allowed, run: { mode: allowed, commands: [pnpm, git] }, web: ${o.draft ? 'ask' : 'off'} }
+    - name: infra-engineer
+      description: Changes Terraform and the deploy scripts.
+      prompt: ./agents/infra-engineer.md
+      skills: [acme-conventions]
     - name: reviewer
       description: Reviews the pull request against the spec.
       prompt: ./agents/reviewer.md
@@ -161,7 +165,7 @@ ${goalRules.map(([name]) => `    - { name: ${name}, source: ./rules/${name}.md }
         name: Build
         kind: agent
         # the spec's lane picks the engineer
-        route: { backend: backend-engineer, frontend: frontend-engineer }
+        route: { backend: backend-engineer, frontend: frontend-engineer, infra: infra-engineer, '': frontend-engineer }
         agents: 2
         wip: 2
         checks: [task check${o.draft ? ', pnpm test' : ''}]
@@ -213,6 +217,10 @@ source of truth for colour, type, spacing and components.
 - Every new state gets a test: loading, empty, error and success.
 - Use tokens, never raw colours. Check both themes.
 - Run task check:changed and attach the output as evidence.
+`,
+    'agents/infra-engineer.md': `# infra-engineer
+
+Change Terraform and the deploy scripts the spec names. Never apply: CI applies from main.
 `,
     'agents/reviewer.md': `# reviewer
 

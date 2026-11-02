@@ -25,6 +25,7 @@ import {
   agentNamesOf,
   agentsOf,
   initialsOf,
+  laneLabel,
   lineSentence,
   nextAgentName,
   type Staffing,
@@ -377,8 +378,8 @@ function StationBody({
       <div className="flex flex-col gap-4">
         {staffed.map((place) => (
           <div key={place.key} className="flex items-center gap-3">
-            <span className="flex w-20 shrink-0 items-center gap-2 text-meta font-control text-ink-soft">
-              {place.lane}
+            <span className="flex w-20 shrink-0 items-center gap-2 text-meta font-control text-ink-soft [overflow-wrap:anywhere]">
+              {laneLabel(place.lanes ?? [])}
               <span aria-hidden="true" className="h-px min-w-2 flex-1 bg-line" />
             </span>
             <div className="flex min-w-0 flex-1 flex-col gap-3">

@@ -7,6 +7,7 @@ This page lists the changes a person using Goal would notice, newest first, grou
 
 ## Week of 2026-11-02
 
+- The Agents page shows each agent once per station, even when a route sends several lanes to it. The card's label lists every lane it takes, and items with no lane read "no lane".
 - On the agent's Overview, Why review sent work back shows each reason in sentence case on one line, with the full text in a tooltip, and a solid red bar. Settings values are regular weight, Skills shows the first seven with a + N more chip, and the stat strip keeps four figures on one line from 768 px up.
 - The Agents page line fits at 1440 px without sideways scrolling. Stations use sentence-case names, the constraint station is marked with a yellow dot, work-in-progress bars use colour only for meaning, lane labels line up with their cards, and primary buttons are near-black.
 - Factory settings has Save changes in the top bar, shows every section open, adds a read-only Badge row, shows the repository with its connection and a Change button, and marks the section in view in the "On this page" list.
