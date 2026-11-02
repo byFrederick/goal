@@ -20,7 +20,7 @@ export function DraftBanner({ next, current, changeCount, problemCount, children
   return (
     <section
       aria-label="Draft"
-      className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-card border border-rule bg-panel py-2 pr-2 pl-4"
+      className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-card border border-line bg-panel px-4 py-3"
     >
       <p className="m-0 text-secondary">
         <span className="font-control text-ink">
