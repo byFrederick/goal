@@ -27,43 +27,58 @@ async function openBasics(page: Page) {
   await expect(title(page)).toHaveValue('Goal');
 }
 
-test('Publish is in the top bar, disabled while a problem stands', async ({ page }) => {
-  await openBasics(page);
-  const publish = page
-    .getByRole('banner')
-    .first()
-    .getByRole('button', { name: /^Publish v\d+$/ });
-  await expect(publish).toBeDisabled();
-  await expect(publish).toHaveAccessibleDescription(/^Fix \d+ problems? before you publish$/);
-  await expect(page.getByRole('main').getByRole('button', { name: /^Publish v\d+$/ })).toHaveCount(0);
-});
-
 test('the definition frame is accessible and fits the screen', async ({ page }) => {
   await openBasics(page);
   await expect(page).toHaveTitle('Basics · Definition · goal · Acme · Goal');
   await expect(page.getByRole('region', { name: 'Draft' })).toContainText('Draft of v9, 3 changes');
   await expect(status(page)).toContainText('Based on v8, the version running now.');
   await expect(page.getByRole('link', { name: '3 changes in 2 sections' })).toBeVisible();
-  await expect(tile(page, /^Basics, No changes$/)).toHaveAttribute('aria-current', 'location');
-  await expect(tile(page, /^Agents, 1 change, 1 problem$/)).toBeAttached();
+  await expect(tile(page, /^Basics, goal, \d+ work types?$/)).toHaveAttribute('aria-current', 'location');
+  await expect(tile(page, /^Agents, 1 change, 1 problem, \d+ agents? on \d+ models?$/)).toBeAttached();
   await expect(tile(page, /^Review and publish, Fix 1 problem first$/)).toBeAttached();
-  await expect(page.getByRole('group', { name: 'Editor view' }).getByRole('button', { name: 'Form' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  await expect(page.getByRole('radio', { name: 'Form' })).toBeChecked();
   await expect(page.getByRole('textbox', { name: 'Name' })).toHaveValue('goal');
   await expect(page.getByText('6f0c2a7e-3d1b-4c55-9a7e-1f2b3c4d5e60')).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
   // Moving between sections focuses the section's heading.
-  await tile(page, /^Line, 2 changes$/).click();
+  await tile(page, /^Line, 2 changes, \d+ stations?/).click();
   await expect(page).toHaveURL(/\/definition\/line$/);
   await expect(page.getByRole('heading', { level: 2, name: 'Line', exact: true })).toBeFocused();
   await expect(page.getByRole('list', { name: 'Stations, in order' })).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
+
+// The pictures for the pull request: attached to the report, not compared; the design exports are the reference.
+for (const colorScheme of ['light', 'dark'] as const) {
+  for (const size of [
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    test(`the definition frame at ${size.width} px, ${colorScheme} theme`, async ({ page }, testInfo) => {
+      await page.emulateMedia({ colorScheme });
+      await page.setViewportSize(size);
+      await openBasics(page);
+      const nav = page.getByRole('navigation', { name: 'Definition sections' });
+      await expect(nav).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      if (size.width < 640) {
+        // One row of actions: Form | YAML, the primary action and More share a top offset.
+        const view = await page.getByRole('group', { name: 'Editor view' }).boundingBox();
+        const more = await page.getByRole('button', { name: 'More actions' }).boundingBox();
+        expect(view && more && Math.abs(view.y + view.height / 2 - (more.y + more.height / 2)) < 4).toBe(true);
+        expect(more?.height).toBeGreaterThanOrEqual(44);
+        await expect(page.getByRole('button', { name: 'More actions' })).toHaveAttribute('aria-haspopup', 'menu');
+      }
+      await testInfo.attach(`definition-frame-${size.width}-${colorScheme}`, {
+        body: await page.screenshot(),
+        contentType: 'image/png',
+      });
+    });
+  }
+}
 
 test('Definition opens the Line from the sidebar or the drawer', async ({ page }) => {
   await page.goto('/o/acme/f/goal');
@@ -93,7 +108,7 @@ test('Basics: changes save on their own, count on the tile and survive a reload'
   await page.getByRole('button', { name: 'Remove work type design' }).click();
 
   await expect(status(page)).toContainText('Autosaved');
-  await expect(tile(page, /^Basics, [2-9] changes$/)).toBeAttached();
+  await expect(tile(page, /^Basics, [2-9] changes, /)).toBeAttached();
   await expect(page.getByRole('link', { name: /^\d+ changes in 3 sections$/ })).toBeVisible();
 
   await page.reload();
@@ -168,9 +183,9 @@ test('discard the draft: the running version shows, and the next change opens a 
 
   await expect(dialog).toBeHidden();
   await expect(status(page)).toContainText('v8 runs now. Your first change opens a draft.');
-  await expect(page.getByText('v8 running', { exact: true })).toBeVisible();
+  await expect(page.getByText('Live: v8', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Discard draft', exact: true })).toHaveCount(0);
-  await expect(tile(page, /^Line, No changes$/)).toBeAttached();
+  await expect(tile(page, /^Line, \d+ stations?/)).toBeAttached();
   // Nothing to publish: Review changes is not the page's primary action.
   await expect(review).toHaveAccessibleDescription('No changes yet');
 
@@ -178,7 +193,7 @@ test('discard the draft: the running version shows, and the next change opens a 
   await expect(status(page)).toContainText('Based on v8, the version running now.');
   await expect(status(page)).toContainText('Autosaved');
   await expect(page.getByRole('region', { name: 'Draft' })).toContainText('Draft of v9');
-  await expect(tile(page, /^Basics, 1 change$/)).toBeAttached();
+  await expect(tile(page, /^Basics, 1 change, /)).toBeAttached();
   await expect(review).not.toHaveAccessibleDescription('No changes yet');
 });
 
@@ -192,7 +207,7 @@ test('a draft discarded elsewhere keeps the changes here for a new draft', async
 
   await title(page).fill('After the discard');
   await expect(status(page)).toContainText('Autosaved');
-  await expect(tile(page, /^Basics, 1 change$/)).toBeAttached();
+  await expect(tile(page, /^Basics, 1 change, /)).toBeAttached();
 });
 
 test('the YAML editor at 375 px: the file tree waits behind Files, and the Outline is left out', async ({ page }) => {
@@ -218,23 +233,99 @@ test('Ask the factory is not built yet: the input is disabled and Ask stays unav
   await expectNoHorizontalScroll(page);
 });
 
-// The pictures for the pull request: the Definition page at the project's width, in both themes. They are
-// attached to the report, not compared; the design exports are the reference.
-for (const [theme, width] of [
-  ['light', 1440],
-  ['dark', 1440],
-  ['light', 390],
-  ['dark', 390],
-] as const) {
-  test(`definition screenshot, ${theme}, ${width}`, async ({ page }, testInfo) => {
-    await page.setViewportSize({ width, height: 900 });
-    await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
-    await page.goto('/o/acme/f/goal/definition/basics');
-    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toHaveCount(0);
-    await testInfo.attach(`definition-${theme}-${width}`, {
-      body: await page.screenshot({ fullPage: true }),
-      contentType: 'image/png',
+// The Agents and Versions sections at 1440 and 390 px, in both themes (the pictures are the
+// review's evidence; the assertions are what the audit of 2026-11-02 found broken).
+for (const width of [1440, 390]) {
+  for (const scheme of ['light', 'dark'] as const) {
+    test(`Agents and Versions at ${width}px in ${scheme}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+      await page.emulateMedia({ colorScheme: scheme });
+
+      await page.goto('/o/acme/f/goal/definition/agents');
+      const list = page.getByRole('navigation', { name: 'Agents' });
+      await expect(list).toBeVisible();
+      const name = list.getByRole('link').first().locator('[translate="no"]');
+      await expect(name).toBeVisible();
+      expect(await name.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+      await expectNoHorizontalScroll(page);
+      await page.screenshot({ path: `test-results/definition-agents-${width}-${scheme}.png`, fullPage: true });
+
+      await page.goto('/o/acme/f/goal/definition/versions');
+      await expect(page.getByText('v8', { exact: true }).first()).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      await page.screenshot({ path: `test-results/definition-versions-${width}-${scheme}.png`, fullPage: true });
     });
-  });
+  }
+}
+
+test('Review and publish with no draft shows Checks and Versions, and no Budget', async ({ page, request }) => {
+  await request.delete(draft, { headers: { 'If-Match': '"42"' } });
+  for (const [width, height] of [
+    [1440, 900],
+    [390, 844],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.goto('/o/acme/f/goal/definition/review');
+      await expect(page.getByRole('heading', { level: 2, name: 'Review and publish' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Checks' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Versions' })).toBeVisible();
+      await expect(page.getByRole('link', { name: /^All (\d+ )?versions$/ })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Budget' })).toHaveCount(0);
+      await expectNoHorizontalScroll(page);
+      await page.screenshot({ path: `test-results/definition-review-${width}-${scheme}.png`, fullPage: true });
+    }
+  }
+});
+
+// The pictures for the pull request: the Line at desktop and phone width, in both themes. They are
+// attached to the report, not compared; docs/design/screens/build/definition-form.jpg is the reference.
+for (const theme of ['light', 'dark'] as const) {
+  for (const [name, size] of [
+    ['1440', { width: 1440, height: 900 }],
+    ['390', { width: 390, height: 844 }],
+  ] as const) {
+    test(`line screenshot at ${name}, ${theme}`, async ({ page }, testInfo) => {
+      await page.setViewportSize(size);
+      await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+      await page.goto('/o/acme/f/goal/definition/line');
+      await expect(page.getByRole('list', { name: 'Stations, in order' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Checks on this line' })).toBeVisible();
+      // The table scrolls in its own box; the page does not scroll sideways.
+      const wide = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+      expect(wide).toBe(true);
+      await testInfo.attach(`line-${name}-${theme}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: 'image/png',
+      });
+    });
+  }
+}
+
+for (const theme of ['light', 'dark'] as const) {
+  for (const [name, size] of [
+    ['1440', { width: 1440, height: 900 }],
+    ['390', { width: 390, height: 844 }],
+  ] as const) {
+    test(`the YAML view at ${name} px in ${theme}: Problems, a one-row ask bar, no overflow`, async ({
+      page,
+    }, testInfo) => {
+      await page.emulateMedia({ colorScheme: theme });
+      await page.setViewportSize(size);
+      await page.goto('/o/acme/f/goal/definition/line?mode=yaml');
+      await expect(page.getByRole('region', { name: /Problems/ })).toBeVisible();
+      const bar = await page
+        .getByRole('textbox', { name: 'Ask the factory to change its definition' })
+        .locator('xpath=..')
+        .boundingBox();
+      expect(bar?.height ?? 0).toBeLessThan(56);
+      await expectAccessible(page);
+      await expectNoHorizontalScroll(page);
+      await testInfo.attach(`yaml-${name}-${theme}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: 'image/png',
+      });
+    });
+  }
 }

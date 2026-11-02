@@ -115,15 +115,24 @@ describe('the Judges page, its four states', () => {
     expect(screen.queryByRole('table')).toBeNull();
   });
 
-  it('is an error when the judges cannot be read, and Try again reads them once more', async () => {
-    vi.mocked(listJudges).mockRejectedValueOnce(
+  it('is the empty state at once when goald has no judges, with New judge not available yet', async () => {
+    vi.mocked(listJudges).mockRejectedValue(
       new ApiError({ title: 'Service Unavailable', status: 503, code: 'judges-unavailable' }),
     );
+    renderJudges(editor, []);
+
+    expect(await screen.findByText('No judges yet')).toBeTruthy();
+    expect(screen.queryByText('Judges could not be loaded')).toBeNull();
+    expect(screen.getByRole('button', { name: 'New judge' }).getAttribute('aria-disabled')).toBe('true');
+    expect(listJudges).toHaveBeenCalledTimes(1);
+  });
+
+  it('is an error when the judges cannot be read, and Try again reads them once more', async () => {
+    vi.mocked(listJudges).mockRejectedValueOnce(new ApiError({ title: 'Bad Gateway', status: 502 }));
     vi.mocked(listJudges).mockResolvedValueOnce(list);
     renderJudges(editor, []);
 
     expect(await screen.findByText('Judges could not be loaded')).toBeTruthy();
-    expect(screen.getByText('Judges are not turned on for this installation yet.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
     expect(await screen.findByRole('table')).toBeTruthy();

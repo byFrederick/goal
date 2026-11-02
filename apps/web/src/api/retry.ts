@@ -1,15 +1,14 @@
+// The retry rule of every query. A 4xx will not fix itself, and neither will a 503 whose code says goald
+// was built without the feature (judges-unavailable, evals-unavailable): the page shows the feature's
+// empty state at once. Any other 5xx or a network blip is tried again, twice.
 import { ApiError } from './client';
 
-/**
- * Whether a failed read is asked again. An answer that will not change is not: a 4xx, a 501 and any
- * `*-unavailable` code (judges, evals, Jonah) show their screen at once. A network blip or a
- * 502/503 may pass, so it is asked up to twice more.
- */
+/** Whether the answer says this goald has no such feature: a 503 with a code ending in "-unavailable". */
+export function isUnavailable(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 503 && (err.code?.endsWith('-unavailable') ?? false);
+}
+
 export function shouldRetry(count: number, err: unknown): boolean {
-  if (count >= 2) return false;
-  if (err instanceof ApiError) {
-    if (err.status < 500 || err.status === 501) return false;
-    if (err.code?.endsWith('-unavailable')) return false;
-  }
-  return true;
+  if (err instanceof ApiError && err.status < 500) return false;
+  return !isUnavailable(err) && count < 2;
 }

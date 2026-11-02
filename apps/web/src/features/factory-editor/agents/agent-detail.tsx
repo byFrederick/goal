@@ -63,7 +63,7 @@ export function AgentDetail({ agent, place, openPicker }: AgentDetailProps) {
   return (
     <section
       aria-labelledby="agent-detail-name"
-      className="flex min-w-0 flex-col gap-[18px] rounded-card border border-line bg-card p-4 md:p-5"
+      className="@container flex min-w-0 flex-col gap-[18px] rounded-card border border-line bg-card p-4 md:p-5"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-[1_1_260px]">

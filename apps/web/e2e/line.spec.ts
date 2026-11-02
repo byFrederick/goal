@@ -25,6 +25,16 @@ async function openLine(page: Page, url = goalLine) {
   await page.goto(url);
   await expect(page.getByRole('heading', { level: 2, name: 'Line', exact: true })).toBeVisible();
   await expect(rows(page).first()).toBeVisible();
+  await openRules(page);
+}
+
+/** Opens every station's rules, which start collapsed under its row. */
+async function openRules(page: Page) {
+  for (const toggle of await stations(page)
+    .getByRole('button', { name: /^Rules of / })
+    .all()) {
+    if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+  }
 }
 
 /** Drags a row by its number onto another row, with the mouse. */
@@ -190,6 +200,7 @@ test('add a station, name it, raise its WIP, add a check and change its kind', a
   await fresh.getByRole('button', { name: 'Raise the WIP limit of Security review' }).click();
   await expect(fresh.getByRole('textbox', { name: 'WIP limit of Security review' })).toHaveValue('2');
 
+  await fresh.getByRole('button', { name: 'Rules of Security review' }).click();
   await fresh.getByRole('button', { name: 'Add check to Security review' }).click();
   const dialog = page.getByRole('dialog', { name: 'Add a check to Security review' });
   await dialog.getByRole('textbox', { name: 'Command' }).fill('pnpm audit');

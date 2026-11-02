@@ -14,6 +14,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 10_000,
+      // A 4xx or a feature goald was built without will not fix itself; a network blip might (api/retry.ts).
       retry: shouldRetry,
     },
   },
