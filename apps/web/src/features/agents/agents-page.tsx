@@ -11,7 +11,7 @@ import { ErrorScreen, PendingScreen } from '../../app/states';
 import { TopBarSlot } from '../../app/top-bar';
 import { type Model, type ModelStation, modelOf } from '../../shared/definition/model';
 import { factoryTitle, useFactory, useFactoryParams } from '../../shared/factory';
-import { formatPercent, formatUsd } from '../../shared/format';
+import { formatPercent, formatUsd, humanize } from '../../shared/format';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
@@ -114,7 +114,7 @@ function Ready({
         ]}
       />
       {canEdit ? <AddAgentDialog open={adding} onOpenChange={setAdding} onAdded={added} /> : null}
-      <div className="flex flex-col gap-6 px-4 pt-4 pb-10 md:px-7 md:pt-6">
+      <div className="flex flex-col gap-5">
         <header className="flex flex-col gap-1">
           <h1 className="m-0 text-page-title">Agents</h1>
           <p className="m-0 text-body text-muted">{sentence}</p>
@@ -195,46 +195,79 @@ function Line({
 }) {
   const stations = stationsOf(model);
   const agents = agentsOf(model);
-  const constraint = model.line.flow?.constraint;
   const reworkRate = model.line.flow?.andon?.rework_rate;
+  const constraints = constraintsOf(stations, statsByAgent, model.line.flow?.constraint);
 
   return (
     <div className="-mx-4 overflow-x-auto px-4 md:-mx-7 md:px-7">
-      <div className="relative md:min-w-max">
-        <ol className="m-0 flex list-none flex-col gap-6 p-0 md:flex-row md:gap-4">
-          {stations.map((station, index) => {
-            const staffed = staffingOf(station, agents);
-            const next = nextAgentName(stations, index);
-            const isConstraint = station.id === constraint;
-            return (
-              <li
-                key={station.id}
-                className={cn(
-                  'flex min-w-0 flex-col gap-3 md:relative',
-                  station.route ? 'md:w-80' : station.kind === 'agent' ? 'md:w-64' : 'md:w-44',
-                )}
-              >
-                <StationHead
-                  station={station}
-                  isConstraint={isConstraint}
-                  first={index === 0}
-                  count={counts.get(station.id)}
-                />
-                <StationBody
-                  station={station}
-                  staffed={staffed}
-                  next={next}
-                  statsByAgent={statsByAgent}
-                  defaultModel={model.agents.default_model}
-                  reworkRate={reworkRate}
-                />
-              </li>
-            );
-          })}
-        </ol>
-      </div>
+      <ol
+        className="m-0 flex list-none flex-col gap-6 p-0 md:grid md:gap-3.5"
+        style={{ gridTemplateColumns: columnsOf(stations), minWidth: minWidthOf(stations) }}
+      >
+        {stations.map((station, index) => {
+          const staffed = staffingOf(station, agents);
+          const next = nextAgentName(stations, index);
+          return (
+            <li key={station.id} className="flex min-w-0 flex-col gap-3 md:relative">
+              <StationHead
+                station={station}
+                isConstraint={constraints.has(station.id)}
+                first={index === 0}
+                count={counts.get(station.id)}
+              />
+              <StationBody
+                station={station}
+                staffed={staffed}
+                next={next}
+                statsByAgent={statsByAgent}
+                defaultModel={model.agents.default_model}
+                reworkRate={reworkRate}
+              />
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
+}
+
+/** Station widths on a wide screen, as the design's grid: narrow cells, flexible agent stations, a wider routed one. */
+const columns = {
+  narrow: { track: '6.5rem', min: 104 },
+  agent: { track: 'minmax(0,1fr)', min: 176 },
+  routed: { track: 'minmax(0,1.7fr)', min: 300 },
+};
+const gapPx = 14;
+
+function columnOf(station: ModelStation) {
+  if (station.route) return columns.routed;
+  return station.kind === 'agent' ? columns.agent : columns.narrow;
+}
+
+function columnsOf(stations: ModelStation[]) {
+  return stations.map((station) => columnOf(station).track).join(' ');
+}
+
+/** Below this width the line scrolls in its own box instead of squeezing its cards. */
+function minWidthOf(stations: ModelStation[]) {
+  const total = stations.reduce((sum, station) => sum + columnOf(station).min, 0);
+  return `${total + gapPx * Math.max(0, stations.length - 1)}px`;
+}
+
+/** The constraint comes from the statistics; the configured one stands in when none reports it. */
+function constraintsOf(
+  stations: ModelStation[],
+  statsByAgent: Map<string, AgentStats | undefined>,
+  configured: string | undefined,
+) {
+  const reported = new Set<string>();
+  for (const stats of statsByAgent.values()) {
+    for (const station of stats?.stations ?? []) if (station.constraint) reported.add(station.id);
+  }
+  const known = new Set(stations.map((station) => station.id));
+  const found = new Set([...reported].filter((id) => known.has(id)));
+  if (found.size > 0) return found;
+  return new Set(configured ? [configured] : []);
 }
 
 function StationHead({
@@ -262,8 +295,13 @@ function StationHead({
       <div className="flex items-center gap-2 text-secondary font-control text-ink">
         {first ? null : <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-muted" />}
         <h2 className="m-0 flex items-center gap-2 text-secondary font-control">
-          {station.name ?? station.id}
-          {isConstraint ? <Chip tone="constraint">Constraint</Chip> : null}
+          {station.name ?? humanize(station.id)}
+          {isConstraint ? (
+            <span className="inline-flex animate-constraint-in items-center gap-1.5 text-meta text-amber-ink">
+              <span aria-hidden="true" className="size-1.5 rounded-full bg-amber" />
+              Constraint
+            </span>
+          ) : null}
           {done ? <span aria-hidden="true" className="size-1.5 rounded-full bg-ok" /> : null}
         </h2>
         <span aria-hidden="true" className="h-px min-w-4 flex-1 bg-line" />
@@ -272,7 +310,7 @@ function StationHead({
         {done || count === undefined ? '' : <NumberRoll value={count} />}
         {done || count === undefined ? null : <span className="sr-only"> items here now</span>}
       </p>
-      <span aria-hidden="true" className={cn('h-1 overflow-hidden rounded-full bg-hover', done && 'bg-ok')}>
+      <span aria-hidden="true" className={cn('h-1 overflow-hidden rounded-full bg-rule', done && 'bg-ok')}>
         <span
           className={cn(
             'block h-full origin-left bg-ink transition-transform duration-(--duration-fast) ease-(--ease-out)',
@@ -333,9 +371,12 @@ function StationBody({
     return (
       <div className="flex flex-col gap-4">
         {staffed.map((place) => (
-          <div key={place.key} className="flex items-start gap-3">
-            <span className="w-20 shrink-0 pt-4 text-meta font-control text-ink-soft">{place.lane}</span>
-            <div className="flex min-w-0 flex-1 flex-col gap-3">
+          <div key={place.key} className="grid grid-cols-[5.25rem_minmax(0,1fr)] items-center gap-3">
+            <span className="flex items-center gap-2 text-meta font-control text-ink-soft">
+              {place.lane}
+              <span aria-hidden="true" className="h-px min-w-2 flex-1 bg-line" />
+            </span>
+            <div className="flex min-w-0 flex-col gap-3">
               <AgentCard
                 place={place}
                 stats={statsByAgent.get(place.agent.name)}
@@ -381,7 +422,7 @@ function AgentCard({
     <Link
       to="/o/$org/f/$factory/agents/$agent"
       params={{ ...params, agent: agent.name }}
-      className="flex flex-col gap-2 rounded-card border border-line bg-card p-4 text-ink no-underline hover:border-rule hover:shadow-raised"
+      className="flex flex-col gap-2 rounded-card border border-line bg-card p-4 text-ink no-underline transition-colors duration-(--duration-quick) hover:border-rule hover:shadow-raised"
     >
       <span className="flex items-center gap-2">
         <span

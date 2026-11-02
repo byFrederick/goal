@@ -7,6 +7,7 @@ This page lists the changes a person using Goal would notice, newest first, grou
 
 ## Week of 2026-11-02
 
+- The Agents page line fits at 1440 px without sideways scrolling. Stations use sentence-case names, the constraint station is marked with a yellow dot, work-in-progress bars use colour only for meaning, lane labels line up with their cards, and primary buttons are near-black.
 - The Agents page shows how many items are at each station now, with a bar against its WIP limit. The agent's page has Reset to default beside the prompt and beside an agent's own model.
 - The agent prompt editor has Reset to default, which restores the running version's prompt file into the draft, and New trigger offers suggested triggers under Or start from a suggestion ([#352](https://github.com/byFrederick/goal/pull/352)).
 - Publish shows a check and the version that is running once a version publishes. A station you drag settles into its new row, and new triggers and agents fade into their lists. Pages that are loading show the shape of their content ([#352](https://github.com/byFrederick/goal/pull/352)).

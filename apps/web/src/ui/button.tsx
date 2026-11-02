@@ -6,8 +6,8 @@ import { cn } from './cn';
 // comes from the global :focus-visible rule (2 px cobalt, 2 px offset). On a coarse pointer the hit
 // area grows to 44 px without changing the drawn size.
 const variants = {
-  /** Cobalt: the one primary action on a surface. */
-  primary: 'border-run bg-run text-white hover:bg-run/90',
+  /** Near-black in light, inverted in dark (MASTER.md): the one primary action on a surface. */
+  primary: 'border-action bg-action text-action-ink hover:bg-action/90',
   /** White with a rule border: the secondary action. */
   secondary: 'border-rule bg-card text-ink hover:bg-panel',
   /** Alias of secondary, kept so callers do not change. */

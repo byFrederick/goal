@@ -279,16 +279,37 @@ test.describe('Agents page', () => {
   });
 });
 
-// The pictures for the pull request: this screen at the project's width, in both themes. They are
+// The line fits the content area at 1440 with the sidebar open: every station is in view and the
+// line's own box does not scroll. Phones stack the stations.
+test('the agents line fits at 1440 without scrolling sideways', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/o/acme/f/goal/agents');
+  await expect(page.getByRole('heading', { level: 1, name: 'Agents' })).toBeVisible();
+  const done = page.getByRole('heading', { level: 2, name: 'Done' });
+  await expect(done).toBeVisible();
+  await expect(done).toBeInViewport();
+  const line = page.getByRole('list').filter({ has: page.getByRole('heading', { level: 2, name: 'Done' }) });
+  const box = await line.evaluate((el) => {
+    const scroller = el.parentElement as HTMLElement;
+    return { scroll: scroller.scrollWidth, client: scroller.clientWidth };
+  });
+  expect(box.scroll).toBeLessThanOrEqual(box.client);
+  await expectNoHorizontalScroll(page);
+});
+
+// The pictures for the pull request: this screen at 1440 and 390 px, in both themes. They are
 // attached to the report, not compared; the design exports are the reference.
 for (const theme of ['light', 'dark'] as const) {
-  test(`agents screenshot, ${theme}`, async ({ page }, testInfo) => {
-    await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
-    await page.goto('/o/acme/f/goal/agents');
-    await expect(page.getByRole('heading', { level: 1, name: 'Agents' })).toBeVisible();
-    await testInfo.attach(`agents-${theme}`, {
-      body: await page.screenshot({ fullPage: true }),
-      contentType: 'image/png',
+  for (const width of [1440, 390]) {
+    test(`agents screenshot, ${width}, ${theme}`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+      await page.goto('/o/acme/f/goal/agents');
+      await expect(page.getByRole('heading', { level: 1, name: 'Agents' })).toBeVisible();
+      await testInfo.attach(`agents-${width}-${theme}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: 'image/png',
+      });
     });
-  });
+  }
 }
