@@ -227,7 +227,7 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
                   <div className="flex flex-wrap items-center gap-2">
                     {factories.map((f) => (
                       <Chip key={f.factory_id} tone="plain">
-                        <FactoryBadge mark={factoryMark(f, factories)} className="size-4" />
+                        <FactoryBadge mark={factoryMark(f, factories)} />
                         {f.name}
                       </Chip>
                     ))}

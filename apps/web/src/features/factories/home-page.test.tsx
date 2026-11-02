@@ -339,6 +339,14 @@ describe('Home: the ready state', () => {
     expect(pill.className).not.toContain('rounded-chip');
   });
 
+  it('draws every Home factory letter badge at 18px', async () => {
+    const { container } = await renderReady();
+
+    const badges = container.querySelectorAll('span[aria-hidden="true"].bg-run');
+    expect(badges.length).toBeGreaterThan(0);
+    for (const b of badges) expect(b.className).toContain('size-[18px]');
+  });
+
   it('leads Open all from Needs you first to the Needs you page', async () => {
     await renderReady();
 

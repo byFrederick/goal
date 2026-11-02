@@ -3,6 +3,7 @@
 // factory's floor. An approval is decided here: Approve runs the item's approve decision, and Deny opens
 // the item, where a send-back takes its reason. Kinds this page does not know get a Review link. There
 // are no Question rows: questions are not built yet.
+import { FactoryBadge } from '../../app/factory-badge';
 import { Link } from '@tanstack/react-router';
 import { useId } from 'react';
 import type { Factory, Inbox, InboxEntry, ItemCard, OrgSummary } from '../../api/types';
@@ -96,12 +97,7 @@ function AskRow({
 
   return (
     <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-t border-line py-3 @[480px]:grid-cols-[auto_minmax(0,1fr)_auto]">
-      <span
-        aria-hidden="true"
-        className="flex size-6 items-center justify-center rounded-control bg-run text-meta font-semibold text-white"
-      >
-        {mark}
-      </span>
+      <FactoryBadge mark={mark} />
       <div className="min-w-0">
         <span className={cn('block text-meta font-semibold', kind.tone)}>{kind.label}</span>
         <span className="block text-body break-words">{kind.title}</span>
