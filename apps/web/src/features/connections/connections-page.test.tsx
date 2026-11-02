@@ -88,6 +88,14 @@ describe('the Connections list', () => {
     expect(within(group('Model providers')).getAllByRole('link', { name: 'claude' })).not.toHaveLength(0);
   });
 
+  it('gives each connection name a 44 px hit area on phones', async () => {
+    renderList();
+    await screen.findByRole('heading', { level: 2, name: 'Code hosts' });
+    for (const link of within(group('Code hosts')).getAllByRole('link', { name: 'github' })) {
+      expect(link.className).toContain('max-md:py-3');
+    }
+  });
+
   it('hides a group with no connection in it', async () => {
     api.connections = connections.filter((c) => c.kind !== 'mcp-server');
     renderConnectionsRoute({

@@ -26,6 +26,7 @@ import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../ui/menu';
 import { NumberRoll } from '../../ui/number-roll';
 import { SearchField } from '../../ui/search-field';
 import { Skeleton } from '../../ui/skeleton';
+import { touchLink } from '../../ui/touch-target';
 import { StatusDot } from './parts';
 import { ReplaceSecretDialog } from './replace-secret-dialog';
 import { useTestConnection } from './use-test';
@@ -394,7 +395,7 @@ function ConnectionName({
           to="/o/$org/connections/$connection"
           params={{ org, connection: c.name }}
           translate="no"
-          className="truncate font-control text-body text-ink underline-offset-3 hover:underline"
+          className={cn(touchLink, 'truncate font-control text-body text-ink underline-offset-3 hover:underline')}
         >
           {c.name}
         </Link>
