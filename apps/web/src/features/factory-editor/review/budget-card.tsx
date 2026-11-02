@@ -103,7 +103,7 @@ function WeekSpend() {
  * A dollar amount: the text as typed while the field has focus ("3." on the way to "3.5"), the
  * draft's value otherwise; every number typed is an edit, an empty field removes the cap.
  */
-function AmountInput({
+export function AmountInput({
   value,
   onValue,
   onDone,

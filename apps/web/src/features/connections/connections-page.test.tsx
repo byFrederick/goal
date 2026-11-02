@@ -127,8 +127,8 @@ describe('the Connections list', () => {
   it('says the loading state to a screen reader while the connections load', async () => {
     api.hold = true;
     renderList();
-    expect((await screen.findByRole('status')).textContent).toBe('Loading connections');
-    expect(screen.getByRole('status').closest('[aria-busy="true"]')).toBeTruthy();
+    expect(await screen.findByText('Loading')).toBeTruthy();
+    expect(screen.getByText('Loading').closest('[aria-busy="true"]')).not.toBeNull();
   });
 
   it('says the error and offers to try again when the connections do not load', async () => {

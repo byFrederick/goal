@@ -16,7 +16,7 @@ import { useLineEditor } from './line-editor';
 type Release = 'push' | 'drum-buffer-rope';
 
 /** Drops empty objects so an emptied group leaves no `{}` behind in factory.yaml. */
-function prune(flow: Flow): Flow {
+export function prune(flow: Flow): Flow {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(flow)) {
     if (v === undefined) continue;

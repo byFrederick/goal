@@ -147,8 +147,8 @@
   --animate-item-in: item-in var(--duration-fast) var(--ease-out) both;
   /* A skeleton pulses once while it waits (MOTION.md, Loading). */
   --animate-skeleton-pulse: skeleton-pulse var(--duration-pulse) linear;
-  /* Four segments of --duration-micro: an invalid field's short shake (MOTION.md, Invalid form field). */
-  --animate-error-shake: error-shake calc(var(--duration-micro) * 4) var(--ease-out);
+  /* An invalid field shakes once, side to side, in five micro segments (MOTION.md, Invalid form field). */
+  --animate-error-shake: error-state-shake calc(var(--duration-micro) * 5) var(--ease-in-out);
   /* A new row in a list fades in and rises 4px (MOTION.md, A new item appears in a list or column). */
   --animate-row-in: row-in var(--duration-fast) var(--ease-out) both;
   /* The sweep across an agent's working status line (MOTION.md, An agent working). See the thinking utility below. */
@@ -192,6 +192,21 @@
   @keyframes skeleton-pulse {
     50% {
       opacity: 0.5;
+    }
+  }
+
+  @keyframes error-state-shake {
+    20% {
+      transform: translateX(calc(var(--distance-micro) * -1));
+    }
+    40% {
+      transform: translateX(var(--distance-micro));
+    }
+    60% {
+      transform: translateX(calc(var(--distance-micro) * -0.75));
+    }
+    80% {
+      transform: translateX(calc(var(--distance-micro) * 0.75));
     }
   }
 
@@ -609,7 +624,8 @@
   }
 
   .animate-spin,
-  .animate-pulse-dot {
+  .animate-pulse-dot,
+  .animate-error-shake {
     animation-name: none;
   }
 
@@ -655,5 +671,93 @@
 
   [data-sonner-toaster] [data-sonner-toast][data-mounted="false"] {
     --y: translateY(0);
+  }
+}
+
+/* Route change (MOTION.md, Route change): the content region fades in and rises; the shell never moves.
+   The sidebar and the top bar carry their own view-transition names, so they are never cross-faded:
+   their images and groups, and the root snapshot that holds the rest of the page, are held still. */
+.shell-main {
+  view-transition-name: main;
+}
+
+.shell-sidebar {
+  view-transition-name: sidebar;
+}
+
+.shell-topbar {
+  view-transition-name: topbar;
+}
+
+::view-transition-old(root),
+::view-transition-new(root),
+::view-transition-group(sidebar),
+::view-transition-old(sidebar),
+::view-transition-new(sidebar),
+::view-transition-group(topbar),
+::view-transition-old(topbar),
+::view-transition-new(topbar) {
+  animation: none;
+}
+
+::view-transition-group(main) {
+  animation-duration: var(--duration-quick);
+  animation-timing-function: var(--ease-out);
+}
+
+::view-transition-old(main) {
+  animation: view-route-out var(--duration-quick) var(--ease-out) both;
+}
+
+::view-transition-new(main) {
+  animation: view-route-in var(--duration-quick) var(--ease-out) both;
+}
+
+@keyframes view-route-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes view-route-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--distance-micro));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes view-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes view-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Reduced motion (MOTION.md, rule 9): the route change keeps its opacity fade and drops the rise. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(main) {
+    animation-name: view-fade-out;
+  }
+
+  ::view-transition-new(main) {
+    animation-name: view-fade-in;
   }
 }

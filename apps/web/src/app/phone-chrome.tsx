@@ -47,7 +47,7 @@ interface PhoneTopBarProps {
 /** The top bar: the Goal mark (opens the drawer), the page title and the page's actions. */
 export function PhoneTopBar({ title, actions, back, onMenu, drawerOpen, menuRef }: PhoneTopBarProps) {
   return (
-    <header className="sticky top-0 z-20 flex min-h-14 flex-none items-center gap-1 border-b border-rule bg-shell pt-[env(safe-area-inset-top)] px-1 md:hidden">
+    <header className="shell-topbar sticky top-0 z-20 flex min-h-14 flex-none items-center gap-1 border-b border-rule bg-shell pt-[env(safe-area-inset-top)] px-1 md:hidden">
       <button
         ref={menuRef}
         type="button"
