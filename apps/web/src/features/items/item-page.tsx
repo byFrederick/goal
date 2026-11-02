@@ -435,7 +435,7 @@ export function ItemPage() {
                 summary={phone}
                 className="order-7 @[720px]:order-none"
               />
-              {phone ? null : <CostCard item={item} factory={factory} runs={runs?.runs ?? []} />}
+              {phone ? null : <CostCard item={item} factory={factory} runs={runs?.runs ?? []} className="order-7 @[720px]:order-none" />}
               <OverlapsCard item={item} className="order-7 @[720px]:order-none" />
               <RulesCard item={item} factory={factory} trace={trace} className="order-7 @[720px]:order-none" />
               <TouchesCard

@@ -234,15 +234,33 @@ describe('the item layout', () => {
     expect(tabs.find((t) => t.getAttribute('aria-selected') === 'true')?.textContent).toBe('Timeline');
   });
 
-  it('puts the tab row before the side cards and after the question card at phone width', async () => {
-    stubWidth(true);
+  // jsdom has no container queries, so read the base (narrow) order-N class that decides the visual order.
+  function narrowOrder(el: HTMLElement): number {
+    let node: HTMLElement | null = el;
+    while (node) {
+      const m = /(?:^|\s)order-(\d+)(?:\s|$)/.exec(node.className);
+      if (m) return Number(m[1]);
+      node = node.parentElement;
+    }
+    return 0;
+  }
+
+  it.each([
+    ['phone', true],
+    ['tablet', false],
+  ])('puts the tab row before every side card and after the question card at %s width', async (_name, phone) => {
+    stubWidth(phone);
     renderPage(item({ question }));
 
     const tablist = await screen.findByRole('tablist', { name: 'Item views' });
-    const details = screen.getByRole('heading', { name: 'Details' });
-    expect(tablist.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const ask = screen.getByText(question.text);
-    expect(ask.compareDocumentPosition(tablist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const tabs = narrowOrder(tablist);
+    for (const name of ['Details', 'Cost', 'Overlaps', 'Rules']) {
+      const heading = screen.queryByRole('heading', { name });
+      if (heading) expect(narrowOrder(heading), name).toBeGreaterThan(tabs);
+    }
+    expect(screen.getByRole('heading', { name: 'Details' })).toBeTruthy();
+    if (!phone) expect(screen.getByRole('heading', { name: 'Cost' })).toBeTruthy();
+    expect(narrowOrder(screen.getByText(question.text))).toBeLessThan(tabs);
   });
 
   it('opens ?tab=teardown on the Teardown panel without the side cards', async () => {
