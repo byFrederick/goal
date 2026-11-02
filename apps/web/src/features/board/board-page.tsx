@@ -20,7 +20,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Menu, MenuChoice, MenuContent, MenuRadioGroup, MenuTrigger } from '../../ui/menu';
 import { SegmentedControl, type SegmentedOption } from '../../ui/segmented-control';
-import { StationColumn } from './board-column';
+import { ExpediteLabel, StationColumn } from './board-column';
 import { CardDnd } from './board-dnd';
 import {
   type AssemblyOption,
@@ -35,7 +35,7 @@ import {
 } from './board-filters';
 import { BoardTopBarActions, SearchItems } from './board-header';
 import { useCardMoves } from './card-move';
-import { columnCount, expediteHeader, expediteUse, firstStation, isExpedite } from './stats';
+import { columnCount, expediteHeader, firstStation, isExpedite } from './stats';
 
 /** Opens the Move menu for a card, with the station a drop chose; undefined: the caller may not move work. */
 type OnMove = ((item: ItemCard, to?: string) => void) | undefined;
@@ -43,14 +43,6 @@ type OnMove = ((item: ItemCard, to?: string) => void) | undefined;
 /** The expedite zone is drawn when the line has an expedite lane or an expedite item is on the board. */
 function drawsExpedite(board: Board): boolean {
   return expediteHeader(board.line, board.stations.flatMap((s) => s.items).filter(isExpedite).length) !== null;
-}
-
-/** The expedite row's caption: "Expedite, 1 of 1 in use, jumps every queue"; null when the line draws no row. */
-function expediteCaption(board: Board): string | null {
-  const shown = board.stations.flatMap((s) => s.items).filter(isExpedite).length;
-  return expediteHeader(board.line, shown) === null
-    ? null
-    : `Expedite, ${expediteUse(board.line, shown)}, jumps every queue`;
 }
 
 interface ColumnsProps {
@@ -81,22 +73,35 @@ function Columns({ board, onMove, decides, finishedThisWeek, arrived }: ColumnsP
   );
 }
 
-/** From 768 px: the stations side by side, each a StationColumn; the first one's expedite row carries the lane's caption. */
+/** From 768 px: the stations side by side, each a StationColumn on a shared row grid, with the expedite lane as one band across all of them. */
 function DesktopColumns({ board, onMove, decides, finishedThisWeek, arrived }: ColumnsProps) {
   const showExpedite = drawsExpedite(board);
+  const tracks = `repeat(${board.stations.length}, minmax(176px, 1fr))`;
   return (
     <section aria-label="Stations" className="-mx-1 hidden overflow-x-auto px-1 pb-2 md:block">
       <div
-        className="grid items-start gap-x-3"
-        style={{ gridTemplateColumns: `repeat(${board.stations.length}, minmax(176px, 1fr))` }}
+        className="grid gap-x-3 gap-y-2"
+        style={{
+          gridTemplateColumns: tracks,
+          gridTemplateRows: showExpedite ? 'auto auto 1fr' : 'auto 1fr',
+        }}
       >
-        {board.stations.map((s, i) => (
+        {showExpedite ? (
+          <fieldset
+            aria-label="Expedite lane"
+            className="col-span-full row-start-2 m-0 grid min-w-0 gap-x-3 border-0 rounded-cell bg-amber-tint py-2 transition-colors duration-(--duration-quick)"
+            style={{ gridTemplateColumns: tracks }}
+          >
+            <ExpediteLabel className="h-6 px-3" />
+          </fieldset>
+        ) : null}
+        {board.stations.map((s) => (
           <StationColumn
             key={s.id}
             board={board}
             station={s}
             showExpedite={showExpedite}
-            expediteCaption={i === 0 ? (expediteCaption(board) ?? undefined) : undefined}
+            inBoard
             decides={decides}
             onMove={onMove}
             draggable={Boolean(onMove)}
@@ -169,7 +174,6 @@ function StationTabs({
             board={board}
             station={s}
             showExpedite={showExpedite}
-            expediteCaption={expediteCaption(board) ?? undefined}
             decides={decides}
             onMove={onMove}
             draggable={false}

@@ -469,10 +469,12 @@ test('the line shows its work in progress and the expedite lane in use', async (
     return;
   }
 
-  // The desktop board has no line card: the expedite lane is captioned above the columns.
-  await expect(page.getByRole('region', { name: 'Stations', exact: true })).toContainText(
-    '1 of 1 in use, jumps every queue',
-  );
+  // The desktop board has no line card: the expedite lane is one band across the columns, labelled Expedite.
+  const band = page
+    .getByRole('region', { name: 'Stations', exact: true })
+    .getByRole('group', { name: 'Expedite lane' });
+  await expect(band).toHaveText('Expedite');
+  await expect(page.getByText('jumps every queue')).toHaveCount(0);
   await expect(page.getByText('Not enforced yet')).toHaveCount(0);
 });
 
