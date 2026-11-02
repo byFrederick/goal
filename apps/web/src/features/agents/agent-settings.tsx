@@ -3,12 +3,17 @@
 // it. Read only: the Definition editor changes these.
 import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
+import { toast } from 'sonner';
 import { useRunningModel } from '../../shared/definition/agent-cards';
 import { toolPolicy } from '../../shared/definition/tool-policy';
-import { useFactoryParams } from '../../shared/factory';
+import { useFactory, useFactoryParams } from '../../shared/factory';
 import { formatUsd } from '../../shared/format';
+import { holds } from '../../shared/permissions';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
+import { NotAvailable } from '../../ui/not-available';
+import { setAgentField } from '../factory-editor/draft/ops';
+import { useDraftSession, useSection } from '../factory-editor/draft/use-draft';
 
 const none = '—';
 
@@ -30,6 +35,36 @@ function Origin({ own }: { own: boolean }) {
   );
 }
 
+/** "Reset to default, <model>": removes the agent's own model from the draft, so the factory's applies. */
+function ResetModel({ agent, fallback }: { agent: string; fallback: string | undefined }) {
+  const factory = useFactory();
+  const session = useDraftSession();
+  const agents = useSection('agents');
+  const label = fallback ? `Reset to default, ${fallback}` : 'Reset to default';
+  const link = 'self-start font-control text-meta text-run-ink hover:text-run';
+  if (!holds(factory, 'definition:edit')) {
+    return (
+      <NotAvailable>
+        <button type="button" className={link}>
+          {label}
+        </button>
+      </NotAvailable>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={link}
+      onClick={() => {
+        session.edit(setAgentField(agents, agent, 'model', undefined));
+        void session.flush().then(() => toast(`${agent} uses the factory’s model again`));
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 export function AgentSettings({ agent }: { agent: string }) {
   const params = useFactoryParams();
   const running = useRunningModel();
@@ -48,6 +83,7 @@ export function AgentSettings({ agent }: { agent: string }) {
               {modelShown ? <Chip tone="run">{modelShown}</Chip> : <span className="text-body text-muted">{none}</span>}
               <Origin own={found.model !== undefined} />
             </span>
+            {found.model !== undefined ? <ResetModel agent={agent} fallback={model.agents.default_model} /> : null}
           </Setting>
           <Setting label="Turns per run">
             <span className="flex flex-wrap items-center gap-2">

@@ -2,8 +2,8 @@
 import { cleanup, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, getAgentStats } from '../../api/client';
-import { agentStatsQuery, versionModelQuery } from '../../api/queries';
-import type { AgentStats, Factory, OrgSummary, VersionModel } from '../../api/types';
+import { agentStatsQuery, boardQuery, versionModelQuery } from '../../api/queries';
+import type { AgentStats, Board, Factory, OrgSummary, VersionModel } from '../../api/types';
 import { renderFactoryPage, type Seed } from '../../test/route';
 import { AgentsPage } from './agents-page';
 
@@ -98,9 +98,17 @@ const stats = (agent: string, over: Partial<AgentStats> = {}): AgentStats => ({
   ...over,
 });
 
+/** The board's answer: each station's waiting and in-progress counts. */
+function boardOf(counts: Record<string, [number, number]>): Board {
+  return {
+    stations: Object.entries(counts).map(([id, [waiting, in_progress]]) => ({ id, waiting, in_progress })),
+  } as unknown as Board;
+}
+
 /** The running version's model and each agent's statistics, as the route's loader leaves them. */
 function seeded(running: unknown, agentStats: AgentStats[]): Seed[] {
   return [
+    [boardQuery(org.id, factory.id).queryKey, boardOf({ draft: [1, 1], build: [3, 5], check: [0, 0] })],
     [versionModelQuery(org.id, factory.id, 'current').queryKey, version(running)],
     ...agentStats.map((s): Seed => [agentStatsQuery(org.id, factory.id, s.agent).queryKey, s]),
   ];
@@ -150,6 +158,17 @@ describe('AgentsPage', () => {
         .getByRole('link', { name: /coder-one/ })
         .getAttribute('href'),
     ).toBe('/o/acme/f/widgets/agents/coder-one');
+  });
+
+  it('shows the live count at each station head and the Constraint marker only on the constraint', async () => {
+    renderPage(seeded(line, readyStats));
+
+    const build = (await screen.findByRole('heading', { level: 2, name: /Build/ })).closest('li') as HTMLElement;
+    expect(within(build).getAllByText('8').length).toBeGreaterThan(0);
+    expect(within(build).getByText('WIP 4, buffer 2')).toBeTruthy();
+    const draft = screen.getByRole('heading', { level: 2, name: /Draft/ }).closest('li') as HTMLElement;
+    expect(within(draft).getAllByText('2').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Constraint')).toHaveLength(1);
   });
 
   it("shows each card's model, its default or own model, its cap and its statistics", async () => {

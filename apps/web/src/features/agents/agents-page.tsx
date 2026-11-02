@@ -5,7 +5,7 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ChevronRight, Code, Plus } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { agentStatsQuery, versionModelQuery } from '../../api/queries';
+import { agentStatsQuery, boardQuery, versionModelQuery } from '../../api/queries';
 import type { AgentStats } from '../../api/types';
 import { ErrorScreen, PendingScreen } from '../../app/states';
 import { TopBarSlot } from '../../app/top-bar';
@@ -18,6 +18,7 @@ import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
+import { NumberRoll } from '../../ui/number-roll';
 import { AddAgentDialog } from '../factory-editor/agents/agent-dialogs';
 import { DraftSessionProvider, useDraftSession } from '../factory-editor/draft/use-draft';
 import {
@@ -41,19 +42,22 @@ export function AgentsPage() {
   const running = useQuery(versionModelQuery(org.id, factory.id, 'current'));
   const names = running.data ? agentNamesOf(running.data.model) : [];
   const stats = useQueries({ queries: names.map((name) => agentStatsQuery(org.id, factory.id, name)) });
+  // The live count at each station head; a board that cannot be read leaves the heads without counts.
+  const board = useQuery(boardQuery(org.id, factory.id));
 
-  if (running.isPending || stats.some((query) => query.isPending)) return <PendingScreen />;
+  if (running.isPending || board.isPending || stats.some((query) => query.isPending)) return <PendingScreen />;
   if (running.isError) return <ErrorScreen error={running.error} reset={() => void running.refetch()} />;
   const failed = stats.find((query) => query.isError);
   if (failed) return <ErrorScreen error={failed.error} reset={() => void failed.refetch()} />;
 
   const model = modelOf(running.data.model);
   const statsByAgent = new Map<string, AgentStats | undefined>(names.map((name, i) => [name, stats[i]?.data]));
+  const counts = new Map<string, number>((board.data?.stations ?? []).map((s) => [s.id, s.waiting + s.in_progress]));
   // The draft session the New agent dialog writes to; a viewer sees the running version and no control.
   const canEdit = holds(factory, 'definition:edit');
   return (
     <DraftSessionProvider key={`${factory.id}:${canEdit}`} org={org.id} factory={factory.id} readOnly={!canEdit}>
-      <Ready model={model} statsByAgent={statsByAgent} canEdit={canEdit} />
+      <Ready model={model} statsByAgent={statsByAgent} counts={counts} canEdit={canEdit} />
     </DraftSessionProvider>
   );
 }
@@ -61,10 +65,12 @@ export function AgentsPage() {
 function Ready({
   model,
   statsByAgent,
+  counts,
   canEdit,
 }: {
   model: Model;
   statsByAgent: Map<string, AgentStats | undefined>;
+  counts: Map<string, number>;
   canEdit: boolean;
 }) {
   const factory = useFactory();
@@ -114,7 +120,7 @@ function Ready({
           <p className="m-0 text-body text-muted">{sentence}</p>
         </header>
         <FactoryDefaults model={model} />
-        <Line model={model} statsByAgent={statsByAgent} />
+        <Line model={model} statsByAgent={statsByAgent} counts={counts} />
         <p className="m-0 text-meta text-muted">
           Copies share the station's work in progress. Change who staffs a station in the definition; every change
           publishes a new version.
@@ -178,7 +184,15 @@ function FactoryDefaults({ model }: { model: Model }) {
 }
 
 /** The line: each station in order, its agents under it. Phones stack the stations; wider screens set them in a row. */
-function Line({ model, statsByAgent }: { model: Model; statsByAgent: Map<string, AgentStats | undefined> }) {
+function Line({
+  model,
+  statsByAgent,
+  counts,
+}: {
+  model: Model;
+  statsByAgent: Map<string, AgentStats | undefined>;
+  counts: Map<string, number>;
+}) {
   const stations = stationsOf(model);
   const agents = agentsOf(model);
   const constraint = model.line.flow?.constraint;
@@ -200,7 +214,12 @@ function Line({ model, statsByAgent }: { model: Model; statsByAgent: Map<string,
                   station.route ? 'md:w-80' : station.kind === 'agent' ? 'md:w-64' : 'md:w-44',
                 )}
               >
-                <StationHead station={station} isConstraint={isConstraint} first={index === 0} />
+                <StationHead
+                  station={station}
+                  isConstraint={isConstraint}
+                  first={index === 0}
+                  count={counts.get(station.id)}
+                />
                 <StationBody
                   station={station}
                   staffed={staffed}
@@ -222,11 +241,15 @@ function StationHead({
   station,
   isConstraint,
   first,
+  count,
 }: {
   station: ModelStation;
   isConstraint: boolean;
   first: boolean;
+  /** Items waiting and in progress here now; undefined when the board could not be read. */
+  count: number | undefined;
 }) {
+  const load = station.wip && count !== undefined ? Math.min(1, count / station.wip) : 0;
   const done = station.kind === 'done';
   const subtitle = [
     station.wip === undefined ? null : `WIP ${station.wip}`,
@@ -245,11 +268,19 @@ function StationHead({
         </h2>
         <span aria-hidden="true" className="h-px min-w-4 flex-1 bg-line" />
       </div>
-      <p className="m-0 text-page-title tabular-nums">{done ? '' : (station.wip ?? '')}</p>
-      <span
-        aria-hidden="true"
-        className={cn('h-1 rounded-full bg-hover', isConstraint && 'bg-amber', done && 'bg-ok')}
-      />
+      <p className="m-0 text-page-title tabular-nums">
+        {done || count === undefined ? '' : <NumberRoll value={count} />}
+        {done || count === undefined ? null : <span className="sr-only"> items here now</span>}
+      </p>
+      <span aria-hidden="true" className={cn('h-1 overflow-hidden rounded-full bg-hover', done && 'bg-ok')}>
+        <span
+          className={cn(
+            'block h-full origin-left bg-ink transition-transform duration-(--duration-fast) ease-(--ease-out)',
+            isConstraint && 'bg-amber',
+          )}
+          style={{ transform: `scaleX(${load})` }}
+        />
+      </span>
       {subtitle ? <p className="m-0 text-meta text-muted">{subtitle}</p> : null}
     </div>
   );

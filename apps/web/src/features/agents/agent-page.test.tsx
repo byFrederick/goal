@@ -7,6 +7,7 @@ import { createDraftRequest } from '../../api/definitions';
 import {
   agentStatsQuery,
   builderMetaQuery,
+  factoryQuery,
   versionFileQuery,
   versionModelQuery,
   versionQuery,
@@ -85,7 +86,7 @@ const model = {
       {
         name: 'frontend-engineer',
         description: 'The React UI in apps/web and the TypeScript packages, following the design system exactly.',
-        prompt: { path: `./${promptPath}` },
+        prompt: { path: `./${promptPath}`, sha256: 'sha-prompt' },
         model: 'claude-haiku-5-5',
         max_turns: 250,
         per_item_usd: 20,
@@ -111,6 +112,7 @@ function seeds({
       agentStatsQuery(org.id, factory.id, 'frontend-engineer').queryKey,
       reasons ? agentStats : { ...agentStats, reasons: [] },
     ],
+    [factoryQuery(org.id, factory.id).queryKey, factory],
     [builderMetaQuery(org.id).queryKey, { capabilities: { tool_approvals: false } }],
     [versionQuery(org.id, factory.id, 'current').queryKey, { files: [{ path: promptPath, sha256: 'sha-prompt' }] }],
     [versionFileQuery(org.id, factory.id, 'current', promptPath, 'sha-prompt').queryKey, { text: promptText }],
@@ -202,6 +204,45 @@ describe('the Agent page, ready', () => {
     expect(screen.getByRole('region', { name: 'Skills' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Tool policy' })).toBeTruthy();
     expect(screen.getByText('Blocked this week: 2 calls, both aws ssm put-parameter.')).toBeTruthy();
+  });
+});
+
+describe('Reset to default', () => {
+  const edit: Factory['can'] = ['item:create', 'factory:manage', 'definition:edit'];
+
+  it('sits beside the prompt header next to Edit prompt, off with its reason when the prompt matches', async () => {
+    await renderPage('overview', { can: edit });
+    const prompt = within(screen.getByRole('region', { name: 'Prompt' }));
+    const reset = await prompt.findByRole('button', { name: 'Reset to default' });
+    await waitFor(() => expect(reset.getAttribute('aria-disabled')).toBe('true'));
+    expect(prompt.getByRole('link', { name: 'Edit prompt' }).getAttribute('href')).toContain('agent=frontend-engineer');
+    reset.focus();
+    expect((await screen.findAllByText('The prompt already matches the running version')).length).toBeGreaterThan(0);
+  });
+
+  it('is Not available yet without definition:edit', async () => {
+    await renderPage('overview');
+    const reset = within(screen.getByRole('region', { name: 'Prompt' })).getByRole('button', {
+      name: 'Reset to default',
+    });
+    expect(reset.getAttribute('aria-disabled')).toBe('true');
+    reset.focus();
+    expect((await screen.findAllByText('Not available yet')).length).toBeGreaterThan(0);
+  });
+
+  it('offers the factory model beside an agent that sets its own, and not beside one that does not', async () => {
+    await renderPage('overview', { can: edit });
+    const settings = within(screen.getByRole('region', { name: 'Settings' }));
+    expect(settings.getByRole('button', { name: 'Reset to default, claude-opus-5-5' })).toBeTruthy();
+    cleanup();
+
+    const { model: own, ...rest } = model.agents.agents[0] as Record<string, unknown>;
+    expect(own).toBe('claude-haiku-5-5');
+    await renderPage('overview', {
+      can: edit,
+      version: { model: { ...model, agents: { ...model.agents, agents: [rest] } } },
+    });
+    expect(screen.queryByRole('button', { name: /^Reset to default, / })).toBeNull();
   });
 });
 

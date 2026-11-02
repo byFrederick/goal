@@ -1,15 +1,22 @@
 // The agent's prompt file as the version that runs has it. The Overview shows its first lines and a link
-// to the whole; the Prompt view shows all of it. Read only: Definition › Agents edits the file.
+// to the whole; the Prompt view shows all of it. The text is read only here: "Edit prompt" opens it in
+// Definition › Agents, and "Reset to default" writes the running version's prompt into the draft.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import { toast } from 'sonner';
 import { versionFileQuery } from '../../api/queries';
 import { useRunningFiles, useRunningModel } from '../../shared/definition/agent-cards';
 import { cleanPath } from '../../shared/definition/place';
 import { useFactory, useFactoryParams } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
+import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
+import { NotAvailable } from '../../ui/not-available';
 import { Skeleton, SkeletonRows } from '../../ui/skeleton';
+import { Tooltip } from '../../ui/tooltip';
+import { resetBlockedReason, usePromptText } from '../factory-editor/agents/prompt-editor';
+import { useDraftSession } from '../factory-editor/draft/use-draft';
 
 /** The lines the Overview shows before "Show the full prompt". */
 const previewLines = 6;
@@ -60,6 +67,60 @@ function PromptText({
   return <p className="m-0 whitespace-pre-line text-body">{shown}</p>;
 }
 
+/**
+ * "Reset to default" and "Edit prompt" beside a prompt header. Reset writes the running version's prompt
+ * into the draft (goald serves no template prompt); it is off, with its reason, when there is nothing to
+ * restore, and not available without definition:edit.
+ */
+function PromptActions({ agent }: { agent: string }) {
+  const params = useFactoryParams();
+  const factory = useFactory();
+  const session = useDraftSession();
+  const { path, text, running } = usePromptText(agent);
+  const canEdit = holds(factory, 'definition:edit');
+  const reason = resetBlockedReason(text, running, !canEdit);
+  const reset = async () => {
+    if (!path || typeof running !== 'string') return;
+    session.editFile(path, running);
+    await session.flush();
+    toast(`${agent}’s prompt is the running version’s again`);
+  };
+  return (
+    <span className="flex items-center gap-3">
+      {path ? (
+        canEdit ? (
+          <Tooltip label={reason ?? 'Restore the running version’s prompt'}>
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-disabled={reason !== undefined || undefined}
+              onClick={() => {
+                if (reason === undefined) void reset();
+              }}
+            >
+              Reset to default
+            </Button>
+          </Tooltip>
+        ) : (
+          <NotAvailable>
+            <Button variant="secondary" size="sm">
+              Reset to default
+            </Button>
+          </NotAvailable>
+        )
+      ) : null}
+      <Link
+        to="/o/$org/f/$factory/definition/$section"
+        params={{ ...params, section: 'agents' }}
+        search={{ agent }}
+        className="font-control text-body text-run-ink hover:text-run"
+      >
+        Edit prompt
+      </Link>
+    </span>
+  );
+}
+
 /** The Overview's prompt: its first lines in a panel, and a link to the Prompt view. */
 export function PromptPreview({ agent }: { agent: string }) {
   const params = useFactoryParams();
@@ -69,6 +130,9 @@ export function PromptPreview({ agent }: { agent: string }) {
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h2 className="m-0 text-heading">Prompt</h2>
         {path ? <span className="font-mono text-meta text-muted">{path}</span> : null}
+        <span className="ml-auto">
+          <PromptActions agent={agent} />
+        </span>
       </div>
       <div className="flex flex-col gap-3 rounded-cell border border-line bg-panel p-4">
         <PromptText agent={agent} lines={previewLines} />
@@ -89,7 +153,7 @@ export function PromptPreview({ agent }: { agent: string }) {
 export function PromptFull({ agent }: { agent: string }) {
   const { path } = usePrompt(agent);
   return (
-    <SectionCard title="Prompt" description={path || undefined}>
+    <SectionCard title="Prompt" description={path || undefined} aside={<PromptActions agent={agent} />}>
       <PromptText agent={agent} />
     </SectionCard>
   );
