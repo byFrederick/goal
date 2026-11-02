@@ -160,6 +160,9 @@ const rowOf = (name: string) => screen.getByText(name).closest('tr') as HTMLElem
 const openMenu = (name: RegExp | string) =>
   fireEvent.pointerDown(screen.getByRole('button', { name }), { button: 0, ctrlKey: false, pointerType: 'mouse' });
 
+/** The text of a filter option, its label and its count. */
+const optionText = (name: RegExp) => (screen.getByRole('radio', { name }).closest('label') as HTMLElement).textContent;
+
 const isChecked = (name: RegExp) => (screen.getByRole('radio', { name }) as HTMLInputElement).checked;
 
 describe('the Credentials page', () => {
@@ -167,9 +170,27 @@ describe('the Credentials page', () => {
     state.hold = true;
     renderPage();
 
-    const status = await screen.findByRole('status');
-    expect(status.textContent).toBe('Loading credentials');
-    expect(status.closest('[aria-busy="true"]')).not.toBeNull();
+    const loading = await screen.findByText('Loading');
+    expect(loading.closest('[aria-busy="true"]')).not.toBeNull();
+  });
+
+  it('shows each kind’s count on its filter, All included, and the counts stay with the whole list', async () => {
+    state.rows = [
+      row({ name: 'key-a', type: 'api_key' }),
+      row({ name: 'key-b', type: 'api_key' }),
+      row({ name: 'token-a', type: 'oauth_token' }),
+    ];
+    renderPage();
+
+    await screen.findByRole('radio', { name: /All/ });
+    expect(optionText(/All/)).toBe('All 3');
+    expect(optionText(/API keys/)).toBe('API keys 2');
+    expect(optionText(/OAuth tokens/)).toBe('OAuth tokens 1');
+
+    fireEvent.click(screen.getByRole('radio', { name: /OAuth tokens/ }));
+    await waitFor(() => expect(isChecked(/OAuth tokens/)).toBe(true));
+    expect(optionText(/All/)).toBe('All 3');
+    expect(optionText(/API keys/)).toBe('API keys 2');
   });
 
   it('shows the error with a way to try again', async () => {

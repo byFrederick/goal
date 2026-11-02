@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { factoriesQuery, knowledgeSourcesQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
+import { ListPageSkeleton } from '../app/route-skeletons';
 import { KnowledgePage } from '../features/knowledge/knowledge-page';
 import { type KnowledgeSearch, knowledgeSearch } from '../features/knowledge/search';
 
@@ -10,6 +11,7 @@ import { type KnowledgeSearch, knowledgeSearch } from '../features/knowledge/sea
 // a factory). The lists load with the page, not before it: when they fail the page keeps its
 // header and New source.
 export const Route = createFileRoute('/o/$org/_org/knowledge/')({
+  pendingComponent: ListPageSkeleton,
   validateSearch: (search: Record<string, unknown>): KnowledgeSearch => knowledgeSearch(search),
   loaderDeps: ({ search }) => ({ factory: search.factory }),
   loader: ({ context: { queryClient, org }, deps }) => {
