@@ -14,5 +14,5 @@ const reasons: Record<string, string> = {
 /** The reason one refused item gives, in plain words. */
 export function laneRefusalOf(err: unknown): string {
   if (err instanceof ApiError && err.code && reasons[err.code]) return reasons[err.code] as string;
-  return 'goald did not set the lane. Try again once it is answering.';
+  return 'The lane was not set. Try again in a moment.';
 }

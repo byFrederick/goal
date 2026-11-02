@@ -52,7 +52,7 @@ export function BakeOffIndexPage() {
           }
         >
           {list.error instanceof ApiError && list.error.code === 'evals-unavailable'
-            ? 'Evals are not available on this goald yet.'
+            ? 'Evals are not turned on for this installation yet.'
             : 'goald is not answering. Try again in a moment.'}
         </EmptyState>
       ) : null}

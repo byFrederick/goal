@@ -115,13 +115,13 @@ export function saveSentence({
     case 'offline':
       return `Not saved: goald can’t be reached.${retry}`;
     case 'retrying':
-      return `Not saved: goald failed.${retry}`;
+      return `Not saved: the save failed.${retry}`;
     case 'conflict':
       return 'Not saved: the same field changed in another tab or the CLI.';
     case 'held':
       return 'Not saved: factory.yaml doesn’t parse. Visual changes wait until it does.';
     case 'failed':
-      return `Not saved: ${(error?.detail ?? error?.title ?? 'goald refused the change').replace(/\.$/, '')}.`;
+      return `Not saved: ${(error?.detail ?? error?.title ?? 'the change was refused').replace(/\.$/, '')}.`;
     default:
       return savedAt ? `Autosaved ${formatClock(savedAt, new Date(now))}.` : null;
   }
