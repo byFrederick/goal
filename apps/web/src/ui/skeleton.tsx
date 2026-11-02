@@ -11,7 +11,7 @@ interface SkeletonProps {
   /** The real layout drawn as muted blocks. It pulses once, then fades out. */
   placeholder: ReactNode;
   children: ReactNode;
-  className?: string;
+  className?: string | undefined;
 }
 
 export function Skeleton({ ready, placeholder, children, className }: SkeletonProps) {

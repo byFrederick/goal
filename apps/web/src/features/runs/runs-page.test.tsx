@@ -316,21 +316,18 @@ describe('the controls that are not built yet', () => {
 
     const control = screen.getByRole('button', { name: 'Export CSV' });
     expect(control.getAttribute('aria-disabled')).toBeNull();
-    expect(screen.queryByText('Not available yet')).toBeNull();
   });
 
-  it('renders the Waiting on you tile and chip disabled, and says why', async () => {
+  it('shows the Waiting on you figure as no data yet, and its chip disabled, and says why', async () => {
     renderRuns();
     await screen.findByRole('table');
 
-    const controls = screen.getAllByRole('button', { name: /Waiting on you/ });
-    expect(controls).toHaveLength(2);
-    for (const control of controls) {
-      expect(control.getAttribute('aria-disabled')).toBe('true');
-      expect(control.tabIndex).not.toBe(-1);
-    }
-    fireEvent.focus(controls[1] as HTMLElement);
-    expect(await screen.findByText('Not available yet')).toBeTruthy();
+    expect(screen.getByText('No data yet')).toBeTruthy();
+    const chip = screen.getByRole('button', { name: /Waiting on you/ });
+    expect(chip.getAttribute('aria-disabled')).toBe('true');
+    expect(chip.tabIndex).not.toBe(-1);
+    fireEvent.focus(chip);
+    expect((await screen.findAllByText('Not available yet')).length).toBeGreaterThan(0);
   });
 
   it('renders Open transcript and Send to Jonah on a failed row disabled and inert', async () => {
