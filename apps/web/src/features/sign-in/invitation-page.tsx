@@ -26,7 +26,7 @@ const failureOf = (err: unknown) =>
   (err as Partial<AuthFailure> | null)?.kind === 'not-recipient' ? 'wrong-account' : 'unusable';
 
 const primary =
-  'inline-flex h-12 w-full items-center justify-center gap-2 rounded-control bg-ink px-4 text-[15px] font-medium text-white no-underline transition-colors duration-200 hover:bg-ink/90';
+  'inline-flex h-12 w-full items-center justify-center gap-2 rounded-control bg-action px-4 text-[15px] font-medium text-action-ink no-underline transition-colors duration-200 hover:bg-action/90';
 
 export function InvitationPage({ id }: { id: string }) {
   const client = useQueryClient();
@@ -114,7 +114,7 @@ export function InvitationPage({ id }: { id: string }) {
       <div className="flex items-center gap-3">
         <span
           aria-hidden="true"
-          className="flex size-11 shrink-0 items-center justify-center rounded-[10px] bg-ink text-sm font-semibold text-white"
+          className="flex size-11 shrink-0 items-center justify-center rounded-[10px] bg-action text-sm font-semibold text-action-ink"
         >
           {orgMark({ name: i.organizationName, mark: '' })}
         </span>

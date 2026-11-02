@@ -3,7 +3,7 @@ import { cn } from './cn';
 
 const kinds = {
   /** The organization: an ink tile with its two letters. */
-  org: 'rounded-cell bg-ink font-semibold text-white',
+  org: 'rounded-cell bg-action font-semibold text-action-ink',
   /** A factory: a white square, ink-filled when it is the current one. */
   factory: 'rounded-control border border-rule bg-card font-medium text-ink group-hover:border-rule',
   /** New factory: a dashed square; ink while the wizard is open. */
@@ -44,8 +44,8 @@ export function Mark({ kind, size = 'phone', current = false, badge = 0, dot = f
         kind === 'org' ? sizes[size].org : sizes[size].square,
         kinds[kind],
         current && kind === 'org' && 'shadow-[0_0_0_2px_var(--color-shell),0_0_0_4px_var(--color-ink)]',
-        current && kind === 'factory' && 'border-ink bg-ink text-white group-hover:border-ink',
-        current && kind === 'add' && 'border-solid border-ink bg-ink text-white',
+        current && kind === 'factory' && 'border-action bg-action text-action-ink group-hover:border-action',
+        current && kind === 'add' && 'border-solid border-action bg-action text-action-ink',
       )}
     >
       {children}
@@ -73,7 +73,7 @@ export function Avatar({ initials, size = 'phone' }: { initials: string; size?: 
     <span
       aria-hidden="true"
       className={cn(
-        'flex shrink-0 items-center justify-center rounded-full bg-muted font-semibold text-white',
+        'flex shrink-0 items-center justify-center rounded-full bg-muted font-semibold text-action-ink',
         size === 'sidebar' && 'size-8 text-meta',
         size === 'phone' && 'size-[34px] text-xs',
         size === 'card' && 'size-10 text-sm',

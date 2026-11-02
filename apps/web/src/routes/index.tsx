@@ -3,7 +3,7 @@ import { ensureLoaded, meQuery, orgsQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
 import { PendingScreen } from '../app/states';
 import { defaultOrg } from '../shared/org';
-import { LogoMark } from '../ui/logo';
+import { GoalMark } from '../ui/goal-mark';
 
 // The organization used last (or the first goald lists). Without any: a signed-in person goes to
 // onboarding, where step 1 creates one (ADR 0032 decision 1); without sign-in, a page saying how to
@@ -23,7 +23,7 @@ export const Route = createFileRoute('/')({
 function NoOrganization() {
   return (
     <main id="main" className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center gap-4 p-6">
-      <LogoMark />
+      <GoalMark size="brand" />
       <h1 className="m-0 text-4xl font-normal tracking-display">No organization yet</h1>
       <p className="m-0 text-body leading-relaxed text-muted">
         Factories belong to an organization. Create one with{' '}

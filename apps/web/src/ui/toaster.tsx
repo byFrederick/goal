@@ -14,7 +14,7 @@ export function Toaster({ theme }: { theme: NonNullable<ToasterProps['theme']> }
       mobileOffset={{ bottom: 'var(--toaster-bottom)' }}
       toastOptions={{
         classNames: {
-          toast: '!rounded-card !border-0 !bg-ink !font-sans !text-action-ink !shadow-pop',
+          toast: '!rounded-card !border-0 !bg-action !font-sans !text-action-ink !shadow-pop',
           description: '!text-action-ink/70',
           // The toast's action: the inverse of the toast, so it reads as a button on the ink fill.
           actionButton: '!rounded-control !bg-action-ink !font-sans !text-action hover:!bg-action-ink/90',

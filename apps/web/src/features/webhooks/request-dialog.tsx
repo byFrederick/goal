@@ -35,7 +35,7 @@ function Request({ target }: { target: RequestTarget }) {
     >
       {request.isPending ? (
         <div aria-busy="true" className="flex items-center gap-2 text-body text-ink-soft">
-          <Spinner />
+          <Spinner tone="dark" />
           <span role="status">Loading the request</span>
         </div>
       ) : request.isError ? (

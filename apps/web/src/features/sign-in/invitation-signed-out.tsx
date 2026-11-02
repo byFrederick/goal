@@ -13,7 +13,7 @@ export function SignInToSeeInvitation({ path }: { path: string }) {
       <Link
         to="/sign-in"
         search={{ next: path }}
-        className="inline-flex h-12 w-full items-center justify-center rounded-control bg-ink px-4 text-[15px] font-medium text-white no-underline transition-colors duration-200 hover:bg-ink/90"
+        className="inline-flex h-12 w-full items-center justify-center rounded-control bg-action px-4 text-[15px] font-medium text-action-ink no-underline transition-colors duration-200 hover:bg-action/90"
       >
         Sign in
       </Link>
