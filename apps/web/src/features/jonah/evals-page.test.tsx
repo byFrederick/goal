@@ -190,7 +190,7 @@ describe('the Evals page, its four states', () => {
     renderEvals(editor, []);
 
     expect(await screen.findByText('Eval cases could not be loaded')).toBeTruthy();
-    expect(screen.getByText('Evals are not available on this goald yet.')).toBeTruthy();
+    expect(screen.getByText('Evals are not turned on for this installation yet.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
     expect(await screen.findByRole('table')).toBeTruthy();

@@ -123,7 +123,7 @@ describe('the Judges page, its four states', () => {
     renderJudges(editor, []);
 
     expect(await screen.findByText('Judges could not be loaded')).toBeTruthy();
-    expect(screen.getByText('Judges are not available on this goald yet.')).toBeTruthy();
+    expect(screen.getByText('Judges are not turned on for this installation yet.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
     expect(await screen.findByRole('table')).toBeTruthy();

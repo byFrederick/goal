@@ -327,7 +327,7 @@ describe('the bake-offs tab', () => {
   it('shows an error with Try again when the list fails', async () => {
     renderIndex(problemError(503, 'evals-unavailable'));
     expect(await screen.findByText('Bake-offs could not be loaded')).toBeTruthy();
-    expect(screen.getByText('Evals are not available on this goald yet.')).toBeTruthy();
+    expect(screen.getByText('Evals are not turned on for this installation yet.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 });

@@ -80,7 +80,7 @@ export function JudgesPage() {
           }
         >
           {unavailable
-            ? 'Judges are not available on this goald yet.'
+            ? 'Judges are not turned on for this installation yet.'
             : 'goald is not answering. Try again in a moment.'}
         </EmptyState>
       </div>
