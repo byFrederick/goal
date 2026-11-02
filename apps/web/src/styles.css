@@ -116,6 +116,7 @@
 
   --scale-dialog: 0.96;
   --scale-menu: 0.97;
+  --scale-menu-close: 0.99;
   --scale-tooltip: 0.98;
   --scale-press: 0.97;
 
@@ -299,6 +300,160 @@
   }
 }
 
+/* Overlay motion (MOTION.md: the catalogue rows for menus, dialogs, sheets, drawers, toasts and disclosures).
+   The visible change is a CSS transition keyed on Radix's data-state, so a reopen during a close reverses from
+   where it is (rule 7). Radix keeps a closing element mounted only while an animation runs, so a closed panel
+   also runs motion-hold for as long as its close: an animation with no visible effect that Radix waits for.
+   A component sets its own durations, easing and distances through the variables; the reduced-motion block
+   below overrides them. */
+@layer components {
+  .motion-panel {
+    --motion-open: var(--duration-fast);
+    --motion-close: var(--duration-quick);
+    --motion-ease: var(--ease-out);
+    --motion-from: none;
+    --motion-to: none;
+    transition:
+      opacity var(--motion-close) var(--motion-ease),
+      transform var(--motion-close) var(--motion-ease);
+  }
+
+  .motion-panel[data-state="open"] {
+    opacity: 1;
+    transform: none;
+    transition-duration: var(--motion-open);
+  }
+
+  @starting-style {
+    .motion-panel[data-state="open"] {
+      opacity: 0;
+      transform: var(--motion-from);
+    }
+  }
+
+  .motion-panel[data-state="closed"] {
+    opacity: 0;
+    transform: var(--motion-to);
+    animation: motion-hold var(--motion-close) linear;
+  }
+
+  /* Menus, popovers and the date range grow from their trigger: Radix sets the origin for each. */
+  .motion-menu {
+    --motion-from: scale(var(--scale-menu));
+    --motion-to: scale(var(--scale-menu-close));
+    transform-origin: var(
+      --radix-dropdown-menu-content-transform-origin,
+      var(--radix-popover-content-transform-origin, center)
+    );
+  }
+
+  /* Dialogs scale from the centre. */
+  .motion-dialog {
+    --motion-from: scale(var(--scale-dialog));
+    --motion-to: scale(var(--scale-dialog));
+  }
+
+  /* Sheets slide up from the bottom edge: slower in, faster out, on the drawer curve. */
+  .motion-sheet {
+    --motion-open: var(--duration-slow);
+    --motion-close: var(--duration-medium);
+    --motion-ease: var(--ease-drawer);
+    --motion-from: translateY(100%);
+    --motion-to: translateY(100%);
+  }
+
+  /* The drawers slide in from the right (desktop) and from the left (the phone drawer). */
+  .motion-drawer {
+    --motion-open: var(--duration-slow);
+    --motion-close: var(--duration-medium);
+    --motion-ease: var(--ease-drawer);
+    --motion-from: translateX(100%);
+    --motion-to: translateX(100%);
+  }
+
+  .motion-drawer-left {
+    --motion-open: var(--duration-slow);
+    --motion-close: var(--duration-medium);
+    --motion-ease: var(--ease-drawer);
+    --motion-from: translateX(-100%);
+    --motion-to: translateX(-100%);
+  }
+
+  /* Disclosure (accordion): the content's grid rows go from 0fr to 1fr. Closed content is hidden with
+     visibility, which switches only when the close ends, so it leaves the tab order and the accessibility
+     tree after it has closed, not before. */
+  .motion-disclosure {
+    display: grid;
+    grid-template-rows: 0fr;
+    visibility: hidden;
+    transition:
+      grid-template-rows var(--duration-fast) var(--ease-out),
+      visibility var(--duration-fast) var(--ease-out);
+  }
+
+  .motion-disclosure[data-state="open"] {
+    grid-template-rows: 1fr;
+    visibility: visible;
+  }
+
+  .motion-disclosure > * {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .motion-chevron {
+    transition: transform var(--duration-fast) var(--ease-out);
+  }
+
+  .motion-disclosure-trigger[data-state="open"] .motion-chevron {
+    transform: rotate(180deg);
+  }
+}
+
+@keyframes motion-hold {
+  from {
+    --motion-hold: 0;
+  }
+  to {
+    --motion-hold: 0;
+  }
+}
+
+/* Toasts (sonner) take the motion tokens in place of its fixed durations. Unlayered, as sonner's own CSS is,
+   and more specific than its rules. A toast rises from --toast-rise below with a fade and scale; stacked
+   toasts keep sonner's own push-back. */
+[data-sonner-toaster] [data-sonner-toast] {
+  transition:
+    transform var(--duration-medium) var(--ease-out),
+    opacity var(--duration-medium) var(--ease-out),
+    height var(--duration-medium) var(--ease-out),
+    box-shadow var(--duration-quick) var(--ease-out);
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-mounted="false"] {
+  --y: translateY(var(--toast-rise)) scale(var(--scale-menu));
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-removed="true"] {
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out);
+}
+
+/* The toasts sit at the bottom right. Below 768 px the phone's tab bar is at the bottom, so they clear it,
+   and they rise further on a phone. */
+:root {
+  --toast-rise: var(--distance-base);
+  --toaster-bottom: calc(var(--distance-base) * 3);
+}
+
+@media (width < 48rem) {
+  :root {
+    --toast-rise: calc(var(--distance-base) * 2);
+    --toaster-bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+}
+
 /* Reduced motion (MOTION.md, rule 9). Unlayered, so it wins over every utility without !important.
    Movement goes: transforms and blur are not transitioned, and animations run at the quick duration
    with one iteration. Opacity fades and colour changes stay, at --duration-quick, so every state
@@ -323,5 +478,31 @@
   .animate-spin,
   .animate-pulse-dot {
     animation-name: none;
+  }
+
+  /* Overlays keep their fade at the quick duration and lose the movement (MOTION.md, rule 9). */
+  .motion-panel {
+    --motion-open: var(--duration-quick);
+    --motion-close: var(--duration-quick);
+    --motion-from: none;
+    --motion-to: none;
+  }
+
+  .motion-disclosure {
+    transition-property: visibility;
+    transition-duration: var(--duration-quick);
+  }
+
+  .motion-chevron {
+    transition: none;
+  }
+
+  [data-sonner-toaster] [data-sonner-toast] {
+    /* biome-ignore lint/complexity/noImportantStyles: sonner turns every toast transition off with !important under reduced motion; the fade has to win that. */
+    transition: opacity var(--duration-quick) var(--ease-out) !important;
+  }
+
+  [data-sonner-toaster] [data-sonner-toast][data-mounted="false"] {
+    --y: translateY(0);
   }
 }

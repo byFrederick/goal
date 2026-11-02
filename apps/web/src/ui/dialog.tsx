@@ -43,7 +43,7 @@ export function DialogContent({
   const opener = useRef<HTMLElement | null>(null);
   return (
     <D.Portal>
-      <D.Overlay className="fixed inset-0 z-40 bg-ink/45 data-[state=open]:animate-fade-in" />
+      <D.Overlay className="motion-panel fixed inset-0 z-40 bg-ink/45" />
       <D.Content
         onCloseAutoFocus={(e) => {
           onCloseAutoFocus?.(e);
@@ -54,8 +54,8 @@ export function DialogContent({
           back.focus();
         }}
         className={cn(
-          'fixed z-50 flex flex-col gap-4 bg-card p-5 shadow-pop outline-none',
-          'top-1/2 left-1/2 max-h-[calc(100dvh-32px)] w-[calc(100vw-32px)] max-w-[480px] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-card',
+          'motion-panel motion-dialog fixed z-50 flex flex-col gap-4 bg-card p-5 shadow-pop outline-none',
+          'top-1/2 left-1/2 max-h-[calc(100dvh-32px)] w-[calc(100vw-32px)] max-w-[480px] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-dialog',
           className,
         )}
         onEscapeKeyDown={keep}
