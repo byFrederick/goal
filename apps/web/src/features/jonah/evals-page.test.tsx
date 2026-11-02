@@ -182,15 +182,25 @@ describe('the Evals page, its four states', () => {
     expect(screen.queryByRole('table')).toBeNull();
   });
 
-  it('is an error when the cases cannot be read, and Try again reads them once more', async () => {
-    vi.mocked(listEvals).mockRejectedValueOnce(
+  it('is the empty state at once when goald has no evals, with adding not available yet', async () => {
+    vi.mocked(listEvals).mockRejectedValue(
       new ApiError({ title: 'Service Unavailable', status: 503, code: 'evals-unavailable' }),
     );
+    renderEvals(editor, []);
+
+    expect(await screen.findByText('No eval cases yet')).toBeTruthy();
+    expect(screen.queryByText('Eval cases could not be loaded')).toBeNull();
+    const add = screen.getByRole('button', { name: 'Add a case from a past run' });
+    expect(add.getAttribute('aria-disabled')).toBe('true');
+    expect(listEvals).toHaveBeenCalledTimes(1);
+  });
+
+  it('is an error when the cases cannot be read, and Try again reads them once more', async () => {
+    vi.mocked(listEvals).mockRejectedValueOnce(new ApiError({ title: 'Bad Gateway', status: 502 }));
     vi.mocked(listEvals).mockResolvedValueOnce(list);
     renderEvals(editor, []);
 
     expect(await screen.findByText('Eval cases could not be loaded')).toBeTruthy();
-    expect(screen.getByText('Evals are not available on this goald yet.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
     expect(await screen.findByRole('table')).toBeTruthy();
