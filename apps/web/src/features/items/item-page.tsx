@@ -237,8 +237,8 @@ export function ItemPage() {
         ) : null}
       </header>
 
-      <div className="flex flex-col gap-3 @[720px]:grid @[720px]:grid-cols-[minmax(0,1fr)_336px] @[720px]:items-start @[720px]:gap-4">
-        <div className="contents @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
+      <div className="flex flex-col gap-3 @[1100px]:grid @[1100px]:grid-cols-[minmax(0,1fr)_336px] @[1100px]:items-start @[1100px]:gap-4">
+        <div className="contents @[1100px]:flex @[1100px]:flex-col @[1100px]:gap-4">
           {item.question ? (
             <QuestionCard
               itemKey={key}
@@ -331,7 +331,7 @@ export function ItemPage() {
             className="hidden @[720px]:flex"
           />
         </div>
-        <div className="contents @[720px]:flex @[720px]:flex-col @[720px]:gap-4">
+        <div className="contents @[1100px]:flex @[1100px]:flex-col @[1100px]:gap-4">
           {/* Only on a phone: the top bar holds these actions from 768 px, so they never show twice. */}
           {phone ? (
             <ItemDecisionsCard

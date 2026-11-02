@@ -109,10 +109,10 @@ export function BoardSkeleton() {
 /** The item page: the header and stepper, the tabs and timeline on the left, the details column on the right. */
 export function ItemShape() {
   return (
-    <div className="flex w-full min-w-0 flex-col gap-5">
+    <div className="@container flex w-full min-w-0 flex-col gap-5">
       <Heading />
       <div className={cn(block, 'h-10')} />
-      <div className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,1fr)_336px]">
+      <div className="grid min-w-0 gap-4 @[1100px]:grid-cols-[minmax(0,1fr)_336px]">
         <div className="flex flex-col gap-4">
           <div className={cn(block, 'h-11')} />
           <div className={cn(block, 'h-16')} />
