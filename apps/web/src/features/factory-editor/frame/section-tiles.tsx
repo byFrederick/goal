@@ -113,7 +113,7 @@ function Tile({
   // In the scrolling row (phones), the current tile scrolls into view.
   const ref = useRef<HTMLAnchorElement>(null);
   useEffect(() => {
-    if (current) ref.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (current) ref.current?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' });
   }, [current]);
   return (
     <a

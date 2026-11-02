@@ -7,7 +7,7 @@
 // The chosen option sits on one white pill that slides to the new option (MOTION.md, Tabs and
 // segmented controls). The pill is measured from the options, so it is placed before the first
 // paint without a slide, and it slides only when the choice changes.
-import { useId, useLayoutEffect, useRef } from 'react';
+import { Fragment, useId, useLayoutEffect, useRef } from 'react';
 import { cn } from './cn';
 import { placePill, tabPill } from './tab-nav';
 import { Tooltip } from './tooltip';
@@ -126,17 +126,18 @@ export function SegmentedControl<T extends string>({
                 <span className="tabular-nums text-muted">{o.count}</span>
               </>
             ) : null}
-            {o.disabledReason && !readOnly ? (
-              <span id={reasonId} className="sr-only">
-                {o.disabledReason}
-              </span>
-            ) : null}
           </label>
         );
         return o.disabledReason && !readOnly ? (
-          <Tooltip key={o.value} label={o.disabledReason} side="top">
-            {option}
-          </Tooltip>
+          <Fragment key={o.value}>
+            <Tooltip label={o.disabledReason} side="top">
+              {option}
+            </Tooltip>
+            {/* Outside the label, so the reason never spills out of the option's box. */}
+            <span id={reasonId} className="sr-only">
+              {o.disabledReason}
+            </span>
+          </Fragment>
         ) : (
           option
         );

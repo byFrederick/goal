@@ -201,7 +201,13 @@ export function DefinitionFrame({ section, yaml, children }: FrameProps) {
         )}
       </header>
 
-      <div className={yaml ? 'contents' : 'grid gap-5 @[880px]:grid-cols-[220px_minmax(0,1fr)] @[880px]:items-start'}>
+      <div
+        className={
+          yaml
+            ? 'contents'
+            : 'grid grid-cols-[minmax(0,1fr)] gap-5 @[880px]:grid-cols-[220px_minmax(0,1fr)] @[880px]:items-start'
+        }
+      >
         {yaml ? null : (
           <SectionTiles
             current={section}
