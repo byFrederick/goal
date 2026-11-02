@@ -45,25 +45,25 @@ afterEach(() => {
 });
 
 describe('the tools of an MCP connection', () => {
-  it('lists every tool with its mode pressed, and how many were found', () => {
+  it('lists every tool with its mode selected, and how many were found', () => {
     renderCard(connectionFixture({ name: 'linear', kind: 'mcp-server', tools }));
 
-    expect(screen.getByRole('heading', { level: 2, name: /Tools agents may use\s*3 found/ })).toBeTruthy();
-    const ask = within(group('create_comment')).getByRole('button', { name: 'Ask first' });
-    expect(ask.getAttribute('aria-pressed')).toBe('true');
-    expect(within(group('create_comment')).getByRole('button', { name: 'Allow' }).getAttribute('aria-pressed')).toBe(
-      'false',
-    );
-    expect(within(group('create_issue')).getByRole('button', { name: 'Off' }).getAttribute('aria-pressed')).toBe(
-      'true',
-    );
+    const heading = screen.getByRole('heading', { level: 2, name: /Tools agents may use\s*3 found/ });
+    expect(heading.className).toContain('text-heading');
+    expect(heading.className).not.toContain('text-lg');
+    const selected = (tool: string) =>
+      within(group(tool)).getByRole('radio', { checked: true }).parentElement?.textContent;
+    expect(selected('create_comment')).toBe('Ask first');
+    expect(selected('update_issue_status')).toBe('Allow');
+    expect(selected('create_issue')).toBe('Off');
+    expect(within(group('create_comment')).getAllByRole('radio')).toHaveLength(3);
   });
 
   it('saves the whole list with the one tool changed, and reads the connection again', async () => {
     vi.mocked(updateConnection).mockResolvedValue(connectionFixture({ name: 'linear', kind: 'mcp-server', tools }));
     renderCard(connectionFixture({ name: 'linear', kind: 'mcp-server', tools }));
 
-    fireEvent.click(within(group('create_issue')).getByRole('button', { name: 'Ask first' }));
+    fireEvent.click(within(group('create_issue')).getByRole('radio', { name: 'Ask first' }));
 
     await waitFor(() => expect(updateConnection).toHaveBeenCalledTimes(1));
     expect(updateConnection).toHaveBeenCalledWith('org-1', 'linear', {
@@ -78,8 +78,11 @@ describe('the tools of an MCP connection', () => {
   it('shows the three settings disabled to a caller without connection:manage', () => {
     renderCard(connectionFixture({ name: 'linear', kind: 'mcp-server', tools }), false);
 
-    const buttons = within(group('create_comment')).getAllByRole('button');
-    expect(buttons.map((b) => (b as HTMLButtonElement).disabled)).toEqual([true, true, true]);
+    const radios = within(group('create_comment')).getAllByRole('radio');
+    expect(radios.map((b) => (b as HTMLInputElement).disabled)).toEqual([true, true, true]);
+    expect(within(group('create_comment')).getByRole('radio', { checked: true }).parentElement?.textContent).toBe(
+      'Ask first',
+    );
   });
 
   it('says to test the connection when it has no tools yet', () => {
@@ -96,7 +99,7 @@ describe('the tools of an MCP connection', () => {
       .mockResolvedValueOnce(connectionFixture({ name: 'linear', kind: 'mcp-server', tools }));
     renderCard(connectionFixture({ name: 'linear', kind: 'mcp-server', tools }));
 
-    fireEvent.click(within(group('create_issue')).getByRole('button', { name: 'Allow' }));
+    fireEvent.click(within(group('create_issue')).getByRole('radio', { name: 'Allow' }));
     const alert = await screen.findByRole('alert');
     expect(within(alert).getByText(/goald is not answering/)).toBeTruthy();
 

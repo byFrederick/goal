@@ -62,7 +62,7 @@ export function Chip({
  * The chip's text. When it changes in place, the new text is drawn again with the swap animation; the
  * first draw does not animate, so a list of chips does not move when it first appears.
  */
-function ChipText({ text }: { text: string }) {
+export function ChipText({ text }: { text: string }) {
   const [seen, setSeen] = useState({ text, generation: 0 });
   let { generation } = seen;
   if (seen.text !== text) {

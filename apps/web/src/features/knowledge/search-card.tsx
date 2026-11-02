@@ -88,13 +88,19 @@ export function SearchCard({ sources }: { sources: KnowledgeSource[] }) {
 function Hit({ hit, q, source }: { hit: KnowledgeHit; q: string; source: KnowledgeSource | undefined }) {
   const org = useOrg();
   const title = hit.heading && hit.heading !== hit.title ? `${hit.title} › ${hit.heading}` : hit.title;
-  const link = 'font-mono text-secondary text-ink underline-offset-3 hover:text-run hover:underline break-all';
+  const link = 'font-mono text-secondary text-ink underline-offset-3 hover:text-run hover:underline min-w-0 truncate';
   const url = externalUrl(hit.url);
   return (
     <li className="grid min-w-0 grid-cols-[minmax(0,1fr)_120px] gap-x-4 gap-y-1 border-t border-line py-3 first:border-t-0 first:pt-0">
       {url ? (
-        <a href={url} target="_blank" rel="noreferrer noopener" className={`${link} inline-flex items-center gap-2`}>
-          {title}
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer noopener"
+          title={title}
+          className={`${link} flex items-center gap-2`}
+        >
+          <span className="truncate">{title}</span>
           <ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" className="shrink-0" />
           <span className="sr-only">, opens at its source</span>
         </a>
@@ -103,6 +109,7 @@ function Hit({ hit, q, source }: { hit: KnowledgeHit; q: string; source: Knowled
           to="/o/$org/knowledge/$source"
           params={{ org: org.slug, source: hit.source }}
           search={{ document: hit.document }}
+          title={title}
           className={link}
         >
           {title}
