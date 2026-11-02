@@ -263,9 +263,19 @@ describe('TopBar', () => {
     expect(within(nav).getByText('Deploy key').getAttribute('title')).toBe('Deploy key');
   });
 
-  it('does not let the actions shrink', async () => {
+  it('lets the actions wrapper shrink instead of running past the gutter', async () => {
     renderBar({ at: '/o/acme/spend' });
     const button = await within(await screen.findByRole('banner')).findByRole('button', { name: 'Export CSV' });
-    expect(button.parentElement?.className).toContain('flex-none');
+    expect(button.parentElement?.className).toContain('min-w-0');
+    expect(button.parentElement?.className).not.toContain('flex-none');
+  });
+
+  it('shrinks the crumbs far ahead of the actions wrapper', async () => {
+    renderBar({ at: '/o/acme/spend' });
+    const banner = await screen.findByRole('banner');
+    const nav = within(banner).getByRole('navigation', { name: 'Breadcrumb' });
+    const button = await within(banner).findByRole('button', { name: 'Export CSV' });
+    expect(nav.className).toContain('shrink-[999]');
+    expect(button.parentElement?.className).toMatch(/(^|\s)shrink(\s|$)/);
   });
 });

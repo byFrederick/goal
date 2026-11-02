@@ -1,5 +1,5 @@
 // The header's actions (screens build/definition): Form | YAML, Versions, Review changes and
-// Publish. From 1024 px up they sit in one wrapping row (the rail takes about 260 px, so main is narrower than the viewport). Below it they are one row that never
+// Publish. From 1280 px up they sit in one wrapping row (the rail takes about 260 px, so main is narrower than the viewport, and the full row needs about 520 px beside the crumbs). Below it they are one row that never
 // wraps: Form | YAML, the primary action (Review, named Review changes) and a More menu holding Versions and Review changes.
 import { Link } from '@tanstack/react-router';
 import { Clock, Ellipsis } from 'lucide-react';
@@ -10,9 +10,9 @@ import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../../ui/menu';
 import type { EditorSection } from '../sections';
 import { ViewToggle } from './view-toggle';
 
-const narrowQuery = '(max-width: 1023px)';
+const narrowQuery = '(max-width: 1279px)';
 
-/** Whether the viewport is below 1024 px (Tailwind's lg). False without matchMedia. */
+/** Whether the viewport is below 1280 px (Tailwind's xl). False without matchMedia. */
 function useNarrow(): boolean {
   return useSyncExternalStore(
     (onChange) => {

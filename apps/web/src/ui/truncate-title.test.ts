@@ -19,7 +19,6 @@ const allowed: Record<string, { count: number; reason: string }> = {
   'app/sidebar-factories.tsx': { count: 3, reason: shown },
   'app/sidebar-search.tsx': { count: 8, reason: shown },
   'app/sidebar.tsx': { count: 4, reason: shown },
-  'features/board/board-lane.tsx': { count: 2, reason: shown },
   'features/board/board-page.tsx': { count: 1, reason: shown },
   'features/credentials/import-credentials-card.tsx': { count: 1, reason: shown },
   'features/factories/spend-week.tsx': { count: 1, reason: shown },
@@ -47,7 +46,6 @@ const allowed: Record<string, { count: number; reason: string }> = {
   'features/spend/bar-list.tsx': { count: 1, reason: shown },
   'shared/new-item.tsx': { count: 1, reason: shown },
   'shared/tokens/token-list.tsx': { count: 2, reason: shown },
-  'shared/waiting-for.tsx': { count: 1, reason: shown },
   'ui/select.tsx': { count: 1, reason: shown },
   'ui/stepper.tsx': { count: 2, reason: shown },
 };
