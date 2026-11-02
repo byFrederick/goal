@@ -15,7 +15,8 @@ The sidebar sits on the left of every organization page, from 768 px wide up.
 - **New item.** Choose New item, or press `C`, to open the composer. See [Submit and follow items](../submit-and-follow-items/).
 - **Organization pages.** Home, Needs you (with the number of items waiting on you), Runs, Connections, Credentials and Knowledge. Pages you may not open are not listed.
 - **Factories.** Each factory opens to its pages: Floor, Board, Items, Agents, Intake, Jonah, Definition and Settings. A factory's count shows the items waiting on you. A red dot means a connection or the line needs attention.
-- **Account.** The person at the bottom of the sidebar opens the account menu.
+- **Spend this week.** A row above the account shows this week's spend, with a bar against the budget when one is set. It opens Spend and billing.
+- **Account.** The person at the bottom of the sidebar, marked with an up and down chevron, opens the account menu.
 
 ## The rail
 
@@ -30,6 +31,7 @@ Choose the avatar and name at the bottom of the sidebar, or the avatar in the ra
 - **Notifications.** Opens the notifications section of your account page.
 - **Connected apps.** Shows "Not available yet" for now.
 - **Keyboard shortcuts.** Opens the shortcuts list.
+- **Help and docs.** Opens this documentation in the same tab.
 - **Sign out** and **Sign out everywhere.**
 
 ## Search
@@ -46,13 +48,11 @@ Use `↑` and `↓` to move between results, `Enter` to open the one you chose, 
 
 ## The top bar
 
-From 768 px, the top bar shows a breadcrumb on every page. On an organization page it reads the organization's name, then the page, such as Acme > Members and roles. On a factory page it reads the factory, then the page, then the item or detail you opened, such as Software > Agents > frontend-engineer. Every crumb but the last links to its page.
-
-The page's actions sit at the right of the top bar, the primary one last: New credential, Invite people, Add a source, Sync now, Test, Save changes, or Export CSV with the time window on Spend. On a phone they sit in the top bar next to the page's title, and Spend shows its time window at the top of the page. A page shows no action you lack the permission for.
+From 768 px, the top bar's breadcrumb starts with the organization (or the factory on a factory page) and links back to it.
 
 ## The phone
 
-Below 768 px, the sidebar is hidden. The top bar has the Goal mark, which opens the drawer. The drawer holds the same content as the sidebar: the organization menu, search, New item, the organization's pages, the factories and the account. The tab bar at the bottom opens Needs you, Floor, Board, Items and More. More opens the drawer. On a page that belongs to a list (a connection, a knowledge source, an agent, an assembly), the top bar also has a Back link, after the Goal mark, to that list.
+Below 768 px, the sidebar is hidden. The top bar has the Goal mark, which opens the drawer. The drawer holds the same content as the sidebar: the organization menu, search, New item, the organization's pages, the factories and the account. The tab bar at the bottom opens Needs you, Floor, Board, Items and More. More opens the drawer.
 
 ## Shortcuts
 

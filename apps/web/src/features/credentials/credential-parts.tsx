@@ -42,7 +42,7 @@ export function FactoryChips({ credential, factories }: { credential: Credential
     <span className="inline-flex flex-wrap gap-1">
       {scoped.map((f) => (
         <span key={f.id} className="inline-flex items-center">
-          <FactoryBadge mark={factoryMark(f, factories)} className="size-5" />
+          <FactoryBadge mark={factoryMark(f, factories)} />
           <span className="sr-only">{f.name}</span>
         </span>
       ))}

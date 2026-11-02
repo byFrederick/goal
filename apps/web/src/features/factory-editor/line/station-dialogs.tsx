@@ -18,11 +18,9 @@ function Actions({ submit }: { submit: string }) {
   return (
     <div className="flex flex-wrap justify-end gap-2">
       <DialogClose asChild>
-        <Button variant="white" className="h-11 md:h-10">
-          Cancel
-        </Button>
+        <Button variant="white">Cancel</Button>
       </DialogClose>
-      <Button type="submit" variant="primary" className="h-11 md:h-10">
+      <Button type="submit" variant="primary">
         {submit}
       </Button>
     </div>
@@ -411,7 +409,6 @@ export function LanesDialog({
             <Button
               variant="white"
               size="sm"
-              className="h-11 md:h-8"
               onClick={() => setLanes((ls) => [...ls, { key: next.current++, lane: '', agent: '' }])}
             >
               <Plus size={14} strokeWidth={1.5} aria-hidden="true" />

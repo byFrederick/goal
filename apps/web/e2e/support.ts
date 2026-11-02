@@ -99,3 +99,26 @@ export const orgMarkOf = (page: Page, org = 'Acme') =>
   orgNav(page)
     .filter({ visible: true })
     .getByRole('button', { name: new RegExp(`${org} organization, switch organization`) });
+
+const longText = ' with a deliberately long wording that would widen a table that does not cut it off'.repeat(3);
+
+/** Makes every title and error in the JSON the page loads from `url` very long, so a table that lets its text set its width overflows. */
+export async function lengthenTitles(page: Page, url: RegExp) {
+  const grow = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(grow);
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, inner]) => [
+          key,
+          (key === 'title' || key === 'error') && typeof inner === 'string' && inner ? inner + longText : grow(inner),
+        ]),
+      );
+    }
+    return value;
+  };
+  await page.route(url, async (route) => {
+    const response = await route.fetch();
+    if (!response.headers()['content-type']?.includes('json')) return route.fulfill({ response });
+    return route.fulfill({ response, json: grow(await response.json()) });
+  });
+}

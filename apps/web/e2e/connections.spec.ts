@@ -25,11 +25,12 @@ test.describe('the Connections page', () => {
     const failed = page.getByRole('region', { name: 'pagerduty failed its test' });
     await expect(failed).toContainText('answered 401');
     await expect(failed).toContainText('sre’s runs still get PAGERDUTY_API_TOKEN');
-    await expect(page.getByRole('heading', { level: 2, name: '9 connections' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Code hosts' })).toBeVisible();
 
     // A table where main is wide, cards where it is not: whichever shows.
     const list = page.getByRole('row').or(page.getByRole('listitem'));
     await expect(list.filter({ hasText: 'pagerduty' })).toContainText('Test failed: 401');
+    await expect(list.filter({ hasText: 'github' }).first()).toContainText('Connected');
     await expect(list.filter({ hasText: 'status-api' })).toContainText('Missing secret');
     await expect(list.filter({ hasText: 'gitlab-infra' })).toContainText('Never tested');
     if (await page.getByRole('table').isVisible()) {
@@ -37,36 +38,35 @@ test.describe('the Connections page', () => {
     }
     // The secrets themselves are never on the page.
     await expect(page.getByText(/ghp_|sk-ant/)).toHaveCount(0);
-    const activity = page.getByRole('region', { name: 'Recent activity' });
-    await expect(activity).toContainText('github: token replaced');
+    await expect(page.getByRole('region', { name: 'Recent activity' })).toHaveCount(0);
     await fits(page);
   });
 
-  test('filters by kind, text and factory in the URL; the factory sidebar opens it filtered', async ({ page }) => {
+  test('searches from the top bar and keeps the query in the URL; the factory sidebar opens it filtered', async ({
+    page,
+  }) => {
     await page.goto('/o/acme/connections');
-    await page.getByRole('combobox', { name: 'Kind' }).selectOption({ label: 'GitHub' });
-    await expect(page).toHaveURL(/kind=github/);
-    await expect(page.getByRole('heading', { level: 2, name: '1 of 9 connections' })).toBeVisible();
-    await page.getByRole('combobox', { name: 'Kind' }).selectOption({ label: 'All kinds' });
-    await page.getByRole('searchbox', { name: 'Find a connection' }).fill('aws');
-    await expect(page.getByRole('heading', { level: 2, name: '1 of 9 connections' })).toBeVisible();
+    await expect(page.getByRole('combobox')).toHaveCount(0);
+    await page.getByRole('searchbox', { name: 'Search connections' }).fill('aws');
+    await expect(page).toHaveURL(/q=aws/);
+    await expect(page.getByRole('link', { name: 'aws', exact: false }).first()).toBeVisible();
 
     // The factory's own filter (Connections of sre) is not on the phone; the drawer's Connections is the organization's.
     if (isPhone(page)) return;
     await page.goto('/o/acme/f/sre');
     await orgNav(page).getByRole('link', { name: 'Connections' }).click();
     await expect(page).toHaveURL(/\/o\/acme\/connections$/);
-    await expect(page.getByRole('combobox', { name: 'Factory' })).toHaveValue('sre');
+    await expect(page).toHaveURL(/factory=sre/);
     await fits(page);
   });
 
   test('a factory the organization has no factory of is said, never the unfiltered list', async ({ page }) => {
     await page.goto('/o/acme/connections?factory=nope');
     await expect(page.getByText('Acme has no factory named nope.')).toBeVisible();
-    await expect(page.getByRole('combobox', { name: 'Factory' })).toHaveValue('nope');
-    await expect(page.getByRole('heading', { level: 2, name: /9 connections/ })).toHaveCount(0);
+    await expect(page).toHaveURL(/factory=nope/);
+    await expect(page.getByRole('heading', { level: 2, name: 'Code hosts' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Show every connection' }).click();
-    await expect(page.getByRole('heading', { level: 2, name: '9 connections' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Code hosts' })).toBeVisible();
     await fits(page);
   });
 
@@ -97,7 +97,7 @@ test.describe('the Connections page', () => {
   test('a member reads connections but changes nothing', async ({ page }) => {
     await page.request.post('/__mock/reset', { data: { role: 'member' } });
     await page.goto('/o/acme/connections');
-    await expect(page.getByRole('heading', { level: 2, name: '9 connections' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Code hosts' })).toBeVisible();
     await expect(page.getByRole('link', { name: /Add connection/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Replace secret…' })).toHaveCount(0);
     // The audit log is for owners and admins.
@@ -110,6 +110,20 @@ test.describe('the Connections page', () => {
     await fits(page);
   });
 });
+
+// The pictures of the list at 1440 and 390 px in both themes. The Playwright suite cannot run in the
+// build box, so the baselines are made by the first CI run with --update-snapshots.
+for (const theme of ['light', 'dark'] as const) {
+  for (const width of [1440, 390]) {
+    test(`connections list screenshot, ${theme}, ${width} px`, async ({ page }) => {
+      await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/o/acme/connections');
+      await expect(page.getByRole('heading', { level: 2, name: 'Code hosts' })).toBeVisible();
+      await expect(page).toHaveScreenshot(`connections-${theme}-${width}.png`, { fullPage: true });
+    });
+  }
+}
 
 test.describe('Add connection', () => {
   test('choose a kind, fill its fields, create, then test it on its page', async ({ page }) => {
@@ -239,7 +253,7 @@ test.describe('a connection’s page', () => {
     await dialog.getByLabel(/Type gitlab-infra to confirm/).fill('gitlab-infra');
     await dialog.getByRole('button', { name: 'Delete connection' }).click();
     await expect(page).toHaveURL(/\/o\/acme\/connections$/);
-    await expect(page.getByRole('heading', { level: 2, name: '8 connections' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Code hosts' })).toBeVisible();
   });
 
   test('replacing a secret keeps the field edits not saved yet', async ({ page }) => {
@@ -400,23 +414,64 @@ test.describe('the builder', () => {
   });
 });
 
-// The pictures for the pull request: the connection page at the project's width, in both themes. They are
-// attached to the report, not compared; the design exports are the reference.
-for (const [theme, width] of [
-  ['light', 1440],
-  ['dark', 1440],
-  ['light', 390],
-  ['dark', 390],
-] as const) {
-  test(`connection screenshot, ${theme}, ${width}`, async ({ page }, testInfo) => {
-    await page.setViewportSize({ width, height: 900 });
-    await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
-    await page.goto('/o/acme/connections/pagerduty');
-    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toHaveCount(0);
-    await testInfo.attach(`connection-${theme}-${width}`, {
-      body: await page.screenshot({ fullPage: true }),
-      contentType: 'image/png',
+// The pictures for the pull request: the connection page at the desktop and phone widths, in both
+// themes. They are attached to the report, not compared; the design export is the reference.
+for (const theme of ['light', 'dark'] as const) {
+  for (const [name, size] of [
+    ['1440', { width: 1440, height: 900 }],
+    ['390', { width: 390, height: 844 }],
+  ] as const) {
+    test(`connection page screenshot, ${name} px, ${theme}`, async ({ page }, testInfo) => {
+      await page.setViewportSize(size);
+      await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+      await page.goto('/o/acme/connections/pagerduty');
+      await expect(page.getByRole('heading', { level: 1, name: /pagerduty/ })).toBeVisible();
+      await testInfo.attach(`connection-${name}-${theme}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: 'image/png',
+      });
     });
-  });
+  }
 }
+
+// The add screen at 1440 and 390 px in both themes, and the phone's tab bar below the catalog.
+for (const theme of ['light', 'dark'] as const) {
+  for (const width of [1440, 390]) {
+    test(`add connection screenshot, ${theme}, ${width} px`, async ({ page }) => {
+      await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/o/acme/connections/new');
+      await expect(page.getByRole('heading', { level: 1, name: 'Add a connection' })).toBeVisible();
+      await expect(page).toHaveScreenshot(`connection-add-${theme}-${width}.png`, { fullPage: true });
+    });
+  }
+}
+
+test('add connection at 390 px keeps the tab bar fully visible below the catalog', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/connections/new');
+  const catalog = page.getByRole('navigation', { name: 'Catalog' });
+  await expect(catalog).toBeVisible();
+  await catalog.getByRole('button').last().scrollIntoViewIfNeeded();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const tabs = page.getByRole('navigation', { name: 'Tabs' });
+  const bar = await tabs.boundingBox();
+  const last = await catalog.getByRole('button').last().boundingBox();
+  expect(bar).not.toBeNull();
+  expect(last).not.toBeNull();
+  if (!bar || !last) return;
+  expect(bar.y).toBeGreaterThanOrEqual(0);
+  expect(bar.y + bar.height).toBeLessThanOrEqual(844);
+  expect(last.y + last.height).toBeLessThanOrEqual(bar.y);
+  // Nothing is painted over the bar: the topmost element at its centre and near both bottom corners is in the bar.
+  const covered = await page.evaluate(
+    ({ x, y, w, h }) =>
+      [
+        [x + w / 2, y + h / 2],
+        [x + 4, y + h - 4],
+        [x + w - 4, y + h - 4],
+      ].filter(([px = 0, py = 0]) => !document.elementFromPoint(px, py)?.closest('nav[aria-label="Tabs"]')).length,
+    { x: bar.x, y: bar.y, w: bar.width, h: bar.height },
+  );
+  expect(covered).toBe(0);
+});

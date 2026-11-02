@@ -6,9 +6,9 @@
 // with per-session sign-out (docs/design/screens/README.md, "Not built yet"). With sign-in off it names
 // the local user, has no Save or sign-out actions, and has no notification preferences to change.
 import { useQuery } from '@tanstack/react-query';
-import { Link, useLocation } from '@tanstack/react-router';
+import { createLink, useLocation } from '@tanstack/react-router';
 import { SquareTerminal } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { type ComponentProps, type FormEvent, useLayoutEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '../../api/client';
 import { meQuery, notificationsQuery } from '../../api/queries';
@@ -73,19 +73,7 @@ function AccountContent({ me, org }: { me: Me; org: OrgSummary }) {
       <TopBarSlot actions={person ? <SaveChanges pending={update.isPending || save.isPending} /> : undefined} />
       <h1 className="m-0 text-page-title tracking-display">Your account</h1>
       <div className="grid gap-8 md:grid-cols-[200px_minmax(0,1fr)]">
-        <nav aria-label="Account sections" className="flex flex-col gap-1">
-          {sections.map((s) => (
-            <Link
-              key={s.id}
-              to="/account"
-              hash={s.id}
-              aria-current={active === s.id ? 'true' : undefined}
-              className="flex h-10 items-center rounded-control px-3 text-body text-ink-soft no-underline hover:bg-hover hover:text-ink aria-[current=true]:bg-run-tint aria-[current=true]:font-semibold aria-[current=true]:text-run-ink"
-            >
-              {s.label}
-            </Link>
-          ))}
-        </nav>
+        <SectionNav active={active} />
 
         <div className="flex min-w-0 flex-col gap-4">
           <ProfileSection person={person} org={org} update={update} saved={preferences.data} save={save} />
@@ -102,6 +90,76 @@ function AccountContent({ me, org }: { me: Me; org: OrgSummary }) {
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * A link to a section of this page. The router marks every link to /account as the current page
+ * (aria-current="page") whatever the hash, so this link drops that and says "true" for the one section
+ * that is current: a place on the page, not the page.
+ */
+const SectionLink = createLink(function SectionAnchor({
+  current,
+  'aria-current': _page,
+  ...props
+}: ComponentProps<'a'> & { current: boolean }) {
+  return <a {...props} aria-current={current ? 'true' : undefined} />;
+});
+
+/**
+ * The left section nav. The current section sits on one `hover` pill that slides to the new one
+ * (MOTION.md, Tabs). It is measured from the links, so it is placed without a slide on first paint
+ * and on resize; reduced motion removes the slide (styles.css).
+ */
+function SectionNav({ active }: { active: string }) {
+  const nav = useRef<HTMLElement>(null);
+  const pill = useRef<HTMLSpanElement>(null);
+  const placed = useRef(false);
+
+  useLayoutEffect(() => {
+    const place = (animate: boolean) => {
+      const el = pill.current;
+      if (!el) return;
+      const current = nav.current?.querySelector<HTMLElement>('[aria-current="true"]');
+      if (!current) {
+        el.style.opacity = '0';
+        return;
+      }
+      if (!animate) el.style.transition = 'none';
+      el.style.opacity = '1';
+      el.style.height = `${current.offsetHeight}px`;
+      el.style.transform = `translateY(${current.offsetTop}px)`;
+      if (!animate) {
+        void el.offsetHeight;
+        el.style.transition = '';
+      }
+    };
+    place(placed.current);
+    placed.current = true;
+    const onResize = () => place(false);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  });
+
+  return (
+    <nav ref={nav} aria-label="Account sections" className="relative flex flex-col gap-1 self-start">
+      <span
+        ref={pill}
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 rounded-control bg-hover opacity-0 transition-[transform,height] duration-(--duration-fast) ease-out motion-reduce:transition-none"
+      />
+      {sections.map((s) => (
+        <SectionLink
+          key={s.id}
+          to="/account"
+          hash={s.id}
+          current={active === s.id}
+          className="press relative flex h-10 items-center rounded-control px-3 text-body text-ink-soft no-underline hover:text-ink aria-[current=true]:font-semibold aria-[current=true]:text-ink"
+        >
+          {s.label}
+        </SectionLink>
+      ))}
+    </nav>
   );
 }
 
@@ -154,7 +212,7 @@ function ProfileSection({
 /** Save changes is in the top bar; it submits this form by its id. */
 function SaveChanges({ pending }: { pending: boolean }) {
   return (
-    <Button type="submit" form={profileForm} variant="primary" disabled={pending}>
+    <Button type="submit" form={profileForm} variant="action" disabled={pending}>
       {pending ? 'Saving…' : 'Save changes'}
     </Button>
   );
@@ -259,12 +317,7 @@ function ConnectedAppsSection() {
       </h2>
       <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
         <span className="flex min-w-0 items-center gap-3">
-          <span
-            aria-hidden="true"
-            className="flex size-10 shrink-0 items-center justify-center rounded-control bg-ink text-white"
-          >
-            <SquareTerminal size={18} strokeWidth={1.5} />
-          </span>
+          <SquareTerminal size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-muted" />
           <span className="flex min-w-0 flex-col">
             <span className="text-body font-semibold">goal CLI</span>
             <span className="text-meta text-muted">Signed in on this device. Full access as you</span>

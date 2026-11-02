@@ -7,7 +7,7 @@ import { formatClock } from '../../shared/format';
 /** What a cell with no value shows: a dash, as the Agent page does. */
 export const none = '—';
 
-/** A try's dot: passed is green, failed and error are red, a try not finished yet is empty. */
+/** A try's square: passed is green, failed and error are red, a try not finished yet is empty. */
 export type TryTone = 'pass' | 'fail' | 'open';
 
 export function tryTone(state: EvalResultState): TryTone {
@@ -17,14 +17,14 @@ export function tryTone(state: EvalResultState): TryTone {
 }
 
 /**
- * The dots of a case's last tries, oldest on the left so the newest is the one at the right. The API
+ * The squares of a case's last tries, oldest on the left so the newest is the one at the right. The API
  * gives them newest first.
  */
 export function dotsOf(tries: readonly EvalHistoryTry[]): TryTone[] {
   return tries.map((t) => tryTone(t.state)).reverse();
 }
 
-/** "2 of 3 passed, last one failed": what the dots say, for a screen reader and a pointer's tip. */
+/** "2 of 3 passed, last one failed": what the squares say, for a screen reader and a pointer's tip. */
 export function triesLabel(tries: readonly EvalHistoryTry[]): string {
   if (tries.length === 0) return 'No finished try yet';
   const passed = tries.filter((t) => t.state === 'pass').length;

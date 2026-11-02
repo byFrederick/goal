@@ -73,7 +73,7 @@ export function ShellFrame({ tabs = true, children }: FrameProps) {
           tabIndex={-1}
           className={cn(
             'shell-main @container flex min-w-0 flex-1 flex-col gap-5 px-4 pt-5 outline-none md:px-7 md:py-5',
-            tabs ? 'pb-28' : 'pb-8',
+            tabs ? 'pb-[calc(7rem+env(safe-area-inset-bottom))]' : 'pb-8',
           )}
         >
           {children}

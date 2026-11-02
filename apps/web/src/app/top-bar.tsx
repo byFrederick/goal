@@ -1,5 +1,5 @@
 // The top bar (MASTER.md "Top bar"): from 768 px, a 56 px row above main. On the left, a breadcrumb:
-// on a factory page the factory's badge and name, then the page; on an organization page, the organization's name (linking to its Home) and the page.
+// on a factory page the factory's badge and name, then the page; on an organization page, the organization then the page.
 // On the right, the page's actions, the primary one last. Below 768 px the phone's top bar takes its
 // place (phone-chrome.tsx): the same page name and actions, without the crumbs.
 //
@@ -93,11 +93,11 @@ export const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/account': { label: 'Your account' },
   '/o/$org/_org/api-keys': apiKeysScreen,
   '/o/$org/_org/members': membersScreen,
+  '/o/$org/_org/models': modelsScreen,
   '/o/$org/_org/runs': runsScreen,
   '/o/$org/_org/needs-you': needsYouScreen,
-  '/o/$org/_org/spend': spendScreen,
-  '/o/$org/_org/models': modelsScreen,
   '/o/$org/_org/settings': settingsScreen,
+  '/o/$org/_org/spend': spendScreen,
   '/o/$org/_org/connections/': connectionsScreen,
   '/o/$org/_org/connections/$connection': connectionsScreen,
   '/o/$org/_org/connections/new': connectionsScreen,
@@ -109,7 +109,7 @@ export const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/o/$org/new/$step': { label: newFactoryScreen.label },
 };
 
-const crumbLink = 'text-ink-soft no-underline hover:text-ink';
+const crumbLink = 'text-muted no-underline hover:text-ink';
 
 /** The page's name the matched route shows (screens.ts), or undefined for a route the bar does not name. */
 export function usePageLabel(): string | undefined {
@@ -163,7 +163,7 @@ function FactoryCrumbs({
       key: 'factory',
       node: (
         <>
-          <FactoryBadge mark={mark} className="size-5" />
+          <FactoryBadge mark={mark} />
           <Link to="/o/$org/f/$factory" params={params} className={crumbLink}>
             {factoryTitle(factory)}
           </Link>
@@ -202,7 +202,8 @@ function FactoryCrumbs({
 function OrgCrumbs({ routeId, crumb }: { routeId: string; crumb: string | undefined }) {
   const org = useOrg();
   const screen: { label: string; to?: OrgPath } | undefined = orgRoutePages[routeId];
-  if (!screen) return null;
+  if (!screen)
+    return crumb === undefined ? null : <Trail items={[{ key: 'crumb', node: <Current>{crumb}</Current> }]} />;
   const page = screen.to ? (
     <Link to={screen.to} params={{ org: org.slug }} className={crumbLink}>
       {screen.label}
@@ -210,18 +211,28 @@ function OrgCrumbs({ routeId, crumb }: { routeId: string; crumb: string | undefi
   ) : (
     screen.label
   );
-  const ancestor: Crumb = {
-    key: 'org',
-    node: (
-      <Link to="/o/$org" params={{ org: org.slug }} className={`${crumbLink} truncate`}>
-        {org.name}
-      </Link>
-    ),
-  };
-  const items: Crumb[] =
+  const pages: Crumb[] =
     crumb === undefined
-      ? [ancestor, { key: 'page', node: <Current>{screen.label}</Current> }]
-      : [ancestor, { key: 'page', node: page }, { key: 'crumb', node: <Current>{crumb}</Current> }];
+      ? [{ key: 'page', node: <Current>{screen.label}</Current> }]
+      : [
+          { key: 'page', node: page },
+          { key: 'crumb', node: <Current>{crumb}</Current> },
+        ];
+  // The organization is the first crumb on every organization page but /account, which has no organization.
+  const items: Crumb[] =
+    routeId === '/account'
+      ? pages
+      : [
+          {
+            key: 'org',
+            node: (
+              <Link to="/o/$org" params={{ org: org.slug }} className={crumbLink}>
+                {org.name}
+              </Link>
+            ),
+          },
+          ...pages,
+        ];
   return <Trail items={items} />;
 }
 

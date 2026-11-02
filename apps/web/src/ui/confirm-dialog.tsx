@@ -83,17 +83,11 @@ export function ConfirmDialog({
           ) : null}
           <div className="flex flex-wrap justify-end gap-2">
             <DialogClose asChild>
-              <Button ref={cancelRef} variant="secondary" size="lg" className="md:h-10 md:text-sm">
+              <Button ref={cancelRef} variant="secondary">
                 {cancelLabel}
               </Button>
             </DialogClose>
-            <Button
-              type="submit"
-              variant={tone === 'danger' ? 'rework' : 'primary'}
-              size="lg"
-              className="md:h-10 md:text-sm"
-              disabled={!confirmed || pending}
-            >
+            <Button type="submit" variant={tone === 'danger' ? 'rework' : 'primary'} disabled={!confirmed || pending}>
               {pending ? (pendingLabel ?? confirmLabel) : confirmLabel}
             </Button>
           </div>

@@ -2,12 +2,14 @@ import { Slot } from 'radix-ui';
 import type { ComponentProps } from 'react';
 import { cn } from './cn';
 
-// MASTER.md, Components: buttons are 34 px (30 px small) with the control radius and weight. Focus
+// MASTER.md, Components: buttons are 32 px (28 px small) with the control radius and weight. Focus
 // comes from the global :focus-visible rule (2 px cobalt, 2 px offset). On a coarse pointer the hit
 // area grows to 44 px without changing the drawn size.
 const variants = {
-  /** Cobalt: the one primary action on a surface. */
-  primary: 'border-run bg-run text-white hover:bg-run/90',
+  /** Near-black action fill with its ink text: the one primary action on a surface. Blue stays for running, links and focus. */
+  primary: 'border-action bg-action text-action-ink hover:bg-action/90',
+  /** Alias of primary, kept so callers do not change. */
+  action: 'border-action bg-action text-action-ink hover:bg-action/90',
   /** White with a rule border: the secondary action. */
   secondary: 'border-rule bg-card text-ink hover:bg-panel',
   /** Alias of secondary, kept so callers do not change. */
@@ -27,10 +29,10 @@ const variants = {
 } as const;
 
 const sizes = {
-  /** Inside cards: 30 px. */
-  sm: 'h-7.5 px-3 text-secondary',
-  /** The default: 34 px. */
-  md: 'h-8.5 px-3 text-body',
+  /** Inside cards: 28 px. */
+  sm: 'h-7 px-3 text-secondary',
+  /** The default: 32 px. */
+  md: 'h-8 px-3 text-body',
   /** A large target for sign-in and dialogs: 44 px. */
   lg: 'h-11 px-4 text-body',
   /** An icon-only button: 32 px square. It must have an accessible name. */
@@ -59,8 +61,8 @@ export function Button({ variant = 'secondary', size = 'md', asChild, className,
   );
 
   if (asChild) {
-    return <Slot.Root className={classes} {...props} />;
+    return <Slot.Root className={classes} data-variant={variant} {...props} />;
   }
 
-  return <button type={type ?? 'button'} className={classes} {...props} />;
+  return <button type={type ?? 'button'} className={classes} data-variant={variant} {...props} />;
 }

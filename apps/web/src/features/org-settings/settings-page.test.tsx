@@ -1,17 +1,13 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { keys } from '../../api/queries';
 import type { AuthConfig, Member, OrgSettings, OrgSummary } from '../../api/types';
+import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { TooltipProvider } from '../../ui/tooltip';
 import { OrgSettingsPage } from './settings-page';
-
-// The top bar is the app's shell: here the page's actions render in a region named Top bar, where the page puts them.
-vi.mock('../../app/top-bar', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../app/top-bar')>()),
-  TopBarSlot: ({ actions }: { actions?: React.ReactNode }) => <section aria-label="Top bar">{actions}</section>,
-}));
 
 // The API client, the router and the permission hooks are replaced, so each state is exact and no
 // request leaves the test.
@@ -76,6 +72,17 @@ const member = (id: string, name: string, role: string) =>
 
 const admins = [member('maya', 'Maya Ruiz', 'admin')];
 
+// The page under a stand-in for the shell's top bar (the real one needs the router), so its TopBarSlot actions show.
+function TopBarFrame({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<TopBarState | null>(null);
+  return (
+    <TopBarSetContext.Provider value={setState}>
+      <header data-testid="top-bar">{state?.actions}</header>
+      {children}
+    </TopBarSetContext.Provider>
+  );
+}
+
 function renderPage({
   held = ['org:manage', 'org:delete', 'org:transfer'],
   auth = signIn,
@@ -95,7 +102,9 @@ function renderPage({
   return render(
     <QueryClientProvider client={client}>
       <TooltipProvider>
-        <OrgSettingsPage />
+        <TopBarFrame>
+          <OrgSettingsPage />
+        </TopBarFrame>
       </TooltipProvider>
     </QueryClientProvider>,
   );
@@ -158,7 +167,6 @@ describe('Organization settings page', () => {
   it('is read-only without org:manage, with who changes it', () => {
     renderPage({ held: [] });
     expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
-    expect(within(screen.getByRole('region', { name: 'Top bar' })).queryByRole('button')).toBeNull();
     expect(screen.getByLabelText('Name').hasAttribute('readonly')).toBe(true);
     expect(screen.queryByRole('heading', { name: 'Danger zone' })).toBeNull();
   });
@@ -205,19 +213,64 @@ describe('controls the API does not have yet', () => {
   });
 });
 
-describe('saving General and Slots', () => {
-  it('puts Save changes in the top bar, once, disabled until the form changes', () => {
+describe('Organization settings v3 details', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('puts an ink Save changes in the top bar, not in the page', () => {
     renderPage();
-    const save = within(screen.getByRole('region', { name: 'Top bar' })).getByRole('button', { name: 'Save changes' });
-    expect(screen.getAllByRole('button', { name: 'Save changes' })).toHaveLength(1);
-    expect((save as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Acme Robotics' } });
-    expect((save as HTMLButtonElement).disabled).toBe(false);
+    const save = screen.getByRole('button', { name: 'Save changes' });
+    expect(save.className).toContain('bg-action');
+    expect(save.className).not.toContain('bg-run');
+    expect(save.closest('header')).toBeTruthy();
+    expect(save.getAttribute('form')).toBe('org-settings');
   });
 
+  it('keeps the address prefix whole and lets the address take the rest', () => {
+    renderPage();
+    const prefix = screen.getByText(`${window.location.host}/o/`);
+    expect(prefix.className).toContain('shrink-0');
+    expect(prefix.className).toContain('whitespace-nowrap');
+    expect(screen.getByLabelText('Address').className).toContain('flex-1');
+  });
+
+  it('draws each factory chip with its badge mark', () => {
+    renderPage();
+    const marked = document.querySelectorAll('span.bg-run.size-\\[18px\\]');
+    expect(marked.length).toBe(3);
+    for (const m of marked) expect(m.className).not.toContain('bg-card');
+  });
+
+  it('marks the section in view in the table of contents', () => {
+    let notify: (entries: Partial<IntersectionObserverEntry>[]) => void = () => undefined;
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(cb: (e: Partial<IntersectionObserverEntry>[]) => void) {
+          notify = cb;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    renderPage();
+    const toc = screen.getByRole('navigation', { name: 'On this page' });
+    const current = () =>
+      within(toc)
+        .getAllByRole('link')
+        .filter((a) => a.getAttribute('aria-current') === 'location');
+    expect(current().map((a) => a.textContent)).toEqual(['General']);
+    fireEvent.click(within(toc).getByRole('link', { name: 'Data' }));
+    expect(current().map((a) => a.textContent)).toEqual(['Data']);
+    const sec = document.getElementById('signin');
+    act(() => notify([{ isIntersecting: true, target: sec as Element }]));
+    expect(current().map((a) => a.textContent)).toEqual(['Sign-in']);
+  });
+});
+
+describe('saving General and Slots', () => {
   it('sends only the changed name', async () => {
     renderPage();
-    const save = within(screen.getByRole('region', { name: 'Top bar' })).getByRole('button', { name: 'Save changes' });
+    const save = screen.getByRole('button', { name: 'Save changes' });
     expect((save as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Acme Robotics' } });
     fireEvent.click(save);

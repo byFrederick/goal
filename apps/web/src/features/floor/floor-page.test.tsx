@@ -598,6 +598,8 @@ describe('the cards below the figures', () => {
     expect(within(card).getByText("Share of the week each station's agents were busy")).toBeTruthy();
     expect(within(card).getByText('94%')).toBeTruthy();
     expect(card.querySelectorAll('.bg-amber')).toHaveLength(1);
+    expect(card.querySelectorAll('.bg-ink').length).toBeGreaterThan(0);
+    expect(card.querySelector('.bg-run')).toBeNull();
   });
 
   describe('the what-if', () => {

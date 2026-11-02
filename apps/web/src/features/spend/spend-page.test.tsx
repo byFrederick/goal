@@ -10,12 +10,6 @@ import type { OrgSpend, SpendWindow } from '../../api/types';
 import { answerFor, spendFixture } from './fixture';
 import { renderSpend } from './harness';
 
-// The top bar is the app's shell: here the page's actions render in a region named Top bar, where the page puts them.
-vi.mock('../../app/top-bar', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../app/top-bar')>()),
-  TopBarSlot: ({ actions }: { actions?: React.ReactNode }) => <section aria-label="Top bar">{actions}</section>,
-}));
-
 const { getOrgSpend, exportOrgSpend } = vi.hoisted(() => ({
   getOrgSpend: vi.fn(),
   exportOrgSpend: vi.fn(),
@@ -43,31 +37,74 @@ afterEach(() => {
 });
 
 describe('the spend screen, ready', () => {
-  it('puts the window control and Export CSV in the top bar, and a phone copy of the window in the page', async () => {
-    renderSpend();
-
-    const bar = await screen.findByRole('region', { name: 'Top bar' });
-    expect(within(bar).getByRole('group', { name: 'Time window' })).toBeTruthy();
-    expect(within(bar).getByRole('button', { name: 'Export CSV' })).toBeTruthy();
-    expect(screen.getAllByRole('group', { name: 'Time window' })).toHaveLength(2);
-  });
-
   it('shows the title, the window control and the figures', async () => {
     renderSpend();
 
     expect(await screen.findByRole('heading', { name: 'Spend and billing' })).toBeTruthy();
-    expect(
-      (
-        within(screen.getByRole('region', { name: 'Top bar' })).getByRole('radio', {
-          name: 'This week',
-        }) as HTMLInputElement
-      ).checked,
-    ).toBe(true);
-    expect(await screen.findByText('Spend this week')).toBeTruthy();
-    expect(screen.getByText('$1,940')).toBeTruthy();
-    expect(screen.getByText('September $2,310')).toBeTruthy();
-    expect(screen.getByText('$3.40')).toBeTruthy();
-    expect(screen.getByText('Spent on rework')).toBeTruthy();
+    expect((screen.getByRole('radio', { name: 'This week' }) as HTMLInputElement).checked).toBe(true);
+    const header = screen.getByTestId('top-bar');
+    expect(within(header).getByRole('radio', { name: 'This month' })).toBeTruthy();
+    expect(within(header).getByRole('button', { name: 'Export CSV' })).toBeTruthy();
+    expect(screen.getAllByRole('radio', { name: 'This month' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Export CSV' })).toHaveLength(1);
+    const strip = await screen.findByRole('region', { name: 'Spend this week' });
+    expect(within(strip).getByText('Spend this week')).toBeTruthy();
+    expect(within(strip).getByText('$1,940')).toBeTruthy();
+    expect(within(strip).getByText(/September \$2,310/)).toBeTruthy();
+    expect(within(strip).getByText('$3.40')).toBeTruthy();
+    expect(within(strip).getByText('Spent on rework')).toBeTruthy();
+    expect(within(strip).getByText('12% of spend · Runs sent back')).toBeTruthy();
+  });
+
+  it('draws one slot for each day of the week, with one bar for one day of data and today marked', async () => {
+    answerWith(() =>
+      spendFixture({
+        since: '2026-10-26T00:00:00Z',
+        until: '2026-10-26T09:00:00Z',
+        days: spendFixture()
+          .days.slice(0, 1)
+          .map((d) => ({ ...d, day: '2026-10-26' })),
+      }),
+    );
+    const { container } = renderSpend();
+    await screen.findByRole('heading', { name: 'Spend by day' });
+
+    const slots = container.querySelectorAll('[data-day]');
+    expect(slots).toHaveLength(7);
+    expect(slots[0]?.getAttribute('data-today')).toBe('true');
+    expect(within(slots[0] as HTMLElement).getByText('Today')).toBeTruthy();
+    expect(slots[0]?.querySelector('.max-w-12.opacity-45')).not.toBeNull();
+    expect(container.querySelectorAll('.max-w-12')).toHaveLength(1);
+    expect(screen.getAllByRole('row')).toHaveLength(2);
+  });
+
+  it('draws the days of the month and 90 days', async () => {
+    const month = renderSpend('/o/acme/spend?window=month');
+    await screen.findByRole('heading', { name: 'Spend by day' });
+    expect(month.container.querySelectorAll('[data-day]')).toHaveLength(31);
+    month.unmount();
+    cleanup();
+    const ninety = renderSpend('/o/acme/spend?window=90d');
+    await screen.findByRole('heading', { name: 'Spend by day' });
+    expect(ninety.container.querySelectorAll('[data-day]')).toHaveLength(90);
+  });
+
+  it('draws the charts in ink on a hover track and the days in factory colours, with no pattern', async () => {
+    const { container } = renderSpend();
+
+    await screen.findByText('Spend this week');
+    const rows = screen.getAllByRole('meter').filter((m) => /: \$/.test(m.getAttribute('aria-label') ?? ''));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const m of rows) {
+      expect(m.className).toContain('bg-hover');
+      expect(m.innerHTML).toMatch(/bg-ink/);
+    }
+    expect(container.querySelector('[class*="bg-factory-"]')).not.toBeNull();
+    expect(container.querySelector('pattern')).toBeNull();
+    for (const name of ['Spend by day', 'By agent', 'By model']) {
+      const card = screen.queryByRole('region', { name });
+      if (card) expect(card.innerHTML).not.toContain('bg-run');
+    }
   });
 
   it('lists the factories with their budgets, the stop and the rules', async () => {
@@ -144,12 +181,10 @@ describe('the window in the URL', () => {
   it('asks for the window the URL names, and moves the URL when another is chosen', async () => {
     const { router } = renderSpend('/o/acme/spend?window=month');
 
-    await within(await screen.findByRole('region', { name: 'Top bar' })).findByRole('radio', { name: 'This month' });
+    await screen.findByRole('radio', { name: 'This month' });
     expect(getOrgSpend).toHaveBeenCalledWith('org-1', 'month', expect.anything());
 
-    fireEvent.click(
-      within(screen.getByRole('region', { name: 'Top bar' })).getByRole('radio', { name: 'Last 90 days' }),
-    );
+    fireEvent.click(screen.getByRole('radio', { name: 'Last 90 days' }));
     await waitFor(() => expect(router.state.location.search).toEqual({ window: '90d' }));
     await waitFor(() => expect(getOrgSpend).toHaveBeenCalledWith('org-1', '90d', expect.anything()));
   });
@@ -159,13 +194,7 @@ describe('the window in the URL', () => {
 
     await screen.findByRole('heading', { name: 'Budgets' });
     expect(getOrgSpend).toHaveBeenCalledWith('org-1', 'week', expect.anything());
-    expect(
-      (
-        within(screen.getByRole('region', { name: 'Top bar' })).getByRole('radio', {
-          name: 'This week',
-        }) as HTMLInputElement
-      ).checked,
-    ).toBe(true);
+    expect((screen.getByRole('radio', { name: 'This week' }) as HTMLInputElement).checked).toBe(true);
   });
 });
 
@@ -177,6 +206,7 @@ describe('the other states', () => {
     const status = await screen.findByRole('status');
     expect(status.textContent).toBe('Loading spend and billing');
     expect(status.closest('[aria-busy="true"]')).not.toBeNull();
+    expect(document.querySelector('.animate-skeleton-pulse')).not.toBeNull();
   });
 
   it('shows an error with Try again, which asks again', async () => {

@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import type { Problem } from '@goal/api-client';
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pictureBakeOff } from '../../../mock/bake-offs.ts';
 import { ApiError, applyBakeOff, getBakeOff, listBakeOffs, rerunBakeOff } from '../../api/client';
 import type { BakeOff, BakeOffList, Factory, OrgSummary } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
-import { BakeOffIndexPage } from './bake-off-index-page';
-import { BakeOffPage } from './bake-off-page';
+import { BakeOffIndexPage, BakeOffsPending } from './bake-off-index-page';
+import { BakeOffPage, BakeOffPending } from './bake-off-page';
 
 vi.mock('../../api/client', async (original) => ({
   ...(await original<typeof import('../../api/client')>()),
@@ -74,9 +74,9 @@ describe('the bake-off page', () => {
     renderBakeOff(done());
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Which model for frontend-engineer?' })).toBeTruthy();
-    expect(
-      screen.getByText('3 models on the same 5 frontend cases, 3 tries each. Finished Oct 25 at 18:40, cost $14.20.'),
-    ).toBeTruthy();
+    // The cost is a NumberRoll, so the sentence is read from the paragraph, which holds its sr-only text once.
+    const subline = screen.getByText(/3 models on the same 5 frontend cases/);
+    expect(subline.textContent).toContain('3 tries each. Finished Oct 25 at 18:40, cost $14.20');
 
     // The banner: the recommended model against the current one.
     expect(
@@ -212,7 +212,10 @@ describe('the bake-off page', () => {
       arms: running.arms.map((a) => ({ ...a, summary: null })),
     });
 
-    expect(await screen.findByText('Running')).toBeTruthy();
+    const running_ = await screen.findByText('Running');
+    expect(running_.className).toContain('thinking');
+    // The cost so far is a NumberRoll: its value is read once, from the sr-only text.
+    expect(screen.getByText('$14.20')).toBeTruthy();
     expect(screen.queryByText(/Finished/)).toBeNull();
     expect(screen.queryByText(/the same pass rate/)).toBeNull();
     expect(screen.getByRole('img', { name: 'Scatter: no model has finished its tries yet' })).toBeTruthy();
@@ -329,5 +332,16 @@ describe('the bake-offs tab', () => {
     expect(await screen.findByText('Bake-offs could not be loaded')).toBeTruthy();
     expect(screen.getByText('Evals are not turned on for this installation yet.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  });
+});
+
+describe('the routes’ pending components', () => {
+  it.each([
+    ['bake-off', BakeOffPending],
+    ['bake-offs', BakeOffsPending],
+  ])('shows the %s layout as a busy skeleton', (_name, Pending) => {
+    render(<Pending />);
+    expect(screen.getByText('Loading')).toBeTruthy();
+    expect(document.querySelector('[aria-busy="true"]')).toBeTruthy();
   });
 });

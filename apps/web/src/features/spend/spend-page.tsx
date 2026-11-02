@@ -17,13 +17,14 @@ import { Callout } from '../../ui/callout';
 import { EmptyState } from '../../ui/empty-state';
 import { PageHeader } from '../../ui/page-header';
 import { SegmentedControl } from '../../ui/segmented-control';
+import { Skeleton } from '../../ui/skeleton';
 import { Spinner } from '../../ui/spinner';
 import { BarList, type SpendRow } from './bar-list';
 import { Budgets } from './budgets';
 import { SpendDays } from './days-chart';
-import { KpiTiles } from './kpi-tiles';
 import { Payers } from './payers';
 import { spendSearch, spendWindows } from './search';
+import { SpendStats } from './spend-stats';
 import { factoryLines, windowLabel } from './view';
 
 export function SpendPage() {
@@ -63,16 +64,15 @@ export function SpendPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-4 p-4 md:p-7">
-      <PageHeader title="Spend and billing" />
       <TopBarSlot
         actions={
           <>
-            <div className="hidden md:flex">{windowControl}</div>
+            {windowControl}
             {exportCsv}
           </>
         }
       />
-      <div className="flex md:hidden">{windowControl}</div>
+      <PageHeader title="Spend and billing" />
       {exportSpend.isError ? (
         <div role="alert">
           <Callout tone="rework">{exportFailure(exportSpend.error, 'spend')}</Callout>
@@ -83,6 +83,9 @@ export function SpendPage() {
           <span role="status" className="sr-only">
             Loading spend and billing
           </span>
+          <Skeleton ready={false} placeholder={<SpendPlaceholder />}>
+            {null}
+          </Skeleton>
         </div>
       ) : query.isError ? (
         <div
@@ -101,6 +104,20 @@ export function SpendPage() {
       ) : (
         <Ready spend={query.data} org={org.slug} />
       )}
+    </div>
+  );
+}
+
+/** The stat strip and the chart as muted blocks, in the slot of what replaces them. */
+function SpendPlaceholder() {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap gap-4">
+        {['a', 'b', 'c', 'd'].map((k) => (
+          <div key={k} className="h-16 min-w-36 flex-1 rounded-control bg-hover" />
+        ))}
+      </div>
+      <div className="h-72 rounded-card bg-hover" />
     </div>
   );
 }
@@ -124,7 +141,7 @@ function Ready({ spend, org }: { spend: OrgSpend; org: string }) {
 
   return (
     <>
-      <KpiTiles spend={spend} />
+      <SpendStats spend={spend} />
       <SpendDays spend={spend} />
       <div className="grid gap-4 lg:grid-cols-2">
         <BarList labelledBy="ag-h" title="By agent" rows={agents} empty={notSplit} />

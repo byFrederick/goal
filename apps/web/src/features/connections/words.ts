@@ -76,12 +76,6 @@ export function activityText(e: AuditEntry): string {
   }
 }
 
-/** The connection an entry is about, by the name it had then. */
-export function activityName(e: AuditEntry): string {
-  const name = data(e, 'name');
-  return typeof name === 'string' ? name : e.target.id;
-}
-
 /** "Just now", "14 min ago" within a day, else "Oct 22". */
 export function activityWhen(iso: string, now: number): string {
   return now - Date.parse(iso) < 86_400_000 ? since(iso, now) : formatDay(iso);

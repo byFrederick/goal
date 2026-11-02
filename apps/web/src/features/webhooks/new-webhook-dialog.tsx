@@ -84,7 +84,7 @@ export function NewWebhookDialog({ org, factory, onClose, onCreated }: NewWebhoo
               maxLength={80}
               autoComplete="off"
               spellCheck={false}
-              placeholder="cf-deploys"
+              placeholder="acme-deploys"
               aria-describedby={`${ids}-kind`}
             />
           </Field>

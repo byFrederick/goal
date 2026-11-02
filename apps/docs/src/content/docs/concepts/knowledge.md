@@ -37,6 +37,7 @@ The gateway records one knowledge use per run, document and kind (search or read
 
 ## Where you meet it
 
+- In the web app, Knowledge lists the sources with their status and schedule, and **Add a source** is in its top bar. A source's page has **Sync now** in its top bar for a synced source, and shows its documents, settings and the factories that read it.
 - `goal knowledge sources` lists the sources with their kind, status and document count.
 - `goal knowledge add`, `sync`, `upload`, `documents` and `rm` manage sources and their documents.
 - `goal knowledge search "<query>"` searches as agents do, so a person can check what an agent would find.

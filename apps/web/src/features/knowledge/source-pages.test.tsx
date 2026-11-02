@@ -8,135 +8,150 @@ import {
   Outlet,
   RouterProvider,
 } from '@tanstack/react-router';
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { type ReactNode, Suspense, useState } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   connectionKindsQuery,
   connectionsQuery,
   factoriesQuery,
   knowledgeDocumentsQuery,
   knowledgeSourceQuery,
+  knowledgeSourcesQuery,
   orgQuery,
 } from '../../api/queries';
-import type { KnowledgeSource, Org, OrgSummary } from '../../api/types';
-import { TopBarProbe } from '../../test/top-bar-probe';
+import type { KnowledgeDocument, KnowledgeSource, Org, OrgSummary } from '../../api/types';
+import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
+import { TooltipProvider } from '../../ui/tooltip';
 import { NewSourcePage } from './new-source-page';
 import { SourcePage } from './source-page';
 
 afterEach(() => {
   cleanup();
-  delete (window as { matchMedia?: unknown }).matchMedia;
+  vi.restoreAllMocks();
 });
 
 const summary: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'Ac', factory_count: 0, role: 'owner' };
 
-const source = {
+const synced = {
   id: 'src-1',
   name: 'eng-docs',
   title: 'Engineering docs',
-  kind: 'upload',
+  kind: 'synced',
+  connection: 'github',
   status: 'idle',
+  config: { repository: 'https://github.com/acme/goal', branch: 'main', include: 'docs/**/*.md' },
+  sync_every_seconds: 3600,
+  last_synced_at: '2026-10-27T14:00:00Z',
+  next_sync_at: '2026-10-27T15:00:00Z',
+  documents: 1,
   created_by: { kind: 'user', id: 'u1', name: 'Ada' },
   created_at: '2026-10-01T00:00:00Z',
   updated_at: '2026-10-01T00:00:00Z',
-  config: {},
-  sync_every_seconds: 3600,
-  documents: 0,
   used_by: { factories: [] },
 } as unknown as KnowledgeSource;
 
-function onPhone() {
-  window.matchMedia = ((query: string) =>
-    ({
-      matches: query === '(max-width: 767px)',
-      media: query,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    }) as unknown as MediaQueryList) as typeof window.matchMedia;
+const doc = {
+  id: 'd1',
+  source: 'eng-docs',
+  title: 'Deploying to production',
+  url: 'https://github.com/acme/goal/blob/main/docs/deploy/production.md',
+  mime: 'text/markdown',
+  bytes: 12_288,
+  status: 'indexed',
+  indexed_at: '2026-10-27T14:02:00Z',
+} as KnowledgeDocument;
+
+function TopBarHost({ children }: { children: ReactNode }) {
+  const [top, setTop] = useState<TopBarState | null>(null);
+  return (
+    <TopBarSetContext.Provider value={setTop}>
+      <div data-testid="top-bar">{top?.actions}</div>
+      {children}
+    </TopBarSetContext.Provider>
+  );
 }
 
-function renderAt(url: string) {
+function renderPage(url: string) {
+  const org: Org = { ...summary, created_at: '2026-09-01T00:00:00Z', can: ['knowledge:manage'] } as Org;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
-  const org = { ...summary, created_at: '2026-09-01T00:00:00Z', can: ['knowledge:manage'] } as Org;
   client.setQueryData(orgQuery(org.id).queryKey, org);
   client.setQueryData(factoriesQuery(org.id).queryKey, []);
+  client.setQueryData(knowledgeSourceQuery(org.id, 'eng-docs').queryKey, synced);
+  client.setQueryData(knowledgeSourcesQuery(org.id).queryKey, [synced]);
   client.setQueryData(connectionsQuery(org.id).queryKey, []);
   client.setQueryData(connectionKindsQuery(org.id).queryKey, []);
-  client.setQueryData(knowledgeSourceQuery(org.id, 'eng-docs').queryKey, source);
   client.setQueryData(knowledgeDocumentsQuery(org.id, 'eng-docs').queryKey, {
-    pages: [{ documents: [] }],
+    pages: [{ documents: [doc] }],
     pageParams: [undefined],
   });
-
-  const rootRoute = createRootRoute();
+  const root = createRootRoute({
+    component: () => (
+      <TopBarHost>
+        <Suspense fallback={null}>
+          <Outlet />
+        </Suspense>
+      </TopBarHost>
+    ),
+  });
   const orgRoute = createRoute({
-    getParentRoute: () => rootRoute,
+    getParentRoute: () => root,
     path: '/o/$org',
     beforeLoad: () => ({ org: summary }),
     component: Outlet,
   });
   const layout = createRoute({ getParentRoute: () => orgRoute, id: '_org', component: Outlet });
   const knowledge = createRoute({ getParentRoute: () => layout, path: 'knowledge', component: Outlet });
-  const added = createRoute({
-    getParentRoute: () => knowledge,
-    path: 'new',
-    component: () => (
-      <TopBarProbe>
-        <NewSourcePage />
-      </TopBarProbe>
-    ),
-  });
-  const one = createRoute({
-    getParentRoute: () => knowledge,
-    path: '$source',
-    component: () => (
-      <TopBarProbe>
-        <SourcePage />
-      </TopBarProbe>
-    ),
-  });
+  const fresh = createRoute({ getParentRoute: () => knowledge, path: 'new', component: NewSourcePage });
+  const source = createRoute({ getParentRoute: () => knowledge, path: '$source', component: SourcePage });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([
-      orgRoute.addChildren([layout.addChildren([knowledge.addChildren([added, one])])]),
-    ]),
+    routeTree: root.addChildren([orgRoute.addChildren([layout.addChildren([knowledge.addChildren([fresh, source])])])]),
     history: createMemoryHistory({ initialEntries: [url] }),
   });
-  render(
+  return render(
     <QueryClientProvider client={client}>
-      <RouterProvider router={router} />
+      <TooltipProvider>
+        <RouterProvider router={router} />
+      </TooltipProvider>
     </QueryClientProvider>,
   );
 }
 
-describe('a knowledge source page', () => {
-  it('has no in-page breadcrumb, and its top bar crumb is the source’s title, not its name', async () => {
-    renderAt('/o/acme/knowledge/eng-docs');
-    await screen.findByRole('heading', { level: 1, name: /Engineering docs/ });
+describe('a Knowledge source page', () => {
+  it('has one crumb, a page-title heading and Sync now in the top bar', async () => {
+    renderPage('/o/acme/knowledge/eng-docs');
+    const h1 = await screen.findByRole('heading', { level: 1 });
+    expect(h1.className).toContain('text-page-title');
     expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
-    const bar = screen.getByRole('region', { name: 'Top bar' });
-    expect(bar.textContent).toBe('Engineering docs');
+    const bar = screen.getByTestId('top-bar');
+    expect(within(bar).getByRole('button', { name: 'Sync now, Engineering docs' })).toBeTruthy();
   });
 
-  it('gives a phone Back to Knowledge in the top bar', async () => {
-    onPhone();
-    renderAt('/o/acme/knowledge/eng-docs');
-    const back = await screen.findByRole('link', { name: 'Back to Knowledge' });
-    expect(back.getAttribute('href')).toBe('/o/acme/knowledge');
+  it('lists a document as its title, mono path, dot status, size and a bare icon button', async () => {
+    renderPage('/o/acme/knowledge/eng-docs');
+    const list = await screen.findByRole('list', { name: 'Documents of Engineering docs' });
+    const row = within(list).getByRole('listitem');
+    expect(within(row).getByRole('link', { name: 'Deploying to production' })).toBeTruthy();
+    const path = within(row).getByText('docs/deploy/production.md');
+    expect(path.className).toContain('font-mono');
+    expect(path.getAttribute('title')).toBe('docs/deploy/production.md');
+    expect(within(row).getByText(/^Indexed /)).toBeTruthy();
+    expect(within(row).getByText('12 KiB')).toBeTruthy();
+    const open = within(row).getByRole('link', { name: 'Open Deploying to production at its source' });
+    expect(open.className).toContain('bg-transparent');
   });
 });
 
-describe('the new knowledge source page', () => {
-  it('has no in-page breadcrumb, and its top bar crumb is New source', async () => {
-    renderAt('/o/acme/knowledge/new');
-    await screen.findByRole('heading', { level: 1, name: 'New source' });
+describe('the New source page', () => {
+  it('shows Kind as a radio group of three cards, and Cancel and Add source inside the form', async () => {
+    renderPage('/o/acme/knowledge/new');
+    const group = await screen.findByRole('group', { name: 'Kind' });
+    expect(within(group).getAllByRole('radio')).toHaveLength(3);
     expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
-    expect(screen.getByRole('region', { name: 'Top bar' }).textContent).toBe('New source');
-  });
-
-  it('gives a phone Back to Knowledge in the top bar', async () => {
-    onPhone();
-    renderAt('/o/acme/knowledge/new');
-    const back = await screen.findByRole('link', { name: 'Back to Knowledge' });
-    expect(back.getAttribute('href')).toBe('/o/acme/knowledge');
+    expect(screen.getByRole('heading', { level: 1, name: 'New source' }).className).toContain('text-page-title');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add source' })).toBeTruthy());
+    const form = screen.getByRole('button', { name: 'Add source' }).closest('form');
+    expect(form).not.toBeNull();
+    expect(within(form as HTMLElement).getByRole('link', { name: 'Cancel' })).toBeTruthy();
   });
 });

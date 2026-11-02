@@ -10,12 +10,6 @@ import { renderOrgPage } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
 import { CredentialsPage } from './credentials-page';
 
-// The top bar is the app's shell: here the page's actions render in a region named Top bar, where the page puts them.
-vi.mock('../../app/top-bar', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../app/top-bar')>()),
-  TopBarSlot: ({ actions }: { actions?: React.ReactNode }) => <section aria-label="Top bar">{actions}</section>,
-}));
-
 // The list the page reads, and which requests fail. The clock is fixed so the expiry days and the
 // "expires this week" count do not depend on the day the test runs.
 const state = vi.hoisted(() => ({
@@ -156,6 +150,7 @@ function renderPage({
     ],
     search,
     path: '/credentials',
+    topBar: true,
   });
 }
 
@@ -172,20 +167,24 @@ const optionText = (name: RegExp) => (screen.getByRole('radio', { name }).closes
 const isChecked = (name: RegExp) => (screen.getByRole('radio', { name }) as HTMLInputElement).checked;
 
 describe('the Credentials page', () => {
+  it('renders at most one primary button when there are no credentials', async () => {
+    state.rows = [];
+    const { container } = renderPage();
+
+    await screen.findByText('No credentials yet');
+    const triggers = screen.getAllByRole('button', { name: /New credential/ });
+    expect(triggers).toHaveLength(1);
+    expect(container.ownerDocument.querySelectorAll('[data-variant="primary"],[data-variant="action"]')).toHaveLength(
+      1,
+    );
+  });
+
   it('says it is loading while the list is out', async () => {
     state.hold = true;
     renderPage();
 
     const loading = await screen.findByText('Loading');
     expect(loading.closest('[aria-busy="true"]')).not.toBeNull();
-  });
-
-  it('shows only the title in the page header, without the organization name above it', async () => {
-    state.rows = picture();
-    renderPage();
-
-    const h1 = await screen.findByRole('heading', { level: 1, name: 'Credentials' });
-    expect(h1.parentElement?.firstElementChild).toBe(h1);
   });
 
   it('shows each kind’s count on its filter, All included, and the counts stay with the whole list', async () => {
@@ -219,29 +218,44 @@ describe('the Credentials page', () => {
     expect(await screen.findByRole('table', { name: /Credentials of Acme/ })).toBeTruthy();
   });
 
-  it('says there are no credentials yet and offers New credential to a manager', async () => {
+  it('says there are no credentials yet and shows New credential once, in the top bar', async () => {
     renderPage();
 
     expect(await screen.findByText('No credentials yet')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /New credential/ }).length).toBeGreaterThan(0);
+    const buttons = screen.getAllByRole('button', { name: /New credential/ });
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]?.closest('header')).toBeTruthy();
   });
 
-  it('puts New credential in the top bar, and nowhere else on the page when there are credentials', async () => {
-    state.rows = picture();
+  it('titles the page at the page-title size and puts the lock line under it', async () => {
     renderPage();
 
-    await screen.findByRole('table', { name: /Credentials of Acme/ });
-    const bar = screen.getByRole('region', { name: 'Top bar' });
-    expect(within(bar).getByRole('button', { name: /New credential/ })).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /New credential/ })).toHaveLength(1);
+    const title = await screen.findByRole('heading', { level: 1, name: 'Credentials' });
+    expect(title.className).toContain('text-page-title');
+    const line = screen.getByText(/Encrypted before storage, never shown again/).closest('p') as HTMLElement;
+    expect(line.querySelector('svg')).toBeTruthy();
+    expect(within(line).getByRole('button', { name: 'Encrypt in your browser instead' })).toBeTruthy();
   });
 
-  it('leaves the top bar empty for a member who only reads', async () => {
+  it('searches from the top bar, with the text in the URL, even while loading and when empty', async () => {
     state.rows = picture();
-    renderPage({ can: ['credential:read'] });
+    const { router } = renderPage({ search: { q: 'cloudflare' } });
 
-    await screen.findByRole('table', { name: /Credentials of Acme/ });
-    expect(within(screen.getByRole('region', { name: 'Top bar' })).queryByRole('button')).toBeNull();
+    const field = (await screen.findByRole('searchbox', { name: 'Search credentials' })) as HTMLInputElement;
+    expect(field.closest('header')).toBeTruthy();
+    expect(field.value).toBe('cloudflare');
+    await screen.findByRole('table');
+    expect(screen.getByRole('table').querySelectorAll('tbody tr')).toHaveLength(1);
+
+    fireEvent.change(field, { target: { value: 'zzz' } });
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ q: 'zzz' }));
+  });
+
+  it('shows the search field while the list loads', async () => {
+    state.hold = true;
+    renderPage();
+
+    expect(await screen.findByRole('searchbox', { name: 'Search credentials' })).toBeTruthy();
   });
 
   it('shows the picture’s seven rows with their type, factories, users, last use and expiry', async () => {
@@ -369,6 +383,15 @@ describe('the Credentials page', () => {
     expect(screen.getByRole('menuitem', { name: /Import from .env or YAML/ }).getAttribute('href')).toBe(
       '/o/acme/credentials/new?panel=import',
     );
+  });
+
+  it('gives a member no New credential menu', async () => {
+    state.rows = picture();
+    renderPage({ can: ['credential:read'] });
+
+    await screen.findByRole('table');
+    expect(screen.queryByRole('button', { name: /New credential/ })).toBeNull();
+    expect(screen.getByRole('searchbox', { name: 'Search credentials' })).toBeTruthy();
   });
 
   it('shows encryption in the browser as not available yet', async () => {

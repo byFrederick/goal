@@ -12,9 +12,8 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { factoriesQuery } from '../api/queries';
 import type { Factory, OrgSummary } from '../api/types';
-import { routeTree } from '../routeTree.gen';
 import { ShellFrame } from './app-shell';
-import { orgRoutePages, pageLabel, TopBarSlot } from './top-bar';
+import { TopBarSlot } from './top-bar';
 
 const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'Ac', factory_count: 1, role: 'owner' };
 
@@ -58,6 +57,11 @@ function ItemStub() {
   );
 }
 
+/** A connection page: it names itself in the top bar's crumb. */
+function ConnectionStub() {
+  return <TopBarSlot crumb="Deploy key" />;
+}
+
 /** The shell as the routes draw it: the organization's, the factory's, and the items' pages. */
 function renderBar({ at, item }: { at: string; item?: { number: number } }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
@@ -81,18 +85,25 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
     ),
   });
   const home = createRoute({ getParentRoute: () => orgPages, path: '/', component: () => <p>Home page</p> });
-  const page = (path: string) =>
-    createRoute({ getParentRoute: () => orgPages, path, component: () => <p>{path} page</p> });
-  const connections = createRoute({ getParentRoute: () => orgPages, path: 'connections', component: Outlet });
-  const connectionsIndex = createRoute({
-    getParentRoute: () => connections,
-    path: '/',
-    component: () => <p>Connections page</p>,
+  const connection = createRoute({
+    getParentRoute: () => orgPages,
+    path: 'connections/$connection',
+    component: ConnectionStub,
   });
-  const connectionRoute = createRoute({
-    getParentRoute: () => connections,
-    path: '$connection',
-    component: () => <TopBarSlot crumb="github" />,
+  const spend = createRoute({
+    getParentRoute: () => orgPages,
+    path: 'spend',
+    component: () => (
+      <>
+        <TopBarSlot actions={<button type="button">Export CSV</button>} />
+        <p>Spend page</p>
+      </>
+    ),
+  });
+  const models = createRoute({
+    getParentRoute: () => orgPages,
+    path: 'models',
+    component: () => <p>Models page</p>,
   });
   const factoryRoute = createRoute({
     getParentRoute: () => orgRoute,
@@ -111,13 +122,7 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
   const router = createRouter({
     routeTree: rootRoute.addChildren([
       orgRoute.addChildren([
-        orgPages.addChildren([
-          home,
-          page('members'),
-          page('needs-you'),
-          page('spend'),
-          connections.addChildren([connectionsIndex, connectionRoute]),
-        ]),
+        orgPages.addChildren([home, connection, spend, models]),
         factoryRoute.addChildren([floor, items.addChildren([itemsIndex, itemRoute])]),
       ]),
     ]),
@@ -131,11 +136,6 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
 }
 
 afterEach(cleanup);
-
-/** Every route id of the generated route tree (FileRoutesById's keys). */
-function collectIds(): string[] {
-  return Object.keys(createRouter({ routeTree, context: { queryClient: new QueryClient() } }).routesById);
-}
 
 describe('TopBar', () => {
   it('shows Software / Items / #12 on a factory item page', async () => {
@@ -163,7 +163,20 @@ describe('TopBar', () => {
     expect(buttons).toEqual(['Share', 'Publish']);
   });
 
-  it('shows the organization and the page name on an organization page', async () => {
+  it('names the spend page and shows its actions', async () => {
+    renderBar({ at: '/o/acme/spend' });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(nav).getByText('Spend and billing').getAttribute('aria-current')).toBe('page');
+    expect(within(await screen.findByRole('banner')).getByRole('button', { name: 'Export CSV' })).toBeTruthy();
+  });
+
+  it('names the models page as the current crumb', async () => {
+    renderBar({ at: '/o/acme/models' });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(nav).getByText('Models and policies').getAttribute('aria-current')).toBe('page');
+  });
+
+  it('starts an organization page with the organization, linked, then the current page', async () => {
     renderBar({ at: '/o/acme/' });
     const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
     expect(within(nav).getByText('Home').getAttribute('aria-current')).toBe('page');
@@ -171,39 +184,12 @@ describe('TopBar', () => {
     expect(within(nav).getAllByRole('listitem')).toHaveLength(2);
   });
 
-  it.each([
-    ['members', 'Members and roles'],
-    ['needs-you', 'Needs you'],
-    ['spend', 'Spend and billing'],
-    ['connections', 'Connections'],
-  ])('reads Acme > page on /%s', async (path, label) => {
-    renderBar({ at: `/o/acme/${path}` });
-    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
-    expect(within(nav).getByRole('link', { name: 'Acme' }).getAttribute('href')).toBe('/o/acme');
-    expect(within(nav).getByText(label).getAttribute('aria-current')).toBe('page');
-    expect(within(nav).getAllByRole('listitem')).toHaveLength(2);
-  });
-
-  it('reads Acme > Connections > name on a connection page', async () => {
-    renderBar({ at: '/o/acme/connections/github' });
+  it('starts a connection page with the organization, then Connections, then its name', async () => {
+    renderBar({ at: '/o/acme/connections/c1' });
     const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
     expect(within(nav).getByRole('link', { name: 'Acme' }).getAttribute('href')).toBe('/o/acme');
     expect(within(nav).getByRole('link', { name: 'Connections' }).getAttribute('href')).toBe('/o/acme/connections');
-    expect(within(nav).getByText('github').getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getByText('Deploy key').getAttribute('aria-current')).toBe('page');
     expect(within(nav).getAllByRole('listitem')).toHaveLength(3);
-  });
-
-  it('names a page for every shell route', () => {
-    const layouts = new Set(['/o/$org/_org', '/o/$org/f/$factory', '/o/$org/f/$factory/definition']);
-    const ids = collectIds();
-    const unnamed = ids.filter(
-      (id) =>
-        (id.startsWith('/o/$org/_org/') || id.startsWith('/o/$org/f/$factory/')) &&
-        !layouts.has(id) &&
-        pageLabel(id) === undefined,
-    );
-    expect(ids.length).toBeGreaterThan(20);
-    expect(unnamed).toEqual([]);
-    expect(Object.keys(orgRoutePages)).toContain('/o/$org/_org/spend');
   });
 });

@@ -56,6 +56,16 @@ export function estimateOf(estimate: ProposalEstimate): { label: string; before:
   return { label: 'Lead time, p85', before: hours(estimate.before), after: hours(estimate.after) };
 }
 
+/** The estimate's change as the stat strip's delta: "−8 pts" for a rate, "−5 h" for a time; good when it goes down. */
+export function estimateDelta(estimate: ProposalEstimate): { text: string; good: boolean } {
+  const change =
+    estimate.metric === 'sent_back_rate' ? (estimate.after - estimate.before) * 100 : estimate.after - estimate.before;
+  const rounded = Math.round(change);
+  const unit = estimate.metric === 'sent_back_rate' ? 'pts' : 'h';
+  const sign = rounded > 0 ? '+' : rounded < 0 ? '−' : '';
+  return { text: `${sign}${Math.abs(rounded)} ${unit}`, good: rounded <= 0 };
+}
+
 /** The cost per item the change adds: "+$0.04", "-$0.02", or "no change". */
 export function costPerItemText(usd: number): string {
   if (usd === 0) return 'no change';

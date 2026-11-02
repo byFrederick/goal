@@ -229,6 +229,8 @@ describe('the Agent page, ready', () => {
     expect(within(reasons).getAllByRole('listitem')).toHaveLength(4);
     expect(within(reasons).getByText('No test for a new empty or error state')).toBeTruthy();
     expect(screen.queryByText(/copy \d/i)).toBeNull();
+    expect(reasons.querySelectorAll('.bg-rework').length).toBeGreaterThan(0);
+    expect(reasons.querySelector('[class*="repeating"], [class*="hatch"]')).toBeNull();
   });
 
   it('settles each setting as its own value or the factory default', async () => {

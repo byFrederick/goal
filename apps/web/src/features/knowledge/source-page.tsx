@@ -3,7 +3,6 @@
 // one's indexed text over the page (?document=); and beside them its settings (title, schedule,
 // what a synced source reads), the factories that may search it and Delete, which needs the name
 // typed and is refused while a factory's current version lists it. Members read it all.
-
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { type FormEvent, useId, useState } from 'react';
@@ -11,7 +10,6 @@ import { toast } from 'sonner';
 import { deleteKnowledgeSource, updateKnowledgeSource } from '../../api/knowledge';
 import { connectionKindsQuery, connectionsQuery, keys, knowledgeSourceQuery } from '../../api/queries';
 import type { KnowledgeSource } from '../../api/types';
-import { usePhoneBack } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { namesText } from '../../shared/connections';
 import { useCreatedOnce } from '../../shared/created';
@@ -22,10 +20,8 @@ import { useEdits } from '../../shared/use-edits';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
-import { cn } from '../../ui/cn';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Field, Input, NativeSelect } from '../../ui/field';
-import { descriptionClass, PageHeader, sectionHeadingClass } from '../../ui/page-header';
 import { ReadOnly } from '../../ui/read-only';
 import { ConfigFields, configErrors, readerOf, trimmed } from './config-fields';
 import { DocumentDialog, DocumentList } from './documents';
@@ -47,48 +43,42 @@ export function SourcePage() {
   const times = syncTimes(source, Date.now());
   const docsId = useId();
 
-  const back = usePhoneBack('Back to Knowledge', '/o/$org/knowledge', { org: org.slug });
   return (
     <>
       <TopBarSlot
-        crumb={source.title}
-        back={back}
+        crumb={source.name}
         actions={
           manage && source.kind === 'synced' ? (
-            <SyncNowButton source={source} sync={sync} className="h-11 md:h-10" />
+            <SyncNowButton source={source} sync={sync} className="h-11 md:h-8.5" />
           ) : null
         }
       />
-      <PageHeader
-        title={
-          <span className="inline-flex flex-wrap items-center gap-3">
-            <span>{source.title}</span>
-            <Chip tone="quiet" className="bg-panel font-normal tracking-normal">
-              {sourceKinds[source.kind].label}
-            </Chip>
-          </span>
-        }
-        description={
-          <div className={cn(descriptionClass, 'flex flex-col gap-1')}>
-            <p className="m-0 break-words" translate="no">
-              <span className="font-mono text-sm text-ink">{source.name}</span>, {sourceSummary(source)}
-            </p>
-            <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-              <StatusText line={{ tone: status.tone, text: status.text }} busy={source.status === 'syncing'} />
-              {source.kind === 'live' ? null : (
-                <span>
-                  {source.status === 'syncing'
-                    ? 'Syncing now'
-                    : source.last_synced_at
-                      ? `${source.kind === 'upload' ? 'Last indexed' : 'Last sync'} ${times.last}`
-                      : 'Not synced yet'}
-                  {times.next && source.kind === 'synced' ? `. ${times.next}` : ''}.
-                </span>
-              )}
-            </p>
-          </div>
-        }
-      />
+      <header className="flex min-w-0 flex-col gap-1">
+        <h1 className="m-0 flex flex-wrap items-center gap-3 text-page-title">
+          <span>{source.title}</span>
+          <Chip tone="quiet" className="bg-panel font-normal tracking-normal">
+            {sourceKinds[source.kind].label}
+          </Chip>
+        </h1>
+        <div className="flex flex-col gap-1 text-body text-muted">
+          <p className="m-0 break-words" translate="no">
+            <span className="font-mono text-ink">{source.name}</span>, {sourceSummary(source)}
+          </p>
+          <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <StatusText line={{ tone: status.tone, text: status.text }} busy={source.status === 'syncing'} />
+            {source.kind === 'live' ? null : (
+              <span>
+                {source.status === 'syncing'
+                  ? 'Syncing now'
+                  : source.last_synced_at
+                    ? `${source.kind === 'upload' ? 'Last indexed' : 'Last sync'} ${times.last}`
+                    : 'Not synced yet'}
+                {times.next && source.kind === 'synced' ? `. ${times.next}` : ''}.
+              </span>
+            )}
+          </p>
+        </div>
+      </header>
 
       {created ? (
         <div role="status">
@@ -102,8 +92,8 @@ export function SourcePage() {
           {source.kind === 'upload' && manage ? <UploadCard source={source} /> : null}
           {source.kind === 'live' ? (
             <section className={card}>
-              <h2 className={sectionHeadingClass}>Documents</h2>
-              <p className="m-0 text-sm leading-normal text-muted">
+              <h2 className="m-0 text-heading">Documents</h2>
+              <p className="m-0 text-body leading-normal text-muted">
                 A live source stores nothing. Factories that list it get the tools of{' '}
                 <span translate="no">{source.connection}</span>, which search at question time.
               </p>
@@ -111,10 +101,10 @@ export function SourcePage() {
           ) : (
             <section aria-labelledby={docsId} className={card}>
               <div className="flex items-baseline justify-between gap-3">
-                <h2 id={docsId} className={sectionHeadingClass}>
+                <h2 id={docsId} className="m-0 text-heading">
                   Documents
                 </h2>
-                <span className="text-[13px] text-muted">{plural(source.documents, 'document')}</span>
+                <span className="text-secondary text-muted">{plural(source.documents, 'document')}</span>
               </div>
               <DocumentList source={source} manage={manage} />
             </section>
@@ -152,7 +142,7 @@ function UploadCard({ source }: { source: KnowledgeSource }) {
   return (
     <section aria-labelledby={id} className={card}>
       <div className="flex items-baseline justify-between gap-3">
-        <h2 id={id} className={sectionHeadingClass}>
+        <h2 id={id} className="m-0 text-heading">
           Upload
         </h2>
         {over && !uploader.busy ? (
@@ -216,7 +206,7 @@ function SettingsCard({ source: s, manage }: { source: KnowledgeSource; manage: 
 
   const form = (
     <form aria-labelledby={id} onSubmit={submit} noValidate className={card}>
-      <h2 id={id} className={sectionHeadingClass}>
+      <h2 id={id} className="m-0 text-heading">
         Settings
       </h2>
       <Field
@@ -227,12 +217,12 @@ function SettingsCard({ source: s, manage }: { source: KnowledgeSource; manage: 
         <Input value={title} onChange={(e) => edits.set('title', e.target.value)} maxLength={120} autoComplete="off" />
       </Field>
       <Field label="Name" help="How definitions list it. It never changes.">
-        <Input value={s.name} readOnly translate="no" className="font-mono md:text-sm" />
+        <Input value={s.name} readOnly translate="no" className="font-mono md:text-body" />
       </Field>
       {s.kind === 'synced' ? (
         <>
           <Field label="Connection" help="It never changes: add another source to read another connection.">
-            <Input value={s.connection ?? ''} readOnly translate="no" className="font-mono md:text-sm" />
+            <Input value={s.connection ?? ''} readOnly translate="no" className="font-mono md:text-body" />
           </Field>
           <ConfigFields
             reader={reader}
@@ -274,18 +264,18 @@ function UsedByCard({ source: s }: { source: KnowledgeSource }) {
   const id = useId();
   return (
     <section aria-labelledby={id} className={card}>
-      <h2 id={id} className={sectionHeadingClass}>
+      <h2 id={id} className="m-0 text-heading">
         Used by
       </h2>
       {s.used_by.factories.length === 0 ? (
-        <p className="m-0 text-sm leading-normal text-muted">
+        <p className="m-0 text-body leading-normal text-muted">
           No factory’s current version lists it yet. A factory’s Definition says which sources its agents may search,
           under Connections and knowledge.
         </p>
       ) : (
         <ul className="m-0 flex list-none flex-col p-0">
           {s.used_by.factories.map((f) => (
-            <li key={f.id} className="border-t border-line py-2.5 text-[15px] first:border-t-0 first:pt-0">
+            <li key={f.id} className="border-t border-line py-2.5 text-body first:border-t-0 first:pt-0">
               <Link
                 to="/o/$org/f/$factory/definition/$section"
                 params={{ org: org.slug, factory: f.name, section: 'connections' }}
@@ -300,7 +290,7 @@ function UsedByCard({ source: s }: { source: KnowledgeSource }) {
         </ul>
       )}
       {s.connection ? (
-        <p className="m-0 text-sm text-muted">
+        <p className="m-0 text-body text-muted">
           Reads the connection{' '}
           <Link
             to="/o/$org/connections/$connection"
@@ -338,8 +328,8 @@ function DeleteCard({ source: s }: { source: KnowledgeSource }) {
   return (
     <section className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-card p-4 md:p-5">
       <div className="flex min-w-0 max-w-[560px] flex-col gap-1">
-        <h2 className="m-0 text-[15px] font-medium">Delete {s.title}</h2>
-        <p id={reasonId} className="m-0 text-sm leading-normal text-muted">
+        <h2 className="m-0 text-heading">Delete {s.title}</h2>
+        <p id={reasonId} className="m-0 text-body leading-normal text-muted">
           {users.length > 0
             ? `${namesText(users)} may search it, so Goal refuses until ${users.length === 1 ? 'its definition no longer lists' : 'their definitions no longer list'} it. Then you type the name to confirm.`
             : `Its documents and their index go with it${s.kind === 'upload' ? ', and the uploaded files' : ''}. You type the name to confirm.`}
@@ -372,7 +362,7 @@ function DeleteCard({ source: s }: { source: KnowledgeSource }) {
         onConfirm={() => remove.mutate()}
       >
         {remove.error ? (
-          <p role="alert" className="m-0 text-sm text-rework-ink">
+          <p role="alert" className="m-0 text-body text-rework-ink">
             {refusalText(remove.error)}
           </p>
         ) : null}

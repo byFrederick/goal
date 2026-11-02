@@ -17,6 +17,9 @@ export function weekSummary(days: readonly WebhookDeliveryDay[]): string {
   return `${delivered} delivered, ${refused} refused`;
 }
 
+/** The chip an endpoint with no trigger shows beside its name. */
+export const noTriggerChip = 'No trigger yet';
+
 /** The chip's words, shown only when a delivery was refused this week. */
 export function refusedChip(refused: number): string {
   return `${refused} refused this week`;

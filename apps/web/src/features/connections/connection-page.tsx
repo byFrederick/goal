@@ -4,7 +4,6 @@
 // needs the name typed and is refused while a factory's current version names it; and beside
 // them what a run gets (the env names and modes, the kind's docs) and its recent use from the
 // audit log. A rename is refused while it is used (the field says so). Members read it all.
-
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { Check, RefreshCw } from 'lucide-react';
@@ -14,7 +13,6 @@ import { ApiError } from '../../api/client';
 import { deleteConnection, updateConnection } from '../../api/connections';
 import { connectionActivityQuery, connectionKindsQuery, connectionQuery, keys } from '../../api/queries';
 import type { Connection, ConnectionKind, ConnectionKindField } from '../../api/types';
-import { usePhoneBack } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { connectionName, modeLabels, namesText, statusLine, testedText } from '../../shared/connections';
 import { useCreatedOnce } from '../../shared/created';
@@ -27,7 +25,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Field, Input } from '../../ui/field';
-import { descriptionClass, PageHeader, sectionHeadingClass } from '../../ui/page-header';
+import { descriptionClass } from '../../ui/page-header';
 import { ReadOnly } from '../../ui/read-only';
 import { EnvNames, ToneText, WriteOnly } from './parts';
 import { ReplaceSecretDialog } from './replace-secret-dialog';
@@ -53,20 +51,6 @@ export function ConnectionPage() {
   const testing = tester.isPending;
   const runTest = () => tester.mutate(connection.name);
 
-  // Before any test, the header offers Test; once there is a result, Test again sits inside that result.
-  const testButton =
-    testable && !connection.last_test ? (
-      <Button variant="white" className="h-11 md:h-10" disabled={testing} onClick={runTest}>
-        <RefreshCw
-          size={16}
-          strokeWidth={1.5}
-          aria-hidden="true"
-          className={cn(testing && 'motion-safe:animate-spin')}
-        />
-        {testing ? 'Testing…' : 'Test'}
-      </Button>
-    ) : null;
-
   // The create answer says it once, as a toast; the id keeps a double run of the effect to one toast.
   useEffect(() => {
     if (!created) return;
@@ -78,22 +62,25 @@ export function ConnectionPage() {
     });
   }, [created, connection.name, kind?.testable]);
 
-  const back = usePhoneBack('Back to Connections', '/o/$org/connections', { org: org.slug });
   return (
     <>
-      <TopBarSlot crumb={connection.name} back={back} actions={testButton} />
-      <PageHeader
-        title={
-          <span className="inline-flex flex-wrap items-center gap-3">
-            <span translate="no">{connection.name}</span>
-            <Chip tone="quiet" className="bg-panel font-normal tracking-normal">
-              {kind?.title ?? connection.kind}
-            </Chip>
-          </span>
-        }
-        description={
-          <p className={cn(descriptionClass, 'flex flex-wrap items-center gap-x-2 gap-y-1')}>
-            {connection.description ? <span>{connection.description}.</span> : null}
+      <TopBarSlot
+        crumb={connection.name}
+        actions={testable ? <TestButton testing={testing} passed={tester.data?.ok} onTest={runTest} /> : undefined}
+      />
+      <header className="flex min-w-0 flex-col gap-1">
+        <h1 className="m-0 flex flex-wrap items-center gap-3 text-page-title">
+          <span translate="no">{connection.name}</span>
+          <Chip tone="quiet" className="bg-panel font-normal tracking-normal">
+            {kind?.title ?? connection.kind}
+          </Chip>
+        </h1>
+        <p className={cn(descriptionClass, 'flex flex-wrap items-center gap-x-2 gap-y-1')}>
+          {connection.description ? <span>{connection.description}.</span> : null}
+          <span
+            key={`${connection.status}-${connection.last_test?.at ?? ''}`}
+            className="inline-flex animate-text-states-swap"
+          >
             <ToneText
               tone={status.tone}
               text={
@@ -103,12 +90,9 @@ export function ConnectionPage() {
               }
               className="text-sm"
             />
-            {testable && connection.last_test ? (
-              <TestAgain testing={testing} passed={tester.data?.ok} onTest={runTest} />
-            ) : null}
-          </p>
-        }
-      />
+          </span>
+        </p>
+      </header>
 
       {connection.status === 'failing' && connection.last_test?.error ? (
         <Callout tone="rework">Its last test failed: {connection.last_test.error}.</Callout>
@@ -212,10 +196,10 @@ function FieldsCard({
       noValidate
       className="flex min-w-0 flex-col gap-4 rounded-card border border-line bg-card p-4 md:p-5"
     >
-      <h2 id={`${id}-fields`} className={sectionHeadingClass}>
+      <h2 id={`${id}-fields`} className="m-0 text-heading">
         Fields
       </h2>
-      <div className="grid grid-cols-1 gap-x-5 gap-y-4 @[640px]:grid-cols-2">
+      <div className="flex flex-col gap-4">
         <Field
           label="Name"
           error={nameError ?? (refusal?.code === 'connection-name-taken' ? 'Taken' : undefined)}
@@ -304,11 +288,19 @@ function FieldsCard({
   return manage ? form : <ReadOnly>{form}</ReadOnly>;
 }
 
-/** Runs the test again. Its label swaps to Testing…, and a pass swaps the icon to a check (Approve/publish row). */
-function TestAgain({ testing, passed, onTest }: { testing: boolean; passed: boolean | undefined; onTest: () => void }) {
+/** The top bar's Test: its label swaps to Testing…, and a pass swaps the icon to a check (Approve/publish row). */
+function TestButton({
+  testing,
+  passed,
+  onTest,
+}: {
+  testing: boolean;
+  passed: boolean | undefined;
+  onTest: () => void;
+}) {
   const showPass = !testing && passed === true;
   return (
-    <Button variant="white" className="h-11 md:h-8" disabled={testing} onClick={onTest}>
+    <Button variant="white" className="h-11 md:h-9" disabled={testing} onClick={onTest}>
       {showPass ? (
         <Check key="pass" size={16} strokeWidth={1.75} aria-hidden="true" className="animate-fade-in text-ok" />
       ) : (
@@ -321,7 +313,7 @@ function TestAgain({ testing, passed, onTest }: { testing: boolean; passed: bool
         />
       )}
       <span key={testing ? 'testing' : 'idle'} className="animate-text-states-swap">
-        {testing ? 'Testing…' : 'Test again'}
+        {testing ? 'Testing…' : 'Test'}
       </span>
     </Button>
   );
@@ -335,7 +327,7 @@ function UsedByCard({ connection: c }: { connection: Connection }) {
       aria-labelledby={`${id}-used`}
       className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-4 md:p-5"
     >
-      <h2 id={`${id}-used`} className={sectionHeadingClass}>
+      <h2 id={`${id}-used`} className="m-0 text-heading">
         Used by
       </h2>
       {c.used_by.factories.length === 0 ? (
@@ -441,7 +433,7 @@ function RunGetsCard({ connection: c, kind }: { connection: Connection; kind: Co
       aria-labelledby={`${id}-gets`}
       className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-4 md:p-5"
     >
-      <h2 id={`${id}-gets`} className={sectionHeadingClass}>
+      <h2 id={`${id}-gets`} className="m-0 text-heading">
         What a run gets
       </h2>
       <p className="m-0 text-sm leading-normal text-muted">
@@ -479,7 +471,7 @@ function RecentUse({ org, connection, now }: { org: string; connection: Connecti
       className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-card p-4 md:p-5"
     >
       <div className="flex items-baseline justify-between gap-3">
-        <h2 id={`${id}-use`} className={sectionHeadingClass}>
+        <h2 id={`${id}-use`} className="m-0 text-heading">
           Recent use
         </h2>
         <span className="text-secondary text-muted">From the audit log</span>

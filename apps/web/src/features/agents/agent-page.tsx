@@ -17,7 +17,7 @@ import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
-import { Meter } from '../../ui/hatch';
+import { Meter } from '../../ui/meter';
 import { StatStrip } from '../../ui/stat-strip';
 import { TabNav, tabNavItem } from '../../ui/tab-nav';
 import { DraftSessionProvider } from '../factory-editor/draft/use-draft';
@@ -72,7 +72,7 @@ function AgentMeasures({ stats }: { stats: AgentStats }) {
   );
 }
 
-/** "Why review sent work back": each reason with a hatched rust bar against the most frequent one. */
+/** "Why review sent work back": each reason with a solid rust bar against the most frequent one. */
 function SendBackReasons({ stats }: { stats: AgentStats }) {
   return (
     <SectionCard
@@ -97,7 +97,7 @@ function SendBackReasons({ stats }: { stats: AgentStats }) {
                 value={reasonShare(r, stats.reasons)}
                 max={1}
                 tone="rework"
-                className="col-span-2 h-2.5 border border-line md:col-span-1 md:col-start-2 md:row-start-1"
+                className="col-span-2 h-2.5 md:col-span-1 md:col-start-2 md:row-start-1"
               />
             </li>
           ))}

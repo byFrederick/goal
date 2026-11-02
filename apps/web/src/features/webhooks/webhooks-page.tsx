@@ -6,7 +6,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Webhook } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { webhookDeliveriesQuery, webhooksQuery } from '../../api/queries';
+import { intakeQuery, webhookDeliveriesQuery, webhooksQuery } from '../../api/queries';
 import type { WebhookEndpoint } from '../../api/webhooks';
 import { TopBarSlot } from '../../app/top-bar';
 import { useFactory } from '../../shared/factory';
@@ -14,19 +14,23 @@ import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { EmptyState } from '../../ui/empty-state';
-import { Skeleton, SkeletonRows } from '../../ui/skeleton';
+import { Skeleton } from '../../ui/skeleton';
 import type { DeliveriesScope } from './deliveries';
 import { EndpointCard } from './endpoint-card';
 import { NewWebhookDialog } from './new-webhook-dialog';
 import { RequestDialog, type RequestTarget } from './request-dialog';
 import { SecretDialog, type ShownSecret } from './secret-dialog';
 import { TestPanel } from './test-panel';
+import { WebhooksShape } from './webhooks-skeleton';
 
 export function WebhooksPage() {
   const org = useOrg();
   const factory = useFactory();
   const canManage = factory.can.includes('webhook:manage');
   const webhooks = useQuery(webhooksQuery(org.id, factory.id));
+  // The triggers' type, station and lane for the Feeds row; the cards show names alone until it answers.
+  const intake = useQuery(intakeQuery(org.id, factory.id));
+  const triggers = intake.data?.triggers;
   const [creating, setCreating] = useState(false);
   const [shown, setShown] = useState<ShownSecret | null>(null);
   const [target, setTarget] = useState<RequestTarget | null>(null);
@@ -51,14 +55,12 @@ export function WebhooksPage() {
       <TopBarSlot crumb="Webhooks" actions={actions} />
       <header className="flex flex-col gap-1">
         <h1 className="m-0 text-page-title tracking-display">Webhooks</h1>
-        <p className="m-0 text-body text-ink-soft">
-          Addresses other systems post to. Each one feeds a trigger; without a trigger, a delivery creates nothing.
-        </p>
+        <p className="m-0 text-body text-ink-soft">Addresses other systems post to. Each one feeds a trigger.</p>
       </header>
 
       {webhooks.isPending ? (
-        <Skeleton ready={false} placeholder={<SkeletonRows rows={3} className="min-h-40" />}>
-          <span />
+        <Skeleton ready={false} placeholder={<WebhooksShape />}>
+          {null}
         </Skeleton>
       ) : webhooks.isError ? (
         <div role="alert" className="flex flex-col items-start gap-3 rounded-card border border-line bg-card p-5">
@@ -73,7 +75,7 @@ export function WebhooksPage() {
           title="No webhooks yet"
           actions={
             canManage ? (
-              <Button variant="primary" onClick={() => setCreating(true)}>
+              <Button variant="secondary" onClick={() => setCreating(true)}>
                 <Plus size={15} strokeWidth={1.5} aria-hidden="true" />
                 New webhook
               </Button>
@@ -93,6 +95,7 @@ export function WebhooksPage() {
                 orgSlug={org.slug}
                 factoryName={factory.name}
                 canManage={canManage}
+                triggers={triggers}
                 onShown={setShown}
                 onView={setTarget}
               />

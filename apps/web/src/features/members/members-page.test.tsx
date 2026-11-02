@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   createMemoryHistory,
@@ -9,6 +10,7 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, clearSignupDomain, setFactoryRole, setSignupDomain } from '../../api/client';
 import {
@@ -21,14 +23,20 @@ import {
   settingsQuery,
 } from '../../api/queries';
 import type { Factory, Invitation, Member, Org, OrgSettings, OrgSummary, SignupDomain } from '../../api/types';
+import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { TooltipProvider } from '../../ui/tooltip';
 import { MembersPage } from './members-page';
 
-// The top bar is the app's shell: here the page's actions render in a region named Top bar, where the page puts them.
-vi.mock('../../app/top-bar', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../app/top-bar')>()),
-  TopBarSlot: ({ actions }: { actions?: React.ReactNode }) => <section aria-label="Top bar">{actions}</section>,
-}));
+/** Stands in for the app shell's top bar: it shows the actions a page sets with TopBarSlot. */
+function Shell({ children }: { children: ReactNode }) {
+  const [top, setTop] = useState<TopBarState | null>(null);
+  return (
+    <TopBarSetContext value={setTop}>
+      <div data-testid="top-bar">{top?.actions}</div>
+      {children}
+    </TopBarSetContext>
+  );
+}
 
 /** The settings the mocked API serves: a failure or a hang makes the switch's query fail or wait. */
 const served = vi.hoisted(() => ({
@@ -204,7 +212,9 @@ function renderMembers({
   render(
     <QueryClientProvider client={client}>
       <TooltipProvider>
-        <RouterProvider router={router} />
+        <Shell>
+          <RouterProvider router={router} />
+        </Shell>
       </TooltipProvider>
     </QueryClientProvider>,
   );
@@ -278,6 +288,29 @@ describe('members and roles, ready', () => {
     expect(setSignupDomain).not.toHaveBeenCalled();
   });
 
+  it('puts Invite people in the top bar in ink, with the count beside the 20 px title', async () => {
+    renderMembers();
+    const invite = await within(await screen.findByTestId('top-bar')).findByRole('button', { name: /^Invite/ });
+    expect(invite.classList).toContain('bg-action');
+    expect(invite.classList).not.toContain('bg-run');
+    expect(screen.getAllByRole('button', { name: /^Invite/ })).toHaveLength(1);
+    const h1 = screen.getByRole('heading', { level: 1 });
+    expect(h1.classList).toContain('text-page-title');
+    expect(h1.parentElement?.textContent).toContain('4 members, 2 invites waiting');
+    fireEvent.click(invite);
+    expect(await screen.findByRole('dialog', { name: 'Invite people to Acme' })).toBeTruthy();
+  });
+
+  it('shows the only owner’s role as a chip, not a disabled select, with no helper text', async () => {
+    renderMembers();
+    await screen.findByText('4 members, 2 invites waiting');
+    expect(screen.queryByRole('combobox', { name: 'Role of Freddy Cruz in Acme' })).toBeNull();
+    const row = within(within(membersCard()).getByRole('table')).getByRole('row', { name: /Freddy Cruz/ });
+    expect(within(row).getByText('Owner')).toBeTruthy();
+    expect(screen.queryByText('Acme needs at least one owner')).toBeNull();
+    expect(screen.getAllByRole('combobox', { name: 'Role of Jonas Okafor in Acme' }).length).toBeGreaterThan(0);
+  });
+
   it('lists the organization role matrix with a mark for each yes and no', async () => {
     renderMembers();
     const heading = await screen.findByRole('heading', { name: 'What each role can do' });
@@ -306,14 +339,6 @@ describe('members and roles, ready', () => {
     await waitFor(() => expect(setFactoryRole).toHaveBeenCalledWith(org.id, 'u3', 'f-goal', 'viewer'));
   });
 
-  it('puts Invite in the top bar, once, for an owner', async () => {
-    renderMembers();
-    expect(await screen.findByText('4 members, 2 invites waiting')).toBeTruthy();
-    const bar = screen.getByRole('region', { name: 'Top bar' });
-    expect(within(bar).getByRole('button', { name: /^Invite/ })).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /^Invite/ })).toHaveLength(1);
-  });
-
   it('hides invitation and invite link controls from a member', async () => {
     renderMembers({
       role: 'member',
@@ -322,7 +347,6 @@ describe('members and roles, ready', () => {
     });
     expect(await screen.findByText('4 members')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Invite/ })).toBeNull();
-    expect(within(screen.getByRole('region', { name: 'Top bar' })).queryByRole('button')).toBeNull();
     expect(screen.queryByRole('region', { name: 'Invite link' })).toBeNull();
     expect(screen.queryByRole('region', { name: /Waiting to join/ })).toBeNull();
   });
