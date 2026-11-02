@@ -1,7 +1,7 @@
 // Items against the mock: every column shows at 1440, the view tabs stay on one line at 768, and the
 // pictures for the pull request.
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll } from './support';
+import { expectNoHorizontalScroll, lengthenTitles } from './support';
 
 const items = '/o/acme/f/goal/items';
 
@@ -26,6 +26,24 @@ test.describe('desktop', () => {
     expect(scrolls).toBeLessThanOrEqual(0);
   });
 });
+
+for (const { width, height } of [
+  { width: 1280, height: 900 },
+  { width: 1440, height: 1000 },
+]) {
+  test(`shows every column without sideways scroll at ${width} px with long titles`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await lengthenTitles(page, /\/v1\/orgs\/[^/]+\/factories\/[^/]+\/items(\?|$)/);
+    await page.goto(items);
+    const table = page.getByRole('table', { name: 'Items' });
+    await expect(table.getByRole('columnheader', { name: 'Cost' })).toBeVisible();
+    const fits = await table.evaluate((t) => {
+      const box = t.parentElement as HTMLElement;
+      return t.scrollWidth <= box.clientWidth && box.scrollWidth <= box.clientWidth;
+    });
+    expect(fits).toBe(true);
+  });
+}
 
 test('keeps the view tabs on one line at 768', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'tablet-768', 'the 768 project');

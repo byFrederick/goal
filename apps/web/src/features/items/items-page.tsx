@@ -350,7 +350,10 @@ export function ItemsPage() {
       ) : (
         <>
           <div className="overflow-x-auto rounded-card border border-line bg-card">
-            <table aria-label="Items" className="w-full min-w-[1060px] border-collapse text-body">
+            <table
+              aria-label="Items"
+              className="w-full min-w-max border-collapse text-body whitespace-nowrap lg:min-w-0"
+            >
               <thead className="bg-panel text-secondary font-medium text-muted">
                 <tr>
                   <th scope="col" className="w-px px-3 py-2 text-left">

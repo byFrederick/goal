@@ -151,7 +151,7 @@ export function ItemTableRow({
           {shortRef(item.ref)}
         </span>
       </td>
-      <td className={cn(cell, 'max-w-sm truncate', indent && 'pl-8')} title={item.title}>
+      <td className={cn(cell, 'max-w-sm truncate lg:max-w-0', indent && 'pl-8')} title={item.title}>
         <Link
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
