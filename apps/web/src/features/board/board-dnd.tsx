@@ -22,6 +22,7 @@ import type { Board, BoardStation, ItemCard } from '../../api/types';
 import { humanize } from '../../shared/format';
 import { cn } from '../../ui/cn';
 import type { CardDrag } from './board-card';
+import { tokenMs } from './card-move';
 
 /** The arrow keys carry a picked-up card to the column beside it, not 25 px at a time. */
 const columnCoordinates: KeyboardCoordinateGetter = (event, { context }) => {
@@ -52,6 +53,14 @@ const collision: CollisionDetection = (args) => {
 
 function findCard(board: Board, id: string | number): ItemCard | undefined {
   return board.stations.flatMap((s) => s.items).find((it) => it.id === id);
+}
+
+/** The card settles on its drop at --duration-fast --ease-out (MOTION.md, Drag); it follows the pointer 1:1 before. */
+function settle() {
+  const duration = tokenMs('--duration-fast');
+  if (duration === 0) return null;
+  const easing = getComputedStyle(document.documentElement).getPropertyValue('--ease-out').trim();
+  return { duration, easing };
 }
 
 /** The drag and drop of one board: a drop on another column calls onDrop with that station. */
@@ -111,7 +120,7 @@ export function CardDnd({
       }}
     >
       <InstructionsId.Provider value={instructions}>{children}</InstructionsId.Provider>
-      <DragOverlay dropAnimation={null}>
+      <DragOverlay dropAnimation={settle()}>
         {active ? (
           <div className="flex w-[200px] flex-col gap-1 rounded-control border border-muted bg-card p-3 shadow-pop">
             <span className="text-xs text-muted tabular-nums">{active.ref}</span>

@@ -1,20 +1,16 @@
-// The desktop board's columns (from 768 px): one column per station, headed by its card (name, WIP
-// meter and what the station says), then the expedite zone and the standard zone of cards. The
-// constraint's column is amber-edged; the drum's column splits its standard zone into the buffer's
-// Ready cards, "Next in" first, and the In progress cards. The phone keeps its station tabs (board-page).
-// On the desktop, every column's body starts at one height without subgrid: the header has a fixed min-height,
-// the expedite zone one card's height, and each standard zone opens with a one-line sub-header slot.
+// The board's columns (from 768 px, and the phone's picked station): one column per station, headed by a
+// row (name, count, WIP meter and what the station says), then the expedite zone and the standard zone of
+// cards. The drum's column lists its In progress cards first and the buffer's Ready cards below them, dimmed;
+// every column's In progress group ends in "Show N more" past a few cards. The columns have no fixed heights:
+// a body starts directly under its header.
+import { Fragment, useState } from 'react';
 import type { Board, BoardStation, ItemCard, PartsSummary } from '../../api/types';
 import { formatDuration, humanize, plural } from '../../shared/format';
 import { waitingOnYou } from '../../shared/item-state';
-import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { BoardCard, type CardDrag } from './board-card';
 import { DraggableCard, DropColumn } from './board-dnd';
-import { columnCount, isExpedite, stationNote } from './stats';
-
-/** The constraint's edge: an amber border with a 1 px amber ring, as the picture draws it. */
-export const constraintEdge = 'border-amber ring-1 ring-amber';
+import { columnCount, columnGroups, columnLimit, isExpedite, stationNote, visibleCards } from './stats';
 
 /** One card of the column; dragged on the desktop, moved by its Move button (and M) always. */
 function ColumnCard({
@@ -34,7 +30,7 @@ function ColumnCard({
   return draggable ? <DraggableCard item={item}>{card}</DraggableCard> : card(undefined);
 }
 
-/** The WIP meter: one segment per slot, in progress (run), waiting on you (you), free (hover). */
+/** The WIP meter: one 4 px segment per slot, in progress (ink), waiting on you (orange), free (rule). */
 function WipMeter({ station }: { station: BoardStation }) {
   const limit = station.wip_limit;
   if (limit === null) return null;
@@ -42,15 +38,15 @@ function WipMeter({ station }: { station: BoardStation }) {
   const waiting = Math.min(waitingOnYou(station), limit - busy);
   const label = `${station.in_progress} of ${limit} in progress`;
   return (
-    <span role="img" aria-label={label} className="flex gap-1">
+    <span role="img" aria-label={label} className="flex gap-0.5">
       {Array.from({ length: limit }, (_, i) => (
         <i
           // biome-ignore lint/suspicious/noArrayIndexKey: the segments are fixed slots by position, never reordered
           key={i}
           aria-hidden="true"
           className={cn(
-            'block h-1.5 flex-1 rounded-chip',
-            i < busy ? 'bg-run' : i < busy + waiting ? 'bg-you' : 'bg-hover',
+            'block h-1 flex-1 rounded-[1px]',
+            i < busy ? 'bg-ink' : i < busy + waiting ? 'bg-you' : 'bg-line',
           )}
         />
       ))}
@@ -77,7 +73,7 @@ function meta(station: BoardStation, decides: boolean, finishedThisWeek: number)
   }
 }
 
-/** A column's header card: the station's name, its count, the constraint chip, the WIP meter and the meta lines. */
+/** A column's header row: the station's name, the constraint's marker, its count, the WIP meter and the meta line. No card. */
 function ColumnHeader({
   station,
   constraint,
@@ -91,16 +87,16 @@ function ColumnHeader({
 }) {
   const [left, right] = meta(station, decides, finishedThisWeek);
   return (
-    <header
-      className={cn(
-        'flex flex-col gap-2 rounded-cell border border-line bg-card p-3 md:min-h-[5.5rem]',
-        constraint && constraintEdge,
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <h2 className="m-0 min-w-0 truncate text-heading font-medium">{humanize(station.id)}</h2>
-        {constraint ? <Chip tone="constraint">Constraint</Chip> : null}
-        <span className="ml-auto whitespace-nowrap text-secondary font-medium text-ink-soft tabular-nums">
+    <header className="flex flex-col gap-1.5 px-0.5 pb-0.5">
+      <div className="flex min-h-[22px] items-center gap-2">
+        <h2 className="m-0 min-w-0 truncate text-heading font-semibold">{humanize(station.id)}</h2>
+        {constraint ? (
+          <span className="inline-flex items-center gap-1.5 text-meta font-medium text-ink-soft">
+            <i aria-hidden="true" className="block size-1.5 rounded-[1px] bg-amber" />
+            Constraint
+          </span>
+        ) : null}
+        <span className="ml-auto whitespace-nowrap text-secondary font-medium text-muted tabular-nums">
           {columnCount(station)}
         </span>
       </div>
@@ -113,18 +109,10 @@ function ColumnHeader({
   );
 }
 
-/**
- * A standard zone's first line on the desktop: the drum's labels sit here, and every other column keeps it
- * empty, so all the zones' first cards start at the same height. Empty and hidden from screen readers.
- */
-function SubHeaderSlot() {
-  return <div aria-hidden="true" className="hidden min-h-[1lh] px-1 text-meta md:block" />;
-}
-
 /** A zone's label row, as in the picture: "Ready, buffer 2 of 2" with "Next in", or "In progress". */
 function ZoneLabel({ children, aside }: { children: string; aside?: string | undefined }) {
   return (
-    <div className="flex items-center justify-between gap-2 px-1 text-meta font-medium text-muted">
+    <div className="flex items-center justify-between gap-2 px-1 py-0.5 text-meta font-medium text-muted">
       <span>{children}</span>
       {aside ? <span>{aside}</span> : null}
     </div>
@@ -167,10 +155,9 @@ export function StationColumn({
 
   const expedite = station.items.filter(isExpedite);
   const standard = station.items.filter((it) => !isExpedite(it));
-  // The drum's column: the buffer's cards are Ready, the rest are in progress.
+  // The drum's column: In progress cards first, then the buffer's Ready cards, dimmed.
   const isDrum = board.line.release.drum === station.id;
-  const ready = isDrum ? standard.filter((it) => it.in_buffer) : [];
-  const working = isDrum ? standard.filter((it) => !it.in_buffer) : standard;
+  const [expanded, setExpanded] = useState(false);
   const bufferLabel = `Ready, buffer ${board.line.release.in_buffer}${
     board.line.release.buffer !== null ? ` of ${board.line.release.buffer}` : ''
   }`;
@@ -178,29 +165,44 @@ export function StationColumn({
   return (
     <DropColumn station={station} className="flex min-w-0 flex-col gap-2">
       <ColumnHeader station={station} constraint={constraint} decides={decides} finishedThisWeek={finishedThisWeek} />
-      {/* On the desktop, one expedite card's height plus the zone's padding: every column's standard zone starts
-          at the same height, whether or not it holds an expedite card. A second card in a column moves that one. */}
       {showExpedite ? (
-        <div
-          className={cn(
-            'flex min-h-10 flex-col gap-2 rounded-cell p-2 md:min-h-[199px]',
-            expedite.length > 0 && 'bg-amber-tint',
-          )}
-        >
+        <div className={cn('flex min-h-10 flex-col gap-2 rounded-cell p-2', expedite.length > 0 && 'bg-amber-tint')}>
           {expedite.map(card)}
         </div>
       ) : null}
       <div className="flex min-h-10 flex-col gap-2 rounded-cell bg-panel p-2">
-        {isDrum ? (
-          <>
-            <ZoneLabel aside="Next in">{bufferLabel}</ZoneLabel>
-            {ready.map(card)}
-            <ZoneLabel>In progress</ZoneLabel>
-          </>
-        ) : (
-          <SubHeaderSlot />
-        )}
-        {working.map(card)}
+        {columnGroups(standard, isDrum).map((group) => {
+          const shown = group.kind === 'in-progress' ? visibleCards(group.items, expanded) : group.items;
+          const hidden = group.items.length - shown.length;
+          return (
+            <Fragment key={group.kind}>
+              {isDrum ? (
+                group.kind === 'ready' ? (
+                  <ZoneLabel aside="Next in">{bufferLabel}</ZoneLabel>
+                ) : (
+                  <ZoneLabel>In progress</ZoneLabel>
+                )
+              ) : null}
+              {group.kind === 'ready' ? (
+                <div className="flex flex-col gap-2 opacity-70" data-group="ready">
+                  {shown.map(card)}
+                </div>
+              ) : (
+                shown.map(card)
+              )}
+              {group.kind === 'in-progress' && group.items.length > columnLimit ? (
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  onClick={() => setExpanded((open) => !open)}
+                  className="press min-h-11 self-start rounded-chip px-1 text-secondary font-medium text-run hover:text-run-ink md:min-h-6"
+                >
+                  {expanded ? 'Show fewer' : `Show ${hidden} more`}
+                </button>
+              ) : null}
+            </Fragment>
+          );
+        })}
         {station.items.length === 0 ? <p className="m-0 px-1 py-2 text-meta text-muted md:py-0">Empty</p> : null}
       </div>
     </DropColumn>

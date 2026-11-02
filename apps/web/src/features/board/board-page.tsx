@@ -34,6 +34,7 @@ import {
   typeOptions,
 } from './board-filters';
 import { BoardTopBarActions, BoardViewControl, SearchItems } from './board-header';
+import { useCardMoves } from './card-move';
 import { columnCount, expediteHeader, expediteUse, firstStation, isExpedite } from './stats';
 
 /** Opens the Move menu for a card, with the station a drop chose; undefined: the caller may not move work. */
@@ -351,7 +352,9 @@ function focusCard(id: string) {
 export function BoardPage() {
   const factory = useFactory();
   const org = useOrg();
-  const { data: board } = useSuspenseQuery(boardQuery(org.id, factory.id));
+  const { data: fetched } = useSuspenseQuery(boardQuery(org.id, factory.id));
+  // A card that changes column or lane travels there (card-move.ts).
+  const board = useCardMoves(fetched);
   const search = useSearch({ from: '/o/$org/f/$factory/board' });
   const navigate = useNavigate({ from: '/o/$org/f/$factory/board' });
   // The filters and the grouping: the URL's choices, those the board offers only.

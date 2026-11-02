@@ -85,17 +85,18 @@ export function BoardCard({
     <article
       ref={drag?.ref}
       data-card={item.id}
+      data-card-ref={item.ref}
       onPointerDown={drag?.onPointerDown}
       onKeyDown={moveKeys(onMove, drag)}
       style={drag?.style}
       className={cn(
-        'relative flex rounded-control border bg-card transition-[border-color,box-shadow,opacity] duration-200',
+        'relative flex rounded-control border bg-card transition-[border-color,box-shadow,opacity] duration-(--duration-quick)',
         'hover:border-muted has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-run',
         compact ? 'items-center gap-2 p-3' : 'flex-col gap-2 rounded-cell p-3',
         // The desktop card keeps its border plain: an expedite item is tinted by its column's zone.
         !compact
           ? item.state === 'waiting_human' && decides
-            ? 'border-you ring-1 ring-you'
+            ? 'border-you'
             : 'border-line'
           : expedite
             ? 'border-rework-tint bg-rework-tint'
@@ -224,15 +225,16 @@ export function AssemblyLine({
       aria-label={`Part ${assembly.part} of ${assembly.parts} of ${assembly.title}`}
       className={cn(
         'relative z-10 flex min-w-0 items-center no-underline hover:text-run',
-        parts ? 'gap-2 text-meta font-medium text-ok-ink' : 'gap-1 text-xs text-muted',
+        parts ? 'gap-1.5 text-meta font-medium text-ink-soft' : 'gap-1 text-xs text-muted',
       )}
     >
       <span className="min-w-0 truncate" title={assembly.title}>
         {assembly.title}
       </span>
       {parts ? <PartPips total={parts.total} merged={parts.merged} /> : null}
-      <span className="shrink-0 whitespace-nowrap">
-        › {assembly.part} of {assembly.parts}
+      <span className={cn('shrink-0 whitespace-nowrap', parts && 'ml-auto font-normal text-muted')}>
+        {parts ? null : '› '}
+        {assembly.part} of {assembly.parts}
       </span>
     </Link>
   );
@@ -241,12 +243,12 @@ export function AssemblyLine({
 /** One pip per part of the assembly; the merged parts are filled. Decorative: the count says the same. */
 function PartPips({ total, merged }: { total: number; merged: number }) {
   return (
-    <span aria-hidden="true" className="flex shrink-0 gap-1">
+    <span aria-hidden="true" className="flex shrink-0 gap-0.5">
       {Array.from({ length: total }, (_, i) => (
         <i
           // biome-ignore lint/suspicious/noArrayIndexKey: the pips are fixed slots by position, never reordered
           key={i}
-          className={cn('block h-1.5 w-2 rounded-chip', i < merged ? 'bg-ok' : 'bg-ok-tint')}
+          className={cn('block h-1 w-2 rounded-[1px]', i < merged ? 'bg-ink' : 'bg-rule')}
         />
       ))}
     </span>

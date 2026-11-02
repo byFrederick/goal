@@ -624,3 +624,21 @@
     --y: translateY(0);
   }
 }
+
+/* A board card moves to another column or lane (card-move.ts names each card card-<ref> and gives it this class).
+   The card travels from its old box to its new one; the cards around it reflow the same way (MOTION.md,
+   Board card moves). The cross-fade of the card's old and new picture stays off: the card is the same. */
+::view-transition-group(.board-card) {
+  animation-duration: var(--duration-fast);
+  animation-timing-function: var(--ease-in-out);
+}
+
+::view-transition-old(.board-card),
+::view-transition-new(.board-card) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(.board-card) {
+  display: none;
+}
