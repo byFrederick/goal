@@ -58,7 +58,7 @@ export function Detail({
     <article className="flex min-w-0 flex-col gap-5 p-4 md:p-7" aria-labelledby="detail-title">
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Chip tone={type === 'decision' || type === 'question' ? 'you' : 'rework'} size="lg">
+          <Chip dot tone={type === 'decision' || type === 'question' ? 'you' : 'rework'} size="lg">
             {typeLabel[type]}
           </Chip>
           <Crumb entry={entry} station={station} />
