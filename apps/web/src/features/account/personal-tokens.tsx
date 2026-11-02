@@ -15,6 +15,8 @@ import { CreatedTokenDialog } from '../../shared/tokens/created-dialog';
 import { RevokeDialog, TokenList } from '../../shared/tokens/token-list';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
+import { cn } from '../../ui/cn';
+import { sectionHeadingClass } from '../../ui/page-header';
 import { NewTokenDialog } from './new-token-dialog';
 
 /** The id the account menu's link names. */
@@ -67,7 +69,12 @@ export function PersonalTokensSection({ org }: { org: OrgSummary }) {
     >
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex max-w-[680px] min-w-0 flex-col gap-2">
-          <h2 id="personal-tokens-heading" ref={heading} tabIndex={-1} className="m-0 text-lg font-medium outline-none">
+          <h2
+            id="personal-tokens-heading"
+            ref={heading}
+            tabIndex={-1}
+            className={cn(sectionHeadingClass, 'outline-none')}
+          >
             Personal tokens
           </h2>
           <p className="m-0 text-sm leading-normal text-muted">

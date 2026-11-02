@@ -56,7 +56,8 @@ export type OrgPath =
   | '/o/$org/credentials'
   | '/o/$org/knowledge'
   | '/o/$org/runs'
-  | '/o/$org/needs-you';
+  | '/o/$org/needs-you'
+  | '/o/$org/spend';
 
 type Availability<Path> = { available: true; to: Path; exact?: boolean } | { available: false };
 
@@ -203,6 +204,13 @@ export const modelsScreen: OrgScreen = {
   label: 'Models and policies',
   icon: Shield,
   to: '/o/$org/models',
+};
+/** The organization's spend and billing (the org menu's Spend and billing entry). */
+export const spendScreen: OrgScreen = {
+  id: 'spend',
+  label: 'Spend and billing',
+  icon: Activity,
+  to: '/o/$org/spend',
 };
 export const settingsScreen: OrgScreen = {
   id: 'settings',

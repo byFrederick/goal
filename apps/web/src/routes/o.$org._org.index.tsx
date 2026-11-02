@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { archivedFactoriesQuery, ensureLoaded, inboxQuery, overviewQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
-import { PendingScreen } from '../app/states';
+import { HomeSkeleton } from '../app/route-skeletons';
 import { FactoriesPage } from '../features/factories/factories-page';
 import { type FactoriesSearch, factoriesSearch } from '../features/factories/search';
 
@@ -9,7 +9,7 @@ import { type FactoriesSearch, factoriesSearch } from '../features/factories/sea
 // waits on you (GET /inbox), loaded in parallel. ?archived=true is the Archived filter: its list loads with the page too. The
 // organization comes from the /o/$org layout's context.
 export const Route = createFileRoute('/o/$org/_org/')({
-  pendingComponent: PendingScreen,
+  pendingComponent: HomeSkeleton,
   validateSearch: (search: Record<string, unknown>): FactoriesSearch => factoriesSearch(search),
   loaderDeps: ({ search }) => ({ archived: search.archived }),
   loader: ({ context: { queryClient, org }, deps }) =>

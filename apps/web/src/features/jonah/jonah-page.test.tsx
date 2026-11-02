@@ -230,7 +230,7 @@ describe('the Jonah overview, its four states', () => {
     renderOverview(editor, []);
 
     expect(await screen.findByText('Jonah could not be loaded')).toBeTruthy();
-    expect(screen.getByText('Jonah is not available on this goald yet.')).toBeTruthy();
+    expect(screen.getByText('Jonah is not turned on for this installation yet.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 

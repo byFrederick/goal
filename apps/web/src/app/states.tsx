@@ -82,7 +82,7 @@ export function NotFoundScreen({ what = 'page' }: { what?: string }) {
   return (
     <div className="flex flex-1 flex-col items-start justify-center gap-3 pb-15">
       <h1 className="m-0 text-page-title tracking-[-0.01em]">No such {what}</h1>
-      <p className="m-0 text-body text-muted">It may have been renamed, or the link is from another goald.</p>
+      <p className="m-0 text-body text-muted">It may have been renamed, or the link is from another installation.</p>
       <Button asChild variant="action">
         <Link to="/">Go to the floor</Link>
       </Button>

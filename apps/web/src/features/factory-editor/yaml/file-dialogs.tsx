@@ -36,7 +36,7 @@ export function FileDialogs({ dialog, onClose, taken, onCreate, onRename, onDele
       await work();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'goald refused it');
+      setError(err instanceof Error ? err.message : 'The file was refused');
     } finally {
       setPending(false);
     }

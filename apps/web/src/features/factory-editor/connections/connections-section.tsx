@@ -19,6 +19,7 @@ import { sourceKinds, sourceSummary } from '../../../shared/knowledge';
 import { useOrg, useOrgHolds } from '../../../shared/org';
 import { Chip } from '../../../ui/chip';
 import { cn } from '../../../ui/cn';
+import { sectionHeadingClass } from '../../../ui/page-header';
 import { useOrgConnections } from '../basics/runtime-fields';
 import { setAgentConnection, setBasics, setFactoryConnection } from '../draft/ops';
 import { useDraftSession, useSection, useViewOnly } from '../draft/use-draft';
@@ -93,7 +94,7 @@ function FactoryConnections({ factory }: { factory: string }) {
   return (
     <section aria-labelledby={id} className={card}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 id={id} className="m-0 text-lg font-medium">
+        <h3 id={id} className={sectionHeadingClass}>
           Connections {factory} uses
         </h3>
         {manage && !viewOnly ? (
@@ -241,7 +242,7 @@ function PerAgent() {
   return (
     <section aria-labelledby={id} className={card}>
       <div className="flex flex-col gap-1">
-        <h3 id={id} className="m-0 text-lg font-medium">
+        <h3 id={id} className={sectionHeadingClass}>
           Per agent
         </h3>
         <p className="m-0 text-sm text-muted">
@@ -372,7 +373,7 @@ function Knowledge({ factory }: { factory: string }) {
   return (
     <section aria-labelledby={id} className={card}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h3 id={id} className="m-0 text-lg font-medium">
+        <h3 id={id} className={sectionHeadingClass}>
           Knowledge {factory} may search
         </h3>
         {read ? (
@@ -462,7 +463,7 @@ function RunsGet() {
   ];
   return (
     <section aria-labelledby={id} className={card}>
-      <h3 id={id} className="m-0 text-lg font-medium">
+      <h3 id={id} className={sectionHeadingClass}>
         What runs get
       </h3>
       <p className="m-0 text-sm leading-normal text-muted">

@@ -37,13 +37,13 @@ function reason(session: DraftSession): string {
     case 'offline':
       return 'goald can’t be reached.';
     case 'retrying':
-      return 'goald failed to save them.';
+      return 'The save failed.';
     case 'conflict':
       return 'The same fields changed in another tab or the CLI; choose which values to keep first.';
     case 'held':
       return 'factory.yaml doesn’t parse, so Visual changes wait.';
     case 'failed':
-      return `goald refused them: ${s.error?.detail ?? s.error?.title ?? 'see the status line'}.`;
+      return `They were refused: ${s.error?.detail ?? s.error?.title ?? 'see the status line'}.`;
     default:
       return 'They are still being saved.';
   }

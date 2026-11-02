@@ -6,6 +6,7 @@ import { ChevronRight } from 'lucide-react';
 import { useId } from 'react';
 import type { Flow } from '../../../shared/definition/model';
 import { Field, Input, NativeSelect } from '../../../ui/field';
+import { sectionHeadingClass } from '../../../ui/page-header';
 import { SegmentedControl } from '../../../ui/segmented-control';
 import { setFlow } from '../draft/ops';
 import { EditedMark } from '../frame/section-shell';
@@ -96,7 +97,7 @@ export function FlowPanel() {
           className="shrink-0 transition-transform duration-(--duration-quick) group-open:rotate-90"
         />
         <span className="flex min-w-0 flex-col">
-          <span className="text-lg font-medium">Flow and targets</span>
+          <span className={sectionHeadingClass}>Flow and targets</span>
           <span className="text-[13px] text-muted">
             How work enters the line, what paces it, the expedite lane, when to stop the line and what to aim for.
           </span>
