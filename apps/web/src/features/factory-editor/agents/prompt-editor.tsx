@@ -12,6 +12,8 @@ import { cleanPath } from '../../../shared/definition/place';
 import { lazyRetrying } from '../../../shared/lazy';
 import { Button } from '../../../ui/button';
 import { SegmentedControl } from '../../../ui/segmented-control';
+import { Skeleton } from '../../../ui/skeleton';
+import { Tooltip } from '../../../ui/tooltip';
 import { useDraft, useDraftSession, useSection, useViewOnly } from '../draft/use-draft';
 import { useProblemText } from '../frame/use-editor';
 import { CodeEditor, LinedText } from '../yaml/code-editor';
@@ -27,6 +29,8 @@ export interface PromptText {
   error: ApiError | undefined;
   /** The text for an edit, read first when the session hasn't it (and adopted, so the edit's undo can write it back). */
   load: () => Promise<string>;
+  /** The running version's text of the file: what "Reset to default" restores. Undefined while it loads; null when the running version has no such file. */
+  running: string | null | undefined;
 }
 
 /**
@@ -44,9 +48,10 @@ export function usePromptText(agent: string): PromptText {
   const draftFile = draftFileQuery(session.org, session.factory, path ?? '');
   const versionFile = versionFileQuery(session.org, session.factory, 'current', path ?? '', prompt?.sha256 ?? '');
   const fromDraft = useQuery({ ...draftFile, enabled: hasDraft && path !== undefined });
+  // The running file is read even with a draft open: Reset to default compares the draft with it.
   const fromVersion = useQuery({
     ...versionFile,
-    enabled: !hasDraft && path !== undefined && prompt?.sha256 !== undefined,
+    enabled: path !== undefined && prompt?.sha256 !== undefined,
   });
   const loaded = hasDraft ? fromDraft : fromVersion;
 
@@ -60,6 +65,7 @@ export function usePromptText(agent: string): PromptText {
     text,
     error: loaded.error instanceof ApiError ? loaded.error : undefined,
     load: () => (path ? session.fileText(path) : Promise.resolve('')),
+    running: fromVersion.data?.text ?? (fromVersion.isError ? null : undefined),
   };
 }
 
@@ -67,14 +73,31 @@ const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
 
 type View = 'write' | 'preview';
 
+/** Why "Reset to default" cannot run, or undefined when it can. */
+export function resetBlockedReason(
+  text: string | undefined,
+  running: string | null | undefined,
+  viewOnly: boolean,
+): string | undefined {
+  if (viewOnly) return 'The definition is view-only';
+  if (running === undefined) return 'Loading the running version’s prompt';
+  if (running === null) return 'The running version has no prompt file to restore';
+  if (text === running) return 'The prompt already matches the running version';
+  return undefined;
+}
+
 export function PromptEditor({ agent, index }: { agent: ModelAgent; index: number }) {
   const session = useDraftSession();
   const viewOnly = useViewOnly();
   const headingId = useId();
   const [view, setView] = useState<View>('write');
-  const { path, text, error } = usePromptText(agent.name);
+  const { path, text, error, running } = usePromptText(agent.name);
   const problem = useProblemText(`/agents/agents/${index}/prompt`);
   const count = text !== undefined ? words(text) : agent.prompt?.words;
+  const resetReason = resetBlockedReason(text, running, viewOnly);
+  const reset = () => {
+    if (path && typeof running === 'string') session.editFile(path, running);
+  };
 
   const body = () => {
     if (!path) {
@@ -96,7 +119,13 @@ export function PromptEditor({ agent, index }: { agent: ModelAgent; index: numbe
         </div>
       );
     }
-    if (text === undefined) return <LinedText text="" minLines={8} />;
+    if (text === undefined) {
+      return (
+        <Skeleton ready={false} placeholder={<div className="m-3 h-40 rounded-cell bg-panel" />}>
+          <span />
+        </Skeleton>
+      );
+    }
     if (view === 'preview') {
       return (
         <Suspense fallback={<p className="m-0 p-3 text-sm text-muted">Loading the preview…</p>}>
@@ -130,15 +159,31 @@ export function PromptEditor({ agent, index }: { agent: ModelAgent; index: numbe
       </div>
       <div className="overflow-hidden rounded-control border border-rule bg-card has-[textarea:focus-visible]:outline-2 has-[textarea:focus-visible]:outline-offset-2 has-[textarea:focus-visible]:outline-run has-[.monaco-editor.focused]:outline-2 has-[.monaco-editor.focused]:outline-offset-2 has-[.monaco-editor.focused]:outline-run">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-card px-2 py-1.5">
-          <SegmentedControl
-            label="Prompt view"
-            value={view}
-            onChange={setView}
-            options={[
-              { value: 'write', label: 'Write' },
-              { value: 'preview', label: 'Preview' },
-            ]}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <SegmentedControl
+              label="Prompt view"
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'write', label: 'Write' },
+                { value: 'preview', label: 'Preview' },
+              ]}
+            />
+            {path && !viewOnly ? (
+              <Tooltip label={resetReason ?? 'Restore the running version’s prompt'}>
+                <Button
+                  variant="white"
+                  size="sm"
+                  aria-disabled={resetReason !== undefined || undefined}
+                  onClick={() => {
+                    if (resetReason === undefined) reset();
+                  }}
+                >
+                  Reset to default
+                </Button>
+              </Tooltip>
+            ) : null}
+          </div>
           {path ? (
             <span translate="no" className="truncate font-mono text-xs text-muted">
               {path}
