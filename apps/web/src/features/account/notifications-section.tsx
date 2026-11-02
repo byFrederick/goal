@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { connectionsQuery, notificationsQuery } from '../../api/queries';
 import type { NotificationChannels, NotificationEvents, NotificationPreferences } from '../../api/types';
+import { usePhone } from '../../app/phone-chrome';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { NotAvailable } from '../../ui/not-available';
@@ -85,6 +86,50 @@ function PreferencesTable({
   slackConnected?: boolean;
   onChange?: (event: Event, channel: Channel, on: boolean) => void;
 }) {
+  const phone = usePhone();
+
+  /** One box of the matrix: live, or the saved value and NotAvailable. `className` sizes the target. */
+  const box = (event: Event, channel: Channel, eventLabel: string, channelLabel: string, className?: string) => {
+    const boxLabel = `${eventLabel}, ${channelLabel}`;
+    const live = prefs !== undefined && (channel !== 'slack' || slackConnected);
+    const checked = prefs?.events[event][channel] ?? false;
+    const extra = className ? { className, label: channelLabel } : {};
+    if (live && onChange !== undefined) {
+      return (
+        <Checkbox
+          aria-label={boxLabel}
+          {...extra}
+          checked={checked}
+          onCheckedChange={(on) => onChange(event, channel, on)}
+        />
+      );
+    }
+    return (
+      // Controlled with a no-op: a click on a box that is not available leaves it at its saved value.
+      <NotAvailable label={boxLabel}>
+        <Checkbox aria-label={boxLabel} {...extra} checked={checked} onCheckedChange={() => undefined} />
+      </NotAvailable>
+    );
+  };
+
+  // Below 768 px one row per event with a labelled box per channel; the table would be wider than the screen.
+  if (phone) {
+    return (
+      <ul className="m-0 flex list-none flex-col p-0">
+        {rules.map(({ event, label }) => (
+          <li key={event} className="flex flex-col gap-1 border-t border-line py-3 first:border-t-0 first:pt-0">
+            <span className="text-sm">{label}</span>
+            {channels.map(({ channel, label: channelLabel }) =>
+              event === 'digest' && channel === 'in_goal' ? null : (
+                <div key={channel}>{box(event, channel, label, channelLabel, 'min-h-11 w-full')}</div>
+              ),
+            )}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[480px] border-collapse text-sm">
@@ -102,35 +147,17 @@ function PreferencesTable({
           {rules.map(({ event, label }) => (
             <tr key={event} className="border-t border-line [&>td]:py-3">
               <td>{label}</td>
-              {channels.map(({ channel, label: channelLabel }) => {
-                if (event === 'digest' && channel === 'in_goal') {
-                  return (
-                    <td key={channel} className="text-center text-muted">
-                      None
-                    </td>
-                  );
-                }
-                const boxLabel = `${label}, ${channelLabel}`;
-                const live = prefs !== undefined && (channel !== 'slack' || slackConnected);
-                const checked = prefs?.events[event][channel] ?? false;
-                const changeable = live && onChange !== undefined;
-                return (
-                  <td key={channel} className="text-center">
-                    {changeable ? (
-                      <Checkbox
-                        aria-label={boxLabel}
-                        checked={checked}
-                        onCheckedChange={(on) => onChange(event, channel, on)}
-                      />
-                    ) : (
-                      // Controlled with a no-op: a click on a box that is not available leaves it at its saved value.
-                      <NotAvailable label={boxLabel}>
-                        <Checkbox aria-label={boxLabel} checked={checked} onCheckedChange={() => undefined} />
-                      </NotAvailable>
-                    )}
+              {channels.map(({ channel, label: channelLabel }) =>
+                event === 'digest' && channel === 'in_goal' ? (
+                  <td key={channel} className="text-center text-muted">
+                    None
                   </td>
-                );
-              })}
+                ) : (
+                  <td key={channel} className="text-center">
+                    {box(event, channel, label, channelLabel)}
+                  </td>
+                ),
+              )}
             </tr>
           ))}
         </tbody>

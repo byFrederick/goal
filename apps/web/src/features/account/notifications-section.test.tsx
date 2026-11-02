@@ -200,3 +200,34 @@ describe('the notification table', () => {
     expect(goald.requests).toHaveLength(0);
   });
 });
+
+describe('the notification table below 768 px', () => {
+  const original = window.matchMedia;
+  beforeEach(() => {
+    window.matchMedia = ((query: string) =>
+      ({
+        matches: query.includes('max-width: 767px'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList) as typeof window.matchMedia;
+  });
+  afterEach(() => {
+    window.matchMedia = original;
+  });
+
+  it('stacks one row per event with a named box per channel and no table', async () => {
+    renderTable();
+    expect((await box('A budget passes 80%, Email')).checked).toBe(true);
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.getAllByRole('checkbox')).toHaveLength(14);
+    expect(screen.queryByRole('checkbox', { name: 'Daily digest at 08:00, In Goal' })).toBeNull();
+    expect(screen.getAllByRole('listitem')).toHaveLength(5);
+  });
+
+  it('saves a changed box', async () => {
+    renderTable();
+    fireEvent.click(await box('A budget passes 80%, Slack'));
+    await waitFor(() => expect(saves()).toHaveLength(1));
+  });
+});

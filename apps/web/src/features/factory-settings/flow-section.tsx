@@ -2,7 +2,9 @@
 // (review.budget) and release, assemblies.overlap (line.flow) and the expedite types (line.flow.expedite)
 // each save their own key; a write keeps the other keys of its object, fresh_base included.
 import { useId } from 'react';
+import { usePhone } from '../../app/phone-chrome';
 import type { Flow } from '../../shared/definition/model';
+import { RadioList } from '../../ui/radio-cards';
 import { SegmentedControl } from '../../ui/segmented-control';
 import { TokenField } from '../factory-editor/basics/token-field';
 import { setBudget, setFlow } from '../factory-editor/draft/ops';
@@ -39,20 +41,33 @@ function Choice<T extends string>({
 }) {
   const helpId = useId();
   const viewOnly = useViewOnly();
+  const phone = usePhone();
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <span aria-hidden="true" className="text-sm font-medium">
         {name}
       </span>
-      <SegmentedControl
-        label={name}
-        options={options}
-        value={value}
-        readOnly={viewOnly}
-        describedBy={helpId}
-        onChange={onChange}
-        className="max-w-full self-start"
-      />
+      {phone ? (
+        // The segmented control's labels do not wrap; below 768 px the options stack as a radio list.
+        <RadioList
+          legend={name}
+          name={`${helpId}-choice`}
+          options={options}
+          value={value}
+          onChange={onChange}
+          describedBy={helpId}
+        />
+      ) : (
+        <SegmentedControl
+          label={name}
+          options={options}
+          value={value}
+          readOnly={viewOnly}
+          describedBy={helpId}
+          onChange={onChange}
+          className="max-w-full self-start"
+        />
+      )}
       <p id={helpId} className="m-0 text-secondary text-muted">
         {help}
       </p>
