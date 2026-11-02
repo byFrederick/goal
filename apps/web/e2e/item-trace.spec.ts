@@ -1,7 +1,7 @@
 // The item's Trace tab (ADR 0019, decision 2): opening it, "Full trace" on the Latest steps card, and the
 // empty state. Item 6 has several runs in the mock; item 15 has none.
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll } from './support';
+import { expectNoClippedElements, expectNoHorizontalScroll } from './support';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -54,4 +54,14 @@ test('Watch live opens the Trace tab and keeps a new step in view', async ({ pag
   const added = panel.getByRole('button', { name: /Grep\s*watch-live-marker/ });
   await expect(added).toBeVisible();
   await expect(added).toBeInViewport();
+});
+
+test('the Trace tab fits at every width', async ({ page }) => {
+  for (const width of [1440, 1280, 1024, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/o/acme/f/goal/items/6?tab=trace');
+    await expect(page.getByRole('tabpanel', { name: 'Trace' }).getByRole('list', { name: 'Legend' })).toBeVisible();
+    await expectNoHorizontalScroll(page);
+    await expectNoClippedElements(page);
+  }
 });

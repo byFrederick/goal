@@ -24,6 +24,7 @@ import {
   type Trace,
 } from './timeline';
 import { checkStep } from './timeline-rows';
+import { axisTicks, tickLabel } from './trace-axis';
 import { outcomeOf, type TimelineStatus } from './trace-view';
 
 type StepTone = 'run' | 'tool' | 'running' | 'ok' | 'failed' | 'you' | 'note';
@@ -118,15 +119,6 @@ function groupsOf(entries: Entry[]): Group[] {
   }
   return groups.filter((g) => g.run || g.steps.length > 0);
 }
-
-/** Tick spacing in seconds: the smallest of a few round steps that gives at most seven ticks. */
-function tickEvery(spanMs: number): number {
-  const options = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 43200, 86400];
-  return options.find((s) => spanMs / 1000 / s <= 7) ?? 86400;
-}
-
-const tickLabel = (seconds: number) =>
-  seconds === 0 ? '0' : seconds >= 3600 ? `${seconds / 3600} h` : seconds >= 60 ? `${seconds / 60} m` : `${seconds} s`;
 
 function label(step: Step): ReactNode {
   switch (step.kind) {
@@ -303,9 +295,17 @@ function Legend() {
 }
 
 function Axis({ spanMs }: { spanMs: number }) {
-  const every = tickEvery(spanMs);
-  const ticks: number[] = [];
-  for (let s = 0; s * 1000 < spanMs * 0.92 || s === 0; s += every) ticks.push(s);
+  const track = useRef<HTMLSpanElement>(null);
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = track.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    setWidth(el.clientWidth);
+    const watch = new ResizeObserver(() => setWidth(el.clientWidth));
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, []);
+  const ticks = width > 0 ? axisTicks(spanMs, width) : [0];
   return (
     <div
       aria-hidden="true"
@@ -313,11 +313,11 @@ function Axis({ spanMs }: { spanMs: number }) {
       className="grid items-center border-b border-line bg-panel text-meta text-muted"
     >
       <span className="px-3 py-2">Span</span>
-      <span className="relative h-full min-h-7 overflow-hidden border-l border-line">
+      <span ref={track} className="relative h-full min-h-7 overflow-hidden border-l border-line">
         {ticks.map((s) => (
           <span
             key={s}
-            className="absolute inset-y-0 border-l border-line pl-1 leading-7 first:border-l-0"
+            className="absolute inset-y-0 whitespace-nowrap border-l border-line pl-1 leading-7 first:border-l-0"
             style={{ left: `${((s * 1000) / spanMs) * 100}%` }}
           >
             {tickLabel(s)}
@@ -575,7 +575,7 @@ function StepRow({
                 isRun ? 'h-1' : 'h-1.5',
                 barTone[step.tone],
               )}
-              style={{ left: `${left}%`, width: `max(${width}%, 2px)` }}
+              style={{ left: `min(${left}%, calc(100% - 4px))`, width: `max(${width}%, 4px)` }}
             />
           </span>
           <span className="px-3 text-right text-secondary text-muted tabular-nums">{took}</span>
