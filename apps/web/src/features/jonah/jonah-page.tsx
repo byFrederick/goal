@@ -27,7 +27,7 @@ import { JonahHeader } from './jonah-header';
 import { proposalStates } from './jonah-search';
 import { ProposalCard } from './proposal-card';
 
-/** Loading shows the app background and an empty region for the screen reader, never a placeholder shape. */
+/** Loading shows the page's rows as a skeleton while the overview waits. */
 export function Loading() {
   return (
     <Skeleton ready={false} placeholder={<SkeletonRows rows={4} className="min-h-40" />}>

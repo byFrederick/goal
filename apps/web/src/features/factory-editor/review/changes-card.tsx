@@ -7,6 +7,7 @@ import { versionFileQuery } from '../../../api/queries';
 import type { Change, Comparison, FileChange } from '../../../api/types';
 import { Chip } from '../../../ui/chip';
 import { cn } from '../../../ui/cn';
+import { Skeleton, SkeletonRows } from '../../../ui/skeleton';
 import { type ComparePair, type Hunk, hunksOf, sectionName } from './review';
 import { useComparison, useEditorFacts } from './use-review';
 
@@ -47,9 +48,9 @@ export function ChangesCard({
       {isError ? (
         <p className="m-0 text-secondary text-rework-ink">The comparison could not load.</p>
       ) : !comparison ? (
-        <div aria-busy="true">
-          <span className="sr-only">Loading</span>
-        </div>
+        <Skeleton ready={false} placeholder={<SkeletonRows rows={3} />}>
+          {null}
+        </Skeleton>
       ) : countsOnly ? null : changes.length === 0 && files.length === 0 ? (
         <p className="m-0 text-secondary text-muted">No changes</p>
       ) : (
@@ -103,9 +104,9 @@ function FileDiff({ file, pair, changes }: { file: FileChange; pair: ComparePair
     return <p className="m-0 text-secondary text-rework-ink">This file could not load.</p>;
   if (loading) {
     return (
-      <div aria-busy="true">
-        <span className="sr-only">Loading {file.path}</span>
-      </div>
+      <Skeleton ready={false} placeholder={<SkeletonRows rows={4} />}>
+        {null}
+      </Skeleton>
     );
   }
   const binary = [before.data?.text, after.data?.text].some((t) => t?.includes('\u0000'));
