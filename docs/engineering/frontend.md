@@ -472,7 +472,7 @@ Differences from `docs/design/screens/intake/webhooks.jpg`, each for a reason:
 
 - The address is `/hooks/{endpoint id}`, not `/hooks/<factory>/<name>`: ADR 0026 decision 3, since a name keys the factory (AGENTS.md rule 2).
 - The secret is a sealed secret shown once with Rotate, not a credential "in Credentials": ADR 0026 decision 2.
-- The endpoint's name stands where the picture's display title does ("cf-deploys", not "Cloudflare deploys"): the API has no display title.
+- The endpoint's name stands where the picture's display title does ("acme-deploys", not "Acme deploys"): the API has no display title.
 - Each trigger is named but not placed ("fix at Spec, expedite lane" is left out): the API does not return the placement.
 - A refusal has its reason only, with no second explanation line: the API gives no such text.
 - The delivery row has no event name ("deploy.failed"): the API has none; the row says the outcome.
