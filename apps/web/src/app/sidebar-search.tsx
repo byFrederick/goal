@@ -35,6 +35,9 @@ import {
 
 const iconProps = { size: 16, strokeWidth: 1.5, 'aria-hidden': true } as const;
 
+/** The answer before one has come: no hits, so only the pages and the actions show. */
+const noAnswer: OrgSearch = { items: [], agents: [], connections: [], factories: [] };
+
 /** How many results each group holds (the API's default). */
 const limit = 5;
 /** The pause in typing after which a search is sent. */
@@ -44,7 +47,7 @@ const debounceMs = 150;
 export const iconButton =
   'flex size-8 flex-none items-center justify-center rounded-control text-ink-soft hover:bg-hover hover:text-ink aria-disabled:cursor-default aria-disabled:text-muted aria-disabled:hover:bg-transparent';
 
-/** A result row: 36 px, the picture's row height, with the tint of the active row. */
+/** A result row: 36 px, the picture's row height, with the hover fill on the active row (shell.jpg, Search). */
 const resultClass =
   'flex h-9 w-full min-w-0 items-center gap-2 rounded-control px-2 text-left text-body text-ink no-underline hover:bg-hover aria-disabled:cursor-default aria-disabled:text-muted aria-disabled:hover:bg-transparent';
 
@@ -139,16 +142,18 @@ export function SidebarSearch({
   // An empty or blank query sends nothing: `enabled` keeps the read off until there is a word to find.
   const q = useDebounced(query.trim(), debounceMs);
   const search = useQuery({ ...searchQuery(org.id, { q, limit }), enabled: q !== '' });
+  // While a new query loads, the previous answer stays (keepPreviousData, searchQuery): the rows update in
+  // place and the body never blanks. The pages and the actions are matched here, so they show at once.
   const pending = q !== '' && (search.isPending || search.isPlaceholderData);
   const failed = q !== '' && search.isError;
-  const result: OrgSearch | undefined = q !== '' && !pending && !failed ? search.data : undefined;
+  const answer: OrgSearch | undefined = q !== '' && !failed ? search.data : undefined;
 
   const go = (open: () => void) => {
     open();
     onClose(false);
   };
 
-  const groups: Group[] = result ? resultGroups(result) : [];
+  const groups: Group[] = q !== '' ? resultGroups(answer ?? noAnswer) : [];
   const rows = groups.flatMap((group) => group.rows);
   const index = rows.length === 0 ? -1 : Math.min(active, rows.length - 1);
   const optionId = (i: number) => `${listId}-${i}`;
@@ -158,11 +163,11 @@ export function SidebarSearch({
   }, [index, listId]);
 
   /** The rows of each group, from the answer and the screens the search matches on the client. */
-  function resultGroups(answer: OrgSearch): Group[] {
+  function resultGroups(found: OrgSearch): Group[] {
     const needle = q.toLowerCase();
     const mark = (name: string) => factoryMark({ name }, list);
 
-    const items: Row[] = answer.items.map((hit) => ({
+    const items: Row[] = found.items.map((hit) => ({
       key: `item-${hit.id}`,
       label: `${hit.factory_name} #${hit.number}, ${hit.title}`,
       content: (
@@ -223,7 +228,7 @@ export function SidebarSearch({
         open: () => go(open),
       }));
 
-    const agents: Row[] = answer.agents.map((hit) => ({
+    const agents: Row[] = found.agents.map((hit) => ({
       key: `agent-${hit.factory_id}-${hit.name}`,
       label: `${hit.name}, ${hit.factory_name}`,
       content: (
@@ -238,7 +243,7 @@ export function SidebarSearch({
         go(() => navigate({ to: '/o/$org/f/$factory', params: { org: org.slug, factory: hit.factory_name } })),
     }));
 
-    const connections: Row[] = answer.connections.map((hit) => ({
+    const connections: Row[] = found.connections.map((hit) => ({
       key: `connection-${hit.name}`,
       label: `${hit.name}, ${humanize(hit.kind)}`,
       content: (
@@ -252,7 +257,7 @@ export function SidebarSearch({
         go(() => navigate({ to: '/o/$org/connections/$connection', params: { org: org.slug, connection: hit.name } })),
     }));
 
-    const factoryRows: Row[] = answer.factories.map((hit) => ({
+    const factoryRows: Row[] = found.factories.map((hit) => ({
       key: `factory-${hit.id}`,
       label: factoryTitle(hit),
       content: (
@@ -304,7 +309,7 @@ export function SidebarSearch({
             },
           ]
         : [];
-    const approveRows: Row[] = answer.items.flatMap((hit) => {
+    const approveRows: Row[] = found.items.flatMap((hit) => {
       const factory = list.find((f) => f.id === hit.factory_id);
       const station = factory?.stations.find((s) => s.id === hit.station);
       if (!factory || !holds(factory, 'item:decide') || !decisionsFor(hit, station).approve) return [];
@@ -350,7 +355,7 @@ export function SidebarSearch({
     }
   };
 
-  const nothingFound = result !== undefined && rows.length === 0;
+  const nothingFound = answer !== undefined && !pending && rows.length === 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -409,7 +414,7 @@ export function SidebarSearch({
                           e.preventDefault();
                           row.open();
                         }}
-                        className={cn(resultClass, 'cursor-pointer', i === index && 'bg-run-tint')}
+                        className={cn(resultClass, 'cursor-pointer', i === index && 'bg-hover')}
                       >
                         {row.content}
                       </div>

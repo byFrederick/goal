@@ -2,15 +2,17 @@
 // bottom of the sidebar (on phones, of the drawer) opens a panel naming the person, their role in
 // this organization and whether they are a platform admin. Its rows: the theme, Profile and Personal
 // tokens (both on the account page, /account), Notifications, Connected apps and Keyboard shortcuts
-// (disabled, "Not available yet"), then Sign out and Sign out everywhere…. With sign-in off (GOAL_AUTH=none)
-// it names the local user and has no actions. The account page itself is features/account/account-page.tsx.
+// (disabled, "Not available yet"), then Sign out and Sign out everywhere…. Notifications opens the account page's
+// notifications section; Keyboard shortcuts opens the shortcuts list (shortcuts-dialog.tsx). With sign-in off
+// (GOAL_AUTH=none) it names the local user and has no actions. The account page itself is
+// features/account/account-page.tsx.
 //
-// AccountProvider (in AppShell) keeps the sign-out confirmation, so it outlives the panel or sheet that
-// opened it, and keeps the session alive while signed in.
+// AccountProvider (in AppShell) keeps the sign-out confirmation and the shortcuts list, so they outlive the panel
+// or sheet that opened them, and keeps the session alive while signed in.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Bell, CircleCheck, Keyboard, KeyRound, LogOut, Puzzle, UserRound } from 'lucide-react';
-import { createContext, type ReactNode, use, useEffect, useState } from 'react';
+import { createContext, type ReactNode, use, useCallback, useEffect, useState } from 'react';
 import { meQuery, orgQuery } from '../api/queries';
 import type { Me, OrgSummary } from '../api/types';
 import { keepSessionAlive, roleName, useSignOut } from '../shared/account';
@@ -26,6 +28,7 @@ import { NotAvailable } from '../ui/not-available';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { AppearanceChoice } from './appearance-choice';
 import { railItemClass } from './rail-items';
+import { ShortcutsDialog, useShortcutsKey } from './shortcuts-dialog';
 
 /** Better Auth extends a session its endpoints see (spec 3 §8.3): on load, then hourly. */
 const keepAliveMs = 60 * 60_000;
@@ -40,6 +43,8 @@ interface Account {
   platformAdmin: boolean;
   signOut: () => void;
   signOutEverywhere: () => void;
+  /** Opens the keyboard shortcuts list from the menu (the dialog row: standard motion). */
+  showShortcuts: () => void;
 }
 
 const AccountContext = createContext<Account | null>(null);
@@ -56,6 +61,10 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const person = me?.mode === 'session' ? me.user : undefined;
   const status: AccountStatus = isPending ? 'loading' : isError ? 'error' : me?.mode === 'session' ? 'ready' : 'local';
   const [everywhereOpen, setEverywhereOpen] = useState(false);
+  // How the shortcuts list is open: by key (no transition, MOTION.md rule 1) or from the menu.
+  const [shortcuts, setShortcuts] = useState({ open: false, instant: false });
+  const openByKey = useCallback(() => setShortcuts({ open: true, instant: true }), []);
+  useShortcutsKey(openByKey);
   const { signOut, everywhere } = useSignOut();
   const signedIn = me?.mode === 'session';
 
@@ -74,11 +83,17 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       if (!signOut.isPending) signOut.mutate();
     },
     signOutEverywhere: () => setEverywhereOpen(true),
+    showShortcuts: () => setShortcuts({ open: true, instant: false }),
   };
 
   return (
     <AccountContext value={account}>
       {children}
+      <ShortcutsDialog
+        open={shortcuts.open}
+        instant={shortcuts.instant}
+        onOpenChange={(open) => setShortcuts((s) => ({ ...s, open }))}
+      />
       <ConfirmDialog
         open={everywhereOpen}
         onOpenChange={(open) => {
@@ -245,12 +260,10 @@ function AccountRows({ org, onAction }: { org: OrgSummary; onAction: () => void 
           </li>
         ) : null}
         <li>
-          <NotAvailable>
-            <button type="button" className={actionRow}>
-              <Bell {...iconProps} />
-              Notifications
-            </button>
-          </NotAvailable>
+          <Link to="/account" hash="notifications" onClick={onAction} className={actionRow}>
+            <Bell {...iconProps} />
+            Notifications
+          </Link>
         </li>
         {tokens ? (
           <li>
@@ -269,15 +282,13 @@ function AccountRows({ org, onAction }: { org: OrgSummary; onAction: () => void 
           </NotAvailable>
         </li>
         <li>
-          <NotAvailable>
-            <button type="button" className={actionRow}>
-              <Keyboard {...iconProps} />
-              Keyboard shortcuts
-              <kbd className="ml-auto inline-grid h-5 min-w-5 place-items-center rounded-chip border border-rule px-1 font-sans text-meta font-semibold text-ink-soft">
-                ?
-              </kbd>
-            </button>
-          </NotAvailable>
+          <button type="button" onClick={act(account.showShortcuts)} className={actionRow}>
+            <Keyboard {...iconProps} />
+            Keyboard shortcuts
+            <kbd className="ml-auto inline-grid h-5 min-w-5 place-items-center rounded-chip border border-rule px-1 font-sans text-meta font-semibold text-ink-soft">
+              ?
+            </kbd>
+          </button>
         </li>
       </ul>
       <div aria-hidden="true" className="my-1 h-px bg-line" />

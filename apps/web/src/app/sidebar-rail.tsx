@@ -1,21 +1,22 @@
 // The collapsed sidebar (MASTER.md "Collapsed rail", shell.html "Collapsed"): a 60 px column in the
-// sidebar's place, from 768 px up. Top to bottom: the Goal mark, Expand sidebar, New item (disabled
-// here, though the 256 px sidebar's opens the composer: new-item.tsx; C still opens it, since Sidebar keeps the
-// composer mounted while the rail shows), the organization-wide pages as icons, the factories as squares with
-// their counts, New factory (+), the spend ring and the person's avatar. It reads the same data as the 256 px sidebar, which it
-// replaces (sidebar.tsx), and it shares the factory squares with the account menu (rail-items.tsx). Command K
-// on the rail expands the sidebar into search, so the shortcut never opens search out of sight.
+// sidebar's place, from 768 px up. Top to bottom: the Goal mark, Expand sidebar, New item (+, which opens the
+// composer the sidebar keeps mounted: sidebar.tsx), the organization-wide pages as icons, the factories as squares
+// with their counts, New factory (+), the spend ring and the person's avatar. It reads the same data as the 256 px
+// sidebar, which it replaces (sidebar.tsx), and it shares the factory squares with the account menu (rail-items.tsx).
+// Command K on the rail expands the sidebar into search, so the shortcut never opens search out of sight.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { CircleHelp, PanelLeft, Plus } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
-import { attentionQuery, overviewQuery } from '../api/queries';
+import { attentionQuery, factoriesQuery, overviewQuery } from '../api/queries';
 import type { FactoryOverviewList, OrgSummary } from '../api/types';
 import { useConnectionTrouble } from '../shared/connections';
 import { formatUsdCompact } from '../shared/format';
 import { useOrgGrants, useOrgHolds } from '../shared/org';
+import { holds } from '../shared/permissions';
 import { GoalMark } from '../ui/goal-mark';
 import { NotAvailable } from '../ui/not-available';
+import { NumberRoll } from '../ui/number-roll';
 import { Tooltip } from '../ui/tooltip';
 import { AccountMenu } from './account-menu';
 import { useFactorySquares } from './factory-squares';
@@ -37,16 +38,24 @@ interface SidebarRailProps {
   focusOnMount: boolean;
   /** Expands the sidebar; `search` opens it straight into search (Command K). */
   onExpand: (search: boolean) => void;
+  /** Opens the New item composer (the sidebar's composer, which the rail keeps mounted). */
+  onNewItem: () => void;
 }
 
-export function SidebarRail({ org, busy, focusOnMount, onExpand }: SidebarRailProps) {
+export function SidebarRail({ org, busy, focusOnMount, onExpand, onNewItem }: SidebarRailProps) {
   const can = useOrgGrants()?.can;
   const mayCreate = useOrgHolds('factory:create');
   const attention = useQuery(attentionQuery(org.id));
   const overview = useQuery(overviewQuery(org.id));
+  const factories = useQuery(factoriesQuery(org.id));
   const trouble = useConnectionTrouble(org.id);
   const waiting = attention.data?.waiting_on_you ?? 0;
   const expand = useRef<HTMLButtonElement>(null);
+  // Like the sidebar's New item: shown while the factories load or fail, and once one may take items.
+  const canAddItem =
+    factories.isPending ||
+    factories.isError ||
+    (factories.data ?? []).some((f) => !f.archived_at && holds(f, 'item:create'));
   useEffect(() => {
     if (focusOnMount) expand.current?.focus();
   }, [focusOnMount]);
@@ -62,7 +71,7 @@ export function SidebarRail({ org, busy, focusOnMount, onExpand }: SidebarRailPr
     <nav
       aria-label="Organization and factories"
       aria-busy={busy}
-      className="sticky top-0 hidden h-dvh w-15 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-line bg-sidebar pt-2 pb-3 md:flex"
+      className="motion-sidebar sticky top-0 hidden h-dvh w-15 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-line bg-sidebar pt-2 pb-3 md:flex"
     >
       {busy ? <span className="sr-only">Loading</span> : null}
       <span className="flex size-10 flex-none items-center justify-center">
@@ -79,15 +88,19 @@ export function SidebarRail({ org, busy, focusOnMount, onExpand }: SidebarRailPr
           <PanelLeft {...iconProps} />
         </button>
       </Tooltip>
-      <NotAvailable label="New item">
-        <button
-          type="button"
-          aria-label="New item"
-          className="flex size-10 flex-none items-center justify-center rounded-control bg-run text-white aria-disabled:cursor-default"
-        >
-          <Plus {...iconProps} size={16} />
-        </button>
-      </NotAvailable>
+      {canAddItem ? (
+        <Tooltip label="New item">
+          <button
+            type="button"
+            aria-label="New item"
+            aria-keyshortcuts="C"
+            onClick={onNewItem}
+            className="flex size-10 flex-none items-center justify-center rounded-control border border-rule bg-card text-ink hover:bg-hover"
+          >
+            <Plus {...iconProps} size={16} />
+          </button>
+        </Tooltip>
+      ) : null}
       <span aria-hidden="true" className="my-1 h-px w-7 flex-none bg-rule" />
       <ul className="m-0 flex list-none flex-col items-center gap-1 p-0">
         {screensFor(sidebarOrgScreens, can).map((screen) => (
@@ -138,9 +151,9 @@ function RailEntry({
       {needs ? (
         <span
           aria-hidden="true"
-          className="absolute top-0.5 right-0 flex h-4 min-w-4 items-center justify-center rounded-chip border-2 border-sidebar bg-you px-1 text-meta leading-none font-semibold text-white"
+          className="absolute top-0.5 right-0 flex h-4 min-w-4 items-center justify-center rounded-chip border-2 border-sidebar bg-you px-1 text-meta leading-none font-semibold text-white motion-safe:animate-notification-badge motion-reduce:animate-fade-in"
         >
-          {waiting}
+          <NumberRoll value={waiting} />
         </span>
       ) : null}
       {failing ? (
