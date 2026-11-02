@@ -29,6 +29,7 @@ import { type ReactNode, useEffect, useImperativeHandle, useRef, useState } from
 import { createPortal } from 'react-dom';
 import schema from '../../../../../../contracts/definitions/factory.schema.json';
 import type { CodeEditorProps } from './code-editor';
+import { editorTheme } from './editor-theme';
 import './monaco-editor.css';
 import YamlWorker from './yaml.worker.ts?worker';
 
@@ -75,43 +76,16 @@ configureMonacoYaml(yamlMonaco as never, {
 
 /** A design token's value as the page has it now: the light or the dark one, by data-theme. */
 const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
-/** Monaco's token rules take the hex digits without the '#'. */
-const hex = (name: string) => token(name).replace('#', '');
-
-/**
- * The editor's theme from the design tokens (MASTER.md), read from the page so the dark theme
- * needs no copy of the colours here. Syntax takes the status and identity tokens.
- */
-function goalTheme(): monaco.editor.IStandaloneThemeData {
-  return {
-    base: 'vs',
-    inherit: true,
-    rules: [
-      { token: 'keyword', foreground: hex('run-ink') },
-      { token: 'type', foreground: hex('run-ink') },
-      { token: 'string', foreground: hex('ok-ink') },
-      { token: 'number', foreground: hex('amber-ink') },
-      { token: 'comment', foreground: hex('muted'), fontStyle: 'italic' },
-      { token: 'variable', foreground: hex('you-ink') },
-    ],
-    colors: {
-      'editor.background': token('shell'),
-      'editor.foreground': token('ink'),
-      'editorLineNumber.foreground': token('muted'),
-      'editorLineNumber.activeForeground': token('ink'),
-      'editorCursor.foreground': token('run'),
-      'editor.selectionBackground': token('run-tint'),
-      'editor.lineHighlightBackground': token('panel'),
-      'editorIndentGuide.background1': token('line'),
-      'editorError.foreground': token('rework'),
-      'editorWarning.foreground': token('rework'),
-    },
-  };
+/** Whether the page shows its dark theme now: a chosen data-theme, else the system's. */
+function isDark(): boolean {
+  const chosen = document.documentElement.dataset.theme;
+  if (chosen) return chosen === 'dark';
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
 }
 
 /** Defines the theme again and applies it: on load, and whenever the page switches theme. */
 function applyGoalTheme() {
-  monaco.editor.defineTheme('goal', goalTheme());
+  monaco.editor.defineTheme('goal', editorTheme(token, isDark()));
   monaco.editor.setTheme('goal');
 }
 

@@ -91,6 +91,7 @@ The recipe column names the transitions.dev recipe the implementation follows (f
 | Approve, publish, merge succeed | the button's label swaps to a check | `--duration-emphasis` `--ease-out` | success-check (10) + icon-swap (09) |
 | Andon pulled | the red strip slides down from the top bar; the line's stations dim | `--duration-fast` `--ease-out` | panel-reveal (07), shortened |
 | Copy to clipboard | the icon swaps to a check and back after 1.5s | `--duration-fast` | icon-swap (09) |
+| Problems panel rows and count while typing (YAML view) | instant, no transition, because they follow typing (frequency decides) | — | — |
 | Drag (board, definition stations, sidebar width) | the dragged element follows the pointer 1:1 with no easing; on drop it settles | settle `--duration-fast` `--ease-out` | — |
 
 Anything not in this table: pick the closest row, add it to the table in the same pull request, and say why in the PR.
