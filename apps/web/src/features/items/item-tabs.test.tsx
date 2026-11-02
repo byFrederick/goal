@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Factory } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
@@ -70,6 +70,17 @@ describe('ItemTabs', () => {
     expect(underline?.className).toContain('duration-(--duration-fast)');
     expect(underline?.className).toContain('ease-out');
     expect(underline?.className).toContain('motion-reduce:transition-none');
+  });
+
+  it('scrolls the selected tab into view along the row, for a phone', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    renderTabs('teardown');
+
+    const tab = await screen.findByRole('tab', { name: 'Teardown' });
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
+    expect(scrollIntoView.mock.contexts).toContain(tab);
+    expect(tab.className).toContain('h-11');
   });
 
   it('moves to the next tab with ArrowRight and puts it in the URL', async () => {

@@ -10,6 +10,10 @@ import (
 // Names of the teardown tests' line, its person and its check.
 const (
 	tdMerge   = "merge"
+	tdSpec    = "spec"
+	tdReview  = "review"
+	tdGoneA   = "gone-a"
+	tdGoneB   = "gone-b"
 	tdModel   = "claude-sonnet-5-5"
 	tdPerson  = "user:u1"
 	tdName    = "Maya"
@@ -83,6 +87,9 @@ func tdRejected(id int64, at int, reason string) []Event {
 
 var tdTarget = TeardownTarget{LeadTime: 6 * time.Hour, BudgetUSD: 4}
 
+// tdOrdered is a target whose line runs spec, build, review.
+var tdOrdered = TeardownTarget{LeadTime: 6 * time.Hour, Stations: []string{tdSpec, stationBuild, tdReview}}
+
 func teardownSimpleCases() []teardownCase {
 	clean := tdRun("c1", 10, 40, RunSucceeded, 1.5, 20)
 
@@ -112,6 +119,40 @@ func teardownSimpleCases() []teardownCase {
 				Runs:     []TeardownRun{tdRunOf(clean, 30, OutcomeFinished)},
 				RunTotal: TeardownRunTotal{Runs: 1, Turns: 20, Took: tdMinutes(30), CostUSD: 1.5},
 				Loops:    []ReworkLoop{}, Touches: []TeardownTouch{},
+			},
+		},
+	}
+}
+
+// Items whose stations come in the line's order, whatever order they first reached them in.
+func teardownOrderCases() []teardownCase {
+	return []teardownCase{
+		{
+			name: "a send-back keeps the line's order",
+			spans: []Span{
+				tdSpan(stationBuild, StateQueued, 0, 0, 10), tdSpan(tdSpec, StateQueued, 1, 10, 20),
+				tdSpan(stationBuild, StateQueued, 1, 20, 25), tdSpan(tdReview, StateWaitingHuman, 1, 25, 30),
+			},
+			target: tdOrdered, now: tdAt(40),
+			want: Teardown{
+				LeadTime: tdMinutes(30), Target: tdOrdered,
+				Stations: []TeardownStation{tdRow(tdSpec, 0, 10), tdRow(stationBuild, 0, 15), tdRow(tdReview, 0, 5)},
+				Total:    TeardownTime{Waiting: tdMinutes(30)},
+				Runs:     []TeardownRun{}, Loops: []ReworkLoop{}, Touches: []TeardownTouch{},
+			},
+		},
+		{
+			name: "stations no longer in the line come last, in first-reached order",
+			spans: []Span{
+				tdSpan(tdGoneB, StateQueued, 0, 0, 5), tdSpan(tdReview, StateQueued, 0, 5, 10),
+				tdSpan(tdGoneA, StateQueued, 0, 10, 15), tdSpan(tdSpec, StateQueued, 0, 15, 20),
+			},
+			target: tdOrdered, now: tdAt(40),
+			want: Teardown{
+				LeadTime: tdMinutes(20), Target: tdOrdered,
+				Stations: []TeardownStation{tdRow(tdSpec, 0, 5), tdRow(tdReview, 0, 5), tdRow(tdGoneB, 0, 5), tdRow(tdGoneA, 0, 5)},
+				Total:    TeardownTime{Waiting: tdMinutes(20)},
+				Runs:     []TeardownRun{}, Loops: []ReworkLoop{}, Touches: []TeardownTouch{},
 			},
 		},
 	}
@@ -219,6 +260,7 @@ func TestTeardownOf(t *testing.T) {
 	t.Parallel()
 
 	cases := append(teardownSimpleCases(), teardownReworkCase(), teardownTouchesCase(), teardownOpenCase())
+	cases = append(cases, teardownOrderCases()...)
 
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {

@@ -130,15 +130,22 @@ function TopBarHarness({ children }: { children: ReactNode }) {
   );
 }
 
-function renderPage(it: Item, events: ItemEvent[] = [approval], grants: Factory = factory) {
+function renderPage(
+  it: Item,
+  events: ItemEvent[] = [approval],
+  grants: Factory = factory,
+  search = '',
+  loader?: () => Promise<unknown> | undefined,
+) {
   return renderFactoryPage({
+    ...(loader ? { loader } : {}),
     page: () => (
       <TopBarHarness>
         <ItemPage />
       </TopBarHarness>
     ),
     path: 'items/$ref',
-    location: 'items/147',
+    location: `items/147${search}`,
     org,
     factory: grants,
     seed: [
@@ -232,6 +239,54 @@ describe('the item layout', () => {
     expect(panel.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const tabs = screen.getAllByRole('tab');
     expect(tabs.find((t) => t.getAttribute('aria-selected') === 'true')?.textContent).toBe('Timeline');
+  });
+
+  // jsdom has no container queries, so read the base (narrow) order-N class that decides the visual order.
+  function narrowOrder(el: HTMLElement): number {
+    let node: HTMLElement | null = el;
+    while (node) {
+      const m = /(?:^|\s)order-(\d+)(?:\s|$)/.exec(node.className);
+      if (m) return Number(m[1]);
+      node = node.parentElement;
+    }
+    return 0;
+  }
+
+  it.each([
+    ['phone', true],
+    ['tablet', false],
+  ])('puts the tab row before every side card and after the question card at %s width', async (_name, phone) => {
+    stubWidth(phone);
+    renderPage(item({ question }));
+
+    const tablist = await screen.findByRole('tablist', { name: 'Item views' });
+    const tabs = narrowOrder(tablist);
+    for (const name of ['Details', 'Cost', 'Overlaps', 'Rules']) {
+      const heading = screen.queryByRole('heading', { name });
+      if (heading) expect(narrowOrder(heading), name).toBeGreaterThan(tabs);
+    }
+    expect(screen.getByRole('heading', { name: 'Details' })).toBeTruthy();
+    if (!phone) expect(screen.getByRole('heading', { name: 'Cost' })).toBeTruthy();
+    expect(narrowOrder(screen.getByText(question.text))).toBeLessThan(tabs);
+  });
+
+  it('opens ?tab=teardown on the Teardown panel without the side cards', async () => {
+    stubWidth(false);
+    renderPage(item(), [approval], factory, '?tab=teardown');
+
+    expect(await screen.findByRole('tabpanel', { name: 'Teardown' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Details' })).toBeNull();
+  });
+
+  it('shows no side cards on Trace, and keeps them on Spec', async () => {
+    stubWidth(false);
+    const { unmount } = renderPage(item(), [approval], factory, '?tab=trace');
+    expect(await screen.findByRole('tabpanel', { name: 'Trace' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Details' })).toBeNull();
+    unmount();
+
+    renderPage(item(), [approval], factory, '?tab=spec');
+    expect(await screen.findByRole('heading', { name: 'Details' })).toBeTruthy();
   });
 
   it('shows the loading skeleton as busy, with the same column order', async () => {
@@ -636,6 +691,64 @@ describe('Watch live', () => {
 
     expect(await screen.findByRole('tabpanel', { name: 'Trace' })).toBeTruthy();
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+  });
+
+  it.each([
+    [false, 'smooth'],
+    [true, 'auto'],
+  ])('scrolls the newest step on the first press from Timeline (reduced motion: %s)', async (reduced, behavior) => {
+    window.matchMedia = ((query: string) =>
+      ({
+        matches: reduced && query === '(prefers-reduced-motion: reduce)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList) as typeof window.matchMedia;
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    // The router commits the new tab a render after the press, as it does in a browser.
+    let release: () => void = () => {};
+    let held = false;
+    const loader = () => {
+      if (!held) return undefined;
+      return new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    };
+    renderPage(running(), [approval], factory, '', loader);
+
+    const bar = await screen.findByLabelText('Top bar');
+    held = true;
+    fireEvent.click(within(bar).getByRole('button', { name: 'Watch live' }));
+    // Let the page commit the press while the tab is still Timeline.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByRole('tabpanel', { name: 'Trace' })).toBeNull();
+    release();
+
+    await screen.findByRole('tabpanel', { name: 'Trace' });
+    // The tab row also scrolls its selected tab into view; only the anchor past the newest step counts.
+    const anchorCalls = () =>
+      scrollIntoView.mock.calls.filter((_, i) =>
+        (scrollIntoView.mock.contexts[i] as HTMLElement).className.includes('h-px'),
+      );
+    await waitFor(() => expect(anchorCalls()).toHaveLength(1));
+    expect(anchorCalls()[0]).toEqual([{ block: 'end', behavior }]);
+  });
+
+  it('opens Trace without letting the router reset the scroll, which would undo the scroll to the newest step', async () => {
+    stubWidth(false);
+    const { router } = renderPage(running());
+    const navigate = vi.spyOn(router, 'navigate');
+
+    const bar = await screen.findByLabelText('Top bar');
+    fireEvent.click(within(bar).getByRole('button', { name: 'Watch live' }));
+
+    await screen.findByRole('tabpanel', { name: 'Trace' });
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate.mock.calls[0]?.[0]).toMatchObject({ search: { tab: 'trace' }, resetScroll: false });
   });
 
   it('is disabled with its reason when no run is working, and does not open the Trace tab', async () => {

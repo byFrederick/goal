@@ -74,9 +74,9 @@ func (s *server) allItemEvents(ctx context.Context, id domain.ItemID) ([]domain.
 	}
 }
 
-// teardownTarget is the lead-time target of the item's class and the per-item budget of the agent
-// at its station (the running run's), as the item page reads them; none when its factory is not
-// loaded.
+// teardownTarget is the lead-time target of the item's class, the per-item budget of the agent
+// at its station (the running run's), as the item page reads them, and the line's station ids in
+// order; none when its factory is not loaded.
 func (s *server) teardownTarget(ctx context.Context, it domain.Item, runs []domain.Run) (domain.TeardownTarget, error) {
 	f, err := s.factories.Lookup(ctx, string(it.FactoryID))
 	if errors.Is(err, ports.ErrNotFound) {
@@ -100,7 +100,12 @@ func (s *server) teardownTarget(ctx context.Context, it domain.Item, runs []doma
 		}
 	}
 
-	return domain.TeardownTarget{LeadTime: l.ItemTarget(it.Class), BudgetUSD: deref(budgetOf(l, agent).PerItemUsd)}, nil
+	stations := make([]string, 0, len(l.Stations))
+	for _, st := range l.Stations {
+		stations = append(stations, st.ID)
+	}
+
+	return domain.TeardownTarget{LeadTime: l.ItemTarget(it.Class), BudgetUSD: deref(budgetOf(l, agent).PerItemUsd), Stations: stations}, nil
 }
 
 func (s *server) teardownOf(td domain.Teardown) gen.Teardown {
