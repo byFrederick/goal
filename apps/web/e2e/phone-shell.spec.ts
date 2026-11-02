@@ -59,6 +59,21 @@ test.describe('the phone shell at 375 px', () => {
 test.describe('the phone shell at 390 px', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
+  test('the title stays visible next to the actions on Home and Runs, and the buttons are 44 px', async ({ page }) => {
+    for (const [path, title] of [
+      ['/o/acme', 'Home'],
+      ['/o/acme/runs', 'Runs'],
+    ] as const) {
+      await page.goto(path);
+      const bar = page.getByRole('banner');
+      await expect(bar.getByText(title, { exact: true })).toBeVisible();
+      for (const button of await bar.getByRole('button').all()) {
+        const box = await button.boundingBox();
+        expect(box?.height ?? 0).toBeGreaterThanOrEqual(43.5);
+      }
+    }
+  });
+
   test('nothing scrolls sideways on a factory page', async ({ page }) => {
     await page.goto('/o/acme/f/goal/board');
     await expectNoHorizontalScroll(page);

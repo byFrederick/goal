@@ -175,6 +175,67 @@ describe('the phone top bar', () => {
   });
 });
 
+function topBar(actions: React.ReactNode) {
+  return render(
+    <PhoneTopBar title="Intake" actions={actions} onMenu={() => {}} drawerOpen={false} menuRef={{ current: null }} />,
+  );
+}
+
+describe('the phone top bar with actions', () => {
+  it('keeps the title next to one action, with its keycap hidden and a 44 px target', () => {
+    topBar(
+      <button type="button">
+        New item <kbd>C</kbd>
+      </button>,
+    );
+    expect(screen.getByText('Intake').className).toContain('truncate');
+    const actions = screen.getByRole('button', { name: /New item/ }).parentElement as HTMLElement;
+    expect(actions.className).toContain('[&_kbd]:hidden');
+    expect(actions.className).toContain('[&_button]:min-h-11');
+    expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull();
+  });
+
+  it('keeps the title with three actions, the last inline and the others in More actions', async () => {
+    topBar(
+      <>
+        <button type="button">New factory</button>
+        <button type="button">Import</button>
+        <button type="button">New item</button>
+      </>,
+    );
+    expect(screen.getByText('Intake')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'New item' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Import' })).toBeNull();
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'More actions' }), { button: 0, ctrlKey: false });
+    expect(await screen.findByRole('menuitem', { name: 'Import' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'New factory' })).toBeTruthy();
+  });
+
+  it('reaches a hidden action with the keyboard, runs it and closes the menu', async () => {
+    const onImport = vi.fn();
+    topBar(
+      <>
+        <button type="button">New factory</button>
+        <button type="button" onClick={onImport}>
+          Import
+        </button>
+        <button type="button">New item</button>
+      </>,
+    );
+    const more = screen.getByRole('button', { name: 'More actions' });
+    more.focus();
+    fireEvent.keyDown(more, { key: 'Enter' });
+    await screen.findByRole('menu');
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'New factory' })).toBe(document.activeElement));
+    fireEvent.keyDown(document.activeElement as Element, { key: 'ArrowDown' });
+    const second = screen.getByRole('menuitem', { name: 'Import' });
+    await waitFor(() => expect(document.activeElement).toBe(second));
+    fireEvent.keyDown(second, { key: 'Enter' });
+    expect(onImport).toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  });
+});
+
 describe('the phone top bar with a Back link', () => {
   it('puts the Back link after the Goal mark and before the title', () => {
     render(
@@ -264,7 +325,14 @@ describe('the tab bar', () => {
   it('opens the factory the page is in, and marks the current tab', async () => {
     renderShell({ at: '/o/acme/f/software' });
     const nav = await tabs();
-    expect(within(nav).getByRole('link', { name: 'Floor' }).getAttribute('aria-current')).toBe('page');
+    const floor = within(nav).getByRole('link', { name: 'Floor' });
+    const board = within(nav).getByRole('link', { name: 'Board' });
+    expect(floor.getAttribute('aria-current')).toBe('page');
+    expect(board.getAttribute('aria-current')).toBeNull();
+    expect(floor.className).toContain('aria-[current=page]:after:opacity-100');
+    expect(floor.className).toContain('aria-[current=page]:text-ink');
+    expect(floor.className).not.toContain('text-run-ink');
+    expect(floor.className).not.toMatch(/(^|\s)duration-\d/);
     expect(within(nav).getByRole('link', { name: 'Board' }).getAttribute('href')).toBe('/o/acme/f/software/board');
     expect(within(nav).getByRole('link', { name: 'Items' }).getAttribute('href')).toBe('/o/acme/f/software/items');
   });
