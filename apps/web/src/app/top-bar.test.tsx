@@ -80,6 +80,16 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
     ),
   });
   const home = createRoute({ getParentRoute: () => orgPages, path: '/', component: () => <p>Home page</p> });
+  const spend = createRoute({
+    getParentRoute: () => orgPages,
+    path: 'spend',
+    component: () => (
+      <>
+        <TopBarSlot actions={<button type="button">Export CSV</button>} />
+        <p>Spend page</p>
+      </>
+    ),
+  });
   const factoryRoute = createRoute({
     getParentRoute: () => orgRoute,
     path: '/f/$factory',
@@ -97,7 +107,7 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
   const router = createRouter({
     routeTree: rootRoute.addChildren([
       orgRoute.addChildren([
-        orgPages.addChildren([home]),
+        orgPages.addChildren([home, spend]),
         factoryRoute.addChildren([floor, items.addChildren([itemsIndex, itemRoute])]),
       ]),
     ]),
@@ -136,6 +146,13 @@ describe('TopBar', () => {
       .getAllByRole('button')
       .map((b) => b.textContent);
     expect(buttons).toEqual(['Share', 'Publish']);
+  });
+
+  it('names the spend page and shows its actions', async () => {
+    renderBar({ at: '/o/acme/spend' });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(nav).getByText('Spend and billing').getAttribute('aria-current')).toBe('page');
+    expect(within(await screen.findByRole('banner')).getByRole('button', { name: 'Export CSV' })).toBeTruthy();
   });
 
   it('shows only the page name on an organization page', async () => {
