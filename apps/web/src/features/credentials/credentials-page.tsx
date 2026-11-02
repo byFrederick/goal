@@ -61,34 +61,35 @@ export function CredentialsPage() {
   const setSearch = (patch: { type?: CredentialType | undefined; q?: string | undefined }) =>
     void navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
 
-  const newCredential = manage ? (
-    <Menu>
-      <MenuTrigger asChild>
-        <Button variant="primary" className="h-11 md:h-10">
-          <span aria-hidden="true">+</span> New credential
-        </Button>
-      </MenuTrigger>
-      <MenuContent side="bottom" align="end" className="w-72">
-        <MenuItem asChild>
-          <Link to="/o/$org/credentials/new" params={{ org: org.slug }}>
-            <KeyRound size={16} strokeWidth={1.5} aria-hidden="true" className="mt-1 text-muted" />
-            <span className="flex flex-col">
-              <span className="font-medium">Create a credential</span>
-              <span className="text-meta text-muted">One value, typed</span>
-            </span>
-          </Link>
-        </MenuItem>
-        <MenuItem asChild>
-          <Link to="/o/$org/credentials/new" params={{ org: org.slug }} search={{ panel: 'import' }}>
-            <span className="flex flex-col">
-              <span className="font-medium">Import from .env or YAML</span>
-              <span className="text-meta text-muted">Many at once, checked before saving</span>
-            </span>
-          </Link>
-        </MenuItem>
-      </MenuContent>
-    </Menu>
-  ) : null;
+  const newCredential = (variant: 'primary' | 'secondary') =>
+    manage ? (
+      <Menu>
+        <MenuTrigger asChild>
+          <Button variant={variant} className="h-11 md:h-10">
+            <span aria-hidden="true">+</span> New credential
+          </Button>
+        </MenuTrigger>
+        <MenuContent side="bottom" align="end" className="w-72">
+          <MenuItem asChild>
+            <Link to="/o/$org/credentials/new" params={{ org: org.slug }}>
+              <KeyRound size={16} strokeWidth={1.5} aria-hidden="true" className="mt-1 text-muted" />
+              <span className="flex flex-col">
+                <span className="font-medium">Create a credential</span>
+                <span className="text-meta text-muted">One value, typed</span>
+              </span>
+            </Link>
+          </MenuItem>
+          <MenuItem asChild>
+            <Link to="/o/$org/credentials/new" params={{ org: org.slug }} search={{ panel: 'import' }}>
+              <span className="flex flex-col">
+                <span className="font-medium">Import from .env or YAML</span>
+                <span className="text-meta text-muted">Many at once, checked before saving</span>
+              </span>
+            </Link>
+          </MenuItem>
+        </MenuContent>
+      </Menu>
+    ) : null;
 
   return (
     <>
@@ -100,7 +101,7 @@ export function CredentialsPage() {
             Keys and tokens that connections and agents use. Nobody can read a value back.
           </p>
         }
-        actions={newCredential}
+        actions={newCredential('primary')}
       />
 
       <NotAvailable label="Encrypt in your browser">
@@ -133,7 +134,11 @@ export function CredentialsPage() {
           </Button>
         </div>
       ) : all.length === 0 ? (
-        <EmptyState icon={<KeyRound size={20} strokeWidth={1.5} />} title="No credentials yet" actions={newCredential}>
+        <EmptyState
+          icon={<KeyRound size={20} strokeWidth={1.5} />}
+          title="No credentials yet"
+          actions={newCredential('secondary')}
+        >
           {manage
             ? 'Add the keys and tokens your connections and agents use.'
             : `Owners and admins of ${org.name} add credentials.`}
