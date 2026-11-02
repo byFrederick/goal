@@ -263,9 +263,10 @@ describe('TopBar', () => {
     expect(within(nav).getByText('Deploy key').getAttribute('title')).toBe('Deploy key');
   });
 
-  it('does not let the actions shrink', async () => {
+  it('lets the actions wrapper shrink instead of running past the gutter', async () => {
     renderBar({ at: '/o/acme/spend' });
     const button = await within(await screen.findByRole('banner')).findByRole('button', { name: 'Export CSV' });
-    expect(button.parentElement?.className).toContain('flex-none');
+    expect(button.parentElement?.className).toContain('min-w-0');
+    expect(button.parentElement?.className).not.toContain('flex-none');
   });
 });

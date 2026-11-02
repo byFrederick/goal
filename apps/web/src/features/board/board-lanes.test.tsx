@@ -157,6 +157,24 @@ describe('board lanes', () => {
     expect(within(person as HTMLElement).queryByText(/slots busy/)).toBeNull();
   });
 
+  it('gives every truncating element on a lane card its full text as a title', async () => {
+    renderBoardPage({
+      page: BoardPage,
+      org,
+      factory,
+      board: board({}, [workItem, queuedItem]),
+      station: 'investigate',
+    });
+
+    const columns = await phonePanel();
+    const truncated = columns.querySelectorAll('.truncate');
+    expect(truncated.length).toBeGreaterThan(0);
+    for (const el of truncated) {
+      expect(el.getAttribute('title')).toBeTruthy();
+      expect(el.getAttribute('title')).toContain((el.textContent ?? '').trim());
+    }
+  });
+
   it('shows no touches on a card nobody touched', async () => {
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [{ ...workItem, touch_count: 0 }]) });
 

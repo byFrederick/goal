@@ -363,7 +363,7 @@ export function CardTitle({
         title={item.title}
         aria-keyshortcuts={movable ? moveShortcut : undefined}
         aria-describedby={describedBy}
-        className="line-clamp-2 no-underline outline-none after:absolute after:inset-0 after:rounded-control"
+        className="line-clamp-2 [overflow-wrap:anywhere] no-underline outline-none after:absolute after:inset-0 after:rounded-control"
       >
         {item.title}
       </Link>

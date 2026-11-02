@@ -136,7 +136,7 @@ export function TopBar({ state }: { state: TopBarState | null }) {
       ) : (
         <OrgCrumbs routeId={routeId} crumb={state?.crumb} />
       )}
-      {state?.actions ? <div className="ml-auto flex flex-none items-center gap-2">{state.actions}</div> : null}
+      {state?.actions ? <div className="ml-auto flex min-w-0 shrink items-center gap-2">{state.actions}</div> : null}
     </header>
   );
 }

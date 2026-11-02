@@ -21,7 +21,9 @@ export function WaitLine({
   return (
     <span title={waitingDetail(waiting)} className={cn('flex min-w-0 items-center gap-1.5 text-muted', className)}>
       {status ? <StatusIcon status={status} className="text-muted" /> : null}
-      <span className="truncate">{waitingShort(waiting)}</span>
+      <span className="truncate" title={waitingDetail(waiting)}>
+        {waitingShort(waiting)}
+      </span>
     </span>
   );
 }
