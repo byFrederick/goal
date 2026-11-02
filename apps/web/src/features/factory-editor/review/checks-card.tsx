@@ -63,14 +63,10 @@ export function ProblemAlert({ errors, next, model }: { errors: DefinitionProble
   );
 }
 
-/** The round mark of a passed check (MASTER.md: a green tint with a green check); a warning or failure keeps its icon. */
+/** A passed check is a plain green check (build/definition-publish); a warning or failure keeps its icon. */
 function CheckIcon({ status }: { status: CheckResult['status'] }) {
   if (status === 'passed')
-    return (
-      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-ok-tint text-ok-ink">
-        <Check size={12} strokeWidth={2} aria-hidden="true" />
-      </span>
-    );
+    return <Check size={16} strokeWidth={1.75} aria-hidden="true" className="mt-px shrink-0 text-ok" />;
   return <TriangleAlert size={16} strokeWidth={1.75} aria-hidden="true" className="mt-1 shrink-0 text-rework" />;
 }
 
@@ -130,9 +126,7 @@ export function ChecksCard({ validation, model }: { validation: Validation | und
           <li className="border-t border-line py-3">
             <NotAvailable label="Evals before publish">
               <button type="button" className="flex w-full items-center gap-3 text-left text-body text-muted">
-                <span className="grid size-5 shrink-0 place-items-center rounded-full bg-panel text-muted">
-                  <Check size={12} strokeWidth={2} aria-hidden="true" />
-                </span>
+                <Check size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
                 Evals before publish
               </button>
             </NotAvailable>
