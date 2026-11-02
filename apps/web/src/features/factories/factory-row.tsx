@@ -1,11 +1,13 @@
 // One factory on Home (ADR 0016, wave 2, the picture's "Factories" list): its letter badge, its name
 // and health, its navy line (MiniLine), then three figures: what needs you, the throughput or, while
 // the andon is pulled, the worst send-back share, and what it spent today. A draft has no line yet.
+
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { boardQuery, metricsQuery } from '../../api/queries';
 import type { FactoryOverview, OrgSummary } from '../../api/types';
+import { FactoryBadge } from '../../app/factory-badge';
 import { formatPercent, formatUsd } from '../../shared/format';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
@@ -44,12 +46,7 @@ export function FactoryRow({
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3 @[1100px]:w-44 @[1100px]:flex-none">
-        <span
-          aria-hidden="true"
-          className="flex size-9 shrink-0 items-center justify-center rounded-control bg-run text-body font-semibold text-white"
-        >
-          {mark}
-        </span>
+        <FactoryBadge mark={mark} />
         <div className="flex min-w-0 flex-col items-start gap-1">
           <h2 id={headingId} className="m-0 min-w-0 text-heading break-words">
             <Link

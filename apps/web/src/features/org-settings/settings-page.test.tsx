@@ -235,7 +235,7 @@ describe('Organization settings v3 details', () => {
 
   it('draws each factory chip with its badge mark', () => {
     renderPage();
-    const marked = document.querySelectorAll('span.bg-run.size-4');
+    const marked = document.querySelectorAll('span.bg-run.size-\\[18px\\]');
     expect(marked.length).toBe(3);
     for (const m of marked) expect(m.className).not.toContain('bg-card');
   });

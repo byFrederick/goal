@@ -8,6 +8,7 @@ import { factoriesQuery } from '../api/queries';
 import type { Factory } from '../api/types';
 import { Button } from '../ui/button';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from '../ui/dialog';
+import { Select } from '../ui/select';
 import { findFactory, refParam } from './factory';
 import { humanize } from './format';
 import { factoryWorkInvalidations } from './invalidation';
@@ -129,17 +130,13 @@ export function NewItemFromSidebar({
       }}
       trigger={
         shown && button ? (
-          <button
-            type="button"
-            aria-keyshortcuts="C"
-            className="flex h-9 w-full items-center gap-2 rounded-control bg-run pr-2 pl-3 font-control text-white"
-          >
+          <Button variant="secondary" aria-keyshortcuts="C" className="w-full pr-2">
             <Plus size={16} strokeWidth={1.5} aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate text-left text-body">New item</span>
-            <kbd className="grid size-5 flex-none place-items-center rounded-chip border border-white/40 text-meta font-semibold">
+            <kbd className="grid size-5 flex-none place-items-center rounded-chip border border-rule font-mono text-meta font-semibold text-ink-soft">
               C
             </kbd>
-          </button>
+          </Button>
         ) : undefined
       }
     />
@@ -268,18 +265,12 @@ function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle }
               <label htmlFor={`${id}-type`} className="text-sm text-muted">
                 Work type
               </label>
-              <select
+              <Select
                 id={`${id}-type`}
                 value={workType}
-                onChange={(e) => setType(e.target.value)}
-                className={`${field} h-11`}
-              >
-                {workTypes.map((t) => (
-                  <option key={t} value={t}>
-                    {humanize(t)}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setType}
+                options={workTypes.map((t) => ({ value: t, label: humanize(t) }))}
+              />
             </div>
           ) : null}
           <div className="flex flex-col gap-1">
@@ -338,29 +329,24 @@ function FactoryField({ id, picker, missing }: { id: string; picker: Picker; mis
       <label htmlFor={`${id}-factory`} className="text-sm text-muted">
         Factory
       </label>
-      <select
+      <Select
         id={`${id}-factory`}
         value={loading ? '' : picker.value}
-        onChange={(e) => picker.onChange(e.target.value)}
+        onValueChange={picker.onChange}
         disabled={loading}
         aria-busy={loading}
         aria-invalid={missing}
         aria-describedby={missing ? `${id}-factory-error` : undefined}
-        className={`${field} h-11`}
-      >
-        {loading ? (
-          <option value="">Loading…</option>
-        ) : (
-          <>
-            <option value="">Choose a factory</option>
-            {picker.factories.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </>
-        )}
-      </select>
+        placeholder={loading ? 'Loading…' : undefined}
+        options={
+          loading
+            ? []
+            : [
+                { value: '', label: 'Choose a factory' },
+                ...picker.factories.map((f) => ({ value: f.id, label: f.name })),
+              ]
+        }
+      />
       {missing ? (
         <p id={`${id}-factory-error`} className="m-0 text-sm text-rework">
           Choose a factory for the item.

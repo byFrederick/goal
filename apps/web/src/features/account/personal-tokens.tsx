@@ -54,7 +54,7 @@ export function PersonalTokensSection({ org }: { org: OrgSummary }) {
 
   const newToken =
     manage && signedIn ? (
-      <Button variant="white" className="h-11 md:h-10" onClick={() => setCreating(true)}>
+      <Button variant="white" onClick={() => setCreating(true)}>
         <span aria-hidden="true">+</span> New token
       </Button>
     ) : null;

@@ -90,7 +90,7 @@ Rules:
 
 ## Shape, space and elevation
 
-- Radii: 4px chips and badges; 6px buttons, inputs, nav items and menus' items; 8px cards, board cells, popovers and menus; 12px dialogs and sheets; 50% only for dots and avatars.
+- Radii: 4px chips and badges; 6px buttons, inputs, nav items and menus' items; 8px cards, board cells, popovers and menus; 12px dialogs and sheets; fully rounded for dots, avatars and count pills (the orange 18px count); one 18px letter badge for factories.
 - Spacing: a 4px base, with 8, 12, 16, 20, 24 and 32px between blocks. Content padding is 24px 28px on desktop and 16px on phones.
 - Elevation: borders, not shadows. Popovers, menus, dialogs and toasts share one shadow, `--shadow-pop` (`0 0 0 1px` ink at 6% plus `0 10px 28px -10px` ink at 18%; on dark the ring is white at 8%). The selected segment gets a 1px hairline shadow.
 - Icons: lucide at 16px, stroke 1.75, in `muted`; `ink` when active. Never in a tinted tile.

@@ -66,7 +66,7 @@ export function VersionRow({
   const name = `v${n}`;
   return (
     <li className={cn(rowClass, 'border-t border-line')}>
-      <span className="font-mono text-secondary font-medium">{name}</span>
+      <Chip tone={version.current ? 'quiet' : 'plain'}>{name}</Chip>
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="min-w-0">
           <p className="m-0 min-w-0 break-words text-body font-medium">{version.message || 'No note'}</p>
@@ -78,7 +78,7 @@ export function VersionRow({
             <Button
               size="sm"
               variant="white"
-              className={cn('h-11 md:h-8', pressed && 'border-ink')}
+              className={cn(pressed && 'border-ink')}
               aria-pressed={pressed}
               aria-label={pressed ? `Comparing ${name}` : `Compare ${name}`}
               onClick={() => setSearch({ compare: pressed ? undefined : compareParam(pair) })}
@@ -90,7 +90,6 @@ export function VersionRow({
             <Button
               size="sm"
               variant="white"
-              className="h-11 md:h-8"
               aria-haspopup="dialog"
               aria-label={`Restore ${name}…`}
               onClick={() => onRestore(version)}

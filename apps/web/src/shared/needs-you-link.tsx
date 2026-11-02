@@ -19,7 +19,7 @@ export function NeedsYouLink({ factory }: { factory: Factory }) {
     <Button variant="raised" asChild>
       <Link to="/o/$org/needs-you" params={{ org: org.slug }} search={{ factory: factory.name }}>
         Needs you
-        {count > 0 ? <Count value={count} label=" waiting on you" tone="you" /> : null}
+        {count > 0 ? <Count value={count} label=" waiting on you" /> : null}
       </Link>
     </Button>
   );

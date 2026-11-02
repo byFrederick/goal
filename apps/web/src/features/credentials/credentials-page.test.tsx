@@ -167,6 +167,18 @@ const optionText = (name: RegExp) => (screen.getByRole('radio', { name }).closes
 const isChecked = (name: RegExp) => (screen.getByRole('radio', { name }) as HTMLInputElement).checked;
 
 describe('the Credentials page', () => {
+  it('renders at most one primary button when there are no credentials', async () => {
+    state.rows = [];
+    const { container } = renderPage();
+
+    await screen.findByText('No credentials yet');
+    const triggers = screen.getAllByRole('button', { name: /New credential/ });
+    expect(triggers).toHaveLength(1);
+    expect(container.ownerDocument.querySelectorAll('[data-variant="primary"],[data-variant="action"]')).toHaveLength(
+      1,
+    );
+  });
+
   it('says it is loading while the list is out', async () => {
     state.hold = true;
     renderPage();

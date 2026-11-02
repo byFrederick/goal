@@ -432,7 +432,6 @@ export function YamlView({ search }: SectionViewProps) {
                 <Button
                   size="sm"
                   variant="white"
-                  className="h-11 md:h-8"
                   onClick={() => void download(org, f, hasDraft ? 'draft' : 'current', path)}
                 >
                   <Download size={14} strokeWidth={1.75} aria-hidden="true" />
@@ -470,7 +469,6 @@ export function YamlView({ search }: SectionViewProps) {
                 <Button
                   size="sm"
                   variant="white"
-                  className="h-11 md:h-7"
                   onClick={() => void format()}
                   disabled={unparseable || text === undefined}
                   aria-describedby={unparseable ? formatHint : undefined}
@@ -480,13 +478,7 @@ export function YamlView({ search }: SectionViewProps) {
                 </Button>
               ) : null}
               {binary ? null : (
-                <Button
-                  size="sm"
-                  variant="white"
-                  className="h-11 md:h-7"
-                  onClick={() => void copy()}
-                  disabled={text === undefined}
-                >
+                <Button size="sm" variant="white" onClick={() => void copy()} disabled={text === undefined}>
                   <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
                   Copy
                 </Button>

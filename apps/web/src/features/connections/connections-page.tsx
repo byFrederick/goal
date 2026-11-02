@@ -278,9 +278,6 @@ export function ConnectionsPage() {
                                 <td className="whitespace-nowrap tabular-nums">
                                   {c.tools.length > 0 ? c.tools.length : <span className="text-muted">None</span>}
                                 </td>
-                                <td className="whitespace-nowrap tabular-nums">
-                                  {c.tools.length > 0 ? c.tools.length : <span className="text-muted">None</span>}
-                                </td>
                                 <td className="whitespace-nowrap text-secondary text-muted">
                                   {c.last_used_at ? since(c.last_used_at, now) : 'Never'}
                                 </td>
@@ -415,7 +412,7 @@ function UsedBy({ connection: c, factories }: { connection: Connection; factorie
     <span className="flex flex-wrap items-center gap-1">
       {c.used_by.factories.map((f) => (
         <span key={f.id} title={f.name} className="inline-flex">
-          <FactoryBadge mark={factoryMark(f, factories.length > 0 ? factories : [f])} className="size-5" />
+          <FactoryBadge mark={factoryMark(f, factories.length > 0 ? factories : [f])} />
           <span className="sr-only">{f.name}</span>
         </span>
       ))}

@@ -212,6 +212,13 @@ describe('the Webhooks page states', () => {
     expect(screen.getAllByRole('button', { name: 'New webhook' }).length).toBeGreaterThan(0);
   });
 
+  it('renders at most one primary button in the empty state', async () => {
+    renderPage(software, seeds([]));
+
+    await screen.findByText('No webhooks yet');
+    expect(document.querySelectorAll('[data-variant="primary"]').length).toBeLessThanOrEqual(1);
+  });
+
   it('keeps New webhook out of the empty state for someone who cannot manage webhooks', async () => {
     renderPage(viewer, seeds([]));
 
@@ -236,6 +243,23 @@ describe('the Webhooks page states', () => {
     expect(await within(card).findAllByRole('button', { name: /View request/ })).toHaveLength(3);
 
     expect(screen.getByRole('complementary', { name: 'Send a test' })).toBeTruthy();
+  });
+
+  it('draws today in ink, earlier days in rule and a day with a refusal in rework', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-27T12:00:00Z'));
+    try {
+      answers();
+      renderPage();
+      const card = await screen.findByRole('region', { name: 'acme-deploys' });
+      const day = (d: string) => card.querySelector(`[title^="${d}:"]`);
+      expect(day('2026-10-27')?.className).toContain('bg-ink');
+      expect(day('2026-10-21')?.className).toContain('bg-rule');
+      expect(day('2026-10-22')?.className).toContain('bg-rework');
+      expect(card.querySelector('[title^="2026-"].bg-run')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('says what an endpoint with no trigger feeds, with a way to create one', async () => {

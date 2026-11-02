@@ -163,6 +163,9 @@ describe('AssemblyPage progress', () => {
     expect(
       within(screen.getByRole('region', { name: 'Progress' })).getByRole('img', { name: '1 of 4 parts merged' }),
     ).toBeTruthy();
+    const bar = screen.getByRole('img', { name: '1 of 4 parts merged' });
+    expect(bar.querySelectorAll('.bg-ink')).toHaveLength(1);
+    expect(bar.querySelector('.bg-run, .bg-ok')).toBeNull();
     expect(stat('Lead time')?.textContent).toBe('3 d');
     // The assembly's $0.50 plus the parts' $2, $1, $1 and $1, against $4 for each of 4 parts.
     expect(stat('Spend')?.textContent).toBe('$5.50 of $16.00');

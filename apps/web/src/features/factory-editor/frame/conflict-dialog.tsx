@@ -89,10 +89,10 @@ export function ConflictDialog({ open, onOpenChange }: { open: boolean; onOpenCh
           ))}
         </div>
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="secondary" size="lg" className="md:h-10 md:text-sm" onClick={keepAllMine}>
+          <Button variant="secondary" onClick={keepAllMine}>
             Keep all mine
           </Button>
-          <Button variant="primary" size="lg" className="md:h-10 md:text-sm" onClick={save}>
+          <Button variant="primary" onClick={save}>
             Save these choices
           </Button>
         </div>
@@ -146,19 +146,12 @@ export function FileConflictDialog({ open, onOpenChange }: { open: boolean; onOp
         <div className="flex flex-wrap justify-end gap-2">
           <Button
             variant="secondary"
-            size="lg"
-            className="md:h-10 md:text-sm"
             disabled={conflict.theirsSha !== null && theirsText === undefined}
             onClick={() => void takeTheirs()}
           >
             Use theirs
           </Button>
-          <Button
-            variant="primary"
-            size="lg"
-            className="md:h-10 md:text-sm"
-            onClick={() => session.resolveFile(conflict.path, 'mine')}
-          >
+          <Button variant="primary" onClick={() => session.resolveFile(conflict.path, 'mine')}>
             Overwrite with mine
           </Button>
         </div>
@@ -180,10 +173,10 @@ export function DiscardedDialog({ onLeave }: { onLeave: () => void }) {
         description="Your changes that weren’t saved are still here. Start a new draft with them, or leave without them."
       >
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="secondary" size="lg" className="md:h-10 md:text-sm" onClick={onLeave}>
+          <Button variant="secondary" onClick={onLeave}>
             Leave
           </Button>
-          <Button variant="primary" size="lg" className="md:h-10 md:text-sm" onClick={() => session.restart()}>
+          <Button variant="primary" onClick={() => session.restart()}>
             Start a new draft
           </Button>
         </div>

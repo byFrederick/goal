@@ -91,13 +91,13 @@ export function UnsavedGuard() {
           </p>
         ) : null}
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="rework" className="mr-auto h-11 md:h-10" onClick={() => blocker.proceed?.()}>
+          <Button variant="rework" onClick={() => blocker.proceed?.()}>
             Leave anyway
           </Button>
-          <Button variant="secondary" className="h-11 md:h-10" onClick={close}>
+          <Button variant="secondary" onClick={close}>
             Stay
           </Button>
-          <Button variant="primary" className="h-11 md:h-10" disabled={retrying} onClick={() => void retry()}>
+          <Button variant="primary" disabled={retrying} onClick={() => void retry()}>
             {retrying ? 'Retrying…' : 'Retry'}
           </Button>
         </div>

@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import type { OrgSummary } from '../api/types';
 import { Mark } from '../ui/mark';
 import { Tooltip } from '../ui/tooltip';
+import { FactoryBadge } from './factory-badge';
 import type { FactorySquare } from './factory-squares';
 import { newFactoryScreen } from './screens';
 
@@ -46,7 +47,7 @@ export function FactorySquareLink({
           badge={attention.waiting}
           dot={attention.andon !== null || attention.blocked > 0}
         >
-          {mark}
+          <FactoryBadge mark={mark} />
         </Mark>
       )}
     </Link>
