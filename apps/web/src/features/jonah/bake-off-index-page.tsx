@@ -2,13 +2,14 @@
 // and an empty state when there is none (docs/design/screens/jonah/bake-offs.html).
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ApiError } from '../../api/client';
 import { bakeOffsQuery } from '../../api/queries';
+import { isUnavailable } from '../../api/retry';
 import { TopBarSlot } from '../../app/top-bar';
 import { useFactory, useFactoryParams } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { EmptyState } from '../../ui/empty-state';
+import { NotAvailable } from '../../ui/not-available';
 import { bakeOffCost, bakeOffDay, bakeOffScope, bakeOffTitle } from './bake-off-format';
 import { BakeOffLoading } from './bake-off-page';
 import { JonahHeader } from './jonah-header';
@@ -18,6 +19,8 @@ export function BakeOffIndexPage() {
   const org = useOrg();
   const params = useFactoryParams();
   const list = useQuery(bakeOffsQuery(org.id, factory.id));
+  // A goald built without evals answers 503 evals-unavailable: no bake-offs yet, and starting one is not available yet.
+  const unavailable = list.isError && isUnavailable(list.error);
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
@@ -42,7 +45,7 @@ export function BakeOffIndexPage() {
           ))}
         </ul>
       ) : null}
-      {list.isError ? (
+      {list.isError && !unavailable ? (
         <EmptyState
           title="Bake-offs could not be loaded"
           actions={
@@ -51,20 +54,26 @@ export function BakeOffIndexPage() {
             </Button>
           }
         >
-          {list.error instanceof ApiError && list.error.code === 'evals-unavailable'
-            ? 'Evals are not available on this goald yet.'
-            : 'goald is not answering. Try again in a moment.'}
+          goald is not answering. Try again in a moment.
         </EmptyState>
       ) : null}
-      {list.data && list.data.bake_offs.length === 0 ? (
+      {unavailable || (list.data && list.data.bake_offs.length === 0) ? (
         <EmptyState
           title="No bake-offs yet"
           actions={
-            <Button variant="secondary" asChild>
-              <Link to="/o/$org/f/$factory/agents" params={params}>
-                New bake-off
-              </Link>
-            </Button>
+            unavailable ? (
+              <NotAvailable>
+                <Button variant="secondary" disabled>
+                  New bake-off
+                </Button>
+              </NotAvailable>
+            ) : (
+              <Button variant="secondary" asChild>
+                <Link to="/o/$org/f/$factory/agents" params={params}>
+                  New bake-off
+                </Link>
+              </Button>
+            )
           }
         >
           A bake-off runs one agent's eval cases on several models and shows which model does the work best for the
