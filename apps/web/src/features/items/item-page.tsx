@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
-import { Link, useParams, useSearch } from '@tanstack/react-router';
+import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { ChevronLeft, Eye, LayoutGrid } from 'lucide-react';
-import { useId, useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef } from 'react';
 import { eventsQuery, itemQuery, itemRunsQuery } from '../../api/queries';
 import type { Station } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
@@ -25,6 +25,7 @@ import { CostCard, DetailsCard, OverlapsCard, RulesCard } from './side-cards';
 import { noFlow, stepsOf, summaryOf } from './steps';
 import { activeRun, buildTrace, criteriaOf, editedFiles, latestToolCalls, runRole, type Trace } from './timeline';
 import { TouchesCard } from './touches-card';
+import { TraceTab } from './trace-tab';
 import { EventList, type TimelineStatus, ToolRow, TraceList } from './trace-view';
 
 /** The spec's acceptance criteria, as the Spec tab lists them. */
@@ -115,7 +116,9 @@ export function ItemPage() {
   const runs = runsQ.data;
   const asking = Boolean(item.question);
   const trace = useMemo(() => buildTrace(events, runs?.runs, asking), [events, runs, asking]);
-  const [fullTrace, setFullTrace] = useState(false);
+  const navigate = useNavigate();
+  const showTrace = () =>
+    void navigate({ to: '/o/$org/f/$factory/items/$ref', params: { ...params, ref }, search: { tab: 'trace' } });
   const { tab = 'timeline' } = useSearch({ from: '/o/$org/f/$factory/items/$ref' });
   const noteField = useRef<HTMLTextAreaElement>(null);
   const compactNoteField = useRef<HTMLTextAreaElement>(null);
@@ -248,12 +251,12 @@ export function ItemPage() {
               className="order-2 @[720px]:order-none"
             />
           ) : null}
-          {fullTrace ? null : phone ? (
-            <LatestInRun trace={trace} onShowAll={() => setFullTrace(true)} className="order-3 @[720px]:hidden" />
+          {phone ? (
+            <LatestInRun trace={trace} onShowAll={showTrace} className="order-3 @[720px]:hidden" />
           ) : (
             <LatestSteps
               trace={trace}
-              onShowAll={() => setFullTrace(true)}
+              onShowAll={showTrace}
               className={cn(deciding ? 'order-4' : 'order-3', '@[720px]:hidden')}
             />
           )}
@@ -263,10 +266,7 @@ export function ItemPage() {
               id={panelId}
               role="tabpanel"
               aria-labelledby={tabId('timeline')}
-              className={cn(
-                'order-6 flex animate-fade-in flex-col gap-4 @[720px]:order-none',
-                !fullTrace && 'hidden @[720px]:flex',
-              )}
+              className="order-6 hidden animate-fade-in flex-col gap-4 @[720px]:order-none @[720px]:flex"
             >
               <p aria-live="polite" className="m-0 inline-flex items-center gap-2 text-sm text-link">
                 {run ? (
@@ -280,6 +280,16 @@ export function ItemPage() {
                 ) : null}
               </p>
               <TraceList entries={trace.entries} itemState={item.state} status={runsStatus} />
+            </section>
+          ) : null}
+          {tab === 'trace' ? (
+            <section
+              id={panelId}
+              role="tabpanel"
+              aria-labelledby={tabId('trace')}
+              className="order-6 animate-fade-in @[720px]:order-none"
+            >
+              <TraceTab trace={trace} itemState={item.state} status={runsStatus} />
             </section>
           ) : null}
           {tab === 'spec' ? (
