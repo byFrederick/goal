@@ -1,4 +1,3 @@
-import { Check } from 'lucide-react';
 import { cn } from './cn';
 
 export type StepState = 'done' | 'current' | 'todo';
@@ -17,9 +16,9 @@ const stateText: Record<StepState, string> = {
 };
 
 /**
- * Progress through named steps: circles joined by a track. Done steps are run-coloured with a
- * check; the current one has a ring in violet when it waits on a person. Each step says its state
- * in text too, so colour is never the only signal.
+ * Progress through named steps (MASTER.md, Components: stepper, v3): 8 px dots on a 1 px track. A done step is an
+ * ink dot and the track before it is ink; the current step is an ink ring, or an orange ring when it waits on a
+ * person; a step not started is a grey dot. Each step says its state in text too, so colour is never the only signal.
  */
 export function Stepper({
   label,
@@ -43,32 +42,25 @@ export function Stepper({
             aria-current={current ? 'step' : undefined}
             className="flex min-w-0 flex-1 flex-col gap-2"
           >
-            <div className="relative flex h-6 items-center">
+            <div className="relative flex h-4 items-center">
               {last ? null : (
-                <span
-                  aria-hidden="true"
-                  className="absolute top-1/2 right-0 left-6 h-1 -translate-y-1/2 rounded-full bg-rule"
-                >
-                  {step.state === 'done' ? <span className="block h-full rounded-full bg-run" /> : null}
-                  {current ? <span className="block h-full w-1/2 rounded-full bg-run" /> : null}
+                <span aria-hidden="true" className="absolute top-1/2 right-0 left-1.5 h-px -translate-y-1/2 bg-rule">
+                  {step.state === 'done' ? <span className="block h-full bg-ink" /> : null}
                 </span>
               )}
               <span
                 aria-hidden="true"
                 className={cn(
-                  'relative flex size-6 shrink-0 items-center justify-center rounded-full border-2 bg-shell',
-                  step.state === 'done' && 'border-run bg-run text-white',
-                  step.state === 'todo' && 'border-rule',
-                  current && !waits && 'border-run',
-                  waits && 'border-you ring-4 ring-you-tint',
+                  'relative block size-2 shrink-0 rounded-full',
+                  step.state === 'done' && 'bg-ink',
+                  step.state === 'todo' && 'bg-rule',
+                  current && 'border-[1.5px] border-ink bg-shell',
+                  waits && 'border-you',
                 )}
-              >
-                {step.state === 'done' ? <Check className="size-3" strokeWidth={2.25} /> : null}
-                {current ? <span className={cn('size-2 rounded-full', waits ? 'bg-you' : 'bg-run')} /> : null}
-              </span>
+              />
             </div>
             <div className="flex min-w-0 flex-col gap-1 pr-2">
-              <span className="text-secondary font-semibold text-ink">
+              <span className="text-secondary font-medium text-ink">
                 {step.name}
                 <span className="sr-only">, {state}</span>
               </span>

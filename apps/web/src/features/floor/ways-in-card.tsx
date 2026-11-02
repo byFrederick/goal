@@ -94,7 +94,7 @@ export function WaysInCard() {
       <ul className="m-0 flex list-none flex-col p-0">
         {labels.map((row) => (
           <li key={row.name}>
-            <WayLine tile="bg-ink" icon={<GitHubMark className="text-white" />} text="Label an issue">
+            <WayLine icon={<GitHubMark className="text-muted" />} text="Label an issue">
               <Chip>{row.label}</Chip>
               <CopyButton text={row.label} name={`label ${row.label}`} />
             </WayLine>
@@ -102,7 +102,6 @@ export function WaysInCard() {
         ))}
         <li>
           <WayLine
-            tile="bg-you-ink"
             icon={<Hash size={14} strokeWidth={1.6} aria-hidden="true" />}
             text={
               <>
@@ -121,7 +120,7 @@ export function WaysInCard() {
         </li>
         {canCreate ? (
           <li>
-            <WayLine tile="bg-run" icon={<Plus size={14} strokeWidth={1.8} aria-hidden="true" />} text={null}>
+            <WayLine icon={<Plus size={14} strokeWidth={1.8} aria-hidden="true" />} text={null}>
               <NewItemButton
                 factory={factory}
                 trigger={
@@ -135,7 +134,6 @@ export function WaysInCard() {
         ) : null}
         <li>
           <WayLine
-            tile="bg-ink-soft"
             icon={<SquareTerminal size={14} strokeWidth={1.6} aria-hidden="true" />}
             text={<span className="font-mono text-meta text-ink">{itemCreateCommand}</span>}
           >
@@ -150,23 +148,11 @@ export function WaysInCard() {
 const card = 'flex min-w-0 flex-col rounded-card border border-line bg-card p-4 pb-2 md:p-5 md:pb-2';
 const heading = 'm-0 text-heading font-semibold text-ink';
 
-/** One row: a tinted tile, the text, and what the row offers (a chip, a copy or a link). */
-function WayLine({
-  tile,
-  icon,
-  text,
-  children,
-}: {
-  tile: string;
-  icon: ReactNode;
-  text: ReactNode;
-  children?: ReactNode;
-}) {
+/** One row: its icon in muted, the text, and what the row offers (a chip, a copy or a link). No icon tile. */
+function WayLine({ icon, text, children }: { icon: ReactNode; text: ReactNode; children?: ReactNode }) {
   return (
     <div className="flex items-center gap-3 border-t border-line py-2 text-body">
-      <span className={`flex size-7.5 shrink-0 items-center justify-center rounded-control text-white ${tile}`}>
-        {icon}
-      </span>
+      <span className="flex size-4 shrink-0 items-center justify-center text-muted">{icon}</span>
       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-ink-soft">
         {text}
         {children}
