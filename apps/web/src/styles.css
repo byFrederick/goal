@@ -519,8 +519,8 @@
     --motion-from: scale(var(--scale-menu));
     --motion-to: scale(var(--scale-menu-close));
     transform-origin: var(
-      --radix-dropdown-menu-content-transform-origin,
-      var(--radix-popover-content-transform-origin, center)
+      --radix-select-content-transform-origin,
+      var(--radix-dropdown-menu-content-transform-origin, var(--radix-popover-content-transform-origin, center))
     );
   }
 

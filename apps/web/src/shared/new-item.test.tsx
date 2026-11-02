@@ -14,6 +14,7 @@ import { factoriesQuery } from '../api/queries';
 import type { Factory, OrgSummary } from '../api/types';
 import { TooltipProvider } from '../ui/tooltip';
 import { NewItemFromSidebar } from './new-item';
+import '../test/select';
 
 // The factories list comes from a source the test sets, so each state (pending, failing, ready) is
 // exact and no request leaves the test.
@@ -100,8 +101,10 @@ describe('the sidebar’s New item picker', () => {
     fireEvent.click(await newItemButton());
 
     const picker = await screen.findByRole('combobox', { name: 'Factory' });
+    fireEvent.keyDown(picker, { key: 'Enter' });
+    const list = await screen.findByRole('listbox');
     expect(
-      within(picker)
+      within(list)
         .getAllByRole('option')
         .map((o) => o.textContent),
     ).toEqual(['Choose a factory', 'goal', 'sre']);
@@ -113,8 +116,8 @@ describe('the sidebar’s New item picker', () => {
 
     const picker = await screen.findByRole('combobox', { name: 'Factory' });
     expect(picker.getAttribute('aria-busy')).toBe('true');
-    expect((picker as HTMLSelectElement).disabled).toBe(true);
-    expect(within(picker).getByRole('option', { name: 'Loading…' })).toBeTruthy();
+    expect((picker as HTMLButtonElement).disabled).toBe(true);
+    expect(picker.textContent).toBe('Loading…');
   });
 
   it('renders an error with its message and a Retry that asks again', async () => {
