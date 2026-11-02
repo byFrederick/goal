@@ -328,6 +328,25 @@ describe('Home: the ready state', () => {
     expect(screen.queryByText('Question')).toBeNull();
   });
 
+  it('draws the Needs you first count as an orange 18px pill', async () => {
+    await renderReady();
+
+    const needs = screen.getByRole('region', { name: 'Needs you first' });
+    const pill = within(needs).getByText('waiting on you').parentElement as HTMLElement;
+    expect(pill.className).toContain('rounded-full');
+    expect(pill.className).toContain('bg-you');
+    expect(pill.className).toContain('h-[18px]');
+    expect(pill.className).not.toContain('rounded-chip');
+  });
+
+  it('draws every Home factory letter badge at 18px', async () => {
+    const { container } = await renderReady();
+
+    const badges = container.querySelectorAll('span[aria-hidden="true"].bg-run');
+    expect(badges.length).toBeGreaterThan(0);
+    for (const b of badges) expect(b.className).toContain('size-[18px]');
+  });
+
   it('leads Open all from Needs you first to the Needs you page', async () => {
     await renderReady();
 
@@ -359,7 +378,14 @@ describe('Home: the ready state', () => {
     expect(within(spend).getByText(/\$512/)).toBeTruthy();
     expect(within(spend).getByText(/of \$1,400/)).toBeTruthy();
     expect(within(spend).getByText('Last 7 days')).toBeTruthy();
-    expect(within(spend).getAllByRole('meter')).toHaveLength(3);
+    const meters = within(spend).getAllByRole('meter');
+    expect(meters).toHaveLength(3);
+    for (const m of meters) {
+      expect(m.className).toContain('bg-hover');
+      expect(m.innerHTML).toMatch(/bg-(ink|rework)/);
+      expect(m.innerHTML).not.toContain('bg-run');
+    }
+    expect(spend.querySelector('pattern')).toBeNull();
   });
 
   it('renders Spend and billing as not available, and never navigates', async () => {

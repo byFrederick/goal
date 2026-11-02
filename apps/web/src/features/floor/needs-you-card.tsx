@@ -103,7 +103,7 @@ export function NeedsYouCard({ className }: { className?: string }) {
       className={className}
       aside={
         <span className="flex items-center gap-3">
-          {query.data ? <Count value={count} label="waiting on you" tone="you" /> : null}
+          {query.data ? <Count value={count} label="waiting on you" /> : null}
           <Link
             to="/o/$org/needs-you"
             params={{ org: org.slug }}

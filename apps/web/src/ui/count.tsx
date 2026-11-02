@@ -1,25 +1,18 @@
 import { cn } from './cn';
 import { NumberRoll } from './number-roll';
 
-const tones = {
-  /** A plain tally (factories, proposals): concrete, ink-soft on the active nav item. */
-  neutral: 'bg-panel text-ink group-aria-[current=page]:bg-ink-soft group-aria-[current=page]:text-white',
-  /** What waits on you: violet. */
-  you: 'bg-you text-white',
-} as const;
-
 /**
- * A small count at the end of a nav entry. `label` finishes the sentence for screen readers
- * (" waiting on you"), so the number never stands alone. Put it inside the link with `group`.
+ * A count at the end of a nav entry or a title: an orange pill (`--color-you`) with a white number,
+ * 18 px high. Every count is a person's queue (what waits on you or for your review). `label`
+ * finishes the sentence for screen readers (" waiting on you"), so the number never stands alone.
  * The badge slides in and pops when it appears (MOTION.md, notification-badge); the number rolls through
  * NumberRoll when it changes. Reduced motion keeps the fade only.
  */
-export function Count({ value, label, tone = 'neutral' }: { value: number; label: string; tone?: keyof typeof tones }) {
+export function Count({ value, label }: { value: number; label: string }) {
   return (
     <span
       className={cn(
-        'ml-auto inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-chip px-1.5 text-xs font-semibold tabular-nums motion-safe:animate-notification-badge motion-reduce:animate-fade-in',
-        tones[tone],
+        'ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-you px-[5px] text-meta font-semibold tabular-nums text-white motion-safe:animate-notification-badge motion-reduce:animate-fade-in',
       )}
     >
       <NumberRoll value={value} />

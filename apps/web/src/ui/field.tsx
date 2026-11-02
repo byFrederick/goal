@@ -69,7 +69,7 @@ export function useFieldControl(): FieldControl | null {
   return use(FieldContext);
 }
 
-/** A text input: 44 px tall on phones (16 px text, so iOS does not zoom), 40 px from 768 px. */
+/** A text input: 32 px tall (16 px text on phones, so iOS does not zoom). */
 /** A control that only shows its value: the concrete fill of the canvas's view-only fields. */
 export const readOnlyControl = 'read-only:border-line read-only:bg-shell read-only:hover:border-line';
 
@@ -83,7 +83,7 @@ export function Input({ className, readOnly, ...props }: ComponentProps<'input'>
       aria-invalid={field?.invalid || undefined}
       readOnly={readOnly || shown}
       className={cn(
-        'h-11 w-full min-w-0 rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-(--duration-quick) md:h-10 md:text-[15px]',
+        'h-8 w-full min-w-0 rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-(--duration-quick) md:text-[15px]',
         'hover:border-muted aria-[invalid=true]:border-rework',
         readOnlyControl,
         className,
@@ -127,7 +127,7 @@ export function NativeSelect({ className, disabled, ...props }: ComponentProps<'
       aria-invalid={field?.invalid || undefined}
       disabled={disabled || shown}
       className={cn(
-        'h-11 w-full min-w-0 cursor-pointer rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-(--duration-quick) md:h-10 md:text-[15px]',
+        'h-8 w-full min-w-0 cursor-pointer rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-(--duration-quick) md:text-[15px]',
         'hover:border-muted aria-[invalid=true]:border-rework',
         'disabled:cursor-default disabled:border-line disabled:bg-shell disabled:hover:border-line',
         className,

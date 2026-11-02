@@ -234,11 +234,9 @@ function RuleFields({ rule, initial, onDone }: { rule: ModelRule | undefined; in
 
       <div className="flex flex-wrap justify-end gap-2">
         <DialogClose asChild>
-          <Button variant="secondary" size="lg" className="md:h-10 md:text-sm">
-            Cancel
-          </Button>
+          <Button variant="secondary">Cancel</Button>
         </DialogClose>
-        <Button type="submit" variant="primary" size="lg" className="md:h-10 md:text-sm">
+        <Button type="submit" variant="primary">
           {rule ? 'Save rule' : 'Add rule'}
         </Button>
       </div>
