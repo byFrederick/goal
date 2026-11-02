@@ -44,7 +44,7 @@ How to use them:
 | Screen | Route | Status | Not built yet |
 |---|---|---|---|
 | `home`: every factory as a mini line, needs you, spend | `/o/$org` | restyle of the factories home | |
-| `floor`: the andon panel, six KPI tiles, needs you, where work waits, throughput, activity | `/o/$org/f/$factory` | restyle |  |
+| `floor`: the line with the andon strip, four flow figures in a stat strip, needs you, where work waits, throughput, activity | `/o/$org/f/$factory` | restyle |  |
 | `board`: columns with WIP meters, expedite lane, Ready and In progress, assembly lines | `…/board` | restyle | |
 | `item`: stepper, the agent's question with quick answers, run timeline, note composer, details, cost, overlaps, rules | `…/items/$ref` | restyle | Watch live, Trace, Teardown |
 | `items`: saved views, filters, grouped by assembly, bulk actions | `…/items` | restyle |  |

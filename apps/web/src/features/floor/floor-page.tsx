@@ -5,8 +5,8 @@ import { useFactory } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
 import { ActivityCard } from './activity-card';
 import { FloorHeader, floorRoute } from './floor-header';
-import { KpiRow } from './kpi-row';
-import { LinePanel } from './line-panel';
+import { FlowStats } from './flow-stats';
+import { LineNow } from './line-now';
 import { NeedsYouCard } from './needs-you-card';
 import { rangeOf } from './range';
 import { SetupCard } from './setup-card';
@@ -14,7 +14,7 @@ import { WaitsCard } from './waits-card';
 import { WaysInCard } from './ways-in-card';
 import { WeeklyCard } from './weekly-card';
 
-// The cards below the KPI tiles, as the screens draw them (ADR 0016): two columns from 768 px, Needs you
+// The cards below the stat strip, as the screens draw them (ADR 0016): two columns from 768 px, Needs you
 // and Where work waits across the top, Throughput by week and Activity below. A phone stacks them in
 // the same order, Needs you first.
 const grid = 'grid gap-4 md:grid-cols-2 md:gap-5';
@@ -42,8 +42,13 @@ export function FloorPage() {
 
       <div className="grid gap-4 md:gap-5 xl:grid-cols-3">
         <div className="flex min-w-0 flex-col gap-4 md:gap-5 xl:col-span-2">
-          <LinePanel board={board} constraint={constraint.constraint ?? board.constraint} doneThisWeek={doneThisWeek} />
-          <KpiRow factory={factory} metrics={metrics} range={range} />
+          <LineNow
+            factory={factory}
+            board={board}
+            constraint={constraint.constraint ?? board.constraint}
+            doneThisWeek={doneThisWeek}
+          />
+          <FlowStats metrics={metrics} />
 
           <div className={grid}>
             <NeedsYouCard />

@@ -15,6 +15,7 @@ import { cn } from '../../ui/cn';
 import { Menu, MenuChoice, MenuContent, MenuRadioGroup, MenuTrigger } from '../../ui/menu';
 import { NotAvailable } from '../../ui/not-available';
 import { descriptionClass } from '../../ui/page-header';
+import { Skeleton } from '../../ui/skeleton';
 import { Switch } from '../../ui/switch';
 import { AssemblyTableRow, ItemTableRow, listRows } from './assembly-rows';
 import { BulkActions } from './bulk-actions';
@@ -166,8 +167,10 @@ export function ItemsPage() {
 
   if (everything.isPending || listed.isPending) {
     return (
-      <main aria-busy="true" className="min-h-40">
-        <p className="sr-only">Loading</p>
+      <main className="flex flex-col gap-5">
+        <Skeleton ready={false} placeholder={<ItemsPlaceholder />}>
+          {null}
+        </Skeleton>
       </main>
     );
   }
@@ -343,14 +346,12 @@ export function ItemsPage() {
       ) : null}
 
       {all.length === 0 ? (
-        <div className="flex flex-col items-start gap-3 rounded-card border border-line bg-card p-5">
-          <p className="m-0 text-body text-ink-soft">No items here. Create one with New item.</p>
+        <div className="flex flex-col items-start gap-3">
+          <p className="m-0 text-body text-muted">No items here. Create one with New item.</p>
           <NewItemButton factory={factory} />
         </div>
       ) : shown.length === 0 ? (
-        <p className="m-0 rounded-card border border-line bg-card p-5 text-body text-ink-soft">
-          No items match these filters. Try another view or filter.
-        </p>
+        <p className="m-0 text-body text-muted">No items match these filters. Try another view or filter.</p>
       ) : (
         <>
           <div className="overflow-x-auto rounded-card border border-line bg-card">
@@ -412,6 +413,22 @@ export function ItemsPage() {
           </p>
         </>
       )}
+    </div>
+  );
+}
+
+/** The items page's skeleton: the title, the filter row and the first table rows, as muted blocks. */
+function ItemsPlaceholder() {
+  return (
+    <div className="flex flex-col gap-5">
+      <span className="block h-10 w-40 rounded-control bg-hover" />
+      <span className="block h-8 w-full max-w-md rounded-control bg-hover" />
+      <div className="flex flex-col gap-2">
+        {Array.from({ length: 8 }, (_, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: placeholder rows are fixed in number and never reorder
+          <span key={i} className="block h-9 rounded-control bg-hover" />
+        ))}
+      </div>
     </div>
   );
 }
