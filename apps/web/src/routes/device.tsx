@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import { authConfigQuery, ensureLoaded, meQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
+import { PendingScreen } from '../app/states';
 import { DevicePage, SignInToApprove } from '../features/sign-in/device-page';
 
 // Where goal login sends the person (<GOAL_PUBLIC_URL>/device; canvas "Device-Approve"). It has no
@@ -8,6 +9,7 @@ import { DevicePage, SignInToApprove } from '../features/sign-in/device-page';
 // link someone sends cannot pre-fill or approve anything. Signed out, it asks to sign in and comes
 // back here. Sign-in off: there is no CLI sign-in.
 export const Route = createFileRoute('/device')({
+  pendingComponent: PendingScreen,
   beforeLoad: async ({ context }) => {
     const config = await ensureLoaded(context.queryClient, authConfigQuery);
     if (config.mode === 'none') throw redirect({ to: '/', replace: true });

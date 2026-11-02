@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import { authConfigQuery, ensureLoaded } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
+import { PendingScreen } from '../app/states';
 import { InvitationPage } from '../features/sign-in/invitation-page';
 import { SignInToSeeInvitation } from '../features/sign-in/invitation-signed-out';
 
@@ -8,6 +9,7 @@ import { SignInToSeeInvitation } from '../features/sign-in/invitation-signed-out
 // out, it asks to sign in and comes back here; signed in, the invitation itself: join or decline
 // (spec 3 §10.2). Sign-in off: there are no invitations.
 export const Route = createFileRoute('/invite/$invitation')({
+  pendingComponent: PendingScreen,
   beforeLoad: async ({ context }) => {
     const config = await ensureLoaded(context.queryClient, authConfigQuery);
     if (config.mode === 'none') throw redirect({ to: '/', replace: true });

@@ -1,5 +1,6 @@
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { pageTitle } from '../app/route-focus';
+import { PendingScreen } from '../app/states';
 import { WizardPage } from '../features/factory-editor/wizard-page';
 import { isWizardStep, stepLabel } from '../features/factory-editor/wizard-progress';
 import { validateWizardSearch } from '../features/factory-editor/wizard-search';
@@ -7,6 +8,7 @@ import { validateWizardSearch } from '../features/factory-editor/wizard-search';
 // The New factory wizard (D §10.1), beside the organization's sidebar. Without `?factory=`, every step
 // but Start goes back to Start; Start with one resumes that draft factory.
 export const Route = createFileRoute('/o/$org/new/$step')({
+  pendingComponent: PendingScreen,
   validateSearch: validateWizardSearch,
   beforeLoad: ({ params, search }) => {
     if (!isWizardStep(params.step)) throw notFound();

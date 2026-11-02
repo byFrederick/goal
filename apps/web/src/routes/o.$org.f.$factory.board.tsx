@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { boardQuery, ensureLoaded, touchesQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
+import { BoardSkeleton } from '../app/route-skeletons';
 import { type BoardGroup, type BoardView, statusChoices } from '../features/board/board-filters';
 import { BoardPage } from '../features/board/board-page';
 import type { StatusKind } from '../ui/status-icon';
@@ -27,6 +28,7 @@ interface BoardSearch extends BoardView {
 const text = (value: unknown): string | undefined => (typeof value === 'string' && value !== '' ? value : undefined);
 
 export const Route = createFileRoute('/o/$org/f/$factory/board')({
+  pendingComponent: BoardSkeleton,
   validateSearch: (search: Record<string, unknown>): BoardSearch => {
     const valid: BoardSearch = {};
     const station = text(search.station);
