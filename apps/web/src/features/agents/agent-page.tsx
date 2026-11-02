@@ -3,8 +3,10 @@
 // model, skills, prompt) come from the version that runs (shared/definition/agent-cards.tsx).
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import { useMemo } from 'react';
 import { agentStatsQuery } from '../../api/queries';
 import type { AgentStats } from '../../api/types';
+import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { DraftChangesNote, SkillsCard, ToolPolicyCard, useRunningModel } from '../../shared/definition/agent-cards';
 import { factoryTitle, useFactory, useFactoryParams } from '../../shared/factory';
@@ -21,7 +23,7 @@ import { DraftSessionProvider } from '../factory-editor/draft/use-draft';
 import { PromptFull, PromptPreview } from './agent-prompt';
 import { AgentSettings } from './agent-settings';
 import { AskJonahButton } from './ask-jonah-button';
-import { BakeOffButton } from './bake-off-button';
+import { useBakeOff } from './bake-off-button';
 import { blockedSentence, reasonShare } from './sentences';
 import { type AgentView, agentViews } from './views';
 
@@ -128,10 +130,31 @@ function AgentPageBody({ agent, view }: { agent: string; view: AgentView }) {
   const { data: stats } = useSuspenseQuery(agentStatsQuery(org.id, factory.id, agent));
   const description = useRunningModel().data?.agents.agents?.find((a) => a.name === agent)?.description;
   const agentParams = { ...params, agent };
+  const phone = usePhone();
+  const bakeOff = useBakeOff(agent);
+  // From 768 px the top bar holds Bake off and Open prompt file, the last one primary; the phone's bar keeps
+  // Open prompt file and Bake off sits in the content, with its reason or refusal.
+  const actions = useMemo(
+    () => (
+      <div className="flex min-w-0 items-center justify-end gap-2">
+        {phone ? null : bakeOff.button}
+        <Button asChild variant="secondary" size="sm">
+          <Link
+            to="/o/$org/f/$factory/definition/$section"
+            params={{ org: params.org, factory: params.factory, section: 'agents' }}
+            search={{ agent }}
+          >
+            Open prompt file
+          </Link>
+        </Button>
+      </div>
+    ),
+    [phone, bakeOff.button, params.org, params.factory, agent],
+  );
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      <TopBarSlot crumb={agent} />
+      <TopBarSlot crumb={agent} actions={actions} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <nav aria-label="Breadcrumb">
           <ol className="m-0 flex list-none flex-wrap items-center gap-2 p-0 text-secondary text-muted">
@@ -148,19 +171,9 @@ function AgentPageBody({ agent, view }: { agent: string; view: AgentView }) {
             </li>
           </ol>
         </nav>
-        <div className="flex flex-wrap gap-2">
-          <BakeOffButton agent={agent} />
-          <Button asChild variant="secondary" size="sm">
-            <Link
-              to="/o/$org/f/$factory/definition/$section"
-              params={{ ...params, section: 'agents' }}
-              search={{ agent }}
-            >
-              Open prompt file
-            </Link>
-          </Button>
-        </div>
       </div>
+      {phone ? bakeOff.button : null}
+      {bakeOff.notes}
 
       <header className="flex flex-wrap items-start gap-4">
         <span

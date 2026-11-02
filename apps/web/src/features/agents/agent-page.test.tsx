@@ -24,13 +24,16 @@ vi.mock('../../api/client', async (original) => ({
 }));
 
 const slotCrumbs = vi.hoisted(() => [] as (string | undefined)[]);
-vi.mock('../../app/top-bar', async (original) => ({
-  ...(await original<typeof import('../../app/top-bar')>()),
-  TopBarSlot: ({ crumb }: { crumb?: string }) => {
-    slotCrumbs.push(crumb);
-    return null;
-  },
-}));
+vi.mock('../../app/top-bar', async (original) => {
+  const real = await original<typeof import('../../app/top-bar')>();
+  return {
+    ...real,
+    TopBarSlot: (props: Parameters<typeof real.TopBarSlot>[0]) => {
+      slotCrumbs.push(props.crumb);
+      return real.TopBarSlot(props);
+    },
+  };
+});
 
 vi.mock('../../api/definitions', async (original) => ({
   ...(await original<typeof import('../../api/definitions')>()),
@@ -148,10 +151,13 @@ async function renderPage(
     factory: can ? { ...factory, can } : factory,
     seed: seeds(seedOptions),
     search: view === 'overview' ? undefined : { view },
+    topBar: true,
   });
   await screen.findByRole('heading', { level: 1, name: 'frontend-engineer' });
   return result;
 }
+
+const topBar = () => screen.getAllByRole('banner')[0] as HTMLElement;
 
 describe('the Agent page, ready', () => {
   it('names the agent, says where it works and lists the views', async () => {
@@ -174,6 +180,24 @@ describe('the Agent page, ready', () => {
   it("sets the agent's name as the top bar's last crumb once loaded", async () => {
     await renderPage();
     expect(slotCrumbs.at(-1)).toBe('frontend-engineer');
+  });
+
+  it('puts Bake off this agent and Open prompt file in the top bar, the prompt file last', async () => {
+    await renderPage();
+    const bar = within(topBar());
+    const bake = bar.getByRole('button', { name: 'Bake off this agent' });
+    const prompt = bar.getByRole('link', { name: 'Open prompt file' });
+    expect(bake.compareDocumentPosition(prompt)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(screen.getAllByRole('button', { name: 'Bake off this agent' })).toHaveLength(1);
+  });
+
+  it('says why Bake off is disabled in the page, and the top bar button points at it', async () => {
+    await renderPage();
+    const bake = within(topBar()).getByRole('button', { name: 'Bake off this agent' }) as HTMLButtonElement;
+    expect(bake.disabled).toBe(true);
+    const reason = document.getElementById(bake.getAttribute('aria-describedby') ?? '');
+    expect(reason?.textContent).toBeTruthy();
+    expect(topBar().contains(reason)).toBe(false);
   });
 
   it('shows the last 7 days and the reasons review sent work back, by role', async () => {
