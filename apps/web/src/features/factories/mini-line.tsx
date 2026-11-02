@@ -47,7 +47,13 @@ export function MiniLine({
     );
   }
   return (
-    <Skeleton ready={board !== undefined} className={className} placeholder={<MiniLineShape />}>
+    // Skeleton is a grid whose one track sizes to its content, so the line's w-max list would widen the card
+    // and the page. A minmax(0,1fr) track keeps the track at the card's width and the section scrolls inside it.
+    <Skeleton
+      ready={board !== undefined}
+      className={cn('grid-cols-[minmax(0,1fr)]', className)}
+      placeholder={<MiniLineShape />}
+    >
       {board ? <HomeLine board={board} name={name} constraint={constraint} stopped={stopped} /> : null}
     </Skeleton>
   );
