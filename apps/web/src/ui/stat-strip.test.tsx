@@ -49,3 +49,19 @@ describe('StatStrip', () => {
     expect(container.querySelector('[style*="scaleX"]')).toBeNull();
   });
 });
+
+describe('StatStrip layout', () => {
+  it('is a grid of two columns, one per figure from md, with no rule on a row start', () => {
+    render(<StatStrip label="Flow" stats={stats} />);
+
+    const strip = screen.getByRole('region', { name: 'Flow' });
+    expect(strip.className).toContain('grid-cols-2');
+    expect(strip.className).toContain('md:grid-cols-4');
+    const cells = Array.from(strip.children) as HTMLElement[];
+    // Below md the rows start at cells 0 and 2: neither has a left rule.
+    expect(cells[0]?.className).not.toMatch(/(^|\s)border-l/);
+    expect(cells[2]?.className).not.toMatch(/(^|\s)border-l/);
+    expect(cells[1]?.className).toMatch(/(^|\s)border-l/);
+    expect(cells[3]?.className).toMatch(/(^|\s)border-l/);
+  });
+});

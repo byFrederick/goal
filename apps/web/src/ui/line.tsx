@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { cn } from './cn';
 import { NumberRoll } from './number-roll';
@@ -96,7 +96,7 @@ export function Line({
       ) : (
         <ol
           aria-label="Stations from intake to done"
-          className="m-0 flex list-none flex-col gap-4 p-0 md:flex-row md:gap-0"
+          className="m-0 flex list-none flex-col gap-0 border-t border-rule p-0 md:flex-row md:gap-0 md:border-t-0"
         >
           {stations.map((s, i) => (
             <StationItem key={s.id} first={i === 0} station={s} compact={compact} dimmed={isDimmed} />
@@ -132,14 +132,27 @@ function StationItem({
   return (
     <>
       {first ? null : (
-        <li aria-hidden="true" data-dimmed={dim} className={cn('hidden w-6 shrink-0 items-start pt-7 md:flex', DIM)}>
-          <span className="flex w-full items-center">
+        <li
+          aria-hidden="true"
+          data-dimmed={dim}
+          className={cn('relative h-0 md:flex md:h-auto md:w-6 md:shrink-0 md:items-start md:pt-7', DIM)}
+        >
+          {/* On a phone the rows are joined by a short vertical rule with a chevron (mobile/floor.html). */}
+          <span className="absolute -top-1.5 left-3.5 h-3 w-px bg-rule md:hidden" />
+          <ChevronDown size={8} strokeWidth={1.75} className="absolute top-0.5 left-3 text-muted md:hidden" />
+          <span className="hidden w-full items-center md:flex">
             <span className="h-px flex-1 bg-rule" />
             <ChevronRight size={12} strokeWidth={1.75} className="-ml-px text-muted" />
           </span>
         </li>
       )}
-      <li data-dimmed={dim} className={cn('flex min-w-0 flex-1 flex-col gap-2', DIM)}>
+      <li
+        data-dimmed={dim}
+        className={cn(
+          'grid min-h-16 min-w-0 flex-1 grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-rule py-3 md:flex md:min-h-0 md:flex-col md:items-stretch md:gap-2 md:border-b-0 md:py-0',
+          DIM,
+        )}
+      >
         <StationColumn station={station} compact={compact} />
       </li>
     </>
@@ -148,9 +161,18 @@ function StationItem({
 
 function StationColumn({ station: s, compact }: { station: LineStation; compact: boolean }) {
   const barClass = s.constraint ? 'bg-amber' : 'bg-ink';
+  // On a phone each station is one row: the count, then the name with its bar and waits, then the slots. From
+  // 768 px the column keeps its order (name, count, bar, slots, waits) through `order`.
   return (
     <>
-      <span className="flex flex-wrap items-center gap-2">
+      <NumberRoll
+        value={s.count}
+        className={cn(
+          'col-start-1 row-span-4 row-start-1 text-center text-kpi md:order-2 md:text-left',
+          compact && 'text-body font-medium',
+        )}
+      />
+      <span className="col-start-2 flex flex-wrap items-center gap-2 md:order-1">
         <span className="text-secondary font-medium text-ink">{s.name}</span>
         {s.constraint ? (
           <span className="flex items-center gap-1 text-meta text-amber-ink">
@@ -159,9 +181,11 @@ function StationColumn({ station: s, compact }: { station: LineStation; compact:
           </span>
         ) : null}
       </span>
-      <NumberRoll value={s.count} className={cn(compact ? 'text-body font-medium' : 'text-kpi')} />
       {s.load !== null ? (
-        <span aria-hidden="true" className="block h-1 w-full overflow-hidden rounded-full bg-hover">
+        <span
+          aria-hidden="true"
+          className="col-start-2 block h-1 w-full max-w-45 overflow-hidden rounded-full bg-hover md:order-3 md:max-w-none"
+        >
           <span
             className={cn(
               'block h-full origin-left transition-transform duration-(--duration-fast) ease-(--ease-out)',
@@ -171,13 +195,17 @@ function StationColumn({ station: s, compact }: { station: LineStation; compact:
           />
         </span>
       ) : null}
-      {s.slots ? <Slots slots={s.slots} label={s.slotsLabel} /> : null}
+      {s.slots ? (
+        <span className="col-start-3 row-span-4 row-start-1 flex justify-end self-center md:order-4 md:justify-start">
+          <Slots slots={s.slots} label={s.slotsLabel} />
+        </span>
+      ) : null}
       {s.waits.map((line) => (
-        <span key={line} className="text-meta text-muted tabular-nums">
+        <span key={line} className="col-start-2 text-meta text-muted tabular-nums md:order-5">
           {line}
         </span>
       ))}
-      {s.share ? <span className="text-meta text-muted tabular-nums">{s.share}</span> : null}
+      {s.share ? <span className="col-start-2 text-meta text-muted tabular-nums md:order-6">{s.share}</span> : null}
     </>
   );
 }

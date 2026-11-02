@@ -16,6 +16,7 @@ import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { EmptyState } from '../../ui/empty-state';
+import { descriptionClass, PageHeader } from '../../ui/page-header';
 import { ReadOnly } from '../../ui/read-only';
 import { Skeleton, SkeletonRows } from '../../ui/skeleton';
 import { ViewOnlyBanner } from '../../ui/view-only-banner';
@@ -35,12 +36,14 @@ export function ModelsPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-5 p-4 md:p-7">
-      <header className="flex flex-col gap-1">
-        <h1 className="m-0 text-page-title tracking-display">Models and policies</h1>
-        <p className="m-0 text-body text-ink-soft">
-          Defaults for every factory in Goal. A factory or an agent can choose less, never more.
-        </p>
-      </header>
+      <PageHeader
+        title="Models and policies"
+        description={
+          <p className={descriptionClass}>
+            Defaults for every factory in Goal. A factory or an agent can choose less, never more.
+          </p>
+        }
+      />
       {query.isPending ? (
         <Skeleton ready={false} placeholder={<SkeletonRows rows={6} />}>
           {null}
@@ -108,7 +111,7 @@ function Ready({ load, org }: { load: PolicyLoad; org: string }) {
       />
       {mayManage ? null : <ViewOnlyBanner>View only. Owners and admins change these policies.</ViewOnlyBanner>}
       {message ? <Callout tone="rework">{message}</Callout> : null}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-2">
         <div className="flex min-w-0 flex-col gap-4">
           <ModelsCard form={form} models={view.models} onChange={setForm} />
           <HarnessCard />

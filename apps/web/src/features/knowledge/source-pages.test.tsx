@@ -131,7 +131,9 @@ describe('a Knowledge source page', () => {
     renderPage('/o/acme/knowledge/eng-docs');
     const list = await screen.findByRole('list', { name: 'Documents of Engineering docs' });
     const row = within(list).getByRole('listitem');
-    expect(within(row).getByRole('link', { name: 'Deploying to production' })).toBeTruthy();
+    const title = within(row).getByRole('link', { name: 'Deploying to production' });
+    // MASTER, Phones: the title answers across 44 px on a phone.
+    expect(title.className).toContain('max-md:py-3');
     const path = within(row).getByText('docs/deploy/production.md');
     expect(path.className).toContain('font-mono');
     expect(path.getAttribute('title')).toBe('docs/deploy/production.md');

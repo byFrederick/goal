@@ -52,20 +52,47 @@ test('the picker is one pane with Back on a phone', async ({ page }) => {
   await expectNoHorizontalScroll(page);
 });
 
-// The pull request's screenshots: Intake and New trigger at 1440 and 375 px in the light and dark themes.
-// Not run in the box (no browser): written to the test output directory when the suite runs elsewhere.
-for (const scheme of ['light', 'dark'] as const) {
-  for (const width of [1440, 375]) {
-    test(`screenshots of Intake and New trigger at ${width} px, ${scheme}`, async ({ page }, testInfo) => {
-      await page.emulateMedia({ colorScheme: scheme });
-      await page.setViewportSize({ width, height: width === 1440 ? 1000 : 800 });
-      await page.goto(intake);
-      await expect(page.getByRole('heading', { level: 2, name: 'Suggested triggers' })).toBeVisible();
-      await page.screenshot({ path: testInfo.outputPath(`intake-${width}-${scheme}.png`), fullPage: true });
-
+// The picker at the desktop and phone widths in both themes: plain icons, one suggestion per row, the breadcrumb.
+for (const theme of ['light', 'dark'] as const) {
+  for (const size of [
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    test(`the New trigger picker at ${size.width}px, ${theme}`, async ({ page }) => {
+      await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+      await page.setViewportSize(size);
       await page.goto(`${intake}/new`);
-      await expect(page.getByRole('dialog', { name: 'New trigger' })).toBeVisible();
-      await page.screenshot({ path: testInfo.outputPath(`intake-new-${width}-${scheme}.png`) });
+      const dialog = page.getByRole('dialog', { name: 'New trigger' });
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole('button', { name: 'Close' })).not.toBeFocused();
+
+      const github = dialog.getByRole('button', { name: 'GitHub' });
+      await expect(github.locator('[class*="bg-"]')).toHaveCount(0);
+
+      const rows = dialog.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Use' }) });
+      const first = await rows.nth(0).boundingBox();
+      const second = await rows.nth(1).boundingBox();
+      expect(second?.y ?? 0).toBeGreaterThan((first?.y ?? 0) + (first?.height ?? 0) - 1);
+      expect(second?.x).toBe(first?.x);
+
+      if (size.width >= 1440) {
+        const nav = page.getByRole('navigation', { name: 'Breadcrumb' });
+        await expect(nav.getByText('Intake')).toBeVisible();
+        await expect(nav.getByText('New trigger')).toBeVisible();
+      }
+      await expectAccessible(page);
+      await expectNoHorizontalScroll(page);
+    });
+  }
+}
+
+for (const colorScheme of ['light', 'dark'] as const) {
+  for (const width of [1440, 768, 390]) {
+    test(`no element is wider than the viewport at ${width} px in ${colorScheme}`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme });
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(intake);
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await expectNoHorizontalScroll(page);
     });
   }

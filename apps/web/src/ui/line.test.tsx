@@ -103,4 +103,16 @@ describe('Line', () => {
     expect(strip.getAttribute('data-state')).toBe('open');
     expect(strip.getAttribute('data-initial')).not.toBeNull();
   });
+
+  it('puts the count, the name and the slots of a station in one row, in that order', () => {
+    render(<Line title="The line, now" stations={stations} />);
+
+    const row = screen.getByText('Build').closest('li');
+    expect(row).not.toBeNull();
+    const count = within(row as HTMLElement).getAllByText('8')[0] as HTMLElement;
+    const name = within(row as HTMLElement).getByText('Build');
+    const slots = within(row as HTMLElement).getByRole('img', { name: /backend-engineer/ });
+    expect(count.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(name.compareDocumentPosition(slots) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });
