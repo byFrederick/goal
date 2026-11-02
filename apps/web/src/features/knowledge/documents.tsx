@@ -101,23 +101,25 @@ export function DocumentList({ source, manage }: { source: KnowledgeSource; mana
             className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-line py-2 first:border-t-0 first:pt-0 md:grid-cols-[minmax(0,1fr)_auto_4.5rem_auto]"
           >
             <DocumentLine source={source.name} document={d} />
-            <div className="order-last col-span-2 flex flex-wrap items-baseline gap-x-3 md:contents">
+            <div className="col-start-1 row-start-2 flex min-w-0 flex-wrap items-baseline gap-x-3 md:contents">
               <StatusText line={documentStatus(d, now)} className="text-secondary" />
               <span className="text-meta text-muted tabular-nums md:text-right">{formatBytes(d.bytes)}</span>
             </div>
-            <DocumentActions
-              document={d}
-              upload={source.kind === 'upload'}
-              manage={manage}
-              onDelete={() => setDeleting(d)}
-            />
+            <div className="col-start-2 row-span-2 row-start-1 flex items-center self-center md:col-start-auto md:row-span-1 md:row-start-auto">
+              <DocumentActions
+                document={d}
+                upload={source.kind === 'upload'}
+                manage={manage}
+                onDelete={() => setDeleting(d)}
+              />
+            </div>
           </li>
         ))}
       </ul>
       {pages.hasNextPage ? (
         <Button
           variant="white"
-          className="self-start"
+          className="mt-3 self-start"
           disabled={pages.isFetchingNextPage}
           onClick={() => void pages.fetchNextPage()}
         >

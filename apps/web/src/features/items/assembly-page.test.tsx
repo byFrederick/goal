@@ -248,6 +248,17 @@ describe('AssemblyPage v3 header', () => {
     expect(screen.getByText(/^x+$/).className).toContain('[overflow-wrap:anywhere]');
   });
 
+  it('holds a long collapsed brief to the column width', async () => {
+    await renderAssembly({ item: { ...assembly, body: 'y'.repeat(120) + ' tail '.repeat(60) } });
+
+    const text = screen.getByText(/^y{120}/);
+    expect(text.className).toContain('[overflow-wrap:anywhere]');
+    const box = text.closest('.motion-disclosure');
+    expect(box?.className).toContain('grid-cols-[minmax(0,1fr)]');
+    expect(box?.className).toContain('min-w-0');
+    expect(box?.parentElement?.className).toContain('w-full min-w-0');
+  });
+
   it('shows a short brief whole, with no button', async () => {
     await renderAssembly();
 

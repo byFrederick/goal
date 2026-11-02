@@ -10,8 +10,8 @@ import {
 } from '@tanstack/react-router';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { knowledgeSourceQuery, orgQuery } from '../../api/queries';
-import type { KnowledgeSource, Org, OrgSummary } from '../../api/types';
+import { knowledgeDocumentsQuery, knowledgeSourceQuery, orgQuery } from '../../api/queries';
+import type { KnowledgeDocument, KnowledgeSource, Org, OrgSummary } from '../../api/types';
 import { TooltipProvider } from '../../ui/tooltip';
 import { SourcePage } from './source-page';
 
@@ -46,13 +46,19 @@ const synced = {
   used_by: { factories: [] },
 } as unknown as KnowledgeSource;
 
-function renderSource(source: KnowledgeSource, can: string[]) {
+function renderSource(source: KnowledgeSource, can: string[], documents: KnowledgeDocument[] = [], next?: string) {
   // What the page asks besides the source never answers; the test looks only at the top bar.
   vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}));
   const org = { ...summary, created_at: '2026-09-01T00:00:00Z', can } as Org;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   client.setQueryData(orgQuery(org.id).queryKey, org);
   client.setQueryData(knowledgeSourceQuery(org.id, source.name).queryKey, source);
+  if (documents.length > 0) {
+    client.setQueryData(knowledgeDocumentsQuery(org.id, source.name, 100).queryKey, {
+      pages: [next ? { documents, next_after: next } : { documents }],
+      pageParams: [undefined],
+    });
+  }
 
   const rootRoute = createRootRoute();
   const orgRoute = createRoute({
@@ -78,6 +84,31 @@ function renderSource(source: KnowledgeSource, can: string[]) {
 }
 
 describe('the knowledge source page', () => {
+  it('gives each document one action cell and puts Show the next after the list', async () => {
+    const doc = (n: number): KnowledgeDocument => ({
+      id: `d${n}`,
+      source: 'goal-docs',
+      mime: 'text/markdown',
+      indexed_at: '2026-10-01T00:00:00Z',
+      title: `Doc ${n}`,
+      url: `https://github.com/acme/docs/blob/main/docs/${n}.md`,
+      bytes: 100,
+      status: 'indexed',
+    });
+    renderSource(synced, [], [doc(1), doc(2)], 'cursor');
+
+    const list = await screen.findByRole('list', { name: /^Documents of/ });
+    const rows = within(list).getAllByRole('listitem');
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(within(row).getAllByRole('link', { name: /at its source$/ })).toHaveLength(1);
+      expect(row.querySelector('.row-span-2')).not.toBeNull();
+    }
+    const show = screen.getByRole('button', { name: 'Show the next 100' });
+    expect(show.className).toContain('mt-3');
+    expect(list.compareDocumentPosition(show) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('puts Sync now in the top bar, once, for a manager of a synced source', async () => {
     renderSource(synced, ['knowledge:manage']);
 
