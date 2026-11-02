@@ -3,10 +3,11 @@
 // factory's floor. An approval is decided here: Approve runs the item's approve decision, and Deny opens
 // the item, where a send-back takes its reason. Kinds this page does not know get a Review link. There
 // are no Question rows: questions are not built yet.
-import { FactoryBadge } from '../../app/factory-badge';
+
 import { Link } from '@tanstack/react-router';
 import { useId } from 'react';
 import type { Factory, Inbox, InboxEntry, ItemCard, OrgSummary } from '../../api/types';
+import { FactoryBadge } from '../../app/factory-badge';
 import { refParam } from '../../shared/factory';
 import { humanize, plural } from '../../shared/format';
 import { type DecidableItem, useDecision } from '../../shared/item-actions';

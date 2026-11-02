@@ -2,8 +2,9 @@
 // factory and the footnote. The window is the last 7 UTC days, not a calendar week, so the footnote says
 // "Last 7 days" (the picture's "Resets Monday" holds only for the org spend endpoint, which has no client).
 // "Spend and billing" is not built yet: it renders through NotAvailable and never navigates.
-import { FactoryBadge } from '../../app/factory-badge';
+
 import type { FactoryOverviewList, OrgSummary } from '../../api/types';
+import { FactoryBadge } from '../../app/factory-badge';
 import { formatUsd } from '../../shared/format';
 import { Meter } from '../../ui/meter';
 import { NotAvailable } from '../../ui/not-available';

@@ -1,12 +1,13 @@
 // One factory on Home (ADR 0016, wave 2, the picture's "Factories" list): its letter badge, its name
 // and health, its navy line (MiniLine), then three figures: what needs you, the throughput or, while
 // the andon is pulled, the worst send-back share, and what it spent today. A draft has no line yet.
-import { FactoryBadge } from '../../app/factory-badge';
+
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { boardQuery, metricsQuery } from '../../api/queries';
 import type { FactoryOverview, OrgSummary } from '../../api/types';
+import { FactoryBadge } from '../../app/factory-badge';
 import { formatPercent, formatUsd } from '../../shared/format';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
