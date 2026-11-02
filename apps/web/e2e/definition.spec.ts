@@ -157,7 +157,7 @@ test('discard the draft: the running version shows, and the next change opens a 
 
   await expect(dialog).toBeHidden();
   await expect(status(page)).toContainText('v8 runs now. Your first change opens a draft.');
-  await expect(page.getByText('Live: v8', { exact: true })).toBeVisible();
+  await expect(page.getByText('v8 running', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Discard draft', exact: true })).toHaveCount(0);
   await expect(tile(page, /^Line, No changes$/)).toBeAttached();
   // Nothing to publish: Review changes is not the page's primary action.

@@ -1,13 +1,15 @@
 // The Agent page (build/agent): who the agent is, the tab the URL names (?view=), and how its work went
 // over the last 7 days. The statistics come from agentStatsQuery; the definition's facts (description,
 // model, skills, prompt) come from the version that runs (shared/definition/agent-cards.tsx).
+
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { agentStatsQuery } from '../../api/queries';
 import type { AgentStats } from '../../api/types';
+import { usePhoneBack } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { DraftChangesNote, SkillsCard, ToolPolicyCard, useRunningModel } from '../../shared/definition/agent-cards';
-import { factoryTitle, useFactory, useFactoryParams } from '../../shared/factory';
+import { useFactory, useFactoryParams } from '../../shared/factory';
 import { formatDuration, formatPercent, formatUsd, humanize } from '../../shared/format';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
@@ -129,25 +131,11 @@ function AgentPageBody({ agent, view }: { agent: string; view: AgentView }) {
   const description = useRunningModel().data?.agents.agents?.find((a) => a.name === agent)?.description;
   const agentParams = { ...params, agent };
 
+  const back = usePhoneBack('Back to Agents', '/o/$org/f/$factory/agents', params);
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      <TopBarSlot crumb={agent} />
+      <TopBarSlot crumb={agent} back={back} />
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <nav aria-label="Breadcrumb">
-          <ol className="m-0 flex list-none flex-wrap items-center gap-2 p-0 text-secondary text-muted">
-            <li>
-              <Link to="/o/$org/f/$factory" params={params} className="hover:text-ink">
-                {factoryTitle(factory)}
-              </Link>
-            </li>
-            <li aria-hidden="true">›</li>
-            <li>Agents</li>
-            <li aria-hidden="true">›</li>
-            <li aria-current="page" className="font-control text-ink">
-              {agent}
-            </li>
-          </ol>
-        </nav>
         <div className="flex flex-wrap gap-2">
           <BakeOffButton agent={agent} />
           <Button asChild variant="secondary" size="sm">
