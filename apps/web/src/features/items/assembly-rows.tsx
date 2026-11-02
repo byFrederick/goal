@@ -265,7 +265,7 @@ export function AssemblyTableRow({
             </span>
           </span>
         </td>
-        <td colSpan={6} className={cn(cell, 'max-w-0')}>
+        <td colSpan={2} className={cn(cell, 'max-w-0')}>
           <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
             <Link
               to="/o/$org/f/$factory/items/$ref"
@@ -301,7 +301,11 @@ export function AssemblyTableRow({
             </span>
           </div>
         </td>
-        <td className={cn(cell, 'text-right text-muted tabular-nums', hideBelowXl)} aria-hidden="true" />
+        <td className={cn(cell, hideBelowLg)} aria-hidden="true" />
+        <td className={cell} aria-hidden="true" />
+        <td className={cell} aria-hidden="true" />
+        <td className={cn(cell, hideBelowXl)} aria-hidden="true" />
+        <td className={cn(cell, hideBelowXl)} aria-hidden="true" />
         <td className={cn(cell, 'whitespace-nowrap text-right font-medium tabular-nums', hideBelowLg)}>
           {formatUsd(cost)}
         </td>
