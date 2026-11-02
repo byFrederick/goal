@@ -46,7 +46,9 @@ How to use them:
 | `home`: every factory as a mini line, needs you, spend | `/o/$org` | restyle of the factories home | |
 | `floor`: the line with the andon strip, four flow figures in a stat strip, needs you, where work waits, throughput, activity | `/o/$org/f/$factory` | restyle |  |
 | `board`: columns with WIP meters, expedite lane, Ready and In progress, assembly lines | `…/board` | restyle | |
-| `item`: stepper, the agent's question with quick answers, run timeline, note composer, details, cost, overlaps, rules | `…/items/$ref` | restyle | Watch live, Trace, Teardown |
+| `item`: stepper, the agent's question with quick answers, run timeline, note composer, details, cost, overlaps, rules | `…/items/$ref` | restyle | |
+| `trace`: the item's Trace tab, every run's steps on a time axis with the selected step's detail (ADR 0019 decision 2; Watch live opens it on the running run) | `…/items/$ref?tab=trace` | new view of data the item page loads | |
+| `teardown` (+ `teardown-768`, `teardown-dark`, `teardown-loading`, `teardown-empty`, `teardown-error`): the item's Teardown tab, lead time, cost, rework and human touches against the target and budget; time by station; runs; why it went back; human touches (ADR 0019 decision 3) | `…/items/$ref?tab=teardown` | new (`getItemTeardown`) | |
 | `items`: saved views, filters, grouped by assembly, bulk actions | `…/items` | restyle |  |
 | `needs-you`: list across factories by type, detail with Approve, Deny, "Edit, then approve" | `/o/$org/needs-you` (new page; replaces the inbox drawer) | new | Always allow |
 | `runs`: every run across factories | `/o/$org/runs` | new (runs exist in the API) | Send to Jonah |
@@ -101,6 +103,7 @@ Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jona
 
 | Screen | Route | Status | Not built yet |
 |---|---|---|---|
+| `teardown` (+ `teardown-loading`, `teardown-empty`, `teardown-error`): the item's Teardown tab on a phone; the item tabs scroll sideways, Runs is a list | `…/items/$ref?tab=teardown` | new | |
 | `daily-work/assembly` | the assembly page (`features/items/assembly-page.tsx`) | restyle | |
 | `daily-work/trace` | an item's Trace tab | new (the tab is "Not available yet" today) | |
 | `build/new-factory` | `/o/$org/new/start`: template, clone, import | restyle | |
