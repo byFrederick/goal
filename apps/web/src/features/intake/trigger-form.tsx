@@ -8,6 +8,7 @@ import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
 import { Field, Input, NativeSelect, Textarea } from '../../ui/field';
 import { NotAvailable } from '../../ui/not-available';
+import { hasVariable, TemplateText } from './template-text';
 import type { BoardChoices, TriggerBlock } from './trigger-yaml';
 
 /** The problems of each block, by the block the problem's line sits in. */
@@ -236,10 +237,11 @@ export function TriggerForm({ value, set, board, factoryName, problems }: Trigge
             aria-expanded={more}
             aria-controls={moreId}
             onClick={() => setMore((open) => !open)}
-            className="px-0 text-run-ink"
+            data-state={more ? 'open' : 'closed'}
+            className="motion-disclosure-trigger px-0 text-run-ink"
           >
             More filters: paths, authors, skip bots
-            <ChevronDown size={14} strokeWidth={1.5} aria-hidden="true" className={cn(more && 'rotate-180')} />
+            <ChevronDown size={14} strokeWidth={1.5} aria-hidden="true" className="motion-chevron" />
           </Button>
           <NotAvailable label="Add another event">
             <Button variant="ghost" size="sm" className="px-0 text-run-ink">
@@ -248,8 +250,14 @@ export function TriggerForm({ value, set, board, factoryName, problems }: Trigge
             </Button>
           </NotAvailable>
         </div>
-        {more ? (
-          <div id={moreId} className="grid gap-3 rounded-cell border border-line bg-panel p-3 sm:grid-cols-2">
+        <div
+          id={moreId}
+          data-state={more ? 'open' : 'closed'}
+          aria-hidden={more ? undefined : true}
+          inert={!more}
+          className="motion-disclosure"
+        >
+          <div className="grid gap-3 rounded-cell border border-line bg-panel p-3 sm:grid-cols-2">
             <Field label="Paths (globs, comma separated)">
               <Input
                 value={listText(filter.paths)}
@@ -270,7 +278,7 @@ export function TriggerForm({ value, set, board, factoryName, problems }: Trigge
               Skip bots
             </Option>
           </div>
-        ) : null}
+        </div>
       </Block>
 
       <Block id={ids.only} title="Only if" hint="Checked before any item is created" problems={problems.only}>
@@ -430,18 +438,54 @@ function TemplateField({
   help?: string;
 }) {
   const id = useId();
+  const [focused, setFocused] = useState(false);
   const insert = (field: string) => onChange(`${value}{{${field}}}`);
   const common = 'rounded-cell border-rule bg-card px-3 py-2 text-body';
+  // While the field is not being edited, its {{fields}} show as orange tokens over the transparent text.
+  const marked = !focused && hasVariable(value);
+  const markers = {
+    onFocus: () => setFocused(true),
+    onBlur: () => setFocused(false),
+    className: cn(common, marked && 'text-transparent'),
+  };
   return (
     <div className="flex flex-col gap-2">
       <label htmlFor={id} className="text-secondary font-semibold">
         {label}
       </label>
-      {multiline ? (
-        <Textarea id={id} rows={4} value={value} onChange={(e) => onChange(e.target.value)} className={common} />
-      ) : (
-        <Input id={id} value={value} onChange={(e) => onChange(e.target.value)} className={cn('h-9', common)} />
-      )}
+      <div className="relative">
+        {multiline ? (
+          <Textarea
+            id={id}
+            rows={4}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            {...markers}
+            className={cn(markers.className, 'resize-none')}
+          />
+        ) : (
+          <Input
+            id={id}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            {...markers}
+            className={cn('h-9', markers.className)}
+          />
+        )}
+        {marked ? (
+          <div
+            aria-hidden="true"
+            className={cn(
+              'pointer-events-none absolute inset-0 overflow-hidden border border-transparent px-3 py-2 text-body text-ink',
+              multiline ? 'whitespace-pre-wrap break-words' : 'flex items-center whitespace-nowrap',
+            )}
+          >
+            <span>
+              <TemplateText text={value} />
+            </span>
+          </div>
+        ) : null}
+      </div>
       {fields.length ? (
         <div className="flex flex-wrap items-center gap-2">
           {fields.map((f) => (

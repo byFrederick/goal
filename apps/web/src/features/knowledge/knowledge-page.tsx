@@ -3,6 +3,7 @@
 // sync, retry, upload and add from it. Below it, "Look something up" searches every source, and
 // "Where it was used" (usage-card.tsx) shows the runs that opened one source's documents. ?factory=
 // (the factory sidebar's Knowledge) shows only the sources that factory's current version lists.
+
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearch } from '@tanstack/react-router';
 import { BookOpen } from 'lucide-react';

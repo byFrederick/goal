@@ -43,6 +43,9 @@ Tokens keep their names across themes, and components use token names only (`app
 | `--color-ink` | `#171717` | `#EDEDEC` | Text, headings, the primary button fill |
 | `--color-ink-soft` | `#4A4A47` | `#B4B4B0` | Secondary text |
 | `--color-muted` | `#6B6B67` | `#8F8F8A` | Meta text, icons (5.3:1 on white, 4.9:1 on the sidebar) |
+| `--color-mark` | `#171717` | `#171717` | Source tiles (Knowledge, triggers): the near-black square under a white icon, the same in both themes, with a 1px inset white rule at 12% |
+| `--color-preview-light`, `--color-preview-light-side` | `#FFFFFF`, `#F8F8F7` | same | The Light half of an Appearance swatch (content, sidebar); never theme-following |
+| `--color-preview-dark`, `--color-preview-dark-side` | `#0F0F0F`, `#141414` | same | The Dark half of an Appearance swatch (content, sidebar); never theme-following |
 | `--color-action` | `#171717` | `#EDEDEC` | Primary buttons (text `--color-action-ink`: white / `#111111`) |
 | `--color-run` | `#2B5BD7` | `#3D6BE0` | Running, links, focus ring, the selection |
 | `--color-run-ink` | `#1E46B0` | `#A9C1FA` | Link hover, text on the run tint |
@@ -140,5 +143,5 @@ The screens on the canvas, one page per flow (unchanged list from version 2): Ge
 
 - WCAG 2.2 AA in both themes: text 4.5:1 (3:1 at 24px+), controls 3:1. Colours that must be told apart also differ in lightness.
 - Real elements: `<button>`, `<a href>`, `<input>` with `<label>`, `role="switch"`. Focus rings are 2px `run` with a 2px offset. Every drag has a Move menu, and every shortcut is shown where its action is.
-- Phone-first: check 375, 768 and 1440px. Wide tables scroll in their own box.
+- Phone-first: check 375, 768 and 1440px. Below 1024px wide tables scroll in their own box; from 1024px every column shows and long titles end in an ellipsis.
 - Every visual change runs the ui-ux-pro-max pre-delivery checklist and the MOTION.md checklist.
