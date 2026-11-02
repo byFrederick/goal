@@ -3,8 +3,9 @@
 // rules (ADR 0014) below them. Two columns from
 // 760 px of `main`, one below; on phones the list comes first and `?agent=` opens the detail with
 // a back link. Definition and the wizard share it (`place`).
-import { Bot, ChevronLeft } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { whereLabel } from '../../../shared/definition/where';
+import { useArrivals } from '../../../ui/arrivals';
 import { cn } from '../../../ui/cn';
 import { EmptyState } from '../../../ui/empty-state';
 import { useSection, useViewOnly } from '../draft/use-draft';
@@ -18,6 +19,7 @@ import { RulesEditor } from './rules-editor';
 export function AgentsSection({ place, search }: SectionViewProps) {
   const viewOnly = useViewOnly();
   const agents = useSection('agents').agents ?? [];
+  const arrived = useArrivals(agents.map((a) => a.name));
   const line = useSection('line');
   const chosen = search.agent ? agents.find((a) => a.name === search.agent) : agents[0];
 
@@ -44,19 +46,11 @@ export function AgentsSection({ place, search }: SectionViewProps) {
                       patch={{ agent: a.name, add: undefined }}
                       aria-current={current ? 'true' : undefined}
                       className={cn(
-                        'grid min-h-11 grid-cols-[36px_minmax(0,1fr)] items-center gap-2.5 rounded-control border bg-card px-3 py-2.5 text-ink no-underline transition-colors duration-200',
-                        current ? 'border-ink shadow-[0_0_0_1px_var(--color-ink)]' : 'border-line hover:border-rule',
+                        'grid min-h-11 grid-cols-[36px_minmax(0,1fr)] items-center gap-2.5 rounded-control border px-3 py-2.5 text-ink no-underline transition-colors duration-(--duration-quick)',
+                        current ? 'border-line bg-hover' : 'border-line bg-card hover:border-rule',
+                        arrived(a.name) && 'motion-safe:animate-item-in',
                       )}
                     >
-                      <span
-                        aria-hidden="true"
-                        className={cn(
-                          'flex size-9 items-center justify-center rounded-control',
-                          current ? 'bg-ink text-white' : 'bg-panel text-ink',
-                        )}
-                      >
-                        <Bot size={18} strokeWidth={1.5} />
-                      </span>
                       <span className="min-w-0">
                         <span translate="no" className="block truncate text-[15px] font-medium">
                           {a.name}

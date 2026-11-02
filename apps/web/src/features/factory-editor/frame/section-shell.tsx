@@ -99,7 +99,7 @@ export function EditedMark({ section, pointer, label }: { section: Section; poin
         type="button"
         onClick={() => void undo()}
         aria-label={`Undo the change to ${label}`}
-        className="inline-flex min-h-6 items-center rounded-chip px-1 text-ink underline underline-offset-3 transition-colors duration-200 hover:text-run"
+        className="inline-flex min-h-6 items-center rounded-chip px-1 text-ink underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-run"
       >
         Undo
       </button>

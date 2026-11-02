@@ -5,6 +5,12 @@ description: What changed in Goal, week by week.
 
 This page lists the changes a person using Goal would notice, newest first, grouped by ISO week. Each entry links its pull request on [github.com/byFrederick/goal](https://github.com/byFrederick/goal). Refactors, CI and tooling changes are left out. The list starts with the changes merged to main from 2026-09-17; the repository's history begins on 2026-10-23.
 
+## Week of 2026-11-02
+
+- The agent prompt editor has Reset to default, which restores the running version's prompt file into the draft, and New trigger offers suggested triggers under Or start from a suggestion ([#352](https://github.com/byFrederick/goal/pull/352)).
+- Publish shows a check and the version that is running once a version publishes. A station you drag settles into its new row, and new triggers and agents fade into their lists. Pages that are loading show the shape of their content ([#352](https://github.com/byFrederick/goal/pull/352)).
+- The Jonah and Agent tabs use a pill that slides to the tab you open. Definition sections are a plain list beside the form. Agents, Judges and Bake-offs lose their icon tiles and explanatory cards ([#352](https://github.com/byFrederick/goal/pull/352)).
+
 ## Week of 2026-10-26
 
 - The factory builder has New agent, roles, quick fixes and model presets, and drafts can be requested through the API ([#328](https://github.com/byFrederick/goal/pull/328)).
