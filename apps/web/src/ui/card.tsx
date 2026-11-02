@@ -27,13 +27,13 @@ export function SectionCard({
       {...props}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <H id={id} className="m-0 text-base font-medium md:text-lg">
             {title}
           </H>
           {description ? <p className="m-0 mt-1 text-sm text-muted">{description}</p> : null}
         </div>
-        {aside}
+        {aside ? <div className="shrink-0">{aside}</div> : null}
       </div>
       {children}
     </section>

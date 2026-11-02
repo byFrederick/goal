@@ -39,7 +39,9 @@ export function SuggestedTriggers({
         <h2 id="suggested-heading" className="m-0 text-heading">
           Suggested triggers
         </h2>
-        <SegmentedControl label="Suggested for" options={options} value={group} onChange={onGroupChange} />
+        <div className="min-w-0 max-w-full overflow-x-auto">
+          <SegmentedControl label="Suggested for" options={options} value={group} onChange={onGroupChange} />
+        </div>
       </div>
       {shown.length === 0 ? (
         <p className="m-0 text-secondary text-muted">No suggestions for this group yet.</p>

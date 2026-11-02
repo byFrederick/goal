@@ -74,13 +74,13 @@ function BudgetRow({ budget: b }: { budget: SpendBudget }) {
             <span className={`block h-full rounded-chip ${fill}`} style={{ width: `${stopped ? 0 : pct}%` }} />
           </div>
         )}
-        <span className="text-meta text-muted">
+        <span className="min-w-0 break-words text-meta text-muted">
           {stopped
             ? (b.reason ?? 'Stopped')
             : `Today ${money(b.today_usd)}${daily === null ? '' : ` of ${money(daily)}`}`}
         </span>
         {b.weekly_usd === null ? null : (
-          <span className="text-meta text-muted">
+          <span className="min-w-0 break-words text-meta text-muted">
             Week {money(b.week_usd)} of {money(b.weekly_usd)}
           </span>
         )}
