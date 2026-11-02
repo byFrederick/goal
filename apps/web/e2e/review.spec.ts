@@ -58,7 +58,7 @@ test('a problem blocks Publish until it is fixed; then v9 runs (flow 3)', async 
   await expectAccessible(page);
 
   // The fix button in YAML puts the agent back.
-  await page.getByRole('group', { name: 'Editor view' }).getByRole('button', { name: 'YAML' }).click();
+  await page.getByRole('group', { name: 'Editor view' }).getByRole('radio', { name: 'YAML' }).click();
   await problems(page).getByRole('button', { name: 'Set agent to spec-writer' }).click();
   await expect(problems(page)).not.toContainText('ghost');
 

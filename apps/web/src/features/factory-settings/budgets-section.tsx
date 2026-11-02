@@ -6,7 +6,7 @@ import { Field, Input } from '../../ui/field';
 import { setBudget, setFlow } from '../factory-editor/draft/ops';
 import { useDraftSession, useSection } from '../factory-editor/draft/use-draft';
 import { prune } from '../factory-editor/line/flow-panel';
-import { AmountInput } from '../factory-editor/review/budget-card';
+import { AmountInput } from './amount-input';
 import { SettingsGroup } from './settings-group';
 
 export function BudgetsSection() {

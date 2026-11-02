@@ -76,7 +76,16 @@ function CheckIcon({ status }: { status: CheckResult['status'] }) {
 
 const statusText = { passed: 'Passed', warning: 'Warning', failed: 'Failed' } as const;
 
-export function ChecksCard({ validation, model }: { validation: Validation | undefined; model: Model }) {
+export function ChecksCard({
+  validation,
+  model,
+  failed = false,
+}: {
+  validation: Validation | undefined;
+  model: Model;
+  /** The checks could not be read: a plain line replaces the skeleton. */
+  failed?: boolean;
+}) {
   const checks = validation?.checks ?? [];
   const passed = checks.filter((c) => c.status === 'passed').length;
   const problems = validation?.problems.filter((p) => p.severity !== 'info').length ?? 0;
@@ -91,7 +100,9 @@ export function ChecksCard({ validation, model }: { validation: Validation | und
         ) : null
       }
     >
-      {!validation ? (
+      {!validation && failed ? (
+        <p className="m-0 text-body text-muted">The checks could not be read. Reload the page to try again.</p>
+      ) : !validation ? (
         <Skeleton ready={false} placeholder={<SkeletonRows rows={4} />}>
           {null}
         </Skeleton>

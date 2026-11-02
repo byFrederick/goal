@@ -109,7 +109,7 @@ export function StationRules({
       : undefined;
 
   return (
-    <div className="col-span-full flex min-w-0 flex-col gap-2 border-t border-dashed border-line pt-2.5 text-sm @[960px]:col-start-2">
+    <div className="flex min-w-0 flex-col gap-2 px-2 pb-2 pt-1 text-sm">
       {buffer ? (
         <p className="m-0 text-muted">
           {buffer}. <span className="text-ink-soft">Not enforced yet; work is released as it arrives.</span>
