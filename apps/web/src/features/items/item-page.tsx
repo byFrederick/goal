@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { ChevronLeft, Eye, LayoutGrid } from 'lucide-react';
-import { useId, useMemo, useRef } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { eventsQuery, itemQuery, itemRunsQuery } from '../../api/queries';
 import type { Station } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
@@ -121,6 +121,18 @@ export function ItemPage() {
   const showTrace = () =>
     void navigate({ to: '/o/$org/f/$factory/items/$ref', params: { ...params, ref }, search: { tab: 'trace' } });
   const { tab = 'timeline', step } = useSearch({ from: '/o/$org/f/$factory/items/$ref' });
+  // Watch live: following lives here, not in the URL. `watchSeq` counts presses so a second press scrolls again.
+  const [following, setFollowing] = useState(false);
+  const [watchSeq, setWatchSeq] = useState(0);
+  const watching = item.state === 'in_progress' && Boolean(item.flow?.current_run);
+  const watchLive = () => {
+    setFollowing(true);
+    setWatchSeq((n) => n + 1);
+    if (tab !== 'trace') showTrace();
+  };
+  useEffect(() => {
+    if (tab !== 'trace' || !watching) setFollowing(false);
+  }, [tab, watching]);
   const noteField = useRef<HTMLTextAreaElement>(null);
   const compactNoteField = useRef<HTMLTextAreaElement>(null);
   const runsStatus: TimelineStatus = runsQ.isPending ? 'loading' : runsQ.isError ? 'error' : 'ready';
@@ -152,10 +164,29 @@ export function ItemPage() {
     [item, events, factory],
   );
   const steps = stepsOf({ item, stations: factory.stations, events, flow: item.flow ?? noFlow, now: Date.now() });
-  // The top bar's actions: Watch live (not built yet), then the item's decisions, Move and Cancel item.
+  // The top bar's actions: Watch live, then the item's decisions, Move and Cancel item.
   // A phone has its decisions in its card under the title, so the bar has no actions there.
   const phone = usePhone();
   // On a phone the bar's More actions menu holds Pause, Send back, Move and Cancel item; its Back link goes to the board.
+  // watchLive only reads `tab` and the route's own values, so the button changes with `watching` and `tab` alone.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see above
+  const watchButton = useMemo(
+    () =>
+      watching ? (
+        <Button variant="secondary" onClick={watchLive}>
+          <Eye size={16} strokeWidth={1.75} aria-hidden="true" />
+          Watch live
+        </Button>
+      ) : (
+        <NotAvailable detail="No run is working on this item">
+          <Button variant="secondary">
+            <Eye size={16} strokeWidth={1.75} aria-hidden="true" />
+            Watch live
+          </Button>
+        </NotAvailable>
+      ),
+    [watching, tab],
+  );
   const actions = useMemo(
     () =>
       phone ? (
@@ -169,12 +200,7 @@ export function ItemPage() {
         />
       ) : (
         <div className="flex items-center gap-2">
-          <NotAvailable>
-            <Button variant="secondary">
-              <Eye size={16} strokeWidth={1.75} aria-hidden="true" />
-              Watch live
-            </Button>
-          </NotAvailable>
+          {watchButton}
           <ItemDecisions
             item={decidable}
             factory={factory.id}
@@ -185,7 +211,7 @@ export function ItemPage() {
           />
         </div>
       ),
-    [phone, decidable, factory.id, station, controls],
+    [phone, decidable, factory.id, station, controls, watchButton],
   );
   const back = useMemo(
     () => (
@@ -290,7 +316,15 @@ export function ItemPage() {
               aria-labelledby={tabId('trace')}
               className="order-6 animate-fade-in @[720px]:order-none"
             >
-              <TraceTab trace={trace} itemState={item.state} status={runsStatus} step={step} />
+              <TraceTab
+                trace={trace}
+                itemState={item.state}
+                status={runsStatus}
+                following={following}
+                watchSeq={watchSeq}
+                onStopFollowing={() => setFollowing(false)}
+                step={step}
+              />
             </section>
           ) : null}
           {tab === 'teardown' ? (
@@ -358,6 +392,16 @@ export function ItemPage() {
         </div>
         <div className="contents @[1100px]:flex @[1100px]:flex-col @[1100px]:gap-4">
           {/* Only on a phone: the top bar holds these actions from 768 px, so they never show twice. */}
+          {phone ? (
+            <div
+              className={cn(
+                deciding || item.state === 'blocked' ? 'order-1' : 'order-9',
+                'flex justify-center rounded-card border border-line bg-card p-4',
+              )}
+            >
+              {watchButton}
+            </div>
+          ) : null}
           {phone ? (
             <ItemDecisionsCard
               item={decidable}

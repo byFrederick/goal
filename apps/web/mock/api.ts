@@ -1628,6 +1628,25 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       if (cookie) res.setHeader('Set-Cookie', cookie);
       return json(res, 200, { ok: true });
     }
+    // Appends a tool call and its result to an item's running run and puts them on the stream, as a live agent
+    // would: {number} picks the item (default: the first with a run in progress), {tool} and {input} what it ran.
+    if (path === '/__mock/step' && method === 'POST') {
+      const body = await readBody(req);
+      const it = state.items.find((i) => (typeof body.number === 'number' ? i.number === body.number : liveRun(i)));
+      const run = it ? liveRun(it) : null;
+      if (!it?.agent || !run) return problem(res, 409, 'No running run', 'The item has no run in progress.');
+      const n = state.events.length;
+      const tool = typeof body.tool === 'string' ? body.tool : 'Bash';
+      const input = typeof body.input === 'string' ? body.input : 'go test ./...';
+      const base = { id: `step${n}` };
+      emit(it, 'tool_call', it.agent, { ...base, tool, input: JSON.stringify({ arg: input }) });
+      const call = state.events.at(-1);
+      if (call) call.run_id = run.id;
+      emit(it, 'tool_result', it.agent, { ...base, is_error: false, summary: 'ok' });
+      const result = state.events.at(-1);
+      if (result) result.run_id = run.id;
+      return json(res, 200, { ok: true, number: it.number, tool });
+    }
     if (path === '/__mock/fail' && method === 'POST') {
       const fault = parseFault(await readBody(req));
       if (!fault) return problem(res, 400, 'Bad Request', 'a fault names the path it applies to');
