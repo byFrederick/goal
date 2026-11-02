@@ -51,7 +51,7 @@ function ProgressCard({ item, assembly, className }: { item: Item; assembly: Ass
     <SectionCard title="Progress" className={className}>
       <div role="img" aria-label={merged} className="flex h-3 gap-1">
         {barSegments(parts).map((s) => (
-          <span key={s.key} aria-hidden="true" className={cn('min-w-0 flex-1 rounded-[3px]', segmentTone[s.tone])} />
+          <span key={s.key} aria-hidden="true" className={cn('min-w-0 flex-1 rounded-chip', segmentTone[s.tone])} />
         ))}
       </div>
       <p className="m-0 text-[15px] tabular-nums">{merged}</p>

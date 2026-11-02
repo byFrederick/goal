@@ -96,6 +96,12 @@ afterEach(() => {
 });
 
 describe('the sidebar’s New item picker', () => {
+  it('keeps the same padding on both sides of the New item button', async () => {
+    renderPicker(writable);
+    const button = await newItemButton();
+    expect(button.className).not.toMatch(/(^|\s)(pl|pr|ps|pe)-/);
+  });
+
   it('lists only the factories the person may add items to, sorted by name', async () => {
     renderPicker(writable);
     fireEvent.click(await newItemButton());

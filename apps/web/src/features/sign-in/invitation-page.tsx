@@ -114,7 +114,7 @@ export function InvitationPage({ id }: { id: string }) {
       <div className="flex items-center gap-3">
         <span
           aria-hidden="true"
-          className="flex size-11 shrink-0 items-center justify-center rounded-[10px] bg-action text-sm font-semibold text-action-ink"
+          className="flex size-11 shrink-0 items-center justify-center rounded-cell bg-action text-sm font-semibold text-action-ink"
         >
           {orgMark({ name: i.organizationName, mark: '' })}
         </span>
