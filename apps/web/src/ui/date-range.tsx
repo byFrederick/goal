@@ -64,7 +64,7 @@ export function DateRange({
         <button
           type="button"
           className={cn(
-            'inline-flex h-9 items-center gap-2 rounded-control bg-card px-3 text-sm text-ink transition-colors duration-200 hover:bg-shell',
+            'inline-flex h-9 items-center gap-2 rounded-control bg-card px-3 text-sm text-ink transition-colors duration-(--duration-quick) hover:bg-shell',
             className,
           )}
         >
@@ -91,7 +91,7 @@ export function DateRange({
                     onPreset(days);
                     setOpen(false);
                   }}
-                  className="flex min-h-11 w-full items-center justify-between gap-3 rounded-control px-2.5 text-left text-[15px] transition-colors duration-200 hover:bg-shell"
+                  className="flex min-h-11 w-full items-center justify-between gap-3 rounded-control px-2.5 text-left text-[15px] transition-colors duration-(--duration-quick) hover:bg-shell"
                 >
                   Last {days} days
                   {active === days ? <Check size={18} strokeWidth={1.75} aria-hidden="true" /> : null}

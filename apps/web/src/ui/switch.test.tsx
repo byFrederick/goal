@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Switch } from './switch';
@@ -36,6 +37,17 @@ describe('Switch', () => {
     expect(onChange).toHaveBeenCalledWith(true);
   });
 
+  it('toggles with the Space key', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Toggle onChange={onChange} />);
+    const sw = screen.getByRole('switch', { name: 'Notify me' });
+    sw.focus();
+    await user.keyboard(' ');
+    expect(sw.getAttribute('aria-checked')).toBe('true');
+    expect(onChange).toHaveBeenCalledWith(true);
+  });
+
   it('travels the thumb at the medium bounce and fades the track at the quick duration', () => {
     const { container } = render(<Toggle />);
     const track = screen.getByRole('switch', { name: 'Notify me' });
@@ -48,12 +60,14 @@ describe('Switch', () => {
     );
   });
 
-  it('does not toggle when disabled, and stays focusable with aria-disabled', () => {
+  it('does not toggle when disabled, and stays focusable with aria-disabled', async () => {
     const onChange = vi.fn();
     render(<Toggle disabled onChange={onChange} />);
     const sw = screen.getByRole('switch', { name: 'Notify me' });
     expect(sw.getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(sw);
+    sw.focus();
+    await userEvent.keyboard(' ');
     expect(sw.getAttribute('aria-checked')).toBe('false');
     expect(onChange).not.toHaveBeenCalled();
   });

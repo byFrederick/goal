@@ -40,6 +40,12 @@ describe('NumberRoll', () => {
     ]);
   });
 
+  it('compares digits by place, so a number that shrinks keeps the digits that did not change still', () => {
+    const { container, rerender } = render(<NumberRoll value="1234" />);
+    rerender(<NumberRoll value="234" />);
+    expect(popping(container)).toEqual([false, false, false]);
+  });
+
   it('falls back to a fade under reduced motion', () => {
     const { container, rerender } = render(<NumberRoll value={7} />);
     rerender(<NumberRoll value={8} />);

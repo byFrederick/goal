@@ -22,12 +22,14 @@ export function NumberRoll({ value, className }: NumberRollProps) {
     setShown(current);
   }
 
-  const previous = current.before.padStart(text.length);
+  // Characters are compared by place from the right: the old text is offset so its last character lines up
+  // with the new one's, so "1234" to "234" leaves the three digits still.
+  const offset = current.before.length - text.length;
   let stagger = 0;
   const cells = [...text].map((character, i) => {
     // Keyed by the place from the right, so a digit keeps its element while the number grows.
     const place = text.length - i;
-    if (current.generation === 0 || previous[i] === character) {
+    if (current.generation === 0 || current.before[i + offset] === character) {
       return { key: `${place}`, character, delay: undefined };
     }
     const delay = stagger;

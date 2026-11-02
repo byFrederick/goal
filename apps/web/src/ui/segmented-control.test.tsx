@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SegmentedControl } from './segmented-control';
 
@@ -45,6 +46,15 @@ describe('SegmentedControl', () => {
     rerender(<SegmentedControl label="View" options={options} value="mine" onChange={() => {}} />);
     expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(1);
     expect(radio('Mine 3').checked).toBe(true);
+  });
+
+  it('moves the choice with the arrow keys, as in any radio group', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<SegmentedControl label="View" options={options} value="all" onChange={onChange} />);
+    radio('All').focus();
+    await user.keyboard('{ArrowLeft}');
+    expect(onChange).toHaveBeenCalledWith('mine');
   });
 
   it('shows the choice only when readOnly, and does not call onChange', () => {
