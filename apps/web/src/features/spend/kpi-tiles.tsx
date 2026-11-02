@@ -12,7 +12,7 @@ export function KpiTiles({ spend }: { spend: OrgSpend }) {
       ? {
           value: spend.total_usd,
           max: weeklyCaps,
-          tone: 'run' as const,
+          tone: 'ink' as const,
           label: `${percentOf(spend.total_usd, weeklyCaps)}% of the weekly budgets combined`,
         }
       : undefined;

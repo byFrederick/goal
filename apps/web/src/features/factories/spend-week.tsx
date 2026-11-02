@@ -4,7 +4,7 @@
 // "Spend and billing" is not built yet: it renders through NotAvailable and never navigates.
 import type { FactoryOverviewList, OrgSummary } from '../../api/types';
 import { formatUsd } from '../../shared/format';
-import { Meter } from '../../ui/hatch';
+import { Meter } from '../../ui/meter';
 import { NotAvailable } from '../../ui/not-available';
 
 export function SpendWeek({
@@ -42,7 +42,7 @@ export function SpendWeek({
               <span className="flex min-w-0 items-center gap-2">
                 <span
                   aria-hidden="true"
-                  className="flex size-5 shrink-0 items-center justify-center rounded-chip bg-run text-meta font-semibold text-white"
+                  className="flex size-5 shrink-0 items-center justify-center rounded-chip bg-factory-1 text-meta font-semibold text-white"
                 >
                   {mark(o.factory)}
                 </span>
@@ -57,9 +57,8 @@ export function SpendWeek({
               <Meter
                 value={o.spend_usd}
                 max={o.budget_usd}
-                tone={o.spend_usd > o.budget_usd ? 'rework' : 'run'}
+                tone={o.spend_usd > o.budget_usd ? 'rework' : 'ink'}
                 label={`${o.factory.name}: ${formatUsd(o.spend_usd)} of ${formatUsd(o.budget_usd)}`}
-                className="h-1.5 bg-panel"
               />
             ) : null}
           </li>
