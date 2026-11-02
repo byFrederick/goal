@@ -36,8 +36,8 @@ They live in `apps/web/src/styles.css` under `@theme` and are documented here. T
 | `--duration-stagger` | 40ms | per-item offset in a list entering (cap at 5 items) |
 | `--duration-micro` | 80ms | tooltip delay, press feedback, error shake segment |
 | `--duration-quick` | 150ms | menu and dialog close, tooltip open, text swap, hover colour, route fade |
-| `--duration-fast` | 250ms | menu and dialog open, tabs pill, icon swap, card move, page slide, accordion |
-| `--duration-medium` | 350ms | sheet and toast close, toggle thumb |
+| `--duration-fast` | 250ms | menu and dialog open, toast close, tabs pill, icon swap, card move, page slide, accordion |
+| `--duration-medium` | 350ms | sheet close, toast open, toggle thumb |
 | `--duration-slow` | 400ms | sheet open, skeleton → content reveal |
 | `--duration-emphasis` | 500ms | rare: a success check, a number pop-in on a KPI |
 | `--duration-pulse` | 1s | one skeleton pulse, linear (`Skeleton`) |
@@ -47,6 +47,7 @@ They live in `apps/web/src/styles.css` under `@theme` and are documented here. T
 | `--ease-drawer` | `cubic-bezier(0.32, 0.72, 0, 1)` | the phone drawer and bottom sheets |
 | `--scale-dialog` | 0.96 | dialog open and close |
 | `--scale-menu` | 0.97 | menu and popover open |
+| `--scale-menu-close` | 0.99 | menu and popover close |
 | `--scale-tooltip` | 0.98 | tooltip open |
 | `--scale-press` | 0.97 | button and icon-button `:active` |
 | `--distance-micro` | 4px | text swap, route content rise |
@@ -70,7 +71,7 @@ The recipe column names the transitions.dev recipe the implementation follows (f
 | Route change (any page) | the content area fades in and rises 4px; the shell never moves | `--duration-quick` `--ease-out`; first five blocks staggered by `--duration-stagger` | texts-reveal (18), shortened |
 | List ↔ detail inside a page (Needs you on a phone, a two-pane picker on a phone, onboarding steps) | the incoming pane slides 8px with a 3px blur cross-fade in the direction of travel | `--duration-fast` `--ease-out` | page-side-by-side (08) |
 | Tabs (Item tabs, Jonah tabs, Account side nav) and segmented controls (time window, Board/List, Form/YAML) | the selected pill or underline slides to the new tab; the content swaps with a quick fade | pill `--duration-fast` `--ease-out`; content `--duration-quick` | tabs-sliding (16) |
-| Accordion and disclosure (tool-call details, "Show transcript", settings groups, sidebar factory groups) | height via `grid-template-rows` 0fr→1fr; chevron rotates | `--duration-fast` `--ease-out` | accordion (21) |
+| Accordion and disclosure (tool-call details, "Show transcript", settings groups, sidebar factory groups), built as `ui/disclosure.tsx` | height via `grid-template-rows` 0fr→1fr; chevron rotates | `--duration-fast` `--ease-out` | accordion (21) |
 | Switch | thumb travels with a slight overshoot; track colour fades (`Switch`) | thumb `--duration-medium` `--ease-bounce`; track `--duration-quick` | toggle (27) |
 | Checkbox (bulk select, notification matrix) | box fills, then the check draws (`Checkbox`) | box `--duration-quick`, check `--duration-medium` after the box | checkbox-check (25) |
 | Toast (sonner) | rises 8px with fade and `scale(0.97)`; stacked toasts push back | open `--duration-medium`, close `--duration-fast`, `--ease-out` | toast (22), banner-stacking (32) |

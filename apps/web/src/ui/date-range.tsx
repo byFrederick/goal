@@ -79,7 +79,7 @@ export function DateRange({
           sideOffset={6}
           collisionPadding={8}
           aria-label="Date range"
-          className="z-50 flex w-72 max-w-[calc(100vw-16px)] flex-col gap-3 rounded-card border border-rule bg-card p-2 text-ink shadow-pop outline-none data-[state=open]:animate-fade-in"
+          className="motion-panel motion-menu z-50 flex w-72 max-w-[calc(100vw-16px)] flex-col gap-3 rounded-card bg-card p-1 text-ink shadow-pop outline-none"
         >
           <ul className="m-0 flex list-none flex-col p-0">
             {presets.map((days) => (
@@ -91,7 +91,7 @@ export function DateRange({
                     onPreset(days);
                     setOpen(false);
                   }}
-                  className="flex min-h-11 w-full items-center justify-between gap-3 rounded-control px-2.5 text-left text-[15px] transition-colors duration-(--duration-quick) hover:bg-shell"
+                  className="flex min-h-11 md:min-h-7.5 w-full items-center justify-between gap-3 rounded-control px-2.5 text-left text-body transition-colors duration-quick hover:bg-shell"
                 >
                   Last {days} days
                   {active === days ? <Check size={18} strokeWidth={1.75} aria-hidden="true" /> : null}
