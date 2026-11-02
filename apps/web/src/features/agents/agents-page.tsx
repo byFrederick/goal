@@ -371,12 +371,12 @@ function StationBody({
     return (
       <div className="flex flex-col gap-4">
         {staffed.map((place) => (
-          <div key={place.key} className="grid grid-cols-[5.25rem_minmax(0,1fr)] items-center gap-3">
-            <span className="flex items-center gap-2 text-meta font-control text-ink-soft">
+          <div key={place.key} className="flex items-center gap-3">
+            <span className="flex w-21 shrink-0 items-center gap-2 text-meta font-control text-ink-soft">
               {place.lane}
               <span aria-hidden="true" className="h-px min-w-2 flex-1 bg-line" />
             </span>
-            <div className="flex min-w-0 flex-col gap-3">
+            <div className="flex min-w-0 flex-1 flex-col gap-3">
               <AgentCard
                 place={place}
                 stats={statsByAgent.get(place.agent.name)}
