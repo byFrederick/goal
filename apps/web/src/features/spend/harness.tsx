@@ -10,7 +10,9 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import { render } from '@testing-library/react';
+import { type ReactNode, useState } from 'react';
 import type { OrgSummary } from '../../api/types';
+import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { TooltipProvider } from '../../ui/tooltip';
 import { spendSearch } from './search';
 import { SpendPage } from './spend-page';
@@ -23,6 +25,17 @@ export const acme: OrgSummary = {
   factory_count: 3,
   role: 'owner',
 };
+
+/** Stands in for the shell's top bar: the page's actions render in a header, as they do on screen. */
+function TopBarHarness({ children }: { children: ReactNode }) {
+  const [bar, setBar] = useState<TopBarState | null>(null);
+  return (
+    <TopBarSetContext.Provider value={setBar}>
+      <header data-testid="top-bar">{bar?.actions}</header>
+      {children}
+    </TopBarSetContext.Provider>
+  );
+}
 
 export function renderSpend(url = '/o/acme/spend') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -46,7 +59,9 @@ export function renderSpend(url = '/o/acme/spend') {
   const view = render(
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <RouterProvider router={router} />
+        <TopBarHarness>
+          <RouterProvider router={router} />
+        </TopBarHarness>
       </TooltipProvider>
     </QueryClientProvider>,
   );

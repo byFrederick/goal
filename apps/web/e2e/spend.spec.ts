@@ -9,6 +9,7 @@ test.beforeEach(async ({ request }) => {
 });
 
 const heading = (page: Page) => page.getByRole('heading', { level: 1, name: 'Spend and billing' });
+// The window control and Export CSV sit in the top bar (the phone top bar below 768 px), never in the body.
 const windowControl = (page: Page) => page.getByRole('radio', { name: 'This week' });
 
 for (const width of [375, 768, 1440]) {

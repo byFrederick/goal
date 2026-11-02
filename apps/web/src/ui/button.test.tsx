@@ -22,6 +22,13 @@ describe('Button', () => {
     expect(list).not.toContain('bg-run');
   });
 
+  it('draws the action variant in ink, never cobalt', () => {
+    render(<Button variant="action">Invite</Button>);
+    const c = classes('Invite');
+    expect(c).toEqual(expect.arrayContaining(['bg-action', 'text-action-ink', 'border-action']));
+    expect(c).not.toContain('bg-run');
+  });
+
   it('draws the secondary action white with a rule border, and keeps the old names as aliases', () => {
     const { unmount } = render(<Button variant="secondary">Edit</Button>);
     expect(classes('Edit')).toEqual(expect.arrayContaining(['bg-card', 'border-rule', 'text-ink']));
