@@ -116,8 +116,15 @@ describe('the token overrides in styles.css', () => {
   const tokens = (text: string) => [...text.matchAll(/(--color-[\w-]+):/g)].map((m) => m[1] ?? '').sort();
 
   it('defines the dark values of every themed color token, in both places', () => {
-    // transparent and currentColor do not change with the theme.
-    const fixed = ['--color-current', '--color-transparent'];
+    // transparent and currentColor do not change with the theme, and neither do the swatches that draw each theme.
+    const fixed = [
+      '--color-current',
+      '--color-transparent',
+      '--color-swatch-light',
+      '--color-swatch-light-panel',
+      '--color-swatch-dark',
+      '--color-swatch-dark-panel',
+    ];
     const light = tokens(css.slice(css.indexOf('@theme {'), css.indexOf('--font-sans'))).filter(
       (t) => !fixed.includes(t),
     );
