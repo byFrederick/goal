@@ -15,6 +15,7 @@ import { factoriesQuery } from '../api/queries';
 import { factoryTitle, useFactory } from '../shared/factory';
 import { factoryMark } from '../shared/marks';
 import { useOrg } from '../shared/org';
+import { cn } from '../ui/cn';
 import { FactoryBadge } from './factory-badge';
 import {
   apiKeysScreen,
@@ -109,7 +110,8 @@ export const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/o/$org/new/$step': { label: newFactoryScreen.label },
 };
 
-const crumbLink = 'text-muted no-underline hover:text-ink';
+// A crumb's text shrinks with an ellipsis before it can touch the actions; its title carries the full label.
+const crumbLink = 'block truncate text-muted no-underline hover:text-ink';
 
 /** The page's name the matched route shows (screens.ts), or undefined for a route the bar does not name. */
 export function usePageLabel(): string | undefined {
@@ -134,7 +136,7 @@ export function TopBar({ state }: { state: TopBarState | null }) {
       ) : (
         <OrgCrumbs routeId={routeId} crumb={state?.crumb} />
       )}
-      {state?.actions ? <div className="ml-auto flex items-center gap-2">{state.actions}</div> : null}
+      {state?.actions ? <div className="ml-auto flex flex-none items-center gap-2">{state.actions}</div> : null}
     </header>
   );
 }
@@ -164,7 +166,7 @@ function FactoryCrumbs({
       node: (
         <>
           <FactoryBadge mark={mark} />
-          <Link to="/o/$org/f/$factory" params={params} className={crumbLink}>
+          <Link to="/o/$org/f/$factory" params={params} className={crumbLink} title={factoryTitle(factory)}>
             {factoryTitle(factory)}
           </Link>
         </>
@@ -172,29 +174,31 @@ function FactoryCrumbs({
     },
   ];
   if (crumb === undefined) {
-    items.push({ key: 'page', node: <Current>{page.label}</Current> });
+    items.push({ key: 'page', node: <Current>{page.label}</Current>, current: true });
   } else {
     items.push({
       key: 'page',
       node: page.available ? (
-        <Link to={page.to} params={params} className={crumbLink}>
+        <Link to={page.to} params={params} className={crumbLink} title={page.label}>
           {page.label}
         </Link>
       ) : (
-        page.label
+        <span className="block truncate text-muted" title={page.label}>
+          {page.label}
+        </span>
       ),
     });
     if (parent) {
       items.push({
         key: 'parent',
         node: (
-          <Link to={parent.to} params={params} className={crumbLink}>
+          <Link to={parent.to} params={params} className={crumbLink} title={parent.label}>
             {parent.label}
           </Link>
         ),
       });
     }
-    items.push({ key: 'crumb', node: <Current>{crumb}</Current> });
+    items.push({ key: 'crumb', node: <Current>{crumb}</Current>, current: true });
   }
   return <Trail items={items} />;
 }
@@ -203,20 +207,24 @@ function OrgCrumbs({ routeId, crumb }: { routeId: string; crumb: string | undefi
   const org = useOrg();
   const screen: { label: string; to?: OrgPath } | undefined = orgRoutePages[routeId];
   if (!screen)
-    return crumb === undefined ? null : <Trail items={[{ key: 'crumb', node: <Current>{crumb}</Current> }]} />;
+    return crumb === undefined ? null : (
+      <Trail items={[{ key: 'crumb', node: <Current>{crumb}</Current>, current: true }]} />
+    );
   const page = screen.to ? (
-    <Link to={screen.to} params={{ org: org.slug }} className={crumbLink}>
+    <Link to={screen.to} params={{ org: org.slug }} className={crumbLink} title={screen.label}>
       {screen.label}
     </Link>
   ) : (
-    screen.label
+    <span className="block truncate text-muted" title={screen.label}>
+      {screen.label}
+    </span>
   );
   const pages: Crumb[] =
     crumb === undefined
-      ? [{ key: 'page', node: <Current>{screen.label}</Current> }]
+      ? [{ key: 'page', node: <Current>{screen.label}</Current>, current: true }]
       : [
           { key: 'page', node: page },
-          { key: 'crumb', node: <Current>{crumb}</Current> },
+          { key: 'crumb', node: <Current>{crumb}</Current>, current: true },
         ];
   // The organization is the first crumb on every organization page but /account, which has no organization.
   const items: Crumb[] =
@@ -226,7 +234,7 @@ function OrgCrumbs({ routeId, crumb }: { routeId: string; crumb: string | undefi
           {
             key: 'org',
             node: (
-              <Link to="/o/$org" params={{ org: org.slug }} className={crumbLink}>
+              <Link to="/o/$org" params={{ org: org.slug }} className={crumbLink} title={org.name}>
                 {org.name}
               </Link>
             ),
@@ -239,6 +247,8 @@ function OrgCrumbs({ routeId, crumb }: { routeId: string; crumb: string | undefi
 interface Crumb {
   key: string;
   node: ReactNode;
+  /** The page the person is on: it keeps its width longest, so the ancestors truncate first. */
+  current?: boolean;
 }
 
 /** The breadcrumb: its crumbs in order, a chevron between each pair. */
@@ -247,7 +257,7 @@ function Trail({ items }: { items: Crumb[] }) {
     <nav aria-label="Breadcrumb" className="min-w-0">
       <ol className="m-0 flex min-w-0 list-none items-center gap-2 p-0 font-control text-body text-ink-soft">
         {items.map((item, i) => (
-          <li key={item.key} className="flex min-w-0 items-center gap-2">
+          <li key={item.key} className={cn('flex min-w-0 items-center gap-2', item.current ? 'shrink' : 'shrink-[4]')}>
             {i > 0 ? (
               <ChevronRight size={12} strokeWidth={1.5} aria-hidden="true" className="flex-none text-muted" />
             ) : null}
@@ -262,7 +272,11 @@ function Trail({ items }: { items: Crumb[] }) {
 /** The last crumb: the page the person is on, in ink. */
 function Current({ children }: { children: ReactNode }) {
   return (
-    <span aria-current="page" className="font-control text-ink">
+    <span
+      aria-current="page"
+      className="block truncate font-control text-ink"
+      title={typeof children === 'string' ? children : undefined}
+    >
       {children}
     </span>
   );
