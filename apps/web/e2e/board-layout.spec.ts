@@ -1,7 +1,7 @@
 // The desktop Board: every column's body starts at the same height, whatever it holds (an empty column,
 // a column of cards, the drum's labelled column), and the header cards share one height.
 import { expect, test } from '@playwright/test';
-import { isPhone } from './support';
+import { expectNoHorizontalScroll, isPhone } from './support';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -129,3 +129,14 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 }
+
+test('fits the top bar at 768 with New item inside the viewport', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'tablet-768', 'the 768 project');
+  await page.goto('/o/acme/f/goal/board');
+  const button = page.getByRole('button', { name: 'New item' });
+  await expect(button).toBeVisible();
+  const box = await button.boundingBox();
+  const width = page.viewportSize()?.width ?? 0;
+  expect(box && box.x >= 0 && box.x + box.width <= width).toBe(true);
+  await expectNoHorizontalScroll(page);
+});

@@ -87,3 +87,19 @@ for (const theme of ['light', 'dark'] as const) {
     });
   });
 }
+
+test('keeps every item title inside its cell with long titles at 768 and 390', async ({ page }, testInfo) => {
+  test.skip(!['tablet-768', 'phone-375'].includes(testInfo.project.name), 'the 768 and phone projects');
+  await lengthenTitles(page, /\/v1\/orgs\/[^/]+\/factories\/[^/]+\/items(\?|$)/);
+  await page.goto(items);
+  const table = page.getByRole('table', { name: 'Items' });
+  await expect(table).toBeVisible();
+  const spills = await table.evaluate((t) =>
+    Array.from(t.querySelectorAll<HTMLElement>('tbody td [title]'))
+      .filter((el) => el.closest('td')?.querySelector('a') && el.tagName !== 'TD')
+      .map((el) => ({ el, cell: el.closest('td') as HTMLElement }))
+      .filter(({ el, cell }) => el.scrollWidth > cell.clientWidth)
+      .map(({ el }) => el.textContent?.slice(0, 40)),
+  );
+  expect(spills).toEqual([]);
+});
