@@ -53,7 +53,7 @@ const writable = [
 ];
 
 /** New item in the sidebar under the organization's route, with the factories list in `list`. */
-function renderPicker(list: Factory[] | 'pending' | 'error', at = '/o/acme') {
+function renderPicker(list: Factory[] | 'pending' | 'error', at = '/o/acme', compact = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   if (list === 'pending') source.load = () => new Promise(() => {});
   else if (list === 'error') source.load = () => Promise.reject(new TypeError('Failed to load'));
@@ -66,7 +66,7 @@ function renderPicker(list: Factory[] | 'pending' | 'error', at = '/o/acme') {
     beforeLoad: () => ({ org: summary }),
     component: () => (
       <>
-        <NewItemFromSidebar />
+        <NewItemFromSidebar compact={compact} />
         <Outlet />
       </>
     ),
@@ -100,6 +100,20 @@ describe('the sidebar’s New item picker', () => {
     renderPicker(writable);
     const button = await newItemButton();
     expect(button.className).not.toMatch(/(^|\s)(pl|pr|ps|pe)-/);
+  });
+
+  it('shows the compact form as a 44 px icon button named New item, without the C keycap', async () => {
+    renderPicker(writable, '/o/acme', true);
+    const button = await newItemButton();
+    expect(button.className).toMatch(/size-11/);
+    expect(button.textContent).toBe('');
+    expect(button.querySelector('kbd')).toBeNull();
+  });
+
+  it('keeps the labelled button with its C keycap when it is not compact', async () => {
+    renderPicker(writable);
+    const button = await newItemButton();
+    expect(button.querySelector('kbd')?.textContent).toBe('C');
   });
 
   it('lists only the factories the person may add items to, sorted by name', async () => {

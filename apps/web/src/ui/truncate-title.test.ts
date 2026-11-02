@@ -46,7 +46,7 @@ const allowed: Record<string, { count: number; reason: string }> = {
   'features/onboarding/first-item-step.tsx': { count: 1, reason: shown },
   'features/sign-in/invitation-page.tsx': { count: 2, reason: shown },
   'features/spend/bar-list.tsx': { count: 1, reason: shown },
-  'shared/new-item.tsx': { count: 2, reason: shown },
+  'shared/new-item.tsx': { count: 1, reason: shown },
   'shared/tokens/token-list.tsx': { count: 2, reason: shown },
   'shared/waiting-for.tsx': { count: 1, reason: shown },
   'ui/select.tsx': { count: 1, reason: shown },
