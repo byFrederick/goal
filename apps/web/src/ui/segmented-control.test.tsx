@@ -38,8 +38,11 @@ describe('SegmentedControl', () => {
     );
     const pill = container.querySelector('[aria-hidden="true"]');
     expect(Array.from(pill?.classList ?? [])).toEqual(
-      expect.arrayContaining(['transition-[transform,width]', 'duration-(--duration-fast)', 'ease-out']),
+      expect.arrayContaining(['transition-transform', 'origin-left', 'duration-(--duration-fast)', 'ease-out']),
     );
+    expect(pill?.className).not.toMatch(/width/);
+    expect((pill as HTMLElement).style.width).toBe('');
+    expect((pill as HTMLElement).style.transition).not.toContain('width');
     expect(Array.from(radio('All').closest('label')?.classList ?? [])).toEqual(expect.arrayContaining(['text-ink']));
     expect(Array.from(radio('All').closest('label')?.classList ?? [])).not.toContain('bg-card');
 
