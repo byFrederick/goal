@@ -1,6 +1,6 @@
 #!/bin/sh
 # Local gate for every push (install once: `task hooks:install`). CI (.github/workflows/ci.yml)
-# runs the same gate on every pull request and push to main; this hook catches it before the push:
+# runs the same gate on pull requests into main only; this hook catches it before every push:
 #   - always: task check (lint, race tests, factory validation, task tf:check)
 #   - when the pushed commits touch db/migrations/ or apps/auth/: task migrate-check as well (with the
 #     Better Auth schema drift check, task auth:schema-check)

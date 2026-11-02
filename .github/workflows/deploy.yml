@@ -1,7 +1,12 @@
-# Deploys production after ci passed for a push to main that changed the app: `task docs:site:build`
-# (the docs site, apps/docs/dist, which wrangler deploy uploads as the control Worker's static assets
-# at /docs, ADR 0035), then `task deploy:worker` (deploy/cloudflare/scripts/deploy.sh), then `task deploy:health` (GET /v1/health on the public host
-# answers {"status":"ok"} within 5 minutes, else the job fails).
+# Deploys production: a person dispatches it by hand (workflow_dispatch) with the sha of a commit of
+# main, from any ref (`gh workflow run deploy.yml -f sha=<sha>`). It checks that the sha is a commit
+# of main and deploys it. It does not look for a ci run: the ci workflow runs only on pull requests
+# into main, and every change reached main through such a pull request that passed ci. A merge does
+# not deploy on its own; production runs the last commit someone dispatched.
+# The deploy job builds the docs site, `task docs:site:build` (apps/docs/dist, which wrangler deploy
+# uploads as the control Worker's static assets at /docs, ADR 0035), then runs `task deploy:worker`
+# (deploy/cloudflare/scripts/deploy.sh), then `task deploy:health` (GET /v1/health on the public
+# host answers {"status":"ok"} within 5 minutes, else the job fails).
 # Images: the script builds goald, auth and goal-agent with docker buildx for linux/amd64 on
 # setup-buildx-action's docker-container builder (BuildKit pinned by digest), reproducibly: each
 # build's SOURCE_DATE_EPOCH is the last commit of that image's inputs (hence fetch-depth: 0 in the
@@ -12,58 +17,27 @@
 # fails to export never fails the deploy), then runs wrangler deploy with a generated config
 # (wrangler.deploy.jsonc) that pins the three digests. The registry login is a 60-minute credential
 # wrangler mints with the deploy token, masked, and logged out at exit.
-# "Changed the app" means a file of the app paths below differs between this commit and the one the
-# last successful deploy job deployed (the run name carries it); deploy/terraform/-only pushes, or ones
-# that change only docs/ or other prose outside apps/docs/, deploy nothing; apps/docs/ is the docs
-# site and counts, and so does contracts/ (the site's API reference reads contracts/api/openapi.yaml).
-# workflow_run has no paths filter, so the `changes` job decides.
-# Rollback: run this workflow by hand (workflow_dispatch) from main with the sha of an earlier commit
-# of main that ci passed for; it deploys that commit without the paths check (cloudflare-operations.md,
-# Deploys).
-# Only the newest push is deployed, and a rollback is never cancelled. Each event has its own
-# concurrency group (deploy-production-workflow_run, deploy-production-workflow_dispatch), with
-# cancel-in-progress true only for workflow_run: a newer push deploy cancels the push deploy in flight
-# (or waiting) and starts at once, while a rollback is never cancelled by a push and a later rollback
-# waits for the one in flight. One shared group cannot do this: a workflow_run run with
-# cancel-in-progress true would cancel a rollback in flight.
-# Never two wrangler deploys at once: two groups could run a rollback and a push deploy side by side,
-# so the deploy job's guard step, before the wrangler step, waits while a run of the other event can
-# deploy. It reads this workflow's runs (gh run list, gh run view --json jobs; actions: read). Another
-# run blocks this one when its deploy job is in progress past the guard step (matched by its exact
-# name, GUARD_STEP: rename both together), or when it has not passed its guard yet (no deploy job,
-# queued, or before or in its guard) and its run id is smaller. So of two runs waiting at once the
-# older proceeds and the newer waits for it: no deadlock, and both never pass together. The wait is
-# bounded (30 minutes, then the step fails; the job's timeout leaves room for a deploy after it).
-# A job-level concurrency group with cancel-in-progress false was rejected: GitHub keeps one pending
-# run per group, so a push queued behind a pending rollback would silently replace it.
-# Why cancelling is safe: the changes job diffs against the commit of the last deploy job that
-# SUCCEEDED, so what a cancelled deploy carried is carried by the next one; ci on main runs one at a
-# time and is never cancelled in flight (ci.yml), so workflow_run events arrive in push order; and a
-# newer deploy only ever cancels an older one, so an older commit never deploys after a newer one.
-# A cancel during wrangler deploy can leave the new Worker version live with the previous container
-# images, or a container rollout unfinished (wrangler activates the Worker before the containers);
-# the next deploy redeploys every path changed since the last successful deploy and wrangler deploy
-# reconciles the Worker version and the container application settings to the config.
+# Rollback: dispatch it with the sha of an earlier commit of main (cloudflare-operations.md, Deploys).
+# One deploy at a time: a single concurrency group, deploy-production, that never cancels a run in
+# flight. GitHub keeps one pending run per group, so a newer dispatch replaces an older one still
+# pending; the run in flight finishes first.
 # `task deploy:worker` retries wrangler deploy once, only when it timed out preparing the container
 # image on Cloudflare's network.
 # Hardening (github-actions-hardening skill): actions pinned to commit SHAs, contents: read
-# everywhere and actions: read only where needed (the changes job reads ci's and this workflow's
-# runs, the deploy job's guard this workflow's), the deploy token only in the env of the one step
-# that builds, pushes and runs wrangler, never the terraform CLOUDFLARE_API_TOKEN of the same
-# environment, no ${{ }} expressions inside run scripts, nothing printed but file names, shas,
-# digests and this workflow's run ids. The registry cache needs no actions: write (type=gha would).
+# everywhere, the deploy token only in the env of the one step that builds, pushes and runs wrangler,
+# never the terraform CLOUDFLARE_API_TOKEN of the same environment, no ${{ }} expressions inside run
+# scripts, nothing printed but file names and shas. The registry cache needs no actions: write
+# (type=gha would). The production environment admits every branch (ADR 0010), so a dispatch from
+# another ref runs that ref's copy of this file with the deploy token; only people with write access
+# can dispatch (ADR 0011, decision 5).
 name: deploy
-run-name: deploy ${{ inputs.sha || github.event.workflow_run.head_sha }}
+run-name: deploy ${{ inputs.sha }}
 
 on:
-  workflow_run:
-    workflows: [ci]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       sha:
-        description: The commit of main to deploy (a rollback); ci must have passed for it
+        description: The commit of main to deploy
         required: true
         type: string
 
@@ -71,91 +45,45 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-production-${{ github.event_name }}
-  cancel-in-progress: ${{ github.event_name == 'workflow_run' }}
+  group: deploy-production
+  cancel-in-progress: false
 
 jobs:
   changes:
     name: changes
-    if: >-
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-      (github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
-      actions: read # ci's runs (a rollback's commit passed) and this workflow's (the last deploy)
     outputs:
-      deploy: ${{ steps.decide.outputs.deploy }}
       sha: ${{ steps.decide.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0 # main's history, for the diff against the last deployed commit
-      - name: Which commit, and did the app change since the last deploy
+          fetch-depth: 0 # main's history, to check the sha is a commit of main
+      - name: Which commit of main
         id: decide
         env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          EVENT: ${{ github.event_name }}
           INPUT_SHA: ${{ inputs.sha }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -eu
-          if [ "$EVENT" = workflow_dispatch ]; then
-            case "$INPUT_SHA" in
-              "" | *[!0-9a-f]*) echo "::error::sha must be a hexadecimal commit id"; exit 1 ;;
-            esac
-            sha=$(git rev-parse --verify --quiet "$INPUT_SHA^{commit}") || { echo "::error::$INPUT_SHA is not a commit"; exit 1; }
-            git merge-base --is-ancestor "$sha" origin/main || { echo "::error::$sha is not a commit of main"; exit 1; }
-            passed=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$sha&event=push&status=success&per_page=1" --jq .total_count)
-            [ "$passed" -gt 0 ] || { echo "::error::ci has not passed for $sha"; exit 1; }
-            echo "Rollback: deploying $sha"
-            { echo "sha=$sha"; echo "deploy=true"; } >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          sha=$HEAD_SHA
+          case "$INPUT_SHA" in
+            "" | *[!0-9a-f]*) echo "::error::sha must be a hexadecimal commit id"; exit 1 ;;
+          esac
+          sha=$(git rev-parse --verify --quiet "$INPUT_SHA^{commit}") || { echo "::error::$INPUT_SHA is not a commit"; exit 1; }
+          git merge-base --is-ancestor "$sha" origin/main || { echo "::error::$sha is not a commit of main"; exit 1; }
+          echo "Deploying $sha"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          # The commit of the newest run whose deploy job succeeded (its run name is "deploy <sha>").
-          prev=""
-          for id in $(gh run list --repo "$REPO" --workflow deploy.yml --status success --limit 30 --json databaseId --jq '.[].databaseId'); do
-            run=$(gh run view "$id" --repo "$REPO" --json displayTitle,jobs)
-            if [ "$(printf %s "$run" | jq '[.jobs[] | select(.name == "deploy" and .conclusion == "success")] | length')" -gt 0 ]; then
-              prev=$(printf %s "$run" | jq -r '.displayTitle | sub("^deploy "; "")')
-              break
-            fi
-          done
-          if [ -z "$prev" ] || ! git rev-parse --verify --quiet "$prev^{commit}" >/dev/null; then
-            echo "No earlier deploy found: deploying $sha"
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          changed=$(git diff --name-only "$prev" "$sha" -- \
-            cmd/ internal/ apps/web/ apps/worker/ apps/auth/ apps/control-worker/ apps/docs/ packages/ deploy/cloudflare/ db/migrations/ contracts/ \
-            go.mod go.sum package.json pnpm-lock.yaml pnpm-workspace.yaml)
-          if [ -z "$changed" ]; then
-            echo "The app did not change between $prev and $sha: nothing to deploy"
-            echo "deploy=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "The app changed between $prev and $sha:"
-            printf '%s\n' "$changed"
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-          fi
 
   deploy:
     name: deploy
     needs: changes
-    if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 75 # up to 30 minutes in the guard, then the deploy's 45
+    timeout-minutes: 45
     environment: production
     permissions:
       contents: read
-      actions: read # the guard reads this workflow's runs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -174,41 +102,6 @@ jobs:
           version: v0.38.1
           driver: docker-container
           driver-opts: image=moby/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
-      - name: Wait while a deploy of the other event runs
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          EVENT: ${{ github.event_name }}
-          RUN_ID: ${{ github.run_id }}
-          GUARD_STEP: Wait while a deploy of the other event runs
-          WAIT_SECONDS: "1800"
-        run: |
-          set -eu
-          deadline=$(( $(date +%s) + WAIT_SECONDS ))
-          while :; do
-            blocker=""
-            for id in $(gh run list --repo "$REPO" --workflow deploy.yml --limit 50 --json databaseId,event,status |
-              jq -r --arg event "$EVENT" '.[] | select(.status != "completed" and .event != $event) | .databaseId'); do
-              # deploying: its deploy job is past the guard; done: no deploy job will run; pending: not past it yet.
-              state=$(gh run view "$id" --repo "$REPO" --json jobs | jq -r --arg step "$GUARD_STEP" '
-                [.jobs[] | select(.name == "deploy")][0] as $job
-                | if $job == null then "pending"
-                  elif $job.status == "completed" then "done"
-                  elif ([$job.steps[]? | select(.name == $step and .status == "completed")] | length) > 0 then "deploying"
-                  else "pending" end')
-              if [ "$state" = deploying ] || { [ "$state" = pending ] && [ "$id" -lt "$RUN_ID" ]; }; then
-                blocker=$id
-                break
-              fi
-            done
-            [ -z "$blocker" ] && exit 0
-            if [ "$(date +%s)" -ge "$deadline" ]; then
-              echo "::error::deploy run $blocker of the other event is still running after $WAIT_SECONDS s"
-              exit 1
-            fi
-            echo "Waiting for deploy run $blocker of the other event"
-            sleep 20
-          done
       # No Cloudflare token here: the build reads only the repository.
       - name: Build the docs site, the control Worker's static assets
         run: task docs:site:build

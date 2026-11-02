@@ -33,6 +33,6 @@ The rules for writing tests (what not to test, fakes instead of mocks, failing t
 ```bash
 task test               # unit tests with -race
 task test-integration   # starts PostgreSQL 18 and RustFS via compose, runs integration-tagged tests
-task check              # everything the pre-push hook and CI (every pull request and push to main) run
+task check              # everything the pre-push hook and CI (pull requests into main) run
 task check:changed      # only the checks of the parts this branch changed since origin/main (README, Development)
 ```
