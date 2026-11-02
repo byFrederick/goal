@@ -3,6 +3,7 @@
 import type { IntakeEvent, IntakeTriggerDetail } from '../../api/types';
 import { Chip, type ChipTone } from '../../ui/chip';
 import { EmptyState } from '../../ui/empty-state';
+import { NumberRoll } from '../../ui/number-roll';
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
@@ -11,6 +12,17 @@ export function weekLine(week: IntakeTriggerDetail['week']): string {
   if (week.created === 0) return 'No items created this week';
   const items = week.created === 1 ? '1 item' : `${week.created} items`;
   return `Created ${items} this week, ${week.merged} merged, ${money.format(week.spend_usd)} in all`;
+}
+
+/** The same line with its numbers in NumberRoll, so a change in a count rolls in place (MOTION.md, A number changes). */
+export function WeekSummary({ week, className }: { week: IntakeTriggerDetail['week']; className?: string }) {
+  if (week.created === 0) return <p className={className}>{weekLine(week)}</p>;
+  return (
+    <p className={className}>
+      Created <NumberRoll value={week.created} /> {week.created === 1 ? 'item' : 'items'} this week,{' '}
+      <NumberRoll value={week.merged} /> merged, <NumberRoll value={money.format(week.spend_usd)} /> in all
+    </p>
+  );
 }
 
 /** "Today 14:05", "Yesterday 18:20" or "Oct 23": the day of an event, then its time on the same day. */
