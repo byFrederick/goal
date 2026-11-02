@@ -70,3 +70,21 @@ test('renders in dark mode', async ({ page }) => {
 
   await expectAccessible(page);
 });
+
+for (const { width, height } of [
+  { width: 1280, height: 900 },
+  { width: 1440, height: 1000 },
+]) {
+  test(`shows every column without sideways scroll at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await openRuns(page);
+
+    const table = page.getByRole('table');
+    await expect(table.getByRole('columnheader', { name: 'Outcome' })).toBeVisible();
+    const fits = await table.evaluate((t) => {
+      const box = t.parentElement as HTMLElement;
+      return t.scrollWidth <= box.clientWidth && box.scrollWidth <= box.clientWidth;
+    });
+    expect(fits).toBe(true);
+  });
+}

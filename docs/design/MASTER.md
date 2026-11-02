@@ -140,5 +140,5 @@ The screens on the canvas, one page per flow (unchanged list from version 2): Ge
 
 - WCAG 2.2 AA in both themes: text 4.5:1 (3:1 at 24px+), controls 3:1. Colours that must be told apart also differ in lightness.
 - Real elements: `<button>`, `<a href>`, `<input>` with `<label>`, `role="switch"`. Focus rings are 2px `run` with a 2px offset. Every drag has a Move menu, and every shortcut is shown where its action is.
-- Phone-first: check 375, 768 and 1440px. Wide tables scroll in their own box.
+- Phone-first: check 375, 768 and 1440px. Below 1024px wide tables scroll in their own box; from 1024px every column shows and long titles end in an ellipsis.
 - Every visual change runs the ui-ux-pro-max pre-delivery checklist and the MOTION.md checklist.

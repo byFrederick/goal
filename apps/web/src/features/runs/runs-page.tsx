@@ -365,7 +365,7 @@ export function RunsPage() {
             </EmptyState>
           ) : (
             <div className="overflow-x-auto rounded-card border border-line">
-              <table className="w-full min-w-max border-collapse text-secondary">
+              <table className="w-full min-w-max border-collapse text-secondary whitespace-nowrap lg:min-w-0">
                 <thead>
                   <tr className="bg-panel text-left text-muted">
                     <th scope="col" className="px-3 py-2 font-medium">
@@ -416,11 +416,12 @@ export function RunsPage() {
                           />
                           <span className="sr-only">{run.factory.title || humanize(run.factory.name)}</span>
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-2 lg:w-full lg:min-w-40 lg:max-w-0">
                           <Link
                             to="/o/$org/f/$factory/items/$ref"
                             params={{ org: org.slug, factory: run.factory.name, ref: refParam(run.item.ref) }}
-                            className="font-medium text-ink no-underline hover:text-run-ink"
+                            title={`${numberOf(run.item.ref)} ${run.item.title}`}
+                            className="block font-medium text-ink no-underline hover:text-run-ink lg:truncate"
                           >
                             {numberOf(run.item.ref)} {run.item.title}
                           </Link>
