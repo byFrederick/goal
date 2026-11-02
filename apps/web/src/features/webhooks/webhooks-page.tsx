@@ -70,18 +70,7 @@ export function WebhooksPage() {
           </Button>
         </div>
       ) : endpoints.length === 0 ? (
-        <EmptyState
-          icon={<Webhook size={18} strokeWidth={1.5} aria-hidden="true" />}
-          title="No webhooks yet"
-          actions={
-            canManage ? (
-              <Button variant="secondary" onClick={() => setCreating(true)}>
-                <Plus size={15} strokeWidth={1.5} aria-hidden="true" />
-                New webhook
-              </Button>
-            ) : null
-          }
-        >
+        <EmptyState icon={<Webhook size={18} strokeWidth={1.5} aria-hidden="true" />} title="No webhooks yet">
           Add a webhook, then give its address and signing secret to the system that posts to it.
         </EmptyState>
       ) : (

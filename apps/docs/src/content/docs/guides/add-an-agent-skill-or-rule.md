@@ -25,7 +25,7 @@ spec:
 2. Add the entry to `spec.agents` in `factory.yaml`. `name` is the name the stations use, and `prompt` must point into `agents/`.
 3. Name the agent in a station's `agent` field on the board, or in a route entry for a lane. An agent that no station names runs nowhere.
 
-In the web app, the factory's Agents page lists the agents, and an agent's page shows its prompt, model, skills and tools.
+In the web app, the factory's Agents page lists the agents, and an agent's page shows its prompt, model, skills and tools. The page has four tabs: Overview, Prompt, Tools and access, and Runs, which shows how many tasks the agent finished this week. Its actions sit in the top bar: Bake off this agent, Open prompt file and, last, Save changes. Save changes sends the changes the page still holds in your draft, such as a reset. Resets save as you make them, so Save changes is usually off, and it is off for a role without definition editing.
 
 To change a prompt in the editor, open the factory's Definition, choose Agents and edit the prompt there. Reset to default restores the prompt file of the running version into your draft, so a change can be undone to what runs now. It is off when the draft already matches the running version, and when the running version has no such file. It does not restore a built-in template's prompt: Goal keeps no built-in prompt text that the editor can read. The agent's page has the same Reset to default beside its Prompt header, next to Edit prompt. Under Settings, an agent that sets its own model also offers Reset to default with the factory's model, which removes its own model from the draft.
 

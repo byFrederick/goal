@@ -7,6 +7,13 @@ This page lists the changes a person using Goal would notice, newest first, grou
 
 ## Week of 2026-11-02
 
+- On the agent's Overview, Why review sent work back shows each reason in sentence case on one line, with the full text in a tooltip, and a solid red bar. Settings values are regular weight, Skills shows the first seven with a + N more chip, and the stat strip keeps four figures on one line from 768 px up.
+- The Agents page line fits at 1440 px without sideways scrolling. Stations use sentence-case names, the constraint station is marked with a yellow dot, work-in-progress bars use colour only for meaning, lane labels line up with their cards, and primary buttons are near-black.
+- Factory settings has Save changes in the top bar, shows every section open, adds a read-only Badge row, shows the repository with its connection and a Change button, and marks the section in view in the "On this page" list.
+- The agent's page shows the agent's name in the top bar, with Bake off this agent, Open prompt file and Save changes there, and its tabs are an underline row with the tasks finished this week on Runs.
+- New trigger shows its sources as plain icons, keeps its title and step on one line, lists suggestions one per row, and shows a Connect link to Connections for GitHub when the organization has no GitHub connection. The top bar reads Intake > New trigger.
+- Intake and Webhooks show their place in the top bar, Intake uses the same page width as the other pages, and neither scrolls sideways on a phone. The Webhooks empty state no longer repeats New webhook.
+- Factory settings shows the factory's purpose (metadata.purpose). Intake records where each submitted item came from: people in the browser, the CLI or a personal token, or an API key. Its headline counts only items with a known source, so older items submitted before this change drop out of it ([#415](https://github.com/byFrederick/goal/pull/415)).
 - Models and policies has a breadcrumb and an ink Save changes. Tool policy shows Ask a person in orange and Allowed in green, the Harness option you pick has an ink border, denied commands are neutral chips, and the page shows a skeleton while it loads.
 - The Agents page shows how many items are at each station now, with a bar against its WIP limit. The agent's page has Reset to default beside the prompt and beside an agent's own model.
 - The agent prompt editor has Reset to default, which restores the running version's prompt file into the draft, and New trigger offers suggested triggers under Or start from a suggestion ([#352](https://github.com/byFrederick/goal/pull/352)).

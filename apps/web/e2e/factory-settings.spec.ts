@@ -31,3 +31,30 @@ test('pausing and resuming the factory from the Danger zone', async ({ page }) =
   await expectToast(page, 'Resumed goal');
   await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
 });
+
+test('factory settings has Save changes in the top bar and flat sections', async ({ page }) => {
+  await page.goto('/o/acme/f/goal/settings');
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible();
+  await expect(page.locator('main [aria-expanded]')).toHaveCount(0);
+  await expect(page.getByText('Badge', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'General' })).toHaveAttribute('aria-current', 'true');
+});
+
+// The pictures for the pull request: this screen at 1440 and 390 px, in both themes. They are attached to
+// the report, not compared; docs/design/screens/build/factory-settings.jpg is the reference.
+for (const theme of ['light', 'dark'] as const) {
+  for (const width of [1440, 390]) {
+    test(`factory settings screenshot, ${width} px, ${theme}`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+      await page.goto('/o/acme/f/goal/settings');
+      await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Repository' })).toBeVisible();
+      await testInfo.attach(`factory-settings-${width}-${theme}`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: 'image/png',
+      });
+    });
+  }
+}

@@ -119,11 +119,27 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
   const items = createRoute({ getParentRoute: () => factoryRoute, path: 'items', component: Outlet });
   const itemsIndex = createRoute({ getParentRoute: () => items, path: '/', component: () => <p>Items page</p> });
   const itemRoute = createRoute({ getParentRoute: () => items, path: '$ref', component: ItemStub });
+  const intake = createRoute({ getParentRoute: () => factoryRoute, path: 'intake', component: Outlet });
+  const newTrigger = createRoute({
+    getParentRoute: () => intake,
+    path: 'new',
+    component: () => <TopBarSlot crumb="New trigger" />,
+  });
+  const intakeIndex = createRoute({ getParentRoute: () => intake, path: '/', component: () => <p>Intake page</p> });
+  const webhooks = createRoute({
+    getParentRoute: () => intake,
+    path: 'webhooks',
+    component: () => <TopBarSlot crumb="Webhooks" />,
+  });
   const router = createRouter({
     routeTree: rootRoute.addChildren([
       orgRoute.addChildren([
         orgPages.addChildren([home, connection, spend, models]),
-        factoryRoute.addChildren([floor, items.addChildren([itemsIndex, itemRoute])]),
+        factoryRoute.addChildren([
+          floor,
+          items.addChildren([itemsIndex, itemRoute]),
+          intake.addChildren([intakeIndex, webhooks, newTrigger]),
+        ]),
       ]),
     ]),
     history: createMemoryHistory({ initialEntries: [at] }),
@@ -163,6 +179,15 @@ describe('TopBar', () => {
     expect(buttons).toEqual(['Share', 'Publish']);
   });
 
+  it('shows Software / Intake / New trigger on the New trigger picker', async () => {
+    renderBar({ at: '/o/acme/f/software/intake/new' });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(nav).getByRole('link', { name: 'Software' }).getAttribute('href')).toBe('/o/acme/f/software');
+    expect(within(nav).getByRole('link', { name: 'Intake' }).getAttribute('href')).toBe('/o/acme/f/software/intake');
+    expect(within(nav).getByText('New trigger').getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getAllByRole('listitem')).toHaveLength(3);
+  });
+
   it('names the spend page and shows its actions', async () => {
     renderBar({ at: '/o/acme/spend' });
     const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
@@ -190,6 +215,22 @@ describe('TopBar', () => {
     expect(within(nav).getByRole('link', { name: 'Acme' }).getAttribute('href')).toBe('/o/acme');
     expect(within(nav).getByRole('link', { name: 'Connections' }).getAttribute('href')).toBe('/o/acme/connections');
     expect(within(nav).getByText('Deploy key').getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getAllByRole('listitem')).toHaveLength(3);
+  });
+
+  it('shows Software / Intake on the Intake page', async () => {
+    renderBar({ at: '/o/acme/f/software/intake' });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(nav).getByRole('link', { name: 'Software' })).toBeTruthy();
+    expect(within(nav).getByText('Intake').getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getAllByRole('listitem')).toHaveLength(2);
+  });
+
+  it('shows Software / Intake / Webhooks on the Webhooks page', async () => {
+    renderBar({ at: '/o/acme/f/software/intake/webhooks' });
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(nav).getByRole('link', { name: 'Intake' }).getAttribute('href')).toBe('/o/acme/f/software/intake');
+    expect(within(nav).getByText('Webhooks').getAttribute('aria-current')).toBe('page');
     expect(within(nav).getAllByRole('listitem')).toHaveLength(3);
   });
 });
