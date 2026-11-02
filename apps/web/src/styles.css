@@ -143,6 +143,8 @@
   --animate-number-pop-in: number-pop-in var(--duration-emphasis) var(--ease-bounce) both;
   /* A skeleton pulses once while it waits (MOTION.md, Loading). */
   --animate-skeleton-pulse: skeleton-pulse var(--duration-pulse) linear;
+  /* A count badge appears: it slides up and pops in (MOTION.md, The needs-you count badge appears in the sidebar). */
+  --animate-notification-badge: notification-badge var(--duration-emphasis) var(--ease-bounce) both;
   /* An invalid field shakes once, side to side, in five micro segments (MOTION.md, Invalid form field). */
   --animate-error-shake: error-state-shake calc(var(--duration-micro) * 5) var(--ease-in-out);
   /* A new row in a list fades in and rises 4px (MOTION.md, A new item appears in a list or column). */
@@ -182,6 +184,13 @@
       opacity: 0;
       transform: translateY(var(--distance-base));
       filter: blur(var(--blur-small));
+    }
+  }
+
+  @keyframes notification-badge {
+    from {
+      opacity: 0;
+      transform: translateY(var(--distance-micro)) scale(var(--scale-tooltip));
     }
   }
 
@@ -524,6 +533,34 @@
 
   .motion-disclosure-trigger[data-state="open"] .motion-chevron {
     transform: rotate(180deg);
+  }
+
+  /* The sidebar's body (the expanded sidebar or the rail) enters with its labels: it slides in from the left edge
+     and fades, on the in-out curve. The column's width changes at once, so no layout animates (MOTION.md, Sidebar
+     collapse). Under reduced motion only the fade remains, at the quick duration. */
+  .motion-sidebar {
+    transition:
+      opacity var(--duration-fast) var(--ease-in-out),
+      transform var(--duration-fast) var(--ease-in-out);
+  }
+
+  @starting-style {
+    .motion-sidebar {
+      opacity: 0;
+      transform: translateX(calc(var(--distance-base) * -1));
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .motion-sidebar {
+      transition: opacity var(--duration-quick) var(--ease-out);
+    }
+
+    @starting-style {
+      .motion-sidebar {
+        transform: none;
+      }
+    }
   }
 }
 
