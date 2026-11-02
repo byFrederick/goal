@@ -3,8 +3,9 @@ import type { ComponentProps } from 'react';
 import { cn } from './cn';
 
 // MASTER.md, Components: buttons are 32 px (28 px small) with the control radius and weight. Focus
-// comes from the global :focus-visible rule (2 px cobalt, 2 px offset). On a coarse pointer the hit
-// area grows to 44 px without changing the drawn size.
+// comes from the global :focus-visible rule (2 px cobalt, 2 px offset). Below md, sm and md grow to
+// a 44 px minimum height (min-height beats h-7 and h-8). Icon buttons keep their drawn size and get
+// a 44 px hit area from the pseudo-element on a coarse pointer.
 const variants = {
   /** Near-black action fill with its ink text: the one primary action on a surface. Blue stays for running, links and focus. */
   primary: 'border-action bg-action text-action-ink hover:bg-action/90',
@@ -29,10 +30,10 @@ const variants = {
 } as const;
 
 const sizes = {
-  /** Inside cards: 28 px. */
-  sm: 'h-7 px-3 text-secondary',
-  /** The default: 32 px. */
-  md: 'h-8 px-3 text-body',
+  /** Inside cards: 28 px, at least 44 px below md. */
+  sm: 'h-7 px-3 text-secondary max-md:min-h-11',
+  /** The default: 32 px, at least 44 px below md. */
+  md: 'h-8 px-3 text-body max-md:min-h-11',
   /** A large target for sign-in and dialogs: 44 px. */
   lg: 'h-11 px-4 text-body',
   /** An icon-only button: 32 px square. It must have an accessible name. */

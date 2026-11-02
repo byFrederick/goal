@@ -9,6 +9,7 @@ import { boardQuery, versionModelQuery } from '../../api/queries';
 import type { Board, Factory, Item, ItemCard, OrgSummary, Station } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
+import { touchLink } from '../../ui/touch-target';
 import { ItemsPage } from './items-page';
 
 // The list reads the items, filtered by state like the server; the tests set what it holds, and
@@ -621,5 +622,15 @@ describe('Items list bulk actions', () => {
 
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select the parts of Migrate billing' }));
     expect(within(await screen.findByRole('region', { name: 'Bulk actions' })).getByText('2 selected')).toBeTruthy();
+  });
+});
+
+describe('phone tap targets on the items page', () => {
+  it('gives Grouped by assembly the touchLink classes and the assembly title link the touchLink classes', async () => {
+    renderItems([assembly(), partOf(1, { title: 'Move the schema', state: 'done', updated_at: now() })]);
+    const grouped = await screen.findByRole('button', { name: 'Grouped by assembly' });
+    for (const cls of touchLink.split(' ')) expect(grouped.classList.contains(cls)).toBe(true);
+    const title = screen.getByRole('link', { name: /^Assembly,/ });
+    for (const cls of touchLink.split(' ')) expect(title.classList.contains(cls)).toBe(true);
   });
 });
