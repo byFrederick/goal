@@ -23,6 +23,7 @@ import { OutputsCard } from './outputs';
 import { QuestionCard } from './question-card';
 import { CostCard, DetailsCard, OverlapsCard, RulesCard } from './side-cards';
 import { noFlow, stepsOf, summaryOf } from './steps';
+import { TeardownTab } from './teardown-tab';
 import { activeRun, buildTrace, criteriaOf, editedFiles, latestToolCalls, runRole, type Trace } from './timeline';
 import { TouchesCard } from './touches-card';
 import { TraceTab } from './trace-tab';
@@ -119,7 +120,7 @@ export function ItemPage() {
   const navigate = useNavigate();
   const showTrace = () =>
     void navigate({ to: '/o/$org/f/$factory/items/$ref', params: { ...params, ref }, search: { tab: 'trace' } });
-  const { tab = 'timeline' } = useSearch({ from: '/o/$org/f/$factory/items/$ref' });
+  const { tab = 'timeline', step } = useSearch({ from: '/o/$org/f/$factory/items/$ref' });
   const noteField = useRef<HTMLTextAreaElement>(null);
   const compactNoteField = useRef<HTMLTextAreaElement>(null);
   const runsStatus: TimelineStatus = runsQ.isPending ? 'loading' : runsQ.isError ? 'error' : 'ready';
@@ -289,7 +290,17 @@ export function ItemPage() {
               aria-labelledby={tabId('trace')}
               className="order-6 animate-fade-in @[720px]:order-none"
             >
-              <TraceTab trace={trace} itemState={item.state} status={runsStatus} />
+              <TraceTab trace={trace} itemState={item.state} status={runsStatus} step={step} />
+            </section>
+          ) : null}
+          {tab === 'teardown' ? (
+            <section
+              id={panelId}
+              role="tabpanel"
+              aria-labelledby={tabId('teardown')}
+              className="order-6 animate-fade-in @[720px]:order-none"
+            >
+              <TeardownTab number={item.number} />
             </section>
           ) : null}
           {tab === 'spec' ? (

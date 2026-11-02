@@ -78,6 +78,7 @@ import type {
   SavedViewList,
   SignupDomain,
   SignupDomainInput,
+  Teardown,
   ToolDecision,
   TouchMetrics,
   TouchReason,
@@ -708,6 +709,11 @@ export function listItemEvents(
 /** An item's agent runs, oldest first (at most 200; `truncated` says there are more). */
 export function listItemRuns(org: string, item: string, signal?: AbortSignal): Promise<RunList> {
   return unwrap(goal.GET(orgPath('/items/{item}/runs'), { params: { path: { org, item } }, ...cancel(signal) }));
+}
+
+/** Where an item's lead time, cost and human help went (worked out by goald on each read). */
+export function getItemTeardown(org: string, item: string, signal?: AbortSignal): Promise<Teardown> {
+  return unwrap(goal.GET(orgPath('/items/{item}/teardown'), { params: { path: { org, item } }, ...cancel(signal) }));
 }
 
 /** The org-level runs filter (GET /v1/orgs/{org}/runs): unset values are left out, and the window is the UTC day when absent. */
