@@ -62,6 +62,18 @@ import { outlineOf } from './outline';
 import { Outline, ProblemBlock, ProblemsPanel } from './panels';
 
 /** The editor's place while a file loads: lines of code in muted blocks (MOTION.md, Loading). */
+/** A file waiting on its text: the Loading skeleton, with its path for screen readers. */
+export function FileLoading({ path }: { path: string }) {
+  return (
+    <>
+      <span className="sr-only">Loading {path}</span>
+      <Skeleton ready={false} placeholder={<FileShape />}>
+        {null}
+      </Skeleton>
+    </>
+  );
+}
+
 function FileShape() {
   return (
     <div className="flex h-64 flex-col gap-3 p-5">
@@ -412,12 +424,7 @@ export function YamlView({ search }: SectionViewProps) {
                   </button>
                 </p>
               ) : (
-                <>
-                  <span className="sr-only">Loading {path}</span>
-                  <Skeleton ready={false} placeholder={<FileShape />}>
-                    {null}
-                  </Skeleton>
-                </>
+                <FileLoading path={path} />
               )
             ) : binary ? (
               <div className="flex flex-wrap items-center justify-between gap-3 p-5 text-secondary">
