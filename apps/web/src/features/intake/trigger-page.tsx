@@ -28,7 +28,6 @@ import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { EmptyState } from '../../ui/empty-state';
 import { NotAvailable } from '../../ui/not-available';
-import { Skeleton, SkeletonRows } from '../../ui/skeleton';
 import { Switch } from '../../ui/switch';
 import { HighlightedYaml } from './template-text';
 import { RecentEvents, WeekSummary } from './trigger-events';
