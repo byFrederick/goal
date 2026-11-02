@@ -48,7 +48,7 @@ function Ready({
   return (
     <>
       <IntakeActions />
-      <div className="flex flex-col gap-6 px-4 pt-4 pb-10 md:px-7 md:pt-6">
+      <div className="flex flex-col gap-5">
         <Header name={factoryTitle(factory)} />
         {empty ? (
           <EmptyState icon={<Webhook aria-hidden="true" />} title="No triggers yet" actions={<NewTriggerLink />}>

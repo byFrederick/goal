@@ -382,7 +382,7 @@ func (s *server) factoryOf(ctx context.Context, rec ports.FactoryRecord, f *conf
 		return out
 	}
 
-	out.Description = optional(f.Metadata.Description)
+	out.Description = optional(f.Purpose())
 	if f.Spec.Board.WorkTypes != nil {
 		out.WorkTypes = slices.Clone(f.Spec.Board.WorkTypes)
 	}
