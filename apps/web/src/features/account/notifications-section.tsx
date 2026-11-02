@@ -9,7 +9,7 @@ import { connectionsQuery, notificationsQuery } from '../../api/queries';
 import type { NotificationChannels, NotificationEvents, NotificationPreferences } from '../../api/types';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
-import { Tooltip } from '../../ui/tooltip';
+import { NotAvailable } from '../../ui/not-available';
 import { type PreferencesChange, useSaveNotifications } from './notification-preferences';
 
 type Event = keyof NotificationEvents;
@@ -32,8 +32,6 @@ const channels: { channel: Channel; label: string }[] = [
 const saveFailed = 'Goal couldn’t save that. Check your connection and try again.';
 
 /** The table, live with a person; the Notifications section's own body. */
-const noop = () => {};
-
 export function NotificationsTable({ org, signedIn }: { org: string; signedIn: boolean }) {
   return signedIn ? <LiveTable org={org} /> : <PreferencesTable />;
 }
@@ -122,12 +120,13 @@ function PreferencesTable({
                       <Checkbox
                         aria-label={boxLabel}
                         checked={checked}
-                        onCheckedChange={(next) => onChange(event, channel, next)}
+                        onCheckedChange={(on) => onChange(event, channel, on)}
                       />
                     ) : (
-                      <Tooltip label={boxLabel} detail="Not available yet">
-                        <Checkbox aria-label={boxLabel} checked={checked} onCheckedChange={noop} unavailable />
-                      </Tooltip>
+                      // Controlled with a no-op: a click on a box that is not available leaves it at its saved value.
+                      <NotAvailable label={boxLabel}>
+                        <Checkbox aria-label={boxLabel} checked={checked} onCheckedChange={() => undefined} />
+                      </NotAvailable>
                     )}
                   </td>
                 );

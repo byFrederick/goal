@@ -4,17 +4,21 @@
 import type { ComponentProps, ReactNode } from 'react';
 import { cn } from './cn';
 
-interface CheckboxProps extends Omit<ComponentProps<'label'>, 'onChange' | 'children'> {
+/** What a wrapper (NotAvailable, a tooltip trigger) may put on the native input: handlers, aria, a ref. */
+type InputPassThrough = Omit<
+  ComponentProps<'input'>,
+  'type' | 'checked' | 'disabled' | 'onChange' | 'className' | 'name'
+>;
+
+interface CheckboxProps extends InputPassThrough {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   /** Shown as a disabled box: it does not change when clicked or when Space is pressed. */
   disabled?: boolean;
   /** The visible name, beside the box. Give aria-label instead when there is none. */
   label?: ReactNode;
-  'aria-label'?: string;
   name?: string;
-  /** A box whose feature is not built: it stays focusable with aria-disabled, shows its saved value and never changes (ADR 0016, decision 4). */
-  unavailable?: boolean;
+  className?: string;
 }
 
 export function Checkbox({
@@ -23,29 +27,37 @@ export function Checkbox({
   disabled = false,
   label,
   name,
-  unavailable = false,
   className,
-  'aria-label': ariaLabel,
-  ...props
+  ...input
 }: CheckboxProps) {
   return (
     <label
       className={cn(
         'inline-flex items-center gap-2 text-body text-ink',
-        disabled || unavailable ? 'cursor-not-allowed opacity-55' : 'cursor-pointer',
+        disabled ? 'cursor-not-allowed opacity-55' : 'cursor-pointer',
         className,
       )}
-      {...props}
     >
       <input
         type="checkbox"
         name={name}
         checked={checked}
         disabled={disabled}
-        aria-label={ariaLabel}
-        aria-disabled={unavailable || undefined}
+        {...input}
+        onClick={(event) => {
+          input.onClick?.(event);
+          // A wrapper that cancels the click (NotAvailable) makes the browser revert the toggle after React
+          // restored the controlled value, which leaves the box flipped. Put the saved value back once the
+          // cancelled click is over.
+          if (event.defaultPrevented) {
+            const el = event.currentTarget;
+            setTimeout(() => {
+              el.checked = checked;
+            }, 0);
+          }
+        }}
         onChange={(event) => {
-          if (!disabled && !unavailable) onCheckedChange(event.currentTarget.checked);
+          if (!disabled) onCheckedChange(event.currentTarget.checked);
         }}
         className="peer sr-only"
       />

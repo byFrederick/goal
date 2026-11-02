@@ -181,12 +181,23 @@ describe('API keys page', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 
-  it('says there are no keys yet, with one action to make one', async () => {
+  it('says there are no keys yet, with one action, in the top bar', async () => {
     await renderPage([]);
 
     expect(screen.getByRole('heading', { name: 'No keys yet' })).toBeTruthy();
     expect(screen.getByText('Create one for CI or a script.')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: 'New key' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'New key' })).toHaveLength(1);
+  });
+
+  it('draws the terminal prompts in the muted colour, not the running blue', async () => {
+    await renderPage(pictured);
+
+    const prompts = [...document.querySelectorAll('pre span')];
+    expect(prompts).toHaveLength(2);
+    for (const prompt of prompts) {
+      expect(prompt.className.split(/\s+/)).toContain('text-muted');
+      expect(prompt.className.split(/\s+/).filter((c) => c.startsWith('text-') && c !== 'text-muted')).toEqual([]);
+    }
   });
 
   it('renders at most one primary button when there are no keys', async () => {

@@ -60,13 +60,12 @@ export function ApiKeysPage() {
     },
   });
 
-  const newKey = (variant: 'primary' | 'secondary') =>
-    manage ? (
-      <Button variant={variant} onClick={() => setCreating(true)}>
-        <Plus size={15} strokeWidth={1.75} aria-hidden="true" />
-        New key
-      </Button>
-    ) : null;
+  const newKey = manage ? (
+    <Button variant="primary" className="h-11 md:h-8.5" onClick={() => setCreating(true)}>
+      <Plus size={15} strokeWidth={1.75} aria-hidden="true" />
+      New key
+    </Button>
+  ) : null;
 
   const live = (list.data ?? []).filter((k) => !k.revoked_at);
   const revoked = (list.data ?? []).filter((k) => k.revoked_at);
@@ -74,7 +73,7 @@ export function ApiKeysPage() {
 
   return (
     <>
-      <TopBarSlot actions={newKey('primary')} />
+      <TopBarSlot actions={newKey} />
       <div className="flex min-w-0 flex-col gap-1 md:gap-2">
         <h1 className="m-0 text-page-title tracking-display">API keys</h1>
         {readKeys ? (
@@ -104,11 +103,7 @@ export function ApiKeysPage() {
                 </Button>
               </div>
             ) : live.length === 0 && revoked.length === 0 ? (
-              <EmptyState
-                icon={<SquareTerminal size={20} strokeWidth={1.5} />}
-                title="No keys yet"
-                actions={newKey('secondary')}
-              >
+              <EmptyState icon={<SquareTerminal size={20} strokeWidth={1.5} />} title="No keys yet">
                 Create one for CI or a script.
               </EmptyState>
             ) : (
@@ -239,12 +234,12 @@ export function ApiKeysPage() {
               </h2>
               <p className="m-0 text-secondary text-ink-soft">People sign in as themselves instead of using a key.</p>
               <pre className="m-0 overflow-x-auto rounded-cell bg-panel p-3 font-mono text-secondary leading-relaxed whitespace-pre text-ink-soft">
-                <span aria-hidden="true" className="text-run">
+                <span aria-hidden="true" className="text-muted">
                   ${' '}
                 </span>
                 goal login
                 {'\n'}
-                <span aria-hidden="true" className="text-run">
+                <span aria-hidden="true" className="text-muted">
                   ${' '}
                 </span>
                 goal item create --factory {sample}

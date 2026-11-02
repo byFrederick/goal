@@ -116,3 +116,22 @@ export function connectionsOf(budgets: readonly SpendBudget[]): { name: string; 
 
 /** "Oct 26": a UTC day as the chart's label. */
 export const shortDay = (day: string): string => monthDay.format(new Date(`${day}T12:00:00Z`));
+
+const dayMs = 86_400_000;
+const isoDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+
+/**
+ * Every UTC day the window covers, oldest first, as `YYYY-MM-DD`: the week from its Monday (seven days), the
+ * month from its first day to its last, and 90 days ending on the window's last day. Days after today are
+ * included, so the chart keeps one slot for each.
+ */
+export function windowDays(spend: Pick<OrgSpend, 'window' | 'since' | 'until'>): string[] {
+  const since = Date.parse(`${spend.since.slice(0, 10)}T00:00:00Z`);
+  if (spend.window === 'week') return Array.from({ length: 7 }, (_, i) => isoDay(since + i * dayMs));
+  if (spend.window === 'month') {
+    const first = new Date(since);
+    const length = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+    return Array.from({ length }, (_, i) => isoDay(since + i * dayMs));
+  }
+  return Array.from({ length: 90 }, (_, i) => isoDay(since + i * dayMs));
+}

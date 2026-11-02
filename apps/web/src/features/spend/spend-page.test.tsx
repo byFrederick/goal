@@ -42,11 +42,51 @@ describe('the spend screen, ready', () => {
 
     expect(await screen.findByRole('heading', { name: 'Spend and billing' })).toBeTruthy();
     expect((screen.getByRole('radio', { name: 'This week' }) as HTMLInputElement).checked).toBe(true);
-    expect(await screen.findByText('Spend this week')).toBeTruthy();
-    expect(screen.getByText('$1,940')).toBeTruthy();
-    expect(screen.getByText('September $2,310')).toBeTruthy();
-    expect(screen.getByText('$3.40')).toBeTruthy();
-    expect(screen.getByText('Spent on rework')).toBeTruthy();
+    const header = screen.getByTestId('top-bar');
+    expect(within(header).getByRole('radio', { name: 'This month' })).toBeTruthy();
+    expect(within(header).getByRole('button', { name: 'Export CSV' })).toBeTruthy();
+    expect(screen.getAllByRole('radio', { name: 'This month' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Export CSV' })).toHaveLength(1);
+    const strip = await screen.findByRole('region', { name: 'Spend this week' });
+    expect(within(strip).getByText('Spend this week')).toBeTruthy();
+    expect(within(strip).getByText('$1,940')).toBeTruthy();
+    expect(within(strip).getByText(/September \$2,310/)).toBeTruthy();
+    expect(within(strip).getByText('$3.40')).toBeTruthy();
+    expect(within(strip).getByText('Spent on rework')).toBeTruthy();
+    expect(within(strip).getByText('12% of spend · Runs sent back')).toBeTruthy();
+  });
+
+  it('draws one slot for each day of the week, with one bar for one day of data and today marked', async () => {
+    answerWith(() =>
+      spendFixture({
+        since: '2026-10-26T00:00:00Z',
+        until: '2026-10-26T09:00:00Z',
+        days: spendFixture()
+          .days.slice(0, 1)
+          .map((d) => ({ ...d, day: '2026-10-26' })),
+      }),
+    );
+    const { container } = renderSpend();
+    await screen.findByRole('heading', { name: 'Spend by day' });
+
+    const slots = container.querySelectorAll('[data-day]');
+    expect(slots).toHaveLength(7);
+    expect(slots[0]?.getAttribute('data-today')).toBe('true');
+    expect(within(slots[0] as HTMLElement).getByText('Today')).toBeTruthy();
+    expect(slots[0]?.querySelector('.max-w-12.opacity-45')).not.toBeNull();
+    expect(container.querySelectorAll('.max-w-12')).toHaveLength(1);
+    expect(screen.getAllByRole('row')).toHaveLength(2);
+  });
+
+  it('draws the days of the month and 90 days', async () => {
+    const month = renderSpend('/o/acme/spend?window=month');
+    await screen.findByRole('heading', { name: 'Spend by day' });
+    expect(month.container.querySelectorAll('[data-day]')).toHaveLength(31);
+    month.unmount();
+    cleanup();
+    const ninety = renderSpend('/o/acme/spend?window=90d');
+    await screen.findByRole('heading', { name: 'Spend by day' });
+    expect(ninety.container.querySelectorAll('[data-day]')).toHaveLength(90);
   });
 
   it('draws the charts in ink on a hover track and the days in factory colours, with no pattern', async () => {
@@ -166,6 +206,7 @@ describe('the other states', () => {
     const status = await screen.findByRole('status');
     expect(status.textContent).toBe('Loading spend and billing');
     expect(status.closest('[aria-busy="true"]')).not.toBeNull();
+    expect(document.querySelector('.animate-skeleton-pulse')).not.toBeNull();
   });
 
   it('shows an error with Try again, which asks again', async () => {

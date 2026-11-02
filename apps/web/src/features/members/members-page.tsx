@@ -6,9 +6,10 @@
 // below 720 px, person cards whose details open in a sheet.
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { Check, ChevronDown, ChevronRight, Ellipsis, Minus, Plus, X } from 'lucide-react';
-import { Component, type ReactNode, Suspense, useId, useState } from 'react';
+import { Component, type ReactNode, Suspense, useMemo, useState } from 'react';
 import { authConfigQuery, factoriesQuery, invitationsQuery, membersQuery, meQuery, orgQuery } from '../../api/queries';
 import type { Factory, FactoryRole, Invitation, Member, OrgRole, OrgSummary } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
 import { displayName, hasName, initialsOf } from '../../shared/names';
 import { useOrg } from '../../shared/org';
 import { reasons } from '../../shared/permissions';
@@ -21,7 +22,7 @@ import { NativeSelect } from '../../ui/field';
 import { Avatar } from '../../ui/mark';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../ui/menu';
 import { NotAvailable } from '../../ui/not-available';
-import { descriptionClass, PageHeader } from '../../ui/page-header';
+import { descriptionClass } from '../../ui/page-header';
 import { SearchField } from '../../ui/search-field';
 import { SegmentedControl, type SegmentedOption } from '../../ui/segmented-control';
 import { Sheet, SheetContent } from '../../ui/sheet';
@@ -145,6 +146,18 @@ function Members({ org, members, invitations, factories, powers, signIn }: Membe
   const sheetMember = members.find((m) => m.user.id === sheetFor);
   const change = (m: Member) => roleChange(m, powers, owners, org.name);
 
+  const topActions = useMemo(
+    () =>
+      powers.manages ? (
+        <Button variant="action" onClick={() => setInviting(true)}>
+          <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
+          <span className="md:hidden">Invite</span>
+          <span className="hidden md:inline">Invite people</span>
+        </Button>
+      ) : null,
+    [powers.manages],
+  );
+
   const actions: RowActions = {
     onFactoryRoles: (m) => setSheetFor(m.user.id),
     onRemove: (m) => setAsking({ kind: 'remove', member: m }),
@@ -155,24 +168,14 @@ function Members({ org, members, invitations, factories, powers, signIn }: Membe
 
   return (
     <>
-      <PageHeader
-        title={
-          <>
-            <span className="md:hidden">Members</span>
-            <span className="hidden md:inline">Members and roles</span>
-          </>
-        }
-        description={<p className={descriptionClass}>{countTitle(members.length, invitations.length)}</p>}
-        actions={
-          powers.manages ? (
-            <Button variant="primary" onClick={() => setInviting(true)}>
-              <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
-              <span className="md:hidden">Invite</span>
-              <span className="hidden md:inline">Invite people</span>
-            </Button>
-          ) : null
-        }
-      />
+      <TopBarSlot crumb="Members" actions={topActions} />
+      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h1 className="m-0 text-page-title tracking-display">
+          <span className="md:hidden">Members</span>
+          <span className="hidden md:inline">Members and roles</span>
+        </h1>
+        <p className={cn(descriptionClass, 'm-0')}>{countTitle(members.length, invitations.length)}</p>
+      </header>
 
       {powers.manages ? null : (
         <ViewOnlyBanner>
@@ -404,21 +407,20 @@ function RoleControl({
   actions: RowActions;
   className?: string;
 }) {
-  const reasonId = useId();
   const label = `Role of ${displayName(member.user)} in ${org.name}`;
   if (!powers.manages) return <span className="text-body">{orgRoleNames[member.role]}</span>;
   // Only an owner makes an owner.
   const choices: OrgRole[] =
     powers.role === 'owner' || member.role === 'owner' ? ['owner', 'admin', 'member'] : ['admin', 'member'];
+  if (!change.editable) return <Chip {...(className ? { className } : {})}>{orgRoleNames[member.role]}</Chip>;
   return (
     <span className={cn('flex flex-col gap-1', className)}>
       <NativeSelect
         aria-label={label}
-        aria-describedby={change.reason ? reasonId : undefined}
         value={member.role}
-        disabled={!change.editable || actions.rolePending === member.user.id}
+        disabled={actions.rolePending === member.user.id}
         onChange={(e) => actions.onRole(member, e.target.value as OrgRole)}
-        className="w-auto min-w-28 disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-auto min-w-28"
       >
         {choices.map((r) => (
           <option key={r} value={r}>
@@ -426,11 +428,6 @@ function RoleControl({
           </option>
         ))}
       </NativeSelect>
-      {change.reason ? (
-        <span id={reasonId} className="max-w-40 text-meta leading-snug text-muted">
-          {change.reason}
-        </span>
-      ) : null}
     </span>
   );
 }

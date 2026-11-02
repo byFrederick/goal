@@ -1,14 +1,17 @@
-// Spend by day, one stacked bar a UTC day, each segment a factory in its legend colour. A day goald
+// Spend by day, one stacked bar a UTC day of the window (days after today are empty slots), each segment a factory in its legend colour. A day goald
 // did not split by factory is drawn as one neutral segment and the note says why. The bars are
 // decorative: a visually hidden table carries every value for screen readers.
 import type { OrgSpend } from '../../api/types';
-import { factoryLines, money, shortDay, weekdayOf } from './view';
+import { factoryLines, money, shortDay, weekdayOf, windowDays } from './view';
 
 export function SpendDays({ spend }: { spend: OrgSpend }) {
   const lines = factoryLines(spend);
   const top = Math.max(0, ...spend.days.map((d) => d.usd));
   const fillOf = new Map(lines.map((l) => [l.id, l.fill]));
   const nameOf = new Map(lines.map((l) => [l.id, l.name]));
+  const byDay = new Map(spend.days.map((d) => [d.day, d]));
+  const slots = windowDays(spend);
+  const todayOf = spend.until.slice(0, 10);
 
   return (
     <section aria-labelledby="day-h" className="flex min-w-0 flex-col rounded-card border border-line bg-card p-4">
@@ -34,33 +37,41 @@ export function SpendDays({ spend }: { spend: OrgSpend }) {
         <div aria-hidden="true" className="relative flex min-w-0 flex-1 items-end gap-1 border-b border-line pb-6">
           <span className="pointer-events-none absolute inset-x-0 top-0 border-t border-dashed border-line" />
           <span className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-dashed border-line" />
-          {spend.days.map((d, i) => (
-            <div key={d.day} className="relative flex h-full min-w-0 flex-1 flex-col-reverse">
-              {d.usd > 0 ? (
-                <div
-                  className="flex flex-col-reverse gap-1 overflow-hidden rounded-chip"
-                  style={{ height: `${top > 0 ? (d.usd / top) * 100 : 0}%` }}
-                >
-                  {spend.complete ? (
-                    d.by_factory.map((f) => (
-                      <span
-                        key={f.factory_id}
-                        className={`block ${fillOf.get(f.factory_id) ?? 'bg-factory-1'}`}
-                        style={{ height: `${d.usd > 0 ? (f.usd / d.usd) * 100 : 0}%` }}
-                      />
-                    ))
-                  ) : (
-                    <span className="block h-full bg-hover" />
-                  )}
-                </div>
-              ) : null}
-              {labelOf(spend.window, i, d.day, spend.days.length) ? (
-                <b className="absolute -bottom-6 inset-x-0 text-center text-meta font-normal text-muted">
-                  {labelOf(spend.window, i, d.day, spend.days.length)}
-                </b>
-              ) : null}
-            </div>
-          ))}
+          {slots.map((slot, i) => {
+            const d = byDay.get(slot);
+            const today = slot === todayOf;
+            const label = labelOf(spend.window, i, slot, slots.length, today);
+            return (
+              <div
+                key={slot}
+                data-day={slot}
+                data-today={today || undefined}
+                className="relative flex h-full min-w-0 flex-1 flex-col-reverse items-center"
+              >
+                {d && d.usd > 0 ? (
+                  <div
+                    className={`flex w-full max-w-12 flex-col-reverse gap-1 overflow-hidden rounded-chip ${today ? 'opacity-45' : ''}`}
+                    style={{ height: `${top > 0 ? (d.usd / top) * 100 : 0}%` }}
+                  >
+                    {spend.complete ? (
+                      d.by_factory.map((f) => (
+                        <span
+                          key={f.factory_id}
+                          className={`block ${fillOf.get(f.factory_id) ?? 'bg-hover'}`}
+                          style={{ height: `${(f.usd / d.usd) * 100}%` }}
+                        />
+                      ))
+                    ) : (
+                      <span className="block h-full bg-hover" />
+                    )}
+                  </div>
+                ) : null}
+                {label ? (
+                  <b className="absolute -bottom-6 inset-x-0 text-center text-meta font-normal text-muted">{label}</b>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       </div>
       {spend.complete ? null : (
@@ -72,15 +83,23 @@ export function SpendDays({ spend }: { spend: OrgSpend }) {
         <caption>Spend by day, {spend.days.length} days</caption>
         <thead>
           <tr>
-            <th scope="col">Day</th>
-            <th scope="col">Total</th>
-            <th scope="col">By factory</th>
+            <th scope="col" className="font-medium">
+              Day
+            </th>
+            <th scope="col" className="font-medium">
+              Total
+            </th>
+            <th scope="col" className="font-medium">
+              By factory
+            </th>
           </tr>
         </thead>
         <tbody>
           {spend.days.map((d) => (
             <tr key={d.day}>
-              <th scope="row">{shortDay(d.day)}</th>
+              <th scope="row" className="font-medium">
+                {shortDay(d.day)}
+              </th>
               <td>{money(d.usd)}</td>
               <td>
                 {spend.complete
@@ -96,9 +115,9 @@ export function SpendDays({ spend }: { spend: OrgSpend }) {
   );
 }
 
-/** A bar's label: every day of a week, then every fifth day of a month and every fourteenth of 90 days. */
-function labelOf(window: OrgSpend['window'], index: number, day: string, count: number): string | null {
-  if (window === 'week') return weekdayOf(day);
+/** A slot's label: every day of a week ("Today" for today), then every fifth day of a month and every fourteenth of 90 days. */
+function labelOf(window: OrgSpend['window'], index: number, day: string, count: number, today: boolean): string | null {
+  if (window === 'week') return today ? 'Today' : weekdayOf(day);
   const step = count <= 31 ? 5 : 14;
   return index % step === 0 ? shortDay(day) : null;
 }

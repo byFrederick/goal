@@ -177,6 +177,7 @@ describe('the notification table', () => {
     expect(approval.checked).toBe(true);
     expect(approval.getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(approval);
+    await new Promise((r) => setTimeout(r, 5));
     expect(approval.checked).toBe(true);
     expect((await box('Daily digest at 08:00, Slack')).getAttribute('aria-disabled')).toBe('true');
     expect(saves()).toHaveLength(0);
@@ -194,6 +195,7 @@ describe('the notification table', () => {
     expect(approval.getAttribute('aria-disabled')).toBe('true');
     expect(approval.checked).toBe(false);
     fireEvent.click(approval);
+    await new Promise((r) => setTimeout(r, 5));
     expect(approval.checked).toBe(false);
     expect(goald.requests).toHaveLength(0);
   });
