@@ -41,7 +41,7 @@ function ResetModel({ agent, fallback }: { agent: string; fallback: string | und
   const session = useDraftSession();
   const agents = useSection('agents');
   const label = fallback ? `Reset to default, ${fallback}` : 'Reset to default';
-  const link = 'self-start font-control text-meta text-run-ink hover:text-run';
+  const link = 'self-start font-control text-meta text-run-ink hover:text-link';
   if (!holds(factory, 'definition:edit')) {
     return (
       <NotAvailable>
@@ -177,7 +177,7 @@ export function AgentSettings({ agent }: { agent: string }) {
                 to="/o/$org/f/$factory/agents/$agent"
                 params={{ ...params, agent }}
                 search={{ view: 'tools' }}
-                className="font-control text-run-ink hover:text-run"
+                className="font-control text-run-ink hover:text-link"
               >
                 Show the lists
               </Link>

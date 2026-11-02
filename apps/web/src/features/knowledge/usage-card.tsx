@@ -186,7 +186,7 @@ function DocumentUses({ id, doc }: { id: string; doc: KnowledgeDocumentUsage }) 
           <Link
             to="/o/$org/f/$factory/items/$ref"
             params={{ org: org.slug, factory: use.factory.name, ref: refParam(use.item.ref) }}
-            className="min-w-0 break-words text-ink underline underline-offset-3 hover:text-run"
+            className="min-w-0 break-words text-ink underline underline-offset-3 hover:text-link"
           >
             {use.item.title}
           </Link>
@@ -195,7 +195,7 @@ function DocumentUses({ id, doc }: { id: string; doc: KnowledgeDocumentUsage }) 
             to="/o/$org/f/$factory/items/$ref"
             params={{ org: org.slug, factory: use.factory.name, ref: refParam(use.item.ref) }}
             hash={`run-${use.run_id}`}
-            className="text-ink underline underline-offset-3 hover:text-run"
+            className="text-ink underline underline-offset-3 hover:text-link"
           >
             Run
           </Link>

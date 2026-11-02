@@ -51,7 +51,7 @@ export function WhoWorks({
           <Link
             to="."
             search={(prev) => ({ ...prev, mode: 'yaml' as const })}
-            className="text-[13px] text-ink-soft underline underline-offset-3 hover:text-run"
+            className="text-[13px] text-ink-soft underline underline-offset-3 hover:text-link"
             aria-label={`Edit the intake of ${label} in YAML`}
           >
             Edit in YAML

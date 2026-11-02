@@ -34,7 +34,7 @@ function SignInLine() {
                   'flex size-9.5 items-center justify-center rounded-full border-2 bg-panel text-ink',
                   queued && 'border-rule',
                   !queued && !done && 'border-run',
-                  done && 'border-ok text-ok',
+                  done && 'border-ok text-ok-ink',
                 )}
               >
                 {done ? <Check size={16} strokeWidth={2.4} /> : null}

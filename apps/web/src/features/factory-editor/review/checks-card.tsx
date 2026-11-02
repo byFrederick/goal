@@ -53,7 +53,7 @@ export function ProblemAlert({ errors, next, model }: { errors: DefinitionProble
       <ul className="m-0 flex list-disc flex-col gap-1 pl-9 text-secondary text-rework-ink">
         {errors.map((p) => (
           <li key={`${p.code}${p.pointer ?? ''}${p.message}`}>
-            <FixLink problem={p} model={model} className={cn(linkClass, 'text-rework-ink hover:text-rework')}>
+            <FixLink problem={p} model={model} className={cn(linkClass, 'text-rework-ink hover:text-rework-ink')}>
               {sectionName(p, model)}: {p.message}
             </FixLink>
           </li>
@@ -66,8 +66,8 @@ export function ProblemAlert({ errors, next, model }: { errors: DefinitionProble
 /** A passed check is a plain green check (build/definition-publish); a warning or failure keeps its icon. */
 function CheckIcon({ status }: { status: CheckResult['status'] }) {
   if (status === 'passed')
-    return <Check size={16} strokeWidth={1.75} aria-hidden="true" className="mt-px shrink-0 text-ok" />;
-  return <TriangleAlert size={16} strokeWidth={1.75} aria-hidden="true" className="mt-1 shrink-0 text-rework" />;
+    return <Check size={16} strokeWidth={1.75} aria-hidden="true" className="mt-px shrink-0 text-ok-ink" />;
+  return <TriangleAlert size={16} strokeWidth={1.75} aria-hidden="true" className="mt-1 shrink-0 text-rework-ink" />;
 }
 
 const statusText = { passed: 'Passed', warning: 'Warning', failed: 'Failed' } as const;
@@ -117,7 +117,7 @@ export function ChecksCard({
                   {own.map((p) => (
                     <p key={`${p.code}${p.pointer ?? ''}${p.message}`} className="m-0">
                       <span className="text-rework-ink">{p.message}.</span>{' '}
-                      <FixLink problem={p} model={model} className={cn(linkClass, 'hover:text-run')}>
+                      <FixLink problem={p} model={model} className={cn(linkClass, 'hover:text-link')}>
                         Fix it in {sectionName(p, model)}
                       </FixLink>
                     </p>
@@ -130,7 +130,7 @@ export function ChecksCard({
             .filter((p) => p.severity === 'info')
             .map((p) => (
               <li key={`info${p.code}${p.message}`} className="flex gap-3 border-t border-line py-3 text-body">
-                <Info size={16} strokeWidth={1.75} aria-hidden="true" className="mt-1 shrink-0 text-run" />
+                <Info size={16} strokeWidth={1.75} aria-hidden="true" className="mt-1 shrink-0 text-link" />
                 <span>{p.message}</span>
               </li>
             ))}

@@ -42,7 +42,7 @@ function useNow(active: boolean): number {
   return now;
 }
 
-const linkClass = 'text-ink underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-run';
+const linkClass = 'text-ink underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-link';
 
 export function StatusLine({
   session,
@@ -112,7 +112,7 @@ export function StatusLine({
           to="/o/$org/f/$factory/definition/$section"
           params={{ ...params, section: place.section }}
           search={placeSearch(place)}
-          className="inline-flex items-center gap-1 text-rework-ink underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-rework"
+          className="inline-flex items-center gap-1 text-rework-ink underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-rework-ink"
         >
           <TriangleAlert size={14} strokeWidth={1.75} aria-hidden="true" />
           {plural(problemCount, 'problem')}
@@ -138,8 +138,8 @@ export function StatusLine({
 }
 
 function StatusIcon({ status }: { status: SessionState['status'] }) {
-  if (status === 'saved') return <Check size={16} strokeWidth={1.8} aria-hidden="true" className="text-ok" />;
+  if (status === 'saved') return <Check size={16} strokeWidth={1.8} aria-hidden="true" className="text-ok-ink" />;
   if (status === 'saving')
     return <LoaderCircle size={16} strokeWidth={1.8} aria-hidden="true" className="motion-safe:animate-spin" />;
-  return <CircleAlert size={16} strokeWidth={1.8} aria-hidden="true" className="text-rework" />;
+  return <CircleAlert size={16} strokeWidth={1.8} aria-hidden="true" className="text-rework-ink" />;
 }

@@ -66,7 +66,7 @@ export function NewConnectionPage() {
               params={{ org: org.slug }}
               search={{ next }}
               replace
-              className="text-run no-underline transition-colors duration-(--duration-quick) hover:text-run-ink"
+              className="text-link no-underline transition-colors duration-(--duration-quick) hover:text-run-ink"
             >
               Back
             </Link>

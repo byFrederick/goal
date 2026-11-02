@@ -55,6 +55,7 @@
 
   /* Meaning: running is blue, waiting on you is orange, sent back and destructive are red, the constraint is yellow, done is green. */
   --color-run: #2b5bd7;
+  --color-link: #2b5bd7;
   --color-run-ink: #1e46b0;
   --color-run-tint: #eef2fc;
   --color-you: #c2410c;
@@ -386,6 +387,7 @@
   --color-action: #ededec;
   --color-action-ink: #111111;
   --color-run: #3d6be0;
+  --color-link: #7396f2;
   --color-run-ink: #a9c1fa;
   --color-run-tint: #17213a;
   --color-you: #b84d1c;
@@ -432,6 +434,7 @@
     --color-action: #ededec;
     --color-action-ink: #111111;
     --color-run: #3d6be0;
+    --color-link: #7396f2;
     --color-run-ink: #a9c1fa;
     --color-run-tint: #17213a;
     --color-you: #b84d1c;

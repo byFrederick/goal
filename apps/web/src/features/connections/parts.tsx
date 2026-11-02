@@ -76,7 +76,7 @@ export function Modes({ kind }: { kind: ConnectionKind | undefined }) {
 export function KindNotes({ kind }: { kind: ConnectionKind | undefined }) {
   if (!kind?.model && !kind?.mint) return null;
   return (
-    <span className="flex flex-col gap-1 text-secondary text-run">
+    <span className="flex flex-col gap-1 text-secondary text-link">
       {kind.model ? (
         <span className="inline-flex items-center gap-1">
           <Lock size={13} strokeWidth={1.75} aria-hidden="true" />

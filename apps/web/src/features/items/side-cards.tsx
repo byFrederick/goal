@@ -86,7 +86,7 @@ export function DetailsCard({
   const pullLinks = pulls.map((url, i) => (
     <Fragment key={url}>
       {i > 0 ? ', ' : null}
-      <a href={url} target="_blank" rel="noreferrer" className="font-medium text-run no-underline hover:underline">
+      <a href={url} target="_blank" rel="noreferrer" className="font-medium text-link no-underline hover:underline">
         {pullRequestNumber(url)}
       </a>
     </Fragment>
@@ -114,7 +114,7 @@ export function DetailsCard({
           <Link
             to="/o/$org/f/$factory/items/$ref"
             params={{ org: org.slug, factory: factoryOf(ref), ref: refParam(ref) }}
-            className="font-medium text-run no-underline hover:underline"
+            className="font-medium text-link no-underline hover:underline"
           >
             {ref}
           </Link>{' '}

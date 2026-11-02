@@ -166,7 +166,7 @@ function WhatIf({
             <Link
               to="/o/$org/f/$factory/definition"
               params={params}
-              className="font-semibold text-run underline hover:text-run-ink"
+              className="font-semibold text-link underline hover:text-run-ink"
             >
               Open the definition
             </Link>
