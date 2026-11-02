@@ -48,7 +48,7 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
                 <StartLink>New factory</StartLink>
               </Button>
             ) : null}
-            <NewItemFromSidebar compact={phone} />
+            <NewItemFromSidebar compact={phone} bar />
           </>
         )
       }

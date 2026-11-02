@@ -70,12 +70,15 @@ function NewItem({ factory, compact, trigger, title }: NewItemProps) {
 export function NewItemFromSidebar({
   button = true,
   compact = false,
+  bar = false,
   openWith,
   onOpened,
 }: {
   button?: boolean;
   /** The 44 px icon button without label or keycap, for the phone's top bar. */
   compact?: boolean;
+  /** The normal top-bar button (label and C shortcut, no full-width row), for the top bar from 768 px. */
+  bar?: boolean;
   /** A request to open the composer with a title, from the sidebar's search; `onOpened` clears it. */
   openWith?: { title: string } | null;
   onOpened?: () => void;
@@ -135,6 +138,11 @@ export function NewItemFromSidebar({
         shown && button && compact ? (
           <Button variant="primary" size="icon" className="size-11" aria-label="New item" aria-keyshortcuts="C">
             <Plus size={18} strokeWidth={1.75} aria-hidden="true" />
+          </Button>
+        ) : shown && button && bar ? (
+          <Button variant="primary" aria-keyshortcuts="C">
+            <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
+            New item
           </Button>
         ) : shown && button ? (
           <Button variant="secondary" aria-keyshortcuts="C" className="w-full">

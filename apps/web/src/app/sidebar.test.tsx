@@ -326,6 +326,18 @@ describe('the sidebar', () => {
     expect(within(sidebar).getByRole('link', { name: /support factory.*andon pulled/ })).toBeTruthy();
   });
 
+  it('keeps the Needs you row as tall as its siblings, with the badge centred and no stray text node', async () => {
+    renderSidebar();
+    const link = within(await nav()).getByRole('link', { name: /Needs you/ });
+
+    expect(link.className).toContain('h-9');
+    expect(link.className).toContain('items-center');
+    const badge = within(link).getByText('waiting on you').parentElement as HTMLElement;
+    expect(badge.className).toContain('self-center');
+    expect([...link.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE)).toEqual([]);
+    expect(link.getAttribute('aria-label') ?? link.textContent).toContain('waiting on you');
+  });
+
   it('shows the spend this week against the budget, as a link to Spend and billing', async () => {
     renderSidebar();
     const sidebar = await nav();

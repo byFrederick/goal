@@ -1,12 +1,13 @@
 // No page scrolls sideways (MASTER.md "Layout" and "Accessibility and checks"): the document is never wider than
-// the window (documentElement.scrollWidth against clientWidth, which counts a button's hit area), at 1440x1000, 1280x800, 1024x768, 768x1024 and 390x844, in light and
+// the window (documentElement.scrollWidth against clientWidth, which counts a button's hit area), at 1440, 1280, 1024, 768 and 390 px wide, in light and
 // dark, against the mock. The routes: Runs, Items, Needs you, Item (/items/12), New trigger, Jonah, Home,
 // Definition line, Board, Account, Factory settings, Assembly item (/items/17), Agents, Agent (reviewer),
 // Connections, GitHub connection, Knowledge source (handbook) and Spend. A wide table scrolls in its own box, so
-// only the document's width is asserted. Each visit attaches a screenshot. Not run in the box (no browser): the
+// the document's width is asserted, and so is that no visible element ends past the right edge outside a
+// horizontal scroller (expectNoClippedElements): the shell clips overflow, so scrollWidth alone misses cut-off content. Each visit attaches a screenshot. Not run in the box (no browser): the
 // pull request says so.
 import { expect, type Page, test } from '@playwright/test';
-import { expectNoHorizontalScroll } from './support';
+import { expectNoClippedElements, expectNoHorizontalScroll } from './support';
 
 const widths = [
   { width: 1440, height: 1000 },
@@ -172,6 +173,7 @@ for (const scheme of ['light', 'dark'] as const) {
         await page.emulateMedia({ colorScheme: scheme });
         await entry.open(page);
         await expectNoHorizontalScroll(page);
+        await expectNoClippedElements(page);
         await testInfo.attach(`${entry.name}-${size.width}-${scheme}`, {
           body: await page.screenshot(),
           contentType: 'image/png',

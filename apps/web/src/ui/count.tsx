@@ -12,7 +12,7 @@ export function Count({ value, label }: { value: number; label: string }) {
   return (
     <span
       className={cn(
-        'ml-auto inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-you px-[5px] text-meta font-semibold tabular-nums text-white motion-safe:animate-notification-badge motion-reduce:animate-fade-in',
+        'ml-auto inline-flex h-[18px] flex-none self-center leading-none min-w-[18px] items-center justify-center rounded-full bg-you px-[5px] text-meta font-semibold tabular-nums text-white motion-safe:animate-notification-badge motion-reduce:animate-fade-in',
       )}
     >
       <NumberRoll value={value} />

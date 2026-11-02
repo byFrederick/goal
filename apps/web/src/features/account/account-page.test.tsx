@@ -203,6 +203,19 @@ describe('the account page', () => {
     await waitFor(() => expect(current().map((a) => a.textContent)).toEqual(['Appearance']));
   });
 
+  it('lays the sections out as a scrolling row below 1024 px and a column from there, content on the full width', async () => {
+    renderAccount(session);
+    await screen.findByRole('heading', { level: 1, name: 'Your account' });
+    const nav = screen.getByRole('navigation', { name: 'Account sections' });
+
+    expect(nav.className).toContain('flex-row');
+    expect(nav.className).toContain('overflow-x-auto');
+    expect(nav.className).toContain('lg:flex-col');
+    const grid = nav.parentElement as HTMLElement;
+    expect(grid.className).toContain('lg:grid-cols-');
+    expect(grid.className).not.toContain('md:grid-cols-');
+  });
+
   it('draws the theme swatches from theme tokens only, never a raw palette class', async () => {
     renderAccount(session);
     const dark = await screen.findByRole('button', { name: 'Dark' });

@@ -304,7 +304,9 @@ function AgentLine({ item }: { item: ItemCard }) {
       >
         {roleMark(item.agent ?? '')}
       </span>
-      <span className="min-w-0 truncate">{item.agent}</span>
+      <span className="min-w-0 truncate" title={item.agent ?? undefined}>
+        {item.agent}
+      </span>
       <span className="ml-auto shrink-0 whitespace-nowrap text-muted tabular-nums">{formatUsd(item.cost_usd)}</span>
     </div>
   );
