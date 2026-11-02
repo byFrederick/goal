@@ -33,7 +33,8 @@ export function Field({ label, aside, help, error, className, children }: FieldP
   const describedBy = [error ? errorId : null, help ? helpId : null].filter(Boolean).join(' ') || undefined;
 
   return (
-    <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
+    // An invalid field shakes once when the error appears (MOTION.md, Invalid form field); the message fades in.
+    <div className={cn('flex min-w-0 flex-col gap-1.5', error && 'animate-error-shake', className)}>
       {aside ? (
         <div className="flex min-h-6 flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <label htmlFor={id} className="text-sm font-medium text-ink">
@@ -48,7 +49,7 @@ export function Field({ label, aside, help, error, className, children }: FieldP
       )}
       <FieldContext value={{ id, describedBy, invalid: Boolean(error) }}>{children}</FieldContext>
       {error ? (
-        <p id={errorId} className="col-span-full m-0 text-[13px] leading-snug text-rework-ink">
+        <p id={errorId} className="col-span-full m-0 animate-fade-in text-[13px] leading-snug text-rework-ink">
           {error}
         </p>
       ) : null}
