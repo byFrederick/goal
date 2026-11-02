@@ -226,6 +226,24 @@ describe('the Credentials page', () => {
     expect(screen.getAllByRole('button', { name: /New credential/ }).length).toBeGreaterThan(0);
   });
 
+  it('puts New credential in the top bar, and nowhere else on the page when there are credentials', async () => {
+    state.rows = picture();
+    renderPage();
+
+    await screen.findByRole('table', { name: /Credentials of Acme/ });
+    const bar = screen.getByRole('region', { name: 'Top bar' });
+    expect(within(bar).getByRole('button', { name: /New credential/ })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /New credential/ })).toHaveLength(1);
+  });
+
+  it('leaves the top bar empty for a member who only reads', async () => {
+    state.rows = picture();
+    renderPage({ can: ['credential:read'] });
+
+    await screen.findByRole('table', { name: /Credentials of Acme/ });
+    expect(within(screen.getByRole('region', { name: 'Top bar' })).queryByRole('button')).toBeNull();
+  });
+
   it('shows the picture’s seven rows with their type, factories, users, last use and expiry', async () => {
     state.rows = picture();
     renderPage();

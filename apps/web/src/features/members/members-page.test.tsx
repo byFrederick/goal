@@ -306,6 +306,14 @@ describe('members and roles, ready', () => {
     await waitFor(() => expect(setFactoryRole).toHaveBeenCalledWith(org.id, 'u3', 'f-goal', 'viewer'));
   });
 
+  it('puts Invite in the top bar, once, for an owner', async () => {
+    renderMembers();
+    expect(await screen.findByText('4 members, 2 invites waiting')).toBeTruthy();
+    const bar = screen.getByRole('region', { name: 'Top bar' });
+    expect(within(bar).getByRole('button', { name: /^Invite/ })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /^Invite/ })).toHaveLength(1);
+  });
+
   it('hides invitation and invite link controls from a member', async () => {
     renderMembers({
       role: 'member',
@@ -314,6 +322,7 @@ describe('members and roles, ready', () => {
     });
     expect(await screen.findByText('4 members')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Invite/ })).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Top bar' })).queryByRole('button')).toBeNull();
     expect(screen.queryByRole('region', { name: 'Invite link' })).toBeNull();
     expect(screen.queryByRole('region', { name: /Waiting to join/ })).toBeNull();
   });

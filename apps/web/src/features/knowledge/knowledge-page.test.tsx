@@ -310,7 +310,9 @@ describe('the Knowledge page', () => {
     expect(
       screen.getByText('What agents can look up before they act: synced documents, searched on every run.'),
     ).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Add a source' }).getAttribute('href')).toBe('/o/acme/knowledge/new');
+    const bar = screen.getByRole('region', { name: 'Top bar' });
+    expect(within(bar).getByRole('link', { name: 'Add a source' }).getAttribute('href')).toBe('/o/acme/knowledge/new');
+    expect(screen.getAllByRole('link', { name: 'Add a source' })).toHaveLength(1);
 
     const sources = screen.getByRole('region', { name: 'Sources' });
     expect(within(sources).getByText('3')).toBeTruthy();
@@ -360,6 +362,7 @@ describe('the Knowledge page', () => {
     renderKnowledge({ sources: [], can: [] });
     expect(await screen.findByText('Owners and admins of Acme add knowledge sources.')).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Add a source' })).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Top bar' })).queryByRole('link')).toBeNull();
   });
 
   it('narrows the Sources card to the factory the URL names, and says so when there is no such factory', async () => {

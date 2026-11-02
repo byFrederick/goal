@@ -158,6 +158,7 @@ describe('Organization settings page', () => {
   it('is read-only without org:manage, with who changes it', () => {
     renderPage({ held: [] });
     expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Top bar' })).queryByRole('button')).toBeNull();
     expect(screen.getByLabelText('Name').hasAttribute('readonly')).toBe(true);
     expect(screen.queryByRole('heading', { name: 'Danger zone' })).toBeNull();
   });
@@ -205,9 +206,18 @@ describe('controls the API does not have yet', () => {
 });
 
 describe('saving General and Slots', () => {
+  it('puts Save changes in the top bar, once, disabled until the form changes', () => {
+    renderPage();
+    const save = within(screen.getByRole('region', { name: 'Top bar' })).getByRole('button', { name: 'Save changes' });
+    expect(screen.getAllByRole('button', { name: 'Save changes' })).toHaveLength(1);
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Acme Robotics' } });
+    expect((save as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('sends only the changed name', async () => {
     renderPage();
-    const save = screen.getByRole('button', { name: 'Save changes' });
+    const save = within(screen.getByRole('region', { name: 'Top bar' })).getByRole('button', { name: 'Save changes' });
     expect((save as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Acme Robotics' } });
     fireEvent.click(save);
