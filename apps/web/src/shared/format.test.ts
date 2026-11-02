@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatHours, ordinal } from './format';
+import { formatDuration, formatDurationCompact, formatHours, formatUsdCost, ordinal } from './format';
 
 describe('formatHours', () => {
   it('says a duration in hours adaptively, as the Item page does', () => {
@@ -23,5 +23,31 @@ describe('ordinal', () => {
     expect(ordinal(13)).toBe('13th');
     expect(ordinal(21)).toBe('21st');
     expect(ordinal(112)).toBe('112th');
+  });
+});
+
+describe('formatDurationCompact', () => {
+  it('says a duration as the Teardown canvas draws it', () => {
+    expect(formatDurationCompact(0)).toBe('0 s');
+    expect(formatDurationCompact(45_000)).toBe('45 s');
+    expect(formatDurationCompact(38 * 60_000)).toBe('38 m');
+    expect(formatDurationCompact((3 * 60 + 10) * 60_000)).toBe('3 h 10 m');
+    expect(formatDurationCompact(3 * 3_600_000)).toBe('3 h');
+    expect(formatDurationCompact(52 * 3_600_000)).toBe('2 d 4 h');
+    expect(formatDurationCompact(48 * 3_600_000)).toBe('2 d');
+  });
+
+  it('leaves formatDuration as it was', () => {
+    expect(formatDuration(38 * 60_000)).toBe('38 min');
+  });
+});
+
+describe('formatUsdCost', () => {
+  it('shows a cost under a cent as <$0.01 and zero as $0.00', () => {
+    expect(formatUsdCost(0)).toBe('$0.00');
+    expect(formatUsdCost(0.005)).toBe('<$0.01');
+    expect(formatUsdCost(0.0001)).toBe('<$0.01');
+    expect(formatUsdCost(0.01)).toBe('$0.01');
+    expect(formatUsdCost(2.4)).toBe('$2.40');
   });
 });

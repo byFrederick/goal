@@ -187,6 +187,28 @@ describe('the Teardown tab', () => {
     });
   });
 
+  it('writes durations compactly and costs under a cent as <$0.01', async () => {
+    renderTab(async () => ({ ...finished, cost_usd: 0.004, lead_time_seconds: 38 * 60 }));
+    const totals = await screen.findByRole('region', { name: 'Totals' });
+    expect(within(totals).getByText('38 m')).toBeTruthy();
+    expect(within(totals).getByText('<$0.01')).toBeTruthy();
+  });
+
+  it('gives Runs the full width when nothing went back and no person stepped in', async () => {
+    renderTab(async () => ({ ...finished, loops: [], touches: [] }));
+    const row = (await screen.findByTestId('runs-row')) as HTMLElement;
+    expect(row.className).not.toContain('min-[1180px]');
+    expect(row.children.length).toBe(1);
+  });
+
+  it('keeps two columns when a side list is present, and Runs a stacked list below 1000 px', async () => {
+    renderTab(async () => finished);
+    const row = await screen.findByTestId('runs-row');
+    expect(row.className).toContain('min-[1180px]:grid-cols');
+    expect(row.children.length).toBe(2);
+    expect(screen.getByRole('list', { name: 'Runs' }).className).toContain('max-[1000px]:block');
+  });
+
   it('says there is no breakdown yet for an item no agent has picked up', async () => {
     renderTab(async () => ({
       ...finished,
