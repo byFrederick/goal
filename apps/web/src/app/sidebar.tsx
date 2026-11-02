@@ -69,7 +69,7 @@ export function Sidebar({ org }: { org: OrgSummary }) {
       {size.collapsed ? <NewItemFromSidebar button={false} /> : null}
       <div
         ref={column}
-        className="sticky top-0 hidden h-dvh shrink-0 transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex"
+        className="shell-sidebar sticky top-0 hidden h-dvh shrink-0 transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex"
         style={{ width: `var(${sidebarWidthVar})`, [sidebarWidthVar]: `${shownWidth(size)}px` } as CSSProperties}
       >
         {size.collapsed ? (

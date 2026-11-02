@@ -6,7 +6,7 @@ import { createRoot } from 'react-dom/client';
 import { ApiError } from './api/client';
 import { keys } from './api/queries';
 import { safeNext, setSessionHandlers } from './api/session';
-import { ErrorScreen, NotFoundScreen, PendingScreen } from './app/states';
+import { routerOptions } from './app/router-options';
 import { registerServiceWorker } from './pwa/register';
 import { routeTree } from './routeTree.gen';
 
@@ -23,14 +23,7 @@ const queryClient = new QueryClient({
 const router = createRouter({
   routeTree,
   context: { queryClient },
-  defaultPreload: 'intent',
-  // Queries own freshness; the router should always ask them.
-  defaultPreloadStaleTime: 0,
-  defaultPendingComponent: PendingScreen,
-  defaultPendingMs: 150,
-  defaultErrorComponent: ErrorScreen,
-  defaultNotFoundComponent: () => <NotFoundScreen />,
-  scrollRestoration: true,
+  ...routerOptions,
 });
 
 declare module '@tanstack/react-router' {

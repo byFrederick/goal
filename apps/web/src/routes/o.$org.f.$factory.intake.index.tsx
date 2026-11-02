@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { pageTitle } from '../app/route-focus';
+import { PendingScreen } from '../app/states';
 import { IntakePage } from '../features/intake/intake-page';
 import { type SuggestionGroup, suggestionGroups } from '../features/intake/suggestions';
 
@@ -7,6 +8,7 @@ import { type SuggestionGroup, suggestionGroups } from '../features/intake/sugge
 // route does not wait for the data, so loading, error and empty show on the page. The suggestion tab is in
 // the URL (?group=), so a link opens the same tab.
 export const Route = createFileRoute('/o/$org/f/$factory/intake/')({
+  pendingComponent: PendingScreen,
   validateSearch: (search: Record<string, unknown>): { group?: SuggestionGroup | undefined } => ({
     group: suggestionGroups.find((g) => g === search.group),
   }),

@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Suspense } from 'react';
 import { pageTitle } from '../app/route-focus';
+import { PendingScreen } from '../app/states';
 import { lazyRetrying } from '../shared/lazy';
 
 const BakeOffPage = lazyRetrying(() => import('../features/jonah/bake-off-page').then((m) => m.BakeOffPage));
@@ -9,6 +10,7 @@ const BakeOffPage = lazyRetrying(() => import('../features/jonah/bake-off-page')
 // passed, what it cost and what the report recommends. The page reads the bake-off itself and shows its own
 // loading and error states, so the route never waits on it.
 export const Route = createFileRoute('/o/$org/f/$factory/jonah/bake-offs/$bakeOff')({
+  pendingComponent: PendingScreen,
   head: ({ match: { context } }) => pageTitle('Bake-offs', context.factory.name),
   component: function BakeOffRoute() {
     return (

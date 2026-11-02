@@ -2,7 +2,7 @@ import { createFileRoute, notFound } from '@tanstack/react-router';
 import { ApiError } from '../api/client';
 import { ensureLoaded, knowledgeSourceQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
-import { NotFoundScreen } from '../app/states';
+import { NotFoundScreen, PendingScreen } from '../app/states';
 import { type SourceSearch, sourceSearch } from '../features/knowledge/search';
 import { SourcePage } from '../features/knowledge/source-page';
 
@@ -10,6 +10,7 @@ import { SourcePage } from '../features/knowledge/source-page';
 // documents (?document= opens one's indexed text), its settings, what may search it and Delete.
 // ?created says it was just added here.
 export const Route = createFileRoute('/o/$org/_org/knowledge/$source')({
+  pendingComponent: PendingScreen,
   validateSearch: (search: Record<string, unknown>): SourceSearch => sourceSearch(search),
   loader: async ({ context: { queryClient, org }, params }) => {
     try {
