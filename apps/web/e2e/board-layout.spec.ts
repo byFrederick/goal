@@ -141,10 +141,10 @@ test('fits the top bar at 768 with New item inside the viewport', async ({ page 
   await expectNoHorizontalScroll(page);
 });
 
-// The expedite lane is one band: it starts at the first column's left edge, ends at the last column's right
-// edge, and every column's expedite cell has its top and height. Nothing reaches past the viewport.
+// Every column has its own Expedite box: the same top and height in every column, headers of one height, and
+// from 1280 px every station fits without the board scrolling. Nothing outside the board's scroller passes the edge.
 for (const width of [1440, 1280, 1024, 768]) {
-  test(`the expedite band spans every column at ${width} px`, async ({ page }) => {
+  test(`the expedite boxes line up across the columns at ${width} px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/o/acme/f/goal/board');
     await expect(page.getByRole('region', { name: 'Stations', exact: true })).toBeVisible();
@@ -152,15 +152,23 @@ for (const width of [1440, 1280, 1024, 768]) {
 
     const geometry = await page.evaluate(() => {
       const stations = document.querySelector<HTMLElement>('section[aria-label="Stations"]');
-      const band = stations?.querySelector<HTMLElement>('[aria-label="Expedite lane"]')?.getBoundingClientRect();
       const columns = Array.from(stations?.querySelectorAll<HTMLElement>(':scope > div > section') ?? []);
+      const lastRight = columns[columns.length - 1]?.getBoundingClientRect().right ?? 0;
       return {
-        band: band ? { left: band.left, right: band.right, top: band.top, height: band.height } : null,
-        first: columns[0]?.getBoundingClientRect().left ?? 0,
-        last: columns[columns.length - 1]?.getBoundingClientRect().right ?? 0,
-        cells: columns.map((column) => {
-          const cell = column.querySelector('[data-zone="expedite"]')?.getBoundingClientRect();
-          return cell ? { top: cell.top, height: cell.height } : null;
+        scrollWidth: stations?.scrollWidth ?? 0,
+        clientWidth: stations?.clientWidth ?? 0,
+        lastRight,
+        sectionRight: stations?.getBoundingClientRect().right ?? 0,
+        boxes: columns.map((column) => {
+          const box = column.querySelector('[data-zone="expedite"]')?.getBoundingClientRect();
+          return box ? { top: box.top, height: box.height } : null;
+        }),
+        headers: columns.map((column) => column.querySelector(':scope > header')?.getBoundingClientRect().height ?? 0),
+        pastColumn: columns.flatMap((column) => {
+          const edge = column.getBoundingClientRect().right + 1;
+          return Array.from(column.querySelectorAll<HTMLElement>('*'))
+            .filter((el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().right > edge)
+            .map((el) => el.tagName);
         }),
         overflowing: Array.from(document.querySelectorAll<HTMLElement>('body *'))
           .filter((el) => !stations?.contains(el) && el.getBoundingClientRect().right > window.innerWidth + 1)
@@ -168,13 +176,18 @@ for (const width of [1440, 1280, 1024, 768]) {
       };
     });
 
-    expect(geometry.band).not.toBeNull();
-    expect(geometry.band?.left).toBeCloseTo(geometry.first, 0);
-    expect(geometry.band?.right).toBeCloseTo(geometry.last, 0);
-    for (const cell of geometry.cells) {
-      expect(cell?.top).toBeCloseTo(geometry.band ? geometry.band.top + 0 : 0, 0);
-      expect(cell?.height).toBeCloseTo(geometry.band?.height ?? 0, 0);
+    expect(geometry.boxes.length).toBeGreaterThan(0);
+    for (const box of geometry.boxes) {
+      expect(box).not.toBeNull();
+      expect(Math.abs((box?.top ?? 0) - (geometry.boxes[0]?.top ?? 0))).toBeLessThanOrEqual(1);
+      expect(Math.abs((box?.height ?? 0) - (geometry.boxes[0]?.height ?? 0))).toBeLessThanOrEqual(1);
     }
+    for (const height of geometry.headers) expect(Math.abs(height - (geometry.headers[0] ?? 0))).toBeLessThanOrEqual(1);
+    if (width >= 1280) {
+      expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
+      expect(geometry.lastRight).toBeLessThanOrEqual(geometry.sectionRight + 1);
+    }
+    expect(geometry.pastColumn).toEqual([]);
     expect(geometry.overflowing).toEqual([]);
   });
 }
@@ -185,5 +198,109 @@ test('on a phone the expedite lane shows only its chip and nothing reaches past 
   const lane = page.getByRole('tabpanel').getByRole('group', { name: 'Expedite lane' });
   await expect(lane).toContainText('Expedite');
   await expect(lane).not.toContainText('in use');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+// A crowded station: three expedite items in Build (one with a long title), one in Review. The cards stack in
+// their station's own box, never overlap and are exactly as wide as their column; titles take at most two lines.
+for (const width of [1440, 1280, 1024, 768]) {
+  test(`expedite cards stack inside their box and fill the column at ${width} px`, async ({ page, request }) => {
+    await request.post('/__mock/reset', { data: { expediteCrowd: true } });
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/o/acme/f/goal/board');
+    await expect(page.getByRole('region', { name: 'Stations', exact: true })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+
+    const g = await page.evaluate(() => {
+      const rect = (el: Element) => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      };
+      const columns = Array.from(
+        document.querySelectorAll<HTMLElement>('section[aria-label="Stations"] > div > section'),
+      );
+      return columns.map((column) => {
+        const box = column.querySelector('[data-zone="expedite"]');
+        return {
+          column: rect(column),
+          box: box ? { ...rect(box), height: box.getBoundingClientRect().height } : null,
+          cards: Array.from(box?.querySelectorAll<HTMLElement>('article') ?? []).map((card) => {
+            const link = card.querySelector<HTMLElement>('h3 a');
+            const lineHeight = link ? Number.parseFloat(getComputedStyle(link).lineHeight) : 0;
+            return {
+              ...rect(card),
+              clipped: card.scrollWidth > card.clientWidth,
+              title: link?.getAttribute('title') ?? '',
+              text: link?.textContent ?? '',
+              lines: link && lineHeight ? Math.round(link.getBoundingClientRect().height / lineHeight) : 0,
+            };
+          }),
+        };
+      });
+    });
+
+    const withCards = g.filter((c) => c.cards.length > 0);
+    expect(withCards.map((c) => c.cards.length).sort()).toEqual([1, 3].sort());
+    const tops = g.map((c) => c.box?.top ?? 0);
+    const tallest = Math.max(...g.map((c) => c.box?.height ?? 0));
+    for (const c of g) {
+      expect(c.box).not.toBeNull();
+      // (d) one top, and every box as tall as the tallest.
+      expect(Math.abs((c.box?.top ?? 0) - (tops[0] ?? 0))).toBeLessThanOrEqual(1);
+      expect(Math.abs((c.box?.height ?? 0) - tallest)).toBeLessThanOrEqual(1);
+      c.cards.forEach((card, i) => {
+        // (b) inside the column and the box; (c) as wide as the column, titles complete and clamped, nothing clipped.
+        expect(card.left).toBeGreaterThanOrEqual((c.column.left ?? 0) - 1);
+        expect(card.right).toBeLessThanOrEqual(c.column.right + 1);
+        expect(card.left).toBeGreaterThanOrEqual((c.box?.left ?? 0) - 1);
+        expect(card.right).toBeLessThanOrEqual((c.box?.right ?? 0) + 1);
+        expect(card.bottom).toBeLessThanOrEqual((c.box?.bottom ?? 0) + 1);
+        expect(card.right - card.left).toBeLessThanOrEqual(c.column.right - c.column.left + 1);
+        expect(card.clipped).toBe(false);
+        expect(card.title).toBe(card.text);
+        expect(card.lines).toBeLessThanOrEqual(2);
+        // (a) stacked one under the other, never overlapping.
+        const next = c.cards[i + 1];
+        if (next) {
+          expect(next.top).toBeGreaterThanOrEqual(card.bottom);
+          expect(next.top - card.bottom).toBeLessThanOrEqual(16);
+        }
+      });
+    }
+    // (b) no card meets a card of another column.
+    const all = g.flatMap((c, ci) => c.cards.map((card) => ({ ci, ...card })));
+    for (const a of all)
+      for (const b of all)
+        if (a.ci < b.ci)
+          expect(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top).toBe(true);
+  });
+}
+
+test('on a phone the crowded station stacks its expedite cards inside the lane', async ({ page, request }) => {
+  await request.post('/__mock/reset', { data: { expediteCrowd: true } });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/f/goal/board?station=build');
+  const lane = page.getByRole('tabpanel').getByRole('group', { name: 'Expedite lane' });
+  await expect(lane.locator('article')).toHaveCount(3);
+  const boxes = await lane.locator('article').evaluateAll((cards) =>
+    cards.map((card) => {
+      const r = card.getBoundingClientRect();
+      return {
+        left: r.left,
+        right: r.right,
+        top: r.top,
+        bottom: r.bottom,
+        clipped: card.scrollWidth > card.clientWidth,
+      };
+    }),
+  );
+  const laneBox = await lane.boundingBox();
+  boxes.forEach((card, i) => {
+    expect(card.clipped).toBe(false);
+    expect(card.left).toBeGreaterThanOrEqual((laneBox?.x ?? 0) - 1);
+    expect(card.right).toBeLessThanOrEqual((laneBox?.x ?? 0) + (laneBox?.width ?? 0) + 1);
+    const next = boxes[i + 1];
+    if (next) expect(next.top).toBeGreaterThanOrEqual(card.bottom);
+  });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

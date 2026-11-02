@@ -20,7 +20,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Menu, MenuChoice, MenuContent, MenuRadioGroup, MenuTrigger } from '../../ui/menu';
 import { SegmentedControl, type SegmentedOption } from '../../ui/segmented-control';
-import { ExpediteLabel, StationColumn } from './board-column';
+import { StationColumn } from './board-column';
 import { CardDnd } from './board-dnd';
 import {
   type AssemblyOption,
@@ -73,12 +73,12 @@ function Columns({ board, onMove, decides, finishedThisWeek, arrived }: ColumnsP
   );
 }
 
-/** From 768 px: the stations side by side, each a StationColumn on a shared row grid, with the expedite lane as one band across all of them. */
+/** From 768 px: the stations side by side, each a StationColumn on a shared row grid, each with its own Expedite box in a shared row; from 1280 px every station fits. */
 function DesktopColumns({ board, onMove, decides, finishedThisWeek, arrived }: ColumnsProps) {
   const showExpedite = drawsExpedite(board);
-  const tracks = `repeat(${board.stations.length}, minmax(176px, 1fr))`;
+  const tracks = `repeat(${board.stations.length}, minmax(144px, 1fr))`;
   return (
-    <section aria-label="Stations" className="-mx-1 hidden overflow-x-auto px-1 pb-2 md:block">
+    <section aria-label="Stations" className="-mx-1 hidden min-w-0 overflow-x-auto px-1 pb-2 md:block">
       <div
         className="grid gap-x-3 gap-y-2"
         style={{
@@ -86,15 +86,6 @@ function DesktopColumns({ board, onMove, decides, finishedThisWeek, arrived }: C
           gridTemplateRows: showExpedite ? 'auto auto 1fr' : 'auto 1fr',
         }}
       >
-        {showExpedite ? (
-          <fieldset
-            aria-label="Expedite lane"
-            className="col-span-full row-start-2 m-0 grid min-w-0 gap-x-3 border-0 rounded-cell bg-amber-tint py-2 transition-colors duration-(--duration-quick)"
-            style={{ gridTemplateColumns: tracks }}
-          >
-            <ExpediteLabel className="h-6 px-3" />
-          </fieldset>
-        ) : null}
         {board.stations.map((s, i) => (
           <StationColumn
             key={s.id}

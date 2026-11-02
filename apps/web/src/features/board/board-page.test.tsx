@@ -172,7 +172,7 @@ describe('BoardPage', () => {
     expect(card).not.toBeNull();
     // Expedite first within the station, as the server orders it.
     expect(within(investigate).getAllByRole('article')[0]).toBe(card);
-    // The card sits in its station's cell of the one tinted band; it keeps its own border and says Expedite in text.
+    // The card sits in its station's own Expedite box; it keeps its own border and says Expedite in text.
     expect(card?.parentElement?.getAttribute('data-zone')).toBe('expedite');
     expect(card?.classList).not.toContain('bg-rework-tint');
     expect(within(card as HTMLElement).getByText('Expedite')).toBeTruthy();
@@ -198,26 +198,33 @@ describe('BoardPage', () => {
     expect(within(buildPanel).queryByRole('link', { name: STANDARD })).toBeNull();
   });
 
-  it('draws the expedite lane as one band across the columns, labelled only Expedite', async () => {
+  it('draws one Expedite box per column, labelled only in the first', async () => {
     renderBoardPage({ page: ShellBoard, org, factory, board: board() });
 
     const columns = await screen.findByRole('region', { name: 'Stations' });
-    const bands = within(columns).getAllByRole('group', { name: 'Expedite lane' });
-    expect(bands).toHaveLength(1);
-    const band = bands[0] as HTMLElement;
-    expect(band.classList).toContain('bg-amber-tint');
-    expect(band.classList).toContain('col-span-full');
-    // The label (the band's) and the card's own Expedite mark; no caption, no use count.
-    expect(within(band).getByText('Expedite')).toBeTruthy();
-    expect(band.textContent).toBe('Expedite');
-    expect(within(columns).getAllByText('Expedite')).toHaveLength(2);
-    expect(within(columns).queryByText(/jumps every queue|1 of 1 in use/)).toBeNull();
-    // Every column has its cell of the band, itself untinted.
-    for (const column of within(columns).getAllByRole('region')) {
-      const cell = column.querySelector('[data-zone="expedite"]');
-      expect(cell).not.toBeNull();
-      expect(cell?.classList).not.toContain('bg-amber-tint');
+    const boxes = within(columns).getAllByRole('group', { name: 'Expedite lane' });
+    expect(boxes).toHaveLength(2);
+    for (const box of boxes) {
+      expect(box.getAttribute('data-zone')).toBe('expedite');
+      expect(box.classList).toContain('bg-amber-tint');
+      expect(box.classList).toContain('rounded-cell');
+      expect(box.classList).toContain('p-2');
+      expect(box.classList).toContain('min-h-11');
+      expect(box.classList).not.toContain('col-span-full');
     }
+    // Only the first box carries the label (an icon and "Expedite"); the expedite card's own mark is the other text.
+    const labels = boxes.map((box) => box.querySelectorAll(':scope > span > svg.lucide-zap').length);
+    expect(labels).toEqual([1, 0]);
+    expect(boxes[0]?.firstElementChild?.textContent).toBe('Expedite');
+    expect(within(columns).queryByText(/jumps every queue|1 of 1 in use/)).toBeNull();
+  });
+
+  it('fits every station from 1280 px with tracks that shrink to 144 px', async () => {
+    renderBoardPage({ page: ShellBoard, org, factory, board: board() });
+
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const grid = columns.firstElementChild as HTMLElement;
+    expect(grid.style.gridTemplateColumns).toBe('repeat(2, minmax(144px, 1fr))');
   });
 
   it('shows only the Expedite chip in the phone lane', async () => {
