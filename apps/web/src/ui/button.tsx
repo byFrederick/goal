@@ -59,8 +59,8 @@ export function Button({ variant = 'secondary', size = 'md', asChild, className,
   );
 
   if (asChild) {
-    return <Slot.Root className={classes} {...props} />;
+    return <Slot.Root className={classes} data-variant={variant} {...props} />;
   }
 
-  return <button type={type ?? 'button'} className={classes} {...props} />;
+  return <button type={type ?? 'button'} className={classes} data-variant={variant} {...props} />;
 }
