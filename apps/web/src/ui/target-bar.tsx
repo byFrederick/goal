@@ -34,8 +34,8 @@ export function TargetBar({
   const pct = (n: number) => (max > 0 ? Math.min(100, Math.max(0, (n / max) * 100)) : 0);
   return (
     <div className={cn('flex flex-col gap-2', className)}>
-      <div {...meterOf(label, value, max)} className="relative h-2.5 rounded-[4px] bg-hover md:h-3">
-        <div className="h-full overflow-hidden rounded-[4px]">
+      <div {...meterOf(label, value, max)} className="relative h-2.5 rounded-chip bg-hover md:h-3">
+        <div className="h-full overflow-hidden rounded-chip">
           <div
             className="h-full origin-left bg-ink transition-transform duration-(--duration-fast) ease-out motion-reduce:transition-none"
             style={{ width: '100%', transform: `scaleX(${pct(value) / 100})` }}
@@ -43,7 +43,7 @@ export function TargetBar({
         </div>
         <span
           aria-hidden="true"
-          className="absolute -top-1 h-[calc(100%+8px)] w-0.5 -translate-x-1/2 rounded-[1px] bg-ink md:-top-1.5 md:h-[calc(100%+12px)]"
+          className="absolute -top-1 h-[calc(100%+8px)] w-0.5 -translate-x-1/2 rounded-full bg-ink md:-top-1.5 md:h-[calc(100%+12px)]"
           style={{ left: `${pct(target)}%` }}
         />
       </div>

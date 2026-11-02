@@ -172,3 +172,25 @@ describe('New trigger picker', () => {
     expect(screen.queryByRole('heading', { level: 3, name: 'Built in' })).toBeNull();
   });
 });
+
+describe('New trigger phone tap targets', () => {
+  it('makes each source button at least 44 px below md and 40 px from md', async () => {
+    renderPicker();
+    await screen.findByRole('dialog', { name: 'New trigger' });
+    for (const name of ['Schedule', 'Webhook', 'GitHub']) {
+      const source = screen.getByRole('button', { name });
+      expect(source.classList.contains('h-11')).toBe(true);
+      expect(source.classList.contains('md:h-10')).toBe(true);
+    }
+  });
+
+  it('makes each GitHub event row at least 44 px below md and 40 px from md', async () => {
+    renderPicker();
+    await screen.findByRole('dialog', { name: 'New trigger' });
+    for (const name of ['Check run failed', 'Issue opened', 'Issue labeled']) {
+      const row = screen.getByRole('radio', { name }).closest('div') as HTMLElement;
+      expect(row.classList.contains('min-h-11')).toBe(true);
+      expect(row.classList.contains('md:min-h-10')).toBe(true);
+    }
+  });
+});

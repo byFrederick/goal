@@ -43,8 +43,10 @@ export function LinePreview() {
                     s.kind === 'human' && !drum && 'border-you-tint',
                   )}
                 >
-                  <span className="truncate text-sm font-medium">{stationLabel(s)}</span>
-                  <span className="truncate text-muted">
+                  <span className="truncate text-sm font-medium" title={stationLabel(s)}>
+                    {stationLabel(s)}
+                  </span>
+                  <span className="truncate text-muted" title={previewDetail(s, line)}>
                     {previewDetail(s, line)}
                     {drum ? <span className="sr-only">, the constraint</span> : null}
                   </span>
@@ -67,7 +69,7 @@ export function LinePreview() {
         <ul className="m-0 flex list-none flex-col gap-1 p-0">
           {rework.map((r) => (
             <li key={r} className="flex items-center gap-2 text-[13px] text-muted">
-              <span className="block h-2 w-6 shrink-0 overflow-hidden rounded-[2px]">
+              <span className="block h-2 w-6 shrink-0 overflow-hidden rounded-chip">
                 <Hatch tone="rework" />
               </span>
               Rework: {r}

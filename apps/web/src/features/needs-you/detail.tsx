@@ -197,7 +197,7 @@ function Brief({ entry }: { entry: InboxEntry }) {
         ))}
         <Fact label="Pull request">
           {pr ? (
-            <a href={pr} target="_blank" rel="noreferrer" className="text-run hover:text-run-ink">
+            <a href={pr} target="_blank" rel="noreferrer" className="text-link hover:text-run-ink">
               Open pull request
             </a>
           ) : (

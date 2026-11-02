@@ -548,7 +548,7 @@ function RowEdited({ index, label }: { index: number; label: string }) {
         type="button"
         onClick={() => void undo()}
         aria-label={`Undo the changes to ${fields} of ${label}`}
-        className="inline-flex min-h-6 items-center rounded-chip px-1 text-ink underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-run"
+        className="inline-flex min-h-6 items-center rounded-chip px-1 text-ink underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-link"
       >
         Undo
       </button>

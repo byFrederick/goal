@@ -94,7 +94,7 @@ export function EvalsTable({
                           // biome-ignore lint/suspicious/noArrayIndexKey: a fixed row of at most three dots, by place only
                           key={`${entry.name}-${i}`}
                           aria-hidden="true"
-                          className={cn('block size-2 rounded-xs', dotTone[tone])}
+                          className={cn('block size-2 rounded-chip', dotTone[tone])}
                         />
                       ))}
                     </span>

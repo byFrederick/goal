@@ -69,10 +69,10 @@ export function useFieldControl(): FieldControl | null {
   return use(FieldContext);
 }
 
-/** A text input: 32 px tall (16 px text on phones, so iOS does not zoom). */
 /** A control that only shows its value: the concrete fill of the canvas's view-only fields. */
 export const readOnlyControl = 'read-only:border-line read-only:bg-shell read-only:hover:border-line';
 
+/** A text input: 44 px tall on phones, 32 px from md (16 px text on phones, so iOS does not zoom). */
 export function Input({ className, readOnly, ...props }: ComponentProps<'input'>) {
   const field = use(FieldContext);
   const shown = useReadOnly();
@@ -83,7 +83,7 @@ export function Input({ className, readOnly, ...props }: ComponentProps<'input'>
       aria-invalid={field?.invalid || undefined}
       readOnly={readOnly || shown}
       className={cn(
-        'h-8 w-full min-w-0 rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-(--duration-quick) md:text-[15px]',
+        'h-11 md:h-8 w-full min-w-0 rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-(--duration-quick) md:text-[15px]',
         'hover:border-muted aria-[invalid=true]:border-rework',
         readOnlyControl,
         className,
@@ -115,7 +115,7 @@ export function Textarea({ className, readOnly, ...props }: ComponentProps<'text
   );
 }
 
-/** A native select, the height of an Input. */
+/** A native select, the height of an Input: 44 px on phones, 32 px from md. */
 export function NativeSelect({ className, disabled, ...props }: ComponentProps<'select'>) {
   const field = use(FieldContext);
   // A select has no read-only state: shown only, it is disabled, drawn like a read-only field.
@@ -127,7 +127,7 @@ export function NativeSelect({ className, disabled, ...props }: ComponentProps<'
       aria-invalid={field?.invalid || undefined}
       disabled={disabled || shown}
       className={cn(
-        'h-8 w-full min-w-0 cursor-pointer rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-(--duration-quick) md:text-[15px]',
+        'h-11 md:h-8 w-full min-w-0 cursor-pointer rounded-control border border-rule bg-card px-3 text-base text-ink transition-colors duration-(--duration-quick) md:text-[15px]',
         'hover:border-muted aria-[invalid=true]:border-rework',
         'disabled:cursor-default disabled:border-line disabled:bg-shell disabled:hover:border-line',
         className,

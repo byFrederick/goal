@@ -194,7 +194,7 @@ export function FileTree({
             type="button"
             aria-label="New file in the definition"
             onClick={() => onNew('')}
-            className="inline-flex size-6 shrink-0 items-center justify-center rounded-chip text-muted hover:bg-hover hover:text-ink"
+            className="inline-flex size-11 md:size-6 shrink-0 items-center justify-center rounded-chip text-muted hover:bg-hover hover:text-ink"
           >
             <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
           </button>

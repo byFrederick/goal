@@ -85,7 +85,7 @@ describe('the connection page', () => {
 
     api.release?.(passed());
     const done = await screen.findByRole('button', { name: 'Test' });
-    expect(done.querySelector('svg.text-ok')).not.toBeNull();
+    expect(done.querySelector('svg.text-ok-ink')).not.toBeNull();
     expect(screen.queryByRole('button', { name: 'Test again' })).toBeNull();
     expect(toast.success).not.toHaveBeenCalledWith(expect.stringContaining('is created'), expect.anything());
   });

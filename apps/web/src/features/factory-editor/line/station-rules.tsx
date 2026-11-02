@@ -58,7 +58,7 @@ const smallInput = cn(
 function BasicsLink({ children }: { children: string }) {
   const editor = useLineEditor();
   const params = useParams({ strict: false }) as { org?: string; factory?: string };
-  const className = 'text-ink underline underline-offset-3 hover:text-run';
+  const className = 'text-ink underline underline-offset-3 hover:text-link';
   if (editor.place === 'wizard') {
     return (
       <Link
@@ -272,7 +272,7 @@ function Checks({
                 type="button"
                 aria-label={`Remove check ${text} from ${label}`}
                 onClick={() => editor.edit(removeCheck(editor.line, station.id, i))}
-                className="inline-flex size-6 shrink-0 items-center justify-center rounded-chip text-muted transition-colors duration-(--duration-quick) hover:bg-shell hover:text-ink"
+                className="inline-flex size-11 md:size-6 shrink-0 items-center justify-center rounded-chip text-muted transition-colors duration-(--duration-quick) hover:bg-shell hover:text-ink"
               >
                 <X size={13} strokeWidth={1.5} aria-hidden="true" />
               </button>

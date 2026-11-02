@@ -215,7 +215,7 @@ export function TextareaEditor({
         {lineNumbers(value, minLines).map((n) => (
           <div key={n} className="flex items-center justify-end gap-0.5">
             {problems.has(n) ? (
-              <TriangleAlert size={12} strokeWidth={2} className="text-rework" />
+              <TriangleAlert size={12} strokeWidth={2} className="text-rework-ink" />
             ) : changed.has(n) ? (
               <span className="text-ok-ink">+</span>
             ) : null}

@@ -16,6 +16,7 @@ import { Menu, MenuChoice, MenuContent, MenuRadioGroup, MenuTrigger } from '../.
 import { NotAvailable } from '../../ui/not-available';
 import { descriptionClass } from '../../ui/page-header';
 import { Skeleton } from '../../ui/skeleton';
+import { touchLink } from '../../ui/touch-target';
 import { AssemblyTableRow, hideBelowLg, hideBelowXl, ItemTableRow, listRows } from './assembly-rows';
 import { BulkActions } from './bulk-actions';
 import {
@@ -321,7 +322,10 @@ export function ItemsPage() {
           type="button"
           aria-pressed={!flat}
           onClick={() => setSearch({ show: flat ? undefined : 'flat' })}
-          className="ml-auto rounded-chip text-secondary text-muted transition-colors duration-(--duration-quick) hover:text-ink motion-reduce:transition-none"
+          className={cn(
+            touchLink,
+            'ml-auto rounded-chip text-secondary text-muted transition-colors duration-(--duration-quick) hover:text-ink motion-reduce:transition-none',
+          )}
         >
           Grouped by assembly
         </button>

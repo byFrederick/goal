@@ -47,7 +47,8 @@ Tokens keep their names across themes, and components use token names only (`app
 | `--color-preview-light`, `--color-preview-light-side` | `#FFFFFF`, `#F8F8F7` | same | The Light half of an Appearance swatch (content, sidebar); never theme-following |
 | `--color-preview-dark`, `--color-preview-dark-side` | `#0F0F0F`, `#141414` | same | The Dark half of an Appearance swatch (content, sidebar); never theme-following |
 | `--color-action` | `#171717` | `#EDEDEC` | Primary buttons (text `--color-action-ink`: white / `#111111`) |
-| `--color-run` | `#2B5BD7` | `#3D6BE0` | Running, links, focus ring, the selection |
+| `--color-run` | `#2B5BD7` | `#3D6BE0` | Running fills and marks, focus ring, the selection |
+| `--color-link` | `#2B5BD7` | `#7396F2` | Link and action text (`text-link`) |
 | `--color-run-ink` | `#1E46B0` | `#A9C1FA` | Link hover, text on the run tint |
 | `--color-run-tint` | `#EEF2FC` | `#17213A` | Text selection, a running item's highlight |
 | `--color-you` | `#C2410C` | `#B84D1C` | Waiting on a person: counts, the Approve button (white text 5.2:1) |
@@ -62,6 +63,16 @@ Tokens keep their names across themes, and components use token names only (`app
 | `--color-ok` | `#1F8A4C` | `#2E9E5E` | Done and healthy marks (dots, bars) |
 | `--color-ok-tint` | `#EEF7F1` | `#11291B` | Rarely: a merged confirmation |
 | `--color-ok-ink` | `#17663A` | `#7EDBA4` | Healthy text, good deltas |
+
+Text uses the ink and link tokens; fills and marks (dots, bars, borders, rings) use the base tokens. A base token as a text colour fails AA in one theme, and `src/ui/text-tokens.test.ts` rejects it. Measured contrast of each text token, on card then panel (`src/ui/theme-contrast.test.ts` holds each at 4.5:1 or more, also on shell):
+
+| Token | Light (card / panel) | Dark (card / panel) |
+|---|---|---|
+| `--color-link` | 5.87 / 5.62 | 6.73 / 6.29 |
+| `--color-run-ink` | 8.21 / 7.86 | 10.68 / 9.98 |
+| `--color-rework-ink` | 7.32 / 7.01 | 10.10 / 9.45 |
+| `--color-ok-ink` | 7.00 / 6.71 | 11.46 / 10.72 |
+| `--color-you-ink` | 7.31 / 7.00 | 11.53 / 10.78 |
 
 The `--color-andon*` tokens are removed.
 
@@ -113,16 +124,17 @@ Unchanged from version 2: New item, Needs you (Approval, Decision, Question, Ale
 
 ## Components
 
-- **Buttons:** 32px tall (28px small), 6px radius, 13px at 500.
+- **Buttons:** 32px tall (28px small), 6px radius, 13px at 500. Below 768px, small and default buttons are at least 44px tall (`max-md:min-h-11`); the desktop sizes do not change.
   - Primary: `--color-action` fill, `--color-action-ink` text.
   - Secondary: shell fill, `rule` border; hover darkens the border to `muted`.
   - Danger: red text; a red fill only for the final confirmation in a dialog.
   - Approve inside Needs you: orange fill, white text.
-  - Icon buttons: 30px, `aria-label`, muted icon that turns ink on hover.
+  - Icon buttons: 32px, `aria-label`, a 44px hit area on a coarse pointer, muted icon that turns ink on hover.
   - Every button scales to 0.97 while pressed (MOTION.md).
 - **Chips:** 22px, 4px radius, 12px at 500, white with a line border and a 6px dot for status. Tinted only for needs you (orange) and sent back (red).
 - **Segmented control:** a `hover`-grey track with no border, 2px inset; the selected segment is white with a hairline shadow, and the highlight slides between segments.
-- **Inputs:** 32px (40px on onboarding), 6px radius, `rule` border, focus: `run` border plus a 3px `run-tint` ring.
+- **Truncated labels:** a label that truncates carries a `title` with its full text (or wraps); `truncate-title.test.ts` guards it.
+- **Inputs:** 32px from 768px, 44px below it, selects included (40px on onboarding), 6px radius, `rule` border, focus: `run` border plus a 3px `run-tint` ring.
 - **Switch:** 32×18px track; off `rule`, on `ink`; the thumb travels (MOTION.md, Toggle).
 - **Stat strip** (replaces the KPI tiles): up to four numbers in one row separated by 1px vertical rules, no boxes. Each has a 12px muted label, the 24px number and unit, and one meta line: the target, and the signed delta in `ok-ink` or `rework-ink`. A 2px bar under the number shows progress to target only when there is one.
 - **The line** (replaces the andon panel): a plain section on the page, no dark panel. Each station is a column: its name at 13px/500, the item count at 24px/500, a 4px load bar (ink for busy, `rule` for free capacity, amber for the constraint), the agent slots as 8px squares (ink working, orange waiting on you, outlined free) and what waits as muted text. Stations are joined by a 1px rule with a small chevron. The constraint gets a yellow 6px marker and the word "Constraint". When the andon is pulled, a red-tint strip spans the top of the Floor with the reason, who pulled it and Clear.

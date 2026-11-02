@@ -43,7 +43,7 @@ export function StationNode({
       )}
     >
       {tone === 'done' ? (
-        <Check size={compact ? 12 : 20} strokeWidth={2.2} className="text-ok" aria-hidden="true" />
+        <Check size={compact ? 12 : 20} strokeWidth={2.2} className="text-ok-ink" aria-hidden="true" />
       ) : (
         count
       )}
