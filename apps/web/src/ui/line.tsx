@@ -1,5 +1,5 @@
 import { ChevronRight } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { cn } from './cn';
 import { NumberRoll } from './number-roll';
 
@@ -7,8 +7,10 @@ import { NumberRoll } from './number-roll';
 // column: its name, the count at 24 px, a 4 px load bar (ink when busy, amber for the constraint), its agent slots
 // as 8 px squares, and what waits in muted text. Stations are joined by a 1 px rule with a chevron. The constraint
 // gets a yellow marker and the word "Constraint". While the andon is pulled, a red-tint strip slides down with the
-// reason, who pulled it and Clear, and the stations dim (MOTION.md, Andon pulled). The strip keeps its last text
-// while it slides away, so the close shows the same words it opened with.
+// reason, who pulled it and Clear, and each station dims by opacity (MOTION.md, Andon pulled). The strip is mounted
+// only while open or closing, on the .motion-panel and .motion-andon transition keyed on data-state; it keeps its
+// last text while it slides away and unmounts when the exit ends. A line that loads stopped shows it without the
+// entrance.
 
 export interface LineSlots {
   total: number;
@@ -94,11 +96,10 @@ export function Line({
       ) : (
         <ol
           aria-label="Stations from intake to done"
-          data-dimmed={isDimmed ? 'true' : undefined}
-          className="m-0 flex list-none flex-col gap-4 p-0 transition-opacity duration-(--duration-fast) ease-(--ease-out) data-[dimmed=true]:opacity-40 md:flex-row md:gap-0"
+          className="m-0 flex list-none flex-col gap-4 p-0 md:flex-row md:gap-0"
         >
           {stations.map((s, i) => (
-            <StationItem key={s.id} first={i === 0} station={s} compact={compact} />
+            <StationItem key={s.id} first={i === 0} station={s} compact={compact} dimmed={isDimmed} />
           ))}
         </ol>
       )}
@@ -112,19 +113,33 @@ export function Line({
   );
 }
 
+const DIM =
+  'transition-opacity duration-(--duration-fast) ease-(--ease-out) motion-reduce:transition-none data-[dimmed=true]:opacity-40';
+
 /** One station, and the connector before it from the second station on. */
-function StationItem({ first, station, compact }: { first: boolean; station: LineStation; compact: boolean }) {
+function StationItem({
+  first,
+  station,
+  compact,
+  dimmed,
+}: {
+  first: boolean;
+  station: LineStation;
+  compact: boolean;
+  dimmed: boolean;
+}) {
+  const dim = dimmed ? 'true' : undefined;
   return (
     <>
       {first ? null : (
-        <li aria-hidden="true" className="hidden w-6 shrink-0 items-start pt-7 md:flex">
+        <li aria-hidden="true" data-dimmed={dim} className={cn('hidden w-6 shrink-0 items-start pt-7 md:flex', DIM)}>
           <span className="flex w-full items-center">
             <span className="h-px flex-1 bg-rule" />
             <ChevronRight size={12} strokeWidth={1.75} className="-ml-px text-muted" />
           </span>
         </li>
       )}
-      <li className="flex min-w-0 flex-1 flex-col gap-2">
+      <li data-dimmed={dim} className={cn('flex min-w-0 flex-1 flex-col gap-2', DIM)}>
         <StationColumn station={station} compact={compact} />
       </li>
     </>
@@ -209,34 +224,46 @@ function LegendItem({ swatch, children }: { swatch: string; children: ReactNode 
 }
 
 /**
- * The red strip under the heading. It is always mounted so it can slide away: while closed it is hidden from
- * assistive technology and inert, and it keeps the last pull's words until it has gone.
+ * The red strip under the heading. It is mounted while the andon is pulled and while it plays its exit: a closed
+ * strip is hidden from assistive technology and inert, keeps the last pull's words, and unmounts when its close ends.
+ * A line that loads stopped marks the strip data-initial, which turns off the entrance.
  */
 function AndonStrip({ andon, clear }: { andon: LineAndon | null; clear: ReactNode }) {
   const [last, setLast] = useState(andon);
-  if (andon && andon !== last) setLast(andon);
+  const [gone, setGone] = useState(andon === null);
+  const [initial, setInitial] = useState(andon !== null);
   const open = andon !== null;
+  if (andon && andon !== last) setLast(andon);
+  if (open && gone) setGone(false);
+  if (!open && initial) setInitial(false);
   const shown = andon ?? last;
+  const closing = !open && !gone;
+
+  // Radix-style safety net: if the exit's animationend never arrives, the strip still goes.
+  useEffect(() => {
+    if (!closing) return;
+    const t = setTimeout(() => setGone(true), 600);
+    return () => clearTimeout(t);
+  }, [closing]);
+
+  if (gone && !open) return null;
 
   return (
     <div
+      role={open ? 'status' : undefined}
       data-state={open ? 'open' : 'closed'}
+      data-initial={initial ? '' : undefined}
       aria-hidden={open ? undefined : true}
       inert={!open}
-      className="grid grid-rows-[1fr] transition-[grid-template-rows,opacity] duration-(--duration-fast) ease-(--ease-out) data-[state=closed]:grid-rows-[0fr] data-[state=closed]:opacity-0 motion-reduce:transition-opacity"
+      onAnimationEnd={(e) => {
+        if (!open && e.target === e.currentTarget) setGone(true);
+      }}
+      className="motion-panel motion-andon flex flex-wrap items-center gap-x-4 gap-y-2 rounded-control bg-rework-tint px-4 py-3 text-ink"
     >
-      <div className="min-h-0 overflow-hidden">
-        <div
-          role="status"
-          className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-control bg-rework-tint px-4 py-3 text-ink transition-transform duration-(--duration-fast) ease-(--ease-out) data-[state=closed]:-translate-y-(--distance-base) motion-reduce:translate-y-0"
-          data-state={open ? 'open' : 'closed'}
-        >
-          <span className="font-medium text-rework-ink">Line stopped</span>
-          <span className="min-w-0 flex-1">{shown?.reason}</span>
-          <span className="text-secondary text-muted">Pulled by {shown?.pulledBy}</span>
-          {clear}
-        </div>
-      </div>
+      <span className="font-medium text-rework-ink">Line stopped</span>
+      <span className="min-w-0 flex-1">{shown?.reason}</span>
+      <span className="text-secondary text-muted">Pulled by {shown?.pulledBy}</span>
+      {clear}
     </div>
   );
 }
