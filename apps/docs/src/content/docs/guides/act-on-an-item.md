@@ -34,6 +34,8 @@ goal deny acme-line#3 --note "Use the staging connection"
 
 On the item page and in Needs you, the Approve button approves, the Deny button denies, and an Always allow checkbox appears when you may set it.
 
+On a phone, Needs you shows the list first. Choosing an entry opens only that entry, with Back in the top bar to return to the list where you left it.
+
 ## Send back
 
 Send an item back to rework when its output is not good enough. A reason is required, and the next run reads it.

@@ -7,16 +7,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronDown, Inbox } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { factoriesQuery, inboxQuery } from '../../api/queries';
 import type { InboxEntry } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
+import { TopBarSlot } from '../../app/top-bar';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
 import { Count } from '../../ui/count';
 import { EmptyState } from '../../ui/empty-state';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '../../ui/menu';
+import { Skeleton, SkeletonRows } from '../../ui/skeleton';
 import { alwaysAllowOffered, type DecidedEntry, decisionOf, useEntryDecision } from './actions';
 import { DenyDialog } from './deny-dialog';
 import { Detail } from './detail';
@@ -61,7 +63,8 @@ export function NeedsYouPage() {
     return () => clearTimeout(timer);
   }, [held]);
   const heldGone = held !== undefined && !visible.some((e) => e.id === held.id);
-  const selected = heldGone ? held : (visible.find((e) => e.id === search.entry) ?? visible[0]);
+  // The split selects the first entry when the URL names none; a phone shows the list until one is chosen.
+  const selected = heldGone ? held : (visible.find((e) => e.id === search.entry) ?? (phone ? undefined : visible[0]));
   const current = decidable(selected);
   const allowAlways = current !== undefined && alwaysAllowOffered(current, canManageConnections);
   const alwaysAllow = current !== undefined && alwaysAllowFor === current.id;
@@ -74,11 +77,43 @@ export function NeedsYouPage() {
   useEffect(() => {
     wasApproving.current = approving;
   }, [approving]);
+  // Back is a new navigation, so the router does not restore the list's scroll: the page keeps it. The
+  // window is the scroller on a phone; it is saved when an entry opens and put back when the list returns.
+  const listScroll = useRef(0);
+  const rememberScroll = () => {
+    if (phone && !approving) listScroll.current = window.scrollY;
+  };
+  useLayoutEffect(() => {
+    if (!cameBack) return;
+    const y = listScroll.current;
+    window.scrollTo(0, y);
+    // The router may reset the scroll after this render; put it back once the frame has painted.
+    const frame = requestAnimationFrame(() => window.scrollTo(0, y));
+    return () => cancelAnimationFrame(frame);
+  }, [cameBack]);
+  // The phone's Back link sits in the top bar. It keeps the tab and the factory and drops the entry.
+  const backLink = useMemo(
+    () => (
+      <Link
+        to="/o/$org/needs-you"
+        params={{ org: org.slug }}
+        search={{ type: search.type, factory: search.factory }}
+        aria-label="Back to Needs you"
+        className="inline-flex h-11 items-center rounded-control px-2 text-run no-underline hover:text-run-ink"
+      >
+        Back
+      </Link>
+    ),
+    [org.slug, search.type, search.factory],
+  );
   const counts = tabCounts(entries, search.factory);
   const approvedId = held?.id;
   const factoryOf = (entry: InboxEntry) => factories.data?.find((f) => f.id === entry.factory.id);
 
-  const setSearch = (next: NeedsSearch) => navigate({ search: (prev) => ({ ...prev, ...clean(next) }) });
+  const setSearch = (next: NeedsSearch) => {
+    rememberScroll();
+    return navigate({ search: (prev) => ({ ...prev, ...clean(next) }) });
+  };
 
   const approve = () => {
     if (!current) return;
@@ -150,8 +185,10 @@ export function NeedsYouPage() {
 
   if (inbox.isPending) {
     return (
-      <main aria-busy="true" className="flex min-h-0 flex-1 flex-col">
-        <p className="sr-only">Loading</p>
+      <main className="flex min-h-0 flex-1 flex-col">
+        <Skeleton ready={false} className="p-4 md:p-7" placeholder={<SkeletonRows rows={6} />}>
+          {null}
+        </Skeleton>
       </main>
     );
   }
@@ -163,7 +200,7 @@ export function NeedsYouPage() {
         {entries.length > 0 ? <Count value={counts.all} label=" waiting on you" tone="you" /> : null}
       </div>
       {entries.length > 0 ? (
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        <div className="flex w-full min-w-0 items-center gap-2 md:ml-auto md:w-auto">
           <TabGroup
             counts={counts}
             value={tab}
@@ -223,18 +260,8 @@ export function NeedsYouPage() {
   if (approving && selected) {
     return (
       <div className="flex min-h-0 flex-1 animate-pane-forward flex-col">
-        <header className="flex items-center gap-3 border-b border-line px-4 py-3">
-          <Link
-            to="/o/$org/needs-you"
-            params={{ org: org.slug }}
-            search={{ type: search.type, factory: search.factory }}
-            aria-label="Back to Needs you"
-            className="text-run no-underline hover:text-run-ink"
-          >
-            Back
-          </Link>
-          <h1 className="m-0 text-heading font-semibold text-ink">{typeLabel[typeOf(selected)]}</h1>
-        </header>
+        <TopBarSlot crumb={typeLabel[typeOf(selected)]} back={backLink} />
+        <h1 className="sr-only">{typeLabel[typeOf(selected)]}</h1>
         <Detail
           entry={selected}
           factory={factoryOf(selected)}
@@ -255,7 +282,7 @@ export function NeedsYouPage() {
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col', cameBack && 'animate-pane-back')}>
       {header}
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row" onClickCapture={rememberScroll}>
         <section
           aria-label="Waiting on you"
           className="flex min-h-0 flex-col lg:w-90 lg:flex-none lg:border-r lg:border-line"
@@ -276,7 +303,7 @@ export function NeedsYouPage() {
           </p>
         </section>
         <div className="min-w-0 flex-1">
-          {selected ? (
+          {selected && !phone ? (
             <Detail
               entry={selected}
               factory={factoryOf(selected)}
@@ -316,7 +343,7 @@ function TabGroup({
   onChange: (tab: NeedsTab) => void;
 }) {
   return (
-    <fieldset className="m-0 inline-flex flex-wrap gap-1 rounded-control bg-hover p-1">
+    <fieldset className="m-0 flex min-w-0 flex-1 flex-nowrap gap-2 overflow-x-auto border-0 p-0 [scrollbar-width:none] md:inline-flex md:flex-none md:flex-wrap md:gap-1 md:overflow-visible md:rounded-control md:bg-hover md:p-1">
       <legend className="sr-only">Show</legend>
       {tabs.map((tab) => {
         const pressed = value === tab.value;
@@ -327,8 +354,8 @@ function TabGroup({
             aria-pressed={pressed}
             onClick={() => onChange(tab.value)}
             className={cn(
-              'inline-flex h-11 items-center gap-2 rounded-chip px-3 font-control text-secondary whitespace-nowrap text-ink-soft hover:text-ink md:h-7',
-              pressed && 'bg-card text-ink shadow-raised',
+              'inline-flex h-11 flex-none items-center gap-2 rounded-chip border border-line px-3 font-control text-secondary whitespace-nowrap text-ink-soft hover:text-ink md:h-7 md:border-0',
+              pressed && 'border-transparent bg-hover text-ink md:bg-card md:shadow-raised',
               'transition-colors duration-(--duration-quick)',
             )}
           >

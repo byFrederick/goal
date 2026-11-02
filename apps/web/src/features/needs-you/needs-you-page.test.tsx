@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { type ReactNode, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   answerItem,
@@ -12,6 +13,7 @@ import {
 } from '../../api/client';
 import { factoriesQuery, inboxQuery, keys, orgQuery } from '../../api/queries';
 import type { Inbox, InboxEntry, Item, ItemCard, OrgSummary } from '../../api/types';
+import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { renderOrgPage } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
 import { NeedsYouPage } from './needs-you-page';
@@ -27,7 +29,10 @@ vi.mock('../../api/client', async (importOriginal) => ({
   decideToolApproval: vi.fn(),
 }));
 
+const desktopMatchMedia = window.matchMedia;
+
 afterEach(() => {
+  window.matchMedia = desktopMatchMedia;
   cleanup();
   vi.clearAllMocks();
 });
@@ -126,6 +131,17 @@ const factories = (can: string[] = ['item:decide']) => [
   { id: 'factory-2', name: 'sre', title: 'SRE', can },
 ];
 
+/** Stands in for the shell's top bar: it shows what the page sets with <TopBarSlot>, its Back link included. */
+function TopBarHarness({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<TopBarState | null>(null);
+  return (
+    <TopBarSetContext.Provider value={setState}>
+      <div data-testid="top-bar">{state?.back}</div>
+      {children}
+    </TopBarSetContext.Provider>
+  );
+}
+
 function renderPage({
   search,
   seed = [
@@ -141,7 +157,9 @@ function renderPage({
     path: '/needs-you',
     page: () => (
       <TooltipProvider>
-        <NeedsYouPage />
+        <TopBarHarness>
+          <NeedsYouPage />
+        </TopBarHarness>
       </TooltipProvider>
     ),
     org,
@@ -165,8 +183,9 @@ describe('Needs you: the four states', () => {
     vi.mocked(getInbox).mockReturnValue(new Promise(() => {}));
     renderPage({ seed: [] });
 
-    const busy = (await screen.findByText('Loading')).closest('main');
-    expect(busy?.getAttribute('aria-busy')).toBe('true');
+    const busy = (await screen.findByText('Loading')).closest('[aria-busy="true"]');
+    expect(busy).not.toBeNull();
+    expect(busy?.querySelector('.animate-skeleton-pulse')).not.toBeNull();
   });
 
   it('shows an empty state with one sentence and one action when nothing waits', async () => {
@@ -316,6 +335,15 @@ describe('Needs you: the keyboard path', () => {
 
     fireEvent.keyDown(document.body, { key: 'k' });
     await waitFor(() => expect(router.state.location.href).toContain('entry=decision%3Aitem-3'));
+  });
+
+  it('adds no pane animation when J moves the selection on the split', async () => {
+    const { router } = renderPage();
+    await screen.findByRole('heading', { name: 'Needs you' });
+
+    fireEvent.keyDown(document.body, { key: 'j' });
+    await waitFor(() => expect(router.state.location.href).toContain('entry='));
+    expect(document.querySelector('.animate-pane-forward, .animate-pane-back')).toBeNull();
   });
 
   it('approves the selected Decision with A and opens the Deny dialog with D', async () => {
@@ -523,8 +551,45 @@ describe('Needs you on a phone', () => {
     phoneWidth();
     renderPage({ search: { entry: 'decision:item-3' } });
 
-    const back = await screen.findByRole('link', { name: 'Back to Needs you' });
-    expect(back.closest('.animate-pane-forward')).not.toBeNull();
+    const approve = await screen.findByRole('button', { name: /^Approve/ });
+    expect(approve.closest('.animate-pane-forward')).not.toBeNull();
+  });
+
+  it('shows only the list on a phone when the URL names no entry', async () => {
+    phoneWidth();
+    renderPage();
+
+    expect(await screen.findByRole('list', { name: /Waiting on you/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Approve/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Deny/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Back to Needs you' })).toBeNull();
+  });
+
+  it('opens one entry from the list, and Back returns to the list with the list sliding in', async () => {
+    phoneWidth();
+    const { router } = renderPage();
+
+    const list = await screen.findByRole('list', { name: /Waiting on you/ });
+    fireEvent.click(within(list).getAllByRole('link')[0] as HTMLElement);
+    await waitFor(() => expect(router.state.location.search).toHaveProperty('entry'));
+    expect(screen.queryByRole('list', { name: /Waiting on you/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /^Approve/ })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('link', { name: 'Back to Needs you' }));
+    const back = await screen.findByRole('list', { name: /Waiting on you/ });
+    expect(router.state.location.search).not.toHaveProperty('entry');
+    expect(back.closest('.animate-pane-back')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: /^Approve/ })).toBeNull();
+  });
+
+  it('puts the filter chips in one row that scrolls sideways', async () => {
+    phoneWidth();
+    renderPage();
+
+    const chip = await screen.findByRole('button', { name: /^All\s*3$/ });
+    const row = chip.closest('fieldset');
+    expect(row?.className).toContain('flex-nowrap');
+    expect(row?.className).toContain('overflow-x-auto');
   });
 
   it('shows the list with its tabs when the URL names no entry', async () => {
