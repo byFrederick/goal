@@ -32,6 +32,12 @@ import type {
 import { TooltipProvider } from '../../ui/tooltip';
 import { KnowledgePage } from './knowledge-page';
 
+// The top bar is the app's shell: here the page's actions render in a region named Top bar, where the page puts them.
+vi.mock('../../app/top-bar', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../app/top-bar')>()),
+  TopBarSlot: ({ actions }: { actions?: React.ReactNode }) => <section aria-label="Top bar">{actions}</section>,
+}));
+
 // goal-docs' usage is answered by a load the test sets: pending never answers, error fails.
 const usageLoad = vi.hoisted(() => ({ run: (): Promise<unknown> => Promise.resolve(null) }));
 vi.mock('../../api/queries', async (importOriginal) => {

@@ -24,6 +24,12 @@ import type { Factory, Invitation, Member, Org, OrgSettings, OrgSummary, SignupD
 import { TooltipProvider } from '../../ui/tooltip';
 import { MembersPage } from './members-page';
 
+// The top bar is the app's shell: here the page's actions render in a region named Top bar, where the page puts them.
+vi.mock('../../app/top-bar', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../app/top-bar')>()),
+  TopBarSlot: ({ actions }: { actions?: React.ReactNode }) => <section aria-label="Top bar">{actions}</section>,
+}));
+
 /** The settings the mocked API serves: a failure or a hang makes the switch's query fail or wait. */
 const served = vi.hoisted(() => ({
   settings: undefined as OrgSettings | undefined,

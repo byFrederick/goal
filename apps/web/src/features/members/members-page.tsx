@@ -9,6 +9,7 @@ import { Check, ChevronDown, ChevronRight, Ellipsis, Minus, Plus, Search, X } fr
 import { Component, type ReactNode, Suspense, useId, useState } from 'react';
 import { authConfigQuery, factoriesQuery, invitationsQuery, membersQuery, meQuery, orgQuery } from '../../api/queries';
 import type { Factory, FactoryRole, Invitation, Member, OrgRole, OrgSummary } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
 import { displayName, hasName, initialsOf } from '../../shared/names';
 import { useOrg } from '../../shared/org';
 import { reasons } from '../../shared/permissions';
@@ -162,6 +163,8 @@ function Members({ org, members, invitations, factories, powers, signIn }: Membe
           </>
         }
         description={<p className={descriptionClass}>{countTitle(members.length, invitations.length)}</p>}
+      />
+      <TopBarSlot
         actions={
           powers.manages ? (
             <Button variant="primary" className="h-11 md:h-10" onClick={() => setInviting(true)}>

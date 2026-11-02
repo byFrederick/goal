@@ -47,7 +47,14 @@ export function SourcePage() {
 
   return (
     <>
-      <TopBarSlot crumb={source.name} />
+      <TopBarSlot
+        crumb={source.name}
+        actions={
+          manage && source.kind === 'synced' ? (
+            <SyncNowButton source={source} sync={sync} className="h-11 md:h-10" />
+          ) : null
+        }
+      />
       <nav aria-label="Breadcrumb" className="text-sm text-muted">
         <ol className="m-0 flex list-none gap-1.5 p-0">
           <li>
@@ -91,11 +98,6 @@ export function SourcePage() {
               )}
             </p>
           </div>
-        }
-        actions={
-          manage && source.kind === 'synced' ? (
-            <SyncNowButton source={source} sync={sync} className="h-11 md:h-10" />
-          ) : null
         }
       />
 

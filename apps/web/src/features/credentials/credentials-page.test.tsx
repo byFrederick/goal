@@ -10,6 +10,12 @@ import { renderOrgPage } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
 import { CredentialsPage } from './credentials-page';
 
+// The top bar is the app's shell: here the page's actions render in a region named Top bar, where the page puts them.
+vi.mock('../../app/top-bar', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../app/top-bar')>()),
+  TopBarSlot: ({ actions }: { actions?: React.ReactNode }) => <section aria-label="Top bar">{actions}</section>,
+}));
+
 // The list the page reads, and which requests fail. The clock is fixed so the expiry days and the
 // "expires this week" count do not depend on the day the test runs.
 const state = vi.hoisted(() => ({

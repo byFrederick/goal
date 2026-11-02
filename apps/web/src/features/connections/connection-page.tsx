@@ -78,7 +78,7 @@ export function ConnectionPage() {
 
   return (
     <>
-      <TopBarSlot crumb={connection.name} />
+      <TopBarSlot crumb={connection.name} actions={testButton} />
       <nav aria-label="Breadcrumb" className="text-sm text-muted">
         <ol className="m-0 flex list-none gap-2 p-0">
           <li>
@@ -122,7 +122,6 @@ export function ConnectionPage() {
             ) : null}
           </p>
         }
-        actions={<div className="flex flex-wrap gap-2">{testButton}</div>}
       />
 
       {connection.status === 'failing' && connection.last_test?.error ? (

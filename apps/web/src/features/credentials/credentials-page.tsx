@@ -8,6 +8,7 @@ import { KeyRound, Search } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
 import { credentialsQuery, factoriesQuery } from '../../api/queries';
 import type { Credential, CredentialType } from '../../api/types';
+import { TopBarSlot } from '../../app/top-bar';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
@@ -99,8 +100,8 @@ export function CredentialsPage() {
             Keys and tokens that connections and agents use. Nobody can read a value back.
           </p>
         }
-        actions={newCredential}
       />
+      <TopBarSlot actions={newCredential} />
 
       <NotAvailable label="Encrypt in your browser">
         <button type="button" className="text-sm text-muted underline underline-offset-3 hover:text-ink">

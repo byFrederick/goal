@@ -7,6 +7,12 @@ import type { Connection, ConnectionTestResult, OrgSummary } from '../../api/typ
 import { connectionFixture, kindFixture, renderConnectionsRoute } from '../../test/connections-route';
 import { ConnectionPage } from './connection-page';
 
+// The top bar is the app's shell: here the page's actions render in a region named Top bar, where the page puts them.
+vi.mock('../../app/top-bar', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../app/top-bar')>()),
+  TopBarSlot: ({ actions }: { actions?: React.ReactNode }) => <section aria-label="Top bar">{actions}</section>,
+}));
+
 // The connection and its kind are seeded; the test request is held until a test releases it.
 const api = vi.hoisted(() => ({ release: undefined as ((result: ConnectionTestResult) => void) | undefined }));
 

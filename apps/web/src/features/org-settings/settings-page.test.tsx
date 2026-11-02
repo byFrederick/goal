@@ -7,6 +7,12 @@ import type { AuthConfig, Member, OrgSettings, OrgSummary } from '../../api/type
 import { TooltipProvider } from '../../ui/tooltip';
 import { OrgSettingsPage } from './settings-page';
 
+// The top bar is the app's shell: here the page's actions render in a region named Top bar, where the page puts them.
+vi.mock('../../app/top-bar', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../app/top-bar')>()),
+  TopBarSlot: ({ actions }: { actions?: React.ReactNode }) => <section aria-label="Top bar">{actions}</section>,
+}));
+
 // The API client, the router and the permission hooks are replaced, so each state is exact and no
 // request leaves the test.
 const api = vi.hoisted(() => ({
