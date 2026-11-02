@@ -1,15 +1,19 @@
 // New trigger, step 1 of 2: what starts it (intake-new, MASTER.md's two-pane picker). The left pane lists the
 // sources; the right pane has the chosen source's events. Continue goes to the trigger page with the choice in
 // the address. On phones the panes take turns, with Back from the details.
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
 import { useId, useState } from 'react';
+import { connectionsQuery } from '../../api/queries';
 import { useFactoryParams } from '../../shared/factory';
+import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Dialog, DialogClose, DialogContent } from '../../ui/dialog';
 import { NotAvailable } from '../../ui/not-available';
+import { Stepper } from '../../ui/stepper';
 import {
   defaultEvent,
   githubEventGroups,
@@ -26,6 +30,11 @@ import { isChoosable, type Suggestion, suggestionHref, suggestions } from './sug
 export function NewTriggerDialog() {
   const navigate = useNavigate();
   const params = useFactoryParams();
+  const org = useOrg();
+  // The organization's own connections decide the Connected and Not connected groups; until they load, none is.
+  const { data: connections } = useQuery(connectionsQuery(org.id));
+  const connectedKinds = new Set((connections ?? []).map((c) => c.kind));
+  const groups = pickerGroups(connectedKinds);
   const [source, setSource] = useState<SourceKey>('github');
   const [event, setEvent] = useState<string>(defaultEvent);
   const [filter, setFilter] = useState('');
@@ -41,6 +50,15 @@ export function NewTriggerDialog() {
     <Dialog open onOpenChange={(open) => !open && void leave()}>
       <DialogContent title="New trigger" description="Step 1 of 2: what starts it" className="max-w-4xl">
         <div className="-mx-5 -mb-5 flex flex-col">
+          <div className="px-5 pb-3">
+            <Stepper
+              label="New trigger steps"
+              steps={[
+                { name: 'What starts it', state: 'current' },
+                { name: 'Filters, what it creates and its limits', state: 'todo' },
+              ]}
+            />
+          </div>
           <div className="flex min-h-0 flex-col border-t border-line md:flex-row">
             <fieldset
               className={cn(
@@ -60,7 +78,7 @@ export function NewTriggerDialog() {
                   className="min-w-0 flex-1 bg-transparent text-body text-ink outline-none placeholder:text-muted"
                 />
               </label>
-              {pickerGroups.map((group) => {
+              {groups.map((group) => {
                 const shown = group.keys
                   .map((key) => pickerSources.find((s) => s.key === key))
                   .filter((s): s is PickerSource => s !== undefined)
@@ -73,6 +91,8 @@ export function NewTriggerDialog() {
                       <SourceButton
                         key={s.key}
                         source={s}
+                        connectHref={`/o/${params.org}/connections`}
+                        showConnect={group.title === 'Not connected' && s.available}
                         pressed={source === s.key}
                         onPick={() => {
                           setSource(s.key);
@@ -96,8 +116,7 @@ export function NewTriggerDialog() {
                 Back
               </Button>
               <div className="flex items-center gap-3">
-                <SourceTile source={chosen} />
-                <h3 className="m-0 text-heading">{chosen.label}</h3>
+                <h3 className="m-0 text-heading">{chosen.key === 'github' ? 'GitHub events' : chosen.label}</h3>
               </div>
               {chosen.key === 'github' ? (
                 <GithubEvents event={event} onChange={setEvent} />
@@ -141,7 +160,7 @@ function SuggestionsBlock() {
       <h3 id="suggestions-heading" className="m-0 text-meta font-semibold text-muted">
         Or start from a suggestion
       </h3>
-      <ul className="m-0 grid list-none gap-2 p-0 md:grid-cols-2">
+      <ul className="m-0 flex list-none flex-col p-0">
         {shown.map((suggestion) => (
           <li key={suggestion.id}>
             <SuggestionRow
@@ -158,7 +177,7 @@ function SuggestionsBlock() {
 function SuggestionRow({ suggestion, onUse }: { suggestion: Suggestion; onUse: () => void }) {
   const choosable = isChoosable(suggestion);
   return (
-    <div className="flex min-h-10 items-center gap-3 rounded-cell border border-line px-3 py-2">
+    <div className="flex min-h-10 items-center gap-3 border-t border-line py-2">
       <Chip>{suggestion.station}</Chip>
       <span className="min-w-0 flex-1 text-secondary text-ink">{suggestion.title}</span>
       <Button size="sm" disabled={!choosable} onClick={onUse}>
@@ -182,7 +201,19 @@ function sourceNote(source: PickerSource): string {
   return 'Starts when a webhook endpoint receives a delivery. The endpoint is chosen on the next step.';
 }
 
-function SourceButton({ source, pressed, onPick }: { source: PickerSource; pressed: boolean; onPick: () => void }) {
+function SourceButton({
+  source,
+  pressed,
+  onPick,
+  connectHref,
+  showConnect,
+}: {
+  source: PickerSource;
+  pressed: boolean;
+  onPick: () => void;
+  connectHref: string;
+  showConnect: boolean;
+}) {
   const button = (
     <button
       type="button"
@@ -192,8 +223,8 @@ function SourceButton({ source, pressed, onPick }: { source: PickerSource; press
         if (source.available) onPick();
       }}
       className={cn(
-        'flex h-10 items-center gap-3 rounded-control px-2 text-left text-body font-medium text-ink hover:bg-hover',
-        'aria-pressed:border aria-pressed:border-rule aria-pressed:bg-card',
+        'flex h-10 min-w-0 flex-1 items-center gap-3 rounded-control px-2 text-left text-body font-medium text-ink hover:bg-hover',
+        'aria-pressed:bg-hover',
         !source.available && 'text-muted',
       )}
     >
@@ -201,17 +232,27 @@ function SourceButton({ source, pressed, onPick }: { source: PickerSource; press
       {source.label}
     </button>
   );
-  return source.available ? button : <NotAvailable label={source.label}>{button}</NotAvailable>;
+  const control = source.available ? button : <NotAvailable label={source.label}>{button}</NotAvailable>;
+  if (!showConnect) return control;
+  return (
+    <div className="flex items-center gap-1">
+      {control}
+      <a
+        href={connectHref}
+        aria-label={`Connect ${source.label}`}
+        className="flex-none rounded-control px-2 py-1 text-secondary font-medium text-run-ink no-underline hover:bg-hover"
+      >
+        Connect
+      </a>
+    </div>
+  );
 }
 
 function SourceTile({ source }: { source: PickerSource }) {
   const Icon = source.icon;
   return (
-    <span
-      aria-hidden="true"
-      className={cn('flex size-6 flex-none items-center justify-center rounded-cell text-white', source.tile)}
-    >
-      <Icon className="size-3.5" />
+    <span aria-hidden="true" className="flex size-4 flex-none items-center justify-center text-ink-soft">
+      <Icon className="size-4" />
     </span>
   );
 }

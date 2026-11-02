@@ -144,6 +144,17 @@ describe('creating one credential', () => {
     await waitFor(() => expect(vi.mocked(listCredentials).mock.calls.length).toBeGreaterThan(before));
   });
 
+  it('fills Create credential with the action colour and marks the invalid name', async () => {
+    renderNew();
+    await screen.findByRole('heading', { name: 'Create one' });
+    expect(screen.getByRole('button', { name: 'Create credential' }).className).toContain('bg-action');
+
+    fillCreate({ name: 'Bad_Name' });
+    fireEvent.click(screen.getByRole('button', { name: 'Create credential' }));
+    await screen.findByText(/Use 3 to 40 lowercase letters/);
+    expect(screen.getByLabelText('Name').getAttribute('aria-invalid')).toBe('true');
+  });
+
   it('refuses a name that is not a credential name, and sends nothing', async () => {
     renderNew();
     await screen.findByRole('heading', { name: 'Create one' });
@@ -292,6 +303,13 @@ describe('importing many credentials', () => {
     for (const query of queryClient.getQueryCache().getAll()) {
       expect(JSON.stringify(query.state.data ?? null)).not.toContain('sntrys_test-1');
     }
+  });
+
+  it('draws the drop zone dashed, with the download icon', async () => {
+    renderNew({ panel: 'import' });
+    const zone = (await screen.findByText('Drop a file, or paste below')).closest('label') as HTMLElement;
+    expect(zone.className).toContain('border-dashed');
+    expect(zone.querySelector('svg')).toBeTruthy();
   });
 
   it('renders the paste area masked', async () => {

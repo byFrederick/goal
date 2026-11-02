@@ -131,12 +131,13 @@ function UsageRow({ doc, width }: { doc: KnowledgeDocumentUsage; width: number }
           aria-expanded={open}
           aria-controls={id}
           onClick={() => setOpen((o) => !o)}
-          className="min-w-0 break-all text-left font-mono text-secondary text-ink underline-offset-3 hover:underline"
+          title={doc.title}
+          className="min-w-0 truncate text-left font-mono text-secondary text-ink underline-offset-3 hover:underline"
         >
           {doc.title}
         </button>
-        <span aria-hidden="true" className="hidden h-2 overflow-hidden rounded-chip bg-panel md:block">
-          <span className="block h-full bg-run" style={{ width: `${width}%` }} />
+        <span aria-hidden="true" className="hidden h-2 overflow-hidden rounded-chip bg-hover md:block">
+          <span className="block h-full bg-ink" style={{ width: `${width}%` }} />
         </span>
         <span className="text-right tabular-nums text-body text-ink">{doc.runs}</span>
         <span className="flex gap-2 text-secondary tabular-nums">

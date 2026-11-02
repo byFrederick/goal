@@ -86,21 +86,6 @@ export function modeLabels(kind: ConnectionKind | undefined): string[] {
   return (kind?.modes ?? []).map((m) => labels[m]);
 }
 
-/**
- * Two letters for a kind's square, from its title: a word's inner capitals ("GitHub" gh,
- * "PagerDuty" pd), else the first two words' initials ("Claude subscription" cs) unless the second
- * is an acronym ("Anthropic API key" an), else its first two letters ("Jira" ji).
- */
-export function monogram(title: string): string {
-  const words = title.split(/[\s_-]+/).filter(Boolean);
-  const first = words[0] ?? '';
-  const caps = first.match(/[A-Z]/g) ?? [];
-  if (caps.length >= 2 && caps.length < first.length) return caps.slice(0, 2).join('').toLowerCase();
-  const second = words[1];
-  if (second && second !== second.toUpperCase()) return `${first[0]}${second[0]}`.toLowerCase();
-  return first.slice(0, 2).toLowerCase();
-}
-
 /** The name pattern goald enforces (ConnectionName): 3 to 40 lowercase letters, digits and inner dashes. */
 export const connectionName = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/;
 
