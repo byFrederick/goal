@@ -218,7 +218,7 @@ export function JonahOverviewPage() {
               <h2 id="waiting-h" className="m-0 text-heading">
                 Waiting for your review
               </h2>
-              <Count value={data.waiting} label=" waiting for your review" tone="you" />
+              <Count value={data.waiting} label=" waiting for your review" />
               <Link
                 to="/o/$org/f/$factory/jonah"
                 params={params}

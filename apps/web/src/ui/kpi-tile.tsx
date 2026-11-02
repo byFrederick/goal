@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
 import { cn } from './cn';
 
-/** The fill of a bar: run is the flow, ok and amber are the good and warning ends, rework is the bad one. */
-export type KpiTone = 'run' | 'ok' | 'rework' | 'amber';
+/** The fill of a bar: ink is the flow, ok and amber are the good and warning ends, rework is the bad one. */
+export type KpiTone = 'ink' | 'ok' | 'rework' | 'amber';
 
 const fillOf: Record<KpiTone, string> = {
-  run: 'bg-run',
+  ink: 'bg-ink',
   ok: 'bg-ok',
   rework: 'bg-rework',
   amber: 'bg-amber',
@@ -108,7 +108,13 @@ function KpiMeter({ bar }: { bar: KpiBar }) {
       }}
       className="h-1.5 overflow-hidden rounded-full bg-hover"
     >
-      <div className={cn('h-full rounded-full', fillOf[bar.tone])} style={{ width: `${pct}%` }} />
+      <div
+        className={cn(
+          'h-full origin-left rounded-full transition-transform duration-(--duration-fast) ease-out motion-reduce:transition-none',
+          fillOf[bar.tone],
+        )}
+        style={{ transform: `scaleX(${pct / 100})` }}
+      />
     </div>
   );
 }
@@ -128,7 +134,7 @@ export function Sparkline({ points, label, className }: KpiSparkline & { classNa
       preserveAspectRatio="none"
       role="img"
       aria-label={label}
-      className={cn('block h-8 w-full text-run', className)}
+      className={cn('block h-8 w-full text-ink', className)}
     >
       <polyline
         points={line}

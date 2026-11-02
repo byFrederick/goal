@@ -10,7 +10,10 @@ describe('GoalMark', () => {
     const { container } = render(<GoalMark />);
     const square = container.firstElementChild as HTMLElement;
     expect(square.getAttribute('aria-hidden')).toBe('true');
-    expect(square.classList.contains('bg-run')).toBe(true);
+    expect(square.classList.contains('bg-mark')).toBe(true);
+    expect(square.classList.contains('bg-run')).toBe(false);
+    expect(square.classList.contains('ring-white/12')).toBe(true);
+    expect(square.classList.contains('ring-inset')).toBe(true);
     expect(square.classList.contains('rounded-control')).toBe(true);
   });
 

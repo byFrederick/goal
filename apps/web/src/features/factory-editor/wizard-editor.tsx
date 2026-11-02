@@ -127,7 +127,6 @@ export function WizardEditor({
     void go(to);
   };
 
-  const footerButton = 'md:h-10 md:text-sm';
   const viewOnly = session.readOnly;
   const deleteError =
     remove.error instanceof ApiError && remove.error.code === 'factory-published'
@@ -157,7 +156,7 @@ export function WizardEditor({
               onChange={(y) => void go(step, y ? 'yaml' : undefined)}
             />
             {viewOnly ? null : (
-              <Button variant="white" className="h-11 md:h-10" onClick={() => void saveAndExit()}>
+              <Button variant="white" onClick={() => void saveAndExit()}>
                 Save and exit
               </Button>
             )}
@@ -174,7 +173,7 @@ export function WizardEditor({
         start={
           <>
             {back && back !== 'start' ? (
-              <Button asChild variant="white" size="lg" className={footerButton}>
+              <Button asChild variant="white">
                 <Link to="/o/$org/new/$step" params={{ org: org.slug, step: back }} search={searchOf()}>
                   Back
                 </Link>
@@ -183,8 +182,7 @@ export function WizardEditor({
             {viewOnly ? null : (
               <Button
                 variant="ghost"
-                size="lg"
-                className={`${footerButton} text-rework-ink`}
+                className="text-rework-ink"
                 aria-haspopup="dialog"
                 onClick={() => setDeleteOpen(true)}
               >
@@ -195,7 +193,7 @@ export function WizardEditor({
         }
         end={
           next ? (
-            <Button variant="primary" size="lg" className={footerButton} onClick={() => continueTo(next)}>
+            <Button variant="primary" onClick={() => continueTo(next)}>
               Continue to {stepLabel(next)}
               <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
             </Button>

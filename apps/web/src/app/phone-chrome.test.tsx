@@ -46,7 +46,7 @@ const factory = (name: string, extra: Partial<Factory> = {}): Factory =>
 
 const factories = [factory('software'), factory('sre')];
 
-const attention: OrgAttention = { waiting_on_you: 0, factories: [] };
+let attention: OrgAttention = { waiting_on_you: 0, factories: [] };
 const overview: FactoryOverviewList = {
   window: '7d',
   since: '2026-10-21',
@@ -145,6 +145,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  attention = { waiting_on_you: 0, factories: [] };
   cleanup();
   // @ts-expect-error restoring the jsdom default, which has no matchMedia
   delete window.matchMedia;
@@ -259,6 +260,27 @@ describe('the tab bar', () => {
     const needs = within(await tabs()).getByRole('link', { name: /^Needs you/ });
     expect(needs.getAttribute('href')).toBe('/o/acme/needs-you');
     expect(needs.getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('draws the Needs you count as an orange 18 px pill that rolls and enters', async () => {
+    attention = { waiting_on_you: 3, factories: [] };
+    renderShell({ at: '/o/acme/f/software' });
+    const needs = within(await tabs()).getByRole('link', { name: /^Needs you/ });
+    const pill = await waitFor(() => {
+      const found = needs.querySelector('span[aria-hidden="true"].bg-you');
+      if (!found) throw new Error('no count yet');
+      return found;
+    });
+    expect(Array.from(pill.classList)).toEqual(
+      expect.arrayContaining([
+        'h-[18px]',
+        'min-w-[18px]',
+        'rounded-full',
+        'text-white',
+        'motion-safe:animate-notification-badge',
+      ]),
+    );
+    expect(pill.classList).not.toContain('rounded-chip');
   });
 
   it('opens the factory the page is in, and marks the current tab', async () => {

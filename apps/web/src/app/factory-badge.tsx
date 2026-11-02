@@ -1,15 +1,9 @@
-// A factory's letter badge (MASTER.md "Sidebar" and "Top bar"): its mark on the run colour. The
-// sidebar's groups show it at 24 px, the top bar's breadcrumb at 20 px, so the size is the caller's.
-import { cn } from '../ui/cn';
-
-export function FactoryBadge({ mark, className }: { mark: string; className?: string }) {
+// A factory's letter badge (MASTER.md "Colour" and "Sidebar"): its mark on the run colour, always 18 px.
+export function FactoryBadge({ mark }: { mark: string }) {
   return (
     <span
       aria-hidden="true"
-      className={cn(
-        'flex flex-none items-center justify-center rounded-chip bg-run text-meta font-semibold text-white',
-        className ?? 'size-6',
-      )}
+      className="flex size-[18px] flex-none items-center justify-center rounded-chip bg-run text-meta font-semibold text-white"
     >
       {mark}
     </span>

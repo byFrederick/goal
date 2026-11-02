@@ -1,4 +1,4 @@
-// The Goal mark: a cobalt square holding a white G that ends in a yellow node (the brand button in
+// The Goal mark: a near-black square holding a white G that ends in a yellow node (the brand button in
 // docs/design/screens/account/shell.html, and sign-up.html). Decorative: the link or button around it
 // holds the name "Goal", so the square is hidden from assistive technology.
 import { cn } from './cn';
@@ -24,7 +24,11 @@ export function GoalMark({ size = 'shell', className }: GoalMarkProps) {
   return (
     <span
       aria-hidden="true"
-      className={cn('inline-grid flex-none place-items-center rounded-control bg-run', square, className)}
+      className={cn(
+        'inline-grid flex-none place-items-center rounded-control bg-mark ring-1 ring-white/12 ring-inset',
+        square,
+        className,
+      )}
     >
       <svg className={glyph} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path

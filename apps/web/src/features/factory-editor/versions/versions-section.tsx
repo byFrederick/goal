@@ -51,12 +51,7 @@ export function VersionsSection({ search }: SectionViewProps) {
             ) : null}
             {pages.hasNextPage ? (
               <div>
-                <Button
-                  variant="white"
-                  className="h-11 md:h-10"
-                  disabled={pages.isFetchingNextPage}
-                  onClick={() => void pages.fetchNextPage()}
-                >
+                <Button variant="white" disabled={pages.isFetchingNextPage} onClick={() => void pages.fetchNextPage()}>
                   {pages.isFetchingNextPage ? 'Loading…' : 'Show older versions'}
                 </Button>
               </div>

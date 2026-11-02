@@ -11,7 +11,17 @@
 // or sheet that opened them, and keeps the session alive while signed in.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Bell, CircleCheck, Keyboard, KeyRound, LogOut, Puzzle, UserRound } from 'lucide-react';
+import {
+  Bell,
+  ChevronsUpDown,
+  CircleCheck,
+  CircleHelp,
+  Keyboard,
+  KeyRound,
+  LogOut,
+  Puzzle,
+  UserRound,
+} from 'lucide-react';
 import { createContext, type ReactNode, use, useCallback, useEffect, useState } from 'react';
 import { meQuery, orgQuery } from '../api/queries';
 import type { Me, OrgSummary } from '../api/types';
@@ -27,7 +37,7 @@ import { menuRow } from '../ui/menu';
 import { NotAvailable } from '../ui/not-available';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { AppearanceChoice } from './appearance-choice';
-import { railItemClass } from './rail-items';
+import { docsLink, railItemClass } from './rail-items';
 import { ShortcutsDialog, useShortcutsKey } from './shortcuts-dialog';
 
 /** Better Auth extends a session its endpoints see (spec 3 §8.3): on load, then hourly. */
@@ -146,6 +156,7 @@ export function AccountMenu({ org, size = 'sidebar' }: { org: OrgSummary; size?:
             <span className="truncate text-body font-semibold">{name}</span>
             {roleName(org.role) ? <span className="truncate text-meta text-muted">{roleName(org.role)}</span> : null}
           </span>
+          <ChevronsUpDown size={16} strokeWidth={1.5} aria-hidden="true" className="ml-auto flex-none text-muted" />
         </PopoverTrigger>
       )}
       <PopoverContent
@@ -179,6 +190,14 @@ const iconProps = { size: 16, strokeWidth: 1.5, 'aria-hidden': true, className: 
 const actionRow = cn(
   menuRow,
   'cursor-pointer border-0 bg-transparent text-body hover:bg-hover data-[highlighted]:bg-hover',
+);
+
+/** A plain link out of the SPA: /docs is served by the same origin, so the same tab loads it. */
+const helpLink = (
+  <a href={docsLink.href} className={actionRow}>
+    <CircleHelp {...iconProps} />
+    Help and docs
+  </a>
 );
 
 /**
@@ -290,6 +309,7 @@ function AccountRows({ org, onAction }: { org: OrgSummary; onAction: () => void 
             </kbd>
           </button>
         </li>
+        <li>{helpLink}</li>
       </ul>
       <div aria-hidden="true" className="my-1 h-px bg-line" />
       <ul className="m-0 flex list-none flex-col p-0">
@@ -332,6 +352,7 @@ function LocalUser() {
         </span>
       </div>
       <Callout tone="note">Sign-in is off. Anyone who can reach this address acts as the local user.</Callout>
+      {helpLink}
       <AppearanceChoice />
     </div>
   );

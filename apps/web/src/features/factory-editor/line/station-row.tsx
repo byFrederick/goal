@@ -341,13 +341,7 @@ export function StationRow({
               {p.fixes.length > 0 && !editor.viewOnly ? (
                 <span className="flex flex-wrap gap-1.5 pl-5">
                   {p.fixes.map((f) => (
-                    <Button
-                      key={f.label}
-                      variant="white"
-                      size="sm"
-                      className="h-11 md:h-8"
-                      onClick={() => fix(applyFix(modelNow(), f))}
-                    >
+                    <Button key={f.label} variant="white" size="sm" onClick={() => fix(applyFix(modelNow(), f))}>
                       {f.label}
                     </Button>
                   ))}

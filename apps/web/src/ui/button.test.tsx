@@ -8,11 +8,19 @@ afterEach(cleanup);
 const classes = (name: string) => Array.from(screen.getByRole('button', { name }).classList);
 
 describe('Button', () => {
-  it('draws the primary action in cobalt with white text', () => {
+  it('draws the primary action as the near-black action fill with its ink text', () => {
     render(<Button variant="primary">Save</Button>);
     expect(classes('Save')).toEqual(
-      expect.arrayContaining(['bg-run', 'text-white', 'h-8.5', 'rounded-control', 'font-control']),
+      expect.arrayContaining([
+        'bg-action',
+        'border-action',
+        'text-action-ink',
+        'h-8',
+        'rounded-control',
+        'font-control',
+      ]),
     );
+    expect(classes('Save')).not.toContain('bg-run');
   });
 
   it('draws the ink action with the action tokens, not cobalt', () => {
@@ -61,9 +69,9 @@ describe('Button', () => {
     expect(classes('Approve')).toEqual(expect.arrayContaining(['bg-you', 'text-white']));
   });
 
-  it('sizes the small button at 30 px and the icon button at 32 px', () => {
+  it('sizes the small button at 28 px and the icon button at 32 px', () => {
     const { unmount } = render(<Button size="sm">Small</Button>);
-    expect(classes('Small')).toContain('h-7.5');
+    expect(classes('Small')).toContain('h-7');
     unmount();
 
     render(

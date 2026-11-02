@@ -57,7 +57,7 @@ function WideActions({
   return (
     <div className="flex flex-wrap items-center gap-2">
       {yaml ? null : <ViewToggle section={section} yaml={false} />}
-      <Button asChild variant="white" className="h-11 md:h-10">
+      <Button asChild variant="white">
         <Link to="/o/$org/f/$factory/definition/$section" params={{ ...params, section: 'versions' }}>
           <Clock size={16} strokeWidth={1.5} aria-hidden="true" />
           Versions
@@ -65,7 +65,7 @@ function WideActions({
       </Button>
       {viewOnly ? null : (
         <>
-          <Button asChild variant="white" className="h-11 md:h-10">
+          <Button asChild variant="white">
             <Link
               to="/o/$org/f/$factory/definition/$section"
               params={{ ...params, section: 'review' }}
@@ -143,7 +143,7 @@ function Publish({ canPublish, number, describedBy }: { canPublish: boolean; num
   const params = useFactoryParams();
   if (canPublish) {
     return (
-      <Button asChild variant="primary" className="h-11 md:h-10">
+      <Button asChild variant="primary">
         <Link to="/o/$org/f/$factory/definition/$section" params={{ ...params, section: 'review' }}>
           Publish v{number}
         </Link>
@@ -151,7 +151,7 @@ function Publish({ canPublish, number, describedBy }: { canPublish: boolean; num
     );
   }
   return (
-    <Button variant="primary" className="h-11 md:h-10" disabled aria-describedby={describedBy}>
+    <Button variant="primary" disabled aria-describedby={describedBy}>
       Publish v{number}
     </Button>
   );

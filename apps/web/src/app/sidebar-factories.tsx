@@ -98,7 +98,7 @@ function FactoryGroup({
         >
           <FactoryBadge mark={mark} />
           <span className="min-w-0 flex-1 truncate">{factory.name}</span>
-          {attention.waiting > 0 ? <Count value={attention.waiting} label=" waiting on you" tone="you" /> : null}
+          {attention.waiting > 0 ? <Count value={attention.waiting} label=" waiting on you" /> : null}
           {attention.andon !== null || attention.blocked > 0 ? (
             <span aria-hidden="true" className="mr-1 size-2.5 flex-none rounded-full bg-rework" />
           ) : null}

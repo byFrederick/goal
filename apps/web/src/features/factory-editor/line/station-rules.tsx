@@ -8,6 +8,7 @@ import type { ModelStation, StationCheck } from '../../../shared/definition/mode
 import { Button } from '../../../ui/button';
 import { cn } from '../../../ui/cn';
 import { readOnlyControl } from '../../../ui/field';
+import { Select } from '../../../ui/select';
 import { Switch } from '../../../ui/switch';
 import { addCheck, removeCheck, setGate, setMergeStep, setStationField } from '../draft/ops';
 import { EditedMark } from '../frame/section-shell';
@@ -284,7 +285,6 @@ function Checks({
         <Button
           variant="white"
           size="sm"
-          className="h-11 md:h-8"
           aria-haspopup="dialog"
           aria-label={`Add check to ${label}`}
           aria-invalid={invalid || undefined}
@@ -334,22 +334,19 @@ function GateRule({
       <label htmlFor={`${id}-to`} className="text-muted">
         If rejected, send back to
       </label>
-      <select
+      <Select
         id={`${id}-to`}
         value={gate.on_reject ?? ''}
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
         disabled={editor.viewOnly}
-        onChange={(e) => editor.edit(setGate(editor.line, station.id, { ...gate, on_reject: e.target.value }))}
-        className={cn(smallInput, 'max-w-[220px] cursor-pointer pr-7')}
-      >
-        {known ? null : <option value={gate.on_reject ?? ''}>{gate.on_reject || 'Choose a station'}</option>}
-        {upstream.map((s) => (
-          <option key={s.id} value={s.id}>
-            {stationLabel(s)}
-          </option>
-        ))}
-      </select>
+        onValueChange={(next) => editor.edit(setGate(editor.line, station.id, { ...gate, on_reject: next }))}
+        className="max-w-[220px]"
+        options={[
+          ...(known ? [] : [{ value: gate.on_reject ?? '', label: gate.on_reject || 'Choose a station' }]),
+          ...upstream.map((s) => ({ value: s.id, label: stationLabel(s) })),
+        ]}
+      />
       <label htmlFor={`${id}-max`} className="text-muted">
         at most
       </label>

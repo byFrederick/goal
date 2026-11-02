@@ -24,7 +24,7 @@ export function NewCredentialPage() {
       <TopBarSlot
         crumb="New credential"
         actions={
-          <Button asChild variant="white" className="h-11 md:h-8.5">
+          <Button asChild variant="white">
             <Link to="/o/$org/credentials" params={{ org: org.slug }}>
               Cancel
             </Link>

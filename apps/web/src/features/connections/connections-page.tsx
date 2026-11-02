@@ -412,7 +412,7 @@ function UsedBy({ connection: c, factories }: { connection: Connection; factorie
     <span className="flex flex-wrap items-center gap-1">
       {c.used_by.factories.map((f) => (
         <span key={f.id} title={f.name} className="inline-flex">
-          <FactoryBadge mark={factoryMark(f, factories.length > 0 ? factories : [f])} className="size-5" />
+          <FactoryBadge mark={factoryMark(f, factories.length > 0 ? factories : [f])} />
           <span className="sr-only">{f.name}</span>
         </span>
       ))}

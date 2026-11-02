@@ -7,7 +7,7 @@
 // from the Goal mark (phone-chrome.tsx), so SidebarContent is the one list of entries for both.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ChevronsUpDown, CircleHelp, PanelLeft, Search } from 'lucide-react';
+import { ChevronsUpDown, PanelLeft, Search } from 'lucide-react';
 import { type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { attentionQuery, overviewQuery } from '../api/queries';
 import type { FactoryOverviewList, OrgSummary } from '../api/types';
@@ -25,7 +25,6 @@ import { Tooltip } from '../ui/tooltip';
 import { AccountMenu } from './account-menu';
 import { CreateOrgDialog } from './create-org-dialog';
 import { OrgMenuContent } from './org-menu';
-import { docsLink } from './rail-items';
 import { screensFor, sidebarOrgScreens } from './screens';
 import { FactoryGroups, rowClass } from './sidebar-factories';
 import { SidebarRail } from './sidebar-rail';
@@ -192,11 +191,6 @@ export function SidebarContent({
             <FactoryGroups org={org} onNavigate={onNavigate} />
           </div>
           <div className="mt-auto flex flex-col gap-2 pt-4">
-            {/* A plain link out of the SPA: /docs is served by the same origin, so the same tab loads it. */}
-            <a href={docsLink.href} className={rowClass}>
-              <CircleHelp {...iconProps} className="flex-none" />
-              <span className="min-w-0 flex-1 truncate">{docsLink.label}</span>
-            </a>
             <SpendThisWeek org={org} overview={overview.data} />
             <AccountMenu org={org} />
           </div>
@@ -309,7 +303,7 @@ function OrgEntry({
       {screen.icon ? <screen.icon {...iconProps} className="flex-none" /> : null}
       <span className="min-w-0 flex-1 truncate">{screen.label}</span>
       {screen.id === 'needs-you' && waiting > 0 ? ' ' : null}
-      {screen.id === 'needs-you' && waiting > 0 ? <Count value={waiting} label=" waiting on you" tone="you" /> : null}
+      {screen.id === 'needs-you' && waiting > 0 ? <Count value={waiting} label=" waiting on you" /> : null}
       {screen.id === 'connections' && trouble > 0 ? <TroubleDot count={trouble} /> : null}
     </>
   );
@@ -359,7 +353,7 @@ function SpendThisWeek({ org, overview }: { org: OrgSummary; overview: FactoryOv
       <Link
         to="/o/$org/spend"
         params={{ org: org.slug }}
-        className="flex flex-wrap items-baseline justify-between gap-x-2 rounded-cell border border-line bg-card p-3 text-meta text-muted"
+        className="flex flex-wrap items-baseline justify-between gap-x-2 rounded-cell px-2 py-1 text-meta text-muted hover:bg-hover"
       >
         <span className="min-w-0 truncate">Spend this week</span>
         <span className="whitespace-nowrap text-secondary font-semibold text-ink">{spent}</span>
@@ -372,15 +366,15 @@ function SpendThisWeek({ org, overview }: { org: OrgSummary; overview: FactoryOv
     <Link
       to="/o/$org/spend"
       params={{ org: org.slug }}
-      className="flex flex-col gap-2 rounded-cell border border-line bg-card p-3"
+      className="flex flex-col gap-2 rounded-cell px-2 py-1 hover:bg-hover"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-meta text-muted">
         <span className="min-w-0 truncate">Spend this week</span>
         <span className="whitespace-nowrap text-secondary font-semibold text-ink">{of}</span>
       </div>
       {/* Decorative: the amount above says the same in words. */}
-      <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-chip bg-hover">
-        <span className="block h-full rounded-chip bg-run" style={{ width: `${pct}%` }} />
+      <div aria-hidden="true" className="h-1 overflow-hidden rounded-chip bg-hover">
+        <span className="block h-full rounded-chip bg-ink" style={{ width: `${pct}%` }} />
       </div>
     </Link>
   );

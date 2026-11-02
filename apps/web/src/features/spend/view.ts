@@ -57,9 +57,18 @@ export function monthToDate(until: string): string {
 /** "Mon" for a UTC day, the bar's label. */
 export const weekdayOf = (day: string): string => weekdayShort.format(new Date(`${day}T12:00:00Z`));
 
-/** The budget's segment colour: the first factory takes run, then the palette in turn. */
-const series = ['bg-run', 'bg-you', 'bg-ok', 'bg-amber', 'bg-rework'] as const;
-export const seriesFill = (index: number): string => series[index % series.length] ?? 'bg-run';
+/** The budget's segment colour: MASTER's factory colours in turn (`--color-factory-*` in styles.css). */
+const series = [
+  'bg-factory-1',
+  'bg-factory-2',
+  'bg-factory-3',
+  'bg-factory-4',
+  'bg-factory-5',
+  'bg-factory-6',
+  'bg-factory-7',
+  'bg-factory-8',
+] as const;
+export const seriesFill = (index: number): string => series[index % series.length] ?? 'bg-factory-1';
 
 /** Each factory's name and its total over the window, in the order of the budgets. */
 export interface FactoryLine {
