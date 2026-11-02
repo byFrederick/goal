@@ -140,3 +140,36 @@ test('the setup checklist hides when closed and stays hidden after a reload', as
   await expect(page.getByRole('heading', { name: 'Floor' })).toBeVisible();
   await expect(checklist).toHaveCount(0);
 });
+
+test('on a phone the floor is a compact vertical line with its actions in the top bar', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/f/sre');
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
+
+  // One row per station: the count, the name and the slots share the station's list item.
+  const row = page
+    .getByRole('list', { name: 'Stations from intake to done' })
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('img') })
+    .first();
+  await expect(row).toBeVisible();
+  const box = await row.boundingBox();
+  const parts = await row.locator('> *').evaluateAll((els) =>
+    els.map((el) => {
+      const r = el.getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom };
+    }),
+  );
+  expect(box).not.toBeNull();
+  for (const part of parts) {
+    expect(part.top).toBeGreaterThanOrEqual((box?.y ?? 0) - 1);
+    expect(part.bottom).toBeLessThanOrEqual((box?.y ?? 0) + (box?.height ?? 0) + 1);
+  }
+  await expect(row.getByRole('img')).toBeVisible();
+
+  // Needs you, Pull andon and New item are in the top bar, not in the page.
+  const bar = page.getByRole('banner').first();
+  await expect(bar.getByRole('button', { name: 'Pull the andon cord' })).toBeVisible();
+  await expect(bar.getByRole('button', { name: 'New item' })).toBeVisible();
+  await expectNoHorizontalScroll(page);
+});
