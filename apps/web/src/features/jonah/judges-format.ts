@@ -79,7 +79,7 @@ export function publishFailure(err: unknown): string {
     case 'judge-not-found':
       return 'This judge is not in the current version.';
     case 'judges-unavailable':
-      return 'Judges are not available on this goald. Nothing was saved.';
+      return 'Judges are not turned on for this installation. Nothing was saved.';
     default:
       return `Not saved: ${err.detail ?? err.title}`;
   }
@@ -88,7 +88,7 @@ export function publishFailure(err: unknown): string {
 /** Why a try was refused, in the page's words. */
 export function tryFailure(err: unknown): string {
   if (!(err instanceof ApiError)) return 'goald is not answering. Nothing was queued; try again once it is.';
-  if (err.code === 'judges-unavailable') return 'Not queued: judges are not available on this goald.';
+  if (err.code === 'judges-unavailable') return 'Not queued: judges are not turned on for this installation.';
   return `Not queued: ${err.detail ?? err.title}`;
 }
 

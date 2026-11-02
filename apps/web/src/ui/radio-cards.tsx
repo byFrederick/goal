@@ -4,6 +4,7 @@
 // border, drawn inside so nothing moves.
 import type { ReactNode } from 'react';
 import { cn } from './cn';
+import { sectionHeadingClass } from './page-header';
 
 export interface RadioOption<T extends string> {
   value: T;
@@ -48,7 +49,7 @@ export function RadioCards<T extends string>({
 }: RadioGroupProps<T>) {
   return (
     <fieldset className={cn('m-0 min-w-0 border-0 p-0', className)}>
-      <legend className={showLegend ? 'mb-3 p-0 text-lg font-medium tracking-[-0.01em]' : 'sr-only'}>{legend}</legend>
+      <legend className={showLegend ? cn(sectionHeadingClass, 'mb-3 p-0') : 'sr-only'}>{legend}</legend>
       <div className={cn('grid gap-3', gridClassName ?? '@[560px]:grid-cols-2 @[1100px]:grid-cols-4')}>
         {options.map((o) => (
           <label

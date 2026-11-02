@@ -23,6 +23,12 @@ test('factory settings is accessible and fits the screen', async ({ page }) => {
   await expectNoHorizontalScroll(page);
 });
 
+test('Save changes is in the top bar, not in the page', async ({ page }) => {
+  await page.goto('/o/acme/f/goal/settings');
+  await expect(page.getByRole('banner').first().getByRole('button', { name: 'Save changes' })).toBeDisabled();
+  await expect(page.getByRole('main').getByRole('button', { name: 'Save changes' })).toHaveCount(0);
+});
+
 test('pausing and resuming the factory from the Danger zone', async ({ page }) => {
   await page.goto('/o/acme/f/goal/settings');
   await page.getByRole('button', { name: 'Pause' }).click();

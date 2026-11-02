@@ -26,10 +26,15 @@ interface Props {
   factory: Factory;
   /** The board's lanes of the assembly's station, for the Add a part dialog. */
   stationLanes: readonly BoardLane[];
+  /**
+   * Which of the actions to draw. The top bar draws them all from 768 px; the phone's bar draws the primary
+   * one (Resume, else Add a part) and the page below it the rest.
+   */
+  part?: 'all' | 'primary' | 'rest';
 }
 
-/** Add a part, Pause or Resume, and Cancel assembly, in the page's header; nothing when the caller may do none. */
-export function AssemblyActions({ item, itemKey, parts, factory, stationLanes }: Props) {
+/** Add a part, Pause or Resume, and Cancel assembly, in the top bar; nothing when the caller may do none. */
+export function AssemblyActions({ item, itemKey, parts, factory, stationLanes, part = 'all' }: Props) {
   const org = useOrg();
   const client = useQueryClient();
   const decide = useDecision(
@@ -57,10 +62,16 @@ export function AssemblyActions({ item, itemKey, parts, factory, stationLanes }:
 
   const open = item.state !== 'done' && item.state !== 'cancelled';
   const action = open ? pauseAction(parts) : null;
-  const showAdd = open && holds(factory, 'item:create');
-  const showPause = action === 'pause' && holds(factory, 'item:operate');
-  const showResume = action === 'resume' && holds(factory, 'item:decide');
-  const showCancel = open && holds(factory, 'item:decide');
+  const mayAdd = open && holds(factory, 'item:create');
+  const mayResume = action === 'resume' && holds(factory, 'item:decide');
+  // The primary action: Resume, else Add a part.
+  const primary = mayResume ? 'resume' : mayAdd ? 'add' : null;
+  const drawn = (key: 'add' | 'pause' | 'resume' | 'cancel') =>
+    part === 'all' || (part === 'primary') === (key === primary);
+  const showAdd = mayAdd && drawn('add');
+  const showPause = action === 'pause' && holds(factory, 'item:operate') && drawn('pause');
+  const showResume = mayResume && drawn('resume');
+  const showCancel = open && holds(factory, 'item:decide') && drawn('cancel');
   if (!showAdd && !showPause && !showResume && !showCancel) return null;
 
   const pending = decide.isPending ? decide.variables?.kind : undefined;
@@ -70,7 +81,7 @@ export function AssemblyActions({ item, itemKey, parts, factory, stationLanes }:
       : undefined;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-w-0 items-center justify-end gap-2 max-md:flex-wrap max-md:justify-start">
       {showAdd ? (
         <>
           <Button variant="white" onClick={() => setAddOpen(true)}>
@@ -97,12 +108,6 @@ export function AssemblyActions({ item, itemKey, parts, factory, stationLanes }:
           {pending === 'pause' ? 'Pausing…' : 'Pause'}
         </Button>
       ) : null}
-      {showResume ? (
-        <Button variant="primary" disabled={decide.isPending} onClick={() => decide.mutate({ kind: 'retry' })}>
-          <Play size={16} strokeWidth={1.75} aria-hidden="true" />
-          {pending === 'retry' ? 'Resuming…' : 'Resume'}
-        </Button>
-      ) : null}
       {showCancel ? (
         <>
           <Button variant="rework" disabled={cancel.isPending} onClick={() => setCancelOpen(true)}>
@@ -123,6 +128,12 @@ export function AssemblyActions({ item, itemKey, parts, factory, stationLanes }:
             refusal={refusal}
           />
         </>
+      ) : null}
+      {showResume ? (
+        <Button variant="primary" disabled={decide.isPending} onClick={() => decide.mutate({ kind: 'retry' })}>
+          <Play size={16} strokeWidth={1.75} aria-hidden="true" />
+          {pending === 'retry' ? 'Resuming…' : 'Resume'}
+        </Button>
       ) : null}
     </div>
   );

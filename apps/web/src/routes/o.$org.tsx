@@ -2,6 +2,7 @@ import { createFileRoute, type NotFoundRouteProps, notFound, Outlet } from '@tan
 import { useEffect } from 'react';
 import { ensureFound, ensureLoaded, factoriesQuery, meQuery, orgQuery, orgsQuery } from '../api/queries';
 import { AppShell, ShellFrame } from '../app/app-shell';
+import { ShellPending } from '../app/shell-pending';
 import { NotFoundScreen } from '../app/states';
 import { TopBarSlot } from '../app/top-bar';
 import { findOrg, OrgContext, rememberOrg } from '../shared/org';
@@ -27,6 +28,7 @@ export const Route = createFileRoute('/o/$org')({
       ensureLoaded(queryClient, orgQuery(org.id)),
       ensureLoaded(queryClient, meQuery).catch(() => undefined),
     ]),
+  pendingComponent: ShellPending,
   component: OrgLayout,
   notFoundComponent: OrgNotFound,
 });

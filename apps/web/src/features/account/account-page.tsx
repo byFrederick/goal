@@ -24,6 +24,7 @@ import { Chip } from '../../ui/chip';
 import { Field, Input } from '../../ui/field';
 import { Avatar } from '../../ui/mark';
 import { NotAvailable } from '../../ui/not-available';
+import { sectionHeadingClass } from '../../ui/page-header';
 import { useSaveNotifications } from './notification-preferences';
 import { NotificationsTable } from './notifications-section';
 import { PersonalTokensSection } from './personal-tokens';
@@ -78,7 +79,7 @@ function AccountContent({ me, org }: { me: Me; org: OrgSummary }) {
           <ProfileSection person={person} org={org} update={update} saved={preferences.data} save={save} />
           <AppearanceSection />
           <section id="notifications" aria-labelledby="notifications-heading" className={card}>
-            <h2 id="notifications-heading" className="m-0 text-lg font-medium">
+            <h2 id="notifications-heading" className={sectionHeadingClass}>
               Notifications
             </h2>
             <NotificationsTable org={org.id} signedIn={person !== undefined} />
@@ -182,7 +183,7 @@ function ProfileSection({
   const role = roleLine(org.role, org.name);
   return (
     <section id="profile" aria-labelledby="profile-heading" className={card}>
-      <h2 id="profile-heading" className="m-0 text-lg font-medium">
+      <h2 id="profile-heading" className={sectionHeadingClass}>
         Profile
       </h2>
       <div className="flex flex-wrap items-center gap-4">
@@ -296,7 +297,7 @@ function NameForm({
 function AppearanceSection() {
   return (
     <section id="appearance" aria-labelledby="appearance-heading" className={card}>
-      <h2 id="appearance-heading" className="m-0 text-lg font-medium">
+      <h2 id="appearance-heading" className={sectionHeadingClass}>
         Appearance
       </h2>
       <AppearanceChoice layout="cards" />
@@ -311,7 +312,7 @@ function AppearanceSection() {
 function ConnectedAppsSection() {
   return (
     <section id="connected-apps" aria-labelledby="connected-apps-heading" className={card}>
-      <h2 id="connected-apps-heading" className="m-0 text-lg font-medium">
+      <h2 id="connected-apps-heading" className={sectionHeadingClass}>
         Connected apps
       </h2>
       <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
@@ -342,7 +343,7 @@ function SessionsSection({ signedIn }: { signedIn: boolean }) {
   return (
     <section id="sessions" aria-labelledby="sessions-heading" className={card}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="sessions-heading" className="m-0 text-lg font-medium">
+        <h2 id="sessions-heading" className={sectionHeadingClass}>
           Sessions
         </h2>
         {signedIn ? (

@@ -13,6 +13,7 @@ import type {
   OrgSummary,
 } from '../../api/types';
 import { renderItemPage } from '../../test/route';
+import { TopBarProbe } from '../../test/top-bar-probe';
 import { AssemblyPage } from './assembly-page';
 
 vi.mock(import('../../api/client'), async (original) => ({
@@ -133,7 +134,11 @@ function stat(label: string) {
 /** Renders the page once the router has mounted it (the route resolves asynchronously). */
 async function renderAssembly(over: { item?: Item; parts?: AssemblyParts; factory?: Factory } = {}) {
   renderItemPage({
-    page: () => <AssemblyPage />,
+    page: () => (
+      <TopBarProbe>
+        <AssemblyPage />
+      </TopBarProbe>
+    ),
     org,
     factory: over.factory ?? factory,
     item: over.item ?? assembly,
@@ -142,6 +147,61 @@ async function renderAssembly(over: { item?: Item; parts?: AssemblyParts; factor
   });
   await screen.findByRole('heading', { level: 1 });
 }
+
+describe('AssemblyPage actions in the top bar', () => {
+  it('draws Add a part, Pause and Cancel assembly in the top bar and none in the page', async () => {
+    await renderAssembly({ factory: { ...factory, can: ['item:create', 'item:operate', 'item:decide'] } });
+
+    const bar = within(screen.getByLabelText('Top bar'));
+    for (const name of ['Add a part', 'Pause', 'Cancel assembly']) {
+      expect(bar.getByRole('button', { name })).toBeTruthy();
+      expect(screen.getAllByRole('button', { name })).toHaveLength(1);
+    }
+  });
+
+  it('puts Resume, the primary action, last', async () => {
+    await renderAssembly({ parts: pausedParts });
+
+    const bar = within(screen.getByLabelText('Top bar'));
+    const names = bar.getAllByRole('button').map((b) => b.textContent);
+    expect(names.at(-1)).toBe('Resume');
+  });
+});
+
+function stubWidth(phone: boolean) {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: phone && query === '(max-width: 767px)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as unknown as MediaQueryList;
+}
+
+describe('AssemblyPage breadcrumb', () => {
+  afterEach(() => {
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  it('draws no in-page breadcrumb or board link: the top bar carries the trail', async () => {
+    stubWidth(false);
+    await renderAssembly();
+
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
+    expect(screen.queryByRole('link', { name: /board/i })).toBeNull();
+  });
+
+  it('puts Back to Board in the phone top bar', async () => {
+    stubWidth(true);
+    await renderAssembly();
+
+    const back = within(screen.getByLabelText('Top bar')).getByRole('link', { name: 'Back to Board' });
+    expect(back.getAttribute('href')).toBe('/o/acme/f/goal/board');
+  });
+});
 
 describe('AssemblyPage header', () => {
   it('shows the assembly label, the key, the title and the brief, and no Add a part without item:create', async () => {
@@ -158,20 +218,12 @@ describe('AssemblyPage header', () => {
 });
 
 describe('AssemblyPage v3 header', () => {
-  it('has one back link and no breadcrumb with the ref', async () => {
+  it('has no in-page breadcrumb or back link, and no action row in the content', async () => {
     await renderAssembly();
 
     expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
-    expect(screen.getAllByRole('link', { name: /Goal board/ })).toHaveLength(1);
-  });
-
-  it('puts the actions in the title row, after the heading', async () => {
-    await renderAssembly();
-
-    const heading = screen.getByRole('heading', { level: 1 });
-    const add = screen.getByRole('button', { name: 'Pause' });
-    expect(heading.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(heading.parentElement?.parentElement).toBe(add.parentElement?.parentElement);
+    expect(screen.queryByRole('link', { name: /Goal board/ })).toBeNull();
+    expect(screen.getByRole('heading', { level: 1 }).closest('header')?.querySelector('button')).toBeNull();
   });
 
   it('collapses a long brief under Show more and opens it', async () => {

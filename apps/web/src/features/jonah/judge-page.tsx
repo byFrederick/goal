@@ -491,7 +491,7 @@ export function JudgePage({ slug }: { slug: string }) {
         >
           {missing
             ? "It is not in the factory's current version, so it scores nothing."
-            : 'goald is not answering, or judges are not available on it. Try again in a moment.'}
+            : 'Judges could not be read. They may not be turned on for this installation. Try again in a moment.'}
         </EmptyState>
       </div>
     );

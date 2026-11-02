@@ -183,7 +183,7 @@ describe('the status line', () => {
       'Not saved: goald can’t be reached. Retrying in 5 s.',
     );
     expect(saveSentence({ ...base, status: 'retrying', retryAt: now + 900 })).toBe(
-      'Not saved: goald failed. Retrying in 1 s.',
+      'Not saved: the save failed. Retrying in 1 s.',
     );
     expect(saveSentence({ ...base, status: 'conflict' })).toBe(
       'Not saved: the same field changed in another tab or the CLI.',

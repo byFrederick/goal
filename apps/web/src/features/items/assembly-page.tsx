@@ -1,11 +1,12 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
-import { ChevronLeft, ExternalLink } from 'lucide-react';
-import { useId, useState } from 'react';
+import { ExternalLink } from 'lucide-react';
+import { useId, useMemo, useState } from 'react';
 import { boardQuery, itemQuery, partsQuery } from '../../api/queries';
 import type { AssemblyPart, AssemblyParts, BoardLane, Item } from '../../api/types';
+import { usePhone, usePhoneBack } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
-import { factoryTitle, itemKey, refParam, useFactory, useFactoryParams } from '../../shared/factory';
+import { itemKey, refParam, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatDuration, formatUsd, humanize } from '../../shared/format';
 import { pullRequestLabel, stateNames } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
@@ -298,40 +299,50 @@ export function AssemblyPage() {
   const board = useQuery({ ...boardQuery(org.id, factory.id), enabled: false }).data;
   const lanes = board?.stations.flatMap((s) => s.lanes ?? []) ?? [];
   // The station the assembly was planned at: the part Add a part queues there names its agents.
-  const stationLanes = board?.stations.find((s) => s.id === item.station)?.lanes ?? [];
-  const boardName = `${factoryTitle(factory)} board`;
+  const stationLanes = useMemo(
+    () => board?.stations.find((s) => s.id === item.station)?.lanes ?? [],
+    [board, item.station],
+  );
+  const phone = usePhone();
+  // From 768 px the top bar holds every action. The phone's bar keeps the primary one (Resume, else Add a part)
+  // and the others sit under the brief.
+  const actions = useMemo(
+    () => (
+      <AssemblyActions
+        item={item}
+        itemKey={key}
+        parts={assembly.parts}
+        factory={factory}
+        stationLanes={stationLanes}
+        part={phone ? 'primary' : 'all'}
+      />
+    ),
+    [item, key, assembly.parts, factory, stationLanes, phone],
+  );
+  const back = usePhoneBack('Back to Board', '/o/$org/f/$factory/board', params);
 
   return (
     <>
-      <TopBarSlot crumb={`#${item.number}`} />
-      <header className="flex flex-col gap-3">
-        <Link
-          to="/o/$org/f/$factory/board"
-          params={params}
-          className="inline-flex min-h-11 items-center gap-1.5 self-start text-[15px] text-muted no-underline hover:text-ink"
-        >
-          <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
-          {boardName}
-        </Link>
-        <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-3">
-          <div className="flex min-w-0 max-w-[820px] flex-1 basis-80 flex-col gap-2">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Chip tone="plain">Assembly</Chip>
-              <span className="text-sm text-muted">{item.ref}</span>
-            </div>
-            <h1 title={item.title} className="line-clamp-2 m-0 text-page-title text-ink">
-              {item.title}
-            </h1>
-          </div>
+      <TopBarSlot crumb={`#${item.number}`} actions={actions} back={back} />
+      <header className="flex flex-col gap-2.5">
+        <div className="flex min-w-0 max-w-[820px] flex-wrap items-center gap-2">
+          <Chip tone="plain">Assembly</Chip>
+          <span className="text-sm text-muted">{item.ref}</span>
+        </div>
+        <h1 title={item.title} className="line-clamp-2 m-0 max-w-[820px] text-detail-title tracking-display">
+          {item.title}
+        </h1>
+        {item.body ? <Brief body={item.body} /> : null}
+        {phone ? (
           <AssemblyActions
             item={item}
             itemKey={key}
             parts={assembly.parts}
             factory={factory}
             stationLanes={stationLanes}
+            part="rest"
           />
-        </div>
-        {item.body ? <Brief body={item.body} /> : null}
+        ) : null}
       </header>
 
       <div className="flex flex-col gap-4 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:items-start">

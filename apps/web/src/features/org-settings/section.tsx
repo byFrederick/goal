@@ -1,4 +1,5 @@
 import { type ReactNode, useId } from 'react';
+import { sectionHeadingClass } from '../../ui/page-header';
 
 /**
  * One section of the settings page (canvas "Org-Settings"): its title and what it covers on the
@@ -12,7 +13,7 @@ export function SettingsSection({ title, lede, children }: { title: string; lede
       className="grid gap-4 border-t border-rule py-6 first:border-t-0 first:pt-1 @[720px]:grid-cols-[minmax(0,280px)_minmax(0,1fr)] @[720px]:gap-6"
     >
       <div>
-        <h2 id={id} className="m-0 text-lg font-medium">
+        <h2 id={id} className={sectionHeadingClass}>
           {title}
         </h2>
         <p className="m-0 mt-1.5 text-sm leading-normal text-muted">{lede}</p>
