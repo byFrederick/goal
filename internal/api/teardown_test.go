@@ -19,13 +19,38 @@ func TestAPI_GetItemTeardown(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
+	it := h.seedTeardown(t)
+
+	var got gen.Teardown
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/"+string(it.ID)+"/teardown", "", &got); code != http.StatusOK {
+		t.Fatalf("teardown = %d", code)
+	}
+
+	expectTeardownTimes(t, got)
+	expectTeardownLoops(t, got)
+
+	for _, path := range []string{
+		"/v1/orgs/acme/items/acme%2399/teardown",
+		"/v1/orgs/example-labs/items/" + string(it.ID) + "/teardown",
+	} {
+		var p gen.Problem
+		if code := h.call(t, http.MethodGet, path, "", &p); code != http.StatusNotFound || deref(p.Code) != codeItemNotFound {
+			t.Errorf("GET %s = %d %+v; want 404 item-not-found", path, code, p)
+		}
+	}
+}
+
+// seedTeardown seeds the line's item of TestAPI_GetItemTeardown, 35 minutes on: built from minute
+// 2, its first run's check failed at 10, done again by 20, sent back from merge at 30.
+func (h *harness) seedTeardown(t *testing.T) domain.Item {
+	t.Helper()
+
 	ctx := inOrg(t)
 	minute := func(n int) time.Time { return t0.Add(time.Duration(n) * time.Minute) }
 
-	it := h.seed(t, stBuild, domain.StateQueued, t0)
-
+	h.seed(t, stBuild, domain.StateQueued, t0)
 	h.clock.Advance(2 * time.Minute)
-	it = h.claim(t, 0)
+	it := h.claim(t, 0)
 
 	r1 := h.startRun(t, it, "", minute(2))
 	if err := h.store.FinishRun(ctx, r1, domain.RunResult{Status: domain.RunSucceeded, Turns: 10, CostUSD: 1}, minute(10)); err != nil {
@@ -59,10 +84,12 @@ func TestAPI_GetItemTeardown(t *testing.T) {
 
 	h.clock.Advance(5 * time.Minute)
 
-	var got gen.Teardown
-	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/"+string(it.ID)+"/teardown", "", &got); code != http.StatusOK {
-		t.Fatalf("teardown = %d", code)
-	}
+	return it
+}
+
+// expectTeardownTimes checks the seeded item's time per station, target, budget, cost and runs.
+func expectTeardownTimes(t *testing.T, got gen.Teardown) {
+	t.Helper()
 
 	wantStations := []gen.TeardownStation{
 		{Station: stBuild, WorkingSeconds: 18 * 60, WaitingSeconds: 7 * 60, TotalSeconds: 25 * 60},
@@ -77,37 +104,46 @@ func TestAPI_GetItemTeardown(t *testing.T) {
 		t.Errorf("target %v budget %v cost %v runs %+v; want 6 h, $4, $1.50, a failed check then a finished run",
 			got.TargetSeconds, got.BudgetUsd, got.CostUsd, got.Runs)
 	}
+}
+
+// expectTeardownLoops checks the seeded item's two loops of rework and the person's touch.
+func expectTeardownLoops(t *testing.T, got gen.Teardown) {
+	t.Helper()
 
 	if len(got.Loops) != 2 {
 		t.Fatalf("loops %+v, want the check failure and the send-back", got.Loops)
 	}
 
 	check, back := got.Loops[0], got.Loops[1]
-	if check.Cause != gen.ReworkLoopCauseCheckFailed || check.Station != stBuild || check.Seconds != 10*60 || check.CostUsd != 0.5 || check.EventId == 0 {
-		t.Errorf("check loop %+v, want check_failed at build, 10 minutes, $0.50, with its event", check)
+	want := []gen.ReworkLoop{
+		{
+			Cause: gen.ReworkLoopCauseCheckFailed, Station: stBuild, Reason: new("task check"), At: check.At,
+			Seconds: 10 * 60, CostUsd: 0.5, EventId: check.EventId,
+		},
+		{
+			Cause: gen.ReworkLoopCauseRejected, Station: stMerge, To: new(stBuild), Reason: new("needs a test"), At: back.At,
+			Seconds: 5 * 60, EventId: back.EventId,
+		},
 	}
 
-	if back.Cause != gen.ReworkLoopCauseRejected || back.Station != stMerge || deref(back.To) != stBuild ||
-		deref(back.Reason) != "needs a test" || back.Seconds != 5*60 || back.CostUsd != 0 || back.EventId <= check.EventId {
-		t.Errorf("send-back loop %+v, want rejected at merge to build, its reason, 5 minutes so far", back)
+	if !reflect.DeepEqual(got.Loops, want) || !check.At.Equal(t0.Add(10*time.Minute)) || !back.At.Equal(t0.Add(30*time.Minute)) ||
+		check.EventId == 0 || back.EventId <= check.EventId {
+		t.Errorf("loops %+v, want the check failure at minute 10 and the send-back at 30, each with its event: %+v", got.Loops, want)
 	}
 
 	if got.Rework != (gen.TeardownRework{Loops: 2, Seconds: 15 * 60, CostUsd: 0.5}) {
 		t.Errorf("rework %+v, want 2 loops, 15 minutes, $0.50", got.Rework)
 	}
 
-	if got.TouchCount != 1 || len(got.Touches) != 1 || got.Touches[0].Touch.EventId != back.EventId ||
+	expectTeardownTouch(t, got, back.EventId)
+}
+
+// expectTeardownTouch checks the seeded item's one touch: the rejection (event rejected).
+func expectTeardownTouch(t *testing.T, got gen.Teardown, rejected int64) {
+	t.Helper()
+
+	if got.TouchCount != 1 || len(got.Touches) != 1 || got.Touches[0].Touch.EventId != rejected ||
 		deref(got.Touches[0].Touch.Station) != stMerge || got.Touches[0].WaitSeconds != 10*60 || got.TouchWaitSeconds != 10*60 {
 		t.Errorf("touches %d %+v, want the rejection at merge after 10 minutes' wait", got.TouchCount, got.Touches)
-	}
-
-	for _, path := range []string{
-		"/v1/orgs/acme/items/acme%2399/teardown",
-		"/v1/orgs/example-labs/items/" + string(it.ID) + "/teardown",
-	} {
-		var p gen.Problem
-		if code := h.call(t, http.MethodGet, path, "", &p); code != http.StatusNotFound || deref(p.Code) != codeItemNotFound {
-			t.Errorf("GET %s = %d %+v; want 404 item-not-found", path, code, p)
-		}
 	}
 }

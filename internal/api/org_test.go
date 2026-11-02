@@ -301,6 +301,7 @@ var probes = map[string]probe{
 	"streamEvents":       {method: http.MethodGet, path: "/v1/orgs/acme/stream?factory=acme", org: testOrg, factory: acmeID},
 	"getItem":            {method: http.MethodGet, path: "/v1/orgs/acme/items/acme%231", org: testOrg, factory: acmeID},
 	"listItemEvents":     {method: http.MethodGet, path: "/v1/orgs/acme/items/acme%231/events", org: testOrg, factory: acmeID},
+	"getItemTeardown":    {method: http.MethodGet, path: "/v1/orgs/acme/items/acme%231/teardown", org: testOrg, factory: acmeID},
 	"listItemParts":      {method: http.MethodGet, path: "/v1/orgs/acme/items/acme%231/parts", org: testOrg, factory: acmeID},
 	"addItemPart":        {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/parts", body: `{"title":"a","brief":"b"}`, org: testOrg, factory: acmeID},
 	"approveItem":        {method: http.MethodPost, path: "/v1/orgs/acme/items/acme%231/approve", org: testOrg, factory: acmeID},

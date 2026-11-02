@@ -147,12 +147,9 @@ type Teardown struct {
 // TeardownOf breaks one item down from its spans (in order), its runs (oldest first), its events
 // (in append order) and its touches (in time order), set against target, at now.
 func TeardownOf(spans []Span, runs []Run, events []Event, touches []Touch, target TeardownTarget, now time.Time) Teardown {
-	td := Teardown{
-		Target: target, Stations: []TeardownStation{}, Runs: make([]TeardownRun, 0, len(runs)),
-		Loops: []ReworkLoop{}, Touches: make([]TeardownTouch, 0, len(touches)),
-	}
-
+	td := Teardown{Target: target, Touches: make([]TeardownTouch, 0, len(touches))}
 	end := now
+
 	if len(spans) > 0 {
 		td.Open = spans[len(spans)-1].LeftAt.IsZero()
 		if !td.Open {
@@ -165,7 +162,9 @@ func TeardownOf(spans []Span, runs []Run, events []Event, touches []Touch, targe
 	td.Stations, td.Total = stationTimes(spans, end)
 	td.Runs, td.RunTotal = teardownRuns(runs, events, now)
 	td.CostUSD = td.RunTotal.CostUSD
-	td.Loops, td.Rework = reworkLoops(spans, runs, events, end, now)
+
+	loops := append(sendBackLoops(spans, runs, events, end), redoLoops(runs, events, now)...)
+	td.Loops, td.Rework = reworkTotal(loops)
 
 	for _, t := range touches {
 		var wait time.Duration
@@ -215,25 +214,19 @@ func stationTimes(spans []Span, end time.Time) ([]TeardownStation, TeardownTime)
 	return rows, total
 }
 
-// teardownRuns describes runs, each with its outcome, and sums them.
+// outcomes are the events that say how a run's output ended, by kind.
+var outcomes = map[EventKind]RunOutcome{
+	EventCheckFailed: OutcomeCheckFailed, EventGateRejected: OutcomeSentBack, EventMerged: OutcomeMerged,
+}
+
+// teardownRuns describes runs, each with its outcome, and sums them. A failed check names a
+// run's outcome over anything that came after it.
 func teardownRuns(runs []Run, events []Event, now time.Time) ([]TeardownRun, TeardownRunTotal) {
 	met := map[RunID]RunOutcome{}
 
 	for _, e := range events {
-		var o RunOutcome
-
-		switch e.Kind {
-		case EventCheckFailed:
-			o = OutcomeCheckFailed
-		case EventGateRejected:
-			o = OutcomeSentBack
-		case EventMerged:
-			o = OutcomeMerged
-		default:
-			continue
-		}
-
-		if id := runOfEvent(runs, e); id != "" && met[id] != OutcomeCheckFailed {
+		o, ok := outcomes[e.Kind]
+		if id := runOfEvent(runs, e); ok && id != "" && met[id] != OutcomeCheckFailed {
 			met[id] = o
 		}
 	}
@@ -243,20 +236,7 @@ func teardownRuns(runs []Run, events []Event, now time.Time) ([]TeardownRun, Tea
 	for _, r := range runs {
 		tr := TeardownRun{
 			ID: r.ID, Station: r.Station, Agent: r.Agent, Model: r.Model, Turns: r.Result.Turns,
-			Took: runTook(r, now), CostUSD: r.Result.CostUSD, Status: r.Result.Status,
-		}
-
-		switch o, ok := met[r.ID]; {
-		case r.Result.Status == RunRunning:
-			tr.Outcome = OutcomeRunning
-		case ok:
-			tr.Outcome = o
-		case r.Result.Status == RunFailed:
-			tr.Outcome = OutcomeFailed
-		case r.Result.Status == RunCancelled:
-			tr.Outcome = OutcomeCancelled
-		default:
-			tr.Outcome = OutcomeFinished
+			Took: runTook(r, now), CostUSD: r.Result.CostUSD, Status: r.Result.Status, Outcome: runOutcome(r, met),
 		}
 
 		out = append(out, tr)
@@ -267,6 +247,24 @@ func teardownRuns(runs []Run, events []Event, now time.Time) ([]TeardownRun, Tea
 	}
 
 	return out, total
+}
+
+// runOutcome is r's outcome: running while it runs, else what its output met, else its status.
+func runOutcome(r Run, met map[RunID]RunOutcome) RunOutcome {
+	o, ok := met[r.ID]
+
+	switch {
+	case r.Result.Status == RunRunning:
+		return OutcomeRunning
+	case ok:
+		return o
+	case r.Result.Status == RunFailed:
+		return OutcomeFailed
+	case r.Result.Status == RunCancelled:
+		return OutcomeCancelled
+	default:
+		return OutcomeFinished
+	}
 }
 
 // runTook is how long r ran, until now while it runs; 0 for a run that ended without an end.
@@ -298,18 +296,20 @@ func runOfEvent(runs []Run, e Event) RunID {
 	return id
 }
 
+// loop is a rework loop being measured: until it ended and the runs it cost.
+type loop struct {
+	ReworkLoop
+
+	until time.Time
+	runs  []Run
+}
+
 // sendBacks are the kinds that open a rework round, the most specific first.
 var sendBacks = []EventKind{EventGateRejected, EventRejected, EventMoved}
 
-// reworkLoops finds the loops of rework (the rules at the top of this file) and their totals.
-func reworkLoops(spans []Span, runs []Run, events []Event, end, now time.Time) ([]ReworkLoop, ReworkTotal) {
-	type loop struct {
-		ReworkLoop
-
-		until time.Time
-		runs  []Run
-	}
-
+// sendBackLoops is a loop for each new rework round among spans (the rules at the top of this
+// file), each until the item is back at the station that sent it, or until end.
+func sendBackLoops(spans []Span, runs []Run, events []Event, end time.Time) []loop {
 	var loops []loop
 
 	for i := 1; i < len(spans); i++ {
@@ -324,23 +324,29 @@ func reworkLoops(spans []Span, runs []Run, events []Event, end, now time.Time) (
 		}
 
 		from := cmp.Or(sp.ReworkBy, cause.Station)
-		until := end
-
-		if j := slices.IndexFunc(spans[i+1:], func(s Span) bool { return s.Station == from }); j >= 0 {
-			until = spans[i+1+j].EnteredAt
-		}
-
-		l := loop{ReworkLoop: loopOf(cause, from), until: until}
+		l := loop{ReworkLoop: loopOf(cause, from), until: end}
 		l.To = sp.Station
 
+		if j := slices.IndexFunc(spans[i+1:], func(s Span) bool { return s.Station == from }); j >= 0 {
+			l.until = spans[i+1+j].EnteredAt
+		}
+
 		for _, r := range runs {
-			if !r.StartedAt.Before(cause.At) && r.StartedAt.Before(until) {
+			if !r.StartedAt.Before(cause.At) && r.StartedAt.Before(l.until) {
 				l.runs = append(l.runs, r)
 			}
 		}
 
 		loops = append(loops, l)
 	}
+
+	return loops
+}
+
+// redoLoops is a loop for each check_failed and run_retried event: until the next run at its
+// station ends (now while it runs), and none without one.
+func redoLoops(runs []Run, events []Event, now time.Time) []loop {
+	var loops []loop
 
 	for _, e := range events {
 		if e.Kind != EventCheckFailed && e.Kind != EventRunRetried {
@@ -353,17 +359,18 @@ func reworkLoops(spans []Span, runs []Run, events []Event, end, now time.Time) (
 		if i := slices.IndexFunc(runs, func(r Run) bool {
 			return r.Station == e.Station && r.ID != own && !r.StartedAt.Before(e.At)
 		}); i >= 0 {
-			redo := runs[i]
-			l.runs, l.until = []Run{redo}, redo.EndedAt
-
-			if redo.EndedAt.IsZero() {
-				l.until = now
-			}
+			l.runs, l.until = runs[i:i+1], cmp.Or(runs[i].EndedAt, now)
 		}
 
 		loops = append(loops, l)
 	}
 
+	return loops
+}
+
+// reworkTotal measures loops in time order and sums them, the time inside any loop and each run
+// counted once.
+func reworkTotal(loops []loop) ([]ReworkLoop, ReworkTotal) {
 	slices.SortFunc(loops, func(a, b loop) int { return cmp.Or(a.At.Compare(b.At), cmp.Compare(a.EventID, b.EventID)) })
 
 	out, total := make([]ReworkLoop, 0, len(loops)), ReworkTotal{Loops: len(loops)}
@@ -373,6 +380,7 @@ func reworkLoops(spans []Span, runs []Run, events []Event, end, now time.Time) (
 
 	for _, l := range loops {
 		l.Time = l.until.Sub(l.At)
+
 		for _, r := range l.runs {
 			l.CostUSD += r.Result.CostUSD
 
@@ -415,11 +423,14 @@ func roundCause(events []Event, since, at time.Time) (Event, bool) {
 	return cause, found
 }
 
+// keyCommand is the data key of a command check's command line (check_passed, check_failed).
+const keyCommand = "command"
+
 // loopOf starts a loop caused by e at station.
 func loopOf(e Event, station string) ReworkLoop {
 	reason, _ := e.Data["reason"].(string)
 	if e.Kind == EventCheckFailed {
-		reason, _ = e.Data["command"].(string)
+		reason, _ = e.Data[keyCommand].(string)
 	}
 
 	return ReworkLoop{Cause: e.Kind, Station: station, Reason: reason, At: e.At, EventID: e.ID}
