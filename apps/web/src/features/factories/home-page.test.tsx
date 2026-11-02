@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { approveItem } from '../../api/client';
+import { approveItem, decideToolApproval } from '../../api/client';
 import {
   attentionQuery,
   boardQuery,
@@ -27,6 +27,7 @@ vi.mock(import('../../api/client'), async (original) => ({
   ...(await original()),
   getFactoryOverview: vi.fn(() => (fake.overview ? fake.overview() : Promise.reject(new Error('no overview')))),
   getBoard: vi.fn((org: string, factory: string) => (fake.board ? fake.board(org, factory) : Promise.reject())),
+  decideToolApproval: vi.fn(async () => ({ id: 'id-software#14', state: 'queued' }) as unknown as Item),
   approveItem: vi.fn(
     async (_org: string, item: string) => ({ ref: item, state: 'done', station: 'done' }) as unknown as Item,
   ),
@@ -154,6 +155,39 @@ const decision = {
   station: 'approve',
   action: null,
   approval: { summary: 'Architect wants to comment on GitHub issue 212' },
+};
+
+const question = {
+  id: 'question:software#13',
+  kind: 'question',
+  factory: { id: software.id, name: 'software', title: 'Software' },
+  since: '2026-10-27T09:30:00Z',
+  item: item('software#13', 'Which colour for the badge?'),
+  station: 'build',
+  action: null,
+  approval: null,
+};
+
+const toolApproval = {
+  id: 'tool:software#14',
+  kind: 'tool_approval',
+  factory: { id: software.id, name: 'software', title: 'Software' },
+  since: '2026-10-27T09:40:00Z',
+  item: item('software#14', 'Add the retry'),
+  station: 'build',
+  action: null,
+  approval: null,
+};
+
+const expedite = {
+  id: 'expedite:software#15',
+  kind: 'expedite',
+  factory: { id: software.id, name: 'software', title: 'Software' },
+  since: '2026-10-27T09:50:00Z',
+  item: item('software#15', 'Hotfix'),
+  station: 'build',
+  action: null,
+  approval: null,
 };
 
 const alert = {
@@ -309,23 +343,43 @@ describe('Home: the ready state', () => {
     expect(within(sreRow).queryByText('Throughput')).toBeNull();
   });
 
-  it('shows each station of the line with what waits there and what finished', async () => {
+  it('shows each station of the line as count over name, with Done today', async () => {
     await renderReady();
 
     const line = screen.getByRole('region', { name: 'software line' });
     expect(within(line).getByText('Intake')).toBeTruthy();
-    expect(within(line).getByText('Done')).toBeTruthy();
-    expect(within(line).getByText('7 merged today')).toBeTruthy();
+    expect(within(line).getByText('Done today')).toBeTruthy();
+    expect(within(line).queryByText(/merged today/)).toBeNull();
+    expect(within(line).queryByText(/Busy/)).toBeNull();
+    expect(within(line).queryByText(/in progress/)).toBeNull();
   });
 
-  it('lists what needs you, with a type and an action, and never a question', async () => {
+  it('colours the type word: orange for questions, red for alerts, and shows Deny and Approve on a tool approval', async () => {
+    await renderReady({ inboxList: inboxEntries([question, expedite, toolApproval]) });
+
+    const needs = screen.getByRole('region', { name: 'Needs you first' });
+    expect(within(needs).getByText('Question').className).toContain('text-you-ink');
+    expect(within(needs).getByText('Alert').className).toContain('text-rework-ink');
+    expect(within(needs).getByText('Approval').className).toContain('text-you-ink');
+    expect(within(needs).getByRole('link', { name: 'Reply' }).getAttribute('href')).toBe('/o/acme/needs-you');
+    expect(within(needs).getByRole('button', { name: 'Deny' })).toBeTruthy();
+
+    fireEvent.click(within(needs).getByRole('button', { name: 'Approve' }));
+    await waitFor(() =>
+      expect(decideToolApproval).toHaveBeenCalledWith('org-1', 'id-software#14', {
+        decision: 'approve',
+        always_allow: false,
+      }),
+    );
+  });
+
+  it('lists what needs you, with a type and an action', async () => {
     await renderReady();
 
     const needs = screen.getByRole('region', { name: 'Needs you first' });
     expect(within(needs).getByText('Alert')).toBeTruthy();
-    expect(within(needs).getByText('Approval')).toBeTruthy();
+    expect(within(needs).getByText('Decision')).toBeTruthy();
     expect(within(needs).getByRole('link', { name: 'Open floor' }).getAttribute('href')).toBe('/o/acme/f/sre');
-    expect(screen.queryByText('Question')).toBeNull();
   });
 
   it('leads Open all from Needs you first to the Needs you page', async () => {
@@ -360,21 +414,13 @@ describe('Home: the ready state', () => {
     expect(within(spend).getByText(/of \$1,400/)).toBeTruthy();
     expect(within(spend).getByText('Last 7 days')).toBeTruthy();
     expect(within(spend).getAllByRole('meter')).toHaveLength(3);
+    expect(within(spend).getByRole('link', { name: 'Spend and billing' }).getAttribute('href')).toBe('/o/acme/spend');
   });
 
-  it('renders Spend and billing as not available, and never navigates', async () => {
+  it('keeps the archived factories one link away', async () => {
     const { router } = await renderReady();
 
-    const link = await screen.findByRole('button', { name: 'Spend and billing' });
-    expect(link.getAttribute('aria-disabled')).toBe('true');
-    fireEvent.click(link);
-    expect(router.state.location.pathname).toBe('/o/acme');
-  });
-
-  it('keeps the archived factories one control away', async () => {
-    const { router } = await renderReady();
-
-    fireEvent.click(await screen.findByRole('radio', { name: 'Archived' }));
+    fireEvent.click(await screen.findByRole('link', { name: 'Archived factories' }));
 
     expect(router.state.location.search).toEqual({ archived: true });
   });
