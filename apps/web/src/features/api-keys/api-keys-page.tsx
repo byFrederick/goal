@@ -26,6 +26,7 @@ import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
+import { CopyButton } from '../../ui/copy-button';
 import { EmptyState } from '../../ui/empty-state';
 import { NotAvailable } from '../../ui/not-available';
 import { MemberTokensSection } from './member-tokens';
@@ -258,9 +259,7 @@ export function ApiKeysPage() {
               <div className="flex h-9 items-center gap-2 rounded-control border border-rule bg-panel pr-2 pl-3">
                 <span className="min-w-0 flex-1 truncate font-mono text-secondary">{mcpAddress}</span>
                 <NotAvailable>
-                  <Button variant="white" size="sm">
-                    Copy
-                  </Button>
+                  <CopyButton variant="white" text={mcpAddress} />
                 </NotAvailable>
               </div>
             </section>
