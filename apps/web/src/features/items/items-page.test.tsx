@@ -271,7 +271,9 @@ describe('Items filters in the URL', () => {
     );
 
     expect(await screen.findByText('Move the schema')).toBeTruthy();
-    expect(screen.getByText('1 of 3 parts merged')).toBeTruthy();
+    const progress = screen.getByText('1 of 3 parts merged').closest('div');
+    expect(progress?.querySelector('.bg-ink')).not.toBeNull();
+    expect(progress?.querySelector('.bg-run, .bg-ok')).toBeNull();
     expect(screen.getByText('Checkout API latency')).toBeTruthy();
     expect(screen.queryByText('Backfill the ledger')).toBeNull();
   });
