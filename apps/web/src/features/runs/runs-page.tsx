@@ -236,7 +236,7 @@ export function RunsPage() {
   const word = rangeWord(search.range);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex min-w-0 flex-col gap-5">
       <TopBarSlot crumb={phone ? 'Runs' : undefined} actions={actions} />
       <div className="flex flex-col gap-1">
         <h1 className="m-0 text-page-title tracking-display">Runs</h1>
@@ -402,7 +402,7 @@ export function RunsPage() {
                 : 'Runs appear here when an agent starts work on an item.'}
             </EmptyState>
           ) : (
-            <div className="overflow-x-auto rounded-card border border-line">
+            <div className="w-full max-w-full min-w-0 overflow-x-auto rounded-card border border-line">
               <table className="w-full border-collapse text-secondary">
                 <thead>
                   <tr className="bg-panel text-left text-muted">

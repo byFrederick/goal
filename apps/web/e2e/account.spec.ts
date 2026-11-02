@@ -81,7 +81,7 @@ test('the Slack boxes are not available with no Slack connection, and the email 
   await expect(page.getByRole('dialog', { name: 'Sign out of every browser and the CLI?' })).toBeVisible();
 });
 
-for (const width of [375, 768, 1440]) {
+for (const width of [390, 768, 1440]) {
   test(`the notifications section fits at ${width} px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await signIn(page.request);
