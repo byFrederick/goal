@@ -124,4 +124,24 @@ describe('IntakePage', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Suggested triggers' })).toBeTruthy();
     expect(screen.getAllByRole('button', { name: 'Add' })).toHaveLength(3);
   });
+
+  it('says which connection a trigger needs, links Connect and reads Off', async () => {
+    vi.mocked(getIntake).mockResolvedValue({
+      ...intake,
+      triggers: [
+        {
+          ...intake.triggers[1],
+          name: 'errors-in-production',
+          on: 'webhook.sentry.issue',
+          problem: { kind: 'missing_connection', message: 'The factory has no webhook endpoint named sentry' },
+        },
+      ],
+    } as Intake);
+    renderIntake();
+
+    const triggers = await screen.findByRole('region', { name: 'Triggers' });
+    expect(within(triggers).getByText(/Needs the sentry connection\./)).toBeTruthy();
+    expect(within(triggers).getByRole('link', { name: 'Connect' }).getAttribute('href')).toBe('/o/acme/connections');
+    expect(within(triggers).getByText('Off')).toBeTruthy();
+  });
 });
