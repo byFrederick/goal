@@ -1,6 +1,6 @@
 // The item page on a phone (ADR 0016, screens/mobile/item.jpg): the top bar with Back to Board and the More
-// actions menu, the summary line under the stepper, Latest in this run, the one Details card and the note
-// field above the tab bar. Runs on the phone-375 project; checked in light and dark mode.
+// actions menu, the summary line under the stepper, the tab bar, the tab panel, then Latest in this run, the one
+// Details card and the note field. Runs on the phone-375 project; checked in light and dark mode.
 import { expect, test } from '@playwright/test';
 import { expectNoHorizontalScroll, isPhone } from './support';
 
@@ -47,3 +47,31 @@ for (const theme of ['light', 'dark'] as const) {
     });
   });
 }
+
+for (const width of [1024, 390]) {
+  for (const tab of ['trace', 'teardown']) {
+    test(`?tab=${tab} opens with its panel in the first viewport at ${width}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto(`/o/acme/f/goal/items/6?tab=${tab}`);
+      const tabs = page.getByRole('tablist', { name: 'Item views' });
+      const panel = page.getByRole('tabpanel');
+      await expect(panel).toBeVisible();
+      const tabsBox = await tabs.boundingBox();
+      const panelBox = await panel.boundingBox();
+      expect(panelBox?.y ?? Infinity).toBeLessThan(844);
+      const latest = page.getByRole('heading', { name: /^Latest (steps|in this run)$/ });
+      if (await latest.count()) {
+        const latestBox = await latest.first().boundingBox();
+        expect(latestBox?.y ?? 0).toBeGreaterThan(tabsBox?.y ?? 0);
+      }
+    });
+  }
+}
+
+test('the item tab row hides its scrollbar at 390', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/f/goal/items/6');
+  const tabs = page.getByRole('tablist', { name: 'Item views' });
+  await expect(tabs).toHaveCSS('scrollbar-width', 'none');
+  await expect(tabs).toHaveCSS('overflow-x', 'auto');
+});

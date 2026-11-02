@@ -68,3 +68,46 @@ test('the Trace tab fits at every width', async ({ page }) => {
     await expectNoClippedElements(page);
   }
 });
+
+for (const width of [1024, 1440]) {
+  test(`every Took cell stays on one line at ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/o/acme/f/goal/items/6?tab=trace');
+    await expect(page.getByRole('tabpanel', { name: 'Trace' })).toBeVisible();
+    const wrapped = await page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLElement>('[role="tabpanel"] span.whitespace-nowrap.tabular-nums'))
+        .filter((cell) => {
+          const row = cell.closest('[role="row"], li') ?? cell.parentElement!;
+          return (
+            cell.scrollHeight > parseFloat(getComputedStyle(cell).lineHeight) + 1 ||
+            cell.scrollWidth > cell.clientWidth ||
+            cell.getBoundingClientRect().right > row.getBoundingClientRect().right + 0.5
+          );
+        })
+        .map((cell) => cell.textContent),
+    );
+    expect(wrapped).toEqual([]);
+  });
+
+  test(`the Took column fits the longest live value at ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/o/acme/f/goal/items/6?tab=trace');
+    await expect(page.getByRole('tabpanel', { name: 'Trace' })).toBeVisible();
+    // The widest value a running span shows is an hour-scale "so far" duration.
+    const room = await page.evaluate(() => {
+      const cell = document.querySelector<HTMLElement>('[role="tabpanel"] span.whitespace-nowrap.tabular-nums');
+      if (!cell) return null;
+      const style = getComputedStyle(cell);
+      const probe = document.createElement('span');
+      probe.textContent = '12 h 41 min so far';
+      probe.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font-family:${style.fontFamily};font-size:${style.fontSize};font-weight:${style.fontWeight};font-variant-numeric:tabular-nums`;
+      document.body.append(probe);
+      const need = probe.getBoundingClientRect().width;
+      probe.remove();
+      const box = cell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      return { need, box };
+    });
+    expect(room).not.toBeNull();
+    expect(room!.box).toBeGreaterThanOrEqual(room!.need);
+  });
+}

@@ -332,6 +332,14 @@
   animation: var(--animate-thinking-shimmer);
 }
 
+/* A row that scrolls sideways without drawing its scrollbar. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* A pressable control (MOTION.md, Button press and Hover): colour changes at the quick duration, and the
    press scales the control at the micro duration with the entering ease. Movement only on :active. */
 @utility press {
