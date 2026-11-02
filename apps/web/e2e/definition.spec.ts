@@ -206,3 +206,24 @@ test('Ask the factory is not built yet: the input is disabled and Ask stays unav
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
+
+test('Review and publish with no draft shows Checks and Versions, and no Budget', async ({ page, request }) => {
+  await request.delete(draft, { headers: { 'If-Match': '"42"' } });
+  for (const [width, height] of [
+    [1440, 900],
+    [390, 844],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    for (const scheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.goto('/o/acme/f/goal/definition/review');
+      await expect(page.getByRole('heading', { level: 2, name: 'Review and publish' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Checks' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Versions' })).toBeVisible();
+      await expect(page.getByRole('link', { name: /^All (\d+ )?versions$/ })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Budget' })).toHaveCount(0);
+      await expectNoHorizontalScroll(page);
+      await page.screenshot({ path: `test-results/definition-review-${width}-${scheme}.png`, fullPage: true });
+    }
+  }
+});
