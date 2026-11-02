@@ -188,6 +188,7 @@ function definitionCache() {
   client.setQueryData(defKeys.draftFile(acme, goal, 'factory.yaml'), {});
   client.setQueryData(defKeys.validation(acme, goal, 4), {});
   client.setQueryData(defKeys.versions(acme, goal), {});
+  client.setQueryData([...defKeys.versionPages(acme, goal), 20], {});
   client.setQueryData(defKeys.version(acme, goal, '8'), {});
   client.setQueryData(defKeys.compare(acme, goal, 'base', 'draft', 42), {});
   client.setQueryData(defKeys.versionFile(acme, 'a1b2'), '');
@@ -245,6 +246,7 @@ describe('definitionInvalidations', () => {
     expect(stale).toEqual(
       expect.arrayContaining([
         defKeys.versions(acme, goal),
+        [...defKeys.versionPages(acme, goal), 20],
         defKeys.version(acme, goal, '8'),
         defKeys.draft(acme, goal),
         defKeys.compare(acme, goal, 'base', 'draft', 42),

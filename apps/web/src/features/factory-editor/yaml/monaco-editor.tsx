@@ -29,8 +29,8 @@ import { type ReactNode, useEffect, useImperativeHandle, useRef, useState } from
 import { createPortal } from 'react-dom';
 import schema from '../../../../../../contracts/definitions/factory.schema.json';
 import type { CodeEditorProps } from './code-editor';
+import { editorTheme } from './editor-theme';
 import './monaco-editor.css';
-import { goalTheme } from './monaco-theme';
 import YamlWorker from './yaml.worker.ts?worker';
 
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
@@ -76,13 +76,16 @@ configureMonacoYaml(yamlMonaco as never, {
 
 /** A design token's value as the page has it now: the light or the dark one, by data-theme. */
 const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
+/** Whether the page shows its dark theme now: a chosen data-theme, else the system's. */
+function isDark(): boolean {
+  const chosen = document.documentElement.dataset.theme;
+  if (chosen) return chosen === 'dark';
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+}
 
 /** Defines the theme again and applies it: on load, and whenever the page switches theme. */
 function applyGoalTheme() {
-  monaco.editor.defineTheme(
-    'goal',
-    goalTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light', token),
-  );
+  monaco.editor.defineTheme('goal', editorTheme(token, isDark()));
   monaco.editor.setTheme('goal');
 }
 

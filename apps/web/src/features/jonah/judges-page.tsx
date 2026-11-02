@@ -6,8 +6,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
-import { ApiError, updateJudge } from '../../api/client';
+import { updateJudge } from '../../api/client';
 import { judgeQuery, judgesQuery } from '../../api/queries';
+import { isUnavailable } from '../../api/retry';
 import type { JudgeListEntry } from '../../api/types';
 import { PendingSkeleton } from '../../app/route-skeletons';
 import { TopBarSlot } from '../../app/top-bar';
@@ -19,6 +20,7 @@ import { Callout } from '../../ui/callout';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { EmptyState } from '../../ui/empty-state';
+import { NotAvailable } from '../../ui/not-available';
 import { NumberRoll } from '../../ui/number-roll';
 import { Skeleton } from '../../ui/skeleton';
 import { JonahHeader } from './jonah-header';
@@ -89,7 +91,16 @@ export function JudgesPage() {
     onSuccess: () => refreshAfterPublish(queryClient, org.id, factory.id),
   });
 
-  const newButton = (
+  // A goald built without judges answers 503 judges-unavailable: the page is the empty one, creation not available yet.
+  const unavailable = judges.isError && isUnavailable(judges.error);
+  const newButton = unavailable ? (
+    <NotAvailable>
+      <Button key="new" variant="primary" disabled>
+        <Plus aria-hidden="true" />
+        New judge
+      </Button>
+    </NotAvailable>
+  ) : (
     <Button key="new" variant="primary" disabled={!canPublish} onClick={() => setAdding(true)}>
       <Plus aria-hidden="true" />
       New judge
@@ -98,8 +109,7 @@ export function JudgesPage() {
 
   if (judges.isPending) return <Loading />;
 
-  if (judges.isError) {
-    const unavailable = judges.error instanceof ApiError && judges.error.code === 'judges-unavailable';
+  if (judges.isError && !unavailable) {
     return (
       <div className="flex min-w-0 flex-col gap-5">
         <TopBarSlot crumb="Judges" />
@@ -112,15 +122,17 @@ export function JudgesPage() {
             </Button>
           }
         >
-          {unavailable
-            ? 'Judges are not available on this goald yet.'
-            : 'goald is not answering. Try again in a moment.'}
+          goald is not answering. Try again in a moment.
         </EmptyState>
       </div>
     );
   }
 
-  const { version, judges: entries, judge_cost_usd: cost } = judges.data;
+  const {
+    version,
+    judges: entries,
+    judge_cost_usd: cost,
+  } = judges.data ?? { version: null, judges: [], judge_cost_usd: 0 };
   const empty = version === null || entries.length === 0;
 
   return (

@@ -11,17 +11,58 @@ import { linesText, sectionBlocks } from '../yaml/blocks';
 
 export type TileState = 'problem' | 'edited' | 'unchanged';
 
-/** A section tile's state and subtitle: "1 change, 1 problem", "2 changes", "No changes". */
-export function sectionTile(summary: SectionSummary | undefined): { state: TileState; text: string } {
+/**
+ * What a section holds, from the draft model alone: "Software, 3 work types", "7 stations,
+ * constraint Review", "6 agents on 2 models", "github, slack, 2 sources".
+ */
+export function sectionSummary(section: Exclude<Section, 'review'>, model: Model): string {
+  switch (section) {
+    case 'basics': {
+      const name = model.basics.name || model.basics.title;
+      const types = plural(model.basics.work_types?.length ?? 0, 'work type');
+      return name ? `${name}, ${types}` : types;
+    }
+    case 'line': {
+      const stations = model.line.stations ?? [];
+      const count = plural(stations.length, 'station');
+      const constraint = model.line.flow?.constraint;
+      if (!constraint) return count;
+      const station = stations.find((s) => s.id === constraint || s.name === constraint);
+      return `${count}, constraint ${station?.name || constraint}`;
+    }
+    case 'agents': {
+      const agents = model.agents.agents ?? [];
+      const models = new Set(agents.map((a) => a.model).filter(Boolean));
+      if (model.agents.default_model) models.add(model.agents.default_model);
+      return `${plural(agents.length, 'agent')} on ${plural(models.size, 'model')}`;
+    }
+    case 'connections': {
+      const names = model.connections.map((c) => c.name);
+      const sources = plural(model.basics.knowledge_sources?.length ?? 0, 'source');
+      return [...names, sources].join(', ');
+    }
+  }
+}
+
+/**
+ * A section tile: the section's summary as text, and a badge beside the label with what needs
+ * attention ("1 change, 1 problem", "2 changes"; none when the section is unchanged).
+ */
+export function sectionTile(
+  summary: SectionSummary | undefined,
+  section: Exclude<Section, 'review'>,
+  model: Model,
+): { state: TileState; text: string; badge?: string } {
   const changes = summary?.changes ?? 0;
   const problems = summary?.problems ?? 0;
+  const text = sectionSummary(section, model);
   if (problems > 0) {
-    const text =
+    const badge =
       changes > 0 ? `${plural(changes, 'change')}, ${plural(problems, 'problem')}` : plural(problems, 'problem');
-    return { state: 'problem', text };
+    return { state: 'problem', text, badge };
   }
-  if (changes > 0) return { state: 'edited', text: plural(changes, 'change') };
-  return { state: 'unchanged', text: 'No changes' };
+  if (changes > 0) return { state: 'edited', text, badge: plural(changes, 'change') };
+  return { state: 'unchanged', text };
 }
 
 /**
@@ -42,13 +83,26 @@ export function viewTileText(section: Exclude<Section, 'review'>, model: Model):
 }
 
 /** The Review and publish tile: what stands between the draft and a publish. */
-export function reviewTile({ problems, changes, hasDraft }: { problems: number; changes: number; hasDraft: boolean }): {
+export function reviewTile({
+  problems,
+  changes,
+  hasDraft,
+  base,
+}: {
+  problems: number;
+  changes: number;
+  hasDraft: boolean;
+  /** The version number the draft started from. */
+  base?: number | null | undefined;
+}): {
   state: TileState | 'ready';
   text: string;
 } {
   if (problems > 0) return { state: 'problem', text: `Fix ${plural(problems, 'problem')} first` };
-  if (hasDraft && changes > 0) return { state: 'ready', text: 'Ready to publish' };
-  return { state: 'unchanged', text: 'No changes' };
+  if (hasDraft && changes > 0) {
+    return { state: 'ready', text: base ? `${plural(changes, 'change')} from v${base}` : 'Ready to publish' };
+  }
+  return { state: 'unchanged', text: 'Nothing to publish' };
 }
 
 /** Every tile while factory.yaml does not parse: Visual waits for it, Review cannot publish. */
