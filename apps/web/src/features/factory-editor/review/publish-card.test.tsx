@@ -8,9 +8,11 @@ import { PublishCard } from './publish-card';
 
 // The card reads the draft session and the editor facts; the test sets them and watches the card.
 const state = vi.hoisted(() => ({ hasDraft: true }));
-const closeDraft = vi.hoisted(() => vi.fn(() => {
-  state.hasDraft = false;
-}));
+const closeDraft = vi.hoisted(() =>
+  vi.fn(() => {
+    state.hasDraft = false;
+  }),
+);
 const publishDraft = vi.hoisted(() => vi.fn(async () => ({ number: 5 })));
 
 vi.mock('../../../api/definitions', () => ({ publishDraft }));

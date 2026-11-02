@@ -93,7 +93,7 @@ export function FlowPanel() {
           size={16}
           strokeWidth={1.75}
           aria-hidden="true"
-          className="shrink-0 transition-transform duration-200 group-open:rotate-90"
+          className="shrink-0 transition-transform duration-(--duration-quick) group-open:rotate-90"
         />
         <span className="flex min-w-0 flex-col">
           <span className="text-lg font-medium">Flow and targets</span>

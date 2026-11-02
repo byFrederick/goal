@@ -48,7 +48,7 @@ export function WizardSteps({ current, done, factory }: StepsProps) {
             </>
           );
           const tile = cn(
-            'flex h-11 min-w-0 items-center gap-2.5 rounded-control border px-3.5 text-sm no-underline transition-colors duration-200',
+            'flex h-11 min-w-0 items-center gap-2.5 rounded-control border px-3.5 text-sm no-underline transition-colors duration-(--duration-quick)',
             isCurrent ? 'border-ink bg-ink font-medium text-white' : 'border-line bg-card text-ink-soft',
           );
           const linked = factory !== undefined && step !== 'start' && !isCurrent;

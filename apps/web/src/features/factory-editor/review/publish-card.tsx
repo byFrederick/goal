@@ -6,8 +6,8 @@
 // revision and the version it saw running, and on success closes the draft.
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { useEffect, useId, useState } from 'react';
 import { Check } from 'lucide-react';
+import { useEffect, useId, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '../../../api/client';
 import { publishDraft } from '../../../api/definitions';
@@ -157,8 +157,8 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
       <SectionCard title="Publish">
         {published !== null ? (
           <p role="status" className="m-0 flex items-center gap-2 text-body">
-            <Check size={16} strokeWidth={1.5} aria-hidden="true" className="motion-safe:animate-success-check" />
-            v{published} is published and running.
+            <Check size={16} strokeWidth={1.5} aria-hidden="true" className="motion-safe:animate-success-check" />v
+            {published} is published and running.
           </p>
         ) : (
           <p className="m-0 text-body">

@@ -185,7 +185,7 @@ function ClaudeSlots({ name }: { name: string }) {
         <Link
           to="/o/$org/settings"
           params={{ org: orgCtx.slug }}
-          className="underline underline-offset-3 transition-colors duration-200 hover:text-run"
+          className="underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-run"
         >
           Change in Organization settings
         </Link>

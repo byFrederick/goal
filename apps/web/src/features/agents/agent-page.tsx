@@ -181,7 +181,7 @@ export function AgentPage({ agent, view }: { agent: string; view: AgentView }) {
               search={{ view: v }}
               aria-current={current ? 'page' : undefined}
               className={cn(
-                '-mb-px inline-flex h-10 shrink-0 items-center border-b-2 px-3 text-body transition-colors duration-200 hover:text-ink',
+                '-mb-px inline-flex h-10 shrink-0 items-center border-b-2 px-3 text-body transition-colors duration-(--duration-quick) hover:text-ink',
                 current ? 'border-run font-control text-ink' : 'border-transparent text-ink-soft',
               )}
             >

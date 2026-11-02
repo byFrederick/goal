@@ -12,7 +12,7 @@ import { placeSearch, problemPlace } from '../frame/state';
 import { SectionLink } from '../search-link';
 import { type EditorSection, sectionInfo } from '../sections';
 
-const linkClass = 'underline underline-offset-3 transition-colors duration-200';
+const linkClass = 'underline underline-offset-3 transition-colors duration-(--duration-quick)';
 
 /** A link to where a problem is fixed: its section, and the entity in it. */
 function FixLink({

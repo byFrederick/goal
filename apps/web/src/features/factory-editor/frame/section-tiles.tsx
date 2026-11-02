@@ -121,7 +121,7 @@ function Tile({
       aria-current={current ? 'location' : undefined}
       className={cn(
         // relative: the screen-reader name stays inside the tile, not past the scrolling row.
-        'relative flex min-h-11 items-center gap-2.5 rounded-control border px-3 py-1.5 text-sm no-underline transition-colors duration-200',
+        'relative flex min-h-11 items-center gap-2.5 rounded-control border px-3 py-1.5 text-sm no-underline transition-colors duration-(--duration-quick)',
         current ? 'border-ink bg-ink text-white' : 'border-line bg-card text-ink hover:border-rule hover:bg-card',
       )}
     >

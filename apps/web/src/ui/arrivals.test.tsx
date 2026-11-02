@@ -24,7 +24,9 @@ describe('useArrivals', () => {
   });
 
   it('treats the first rows a list gets, after it was empty, as its baseline', () => {
-    const { result, rerender } = renderHook(({ keys }) => useArrivals(keys), { initialProps: { keys: [] as string[] } });
+    const { result, rerender } = renderHook(({ keys }) => useArrivals(keys), {
+      initialProps: { keys: [] as string[] },
+    });
     rerender({ keys: ['first'] });
     expect(result.current('first')).toBe(false);
   });

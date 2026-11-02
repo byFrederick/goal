@@ -36,7 +36,7 @@ const introOf: Record<Exclude<JonahTab, 'overview' | 'proposals'>, string> = {
 };
 
 const tabClass =
-  '-mb-px inline-flex h-10 shrink-0 items-center gap-2 border-b-2 px-3 text-body transition-colors duration-200';
+  '-mb-px inline-flex h-10 shrink-0 items-center gap-2 border-b-2 px-3 text-body transition-colors duration-(--duration-quick)';
 
 export function JonahHeader({
   tab,
