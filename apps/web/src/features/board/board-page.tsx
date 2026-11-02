@@ -1,8 +1,8 @@
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { Tabs } from 'radix-ui';
-import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { boardQuery } from '../../api/queries';
 import type { Board, Factory, ItemCard } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
@@ -15,11 +15,11 @@ import { NeedsYouLink } from '../../shared/needs-you-link';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
 import { factoryRoleNote, holds, reasons } from '../../shared/permissions';
+import { useArrivals } from '../../ui/arrivals';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
-import { NativeSelect } from '../../ui/field';
+import { Menu, MenuChoice, MenuContent, MenuRadioGroup, MenuTrigger } from '../../ui/menu';
 import { SegmentedControl, type SegmentedOption } from '../../ui/segmented-control';
-import { StatusIcon } from '../../ui/status-icon';
 import { StationColumn } from './board-column';
 import { CardDnd } from './board-dnd';
 import {
@@ -33,7 +33,7 @@ import {
   statusChoices,
   typeOptions,
 } from './board-filters';
-import { BoardTopBarActions, BoardViewControl, SearchItems } from './board-header';
+import { BoardTopBarActions, SearchItems } from './board-header';
 import { useCardMoves } from './card-move';
 import { columnCount, expediteHeader, expediteUse, firstStation, isExpedite } from './stats';
 
@@ -45,19 +45,31 @@ function drawsExpedite(board: Board): boolean {
   return expediteHeader(board.line, board.stations.flatMap((s) => s.items).filter(isExpedite).length) !== null;
 }
 
-function Columns({
-  board,
-  onMove,
-  decides,
-  finishedThisWeek,
-}: {
+/** The expedite row's caption: "Expedite, 1 of 1 in use, jumps every queue"; null when the line draws no row. */
+function expediteCaption(board: Board): string | null {
+  const shown = board.stations.flatMap((s) => s.items).filter(isExpedite).length;
+  return expediteHeader(board.line, shown) === null
+    ? null
+    : `Expedite, ${expediteUse(board.line, shown)}, jumps every queue`;
+}
+
+interface ColumnsProps {
   board: Board;
   onMove: OnMove;
   decides: boolean;
   finishedThisWeek: number;
-}) {
+  arrived: (id: string) => boolean;
+}
+
+function Columns({ board, onMove, decides, finishedThisWeek, arrived }: ColumnsProps) {
   const columns = (
-    <DesktopColumns board={board} onMove={onMove} decides={decides} finishedThisWeek={finishedThisWeek} />
+    <DesktopColumns
+      board={board}
+      onMove={onMove}
+      decides={decides}
+      finishedThisWeek={finishedThisWeek}
+      arrived={arrived}
+    />
   );
   // Cards are dragged only by someone who may move them.
   return onMove ? (
@@ -69,44 +81,27 @@ function Columns({
   );
 }
 
-/** From 768 px: the stations side by side, each a StationColumn, with the expedite lane's caption above them. */
-function DesktopColumns({
-  board,
-  onMove,
-  decides,
-  finishedThisWeek,
-}: {
-  board: Board;
-  onMove: OnMove;
-  decides: boolean;
-  finishedThisWeek: number;
-}) {
+/** From 768 px: the stations side by side, each a StationColumn; the first one's expedite row carries the lane's caption. */
+function DesktopColumns({ board, onMove, decides, finishedThisWeek, arrived }: ColumnsProps) {
   const showExpedite = drawsExpedite(board);
   return (
     <section aria-label="Stations" className="-mx-1 hidden overflow-x-auto px-1 pb-2 md:block">
-      {showExpedite ? (
-        <p className="m-0 mb-2 flex items-center gap-2 text-secondary text-muted">
-          <Chip tone="expedite">Expedite</Chip>
-          <span>
-            {expediteUse(board.line, board.stations.flatMap((s) => s.items).filter(isExpedite).length)}, jumps every
-            queue
-          </span>
-        </p>
-      ) : null}
       <div
         className="grid items-start gap-x-3"
         style={{ gridTemplateColumns: `repeat(${board.stations.length}, minmax(176px, 1fr))` }}
       >
-        {board.stations.map((s) => (
+        {board.stations.map((s, i) => (
           <StationColumn
             key={s.id}
             board={board}
             station={s}
             showExpedite={showExpedite}
+            expediteCaption={i === 0 ? (expediteCaption(board) ?? undefined) : undefined}
             decides={decides}
             onMove={onMove}
             draggable={Boolean(onMove)}
             finishedThisWeek={finishedThisWeek}
+            arrived={arrived}
           />
         ))}
       </div>
@@ -125,13 +120,8 @@ function StationTabs({
   onMove,
   decides,
   finishedThisWeek,
-}: {
-  board: Board;
-  selected: string;
-  onMove: OnMove;
-  decides: boolean;
-  finishedThisWeek: number;
-}) {
+  arrived,
+}: ColumnsProps & { selected: string }) {
   const navigate = useNavigate({ from: '/o/$org/f/$factory/board' });
   const list = useRef<HTMLDivElement>(null);
   const showExpedite = drawsExpedite(board);
@@ -176,10 +166,12 @@ function StationTabs({
             board={board}
             station={s}
             showExpedite={showExpedite}
+            expediteCaption={expediteCaption(board) ?? undefined}
             decides={decides}
             onMove={onMove}
             draggable={false}
             finishedThisWeek={finishedThisWeek}
+            arrived={arrived}
           />
         </Tabs.Content>
       ))}
@@ -192,38 +184,52 @@ const groupChoices: SegmentedOption<'none' | 'assembly'>[] = [
   { value: 'assembly', label: 'Assembly' },
 ];
 
-/** A filter: a labelled native select (44 px on phones), with the status icon of its choice beside it. */
-function FilterSelect({
-  label,
+/** The value a filter menu shows for "any": no filter in the URL. */
+const any = '*';
+
+/** A small dropdown button (design: .fbtn): 28 px from 768 px, 44 px on a phone; the chosen value shows in it. */
+const filterButton =
+  'inline-flex min-h-11 items-center gap-2 rounded-control border border-rule bg-card px-3 text-secondary font-medium text-ink-soft transition-colors duration-(--duration-quick) hover:border-muted hover:text-ink md:min-h-7';
+
+/** One filter: a button naming the filter and its choice, opening a radio list of what the board offers. */
+function FilterMenu({
+  name,
   value,
+  choices,
   onChange,
-  icon,
   phoneOnly = false,
-  children,
 }: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  icon?: ReactNode;
-  /** Status and Group by only the phone's station tabs use; from 768 px the columns do not take them. */
+  name: string;
+  value: string | undefined;
+  choices: { value: string; label: string }[];
+  onChange: (value: string | undefined) => void;
+  /** Status only the phone's station tabs use; from 768 px the columns do not take it. */
   phoneOnly?: boolean;
-  children: ReactNode;
 }) {
-  const id = useId();
+  const shown = choices.find((c) => c.value === value)?.label;
   return (
-    <div className={cn('flex min-w-0 max-w-full items-center gap-2 text-sm text-muted', phoneOnly && 'md:hidden')}>
-      <label htmlFor={id} className="shrink-0">
-        {label}
-      </label>
-      <NativeSelect
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-44 max-w-full truncate"
-      >
-        {children}
-      </NativeSelect>
-      {icon}
+    <div className={cn('min-w-0 max-w-full', phoneOnly && 'md:hidden')}>
+      <Menu>
+        <MenuTrigger asChild>
+          <button type="button" className={cn(filterButton, 'max-w-full')}>
+            <span className="truncate">{shown ? `${name}: ${shown}` : name}</span>
+            <ChevronDown size={12} strokeWidth={1.75} aria-hidden="true" className="shrink-0 text-muted" />
+          </button>
+        </MenuTrigger>
+        <MenuContent side="bottom" className="w-60">
+          <MenuRadioGroup
+            value={shown ? (value ?? any) : any}
+            onValueChange={(v) => onChange(v === any ? undefined : v)}
+          >
+            <MenuChoice value={any}>{`Any ${name.toLowerCase()}`}</MenuChoice>
+            {choices.map((c) => (
+              <MenuChoice key={c.value} value={c.value}>
+                {c.label}
+              </MenuChoice>
+            ))}
+          </MenuRadioGroup>
+        </MenuContent>
+      </Menu>
     </div>
   );
 }
@@ -246,59 +252,40 @@ function FilterRow({
 }) {
   const assemblies: AssemblyOption[] = assemblyOptions(board);
   return (
-    <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-0 p-0">
+    <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-2 border-0 p-0">
       <legend className="sr-only">Filter and group the cards</legend>
       {phone ? <SearchItems value={view.q ?? ''} onChange={(q) => onChange({ q: q || undefined })} /> : null}
-      <FilterSelect label="Work type" value={view.type ?? ''} onChange={(v) => onChange({ type: v || undefined })}>
-        <option value="">Any</option>
-        {typeOptions(board).map((type) => (
-          <option key={type} value={type}>
-            {humanize(type)}
-          </option>
-        ))}
-      </FilterSelect>
-      <FilterSelect label="Lane" value={view.lane ?? ''} onChange={(v) => onChange({ lane: v || undefined })}>
-        <option value="">Any</option>
-        {laneOptions(board).map((lane) => (
-          <option key={lane} value={lane}>
-            {humanize(lane)}
-          </option>
-        ))}
-      </FilterSelect>
-      <FilterSelect
-        label="Assembly"
-        value={view.assembly ?? ''}
-        onChange={(v) => onChange({ assembly: v || undefined })}
-      >
-        <option value="">Any</option>
-        {assemblies.map((a) => (
-          <option key={a.id} value={a.id} title={a.title}>
-            {a.title}
-          </option>
-        ))}
-      </FilterSelect>
-      <FilterSelect label="Agent role" value={view.role ?? ''} onChange={(v) => onChange({ role: v || undefined })}>
-        <option value="">Any</option>
-        {roleOptions(board).map((role) => (
-          <option key={role} value={role}>
-            {role}
-          </option>
-        ))}
-      </FilterSelect>
-      <FilterSelect
-        label="Status"
+      <FilterMenu
+        name="Work type"
+        value={view.type}
+        onChange={(type) => onChange({ type })}
+        choices={typeOptions(board).map((type) => ({ value: type, label: humanize(type) }))}
+      />
+      <FilterMenu
+        name="Lane"
+        value={view.lane}
+        onChange={(lane) => onChange({ lane })}
+        choices={laneOptions(board).map((lane) => ({ value: lane, label: humanize(lane) }))}
+      />
+      <FilterMenu
+        name="Assembly"
+        value={view.assembly}
+        onChange={(assembly) => onChange({ assembly })}
+        choices={assemblies.map((a) => ({ value: a.id, label: a.title }))}
+      />
+      <FilterMenu
+        name="Agent role"
+        value={view.role}
+        onChange={(role) => onChange({ role })}
+        choices={roleOptions(board).map((role) => ({ value: role, label: role }))}
+      />
+      <FilterMenu
+        name="Status"
         phoneOnly
-        value={view.status ?? ''}
+        value={view.status}
         onChange={(v) => onChange({ status: statusChoices.find((s) => s.value === v)?.value })}
-        icon={view.status ? <StatusIcon status={view.status} /> : null}
-      >
-        <option value="">Any</option>
-        {statusChoices.map((s) => (
-          <option key={s.value} value={s.value}>
-            {s.label}
-          </option>
-        ))}
-      </FilterSelect>
+        choices={statusChoices}
+      />
       <div className="md:hidden">
         <SegmentedControl
           label="Group by"
@@ -360,6 +347,8 @@ export function BoardPage() {
   // The filters and the grouping: the URL's choices, those the board offers only.
   const view = knownView(board, search);
   const shown = arrangeBoard(board, view);
+  // Cards new to the board since it first had cards rise in; the ones it opened with, and a filter's returns, do not.
+  const arrived = useArrivals(board.stations.flatMap((s) => s.items.map((it) => it.id)));
   const changeView = (change: BoardView) =>
     navigate({ search: (prev) => ({ ...prev, ...change }), replace: true, resetScroll: false });
   const selected = board.stations.find((s) => s.id === search.station)?.id ?? firstStation(board);
@@ -380,9 +369,16 @@ export function BoardPage() {
           onToggle={() => setFiltersOpen((open) => !open)}
         />
       ) : (
-        <BoardTopBarActions factory={factory} andon={board.line.andon} />
+        <BoardTopBarActions
+          factory={factory}
+          andon={board.line.andon}
+          q={view.q ?? ''}
+          onSearch={(q) =>
+            navigate({ search: (prev) => ({ ...prev, q: q || undefined }), replace: true, resetScroll: false })
+          }
+        />
       ),
-    [phone, factory, board.line.andon, filtersOpen, filtersId],
+    [phone, factory, board.line.andon, filtersOpen, filtersId, view.q, navigate],
   );
   const filters = <FilterRow board={board} view={view} phone={phone} onChange={changeView} />;
 
@@ -400,11 +396,9 @@ export function BoardPage() {
               </Chip>
             </span>
           </div>
-          <div className="ml-auto flex min-w-0 flex-wrap items-center gap-2">
+          {filters}
+          <div className="ml-auto flex min-w-0 items-center gap-2">
             <NeedsYouLink factory={factory} />
-            <SearchItems value={view.q ?? ''} onChange={(q) => changeView({ q: q || undefined })} />
-            <BoardViewControl />
-            {filters}
           </div>
         </header>
       )}
@@ -419,6 +413,7 @@ export function BoardPage() {
         onMove={onMove}
         decides={holds(factory, 'item:decide')}
         finishedThisWeek={board.line.touches.finished}
+        arrived={arrived}
       />
       <StationTabs
         board={shown}
@@ -426,6 +421,7 @@ export function BoardPage() {
         onMove={onMove}
         decides={holds(factory, 'item:decide')}
         finishedThisWeek={board.line.touches.finished}
+        arrived={arrived}
       />
       {onMove ? (
         <>
