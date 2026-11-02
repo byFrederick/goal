@@ -1,7 +1,6 @@
 import { cn } from './cn';
-import { Hatch } from './hatch';
 
-/** The ARIA meter of a styled track (a native meter cannot carry the hatch and the tick). */
+/** The ARIA meter of a styled track (a native meter cannot carry the fill and the tick). */
 const meterOf = (label: string, value: number, max: number) => ({
   role: 'meter',
   'aria-label': label,
@@ -11,7 +10,7 @@ const meterOf = (label: string, value: number, max: number) => ({
 });
 
 /**
- * Actual against a target on one track: hatched teal to `value` and an ink tick at `target`;
+ * Actual against a target on one track: ink on a `hover` track to `value` and an ink tick at `target`;
  * from 768 px, "0" under the start and the target's label under the tick (phones say the target
  * in the text beside it). The track runs to a quarter past the target, or to the value when it is
  * beyond that. A `meter` named by `label`.
@@ -35,12 +34,13 @@ export function TargetBar({
   const pct = (n: number) => (max > 0 ? Math.min(100, Math.max(0, (n / max) * 100)) : 0);
   return (
     <div className={cn('flex flex-col gap-2', className)}>
-      <div {...meterOf(label, value, max)} className="relative h-2.5 rounded-[4px] bg-card md:h-3">
-        {value > 0 ? (
-          <div className="h-full overflow-hidden rounded-[4px]" style={{ width: `${pct(value)}%` }}>
-            <Hatch tone="run" />
-          </div>
-        ) : null}
+      <div {...meterOf(label, value, max)} className="relative h-2.5 rounded-[4px] bg-hover md:h-3">
+        <div className="h-full overflow-hidden rounded-[4px]">
+          <div
+            className="h-full origin-left bg-ink transition-transform duration-(--duration-fast) ease-out motion-reduce:transition-none"
+            style={{ width: '100%', transform: `scaleX(${pct(value) / 100})` }}
+          />
+        </div>
         <span
           aria-hidden="true"
           className="absolute -top-1 h-[calc(100%+8px)] w-0.5 -translate-x-1/2 rounded-[1px] bg-ink md:-top-1.5 md:h-[calc(100%+12px)]"
