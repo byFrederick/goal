@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Check your email</title>
+
 </head>
 <body>
 <x-dc>
@@ -176,7 +177,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 @keyframes rise{from{opacity:0;transform:translateY(8px);filter:blur(3px)}}
 </style>
 </helmet>
-<div class="g cen {{theme}}">
+<div class="g cen ">
 <div class="tophd"><a class="brand" href="V2-Start-Sign-Up.dc.html"><span class="omk"><svg width="19" height="19" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="var(--yel)"></circle></svg></span>Goal</a></div>
 <main class="card2"><div class="band"><div class="ln" role="img" aria-label="The line: Intake, Spec, Build, Review, Done"><div class="s q"><span class="nm">Intake</span></div><span class="cx" aria-hidden="true"></span><div class="s"><span class="nm">Spec</span><span class="ld"><i style="width: 67%"></i></span><span class="sl"><i class="b"></i><i class="b"></i><i></i></span></div><span class="cx" aria-hidden="true"></span><div class="s"><span class="nm">Build</span><span class="ld"><i style="width: 50%"></i></span><span class="sl"><i class="b"></i><i class="b"></i><i class="b"></i><i></i><i></i><i></i></span></div><span class="cx" aria-hidden="true"></span><div class="s"><span class="nm">Review</span><span class="ld"><i style="width: 33%"></i></span><span class="sl"><i class="b"></i><i></i><i></i></span></div><span class="cx" aria-hidden="true"></span><div class="s dn"><span class="nm">Done</span></div></div></div><div class="cb"><div><h1 class="ttl">Check your email</h1><p class="m2" style="margin-top: 6px">We sent a 6-digit code to the address you entered. It works for 10 minutes.</p></div>
 <div style="display: flex; gap: 8px; justify-content: space-between" role="group" aria-label="Code"><input class="in" type="text" inputmode="numeric" maxlength="1" value="4" aria-label="Digit 1" style="width: 52px; height: 58px; text-align: center; font-size: 24px; font-weight: 500; padding: 0"><input class="in" type="text" inputmode="numeric" maxlength="1" value="1" aria-label="Digit 2" style="width: 52px; height: 58px; text-align: center; font-size: 24px; font-weight: 500; padding: 0"><input class="in" type="text" inputmode="numeric" maxlength="1" value="8" aria-label="Digit 3" style="width: 52px; height: 58px; text-align: center; font-size: 24px; font-weight: 500; padding: 0"><input class="in" type="text" inputmode="numeric" maxlength="1" value="" aria-label="Digit 4" style="width: 52px; height: 58px; text-align: center; font-size: 24px; font-weight: 500; padding: 0; border-color: var(--pri); box-shadow: 0 0 0 3px var(--pri-t)"><input class="in" type="text" inputmode="numeric" maxlength="1" value="" aria-label="Digit 5" style="width: 52px; height: 58px; text-align: center; font-size: 24px; font-weight: 500; padding: 0"><input class="in" type="text" inputmode="numeric" maxlength="1" value="" aria-label="Digit 6" style="width: 52px; height: 58px; text-align: center; font-size: 24px; font-weight: 500; padding: 0"></div>
@@ -185,12 +186,6 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 <p class="hint" style="margin-top: 18px; text-align: center">By continuing you agree to the <a href="#" style="text-decoration: none">terms</a> and the <a href="#" style="text-decoration: none">privacy policy</a>.</p>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":800}}'>
-class Component extends DCLogic {
-  renderVals() {
-    return { theme: this.props.dark ? 'dark' : '' };
-  }
-}
-</script>
+
 </body>
 </html>

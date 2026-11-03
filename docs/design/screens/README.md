@@ -31,7 +31,7 @@ How to use them:
 |---|---|---|---|
 | `sign-up`, `code` | `/sign-in`, `/sign-in/code` | restyle; sign-up is the same flow for a new address | GitHub sign-in (its button is disabled) |
 | `org` | onboarding step 1 | new (create organization exists for platform admins) | |
-| `github` | step 2 | new (uses the github connection kind) | GitLab |
+| `repository`: a repository URL and a token, tested for clone and push, saved as a secret (no app to install) | step 2 | new ([ADR 0037](../../adr/0037-secrets-and-environment-files.md) decision 7; replaces the GitHub app flow) | |
 | `template`, `line` | steps 3 and 4 | restyle of the new-factory wizard (`/o/$org/new/$step`) | quality-first or cost-first model preset |
 | `budget` | step 5 | new (budgets exist in the definition) | |
 | `triggers` | step 6 | new feature (needs Intake triggers) | |
@@ -70,19 +70,26 @@ How to use them:
 | `agent`: overview, prompt, tools and access, runs | `…/agents/$agent` | restyle | Bake off this agent |
 | `definition`: files, tabs, YAML editor, problems, outline, draft banner | `…/definition` | restyle (Monaco and the sections exist) | quick fixes |
 | `definition-publish`: changes by section, checks, versions | `…/definition/publish` | restyle | evals before publish |
-| `factory-settings` | `…/settings` | restyle | per-factory roles |
+| `factory-settings`: repository and its token, model key, environments, notifications | `…/settings` | restyle | per-factory roles |
+| `definition-environments` (+ `definition-environments-768`, the deploy environment): Form view, Environments section. A tab per environment and who uses it; the box (size, image, setup), command-line tools, variables (plain or a secret), files, AWS, MCP servers with tool modes, standing rules and tests; checks, including a key pasted in plain text | `…/definition/environments` | new feature ([ADR 0037](../../adr/0037-secrets-and-environment-files.md)) | Sign in and 1Password sources |
+| `definition-environment-yaml`: the same environment as `environments/default.yaml` in the YAML view, with the plain-key problem | `…/definition` | new feature (ADR 0037 decision 5) | |
+| `add-tool` (+ `add-tool-768`): the catalog of MCP servers, CLIs and APIs; pick or create the secret in place, the server's answer, what agents may do, and the lines added to the draft | `…/definition/add-tool` | new feature (ADR 0037 decision 15) | |
+| `add-tool-custom`: Custom, a command-line tool with a variable and a file | `…/definition/add-tool?custom` | new feature (ADR 0037 decision 15) | |
 
 ## Jonah (`jonah/`)
 
 Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jonah-evals.md)): `jonah` (overview), `proposal`, `judges`, `judge`, `evals`, `bake-off`, under `…/jonah/…`.
 
-## Connections and knowledge (`connections/`)
+## Access, secrets and knowledge (`connections/`)
+
+[ADR 0037](../../adr/0037-secrets-and-environment-files.md) replaced the connection and credential screens with these.
 
 | Screen | Route | Status | Not built yet |
 |---|---|---|---|
-| `connections`: grouped by code hosts, apps, MCP servers and model providers | `/o/$org/connections` | restyle | writes waiting for approval |
-| `connection-add`: catalog and details, tool permissions, factories, test | `/o/$org/connections/new` | restyle | the per-tool "Ask first" setting |
-| `credentials`, `credential-new` | `/o/$org/credentials` | new feature: today secrets live in connection fields. The spec decides how credentials relate to connections. | encryption in the browser |
+| `access` (+ `access-768`, a list): what every factory's environments reach, by what they reach, by factory or by secret; the key each uses and its status; what needs attention | `/o/$org/access` (replaces `/connections`) | new feature (ADR 0037 decisions 14 and 16) | |
+| `secrets` (+ `secrets-768`): every secret with where it is used, its factories, expiry and last use; New secret in a side sheet (name, where the value comes from, value, factories, expiry and reminder) | `/o/$org/secrets` (replaces `/credentials`) | new feature (credentials exist; ADR 0037 decisions 1 to 4) | Sign in and 1Password sources |
+| `secret`: where it is used, activity, Replace value, settings, Delete (disabled while used) | `/o/$org/secrets/$secret` | new feature | |
+| `secrets-import`: paste a .env or YAML, the dry run with Replace or Skip, factories to open them to | `/o/$org/secrets/import` | new feature (the import API exists for credentials) | |
 | `knowledge` | `/o/$org/knowledge` | restyle |  |
 
 ## Organization (`organization/`)
@@ -91,13 +98,13 @@ Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jona
 |---|---|---|---|
 | `members` | `/o/$org/members` | restyle | restricting sign-up to a domain |
 | `spend`: spend by factory, agent and model; budgets; who pays for models | `/o/$org/spend` | new (budgets and costs exist) | routers |
-| `models`: models agents may use, harness, tool policy, box sizes, egress | `/o/$org/models` | new (model connections exist) | routers, other harnesses |
+| `models`: models agents may use, harness, tool policy (Use secrets), box sizes, egress | `/o/$org/models` | new (model keys come from Secrets) | routers, other harnesses |
 | `api-keys` | `/o/$org/api-keys` | restyle | the Goal MCP server address |
 | `org-settings` | `/o/$org/settings` | restyle | single sign-on, your own bucket |
 
 ## Mobile (`mobile/`)
 
-`sign-in`, `drawer`, `needs-you`, `approve`, `floor`, `board`, `item`, `intake`, `teardown` (+ its loading, empty and error states; the item tabs scroll sideways and Runs becomes a list): the phone layouts at 390px. Every other screen follows MASTER.md's phone rules: a top bar with the Goal mark, a drawer, a bottom tab bar, one column, and tables that scroll in their own box.
+`sign-in`, `drawer`, `needs-you`, `approve`, `floor`, `board`, `item`, `intake`, `teardown` (+ its loading, empty and error states; the item tabs scroll sideways and Runs becomes a list), and for ADR 0037 `access`, `secrets`, `secret-new`, `environments` and `add-tool`: the phone layouts at 390px. Every other screen follows MASTER.md's phone rules: a top bar with the Goal mark, a drawer, a bottom tab bar, one column, and tables that scroll in their own box.
 
 ## Added in v3: live pages that had no design
 
@@ -108,8 +115,7 @@ Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jona
 | `build/new-factory` | `/o/$org/new/start`: template, clone, import | restyle | |
 | `build/definition-form` | `…/definition/$section` in Form view, with the unsaved-changes dialog | restyle | |
 | `jonah/bake-offs` | `…/jonah/bake-offs` empty state | restyle | |
-| `connections/connection` | `/o/$org/connections/$connection` | restyle | |
-| `connections/knowledge-source`, `connections/knowledge-new` | `/o/$org/knowledge/$source`, `…/knowledge/new` | restyle | |
+| `connections/knowledge-source`, `connections/knowledge-new` | `/o/$org/knowledge/$source`, `…/knowledge/new` | restyle (a synced source reads with a secret, ADR 0037) | |
 | `account/shortcuts` | the `?` keyboard-shortcuts dialog | new | |
 | `account/states` | Pending (skeleton), Error, Not found; archived and view-only banners (`app/states.tsx`) | restyle | |
 | `account/no-org` | `/` with no organization, and Create organization | restyle | |

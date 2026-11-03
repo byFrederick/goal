@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>No organization</title>
+
 </head>
 <body>
 <x-dc>
@@ -168,7 +169,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 .addr:focus-within{border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-t)}
 </style>
 </helmet>
-<div class="g {{theme}}">
+<div class="g ">
 <div class="stage">
   <div class="brand"><span class="omk" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#EAB308"></circle></svg></span>Goal</div>
   <main class="none">
@@ -191,12 +192,6 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"dialog":{"editor":"boolean","default":true},"$preview":{"width":1440,"height":800}}'>
-class Component extends DCLogic {
-  renderVals() {
-    return { theme: this.props.dark ? 'dark' : '', dialog: !!this.props.dialog };
-  }
-}
-</script>
+
 </body>
 </html>
