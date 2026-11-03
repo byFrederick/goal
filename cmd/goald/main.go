@@ -189,22 +189,10 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// definition's secret references and knowledge sources are checked against the organization's
 	// (ADR 0037), its models against the organization policy.
 	authors := authoring.New(authoring.Deps{
-		Store: definitionStore, Loads: store, Templates: objects,
+		Store: definitionStore, Loads: store, Templates: objects, Policies: policies, Clock: clock,
 		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.searcher},
-		Policies:    policies, Clock: clock,
 	})
-
-	// Every organization moves from connections and credentials to secrets and environment files
-	// once (ADR 0037 decision 19), before the lines load, so they load the converted versions. A
-	// failure is logged and goald starts: an unconverted factory runs on the old path.
-	conversions := postgres.NewFactoryConversions(store)
-	mover := moveover.New(moveover.Deps{
-		Orgs: store, Connections: connections, Secrets: orgSecrets, Definitions: definitionStore, Publisher: authors,
-		Conversions: conversions, Clock: clock, Logger: log,
-	})
-	if err := mover.Run(ctx); err != nil {
-		log.ErrorContext(ctx, "move over failed", slog.Any("error", err))
-	}
+	moveOver(ctx, store, connections, orgSecrets, definitionStore, authors, clock, log)
 
 	boxes, err := sandboxes(ctx, s, log)
 	if err != nil {
@@ -272,7 +260,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 			Mode: api.AuthMode(s.Auth), EmailCodes: s.EmailCodes, Google: s.Google, SecureCookies: s.strictTransport(),
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
-		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), Conversions: conversions, ToolLister: toollister.New(connectionTransport(s.AllowPrivateUpstreams)),
+		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), Conversions: postgres.NewFactoryConversions(store), ToolLister: toollister.New(connectionTransport(s.AllowPrivateUpstreams)),
 		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
@@ -291,6 +279,21 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 
 	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed, j)
+}
+
+// moveOver moves every organization from connections and credentials to secrets and environment
+// files, once (ADR 0037 decision 19): run before the lines load, so they load the converted
+// versions. A failure is logged and goald starts, an unconverted factory running on the old path.
+func moveOver(ctx context.Context, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets,
+	definitions ports.DefinitionStore, authors *authoring.Service, clock ports.Clock, log *slog.Logger,
+) {
+	err := moveover.New(moveover.Deps{
+		Orgs: store, Connections: connections, Secrets: secrets, Definitions: definitions, Publisher: authors,
+		Conversions: postgres.NewFactoryConversions(store), Clock: clock, Logger: log,
+	}).Run(ctx)
+	if err != nil {
+		log.ErrorContext(ctx, "move over failed", slog.Any("error", err))
+	}
 }
 
 // newJobs builds goald's scheduled jobs: the purge, the identity watch, the knowledge base's

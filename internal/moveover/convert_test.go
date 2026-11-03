@@ -20,10 +20,25 @@ const (
 	githubValue  = "github-token-for-tests-1111"
 	cfValue      = "cloudflare-token-for-tests-2222"
 	ctx7Value    = "context7-key-for-tests-3333"
-	oauthValue   = "sk-ant-oat01-token-for-tests-4444" //nolint:gosec // a test value
+	oauthValue   = "sk-ant-oat01-token-for-tests-4444"
 	ticketsID    = "tickets-id-for-tests-5555"
 	ticketsValue = "tickets-secret-for-tests-6666"
 	factoryUUID  = "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a77"
+)
+
+// Names the fixtures share.
+const (
+	connGitHub     = "github"
+	connCloudflare = "cloudflare"
+	connContext7   = "context7"
+	fieldToken     = "token"
+	accountID      = "acme-account"
+	sizeLarge      = "large"
+	context7URL    = "https://mcp.context7.com/mcp"
+	envGHToken     = "GH_TOKEN"
+	envContext7    = "CONTEXT7_API_KEY"
+	refGitHub      = "{{github}}"
+	refContext7    = "{{context7}}"
 )
 
 // Organization kinds of the fixtures: an API token CLI, a remote MCP server with a key, a kind
@@ -210,126 +225,143 @@ func factoryOf(t *testing.T, tree map[string][]byte) *config.Factory {
 	return f
 }
 
-func TestConvert(t *testing.T) {
-	t.Parallel()
+// testProductionFactory converts the production factory: factory.yaml, the default
+// environment, the reviewer's and the names.
+func testProductionFactory(t *testing.T) {
+	t.Helper()
 
-	t.Run("production factory", func(t *testing.T) {
-		t.Parallel()
+	got := moveover.Convert(files(productionFactory), productionConnections(t))
+	if len(got.Problems) > 0 {
+		t.Fatalf("problems %v", got.Problems)
+	}
 
-		got := moveover.Convert(files(productionFactory), productionConnections(t))
-		if len(got.Problems) > 0 {
-			t.Fatalf("problems %v", got.Problems)
+	f := factoryOf(t, got.Files)
+	checkRuntime(t, f)
+	checkDefault(t, environment(t, got.Files, config.DefaultEnvironment))
+	checkAgents(t, f, environment(t, got.Files, "reviewer"))
+	checkNames(t, got.Names)
+
+	for p, b := range got.Files {
+		if slices.ContainsFunc([]string{githubValue, cfValue, ctx7Value, oauthValue}, func(v string) bool { return strings.Contains(string(b), v) }) {
+			t.Errorf("%s holds a secret value", p)
 		}
+	}
 
-		f := factoryOf(t, got.Files)
-		rt := f.Spec.Runtime
+	if string(got.Files["agents/engineer.md"]) != "# engineer\n\nBuild the change.\n" {
+		t.Error("the prompt files changed")
+	}
+}
 
-		if rt.ModelKey != "{{claude}}" || rt.ModelConnection != "" {
-			t.Errorf("modelKey %q, modelConnection %q; want {{claude}} and none", rt.ModelKey, rt.ModelConnection)
+func checkRuntime(t *testing.T, f *config.Factory) {
+	t.Helper()
+
+	rt := f.Spec.Runtime
+	if rt.ModelKey != "{{claude}}" || rt.ModelConnection != "" {
+		t.Errorf("modelKey %q, modelConnection %q; want {{claude}} and none", rt.ModelKey, rt.ModelConnection)
+	}
+
+	if r := rt.Repository; r == nil || r.Token != refGitHub || r.Connection != "" || r.URL != "https://github.com/acme/app.git" {
+		t.Errorf("repository %+v; want the URL with token {{github}}", r)
+	}
+
+	if rt.Size != "" || len(rt.Tools) > 0 || len(f.Spec.Connections) > 0 {
+		t.Errorf("runtime size %q, tools %v, connections %v left in factory.yaml", rt.Size, rt.Tools, f.Spec.Connections)
+	}
+}
+
+func checkDefault(t *testing.T, def config.EnvironmentSpec) {
+	t.Helper()
+
+	wantEnv := map[string]string{ //nolint:gosec // references to test secrets, not values
+		envGHToken: refGitHub, "GH_HOST": "github.com",
+		"CLOUDFLARE_ACCOUNT_ID": accountID, "CLOUDFLARE_API_TOKEN": "{{cloudflare}}",
+		envContext7: refContext7,
+	}
+	if !maps.Equal(def.Env, wantEnv) {
+		t.Errorf("default env %v; want %v", def.Env, wantEnv)
+	}
+
+	if def.Size != sizeLarge || !slices.Equal(def.Tools, []string{"go@1.26.10", "npm:wrangler@4"}) {
+		t.Errorf("default size %q, tools %v; want large and the runtime's tools then wrangler", def.Size, def.Tools)
+	}
+
+	gh, c7 := def.MCP[connGitHub], def.MCP[connContext7]
+	if gh.URL != "https://api.githubcopilot.com/mcp/" || gh.Headers["Authorization"] != "Bearer "+refGitHub {
+		t.Errorf("github MCP %+v; want its URL and a Bearer {{github}} header", gh)
+	}
+
+	if c7.URL != context7URL || c7.Headers[envContext7] != refContext7 {
+		t.Errorf("context7 MCP %+v; want its URL and the key header", c7)
+	}
+
+	if !maps.Equal(c7.Tools, map[string]string{"resolve-library-id": "ask"}) {
+		t.Errorf("context7 tools %v; want the organization's ask mode only", c7.Tools)
+	}
+}
+
+// checkAgents: the engineer has the factory's set; the reviewer's differs, so it gets its own file.
+func checkAgents(t *testing.T, f *config.Factory, rev config.EnvironmentSpec) {
+	t.Helper()
+
+	for _, a := range f.Spec.Agents {
+		want := map[string]string{"engineer": "", "reviewer": "reviewer"}[a.Name]
+		if a.Environment != want || len(a.Connections) > 0 {
+			t.Errorf("agent %s: environment %q, connections %v; want %q and none", a.Name, a.Environment, a.Connections, want)
 		}
+	}
 
-		if r := rt.Repository; r == nil || r.Token != "{{github}}" || r.Connection != "" || r.URL != "https://github.com/acme/app.git" {
-			t.Errorf("repository %+v; want the URL with token {{github}}", r)
+	if !maps.Equal(rev.Env, map[string]string{envGHToken: refGitHub, "GH_HOST": "github.com"}) || len(rev.MCP) != 1 || rev.Size != sizeLarge {
+		t.Errorf("reviewer environment %+v; want github's only, with the runtime's size", rev)
+	}
+}
+
+func checkNames(t *testing.T, names map[string]map[string]string) {
+	t.Helper()
+
+	want := map[string]map[string]string{
+		connGitHub: {fieldToken: connGitHub}, connCloudflare: {"api_token": connCloudflare}, connContext7: {"key": connContext7}, "claude": {fieldToken: "claude"},
+	}
+	if len(names) != len(want) {
+		t.Errorf("names %v; want %v", names, want)
+	}
+
+	for c, m := range want {
+		if !maps.Equal(names[c], m) {
+			t.Errorf("names of %s %v; want %v", c, names[c], m)
 		}
+	}
+}
 
-		if rt.Size != "" || len(rt.Tools) > 0 || len(f.Spec.Connections) > 0 {
-			t.Errorf("runtime size %q, tools %v, connections %v left in factory.yaml", rt.Size, rt.Tools, f.Spec.Connections)
-		}
+// testSeveralSecretFields names a kind's several secret fields <connection>-<field> and uses a credential a field refers to.
+func testSeveralSecretFields(t *testing.T) {
+	t.Helper()
 
-		def := environment(t, got.Files, "default")
-		wantEnv := map[string]string{
-			"GH_TOKEN": "{{github}}", "GH_HOST": "github.com",
-			"CLOUDFLARE_ACCOUNT_ID": "acme-account", "CLOUDFLARE_API_TOKEN": "{{cloudflare}}",
-			"CONTEXT7_API_KEY": "{{context7}}",
-		}
-		if !maps.Equal(def.Env, wantEnv) {
-			t.Errorf("default env %v; want %v", def.Env, wantEnv)
-		}
+	tk := kind(t, "tickets", ticketsKind)
+	tickets := conn("tickets", tk, nil, map[string]string{"key_id": ticketsID})
+	tickets.Connection.SecretRefs = map[string]string{"key_secret": "tickets-shared"}
 
-		if def.Size != "large" || !slices.Equal(def.Tools, []string{"go@1.26.10", "npm:wrangler@4"}) {
-			t.Errorf("default size %q, tools %v; want large and the runtime's tools then wrangler", def.Size, def.Tools)
-		}
+	got := moveover.Convert(files(strings.ReplaceAll(productionFactory, "[github, cloudflare, context7]", "[tickets]")),
+		append(productionConnections(t), tickets))
+	if len(got.Problems) > 0 {
+		t.Fatalf("problems %v", got.Problems)
+	}
 
-		gh, c7 := def.MCP["github"], def.MCP["context7"]
-		if gh.URL != "https://api.githubcopilot.com/mcp/" || gh.Headers["Authorization"] != "Bearer {{github}}" {
-			t.Errorf("github MCP %+v; want its URL and a Bearer {{github}} header", gh)
-		}
+	def := environment(t, got.Files, "default")
+	if def.Env["TICKETS_KEY_ID"] != "{{tickets-key-id}}" || def.Env["TICKETS_KEY_SECRET"] != "{{tickets-shared}}" {
+		t.Errorf("default env %v; want <connection>-<field> and the credential's name", def.Env)
+	}
 
-		if c7.URL != "https://mcp.context7.com/mcp" || c7.Headers["CONTEXT7_API_KEY"] != "{{context7}}" {
-			t.Errorf("context7 MCP %+v; want its URL and the key header", c7)
-		}
+	secrets := moveover.Secrets([]domain.ResolvedConnection{tickets})
+	if len(secrets) != 1 || secrets[0].Name != "tickets-key-id" || secrets[0].Value != ticketsID || !secrets[0].Scope.All {
+		t.Errorf("secrets %v; want tickets-key-id only, for every factory: the reference is a secret already", secrets)
+	}
+}
 
-		if !maps.Equal(c7.Tools, map[string]string{"resolve-library-id": "ask"}) {
-			t.Errorf("context7 tools %v; want the organization's ask mode only", c7.Tools)
-		}
+// testTriggerModel turns a trigger's modelAgrees.connection into modelAgrees.key.
+func testTriggerModel(t *testing.T) {
+	t.Helper()
 
-		// The engineer has the factory's set; the reviewer's differs, so it gets its own file.
-		for _, a := range f.Spec.Agents {
-			want := map[string]string{"engineer": "", "reviewer": "reviewer"}[a.Name]
-			if a.Environment != want || len(a.Connections) > 0 {
-				t.Errorf("agent %s: environment %q, connections %v; want %q and none", a.Name, a.Environment, a.Connections, want)
-			}
-		}
-
-		rev := environment(t, got.Files, "reviewer")
-		if !maps.Equal(rev.Env, map[string]string{"GH_TOKEN": "{{github}}", "GH_HOST": "github.com"}) || len(rev.MCP) != 1 || rev.Size != "large" {
-			t.Errorf("reviewer environment %+v; want github's only, with the runtime's size", rev)
-		}
-
-		wantNames := map[string]map[string]string{
-			"github": {"token": "github"}, "cloudflare": {"api_token": "cloudflare"}, "context7": {"key": "context7"}, "claude": {"token": "claude"},
-		}
-		if len(got.Names) != len(wantNames) {
-			t.Errorf("names %v; want %v", got.Names, wantNames)
-		}
-
-		for c, m := range wantNames {
-			if !maps.Equal(got.Names[c], m) {
-				t.Errorf("names of %s %v; want %v", c, got.Names[c], m)
-			}
-		}
-
-		for p, b := range got.Files {
-			for _, v := range []string{githubValue, cfValue, ctx7Value, oauthValue} {
-				if strings.Contains(string(b), v) {
-					t.Errorf("%s holds a secret value", p)
-				}
-			}
-		}
-
-		if string(got.Files["agents/engineer.md"]) != "# engineer\n\nBuild the change.\n" {
-			t.Error("the prompt files changed")
-		}
-	})
-
-	t.Run("several secret fields and a credential reference", func(t *testing.T) {
-		t.Parallel()
-
-		tk := kind(t, "tickets", ticketsKind)
-		tickets := conn("tickets", tk, nil, map[string]string{"key_id": ticketsID})
-		tickets.Connection.SecretRefs = map[string]string{"key_secret": "tickets-shared"}
-
-		got := moveover.Convert(files(strings.ReplaceAll(productionFactory, "[github, cloudflare, context7]", "[tickets]")),
-			append(productionConnections(t), tickets))
-		if len(got.Problems) > 0 {
-			t.Fatalf("problems %v", got.Problems)
-		}
-
-		def := environment(t, got.Files, "default")
-		if def.Env["TICKETS_KEY_ID"] != "{{tickets-key-id}}" || def.Env["TICKETS_KEY_SECRET"] != "{{tickets-shared}}" {
-			t.Errorf("default env %v; want <connection>-<field> and the credential's name", def.Env)
-		}
-
-		secrets := moveover.Secrets([]domain.ResolvedConnection{tickets})
-		if len(secrets) != 1 || secrets[0].Name != "tickets-key-id" || secrets[0].Value != ticketsID || !secrets[0].Scope.All {
-			t.Errorf("secrets %v; want tickets-key-id only, for every factory: the reference is a secret already", secrets)
-		}
-	})
-
-	t.Run("a trigger's model connection", func(t *testing.T) {
-		t.Parallel()
-
-		withTrigger := strings.Replace(productionFactory, "  board:\n", `  board:
+	withTrigger := strings.Replace(productionFactory, "  board:\n", `  board:
     triggers:
       - name: alerts
         on: webhook.alerts.fired
@@ -337,29 +369,47 @@ func TestConvert(t *testing.T) {
         create: {type: incident, station: inbox, title: "{{title}}"}
 `, 1)
 
-		got := moveover.Convert(files(withTrigger), productionConnections(t))
-		if len(got.Problems) > 0 {
-			t.Fatalf("problems %v", got.Problems)
-		}
+	got := moveover.Convert(files(withTrigger), productionConnections(t))
+	if len(got.Problems) > 0 {
+		t.Fatalf("problems %v", got.Problems)
+	}
 
-		var doc struct {
-			Spec struct {
-				Board struct {
-					Triggers []struct {
-						Only struct {
-							ModelAgrees map[string]string `yaml:"modelAgrees"`
-						} `yaml:"only"`
-					} `yaml:"triggers"`
-				} `yaml:"board"`
-			} `yaml:"spec"`
-		}
-		if err := yaml.Unmarshal(got.Files[config.FileName], &doc); err != nil {
-			t.Fatal(err)
-		}
+	var doc struct {
+		Spec struct {
+			Board struct {
+				Triggers []struct {
+					Only struct {
+						ModelAgrees map[string]string `yaml:"modelAgrees"`
+					} `yaml:"only"`
+				} `yaml:"triggers"`
+			} `yaml:"board"`
+		} `yaml:"spec"`
+	}
+	if err := yaml.Unmarshal(got.Files[config.FileName], &doc); err != nil {
+		t.Fatal(err)
+	}
 
-		if m := doc.Spec.Board.Triggers[0].Only.ModelAgrees; m["key"] != "{{claude}}" || m["connection"] != "" {
-			t.Errorf("modelAgrees %v; want key {{claude}} and no connection", m)
-		}
+	if m := doc.Spec.Board.Triggers[0].Only.ModelAgrees; m["key"] != "{{claude}}" || m["connection"] != "" {
+		t.Errorf("modelAgrees %v; want key {{claude}} and no connection", m)
+	}
+}
+
+func TestConvert(t *testing.T) {
+	t.Parallel()
+
+	t.Run("production factory", func(t *testing.T) {
+		t.Parallel()
+		testProductionFactory(t)
+	})
+
+	t.Run("several secret fields and a credential reference", func(t *testing.T) {
+		t.Parallel()
+		testSeveralSecretFields(t)
+	})
+
+	t.Run("a trigger's model connection", func(t *testing.T) {
+		t.Parallel()
+		testTriggerModel(t)
 	})
 
 	refusals := []struct {

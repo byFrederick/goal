@@ -139,6 +139,7 @@ func Convert(files map[string][]byte, conns []domain.ResolvedConnection) Result 
 	f, problems := config.Check(fs)
 	if f == nil {
 		msgs := []string{}
+
 		for _, p := range problems {
 			if p.Blocking() {
 				msgs = append(msgs, fmt.Sprintf("%s: %s", p.File, p.Message))
@@ -345,18 +346,7 @@ func (c *converter) convert(f *config.Factory, raw []byte) map[string][]byte {
 	runtime := get(spec, "runtime")
 	rt := f.Spec.Runtime
 
-	factoryConns := make([]string, 0, len(f.Spec.Connections))
-
-	for _, conn := range f.Spec.Connections {
-		if conn.Inline() {
-			c.fail("connection %s is an inline connection, removed in phase 4: remove it from the factory", conn.Name)
-
-			continue
-		}
-
-		factoryConns = append(factoryConns, conn.Name)
-	}
-
+	factoryConns := c.factoryConnections(f)
 	out := map[string][]byte{}
 	write := func(name string, s envSpec) {
 		b, err := marshal(envFile{APIVersion: "goal/v1", Kind: "Environment", Metadata: map[string]string{"name": name}, Spec: s})
@@ -368,42 +358,13 @@ func (c *converter) convert(f *config.Factory, raw []byte) map[string][]byte {
 	}
 
 	write(config.DefaultEnvironment, c.environment(factoryConns, rt.Size, rt.Tools))
-
-	agents := get(spec, "agents")
-	for i, a := range f.Spec.Agents {
-		own := slices.DeleteFunc(slices.Clone(a.Connections), func(n string) bool { return !slices.Contains(factoryConns, n) })
-		node := agents.Content[i]
-		remove(node, "connections")
-
-		if sameSet(own, factoryConns) {
-			continue
-		}
-
-		if a.Name == config.DefaultEnvironment {
-			c.fail("agent default's connections differ from the factory's, and its environment cannot be named default: rename the agent")
-
-			continue
-		}
-
-		write(a.Name, c.environment(own, rt.Size, rt.Tools))
-		set(node, "environment", a.Name)
-	}
+	c.agents(f, get(spec, "agents"), factoryConns, write)
 
 	remove(spec, "connections")
 	remove(runtime, "size")
 	remove(runtime, "tools")
 
-	if name := rt.ModelConnection; name != "" {
-		remove(runtime, "modelConnection")
-
-		if rc, ok := c.connection(name); ok {
-			if !rc.Kind.Spec.Model {
-				c.fail("connection %s, the model connection, gives no model: set runtime.modelKey yourself", name)
-			} else if ref := c.secretOf(rc, "runtime.modelKey"); ref != "" {
-				set(runtime, "modelKey", ref)
-			}
-		}
-	}
+	c.model(runtime, rt.ModelConnection)
 
 	if r := rt.Repository; r != nil && r.Connection != "" {
 		c.repository(get(runtime, "repository"), *r)
@@ -419,6 +380,69 @@ func (c *converter) convert(f *config.Factory, raw []byte) map[string][]byte {
 	out[config.FileName] = b
 
 	return out
+}
+
+// factoryConnections are spec.connections' names; an inline one is a problem.
+func (c *converter) factoryConnections(f *config.Factory) []string {
+	out := make([]string, 0, len(f.Spec.Connections))
+
+	for _, conn := range f.Spec.Connections {
+		if conn.Inline() {
+			c.fail("connection %s is an inline connection, removed in phase 4: remove it from the factory", conn.Name)
+
+			continue
+		}
+
+		out = append(out, conn.Name)
+	}
+
+	return out
+}
+
+// agents drop each agent's connections, and write an environment named after each agent whose
+// connections, those the factory lists too, differ from the factory's.
+func (c *converter) agents(f *config.Factory, nodes *yaml.Node, factoryConns []string, write func(string, envSpec)) {
+	rt := f.Spec.Runtime
+
+	for i, a := range f.Spec.Agents {
+		own := slices.DeleteFunc(slices.Clone(a.Connections), func(n string) bool { return !slices.Contains(factoryConns, n) })
+		node := nodes.Content[i]
+		remove(node, "connections")
+
+		if sameSet(own, factoryConns) {
+			continue
+		}
+
+		if a.Name == config.DefaultEnvironment {
+			c.fail("agent default's connections differ from the factory's, and its environment cannot be named default: rename the agent")
+
+			continue
+		}
+
+		write(a.Name, c.environment(own, rt.Size, rt.Tools))
+		set(node, "environment", a.Name)
+	}
+}
+
+// model turns runtime.modelConnection into runtime.modelKey, the model connection's secret.
+func (c *converter) model(runtime *yaml.Node, name string) {
+	if name == "" {
+		return
+	}
+
+	remove(runtime, "modelConnection")
+
+	rc, ok := c.connection(name)
+
+	switch {
+	case !ok:
+	case !rc.Kind.Spec.Model:
+		c.fail("connection %s, the model connection, gives no model: set runtime.modelKey yourself", name)
+	default:
+		if ref := c.secretOf(rc, "runtime.modelKey"); ref != "" {
+			set(runtime, "modelKey", ref)
+		}
+	}
 }
 
 // repository turns repository.connection into repository.token, the connection's git password,

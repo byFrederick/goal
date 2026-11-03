@@ -13,7 +13,7 @@ Every command of the `goal` CLI, in the order its usage text lists them: each se
 
 Factory definitions live in goald (drafts and published versions), not in files: goal factory push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, secret, env, access, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
+Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
 
 With sign-in on (GOAL\_AUTH=session), commands send GOAL\_API\_KEY (an API key goal\_sk\_… or a personal token goal\_pat\_…) when it is set, else what goal login stored for goald's origin, and only over https or to this machine; a refused credential or permission exits 77
 
@@ -402,83 +402,13 @@ goal key revoke <name|id>
 
 revoke a key: anything using it stops working at once
 
-## goal connection list
+## goal connection
 
 ```text
-goal connection list [--kind K] [--factory F]
+goal connection ...
 ```
 
-the organization's connections: kind, status, which secrets are set (never a value), what uses them
-
-Flags: `--kind K`, `--factory F`.
-
-## goal connection show
-
-```text
-goal connection show <name>
-```
-
-one connection: its fields, last test, the env names a run gets and its kind's docs
-
-## goal connection create
-
-```text
-goal connection create <name> --kind K [--field k=v]... [--secret k=-] [--secret-file k=<path>]... [--description D]
-```
-
-create a connection (owners and admins); a secret comes from stdin (k=-, one value) or a file, never argv
-
-Flags: `--kind K`, `--field k=v`, `--secret k=-`, `--secret-file k=<path>`, `--description D`.
-
-## goal connection update
-
-```text
-goal connection update <name> [--name N] [--description D] [--field k=v]... [--secret k=-] [--secret-file k=<path>]...
-```
-
-rename it, change its fields (merged; k= clears one) or replace the named secrets
-
-Flags: `--name N`, `--description D`, `--field k=v`, `--secret k=-`, `--secret-file k=<path>`.
-
-## goal connection delete
-
-```text
-goal connection delete <name>
-```
-
-delete it (refused while a factory's current version names it)
-
-## goal connection test
-
-```text
-goal connection test <name>
-```
-
-run its kind's test from goald (exit 1 when it fails)
-
-## goal connection kinds
-
-```text
-goal connection kinds
-```
-
-the kinds connections are made of, the platform's and the organization's
-
-## goal connection kind push
-
-```text
-goal connection kind push <file.yaml>
-```
-
-create or replace an organization kind from its file
-
-## goal connection kind delete
-
-```text
-goal connection kind delete <name>
-```
-
-delete an organization kind no connection is of
+moved to goal access, goal secret and environment files; prints where and exits 2
 
 ## goal secret list
 
@@ -881,14 +811,6 @@ goal webhooks deliveries <factory> <name> [--limit N] [--after C] [--json]
 what it received, newest first: refused (and why), accepted or created an item
 
 Flags: `--limit N`, `--after C`, `--json`.
-
-## goal connection import-env
-
-```text
-goal connection import-env
-```
-
-once, after the cutover to connections: GOAL\_GITHUB\_TOKEN becomes github, CLAUDE\_CODE\_OAUTH\_TOKEN (or ANTHROPIC\_API\_KEY) claude; names that exist are left as they are
 
 ## goal storage init
 

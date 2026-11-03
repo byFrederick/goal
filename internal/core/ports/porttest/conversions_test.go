@@ -10,28 +10,29 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports/porttest/conversiontest"
 )
 
+// conversionIDs hands out the organization and factory ids of the conversions suite.
+type conversionIDs struct{ n atomic.Int64 }
+
+func (c *conversionIDs) next() string {
+	return fmt.Sprintf("0b6f1c9e-0000-7000-9000-%012d", c.n.Add(1))
+}
+
+// harness is a fresh fake whose factories are registered as NewFactory makes them.
+func (c *conversionIDs) harness(*testing.T) conversiontest.Harness {
+	fake := porttest.NewFactoryConversions()
+	newFactory := func(_ *testing.T, org domain.OrgID) domain.FactoryID {
+		f := domain.FactoryID(c.next())
+		fake.AddFactory(org, f)
+
+		return f
+	}
+
+	return conversiontest.Harness{Conversions: fake, NewOrg: func(*testing.T) domain.OrgID { return domain.OrgID(c.next()) }, NewFactory: newFactory}
+}
+
 // The fake runs the factory conversions suite.
 func TestFactoryConversions_Conformance(t *testing.T) {
 	t.Parallel()
 
-	var ids atomic.Int64
-
-	next := func() string { return fmt.Sprintf("0b6f1c9e-0000-7000-8000-%012d", ids.Add(1)) }
-
-	conversiontest.Run(t, func(t *testing.T) conversiontest.Harness {
-		t.Helper()
-
-		c := porttest.NewFactoryConversions()
-
-		return conversiontest.Harness{
-			Conversions: c,
-			NewOrg:      func(*testing.T) domain.OrgID { return domain.OrgID(next()) },
-			NewFactory: func(_ *testing.T, org domain.OrgID) domain.FactoryID {
-				f := domain.FactoryID(next())
-				c.AddFactory(org, f)
-
-				return f
-			},
-		}
-	})
+	conversiontest.Run(t, (&conversionIDs{}).harness)
 }

@@ -154,6 +154,17 @@ linters:
               desc: AWS access belongs in internal/adapters
             - pkg: github.com/jackc/pgx
               desc: database access belongs in internal/adapters/store/postgres
+        moveover:
+          files: ["**/internal/moveover/**", "!$test"]
+          deny:
+            - pkg: github.com/byFrederick/goal/internal/adapters
+              desc: the conversion reaches the database and the bucket only through ports
+            - pkg: github.com/byFrederick/goal/internal/core/engine
+              desc: the conversion runs before the engine; only its tests start runs
+            - pkg: github.com/byFrederick/goal/internal/api
+              desc: the conversion runs at goald's start; the HTTP API never calls it
+            - pkg: github.com/jackc/pgx
+              desc: database access belongs in internal/adapters/store/postgres
         retention:
           files: ["**/internal/retention/**"]
           deny:

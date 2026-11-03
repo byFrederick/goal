@@ -38,24 +38,33 @@ Values come in only through standard input or an import file, never on the comma
 
 An agent holds its connections' credentials for the whole run, and it has network access from the box. A prompt-injected agent can misuse what its tokens reach. The control for that is a narrow token, with only the repositories and permissions the agent needs. ADR 0008 (`docs/adr/0008-portable-runs-connections-and-knowledge.md` in the repository) records this decision and its accepted risks.
 
-Here is a connection for an `acme` repository, created from the `github` kind. The token is read from standard input, so it never appears in the shell history:
-
-```sh
-goal connection create acme-github --kind github --field host=github.com --secret token=-
-```
-
 ## Tool modes
 
 Each tool of an MCP connection is `allow`, `ask` or `off`. A tool with no mode is `allow`. `ask` pauses the call for a person, and `off` never runs it. The modes are set on the organization connection, and the stricter of the connection's mode and the factory's rule applies. See [skills and rules](../skills-and-rules/#tools-that-ask-first).
 
 ## Testing and managing connections
 
-- `goal connection test <name>` runs the kind's test from goald and exits 1 when it fails. The connection records when it was last tested and the outcome.
-- `goal connection list`, `show`, `update` and `delete` manage a connection. Deleting is refused while a factory's current version uses the connection.
-- `goal connection kinds` lists the kinds, the platform's and the organization's.
+- `goal connection` moved: whatever follows it, it prints where connections went (Access with `goal access`, Secrets with `goal secret`, and the factory's environment files) and exits 2.
 - `goal secret list`, `show`, `create`, `replace`, `delete` and `import` manage the organization's secrets, which a connection refers to as `{{name}}`. A value comes only from stdin or the import file and is never shown. `goal credential` moved to `goal secret`: it prints where and exits 2.
 
 Flags and output are in the [CLI reference](../../reference/).
+
+## Moving to secrets and environment files
+
+Goal moves every organization from connections to secrets and environment files once, when goald starts, with no person needed ([ADR 0037](https://github.com/byFrederick/goal/blob/main/docs/adr/0037-secrets-and-environment-files.md), decision 19). For each organization it:
+
+1. Makes each sealed connection field a secret open to every factory. The secret is named after the connection, or `<connection>-<field>` when the kind has several secret fields. A field that referred to a credential uses that credential, which is a secret already. A secret that already exists by name is left as it is.
+2. Converts each factory's current version into a new version, published by Goal with the message "Moved connections to environments (ADR 0037)":
+   - the factory's connections become `environments/default.yaml`, rendered from their kinds: the kind's variables, its command-line tool and its MCP server, with each secret field as a `{{secret}}` reference;
+   - an agent whose connections differ from the factory's gets `environments/<agent>.yaml` and `environment: <agent>`;
+   - `runtime.size` and `runtime.tools` move into every environment file;
+   - `runtime.repository.connection` becomes `runtime.repository.token`, `runtime.modelConnection` becomes `runtime.modelKey`, and a trigger's `modelAgrees.connection` becomes `modelAgrees.key`;
+   - each tool mode set on a connection, other than `allow`, becomes that server's `tools:` entry.
+3. Reopens a draft that was open on the new version, converted, for its author. A draft that does not convert is reopened as it was, and publishing it shows what to fix.
+
+Running items keep the version they started on. goald logs one `moved over` line per organization, with how many factories it converted and refused and how many secrets it created. Running it again changes nothing.
+
+A factory Goal cannot convert keeps its version and runs on connections. Needs you shows a conversion entry for it that names each problem, for example "connection aws-prod uses the aws kind, which Goal no longer converts: remove it from the factory". Goal refuses connections of the `aws` and `bedrock` kinds, and custom kinds that start a command with no fields. The entry goes away once the factory publishes a version with environment files.
 
 ## Where you meet connections
 

@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -24,7 +25,11 @@ import (
 
 var t0 = time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC)
 
-const refusedUUID = "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a78"
+const (
+	refusedUUID = "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a78"
+	awsSecret   = "aws-secret-for-tests"
+	defaultFile = "environments/default.yaml"
+)
 
 // logBuffer is a log sink safe for the engine's goroutines.
 type logBuffer struct {
@@ -104,18 +109,18 @@ func newWorld(t *testing.T) *world {
 	}
 
 	for _, n := range []domain.NewConnection{
-		{Name: "github", Kind: "github", Secrets: map[string]string{"token": githubValue}},
-		{Name: "cloudflare", Kind: "cloudflare", Fields: map[string]string{"account_id": "acme-account"}, Secrets: map[string]string{"api_token": cfValue}},
-		{Name: "context7", Kind: "context7", Secrets: map[string]string{"key": ctx7Value}},
+		{Name: connGitHub, Kind: connGitHub, Secrets: map[string]string{fieldToken: githubValue}},
+		{Name: connCloudflare, Kind: connCloudflare, Fields: map[string]string{"account_id": accountID}, Secrets: map[string]string{"api_token": cfValue}},
+		{Name: connContext7, Kind: connContext7, Secrets: map[string]string{"key": ctx7Value}},
 		{Name: "claude", Kind: "claude-subscription", Secrets: map[string]string{"token": oauthValue}},
-		{Name: "aws-prod", Kind: "aws", Secrets: map[string]string{"access_key_id": "AKIAEXAMPLE", "secret_access_key": "aws-secret-for-tests"}},
+		{Name: "aws-prod", Kind: "aws", Secrets: map[string]string{"access_key_id": "AKIAEXAMPLE", "secret_access_key": awsSecret}},
 	} {
 		if _, err := w.conns.Create(ctx, n, domain.LocalUser); err != nil {
 			t.Fatalf("connection %s: %v", n.Name, err)
 		}
 	}
 
-	if _, err := w.conns.Update(ctx, "context7", domain.ConnectionPatch{
+	if _, err := w.conns.Update(ctx, connContext7, domain.ConnectionPatch{
 		ToolModes: map[string]domain.ConnectionToolMode{"resolve-library-id": domain.ToolModeAsk},
 	}, domain.LocalUser); err != nil {
 		t.Fatal(err)
@@ -202,13 +207,44 @@ func TestRun_Idempotent(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld(t)
-	ctx := w.ctx(t)
-
 	v1 := w.publishOld(t, factoryUUID, "acme-software", files(productionFactory))
 	refusedV1 := w.publishOld(t, refusedUUID, "acme-cloud",
 		files(strings.NewReplacer(factoryUUID, refusedUUID, "acme-software", "acme-cloud", "[github, cloudflare, context7]", "[github, aws-prod]").Replace(productionFactory)))
+	d := w.personDraft(t)
 
-	// A person's draft on v1, with a changed prompt and the old keys.
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	v2 := w.checkPublished(t)
+	draft := w.checkReopened(t, d, v2)
+
+	if r := w.record(t, refusedUUID); r.Current.ID != refusedV1.ID || r.LastVersionNumber != 1 {
+		t.Errorf("refused factory at %+v; want its v1", r.Current)
+	}
+
+	w.checkConversions(t, v1, v2)
+	w.checkSecrets(t)
+
+	// Again: nothing changes.
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	if again := w.record(t, factoryUUID); again.LastVersionNumber != 2 || again.Current.ID != v2.ID || again.Draft == nil || again.Draft.ID != draft.ID {
+		t.Errorf("after a second run %+v; want v2 and the same draft", again)
+	}
+
+	w.checkLogs(t)
+}
+
+// personDraft opens a person's draft on the production factory's v1, with a changed prompt and
+// the old keys.
+func (w *world) personDraft(t *testing.T) domain.DefinitionVersion {
+	t.Helper()
+
+	ctx := w.ctx(t)
+
 	d, _, err := w.defs.OpenDraft(ctx, ports.OpenDraft{Factory: factoryUUID, By: person})
 	if err != nil {
 		t.Fatal(err)
@@ -226,16 +262,20 @@ func TestRun_Idempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := w.mover.Run(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	return d
+}
+
+// checkPublished checks the production factory's v2, published by Goal with the message and
+// environment files, and returns it.
+func (w *world) checkPublished(t *testing.T) domain.DefinitionVersion {
+	t.Helper()
 
 	rec := w.record(t, factoryUUID)
 	if rec.Current == nil || rec.Current.Number != 2 || rec.Current.By.Ref() != moveover.Actor.Ref() {
 		t.Fatalf("current %+v; want v2 published by Goal", rec.Current)
 	}
 
-	v2, err := w.defs.Version(ctx, rec.Current.ID)
+	v2, err := w.defs.Version(w.ctx(t), rec.Current.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,60 +284,69 @@ func TestRun_Idempotent(t *testing.T) {
 		t.Errorf("v2's message %q; want %q", v2.Message, moveover.Message)
 	}
 
-	if _, ok := w.tree(t, v2)["environments/default.yaml"]; !ok {
+	if _, ok := w.tree(t, v2)[defaultFile]; !ok {
 		t.Error("v2 has no environments/default.yaml")
 	}
 
-	// The draft is on v2, still its author's, converted and with its change.
-	draft, err := w.defs.Draft(ctx, factoryUUID)
+	return v2
+}
+
+// checkReopened checks the person's draft d is reopened on v2, still theirs, converted and with
+// its change, and returns it.
+func (w *world) checkReopened(t *testing.T, d, v2 domain.DefinitionVersion) domain.DefinitionVersion {
+	t.Helper()
+
+	draft, err := w.defs.Draft(w.ctx(t), factoryUUID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	got := w.tree(t, draft)
 	if draft.BaseID != v2.ID || draft.UpdatedBy.Ref() != person.Ref() {
 		t.Errorf("draft base %s by %v; want v2 by %v", draft.BaseID, draft.UpdatedBy, person)
 	}
 
-	if !strings.Contains(string(got["agents/engineer.md"]), "then test it") || got["environments/default.yaml"] == nil ||
+	got := w.tree(t, draft)
+	if !strings.Contains(string(got["agents/engineer.md"]), "then test it") || got[defaultFile] == nil ||
 		strings.Contains(string(got[config.FileName]), "modelConnection") {
 		t.Errorf("the reopened draft lost its change or kept the old keys:\n%s", got[config.FileName])
 	}
 
-	if old, err := w.defs.Version(ctx, d.ID); err != nil || old.State == domain.VersionDraft && old.ID == draft.ID {
+	if old, err := w.defs.Version(w.ctx(t), d.ID); err != nil || old.ID == draft.ID {
 		t.Errorf("the archived draft %s = %+v, %v; want it readable and no longer open", d.ID, old.State, err)
 	}
 
-	// The refused factory keeps v1.
-	if r := w.record(t, refusedUUID); r.Current.ID != refusedV1.ID || r.LastVersionNumber != 1 {
-		t.Errorf("refused factory at %+v; want its v1", r.Current)
+	return draft
+}
+
+// checkConversions checks one conversion per factory: v1 to v2 with the names, and the refusal
+// naming aws-prod.
+func (w *world) checkConversions(t *testing.T, v1, v2 domain.DefinitionVersion) {
+	t.Helper()
+
+	convs, err := w.conversions.List(w.ctx(t))
+	if err != nil || len(convs) != 2 {
+		t.Fatalf("conversions %+v, %v; want 2", convs, err)
 	}
 
-	convs, err := w.conversions.List(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	want := map[domain.FactoryID]bool{factoryUUID: false, refusedUUID: true}
 	for _, c := range convs {
-		if c.Refused() != want[c.Factory] {
-			t.Errorf("conversion of %s refused %v; want %v (%v)", c.Factory, c.Refused(), want[c.Factory], c.Problems)
-		}
-
-		if c.Factory == factoryUUID && (c.From != v1.ID || c.To != v2.ID || !maps.Equal(c.Names["github"], map[string]string{"token": "github"})) {
-			t.Errorf("conversion %+v; want v1 to v2 with github's names", c)
-		}
-
-		if c.Factory == refusedUUID && (len(c.Problems) != 1 || !strings.HasPrefix(c.Problems[0], "connection aws-prod uses the aws kind")) {
-			t.Errorf("refusal problems %q; want aws-prod's", c.Problems)
+		switch c.Factory {
+		case factoryUUID:
+			if c.Refused() || c.From != v1.ID || c.To != v2.ID || !maps.Equal(c.Names[connGitHub], map[string]string{fieldToken: connGitHub}) {
+				t.Errorf("conversion %+v; want v1 to v2 with github's names", c)
+			}
+		case refusedUUID:
+			if !c.Refused() || len(c.Problems) != 1 || !strings.HasPrefix(c.Problems[0], "connection aws-prod uses the aws kind") {
+				t.Errorf("refusal %+v; want aws-prod's problem", c)
+			}
 		}
 	}
+}
 
-	if len(convs) != 2 {
-		t.Errorf("%d conversions; want 2", len(convs))
-	}
+// checkSecrets checks the four connections' secrets and none of aws-prod.
+func (w *world) checkSecrets(t *testing.T) {
+	t.Helper()
 
-	secrets, err := w.secrets.List(ctx)
+	secrets, err := w.secrets.List(w.ctx(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,15 +359,12 @@ func TestRun_Idempotent(t *testing.T) {
 	if strings.Join(names, ",") != "claude,cloudflare,context7,github" {
 		t.Errorf("secrets %v; want the four connections' and none of aws-prod", names)
 	}
+}
 
-	// Again: nothing changes.
-	if err := w.mover.Run(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-
-	if again := w.record(t, factoryUUID); again.LastVersionNumber != 2 || again.Current.ID != v2.ID || again.Draft == nil || again.Draft.ID != draft.ID {
-		t.Errorf("after a second run %+v; want v2 and the same draft", again)
-	}
+// checkLogs checks one moved over line per run, the first counting its work and the second none,
+// and no value.
+func (w *world) checkLogs(t *testing.T) {
+	t.Helper()
 
 	logs := w.logs.String()
 	if n := strings.Count(logs, `"msg":"moved over"`); n != 2 {
@@ -329,10 +375,8 @@ func TestRun_Idempotent(t *testing.T) {
 		t.Errorf("the lines do not count the first run's work and the second's none:\n%s", logs)
 	}
 
-	for _, v := range []string{githubValue, cfValue, ctx7Value, oauthValue, "aws-secret-for-tests"} {
-		if strings.Contains(logs, v) {
-			t.Errorf("a secret's value reached the logs")
-		}
+	if slices.ContainsFunc([]string{githubValue, cfValue, ctx7Value, oauthValue, awsSecret}, func(v string) bool { return strings.Contains(logs, v) }) {
+		t.Error("a secret's value reached the logs")
 	}
 }
 
@@ -351,22 +395,44 @@ func TestConvert_GoalProductionFactory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := w.ctx(t)
+	env := w.oneRun(t, w.convertedLine(t))
+	for name, want := range map[string]string{
+		envGHToken: githubValue, "CLOUDFLARE_ACCOUNT_ID": accountID, "CLOUDFLARE_API_TOKEN": cfValue,
+		envContext7: ctx7Value, domain.EnvClaudeOAuthToken: oauthValue,
+	} {
+		if env[name] != want {
+			t.Errorf("the run's %s = %q; want the converted secret's value", name, env[name])
+		}
+	}
 
-	v2, err := w.defs.Version(ctx, w.record(t, factoryUUID).Current.ID)
+	for _, action := range []string{domain.AuditConnectionUsed, domain.AuditCredentialUsed} {
+		entries, err := w.tenancy.AuditLog(w.ctx(t), ports.AuditQuery{Action: action, Limit: 10})
+		if err != nil || len(entries) != 0 {
+			t.Errorf("%s entries %v (%v); want none: the run is on secrets", action, entries, err)
+		}
+	}
+}
+
+// convertedLine is the production factory's converted version as the engine runs it, failing
+// unless it passes the publish checks, declares the context7 MCP server and is on secrets.
+func (w *world) convertedLine(t *testing.T) domain.Line {
+	t.Helper()
+
+	v2, err := w.defs.Version(w.ctx(t), w.record(t, factoryUUID).Current.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fs := fstest.MapFS{}
-	for p, b := range w.tree(t, v2) {
-		fs[p] = &fstest.MapFile{Data: b}
+	tree := w.tree(t, v2)
+	f := factoryOf(t, tree)
+
+	if c7 := environment(t, tree, config.DefaultEnvironment).MCP[connContext7]; c7.URL != context7URL || c7.Headers[envContext7] != refContext7 {
+		t.Errorf("default's context7 MCP server %+v; want its URL and key header", c7)
 	}
 
-	f := factoryOf(t, w.tree(t, v2))
-
-	if c7 := environment(t, w.tree(t, v2), "default").MCP["context7"]; c7.URL != "https://mcp.context7.com/mcp" || c7.Headers["CONTEXT7_API_KEY"] != "{{context7}}" {
-		t.Errorf("default's context7 MCP server %+v; want its URL and key header", c7)
+	fs := fstest.MapFS{}
+	for p, b := range tree {
+		fs[p] = &fstest.MapFile{Data: b}
 	}
 
 	if _, err := config.Load(fs); err != nil {
@@ -380,13 +446,21 @@ func TestConvert_GoalProductionFactory(t *testing.T) {
 		t.Fatal("the new version is not on secrets")
 	}
 
+	return line
+}
+
+// oneRun submits an item to line, runs one tick on an engine over w's fakes and returns the env
+// of the one agent run it started.
+func (w *world) oneRun(t *testing.T, line domain.Line) map[string]string {
+	t.Helper()
+
 	logs := &logBuffer{}
 	worker := porttest.NewWorker(porttest.Succeed(`{}`))
 
 	e, err := engine.New(engine.Deps{
 		Store: w.store, Orgs: w.tenancy, Sandboxes: porttest.NewSandboxes(worker.Exec), Contracts: porttest.NewContracts(), Clock: w.clock,
 		Secrets: porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"}, Connections: w.conns, Credentials: porttest.NewCredentials(w.key, w.tenancy, w.conns),
-		OrgSecrets: w.secrets, CodeHosts: map[string]ports.CodeHost{"github": porttest.NewCodeHost()},
+		OrgSecrets: w.secrets, CodeHosts: map[string]ports.CodeHost{connGitHub: porttest.NewCodeHost()},
 		Audit: w.tenancy, NotificationOutbox: porttest.NewNotificationOutbox(), Logger: slog.New(slog.NewJSONHandler(logs, nil)),
 	}, engine.Config{
 		Lines: []domain.Line{line}, Image: "ghcr.io/acme/goal-agent:test", GatewayURL: "http://gateway.example.com", GatewayKeyRef: "env:GOAL_GATEWAY_KEY",
@@ -394,6 +468,8 @@ func TestConvert_GoalProductionFactory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	ctx := w.ctx(t)
 
 	if _, err := e.Submit(ctx, domain.NewItem{FactoryID: factoryUUID, Type: "feature", Title: "Add the flag"}); err != nil {
 		t.Fatal(err)
@@ -418,22 +494,7 @@ func TestConvert_GoalProductionFactory(t *testing.T) {
 		t.Fatalf("%d agent runs; want 1:\n%s", len(runs), logs.String())
 	}
 
-	env := runs[0].Env
-	for name, want := range map[string]string{
-		"GH_TOKEN": githubValue, "CLOUDFLARE_ACCOUNT_ID": "acme-account", "CLOUDFLARE_API_TOKEN": cfValue,
-		"CONTEXT7_API_KEY": ctx7Value, domain.EnvClaudeOAuthToken: oauthValue,
-	} {
-		if env[name] != want {
-			t.Errorf("the run's %s = %q; want the converted secret's value", name, env[name])
-		}
-	}
-
-	for _, action := range []string{domain.AuditConnectionUsed, domain.AuditCredentialUsed} {
-		entries, err := w.tenancy.AuditLog(ctx, ports.AuditQuery{Action: action, Limit: 10})
-		if err != nil || len(entries) != 0 {
-			t.Errorf("%s entries %v (%v); want none: the run is on secrets", action, entries, err)
-		}
-	}
+	return runs[0].Env
 }
 
 var _ io.Writer = (*logBuffer)(nil)

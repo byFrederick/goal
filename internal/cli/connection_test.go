@@ -29,7 +29,7 @@ func (g *defGoald) goalIn(t *testing.T, stdin string, args ...string) (string, e
 func (g *defGoald) githubConnection(t *testing.T) {
 	t.Helper()
 
-	n := domain.NewConnection{Name: importedGitHub, Kind: importedGitHub, Secrets: map[string]string{"token": "{{acme-token}}"}}
+	n := domain.NewConnection{Name: importedGitHub, Kind: importedGitHub, Secrets: map[string]string{"token": "{{acme-token}}"}} //nolint:gosec // a reference to a test secret, not a value
 	if _, err := g.conns.Create(domain.WithOrg(t.Context(), g.orgID), n, domain.LocalUser); err != nil {
 		t.Fatal(err)
 	}
