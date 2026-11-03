@@ -54,8 +54,10 @@ const (
 
 // Limits and defaults of the knowledge base (00054's checks).
 const (
-	// DefaultSyncEvery and MinSyncEvery bound how often a source syncs.
-	DefaultSyncEvery = time.Hour
+	// DefaultSyncEvery and MinSyncEvery bound how often a source syncs; SyncOnDemand is a
+	// source that syncs only when someone presses Sync (ADR 0038 decision 1).
+	SyncOnDemand     time.Duration = 0
+	DefaultSyncEvery               = time.Hour
 	MinSyncEvery     = 15 * time.Minute
 	// MaxSourceTitle is a source title's length in characters; MaxSourceConfig its config's
 	// size as JSON.
@@ -94,8 +96,11 @@ type KnowledgeSource struct {
 	ReadWhen string
 	// CurrentSnapshot is the snapshot runs read; "" before its first.
 	CurrentSnapshot KnowledgeSnapshotID
-	SyncEvery       time.Duration
-	NextSyncAt      *time.Time
+	// SyncEvery is how often the source syncs; SyncOnDemand (0) only when someone presses Sync.
+	SyncEvery time.Duration
+	// NextSyncAt is when the source is due; nil for a live source, and for an on-demand one
+	// between syncs.
+	NextSyncAt *time.Time
 	// LeaseUntil is when the lease of the goald syncing it ends.
 	LeaseUntil   *time.Time
 	Status       SyncStatus
@@ -109,7 +114,8 @@ type KnowledgeSource struct {
 	UpdatedAt    time.Time
 }
 
-// NewKnowledgeSource is a source to create. SyncEvery 0 is DefaultSyncEvery.
+// NewKnowledgeSource is a source to create. SyncEvery nil is DefaultSyncEvery and SyncOnDemand
+// syncs only when someone presses Sync; a source that syncs is due once when it is created.
 type NewKnowledgeSource struct {
 	Name, Title string
 	Kind        KnowledgeSourceKind
@@ -117,7 +123,16 @@ type NewKnowledgeSource struct {
 	Secret      string
 	Config      map[string]string
 	ReadWhen    string
-	SyncEvery   time.Duration
+	SyncEvery   *time.Duration
+}
+
+// Every is how often the new source syncs: SyncEvery, or DefaultSyncEvery when nil.
+func (n NewKnowledgeSource) Every() time.Duration {
+	if n.SyncEvery == nil {
+		return DefaultSyncEvery
+	}
+
+	return *n.SyncEvery
 }
 
 // SourceReaderKey is the config key naming the reader of a synced source on a secret (gitdocs,
@@ -131,8 +146,11 @@ const SourceReaderKey = "reader"
 // a connection; its config's size, its read-when line and the schedule. Errors wrap ErrInvalid.
 func (n NewKnowledgeSource) Check() error {
 	errs := []error{
-		CheckConnectionName(n.Name), checkSourceTitle(n.Title), checkSourceConfig(n.Config), checkSyncEvery(n.SyncEvery),
-		CheckReadWhen(n.ReadWhen),
+		CheckConnectionName(n.Name), checkSourceTitle(n.Title), checkSourceConfig(n.Config), CheckReadWhen(n.ReadWhen),
+	}
+
+	if n.SyncEvery != nil {
+		errs = append(errs, checkSyncEvery(*n.SyncEvery))
 	}
 
 	if n.Secret != "" {
@@ -170,7 +188,8 @@ func (n NewKnowledgeSource) checkReads() error {
 }
 
 // KnowledgeSourcePatch changes a source: Title, ReadWhen, SyncEvery and Secret when set, Config
-// when not nil. Secret is a synced, repository or Confluence source's only: it moves a synced
+// when not nil. SyncEvery SyncOnDemand makes the source wait for Sync; an interval makes an
+// on-demand source due at once. Secret is a synced, repository or Confluence source's only: it moves a synced
 // source on a connection over to the secret.
 type KnowledgeSourcePatch struct {
 	Title     *string
@@ -189,10 +208,6 @@ func (p KnowledgeSourcePatch) Check() error {
 	}
 
 	if p.SyncEvery != nil {
-		if *p.SyncEvery == 0 {
-			errs = append(errs, fmt.Errorf("a source syncs at least every %s: %w", MinSyncEvery, ErrInvalid))
-		}
-
 		errs = append(errs, checkSyncEvery(*p.SyncEvery))
 	}
 
@@ -313,8 +328,9 @@ func checkSourceConfig(c map[string]string) error {
 	return nil
 }
 
+// checkSyncEvery allows SyncOnDemand or an interval of at least MinSyncEvery.
 func checkSyncEvery(d time.Duration) error {
-	if d != 0 && d < MinSyncEvery {
+	if d != SyncOnDemand && d < MinSyncEvery {
 		return fmt.Errorf("a source syncs at most every %s, not every %s: %w", MinSyncEvery, d, ErrInvalid)
 	}
 
@@ -322,8 +338,8 @@ func checkSyncEvery(d time.Duration) error {
 }
 
 // SyncResult is how a source's sync ended: Error "" when it went through, At when it ended. Due is the source's NextSyncAt when
-// it was claimed: the next sync is At plus the source's interval unless someone made it due
-// since (Sync now, an upload), which then stands.
+// it was claimed: the next sync is At plus the source's interval, or none for an on-demand
+// source, unless someone made it due since (Sync now, an upload), which then stands.
 type SyncResult struct {
 	At, Due time.Time
 	Error   string

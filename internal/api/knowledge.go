@@ -218,10 +218,7 @@ func (s *server) UpdateKnowledgeSource(ctx context.Context, req gen.UpdateKnowle
 		}
 	}
 
-	if b.SyncEverySeconds != nil {
-		every := seconds(b.SyncEverySeconds)
-		p.SyncEvery = &every
-	}
+	p.SyncEvery = seconds(b.SyncEverySeconds)
 
 	src, err := s.knowledge.UpdateSource(ctx, req.Source, p, by)
 	if err != nil {
@@ -402,13 +399,16 @@ func (s *server) sourceOut(ctx context.Context, src domain.KnowledgeSource, by [
 	return out, nil
 }
 
-// seconds is a schedule in seconds as a duration; nil is 0, the default.
-func seconds(n *int) time.Duration {
+// seconds is a schedule in seconds as a duration: nil when not given, and 0 on demand
+// (domain.SyncOnDemand).
+func seconds(n *int) *time.Duration {
 	if n == nil {
-		return 0
+		return nil
 	}
 
-	return time.Duration(*n) * time.Second
+	d := time.Duration(*n) * time.Second
+
+	return &d
 }
 
 // listedSources are the knowledge sources a factory's agents read.
