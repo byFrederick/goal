@@ -84,10 +84,12 @@ type Orgs interface {
 	ActiveOrgs(ctx context.Context) ([]domain.OrgID, error)
 }
 
-// KnowledgeSnapshots reads a knowledge source's snapshots of the organization in ctx, newest first;
-// ports.Knowledge satisfies it.
+// KnowledgeSnapshots reads a knowledge source's snapshots of the organization in ctx, newest first,
+// and counts the reads of its files (ADR 0038 decision 10); ports.Knowledge satisfies it.
 type KnowledgeSnapshots interface {
 	Snapshots(ctx context.Context, source string) ([]domain.KnowledgeSnapshot, error)
+	Source(ctx context.Context, name string) (domain.KnowledgeSource, error)
+	AddReads(ctx context.Context, reads []domain.KnowledgeFileReads) error
 }
 
 // Deps are the ports the engine works through.

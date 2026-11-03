@@ -3,8 +3,11 @@ package engine_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -215,5 +218,126 @@ func TestRunDefinition_KnowledgePinsOfTheRequestsAgent(t *testing.T) {
 	want := []domain.KnowledgePin{{Source: kbHandbook, Snapshot: "h1"}, {Source: "reviews", Snapshot: "r1"}}
 	if got := h.pinsOf(t, 0); !reflect.DeepEqual(got, want) {
 		t.Errorf("pins = %+v, want %+v", got, want)
+	}
+}
+
+// toolLines writes the worker's tool_use lines for each call, a tool and its path, to stdout.
+func toolLines(t *testing.T, stdout io.Writer, calls ...[2]string) {
+	t.Helper()
+
+	for i, c := range calls {
+		line, err := json.Marshal(map[string]any{"type": "tool_use", "at": t0.Format(time.RFC3339), "id": fmt.Sprintf("tu_%d", i), "tool": c[0], "input": "{}", "path": c[1]})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := fmt.Fprintf(stdout, "%s\n", line); err != nil {
+			t.Error(err)
+		}
+	}
+}
+
+// kbReadCalls are the calls of the reads tests' runs: two reads of one runbook and a search of
+// the runbooks, then calls that count for nothing (another source, the checkout, a tool other
+// than Read, Grep and Glob).
+var kbReadCalls = [][2]string{
+	{"Read", "/knowledge/runbooks/db/disk.md"},
+	{"Read", "/knowledge/runbooks/db/disk.md"},
+	{"Grep", "/knowledge/runbooks"},
+	{"Read", "/knowledge/design/a.md"},
+	{"Read", "/workspace/README.md"},
+	{"Bash", "/knowledge/runbooks/db/disk.md"},
+}
+
+// A run's reads and searches of the sources it pinned are counted once it ends, into the day's
+// rollup of its factory; a source it did not pin counts nothing.
+func TestRun_CountsKnowledgeReads(t *testing.T) {
+	t.Parallel()
+
+	line := repoLine()
+	line.Knowledge = []domain.KnowledgeEntry{{Name: "runbooks"}}
+
+	var once sync.Once
+
+	h := newHarness(t, line, func(ctx context.Context, c porttest.ExecCall, stdout io.Writer) domain.RunResult {
+		once.Do(func() { toolLines(t, stdout, kbReadCalls...) })
+		return porttest.Succeed(`{}`)(ctx, c, stdout)
+	})
+	kb := h.knowledgeBase(t)
+	kb.putSnapshot(t, "runbooks", "r1")
+	kb.putSnapshot(t, "design", "d1")
+	h.e = h.engine(t, h.store)
+	it := h.submit(t, domain.NewItem{})
+
+	h.step(t)
+
+	if got := h.item(t, it.ID); got.State != domain.StateDone {
+		t.Fatalf("item is %s, want done (events %v)", got.State, h.kinds(it.ID))
+	}
+
+	src, err := kb.kb.Source(inOrg(t), "runbooks")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := kb.kb.FileReads(inOrg(t), "runbooks", t0.AddDate(0, 0, -1))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	day := domain.KnowledgeDay(h.clock.Now())
+	want := []domain.KnowledgeFileReads{
+		{Source: src.ID, Path: domain.KnowledgeSourceRoot, Factory: factoryID, Day: day, Searches: 1},
+		{Source: src.ID, Path: "db/disk.md", Factory: factoryID, Day: day, Reads: 2},
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("reads = %+v\nwant %+v", got, want)
+	}
+
+	if other, err := kb.kb.FileReads(inOrg(t), "design", t0.AddDate(0, 0, -1)); err != nil || len(other) != 0 {
+		t.Errorf("reads of the unpinned source = %+v, %v; want none", other, err)
+	}
+}
+
+// failingReads is a knowledge base whose AddReads always fails.
+type failingReads struct{ *porttest.Knowledge }
+
+func (failingReads) AddReads(context.Context, []domain.KnowledgeFileReads) error {
+	return errors.New("the rollup is down")
+}
+
+// Counting is best effort: when the reads cannot be added the run ends as it would have, and the
+// failure is logged.
+func TestRun_KnowledgeReadsFailureLeavesTheRunAlone(t *testing.T) {
+	t.Parallel()
+
+	line := repoLine()
+	line.Knowledge = []domain.KnowledgeEntry{{Name: "runbooks"}}
+
+	h := newHarness(t, line, func(ctx context.Context, c porttest.ExecCall, stdout io.Writer) domain.RunResult {
+		toolLines(t, stdout, kbReadCalls...)
+		return porttest.Succeed(`{}`)(ctx, c, stdout)
+	})
+	kb := h.knowledgeBase(t)
+	kb.putSnapshot(t, "runbooks", "r1")
+	h.knowledgeDeps = failingReads{kb.kb}
+	h.e = h.engine(t, h.store)
+	it := h.submit(t, domain.NewItem{})
+
+	h.step(t)
+
+	if got := h.item(t, it.ID); got.State != domain.StateDone {
+		t.Fatalf("item is %s, want done (events %v)", got.State, h.kinds(it.ID))
+	}
+
+	for _, r := range h.runs(t, testOrg, it.ID) {
+		if r.Result.Status != domain.RunSucceeded {
+			t.Errorf("run %s is %s (%s), want succeeded", r.ID, r.Result.Status, r.Result.Error)
+		}
+	}
+
+	if logs := h.logs.String(); !strings.Contains(logs, "knowledge reads not counted") || !strings.Contains(logs, "the rollup is down") {
+		t.Errorf("logs lack the failed count:\n%s", logs)
 	}
 }

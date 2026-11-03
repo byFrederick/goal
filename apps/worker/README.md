@@ -217,7 +217,7 @@ One JSON object per line, each with `type` and `at` (RFC 3339). Logs go to stder
 | `type` | Fields | goald event kind |
 | --- | --- | --- |
 | `started` | `session_id`, `model`, `tools`, `skills` (the enabled ones Claude Code found), `mcp_servers` (`name`, `status`) | `agent_started` |
-| `tool_use` | `id`, `tool`, `input` (JSON, cut to 500 chars) | `tool_call` |
+| `tool_use` | `id`, `tool`, `input` (JSON, cut to 500 chars), and for Read, Grep and Glob `path` (the file or folder named, uncut; goald counts reads under `/knowledge` from it) | `tool_call` |
 | `tool_result` | `id`, `is_error`, `summary` (cut to 500 chars) | `tool_result` |
 | `message` | `text` (assistant text, cut to 2000 chars) | `agent_message` |
 | `usage` | `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`: one event per API call (one model turn), with that call's final counts, not a running total. They come from the stream's `message_delta` (`includePartialMessages`): the SDK's assistant messages carry only the opening counts (`output_tokens` 1). The run's totals are in `finished` | `usage` |

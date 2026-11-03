@@ -220,6 +220,39 @@ describe('runTask', () => {
     });
   });
 
+  it('puts the path of each Read, Grep and Glob call in its tool_use event', async () => {
+    const long = `/knowledge/runbooks/${'deep/'.repeat(120)}disk.md`;
+    const { events } = await run([
+      {
+        type: 'assistant',
+        message: {
+          id: 'msg_1',
+          content: [
+            { type: 'tool_use', id: 'tu_1', name: 'Read', input: { file_path: long } },
+            { type: 'tool_use', id: 'tu_2', name: 'Grep', input: { pattern: 'disk', path: '/knowledge/runbooks' } },
+            { type: 'tool_use', id: 'tu_3', name: 'Glob', input: { pattern: '**/*.md', path: '/knowledge' } },
+            { type: 'tool_use', id: 'tu_4', name: 'Grep', input: { pattern: 'disk' } },
+            { type: 'tool_use', id: 'tu_5', name: 'Bash', input: { path: '/knowledge/runbooks' } },
+          ],
+          usage: { ...usage, output_tokens: 1 },
+        },
+        parent_tool_use_id: null,
+        session_id: 's1',
+      },
+      success,
+    ]);
+
+    const paths = events.flatMap((e) => (e.type === 'tool_use' ? [[e.id, e.path]] : []));
+    // The path is never clipped, unlike the input, so a long one still counts.
+    expect(paths).toEqual([
+      ['tu_1', long],
+      ['tu_2', '/knowledge/runbooks'],
+      ['tu_3', '/knowledge'],
+      ['tu_4', undefined],
+      ['tu_5', undefined],
+    ]);
+  });
+
   it('streams progress events and ends with the result', async () => {
     const assistant = (content: unknown[]) => ({
       type: 'assistant',
@@ -280,6 +313,8 @@ describe('runTask', () => {
       is_error: false,
       summary: 'ok',
     });
+    // Bash names no path: goald counts only Read, Grep and Glob.
+    expect(events.find((e) => e.type === 'tool_use')).not.toHaveProperty('path');
     expect(events.at(-1)).toEqual({
       type: 'finished',
       at: at.toISOString(),

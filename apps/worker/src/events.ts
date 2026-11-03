@@ -14,7 +14,11 @@ export type WorkerEvent =
       skills: string[];
       mcp_servers: { name: string; status: string }[];
     }
-  | { type: 'tool_use'; at: string; id: string; tool: string; input: string }
+  /**
+   * path is the file or folder a Read, Grep or Glob call names, unclipped, so goald counts the
+   * reads of /knowledge (ADR 0038 decision 10); absent for other tools and when the call names none.
+   */
+  | { type: 'tool_use'; at: string; id: string; tool: string; input: string; path?: string }
   | { type: 'tool_result'; at: string; id: string; is_error: boolean; summary: string }
   | { type: 'message'; at: string; text: string }
   | {
@@ -59,6 +63,19 @@ const maxText = 2000;
 
 export function clip(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max)}…` : s;
+}
+
+/** The input field that names the file or folder of each tool goald counts reads of. */
+const pathFields: Record<string, string> = { Read: 'file_path', Grep: 'path', Glob: 'path' };
+
+/** The path a Read, Grep or Glob call names; undefined for other tools or without one. */
+export function toolPath(tool: string, input: unknown): string | undefined {
+  const field = pathFields[tool];
+  if (field === undefined || typeof input !== 'object' || input === null) {
+    return undefined;
+  }
+  const value = (input as Record<string, unknown>)[field];
+  return typeof value === 'string' && value !== '' ? value : undefined;
 }
 
 type Usage = Omit<Extract<WorkerEvent, { type: 'usage' }>, 'type' | 'at'>;
@@ -115,12 +132,14 @@ export class EventMapper {
       if (block.type === 'text' && block.text.trim() !== '') {
         events.push({ type: 'message', at, text: clip(block.text, maxText) });
       } else if (block.type === 'tool_use') {
+        const path = toolPath(block.name, block.input);
         events.push({
           type: 'tool_use',
           at,
           id: block.id,
           tool: block.name,
           input: clip(JSON.stringify(block.input), maxInput),
+          ...(path === undefined ? {} : { path }),
         });
       }
     }
