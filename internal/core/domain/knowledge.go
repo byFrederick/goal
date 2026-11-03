@@ -254,6 +254,66 @@ func (p KnowledgeSourcePatch) CheckOn(src KnowledgeSource) error {
 	return checkSourceReader(cfg)
 }
 
+// ConvertsTo is the kind a synced source on a secret becomes when moving over (ADR 0038 decision
+// 16): repository for one gitdocs reads, confluence for one confluence reads. It errs, wrapping
+// ErrInvalid and saying why, for any other source.
+func (s KnowledgeSource) ConvertsTo() (KnowledgeSourceKind, error) {
+	if s.Kind != SourceSynced || s.Secret == "" {
+		return "", fmt.Errorf("only a synced source that reads with a secret converts, and %s is %s reading %s: %w",
+			s.Name, s.Kind, s.reads(), ErrInvalid)
+	}
+
+	switch r := s.Config[SourceReaderKey]; r {
+	case "gitdocs":
+		return SourceRepository, nil
+	case "confluence":
+		return SourceConfluence, nil
+	default:
+		return "", fmt.Errorf("source %s's reader %q is neither gitdocs nor confluence: %w", s.Name, r, ErrInvalid)
+	}
+}
+
+// CheckConvert enforces the rules of converting s into a source of kind to: s converts
+// (ConvertsTo), and to is the kind it converts into. Errors wrap ErrInvalid.
+func (s KnowledgeSource) CheckConvert(to KnowledgeSourceKind) error {
+	want, err := s.ConvertsTo()
+	if err != nil {
+		return err
+	}
+
+	if to != want {
+		return fmt.Errorf("source %s converts into a %s source, not %q: %w", s.Name, want, to, ErrInvalid)
+	}
+
+	return nil
+}
+
+// ConvertedConfig is s's config as its converted source keeps it: without SourceReaderKey, which
+// the kind names now.
+func (s KnowledgeSource) ConvertedConfig() map[string]string {
+	out := make(map[string]string, len(s.Config))
+
+	for k, v := range s.Config {
+		if k != SourceReaderKey {
+			out[k] = v
+		}
+	}
+
+	return out
+}
+
+// reads names what s reads with, for a refusal.
+func (s KnowledgeSource) reads() string {
+	switch {
+	case s.Secret != "":
+		return "secret " + s.Secret
+	case s.Connection != "":
+		return "connection " + s.Connection
+	default:
+		return "nothing"
+	}
+}
+
 // checkSourceReader refuses a synced source on a secret whose config names no reader.
 func checkSourceReader(c map[string]string) error {
 	if strings.TrimSpace(c[SourceReaderKey]) == "" {

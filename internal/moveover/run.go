@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -52,6 +53,9 @@ type Tally struct {
 	Converted, Refused, Secrets int
 	// Sources are the knowledge sources pointed at a secret.
 	Sources int
+	// Kinds are the synced sources converted into repository or Confluence sources, Live the live
+	// sources deleted and Due the sources without a snapshot made due (ADR 0038 decision 16).
+	Kinds, Live, Due int
 }
 
 // Run converts every organization once, under the install's conversion lock, and logs one line
@@ -74,7 +78,8 @@ func (m *Mover) Run(ctx context.Context) error {
 			}
 
 			m.d.Logger.InfoContext(ctx, "moved over", slog.String("org", string(org)),
-				slog.Int("converted", t.Converted), slog.Int("refused", t.Refused), slog.Int("secrets", t.Secrets), slog.Int("sources", t.Sources))
+				slog.Int("converted", t.Converted), slog.Int("refused", t.Refused), slog.Int("secrets", t.Secrets), slog.Int("sources", t.Sources),
+				slog.Int("kinds", t.Kinds), slog.Int("live", t.Live), slog.Int("due", t.Due))
 		}
 
 		return nil
@@ -92,7 +97,8 @@ func (m *Mover) Run(ctx context.Context) error {
 
 // Org converts the organization in ctx: its connections' secrets first, then its synced
 // knowledge sources still on a connection, then each factory with no conversion recorded whose
-// current version is on connections.
+// current version is on connections, and last its knowledge sources into ADR 0038's kinds, after
+// the factories so a factory listing a live source still publishes its conversion.
 func (m *Mover) Org(ctx context.Context) (Tally, error) {
 	var t Tally
 
@@ -109,7 +115,85 @@ func (m *Mover) Org(ctx context.Context) (Tally, error) {
 		return t, err
 	}
 
-	return t, m.factories(ctx, conns, &t)
+	if err := m.factories(ctx, conns, &t); err != nil {
+		return t, err
+	}
+
+	return t, m.knowledge(ctx, &t)
+}
+
+// knowledge moves the organization's knowledge sources onto files (ADR 0038 decision 16): each
+// synced source on a secret becomes the kind its reader reads (ConvertSource, which makes it due),
+// each live source is deleted, and each other source without a snapshot that is not due nor
+// syncing is made due, so every source syncs once. A synced source it cannot convert is logged
+// (knowledge source not converted) with the reason, never a value, and left as it is. It never
+// edits a definition: a factory listing a converted source lists it by the same name. A second
+// run finds nothing to do.
+func (m *Mover) knowledge(ctx context.Context, t *Tally) error {
+	list, err := m.d.Knowledge.Sources(ctx)
+	if err != nil {
+		return fmt.Errorf("list knowledge sources: %w", err)
+	}
+
+	now := m.d.Clock.Now()
+
+	for _, src := range list {
+		if err := m.moveSource(ctx, src, now, t); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// moveSource converts, deletes or makes due one source, counting it in t.
+func (m *Mover) moveSource(ctx context.Context, src domain.KnowledgeSource, now time.Time, t *Tally) error {
+	switch src.Kind {
+	case domain.SourceLive:
+		if err := m.d.Knowledge.DeleteSource(ctx, src.Name, Actor, nil); err != nil {
+			return fmt.Errorf("delete live knowledge source %s: %w", src.Name, err)
+		}
+
+		t.Live++
+
+		return nil
+	case domain.SourceSynced:
+		if kind, err := src.ConvertsTo(); err == nil {
+			if _, err := m.d.Knowledge.ConvertSource(ctx, src.Name, kind, Actor); err != nil {
+				return fmt.Errorf("convert knowledge source %s: %w", src.Name, err)
+			}
+
+			t.Kinds++
+
+			return nil
+		}
+
+		m.d.Logger.WarnContext(ctx, "knowledge source not converted", slog.String("source", src.Name), slog.String("reason", notConverted(src)))
+	case domain.SourceUpload, domain.SourceRepository, domain.SourceConfluence:
+		// Already of ADR 0038's kinds: due once below when it has no snapshot.
+	}
+
+	due := src.NextSyncAt != nil && !src.NextSyncAt.After(now)
+	if src.CurrentSnapshot != "" || due || src.Status == domain.SyncSyncing {
+		return nil
+	}
+
+	if err := m.d.Knowledge.SyncNow(ctx, src.Name); err != nil {
+		return fmt.Errorf("make knowledge source %s due: %w", src.Name, err)
+	}
+
+	t.Due++
+
+	return nil
+}
+
+// notConverted is why the synced source src does not convert.
+func notConverted(src domain.KnowledgeSource) string {
+	if src.Secret == "" {
+		return "it reads its connection and no secret; give it a secret, or recreate it as a repository or Confluence source"
+	}
+
+	return "its reader " + src.Config[domain.SourceReaderKey] + " is neither gitdocs nor confluence"
 }
 
 // factories converts each factory with no conversion recorded whose current version is on
