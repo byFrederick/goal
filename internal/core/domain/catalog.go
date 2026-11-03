@@ -75,7 +75,7 @@ type RenderedTest struct {
 	Expect  int
 }
 
-// The tool modes an environment file's mcp.<server>.tools takes (ADR 0037 decision 8).
+// ToolModes are the tool modes an environment file's mcp.<server>.tools takes (ADR 0037 decision 8).
 var ToolModes = []string{"allow", "ask", "off"}
 
 var (
@@ -126,6 +126,31 @@ func (t ToolTemplate) Check() error {
 		add("template %s needs a one-line description", t.Name)
 	}
 
+	slots := t.checkSlots(add)
+
+	refs := func(where, value string) {
+		for _, slot := range Slots(value) {
+			if !slots[slot] {
+				add("template %s: %s refers to {{%s}}, which is none of its secrets", t.Name, where, slot)
+			}
+		}
+	}
+
+	t.checkAdds(add, refs)
+
+	for _, name := range slices.Sorted(maps.Keys(t.MCP)) {
+		errs = append(errs, t.checkMCP(name, refs)...)
+	}
+
+	if t.Test != nil {
+		errs = append(errs, t.checkTest(refs)...)
+	}
+
+	return errors.Join(errs...)
+}
+
+// checkSlots reports each broken slot through add and returns the slots declared.
+func (t ToolTemplate) checkSlots(add func(format string, a ...any)) map[string]bool {
 	slots := map[string]bool{}
 
 	for _, s := range t.Secrets {
@@ -143,14 +168,12 @@ func (t ToolTemplate) Check() error {
 		slots[s.Slot] = true
 	}
 
-	refs := func(where, value string) {
-		for _, slot := range Slots(value) {
-			if !slots[slot] {
-				add("template %s: %s refers to {{%s}}, which is none of its secrets", t.Name, where, slot)
-			}
-		}
-	}
+	return slots
+}
 
+// checkAdds reports broken tools, env names and file paths through add, and their values'
+// references through refs.
+func (t ToolTemplate) checkAdds(add func(format string, a ...any), refs func(where, value string)) {
 	for _, tool := range t.Tools {
 		if tool == "" || strings.ContainsAny(tool, " \t\n") {
 			add("template %s: tools: %q is not a mise tool spec", t.Name, tool)
@@ -172,16 +195,6 @@ func (t ToolTemplate) Check() error {
 
 		refs("files."+p, t.Files[p])
 	}
-
-	for _, name := range slices.Sorted(maps.Keys(t.MCP)) {
-		errs = append(errs, t.checkMCP(name, refs)...)
-	}
-
-	if t.Test != nil {
-		errs = append(errs, t.checkTest(refs)...)
-	}
-
-	return errors.Join(errs...)
 }
 
 // checkMCP checks the template's MCP server name, reporting its references through refs.
@@ -197,15 +210,8 @@ func (t ToolTemplate) checkMCP(name string, refs func(where, value string)) []er
 		add("template %s: MCP server name %q must be 3 to 40 lowercase letters, digits or dashes", t.Name, name)
 	}
 
-	switch remote, stdio := m.URL != "", len(m.Command) > 0; {
-	case remote && stdio:
-		add("template %s: MCP server %s is remote (url) or stdio (command), never both", t.Name, name)
-	case !remote && !stdio:
-		add("template %s: MCP server %s needs a url or a command", t.Name, name)
-	case remote && (len(m.Env) > 0 || !strings.HasPrefix(m.URL, "https://")):
-		add("template %s: remote MCP server %s needs an https url and takes headers, not env", t.Name, name)
-	case stdio && len(m.Headers) > 0:
-		add("template %s: stdio MCP server %s takes env, not headers", t.Name, name)
+	if msg := m.shape(); msg != "" {
+		add("template %s: MCP server %s %s", t.Name, name, msg)
 	}
 
 	for _, h := range slices.Sorted(maps.Keys(m.Headers)) {
@@ -223,6 +229,23 @@ func (t ToolTemplate) checkMCP(name string, refs func(where, value string)) []er
 	}
 
 	return errs
+}
+
+// shape is what is wrong with m's form, or "": it is remote (an https url and headers) or stdio
+// (a command and env), never both.
+func (m TemplateMCP) shape() string {
+	switch remote, stdio := m.URL != "", len(m.Command) > 0; {
+	case remote && stdio:
+		return "is remote (url) or stdio (command), never both"
+	case !remote && !stdio:
+		return "needs a url or a command"
+	case remote && (len(m.Env) > 0 || !strings.HasPrefix(m.URL, "https://")):
+		return "is remote: it needs an https url and takes headers, not env"
+	case stdio && len(m.Headers) > 0:
+		return "is stdio: it takes env, not headers"
+	default:
+		return ""
+	}
 }
 
 // checkTest checks the template's test, reporting its references through refs.

@@ -17,6 +17,10 @@ import (
 // The route the environment tests call, acme's default environment file in the draft and the
 // MCP server URLs the tests' environments name.
 const (
+	serverLinear  = "linear"
+	serverDocs    = "docs"
+	envAcmeKey    = "ACME_KEY"
+	authorization = "Authorization"
 	envTestPath   = acmeFactory + "/environments/default/test"
 	draftEnvFile  = acmeDraft + "/files/environments%2Fdefault.yaml"
 	linearURL     = "https://mcp.linear.example.com/mcp"
@@ -71,36 +75,77 @@ func TestEnvironmentTest_ToolsList(t *testing.T) {
 	h.tools.Serve(docsURL, "search")
 
 	got := decode[gen.EnvironmentTestResult](t, h.request(t, http.MethodPost, envTestPath, `{}`, nil), http.StatusOK)
-	if got.Environment != "default" || got.Version != "draft" || len(got.Servers) != 3 {
-		t.Fatalf("test = %s", body(t, got))
+	if got.Environment != defaultEnvironment || got.Version != "draft" {
+		t.Errorf("test = %s; want the draft's default environment", body(t, got))
 	}
 
-	docs, linear, playwright := got.Servers[0], got.Servers[1], got.Servers[2]
-	if linear.Server != "linear" || !linear.Tested || !linear.Ok || !slices.Equal(linear.Tools, []string{"create_issue", "list_issues"}) || linear.At == nil {
-		t.Errorf("linear = %s", body(t, linear))
+	want := []serverSum{
+		{Server: serverDocs, Tested: true, Ok: true, Tools: "search", At: true},
+		{Server: serverLinear, Tested: true, Ok: true, Tools: "create_issue,list_issues", At: true},
+		{Server: "playwright"},
+	}
+	if sums := summaries(got.Servers); !slices.Equal(sums, want) {
+		t.Errorf("servers = %+v; want %+v", sums, want)
 	}
 
-	if docs.Server != "docs" || !docs.Ok || playwright.Server != "playwright" || playwright.Tested || playwright.Ok {
-		t.Errorf("docs, playwright = %s, %s", body(t, docs), body(t, playwright))
-	}
-
-	called := h.tools.Called()
-	if i := slices.IndexFunc(called, func(e ports.MCPEndpoint) bool { return e.URL == linearURL }); i < 0 || called[i].Headers["Authorization"] != "Bearer "+secretValue {
-		t.Errorf("called = %v; want linear with its secret opened", called)
+	if h.calledWith(linearURL)[authorization] != "Bearer "+secretValue {
+		t.Errorf("called = %v; want linear with its secret opened", h.tools.Called())
 	}
 
 	kept, err := h.envTests.List(inOrg(t), acmeID)
-	if err != nil || len(kept) != 2 || kept[1].Server != "linear" || !kept[1].OK || len(kept[1].Tools) != 2 {
+	if err != nil || keptServers(kept) != "docs:ok,linear:ok" {
 		t.Errorf("kept = %+v, %v; want docs and linear", kept, err)
 	}
 
 	one := decode[gen.EnvironmentTestResult](t, h.request(t, http.MethodPost, envTestPath, `{"server":"linear"}`, nil), http.StatusOK)
-	if len(one.Servers) != 1 || one.Servers[0].Server != "linear" {
+	if names := summaries(one.Servers); len(names) != 1 || names[0].Server != serverLinear {
 		t.Errorf("server linear = %s", body(t, one))
 	}
 
 	refused(t, "an unknown server", h.request(t, http.MethodPost, envTestPath, `{"server":"sentry"}`, nil),
 		http.StatusNotFound, "environment-server-not-found")
+}
+
+// defaultEnvironment is the environment every factory has.
+const defaultEnvironment = "default"
+
+// serverSum is what a test of a server answered, comparable.
+type serverSum struct {
+	Server     string
+	Tested, Ok bool
+	Tools      string
+	At         bool
+	ErrorHolds string
+}
+
+// summaries are servers as serverSums.
+func summaries(servers []gen.ServerTest) []serverSum {
+	out := make([]serverSum, 0, len(servers))
+	for _, s := range servers {
+		out = append(out, serverSum{Server: s.Server, Tested: s.Tested, Ok: s.Ok, Tools: strings.Join(s.Tools, ","), At: s.At != nil})
+	}
+
+	return out
+}
+
+// keptServers are the kept tests as server:ok or server:failed, in order.
+func keptServers(kept []domain.EnvironmentTest) string {
+	parts := make([]string, 0, len(kept))
+	for _, k := range kept {
+		parts = append(parts, k.Server+":"+map[bool]string{true: "ok", false: "failed"}[k.OK])
+	}
+
+	return strings.Join(parts, ",")
+}
+
+// calledWith are the headers the tool lister got for url's last call, or none.
+func (h *harness) calledWith(url string) map[string]string {
+	called := h.tools.Called()
+	if i := slices.IndexFunc(called, func(e ports.MCPEndpoint) bool { return e.URL == url }); i >= 0 {
+		return called[i].Headers
+	}
+
+	return nil
 }
 
 // A secret value a server echoes in its refusal is in neither the answer nor what is kept, and a
@@ -128,7 +173,7 @@ func TestEnvironmentTest_NoValueInAnswer(t *testing.T) {
 		t.Errorf("kept = %+v, %v; want one scrubbed failure", kept, err)
 	}
 
-	h.draftEnvironment(t, strings.ReplaceAll(testedEnvYAML, "acme-token", "gone-key"))
+	h.draftEnvironment(t, strings.ReplaceAll(testedEnvYAML, secretName, "gone-key"))
 
 	missing := decode[gen.EnvironmentTestResult](t, h.request(t, http.MethodPost, envTestPath, `{"server":"linear"}`, nil), http.StatusOK)
 	if s := missing.Servers[0]; s.Ok || !strings.Contains(valueOf(s.Error), "gone-key") {
@@ -157,55 +202,91 @@ func TestEnvironmentTest_UnknownEnvironment(t *testing.T) {
 	}
 }
 
+// upstream is an https API that answers 200 to GET /v1/me with the secret as a bearer token, and
+// 401 to anything else; auth is the Authorization it last got.
+func upstream(t *testing.T) (srv *httptest.Server, auth *string) {
+	t.Helper()
+
+	auth = new(string)
+	srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		*auth = r.Header.Get(authorization)
+		if r.URL.Path != "/v1/me" || *auth != "Bearer "+secretValue {
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	return srv, auth
+}
+
+// withAcmeTemplate adds the acme-api template to the catalog, and makes the connection client
+// trust srv's certificate.
+func withAcmeTemplate(srv *httptest.Server) func(*harness, *api.Deps) {
+	return func(h *harness, d *api.Deps) {
+		if tr, ok := srv.Client().Transport.(*http.Transport); ok {
+			h.connTransport.TLSClientConfig = tr.TLSClientConfig
+		}
+
+		bearer := map[string]string{authorization: "Bearer {{key}}"}
+		d.Catalog = append(d.Catalog, domain.ToolTemplate{
+			Name: "acme-api", Title: acmeTitle, Description: "The acme API.",
+			Secrets: []domain.TemplateSecret{{Slot: "key", Title: "Key", Suggest: "acme-key"}},
+			Env:     map[string]string{"ACME_URL": "https://api.example.com", envAcmeKey: "{{key}}"},
+			MCP:     map[string]domain.TemplateMCP{acmeSlug: {URL: templateMCP, Headers: bearer}},
+			Test:    &domain.TemplateTest{Method: http.MethodGet, URL: "${ACME_URL}/v1/me", Headers: bearer, Expect: http.StatusOK},
+		})
+	}
+}
+
+// templateSum is what a template's HTTP test answered, comparable.
+type templateSum struct {
+	Ok     bool
+	Status int
+	Error  bool
+}
+
+// templateSummary is r as a templateSum; the zero one without r.
+func templateSummary(r *gen.TemplateTestResult) templateSum {
+	if r == nil {
+		return templateSum{}
+	}
+
+	return templateSum{Ok: r.Ok, Status: valueOf(r.Status), Error: r.Error != nil}
+}
+
 // A template test runs its HTTP test with the secrets its slots take and lists its MCP server's
 // tools, keeping that result as the environment's; a slot without a secret is 400.
 func TestEnvironmentTest_Template(t *testing.T) {
 	t.Parallel()
 
-	var auth string
-
-	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth = r.Header.Get("Authorization")
-		if r.URL.Path != "/v1/me" || auth != "Bearer "+secretValue {
-			w.WriteHeader(http.StatusUnauthorized)
-		}
-	}))
-	t.Cleanup(upstream.Close)
-
-	h := newHarnessLogged(t, nil, nil, func(h *harness, d *api.Deps) {
-		h.connTransport.TLSClientConfig = upstream.Client().Transport.(*http.Transport).TLSClientConfig
-		d.Catalog = append(d.Catalog, domain.ToolTemplate{
-			Name: "acme-api", Title: "Acme", Description: "The acme API.",
-			Secrets: []domain.TemplateSecret{{Slot: "key", Title: "Key", Suggest: "acme-key"}},
-			Env:     map[string]string{"ACME_URL": "https://api.example.com", "ACME_KEY": "{{key}}"},
-			MCP:     map[string]domain.TemplateMCP{"acme": {URL: templateMCP, Headers: map[string]string{"Authorization": "Bearer {{key}}"}}},
-			Test:    &domain.TemplateTest{Method: http.MethodGet, URL: "${ACME_URL}/v1/me", Headers: map[string]string{"Authorization": "Bearer {{key}}"}, Expect: 200},
-		})
-	})
+	srv, auth := upstream(t)
+	h := newHarnessLogged(t, nil, nil, withAcmeTemplate(srv))
 	h.createSecret(t)
 	h.openDraft(t)
 	h.tools.Serve(templateMCP, "get_widget")
 
-	req := `{"template":{"name":"acme-api","secrets":{"key":"acme-token"},"env":{"ACME_URL":"` + upstream.URL + `"}}}`
-
-	got := decode[gen.EnvironmentTestResult](t, h.request(t, http.MethodPost, envTestPath, req, nil), http.StatusOK)
-	if got.Template == nil || !got.Template.Ok || valueOf(got.Template.Status) != 200 || auth != "Bearer "+secretValue {
-		t.Errorf("template = %s (auth %q)", body(t, got), auth)
+	req := func(url string) string {
+		return `{"template":{"name":"acme-api","secrets":{"key":"acme-token"},"env":{"ACME_URL":"` + url + `"}}}`
 	}
 
-	if len(got.Servers) != 1 || got.Servers[0].Server != "acme" || !got.Servers[0].Ok || got.Servers[0].Tools[0] != "get_widget" {
-		t.Errorf("servers = %s", body(t, got.Servers))
+	got := decode[gen.EnvironmentTestResult](t, h.request(t, http.MethodPost, envTestPath, req(srv.URL), nil), http.StatusOK)
+	if sum := templateSummary(got.Template); sum != (templateSum{Ok: true, Status: http.StatusOK}) || *auth != "Bearer "+secretValue {
+		t.Errorf("template = %+v (auth %q); want it passed with the secret", sum, *auth)
 	}
 
-	if kept, err := h.envTests.List(inOrg(t), acmeID); err != nil || len(kept) != 1 || kept[0].Server != "acme" {
+	if sums := summaries(got.Servers); !slices.Equal(sums, []serverSum{{Server: acmeSlug, Tested: true, Ok: true, Tools: "get_widget", At: true}}) {
+		t.Errorf("servers = %+v", sums)
+	}
+
+	if kept, err := h.envTests.List(inOrg(t), acmeID); err != nil || keptServers(kept) != "acme:ok" {
 		t.Errorf("kept = %+v, %v; want acme", kept, err)
 	}
 
-	failed := decode[gen.EnvironmentTestResult](t, h.request(t, http.MethodPost, envTestPath,
-		`{"template":{"name":"acme-api","secrets":{"key":"acme-token"},"env":{"ACME_URL":"`+upstream.URL+`/wrong"}}}`, nil), http.StatusOK)
-	if failed.Template == nil || failed.Template.Ok || valueOf(failed.Template.Status) != http.StatusUnauthorized ||
-		strings.Contains(valueOf(failed.Template.Error), secretValue) {
-		t.Errorf("failed template = %s", body(t, failed))
+	r := h.request(t, http.MethodPost, envTestPath, req(srv.URL+"/wrong"), nil)
+	failed := decode[gen.EnvironmentTestResult](t, r, http.StatusOK)
+
+	if sum := templateSummary(failed.Template); sum != (templateSum{Status: http.StatusUnauthorized, Error: true}) || strings.Contains(string(r.body), secretValue) {
+		t.Errorf("failed template = %s", r.body)
 	}
 
 	refused(t, "a slot without a secret", h.request(t, http.MethodPost, envTestPath, `{"template":{"name":"acme-api","secrets":{}}}`, nil),

@@ -9,14 +9,14 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 )
 
-// access runs goal access [--factory <f>] [--by reach|factory|secret]: what the organization's
+// access runs goal access [--factory <f>] [--group reach|factory|secret]: what the organization's
 // agents reach (ADR 0037 decisions 16 and 17), from the published versions, the environment tests
 // and the secrets; secrets by name, never a value.
 func access(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs := newFlags("access")
 	orgFlag := addOrgFlag(fs)
 	factoryFlag := fs.String("factory", "", "only this factory's")
-	by := fs.String("by", string(gen.GetAccessParamsByReach), "reach, factory or secret")
+	by := fs.String("group", string(gen.GetAccessParamsByReach), "reach, factory or secret")
 
 	if pos, err := parseInterspersed(fs, args); err != nil || len(pos) != 0 {
 		return errUsage

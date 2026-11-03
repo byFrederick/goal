@@ -3,6 +3,7 @@ package api
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"maps"
 	"slices"
 	"time"
@@ -46,7 +47,9 @@ type accessUse struct {
 func (s *server) GetAccess(ctx context.Context, req gen.GetAccessRequestObject) (gen.GetAccessResponseObject, error) {
 	by := gen.AccessByReach
 	if req.Params.By != nil {
-		by = gen.AccessBy(*req.Params.By)
+		if by = gen.AccessBy(*req.Params.By); !by.Valid() {
+			return nil, fmt.Errorf("%w: by is reach, factory or secret", errInvalid)
+		}
 	}
 
 	var only domain.FactoryID
@@ -79,6 +82,15 @@ func (s *server) GetAccess(ctx context.Context, req gen.GetAccessRequestObject) 
 		}
 	}
 
+	out.Groups = accessGroups(by, uses, all, secrets, now)
+
+	return out, nil
+}
+
+// accessGroups are the rows of uses grouped by kind (all, by reach), by factory or by secret.
+func accessGroups(by gen.AccessBy, uses []accessUse, all []gen.AccessRow, secrets map[string]domain.Secret, now time.Time) []gen.AccessGroup {
+	groups := []gen.AccessGroup{}
+
 	switch by {
 	case gen.AccessByFactory:
 		factories := map[string]gen.AccessFactory{}
@@ -90,7 +102,7 @@ func (s *server) GetAccess(ctx context.Context, req gen.GetAccessRequestObject) 
 			return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.Id, b.Id))
 		}) {
 			of := filter(uses, func(u accessUse) bool { return u.factory.Id == f.Id })
-			out.Groups = append(out.Groups, gen.AccessGroup{Key: f.Id, Title: f.Name, Rows: accessRows(of, secrets, now)})
+			groups = append(groups, gen.AccessGroup{Key: f.Id, Title: f.Name, Rows: accessRows(of, secrets, now)})
 		}
 	case gen.AccessBySecret:
 		var names []string
@@ -100,18 +112,17 @@ func (s *server) GetAccess(ctx context.Context, req gen.GetAccessRequestObject) 
 
 		for _, name := range slices.Compact(slices.Sorted(slices.Values(names))) {
 			of := filter(uses, func(u accessUse) bool { return slices.Contains(u.secrets, name) })
-			out.Groups = append(out.Groups, gen.AccessGroup{Key: name, Title: name, Rows: accessRows(of, secrets, now)})
+			groups = append(groups, gen.AccessGroup{Key: name, Title: name, Rows: accessRows(of, secrets, now)})
 		}
-	default:
-		for _, kind := range []gen.AccessRowKind{gen.AccessRowKindMcp, gen.AccessRowKindEnv, gen.AccessRowKindFile} {
-			rows := filter(all, func(r gen.AccessRow) bool { return r.Kind == kind })
-			if len(rows) > 0 {
-				out.Groups = append(out.Groups, gen.AccessGroup{Key: string(kind), Title: reachTitles[kind], Rows: rows})
+	case gen.AccessByReach:
+		for _, kind := range accessKinds {
+			if rows := filter(all, func(r gen.AccessRow) bool { return r.Kind == kind }); len(rows) > 0 {
+				groups = append(groups, gen.AccessGroup{Key: string(kind), Title: reachTitles[kind], Rows: rows})
 			}
 		}
 	}
 
-	return out, nil
+	return groups
 }
 
 // accessUses are what the current versions of the factories the caller sees give their agents,
@@ -172,6 +183,7 @@ func environmentUses(base accessUse, e config.Environment, tests map[[3]string]d
 	add := func(kind gen.AccessRowKind, name string, refs []string) accessUse {
 		u := base
 		u.kind, u.name, u.secrets = kind, name, refs
+
 		u.agents = append([]string{}, base.agents...)
 
 		return u
@@ -225,37 +237,10 @@ func accessRows(uses []accessUse, secrets map[string]domain.Secret, now time.Tim
 			rows[k] = r
 		}
 
-		status := useStatus(u, secrets, now)
-		out := gen.AccessUse{Factory: u.factory, Environment: u.environment, Agents: u.agents, Status: status}
+		addUse(r, u, useStatus(u, secrets, now), secrets)
 
-		if t := u.test; t != nil {
-			out.Test = &gen.AccessTest{At: t.At, Ok: t.OK, Tools: len(t.Tools)}
-			if t.Error != "" {
-				out.Test.Error = new(t.Error)
-			}
-
-			if latest[k] == nil || t.At.After(latest[k].At) {
-				latest[k] = t
-			}
-		}
-
-		r.Uses = append(r.Uses, out)
-		r.Status = worse(r.Status, status)
-		r.Secrets = slices.Compact(slices.Sorted(slices.Values(append(r.Secrets, u.secrets...))))
-
-		for _, name := range u.secrets {
-			sec, ok := secrets[name]
-			if !ok {
-				continue
-			}
-
-			if sec.LastUsedAt != nil && (r.LastUsedAt == nil || sec.LastUsedAt.After(*r.LastUsedAt)) {
-				r.LastUsedAt = new(*sec.LastUsedAt)
-			}
-
-			if sec.ExpiresAt != nil && (r.ExpiresAt == nil || sec.ExpiresAt.Before(*r.ExpiresAt)) {
-				r.ExpiresAt = new(*sec.ExpiresAt)
-			}
+		if t := u.test; t != nil && (latest[k] == nil || t.At.After(latest[k].At)) {
+			latest[k] = t
 		}
 	}
 
@@ -276,6 +261,37 @@ func accessRows(uses []accessUse, secrets map[string]domain.Secret, now time.Tim
 	}
 
 	return out
+}
+
+// addUse adds u, of status, to row r: its status, secrets, latest use and soonest expiry.
+func addUse(r *gen.AccessRow, u accessUse, status gen.AccessStatus, secrets map[string]domain.Secret) {
+	out := gen.AccessUse{Factory: u.factory, Environment: u.environment, Agents: u.agents, Status: status}
+
+	if t := u.test; t != nil {
+		out.Test = &gen.AccessTest{At: t.At, Ok: t.OK, Tools: len(t.Tools)}
+		if t.Error != "" {
+			out.Test.Error = new(t.Error)
+		}
+	}
+
+	r.Uses = append(r.Uses, out)
+	r.Status = worse(r.Status, status)
+	r.Secrets = slices.Compact(slices.Sorted(slices.Values(append(r.Secrets, u.secrets...))))
+
+	for _, name := range u.secrets {
+		sec, ok := secrets[name]
+		if !ok {
+			continue
+		}
+
+		if sec.LastUsedAt != nil && (r.LastUsedAt == nil || sec.LastUsedAt.After(*r.LastUsedAt)) {
+			r.LastUsedAt = new(*sec.LastUsedAt)
+		}
+
+		if sec.ExpiresAt != nil && (r.ExpiresAt == nil || sec.ExpiresAt.Before(*r.ExpiresAt)) {
+			r.ExpiresAt = new(*sec.ExpiresAt)
+		}
+	}
 }
 
 // accessKinds are the row kinds in the order rows list them.

@@ -13,7 +13,7 @@ Every command of the `goal` CLI, in the order its usage text lists them: each se
 
 Factory definitions live in goald (drafts and published versions), not in files: goal factory push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, secret, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
+Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, secret, env, access, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
 
 With sign-in on (GOAL\_AUTH=session), commands send GOAL\_API\_KEY (an API key goal\_sk\_… or a personal token goal\_pat\_…) when it is set, else what goal login stored for goald's origin, and only over https or to this machine; a refused credential or permission exits 77
 
@@ -539,6 +539,26 @@ goal credential ...
 ```
 
 moved to goal secret; prints where and exits 2
+
+## goal env test
+
+```text
+goal env test <factory> [<env>] [--server <name>] [--version draft|current|N]
+```
+
+call tools/list on the environment's remote MCP servers (default: default) from goald, with their secrets opened there; the draft, or the current version while no draft is open (exit 1 when one fails)
+
+Flags: `--server <name>`, `--version draft|current|N`.
+
+## goal access
+
+```text
+goal access [--factory <f>] [--group reach|factory|secret]
+```
+
+what agents reach: each MCP server, and each variable and file with a secret, with its factories and environments, secrets and status (tested, failed, untested, expiring, expired, missing, ok)
+
+Flags: `--factory <f>`, `--group reach|factory|secret`.
 
 ## goal knowledge sources
 

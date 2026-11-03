@@ -176,7 +176,7 @@ type envTest struct {
 
 // server tests one remote MCP server: it opens the secrets its headers name (or takes slots'
 // values for a template's, when slots is set), lists its tools and keeps the result.
-func (t envTest) server(ctx context.Context, name, url string, headers map[string]string, slots map[string]string) (gen.ServerTest, error) {
+func (t envTest) server(ctx context.Context, name, url string, headers, slots map[string]string) (gen.ServerTest, error) {
 	if !environmentName.MatchString(name) {
 		return gen.ServerTest{}, fmt.Errorf("%w: %q is not an MCP server's name", errEnvironmentTestInvalid, name)
 	}
@@ -222,29 +222,6 @@ func (t envTest) template(ctx context.Context, tpl gen.EnvironmentTestTemplate, 
 
 	c := t.s.catalog[i]
 
-	var names []string
-
-	for _, slot := range c.Secrets {
-		name, ok := tpl.Secrets[slot.Slot]
-		if !ok {
-			return nil, fmt.Errorf("%w: template %s needs a secret for its slot %s", errEnvironmentTestInvalid, c.Name, slot.Slot)
-		}
-
-		names = append(names, name)
-	}
-
-	opened, openErr := t.open(ctx, names)
-	if openErr != nil && !errors.Is(openErr, ports.ErrNotFound) && !errors.Is(openErr, ports.ErrSecretNotAllowed) {
-		return nil, secretError(openErr)
-	}
-
-	slots := map[string]string{}
-	for slot, name := range tpl.Secrets {
-		if v, ok := opened[name]; ok {
-			slots[slot] = v
-		}
-	}
-
 	servers := slices.Sorted(maps.Keys(c.MCP))
 	if server != "" {
 		if _, ok := c.MCP[server]; !ok {
@@ -254,21 +231,13 @@ func (t envTest) template(ctx context.Context, tpl gen.EnvironmentTestTemplate, 
 		servers = []string{server}
 	}
 
+	slots, openErr, err := t.openSlots(ctx, c, tpl.Secrets)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, name := range servers {
-		m := c.MCP[name]
-		if m.URL == "" {
-			out.Servers = append(out.Servers, gen.ServerTest{Server: name, Tools: []string{}})
-
-			continue
-		}
-
-		if openErr != nil {
-			out.Servers = append(out.Servers, gen.ServerTest{Server: name, Tools: []string{}, Error: new(openErr.Error()), At: new(t.s.clock.Now().UTC())})
-
-			continue
-		}
-
-		r, err := t.server(ctx, name, m.URL, m.Headers, slots)
+		r, err := t.templateServer(ctx, name, c.MCP[name], slots, openErr)
 		if err != nil {
 			return nil, err
 		}
@@ -297,6 +266,50 @@ func (t envTest) template(ctx context.Context, tpl gen.EnvironmentTestTemplate, 
 	}
 
 	return gen.TestEnvironment200JSONResponse(out), nil
+}
+
+// openSlots opens the secrets the request puts in each of c's slots: their values by slot. A secret
+// that does not exist or is not open to the factory is openErr, which fails the tests that need
+// it; err is any other refusal, such as a missing master key, or a slot without a secret.
+func (t envTest) openSlots(ctx context.Context, c domain.ToolTemplate, secrets map[string]gen.SecretName) (slots map[string]string, openErr, err error) {
+	var names []string
+
+	for _, slot := range c.Secrets {
+		name, ok := secrets[slot.Slot]
+		if !ok {
+			return nil, nil, fmt.Errorf("%w: template %s needs a secret for its slot %s", errEnvironmentTestInvalid, c.Name, slot.Slot)
+		}
+
+		names = append(names, name)
+	}
+
+	opened, openErr := t.open(ctx, names)
+	if openErr != nil && !errors.Is(openErr, ports.ErrNotFound) && !errors.Is(openErr, ports.ErrSecretNotAllowed) {
+		return nil, nil, secretError(openErr)
+	}
+
+	slots = map[string]string{}
+
+	for slot, name := range secrets {
+		if v, ok := opened[name]; ok {
+			slots[slot] = v
+		}
+	}
+
+	return slots, openErr, nil
+}
+
+// templateServer tests a template's MCP server m with slots: not a stdio one, and not when its
+// secrets did not open (openErr).
+func (t envTest) templateServer(ctx context.Context, name string, m domain.TemplateMCP, slots map[string]string, openErr error) (gen.ServerTest, error) {
+	switch {
+	case m.URL == "":
+		return gen.ServerTest{Server: name, Tools: []string{}}, nil
+	case openErr != nil:
+		return gen.ServerTest{Server: name, Tested: true, Tools: []string{}, Error: new(cut(openErr.Error())), At: new(t.s.clock.Now().UTC())}, nil
+	default:
+		return t.server(ctx, name, m.URL, m.Headers, slots)
+	}
 }
 
 // open opens the named secrets for the factory, without a run (audited as secret.used): their

@@ -107,12 +107,12 @@ func TestAccessCommand(t *testing.T) {
 		}
 	}
 
-	bySecret := g.mustGoal(t, "access", "--factory", "acme", "--by", "secret")
+	bySecret := g.mustGoal(t, "access", "--factory", "acme", "--group", "secret")
 	if !strings.Contains(bySecret, "\nacme-token\n") || strings.Contains(bySecret, "docs") {
-		t.Errorf("access --by secret = %s", bySecret)
+		t.Errorf("access --group secret = %s", bySecret)
 	}
 
-	if _, err := g.goal(t, "access", "--by", "team"); !errors.Is(err, errUsage) {
-		t.Errorf("access --by team = %v; want errUsage", err)
+	if _, err := g.goal(t, "access", "--group", "team"); !errors.Is(err, errUsage) {
+		t.Errorf("access --group team = %v; want errUsage", err)
 	}
 }

@@ -46,14 +46,7 @@ func envTest(ctx context.Context, out *printer, getenv func(string) string, args
 		return err
 	}
 
-	body := gen.EnvironmentTestRequest{}
-	if *server != "" {
-		body.Server = server
-	}
-
-	if *version != "" {
-		body.Version = version
-	}
+	body := gen.EnvironmentTestRequest{Server: optional(*server), Version: optional(*version)}
 
 	res, err := c.TestEnvironmentWithResponse(ctx, c.org, pos[0], env, body)
 	if err != nil {
@@ -64,13 +57,19 @@ func envTest(ctx context.Context, out *printer, getenv func(string) string, args
 		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
 	}
 
-	r := res.JSON200
-	out.printf("%s %s (%s)\n", pos[0], r.Environment, versionWord(r.Version))
+	if printEnvTest(out, pos[0], *res.JSON200) {
+		return errEnvTestFailed
+	}
+
+	return nil
+}
+
+// printEnvTest prints a test's servers and reports whether one failed.
+func printEnvTest(out *printer, factory string, r gen.EnvironmentTestResult) bool {
+	out.printf("%s %s (%s)\n", factory, r.Environment, versionWord(r.Version))
 
 	if len(r.Servers) == 0 {
 		out.printf("  no MCP servers to test\n")
-
-		return nil
 	}
 
 	failed := false
@@ -81,11 +80,7 @@ func envTest(ctx context.Context, out *printer, getenv func(string) string, args
 		failed = failed || s.Tested && !s.Ok
 	}
 
-	if failed {
-		return errEnvTestFailed
-	}
-
-	return nil
+	return failed
 }
 
 // versionWord is a tested version as goal env test prints it: draft, or v<number>.

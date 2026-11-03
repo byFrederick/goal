@@ -123,6 +123,7 @@ func ParseEnvironment(name string, raw []byte) (Environment, error) {
 	e, ok := c.environment(p, name)
 
 	var msgs []string
+
 	for _, pr := range c.problems {
 		if pr.Severity == domain.SeverityError {
 			msgs = append(msgs, pr.Message)

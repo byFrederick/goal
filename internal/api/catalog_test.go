@@ -14,21 +14,24 @@ func TestCatalog_List(t *testing.T) {
 	h := newHarness(t)
 
 	got := decode[gen.ToolTemplateList](t, h.request(t, http.MethodGet, "/v1/catalog", "", nil), http.StatusOK)
-	if len(got.Templates) != 11 || got.Templates[0].Name != "anthropic" || got.Templates[10].Name != "slack" {
-		t.Fatalf("templates = %s", body(t, got))
+	if len(got.Templates) != 11 {
+		t.Fatalf("templates = %s; want goald's 11", body(t, got))
 	}
 
 	var gh gen.ToolTemplate
 
 	for _, tpl := range got.Templates {
-		if tpl.Name == "github" {
+		if tpl.Name == kindGitHub {
 			gh = tpl
 		}
 	}
 
-	mcp := gh.Adds.Mcp["github"]
-	if gh.Title != "GitHub" || len(gh.Secrets) != 1 || gh.Secrets[0].Suggest != "github-token" || gh.Adds.Env["GH_TOKEN"] != "{{token}}" ||
-		valueOf(mcp.Url) == "" || mcp.Tools["merge_pull_request"] != gen.TemplateMCPToolsAsk || gh.Test == nil || gh.Test.Expect != 200 {
-		t.Errorf("github = %s", body(t, gh))
+	want := `{"adds":{"env":{"GH_TOKEN":"{{token}}"},"files":{},"mcp":{"github":{"headers":{"Authorization":"Bearer {{token}}"},` +
+		`"tools":{"delete_*":"ask","merge_pull_request":"ask"},"url":"https://api.githubcopilot.com/mcp/"}},"tools":["gh"]},` +
+		`"description":"The gh CLI and GitHub's MCP server with a fine-grained token for the repositories agents may use.","name":"github",` +
+		`"secrets":[{"description":"A fine-grained token: only the repositories and permissions agents need.","slot":"token","suggest":"github-token","title":"Token"}],` +
+		`"test":{"expect":200,"headers":{"Authorization":"Bearer {{token}}"},"method":"GET","url":"https://api.github.com/user"},"title":"GitHub"}`
+	if got := body(t, gh); got != want {
+		t.Errorf("github = %s\nwant %s", got, want)
 	}
 }

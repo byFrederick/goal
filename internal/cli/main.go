@@ -171,7 +171,7 @@ const usage = `usage:
                                                   servers (default: default) from goald, with their
                                                   secrets opened there; the draft, or the current
                                                   version while no draft is open (exit 1 when one fails)
-  goal access [--factory <f>] [--by reach|factory|secret]
+  goal access [--factory <f>] [--group reach|factory|secret]
                                                   what agents reach: each MCP server, and each variable
                                                   and file with a secret, with its factories and
                                                   environments, secrets and status (tested, failed,
@@ -318,7 +318,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, secret, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one
+Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, secret, env, access, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or

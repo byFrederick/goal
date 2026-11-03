@@ -23,6 +23,12 @@ type Harness struct {
 	NewFactory func(t *testing.T, org domain.OrgID) domain.FactoryID
 }
 
+// The environment and the server most of the suite's tests are of.
+const (
+	defaultEnv = "default"
+	linear     = "linear"
+)
+
 // at is the time of the suite's tests.
 var at = time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC)
 
@@ -49,16 +55,18 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 }
 
 func testLatestReplaces(t *testing.T, h Harness) {
+	t.Helper()
+
 	org := h.NewOrg(t)
 	f := h.NewFactory(t, org)
 	ctx := domain.WithOrg(t.Context(), org)
 
-	first := domain.EnvironmentTest{Factory: f, Environment: "default", Server: "linear", At: at, OK: true, Tools: []string{"create_issue", "list_issues"}}
+	first := domain.EnvironmentTest{Factory: f, Environment: defaultEnv, Server: linear, At: at, OK: true, Tools: []string{"create_issue", "list_issues"}}
 	if err := h.Tests.Record(ctx, first); err != nil {
 		t.Fatal(err)
 	}
 
-	second := domain.EnvironmentTest{Factory: f, Environment: "default", Server: "linear", At: at.Add(time.Hour), Error: "POST https://mcp.example.com/mcp answered 401"}
+	second := domain.EnvironmentTest{Factory: f, Environment: defaultEnv, Server: linear, At: at.Add(time.Hour), Error: "POST https://mcp.example.com/mcp answered 401"}
 	if err := h.Tests.Record(ctx, second); err != nil {
 		t.Fatal(err)
 	}
@@ -74,15 +82,17 @@ func testLatestReplaces(t *testing.T, h Harness) {
 }
 
 func testInvalid(t *testing.T, h Harness) {
+	t.Helper()
+
 	org := h.NewOrg(t)
 	f := h.NewFactory(t, org)
 	ctx := domain.WithOrg(t.Context(), org)
 
 	for _, bad := range []domain.EnvironmentTest{
-		{Factory: f, Environment: "default", Server: "linear", At: at},                       // failed without an error
-		{Factory: f, Environment: "default", Server: "linear", At: at, OK: true, Error: "x"}, // passed with one
-		{Factory: f, Environment: "Default", Server: "linear", At: at, OK: true},
-		{Factory: f, Environment: "default", Server: "linear", OK: true},
+		{Factory: f, Environment: defaultEnv, Server: linear, At: at},                       // failed without an error
+		{Factory: f, Environment: defaultEnv, Server: linear, At: at, OK: true, Error: "x"}, // passed with one
+		{Factory: f, Environment: "Default", Server: linear, At: at, OK: true},
+		{Factory: f, Environment: defaultEnv, Server: linear, OK: true},
 	} {
 		if err := h.Tests.Record(ctx, bad); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("Record(%+v) = %v; want ErrInvalid", bad, err)
@@ -91,25 +101,29 @@ func testInvalid(t *testing.T, h Harness) {
 }
 
 func testUnknownFactory(t *testing.T, h Harness) {
+	t.Helper()
+
 	org, other := h.NewOrg(t), h.NewOrg(t)
 	theirs := h.NewFactory(t, other)
 
 	err := h.Tests.Record(domain.WithOrg(t.Context(), org),
-		domain.EnvironmentTest{Factory: theirs, Environment: "default", Server: "linear", At: at, OK: true})
+		domain.EnvironmentTest{Factory: theirs, Environment: defaultEnv, Server: linear, At: at, OK: true})
 	if !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("Record of another organization's factory = %v; want ErrNotFound", err)
 	}
 }
 
 func testListByFactory(t *testing.T, h Harness) {
+	t.Helper()
+
 	org := h.NewOrg(t)
 	a, b := h.NewFactory(t, org), h.NewFactory(t, org)
 	ctx := domain.WithOrg(t.Context(), org)
 
 	for _, r := range []domain.EnvironmentTest{
-		{Factory: a, Environment: "default", Server: "linear", At: at, OK: true},
-		{Factory: a, Environment: "review", Server: "linear", At: at, OK: true},
-		{Factory: b, Environment: "default", Server: "sentry", At: at, OK: true},
+		{Factory: a, Environment: defaultEnv, Server: linear, At: at, OK: true},
+		{Factory: a, Environment: "review", Server: linear, At: at, OK: true},
+		{Factory: b, Environment: defaultEnv, Server: "sentry", At: at, OK: true},
 	} {
 		if err := h.Tests.Record(ctx, r); err != nil {
 			t.Fatal(err)
@@ -131,17 +145,19 @@ func testListByFactory(t *testing.T, h Harness) {
 		envs = append(envs, r.Environment)
 	}
 
-	if !slices.Equal(envs, []string{"default", "review"}) {
+	if !slices.Equal(envs, []string{defaultEnv, "review"}) {
 		t.Errorf("List(a) environments = %v; want default, review", envs)
 	}
 }
 
 func testIsolation(t *testing.T, h Harness) {
+	t.Helper()
+
 	org, other := h.NewOrg(t), h.NewOrg(t)
 	f := h.NewFactory(t, org)
 
 	if err := h.Tests.Record(domain.WithOrg(t.Context(), org),
-		domain.EnvironmentTest{Factory: f, Environment: "default", Server: "linear", At: at, OK: true}); err != nil {
+		domain.EnvironmentTest{Factory: f, Environment: defaultEnv, Server: linear, At: at, OK: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -152,6 +168,8 @@ func testIsolation(t *testing.T, h Harness) {
 }
 
 func testNoOrg(t *testing.T, h Harness) {
+	t.Helper()
+
 	if _, err := h.Tests.List(t.Context(), ""); err == nil {
 		t.Error("List without an organization succeeded")
 	}
