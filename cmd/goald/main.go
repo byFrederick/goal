@@ -379,8 +379,8 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 }
 
 // openConnections loads the platform's master keys (GOAL_MASTER_KEYS or GOAL_MASTER_KEY_FILE),
-// refuses to start while a connection or credential is sealed under a key id they lack (spec 4
-// §5.2, threat row 12, ADR 0017), makes the kinds goald ships the platform's, and returns the
+// refuses to start while a secret, connection or webhook endpoint is sealed under a key id they
+// lack (spec 4 §5.2, threat row 12, ADR 0017, ADR 0037 decision 1), makes the kinds goald ships the platform's, and returns the
 // connections, the credentials and the intake state sealed with those keys. Without a master key goald serves
 // everything but connections with secrets and credentials' values, and says so.
 func openConnections(ctx context.Context, store *postgres.Store, getenv func(string) string, log *slog.Logger,
@@ -398,8 +398,8 @@ func openConnections(ctx context.Context, store *postgres.Store, getenv func(str
 	have := keys.IDs()
 
 	if missing := slices.DeleteFunc(sealed, func(id string) bool { return slices.Contains(have, id) }); len(missing) > 0 {
-		return nil, nil, nil, fmt.Errorf("connections or credentials are sealed under master key %s, which %s and %s do not hold: "+
-			"give goald every key a connection or credential is sealed under (goal db rekey reseals them under the active one, "+
+		return nil, nil, nil, fmt.Errorf("secrets or connections are sealed under master key %s, which %s and %s do not hold: "+
+			"give goald every key a secret or connection is sealed under (goal db rekey reseals them under the active one, "+
 			"after which an old key can go)", strings.Join(missing, ", "), masterkey.KeysEnv, masterkey.FileEnv)
 	}
 
