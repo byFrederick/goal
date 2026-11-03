@@ -320,16 +320,19 @@ for (const width of [1280, 1440]) {
         scrollWidth: region?.scrollWidth ?? 0,
         clientWidth: region?.clientWidth ?? 0,
         overflowing: columns.flatMap((column) =>
-          Array.from(column.querySelectorAll<HTMLElement>('article'))
-            .filter((card) => card.getBoundingClientRect().right > column.getBoundingClientRect().right + 0.5)
-            .map((card) => card.textContent?.slice(0, 40) ?? ''),
+          Array.from(column.querySelectorAll<HTMLElement>('*'))
+            .filter((el) => !el.closest('.sr-only'))
+            .filter((el) => el.getBoundingClientRect().right > column.getBoundingClientRect().right + 0.5)
+            .map((el) => `${el.tagName.toLowerCase()} "${el.textContent?.slice(0, 40) ?? ''}"`),
         ),
+        ages: Array.from(document.querySelectorAll('article')).some((a) => /\b23 min\b/.test(a.textContent ?? '')),
         longTitle: Array.from(document.querySelectorAll('article span.truncate')).some(
           (span) => (span.textContent?.length ?? 0) > 80,
         ),
       };
     });
     expect(result.longTitle, 'the mock has a Done card with a long assembly title').toBe(true);
+    expect(result.ages, 'the mock has a card whose age reads 23 min').toBe(true);
     expect(result.overflowing).toEqual([]);
     expect(result.scrollWidth).toBeLessThanOrEqual(result.clientWidth);
   });

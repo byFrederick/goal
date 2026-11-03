@@ -122,6 +122,40 @@ async function buildColumn() {
   return within(columns).getByRole('region', { name: 'Build' });
 }
 
+describe('the Done column header', () => {
+  it('shows both figures in full and lets the meta line wrap instead of clipping one', async () => {
+    const done: BoardStation = {
+      ...buildStation([]),
+      id: 'done',
+      kind: 'done',
+      agents: [],
+      wip_limit: null,
+      in_progress: 0,
+      done_today: 0,
+    };
+    const base = board([]);
+    renderBoardPage({
+      page: ShellBoard,
+      org,
+      factory,
+      board: {
+        ...base,
+        stations: [done],
+        constraint: null,
+        line: { ...base.line, touches: { ...base.line.touches, finished: 281 } },
+      },
+    });
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const column = within(columns).getByRole('region', { name: 'Done' });
+
+    expect(within(column).getByText('0 today')).toBeTruthy();
+    const week = within(column).getByText('281 this week');
+    expect(within(column).getByText('Merged pull requests')).toBeTruthy();
+    expect(week.classList).not.toContain('shrink-0');
+    expect(week.parentElement?.classList).toContain('flex-wrap');
+  });
+});
+
 describe('a column with a buffer', () => {
   // The Ready card arrives first from the server; the column still lists In progress first.
   const items = [item(1, { state: 'queued', in_buffer: true }), item(2), item(3)];

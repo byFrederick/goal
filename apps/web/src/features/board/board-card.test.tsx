@@ -76,6 +76,26 @@ describe('BoardCard agent', () => {
   });
 });
 
+describe('BoardCard meta row', () => {
+  it('truncates a long type and lane with their full text as titles and keeps the age whole', async () => {
+    const type = 'a-very-long-work-type-name';
+    const lane = 'a-very-long-lane-name-too';
+    renderMovable(card({ type, lane, age_seconds: 1380 }));
+
+    const article = (await screen.findByRole('link', { name: 'Adjust the export handler' })).closest(
+      'article',
+    ) as HTMLElement;
+    const age = within(article).getByText('23 min');
+    expect(age.classList).toContain('shrink-0');
+    for (const text of [type, lane]) {
+      const span = within(article).getByText(text);
+      expect(span.getAttribute('title')).toBe(text);
+      expect(span.classList).toContain('min-w-0');
+      expect(span.classList).toContain('text-ellipsis');
+    }
+  });
+});
+
 describe('BoardCard title', () => {
   it('clamps to two lines, breaks a long unbroken token and keeps the full title as a title', async () => {
     const long = 'Add domain.Teardown and GET /v1/orgs/{org}/items/{item}/domain.TeardownAndDeleteEverything';
