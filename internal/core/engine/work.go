@@ -421,7 +421,7 @@ func (e *Engine) runOnce(ctx context.Context, c claimed, b *box, feedback string
 	var chk checked
 
 	res, err := e.runTask(ctx, runTask{
-		RunRequest: c.request(feedback), item: c.item, box: b,
+		RunRequest: c.request(feedback), item: c.item, box: b, work: c.item.Work(),
 		// The agent's env gets the connections of its list the factory lists too, as the gateway
 		// serves them; its task token names its whole list.
 		own:       slices.DeleteFunc(slices.Clone(c.agent.Connections), func(n string) bool { return !slices.Contains(c.line.Connections, n) }),

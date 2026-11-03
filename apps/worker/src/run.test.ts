@@ -1,7 +1,7 @@
 import type { CanUseTool, Options, query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkerEvent } from './events.js';
-import { runTask } from './run.js';
+import { lsRemoteHead, runTask } from './run.js';
 import { type AgentFiles, parseSpec, type TaskSpec } from './spec.js';
 
 const spec: TaskSpec = parseSpec(
@@ -90,6 +90,7 @@ async function run(
     files?: AgentFiles;
     env?: NodeJS.ProcessEnv;
     fetch?: typeof globalThis.fetch;
+    remoteHead?: (branch: string) => Promise<string | undefined>;
   } = {},
 ) {
   const { fake, calls } = scripted(messages, opts);
@@ -102,6 +103,7 @@ async function run(
     abortController: new AbortController(),
     fetch: opts.fetch ?? gateway().fetch,
     notePollMs: 0,
+    ...(opts.remoteHead ? { remoteHead: opts.remoteHead } : {}),
   });
   for (const call of calls) await call.read;
   return { code, events, calls };
@@ -349,6 +351,69 @@ describe('runTask', () => {
     const silent = await run([]);
     expect(silent.code).toBe(1);
     expect(silent.events).toEqual([expect.objectContaining({ type: 'finished', status: 'failed' })]);
+  });
+});
+
+describe('runTask pushed head', () => {
+  const head = 'c'.repeat(40);
+  const onBranch = parseSpec(JSON.stringify({ ...spec, branch: 'goal/1-add-a-health-endpoint' }));
+
+  it("reports the item branch's head on the remote when the agent ended", async () => {
+    const asked: string[] = [];
+    const remoteHead = async (branch: string) => {
+      asked.push(branch);
+      return head;
+    };
+
+    const { code, events } = await run([success], { spec: onBranch, remoteHead });
+
+    expect(code).toBe(0);
+    expect(asked).toEqual(['goal/1-add-a-health-endpoint']);
+    expect(events.at(-1)).toMatchObject({ type: 'finished', status: 'succeeded', pushed_head: head });
+  });
+
+  it('reports it after a crash too, as the agent may have pushed before', async () => {
+    const { code, events } = await run([], { spec: onBranch, remoteHead: async () => head, throws: new Error('boom') });
+
+    expect(code).toBe(1);
+    expect(events.at(-1)).toMatchObject({ status: 'failed', error: 'boom', pushed_head: head });
+  });
+
+  it('leaves it out when the lookup fails or finds no branch, and the run ends as it would', async () => {
+    for (const remoteHead of [async () => undefined, () => Promise.reject(new Error('git ls-remote exited 128'))]) {
+      const { code, events } = await run([success], { spec: onBranch, remoteHead });
+
+      expect(code).toBe(0);
+      expect(events.at(-1)).toMatchObject({ type: 'finished', status: 'succeeded' });
+      expect(events.at(-1)).not.toHaveProperty('pushed_head');
+    }
+  });
+
+  it('never looks without a repository', async () => {
+    const asked: string[] = [];
+    const { events } = await run([success], {
+      remoteHead: async (b) => {
+        asked.push(b);
+        return head;
+      },
+    });
+
+    expect(asked).toEqual([]);
+    expect(events.at(-1)).not.toHaveProperty('pushed_head');
+  });
+});
+
+describe('lsRemoteHead', () => {
+  const sha = 'd'.repeat(40);
+
+  it("reads the branch's commit from git ls-remote's output", () => {
+    expect(lsRemoteHead(`${sha}\trefs/heads/goal/1-x\n`, 'goal/1-x')).toBe(sha);
+  });
+
+  it('reads nothing for another ref, no output or something that is not a commit id', () => {
+    expect(lsRemoteHead(`${sha}\trefs/heads/goal/1-xy\n`, 'goal/1-x')).toBeUndefined();
+    expect(lsRemoteHead('', 'goal/1-x')).toBeUndefined();
+    expect(lsRemoteHead('main\trefs/heads/goal/1-x\n', 'goal/1-x')).toBeUndefined();
   });
 });
 

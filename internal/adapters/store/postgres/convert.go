@@ -82,7 +82,9 @@ func runFrom(r db.AgentRun) domain.Run {
 		Result: domain.RunResult{
 			Status: domain.RunStatus(r.Status), CostUSD: r.CostUsd, Turns: int(r.Turns), InputTokens: r.InputTokens,
 			OutputTokens: r.OutputTokens, SessionID: deref(r.SessionID), Error: deref(r.Error),
+			Output: rawJSON(r.Output), PushedHead: deref(r.PushedHead),
 		},
+		Input: domain.RunInput{Brief: deref(r.Brief), BranchHead: deref(r.BranchHead), BaseHead: deref(r.BaseHead)},
 	}
 
 	if r.DefinitionVersionID != nil {
@@ -201,6 +203,24 @@ func optional(s string) *string {
 	}
 
 	return &s
+}
+
+// jsonOrNull maps an empty document to NULL.
+func jsonOrNull(doc json.RawMessage) []byte {
+	if len(doc) == 0 {
+		return nil
+	}
+
+	return doc
+}
+
+// rawJSON maps NULL to an empty document.
+func rawJSON(b []byte) json.RawMessage {
+	if b == nil {
+		return nil
+	}
+
+	return json.RawMessage(b)
 }
 
 // convertAll converts every row, or fails on the first that does not convert.

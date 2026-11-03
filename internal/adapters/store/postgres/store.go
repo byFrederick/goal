@@ -655,7 +655,7 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 		row, err := q.FinishRun(ctx, db.FinishRunParams{
 			ID: run, Status: string(res.Status), SessionID: optional(res.SessionID), Turns: int64(res.Turns),
 			InputTokens: res.InputTokens, OutputTokens: res.OutputTokens, CostUsd: res.CostUSD,
-			Error: optional(res.Error), EndedAt: &endedAt,
+			Error: optional(res.Error), EndedAt: &endedAt, Output: jsonOrNull(res.Output), PushedHead: optional(res.PushedHead),
 		})
 		if notFound(err) {
 			return nil // already finished
@@ -681,6 +681,30 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 	})
 	if err != nil {
 		return fmt.Errorf("finish run %s: %w", id, err)
+	}
+
+	return nil
+}
+
+// RecordRunInput implements ports.Store.
+func (s *Store) RecordRunInput(ctx context.Context, id domain.RunID, in domain.RunInput) error {
+	run, err := parseID("run", string(id))
+	if err != nil {
+		return err
+	}
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		n, err := q.RecordRunInput(ctx, db.RecordRunInputParams{
+			ID: run, Brief: optional(in.Brief), BranchHead: optional(in.BranchHead), BaseHead: optional(in.BaseHead),
+		})
+		if err == nil && n == 0 {
+			return ports.ErrNotFound
+		}
+
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("record run %s input: %w", id, err)
 	}
 
 	return nil

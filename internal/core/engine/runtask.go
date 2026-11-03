@@ -58,6 +58,10 @@ type runTask struct {
 	own []string
 	// box is the sandbox the run opens when it has none, and runs in.
 	box *box
+	// work is the bundle's brief as the gateway serves it (spec.brief: the item's Work(),
+	// internal/gateway/bundle.go); the two must match, as the run's record (RecordRunInput) keeps
+	// it as the brief the agent was given. Empty for a run without an item.
+	work string
 	// workspace, when set, is what the brief says the sandbox's workspace holds once prepared.
 	workspace func(b *box, env runEnv) string
 	// then, when set, runs after a succeeded run in its sandbox, under the lease's heartbeat.
@@ -120,10 +124,12 @@ func (e *Engine) runInBox(ctx context.Context, t runTask, runID domain.RunID) (d
 		scrub = newScrubber(append(env.secrets, token)...)
 	}
 
+	var line *prepared
+
 	if err == nil {
 		prepareEnv := maps.Clone(env.prepare)
 		prepareEnv[envGatewayToken] = token
-		err = e.open(ctx, t, runID, prepareEnv, scrub)
+		line, err = e.open(ctx, t, runID, prepareEnv, scrub)
 	}
 
 	if err != nil {
@@ -139,9 +145,12 @@ func (e *Engine) runInBox(ctx context.Context, t runTask, runID domain.RunID) (d
 		note = t.workspace(t.box, env)
 	}
 
-	if f := joinParts(t.Brief, note); f != "" {
-		agentEnv[envFeedback] = f
+	feedback := joinParts(t.Brief, note)
+	if feedback != "" {
+		agentEnv[envFeedback] = feedback
 	}
+
+	e.recordInput(ctx, t, runID, line, scrub.string(joinParts(t.work, feedback)))
 
 	res, lost := e.agent(ctx, t, runID, agentEnv, scrub)
 	e.finishRun(ctx, runID, res)
@@ -307,6 +316,21 @@ func (e *Engine) heartbeat(ctx context.Context, lease domain.Lease, stopTask con
 		case err != nil && ctx.Err() == nil:
 			e.log.WarnContext(ctx, "heartbeat lease", slog.String("item", string(lease.ItemID)), slog.Any("error", err))
 		}
+	}
+}
+
+// recordInput records what the run was given, for a later try to rerun it (ADR 0039, decision
+// 8): brief, joined as the worker's prompt joins the bundle's brief and GOAL_FEEDBACK, and, when
+// this run prepared the box of a run with a repository, the heads prepare reported. A retry in
+// its claim's box (line nil) records none. A failure is logged and the run goes on.
+func (e *Engine) recordInput(ctx context.Context, t runTask, runID domain.RunID, line *prepared, brief string) {
+	in := domain.RunInput{Brief: brief}
+	if line != nil && t.Repository.URL != "" {
+		in.BranchHead, in.BaseHead = domain.GitHead(line.BranchHead), domain.GitHead(line.BaseHead)
+	}
+
+	if err := e.store.RecordRunInput(ctx, runID, in); err != nil && ctx.Err() == nil {
+		e.log.WarnContext(ctx, "record run input", slog.String("run", string(runID)), slog.Any("error", err))
 	}
 }
 
