@@ -303,13 +303,10 @@ var compiledEnvironment = sync.OnceValues(func() (*jsonschema.Schema, error) {
 	return compileSchema(definitions.Environment, "environment.schema.json", "")
 })
 
-// knownForges are the code hosts whose host names say which adapter they take; any other host
-// needs runtime.repository.forge.
-var knownForges = map[string]string{"github.com": "github", "gitlab.com": "gitlab"}
-
 // KnownForge is the code host adapter host's name says (github or gitlab), or "" for a host
-// whose adapter only runtime.repository.forge names.
-func KnownForge(host string) string { return knownForges[strings.ToLower(host)] }
+// whose adapter only runtime.repository.forge names: domain.KnownForge, the rule the engine
+// merges by.
+func KnownForge(host string) string { return domain.KnownForge(host) }
 
 // environments checks the environment files and what refers to them (ADR 0037 decisions 5-7):
 // each file is named as a slug, satisfies environment.schema.json, says its own name, lists
@@ -484,7 +481,7 @@ func (c *checker) forge() {
 		return
 	}
 
-	if _, ok := knownForges[strings.ToLower(u.Hostname())]; ok {
+	if domain.KnownForge(u.Hostname()) != "" {
 		return
 	}
 

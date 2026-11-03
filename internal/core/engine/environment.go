@@ -45,7 +45,7 @@ func (e *Engine) secretEnv(
 	tokenNames := domain.SecretNames(token)
 	names, mcpSecrets := secretNames(modelKey, token, env)
 
-	values, err := e.openSecrets(ctx, names, use, env.Name, len(tokenNames) > 0)
+	values, err := e.openSecrets(ctx, names, use, env.Name, runSecretsWhere(len(tokenNames) > 0, env.Name))
 	if err != nil {
 		return runEnv{}, err
 	}
@@ -128,21 +128,27 @@ func secretNames(modelKey, token string, env domain.Environment) (names, mcp []s
 	return names, mcp
 }
 
-// openSecrets opens names for use's run, by name; none opens nothing. Its error names the
-// environment the run gets, if any, and runtime.repository.token when repo, and wraps the port's,
-// which names the secret.
-func (e *Engine) openSecrets(ctx context.Context, names []string, use domain.SecretUse, env string, repo bool) (map[string]string, error) {
-	if len(names) == 0 {
-		return nil, nil
-	}
-
+// runSecretsWhere names the keys a run's secrets were named in, for openSecrets's error: the
+// model key, the repository token when repo, and the environment env, if any.
+func runSecretsWhere(repo bool, env string) string {
 	where := "runtime.modelKey"
 	if repo {
-		where += ", runtime.repository.token"
+		where += ", " + repositoryLogin
 	}
 
 	if env != "" {
 		where += " and environment " + env
+	}
+
+	return where
+}
+
+// openSecrets opens names for use, by name; none opens nothing. env is the environment the run
+// gets, if any, for the log. Its error names where, the keys the secrets were named in, and wraps
+// the port's, which names the secret.
+func (e *Engine) openSecrets(ctx context.Context, names []string, use domain.SecretUse, env, where string) (map[string]string, error) {
+	if len(names) == 0 {
+		return nil, nil
 	}
 
 	if e.orgSecrets == nil {

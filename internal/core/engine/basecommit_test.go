@@ -382,3 +382,42 @@ func TestEngine_OverlappingRequestsMergeInOrder(t *testing.T) {
 		}
 	}
 }
+
+// On secrets, the base commit is read through the repository token, never a connection.
+func TestEngine_BaseCommitOnSecrets(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, onSecrets(changedSinceLine(), domain.Repository{URL: appRepo, Token: repositoryToken}), porttest.Succeed(touchesStore))
+	h.addSecrets(t)
+	h.codehost.SetBranchHead(appRepo, "", base)
+
+	it := h.submit(t, domain.NewItem{})
+	h.step(t) // spec
+
+	if got := h.item(t, it.ID); got.BaseCommit != base || got.Station != stBuild {
+		t.Fatalf("after spec: base commit %q at %s, want %q at build", got.BaseCommit, got.Station, base)
+	}
+
+	h.expectRepositoryLogin(t, it.ID, h.codehost)
+}
+
+// On secrets, changed since your plan compares through the repository token.
+func TestEngine_ChangedSinceOnSecrets(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, onSecrets(changedSinceLine(), domain.Repository{URL: appRepo, Token: repositoryToken}), porttest.Succeed(touchesStore))
+	h.addSecrets(t)
+	h.codehost.SetBranchHead(appRepo, "", base)
+
+	it := h.submit(t, domain.NewItem{})
+	h.step(t) // spec, at base
+
+	h.land(ports.Commit{SHA: base}, ports.Commit{SHA: "c0ffee000004", Subject: "Fix the store", Files: []string{storeFile}})
+	h.step(t) // build
+
+	if section := h.changedSinceOf(1); !strings.Contains(section, `- commit c0ffee000004 "Fix the store": `+storeFile) {
+		t.Errorf("build's feedback lacks the store commit:\n%s", h.feedback(1))
+	}
+
+	h.expectRepositoryLogin(t, it.ID, h.codehost)
+}
