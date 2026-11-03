@@ -246,3 +246,90 @@ func TestSlack_UnreachableIsTemporary(t *testing.T) {
 		t.Fatalf("err %q holds the token or the email", err)
 	}
 }
+
+// A check asks auth.test with the bearer token and answers the token's workspace.
+func TestSlack_CheckAnswersTheWorkspace(t *testing.T) {
+	t.Parallel()
+
+	f := &fakeSlack{answer: func(string) (int, string) {
+		return http.StatusOK, `{"ok":true,"team":"Acme","team_id":"T1","user":"goal"}`
+	}}
+
+	workspace, err := newSlack(t, f).Check(t.Context(), token)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if workspace != "Acme" {
+		t.Errorf("workspace = %q; want Acme", workspace)
+	}
+
+	calls := f.Calls()
+	if len(calls) != 1 || calls[0].method != "POST auth.test" || calls[0].auth != "Bearer "+token {
+		t.Fatalf("calls = %+v; want one POST auth.test with the bearer token", calls)
+	}
+}
+
+// A check that fails is a DMError of two fixed codes: slack-token-invalid when Slack refuses the
+// token, slack-token-unavailable when Slack could not say; neither holds the token or the reply.
+func TestSlack_CheckRefusals(t *testing.T) {
+	t.Parallel()
+
+	echo := `"` + token + ` reply-secret"`
+
+	for _, c := range []struct {
+		name      string
+		status    int
+		body      string
+		code      string
+		permanent bool
+	}{
+		{"invalid auth", http.StatusOK, `{"ok":false,"error":"invalid_auth","detail":` + echo + `}`, "slack-token-invalid", true},
+		{"not authed", http.StatusOK, `{"ok":false,"error":"not_authed"}`, "slack-token-invalid", true},
+		{"account inactive", http.StatusOK, `{"ok":false,"error":"account_inactive"}`, "slack-token-invalid", true},
+		{"token revoked", http.StatusOK, `{"ok":false,"error":"token_revoked"}`, "slack-token-invalid", true},
+		{"rate limited", http.StatusTooManyRequests, echo, "slack-token-unavailable", false},
+		{"server error", http.StatusBadGateway, echo, "slack-token-unavailable", false},
+		{"slack's own failure", http.StatusOK, `{"ok":false,"error":"internal_error"}`, "slack-token-unavailable", false},
+		{"not json", http.StatusOK, echo, "slack-token-unavailable", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := &fakeSlack{answer: func(string) (int, string) { return c.status, c.body }}
+
+			_, err := newSlack(t, f).Check(t.Context(), token)
+			if err == nil {
+				t.Fatal("check succeeded")
+			}
+
+			for _, private := range []string{token, "reply-secret"} {
+				if strings.Contains(err.Error(), private) {
+					t.Errorf("err %q holds %q", err, private)
+				}
+			}
+
+			de, ok := errors.AsType[*ports.DMError](err)
+			if !ok || de.Code != c.code || errors.Is(err, ports.ErrDMPermanent) != c.permanent {
+				t.Fatalf("err = %v (%+v); want code %s, permanent %v", err, de, c.code, c.permanent)
+			}
+		})
+	}
+}
+
+// A Slack that cannot be reached leaves the token unchecked, temporarily.
+func TestSlack_CheckUnreachable(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.NotFoundHandler())
+	srv.Close()
+
+	_, err := slack.New(slack.Config{BaseURL: srv.URL + "/api"}).Check(t.Context(), token)
+	if de, ok := errors.AsType[*ports.DMError](err); !ok || de.Code != "slack-token-unavailable" || errors.Is(err, ports.ErrDMPermanent) {
+		t.Fatalf("err = %v; want a temporary slack-token-unavailable", err)
+	}
+
+	if strings.Contains(err.Error(), token) {
+		t.Fatalf("err %q holds the token", err)
+	}
+}

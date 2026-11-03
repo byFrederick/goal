@@ -291,6 +291,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/settings/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's notification settings
+         * @description The secret whose Slack bot token sends the organization's Slack notifications (ADR 0037), by name; null while Slack is off. Never the token itself.
+         */
+        get: operations["getNotificationSettings"];
+        /**
+         * Choose the secret that sends the organization's Slack notifications
+         * @description Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+         */
+        put: operations["setNotificationSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/settings/notifications/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test a Slack bot token without saving it
+         * @description Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+         */
+        post: operations["testNotificationSettings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/policy": {
         parameters: {
             query?: never;
@@ -8085,6 +8135,22 @@ export interface components {
             read: components["schemas"]["RepositoryCheck"];
             push: components["schemas"]["RepositoryCheck"];
         };
+        NotificationSettings: {
+            /** @description The name of the secret holding the Slack bot token that sends the organization's Slack notifications, slack-bot by convention; null while Slack is off */
+            slack_secret: string | null;
+        };
+        NotificationTestRequest: {
+            /** @description The secret to test; absent, the saved setting's */
+            slack_secret?: components["schemas"]["SecretName"];
+        };
+        NotificationTestResult: {
+            /** @description Whether Slack accepted the token */
+            ok: boolean;
+            /** @description The Slack workspace the token belongs to, when ok */
+            workspace?: string;
+            /** @description Why it failed, when not ok, as a fixed code: slack-not-set (no secret given and none saved), slack-token-invalid (Slack refused the token) or slack-token-unavailable (Slack could not be reached or asked to wait). Never the token or Slack's reply. */
+            error?: string;
+        };
         RepositoryCheck: {
             ok: boolean;
             /** @description The host's one-line reason */
@@ -9084,6 +9150,86 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getNotificationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettings"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    setNotificationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationSettings"];
+            };
+        };
+        responses: {
+            /** @description The settings after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettings"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    testNotificationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["NotificationTestRequest"];
+            };
+        };
+        responses: {
+            /** @description The result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTestResult"];
+                };
             };
             default: components["responses"]["Problem"];
         };
