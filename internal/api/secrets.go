@@ -22,9 +22,10 @@ import (
 //
 // What uses a secret is the factories whose current published version refers to it as {{name}}
 // (decision 3: its repository token, model key, a trigger's model-agrees key or an environment
-// file), the knowledge sources that read with it and the connections that refer to it, read
-// through ports.Credentials.UsedBy (the same table). The parts that let webhooks and the Slack
-// setting refer to secrets add their uses to secretUses.
+// file), the knowledge sources that read with it, the organization's Slack notification setting
+// (ports.NotificationSettings) and the connections that refer to it, read through
+// ports.Credentials.UsedBy (the same table). The part that lets webhooks refer to secrets adds
+// their uses to secretUses.
 
 // Errors of the secret routes, answered with their codes by secretProblem.
 var (
@@ -37,6 +38,9 @@ var (
 	// errSecretsUnavailable is a value to seal while goald has no master key.
 	errSecretsUnavailable = errors.New("secrets unavailable")
 )
+
+// slackUseName names the Slack notification setting as a secret's use.
+const slackUseName = "Slack notifications"
 
 // secretInUseError is a delete refused while something uses the secret; its problem names each use.
 type secretInUseError struct {
@@ -374,7 +378,8 @@ func (s *server) importSecret(ctx context.Context, e domain.CredentialImportEntr
 
 // secretUses is what uses secret name, by kind then name: the connections that refer to it as
 // {{name}}, the factories whose current published version does (archived ones left out, as for a
-// connection's users) and the knowledge sources that read with it. It opens no secret.
+// connection's users), the knowledge sources that read with it and the Slack notification
+// setting, when it names the secret. It opens no secret.
 func (s *server) secretUses(ctx context.Context, name string) ([]gen.SecretUse, error) {
 	conns, err := s.credentials.UsedBy(ctx, name)
 	if err != nil {
@@ -387,6 +392,11 @@ func (s *server) secretUses(ctx context.Context, name string) ([]gen.SecretUse, 
 	}
 
 	sources, err := s.knowledge.Sources(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("the uses of secret %q: %w", name, err)
+	}
+
+	notify, err := s.notifySettings.NotificationSettings(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("the uses of secret %q: %w", name, err)
 	}
@@ -413,6 +423,10 @@ func (s *server) secretUses(ctx context.Context, name string) ([]gen.SecretUse, 
 		if src.Secret == name {
 			uses = append(uses, gen.SecretUse{Kind: gen.SecretUseKnowledgeSource, Name: src.Name})
 		}
+	}
+
+	if notify.SlackSecret == name {
+		uses = append(uses, gen.SecretUse{Kind: gen.SecretUseSlack, Name: slackUseName})
 	}
 
 	return uses, nil
