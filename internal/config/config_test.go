@@ -158,7 +158,7 @@ func TestLoad_AcceptsTheBuilderKeys(t *testing.T) {
 		t.Errorf("runtime = %+v, agents %+v; want its model key, repository and the agent's environment", r, f.Spec.Agents)
 	}
 
-	if f.Spec.Knowledge == nil || !slices.Equal(f.Spec.Knowledge.Names(), []string{"handbook"}) {
+	if f.Spec.Knowledge == nil || !slices.Equal(f.Spec.Knowledge.Names(), []string{srcHandbook}) {
 		t.Errorf("knowledge = %+v, want the handbook source", f.Spec.Knowledge)
 	}
 

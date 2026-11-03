@@ -74,7 +74,14 @@ object, required.
   - `roleArn`: string matching `^arn:aws:iam::\d{12}:role/.+$`, required; only when `type` is `"aws"`.
   - `region`: string; only when `type` is `"aws"`.
 - `knowledge`: object.
-  - `sources`: array of string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`. The organization's knowledge sources the factory's agents may search, by name.
+  - `sources`: array of string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$` or object. The organization's knowledge sources the factory's runs read (ADR 0038 decision 5), at most 10 (knowledge-too-many). An entry is a source's name, or an object that also says which runs read it (appliesTo) and when (readWhen).
+    - `name`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, required. The organization's knowledge source.
+    - `appliesTo`: object. The runs that read the source: ADR 0014's rule scope, matched as a rule's appliesTo is. A run matches when every key set names its agent, station, lane or work type. Without appliesTo, every run reads it.
+      - `agents`: array of string.
+      - `stations`: array of string.
+      - `lanes`: array of string.
+      - `workTypes`: array of string.
+    - `readWhen`: string matching `^[^\r\n]*$`. One line that replaces the source's own read-when line in this factory's prompt: when its runs should open it.
 - `knowledgeBase`: object. Removed in phase 4 (field-removed): set knowledge.sources. Accepted so versions published before still load; goald does not run them.
   - `collections`: array of string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, required.
   - `retrieval`: object.

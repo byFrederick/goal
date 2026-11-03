@@ -185,7 +185,7 @@ spec:
 	}
 
 	want := []any{"handbook", map[string]any{
-		"name": "runbooks", "appliesTo": map[string]any{"stations": []any{"investigate", "fix"}},
+		keyName: "runbooks", "appliesTo": map[string]any{"stations": []any{"investigate", "fix"}},
 		"readWhen": "Before you touch production, find the runbook for the alert.",
 	}}
 	if got := m.Basics["knowledge_sources"]; !reflect.DeepEqual(got, want) {

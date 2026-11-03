@@ -214,6 +214,13 @@ func (failingSources) Sources(context.Context) ([]domain.KnowledgeSource, error)
 	return nil, errors.New("knowledge unavailable")
 }
 
+// repositoryKey is a repository source's config key of its URL, and codeToken a secret open to
+// every factory.
+const (
+	repositoryKey = "repository"
+	codeToken     = "code-token"
+)
+
 // withSources is acmeYAML whose knowledge.sources are the entries, YAML lines below sources:.
 func withSources(entries ...string) string {
 	return strings.Replace(acmeYAML, "  agents:\n", "  knowledge:\n    sources:\n      "+strings.Join(entries, "\n      ")+"\n  agents:\n", 1)
@@ -227,14 +234,14 @@ func TestSecretsCheck_KnowledgeSources(t *testing.T) {
 
 	org := sources{
 		{Name: "handbook", Kind: domain.SourceUpload},
-		{Name: "scoped", Kind: domain.SourceRepository, Secret: "other-only", Config: map[string]string{"repository": "https://git.example.com/acme/docs"}},
-		{Name: "open", Kind: domain.SourceRepository, Secret: "code-token", Config: map[string]string{"repository": "https://git.example.com/acme/docs"}},
-		{Name: "self", Kind: domain.SourceRepository, Secret: "code-token", Config: map[string]string{"repository": "https://GIT.example.com/Acme/Review/"}},
+		{Name: "scoped", Kind: domain.SourceRepository, Secret: "other-only", Config: map[string]string{repositoryKey: "https://git.example.com/acme/docs"}},
+		{Name: "open", Kind: domain.SourceRepository, Secret: codeToken, Config: map[string]string{repositoryKey: "https://git.example.com/acme/docs"}},
+		{Name: "self", Kind: domain.SourceRepository, Secret: codeToken, Config: map[string]string{repositoryKey: "https://GIT.example.com/Acme/Review/"}},
 		{
 			Name: "self-synced", Kind: domain.SourceSynced, Connection: "code",
-			Config: map[string]string{"repository": "https://git.example.com/acme/review.git", "include": "docs/**"},
+			Config: map[string]string{repositoryKey: "https://git.example.com/acme/review.git", "include": "docs/**"},
 		},
-		{Name: "wiki", Kind: domain.SourceConfluence, Secret: "code-token", Config: map[string]string{"spaces": "ENG"}},
+		{Name: "wiki", Kind: domain.SourceConfluence, Secret: codeToken, Config: map[string]string{"spaces": "ENG"}},
 	}
 
 	tests := []secretsRow{
