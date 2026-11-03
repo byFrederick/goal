@@ -235,11 +235,11 @@ type RunToolModes struct {
 // EffectiveToolModes combines the organization connection's modes with the organization's
 // standing rules for agent, the agent's role: an active rule for (connection, tool, agent) turns
 // an ask into allow, and nothing turns off into anything. Every ask that remains comes from the
-// organization's mode, so each offers Always allow. The definition's per-tool rule has no input
-// here: no definition can carry one today.
+// organization's mode, so each offers Always allow. A rule keyed by server lifts nothing here. The
+// definition's per-tool rule has no input here: no definition can carry one today.
 func EffectiveToolModes(modes map[string]ConnectionToolMode, rules []StandingRule, connection ConnectionID, agent string) RunToolModes {
 	return effectiveToolModes(modes, rules, func(r StandingRule, tool string) bool {
-		return r.ConnectionID == connection && r.Tool == tool && r.Agent == agent
+		return r.ConnectionID != "" && r.ConnectionID == connection && r.Tool == tool && r.Agent == agent
 	})
 }
 

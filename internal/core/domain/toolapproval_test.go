@@ -194,6 +194,11 @@ func TestEffectiveToolModes(t *testing.T) {
 		t.Errorf("EffectiveToolModes = %+v; want %+v", got, want)
 	}
 
+	server := []StandingRule{{Factory: "f-1", Environment: DefaultEnvironment, Server: "acme-git", Tool: toolCreateComment, Agent: roleArchitect}}
+	if lifted := EffectiveToolModes(modes, server, "", roleArchitect); lifted.Modes[toolCreateComment] != ToolModeAsk {
+		t.Errorf("EffectiveToolModes with a server's rule = %+v; want %s still asking", lifted, toolCreateComment)
+	}
+
 	if none := EffectiveToolModes(nil, nil, conn, roleArchitect); len(none.Modes) != 0 || len(none.AlwaysAllowOffered) != 0 {
 		t.Errorf("EffectiveToolModes without modes = %+v; want every tool allowed", none)
 	}

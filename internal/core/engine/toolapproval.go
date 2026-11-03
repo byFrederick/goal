@@ -113,7 +113,8 @@ func (e *Engine) RequestToolApproval(ctx context.Context, id domain.ItemID, run 
 // DecideToolApproval records a person's decision on an item's open tool approval and puts the
 // item back in its station's arrival state with its rework count unchanged. Approving grants the
 // call to the item's next run (domain.GrantedCalls); with alwaysAllow it first creates the
-// standing rule for the call's connection, tool and agent role, which a retry finds instead of
+// standing rule for the call's tool and agent role, keyed by its connection or, on secrets, by
+// the factory, the agent's environment and the MCP server, which a retry finds instead of
 // creating another. Denying, with an optional note, puts the denial in the next run's brief. A
 // done or cancelled item is refused with ErrItemClosed.
 func (e *Engine) DecideToolApproval(ctx context.Context, id domain.ItemID, by domain.Actor, approve, alwaysAllow bool, note string) (domain.Item, error) {
@@ -122,7 +123,7 @@ func (e *Engine) DecideToolApproval(ctx context.Context, id domain.ItemID, by do
 		return domain.Item{}, fmt.Errorf("decide tool approval on item %s: %w", id, err)
 	}
 
-	it, st, a, err := e.openToolApproval(ctx, id)
+	it, l, st, a, err := e.openToolApproval(ctx, id)
 	if err != nil {
 		return domain.Item{}, fmt.Errorf("decide tool approval on item %s: %w", id, err)
 	}
@@ -134,8 +135,7 @@ func (e *Engine) DecideToolApproval(ctx context.Context, id domain.ItemID, by do
 	// The rule comes first: an approval whose transition then fails is retried, and the retry
 	// finds the rule instead of creating another.
 	if alwaysAllow {
-		rule := domain.NewStandingRule{Connection: a.Connection, Tool: a.Tool, Agent: a.Agent, Item: it.ID}
-		if _, err := e.connections.CreateStandingRule(ctx, rule, by); err != nil {
+		if err := e.alwaysAllow(ctx, it, l, a, by); err != nil {
 			return domain.Item{}, fmt.Errorf("decide tool approval on item %s: always allow: %w", id, err)
 		}
 	}
@@ -161,6 +161,28 @@ func (e *Engine) DecideToolApproval(ctx context.Context, id domain.ItemID, by do
 	return got, nil
 }
 
+// alwaysAllow creates the standing rule for approval a's call. On a line on secrets the rule is
+// keyed by the item's factory, the calling agent's environment and the call's MCP server (ADR
+// 0037 decision 8); on connections by the call's connection.
+func (e *Engine) alwaysAllow(ctx context.Context, it domain.Item, l domain.Line, a domain.ToolApproval, by domain.Actor) error {
+	if !l.OnSecrets() {
+		_, err := e.connections.CreateStandingRule(ctx, domain.NewStandingRule{Connection: a.Connection, Tool: a.Tool, Agent: a.Agent, Item: it.ID}, by)
+
+		return err
+	}
+
+	env := domain.DefaultEnvironment
+	if spec, ok := l.Agent(a.Agent); ok && spec.Environment != "" {
+		env = spec.Environment
+	}
+
+	_, err := e.connections.CreateServerStandingRule(ctx, domain.NewServerStandingRule{
+		Factory: it.FactoryID, Environment: env, Server: a.Connection, Tool: a.Tool, Agent: a.Agent, Item: it.ID,
+	}, by)
+
+	return err
+}
+
 // validToolDecision refuses Always allow with a denial, a note with an approval and a note
 // outside the limits.
 func validToolDecision(approve, alwaysAllow bool, note string) error {
@@ -176,34 +198,34 @@ func validToolDecision(approve, alwaysAllow bool, note string) error {
 	}
 }
 
-// openToolApproval reads an open item, its station and its open tool approval: ErrItemClosed for
-// a done or cancelled item, ErrNoOpenToolApproval without an open approval.
-func (e *Engine) openToolApproval(ctx context.Context, id domain.ItemID) (domain.Item, domain.Station, domain.ToolApproval, error) {
+// openToolApproval reads an open item, its line, its station and its open tool approval:
+// ErrItemClosed for a done or cancelled item, ErrNoOpenToolApproval without an open approval.
+func (e *Engine) openToolApproval(ctx context.Context, id domain.ItemID) (domain.Item, domain.Line, domain.Station, domain.ToolApproval, error) {
 	it, l, err := e.itemAndLine(ctx, id)
 	if err != nil {
-		return domain.Item{}, domain.Station{}, domain.ToolApproval{}, err
+		return domain.Item{}, domain.Line{}, domain.Station{}, domain.ToolApproval{}, err
 	}
 
 	if closed(it) {
-		return domain.Item{}, domain.Station{}, domain.ToolApproval{}, ErrItemClosed
+		return domain.Item{}, domain.Line{}, domain.Station{}, domain.ToolApproval{}, ErrItemClosed
 	}
 
 	events, err := e.itemEvents(ctx, id)
 	if err != nil {
-		return domain.Item{}, domain.Station{}, domain.ToolApproval{}, err
+		return domain.Item{}, domain.Line{}, domain.Station{}, domain.ToolApproval{}, err
 	}
 
 	a, open := domain.OpenToolApproval(events)
 	if !open {
-		return domain.Item{}, domain.Station{}, domain.ToolApproval{}, ErrNoOpenToolApproval
+		return domain.Item{}, domain.Line{}, domain.Station{}, domain.ToolApproval{}, ErrNoOpenToolApproval
 	}
 
 	st, ok := l.Station(it.Station)
 	if !ok {
-		return domain.Item{}, domain.Station{}, domain.ToolApproval{}, fmt.Errorf("station %q is not on the line", it.Station)
+		return domain.Item{}, domain.Line{}, domain.Station{}, domain.ToolApproval{}, fmt.Errorf("station %q is not on the line", it.Station)
 	}
 
-	return it, st, a, nil
+	return it, l, st, a, nil
 }
 
 // toolDecisionEvent is the person's tool_approval_granted or tool_approval_denied event on a.

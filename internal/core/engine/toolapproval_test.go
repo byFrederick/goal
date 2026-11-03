@@ -1,6 +1,7 @@
 package engine_test
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -472,6 +473,50 @@ func (h *harness) expectRuleLiftsTheAsk(t *testing.T, rules []domain.StandingRul
 	modes := domain.EffectiveToolModes(conn.ToolModes, rules, conn.ID, agWorker)
 	if _, asks := modes.Modes[askTool]; asks || modes.Modes[offTool] != domain.ToolModeOff {
 		t.Errorf("effective modes %+v; want %s allowed and %s off", modes, askTool, offTool)
+	}
+}
+
+// On secrets, Always allow keys the rule by the item's factory, the agent's environment ("" is the
+// default one) and the call's MCP server, and the rule lifts the ask only there.
+func TestDecideToolApproval_AlwaysAllowOnSecretsKeysByServer(t *testing.T) {
+	t.Parallel()
+
+	for _, env := range []string{"", envBrowser} {
+		want := cmp.Or(env, domain.DefaultEnvironment)
+
+		t.Run(want, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t, withEnvironment(secretsLine(), agWorker, env), porttest.Block(nil, `{}`))
+			h.addSecrets(t)
+			h.addSecret(t, secTickets, ticketsKeyValue)
+			it, _ := h.awaiting(t)
+
+			if _, err := h.e.DecideToolApproval(inOrg(t), it.ID, human, true, true, ""); err != nil {
+				t.Fatal(err)
+			}
+
+			rules, err := h.connections.StandingRules(inOrg(t), true)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if len(rules) != 1 || rules[0].ConnectionID != "" || rules[0].Factory != factoryID || rules[0].Environment != want ||
+				rules[0].Server != connTracker || rules[0].Tool != askTool || rules[0].Agent != agWorker || rules[0].ItemID != it.ID ||
+				!rules[0].Active() || rules[0].CreatedBy.Ref() != human.Ref() {
+				t.Fatalf("standing rules %+v; want one rule keyed by the factory, environment %s and server %s", rules, want, connTracker)
+			}
+
+			modes := map[string]domain.ConnectionToolMode{askTool: domain.ToolModeAsk, offTool: domain.ToolModeOff}
+			if got := domain.EffectiveServerToolModes(modes, rules, factoryID, want, connTracker, agWorker); got.Modes[askTool] != "" ||
+				got.Modes[offTool] != domain.ToolModeOff {
+				t.Errorf("effective modes %+v; want %s allowed and %s off", got, askTool, offTool)
+			}
+
+			if got := domain.EffectiveToolModes(modes, rules, "", agWorker); got.Modes[askTool] != domain.ToolModeAsk {
+				t.Errorf("a server's rule lifted a connection's ask: %+v", got)
+			}
+		})
 	}
 }
 
