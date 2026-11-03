@@ -45,6 +45,8 @@ type Factory struct {
 	removed []string
 	// environments are its environment files that satisfy their schema, by name.
 	environments []Environment
+	// memory is memory.yaml's entries, nil when the file is absent or fails its schema.
+	memory []MemoryEntry
 }
 
 // Metadata identifies a factory.
@@ -114,9 +116,77 @@ type Budget struct {
 	MaxTurnsPerTask int     `json:"maxTurnsPerTask,omitempty"`
 }
 
-// Knowledge lists the organization's knowledge sources the factory's agents may search.
+// Knowledge lists the organization's knowledge sources the factory's runs read.
 type Knowledge struct {
-	Sources []string `json:"sources,omitempty"`
+	Sources []KnowledgeSource `json:"sources,omitempty"`
+}
+
+// Names are the sources' names, in the order the definition lists them; nil for a nil Knowledge.
+func (k *Knowledge) Names() []string {
+	if k == nil {
+		return nil
+	}
+
+	return names(k.Sources, func(s KnowledgeSource) string { return s.Name })
+}
+
+// KnowledgeSource is an entry of knowledge.sources (ADR 0038 decision 5): a source's name, written
+// as a plain string, or an object that also scopes the runs that read it, as a rule's appliesTo
+// does (a zero AppliesTo is every run), and replaces its read-when line in the factory's prompt.
+type KnowledgeSource struct {
+	Name      string
+	AppliesTo domain.RuleScope
+	ReadWhen  string
+}
+
+// knowledgeSourceForm is a KnowledgeSource's object form.
+type knowledgeSourceForm struct {
+	Name      string          `json:"name"`
+	AppliesTo *knowledgeScope `json:"appliesTo,omitempty"`
+	ReadWhen  string          `json:"readWhen,omitempty"`
+}
+
+type knowledgeScope struct {
+	Agents    []string `json:"agents,omitempty"`
+	Stations  []string `json:"stations,omitempty"`
+	Lanes     []string `json:"lanes,omitempty"`
+	WorkTypes []string `json:"workTypes,omitempty"`
+}
+
+// UnmarshalJSON reads a source's name or its object form.
+func (k *KnowledgeSource) UnmarshalJSON(data []byte) error {
+	if err := json.Unmarshal(data, &k.Name); err == nil {
+		return nil
+	}
+
+	var form knowledgeSourceForm
+	if err := json.Unmarshal(data, &form); err != nil {
+		return err
+	}
+
+	*k = KnowledgeSource{Name: form.Name, ReadWhen: form.ReadWhen}
+	if a := form.AppliesTo; a != nil {
+		k.AppliesTo = domain.RuleScope{Agents: a.Agents, Stations: a.Stations, Lanes: a.Lanes, WorkTypes: a.WorkTypes}
+	}
+
+	return nil
+}
+
+// MarshalJSON writes the name alone when the entry has no scope and no read-when line.
+func (k KnowledgeSource) MarshalJSON() ([]byte, error) {
+	a := k.AppliesTo
+	scoped := a.Agents != nil || a.Stations != nil || a.Lanes != nil || a.WorkTypes != nil
+
+	if !scoped && k.ReadWhen == "" {
+		return json.Marshal(k.Name)
+	}
+
+	form := knowledgeSourceForm{Name: k.Name, ReadWhen: k.ReadWhen}
+	if scoped {
+		form.AppliesTo = &knowledgeScope{Agents: a.Agents, Stations: a.Stations, Lanes: a.Lanes, WorkTypes: a.WorkTypes}
+	}
+
+	return json.Marshal(form)
 }
 
 // KnowledgeBase is the removed knowledge base's collections.

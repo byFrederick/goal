@@ -190,7 +190,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// (ADR 0037), its models against the organization policy.
 	authors := authoring.New(authoring.Deps{
 		Store: definitionStore, Loads: store, Templates: objects, Policies: policies, Clock: clock,
-		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.searcher},
+		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.kb},
 	})
 	moveOver(ctx, store, connections, orgSecrets, definitionStore, authors, clock, log)
 

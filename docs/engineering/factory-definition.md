@@ -1,6 +1,6 @@
 # Factory definition reference
 
-A factory definition is a file tree with `factory.yaml` at its root ([ADR 0005](../adr/0005-factory-definitions-in-object-storage.md)): `agents/` (prompts), `skills/`, `rules/`, `contracts/`, `environments/` and `evals/`. `contracts/definitions/factory.schema.json` is the reference for every key of `factory.yaml`, `contracts/definitions/environment.schema.json` for environment files ([below](#environment-files)) and `contracts/definitions/evals.schema.json` for judges and eval cases ([below](#judges-and-eval-cases)). `internal/config` loads a tree and validates it (`config.Check`): every file parses, `factory.yaml` satisfies the schema, and every name and path it uses points at something that exists. `goal factory validate` (and `goal validate`, its offline form), the builder and publish all run the same checks. This page covers what the schema alone cannot explain.
+A factory definition is a file tree with `factory.yaml` at its root ([ADR 0005](../adr/0005-factory-definitions-in-object-storage.md)): `agents/` (prompts), `skills/`, `rules/`, `contracts/`, `environments/`, `evals/` and, optionally, `memory.yaml`. `contracts/definitions/factory.schema.json` is the reference for every key of `factory.yaml`, `contracts/definitions/environment.schema.json` for environment files ([below](#environment-files)), `contracts/definitions/evals.schema.json` for judges and eval cases ([below](#judges-and-eval-cases)) and `contracts/definitions/memory.schema.json` for the factory memory ([below](#factory-memory-memoryyaml)). `internal/config` loads a tree and validates it (`config.Check`): every file parses, `factory.yaml` satisfies the schema, and every name and path it uses points at something that exists. `goal factory validate` (and `goal validate`, its offline form), the builder and publish all run the same checks. This page covers what the schema alone cannot explain.
 
 ## Rules
 
@@ -213,7 +213,7 @@ Publish then runs the secrets check (`authoring.SecretsCheck`, `internal/authori
 | `reserved-env` | error | an `env` name is one the platform keeps (`domain.ReservedRunEnv`: `GOAL_*`, `HOME`, `PATH`, the proxy variables, `LD_*`, `MISE_*`…) |
 | `plain-key` | error | a plain `env` value starts with `sk-`, `ghp_`, `github_pat_`, `glpat-`, `xoxb-` or `xoxp-` |
 | `plain-key` | warning | a plain `env` value's name ends with `_TOKEN`, `_KEY`, `_SECRET` or `_PASSWORD` |
-| `knowledge-source-unknown` | error | the organization has no knowledge source of a name in `knowledge.sources` |
+| `knowledge-source-unknown`, `knowledge-secret-not-in-scope`, `knowledge-copies-checkout` | see [Knowledge](#knowledge-knowledgesources) | a source in `knowledge.sources` |
 | `merge-needs-code-host` | error | a station has `action: merge` and `runtime.repository` has no `token` |
 
 `plain-key` carries the fix "Move to Secrets", which replaces the value with a reference named after the variable in kebab case (`GH_TOKEN` becomes `{{gh-token}}`). A problem in an environment file has the section `environments` and the pointer `/environments/<name>/<keys below spec>`; the Form view does not show that section yet.
@@ -232,6 +232,66 @@ These keys are errors under the check `moved` (code `moved-to-environment`). Eac
 | `board.triggers[].only.modelAgrees.connection` | `only.modelAgrees.key` |
 
 A draft that has one does not publish. A version published before ADR 0037 has them and no `environments/` folder: `config.Load` skips the `moved` check, and the environment checks for such a version, so it loads and its line keeps its connections, model connection, size and tools. The engine runs it as before until Goal converts it.
+
+## Knowledge: `knowledge.sources`
+
+`knowledge.sources` lists the organization's knowledge sources the factory's runs read, at most 10 ([ADR 0038](../adr/0038-knowledge-is-files.md), decisions 4 and 5). An entry is a source's name, or an object that also says which runs read it and when:
+
+```yaml
+spec:
+  knowledge:
+    sources:
+      - handbook
+      - name: runbooks
+        appliesTo: { stations: [investigate, fix] }
+        readWhen: Before you touch production, find the runbook for the alert.
+```
+
+| Key | Required | Meaning |
+| --- | --- | --- |
+| `name` | yes | The source, a slug. |
+| `appliesTo` | no | The runs that read the source, with the same lists and the same matching as a [rule's `appliesTo`](#rules): `agents`, `stations`, `lanes` and `workTypes`. Omitted, every run of the factory reads it. A list may not be empty. |
+| `readWhen` | no | One line of at most 160 characters. It replaces the source's own read-when line in this factory's prompt. |
+
+`config.Knowledge.Names()` gives the names in order; `config.Check` keeps each entry as `config.KnowledgeSource`. Run start does not read `appliesTo` or `readWhen` yet.
+
+**Checks.** `config.Check` reports the first two rows. The secrets check (`authoring.SecretsCheck`) reports the rest at publish and in validation, against the organization's source rows:
+
+| Code | Severity | When |
+| --- | --- | --- |
+| `knowledge-too-many` | error | `knowledge.sources` lists more than 10 sources |
+| `unknown-agent`, `unknown-station`, `unknown-lane`, `unknown-work-type` | error | an `appliesTo` entry the definition does not declare, located at that entry (`knowledge source runbooks: appliesTo.stations: unknown station "ghost"`) |
+| `knowledge-source-unknown` | error | the organization has no source of the name; the fix removes the entry |
+| `knowledge-secret-not-in-scope` | error | the source reads with a secret whose factory scope leaves the factory out, so listing it would hand the factory that secret's reach |
+| `knowledge-copies-checkout` | warning | the source is a Repository source, or a synced source read by gitdocs, of the repository in `runtime.repository.url`: the same host and path, ignoring case, a trailing slash and `.git`. Its runs already have those files on the item's branch. The warning does not block validation or publishing. |
+
+For example, a factory whose `runtime.repository.url` is `https://github.com/acme/app` and that lists a Repository source of `https://github.com/acme/app.git` validates and publishes with the `knowledge-copies-checkout` warning.
+
+## Factory memory: `memory.yaml`
+
+`memory.yaml`, at the root of the definition beside `factory.yaml`, is the factory memory: short facts the factory's runs should know ([ADR 0038](../adr/0038-knowledge-is-files.md), decision 6). Rules say how to act, skills how to do a task, and the factory memory what is true here. Facts for the whole organization belong in a knowledge source every factory lists. The file is optional; without it the factory has no memory.
+
+```yaml
+- text: staging-db disk alerts below 85% are noise; the nightly vacuum clears them.
+  from: [acme-sre#225, acme-sre#231]
+  added: 2026-11-01
+```
+
+| Key | Required | Meaning |
+| --- | --- | --- |
+| `text` | yes | One fact, at most 300 characters. |
+| `from` | no | The items the fact came from, as `<factory>#<number>`. |
+| `added` | yes | The date the fact was added, `YYYY-MM-DD`. |
+
+`config.Check` loads the file into `Factory.Memory()` (`internal/config/memory.go`) and reports these as errors in `memory.yaml`, in the Files section:
+
+| Code | When |
+| --- | --- |
+| schema codes | the file does not satisfy `memory.schema.json`: it is not a list, an entry has an unknown key or lacks `text` or `added`, `added` is not a date or a `from` entry is not an item reference |
+| `memory-too-long` | an entry's `text` is over 300 characters, located at that entry |
+| `memory-too-big` | the file is over 8 KB (8,192 bytes) or holds over 50 entries |
+
+The limits are `domain.MaxMemoryText`, `domain.MaxMemoryBytes` and `domain.MaxMemoryEntries`. Runs do not receive the factory memory yet.
 
 ## Judges and eval cases
 

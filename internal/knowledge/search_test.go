@@ -17,19 +17,6 @@ const (
 	srcRunbooks = "runbooks"
 )
 
-// SourceNames are what a search may name: the organization's sources, which the definitions check
-// holds knowledge.sources to.
-func TestSearcher_SourceNames(t *testing.T) {
-	t.Parallel()
-
-	w := newWorld(t)
-
-	names, err := knowledge.NewSearcher(w.kb, nil, nil).SourceNames(w.ctx())
-	if err != nil || !slices.Equal(names, []string{srcHandbook, srcRunbooks}) {
-		t.Errorf("SourceNames = %v, %v; want handbook and runbooks", names, err)
-	}
-}
-
 // Read returns a document of the named sources only: one of a source the caller may not search,
 // or of another organization, is not found, as one that does not exist.
 func TestSearcher_ReadsOnlyDocumentsOfTheNamedSources(t *testing.T) {
