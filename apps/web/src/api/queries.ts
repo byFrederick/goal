@@ -63,7 +63,7 @@ import {
   listConnectionRepositories,
   listConnections,
 } from './connections';
-import { listCredentials } from './credentials';
+import { getSecret, listSecretActivity, listSecrets } from './secrets';
 import {
   getDraft,
   getDraftFile,
@@ -179,8 +179,10 @@ export const keys = {
   /** The owners and repositories a code host connection reaches; `owner` absent is its own account. */
   connectionRepositories: (org: string, connection: string, owner?: string) =>
     ['org', org, 'connections', 'repositories', connection, owner ?? 'account'] as const,
-  /** The organization's credentials (ADR 0017): the list, which a connection's change also moves. */
-  credentials: (org: string) => ['org', org, 'credentials'] as const,
+  /** The organization's secrets (ADR 0037): the list, one secret, and the audit entries about it. A connection's change also moves them. */
+  secrets: (org: string) => ['org', org, 'secrets'] as const,
+  secret: (org: string, name: string) => ['org', org, 'secrets', name] as const,
+  secretActivity: (org: string, id: string) => ['org', org, 'secrets', 'activity', id] as const,
   /**
    * The prefix of everything of the organization's knowledge base (spec 4 §10): the source lists
    * by filter, each source and its documents, a document's text, searches. `event: knowledge` re-reads
@@ -399,12 +401,29 @@ export const connectionActivityQuery = (org: string, id?: string) =>
     staleTime: 30_000,
   });
 
-/** The organization's credentials, by name, never a value (secret:read: every member). */
-export const credentialsQuery = (org: string) =>
+/** The organization's secrets, by name, never a value (secret:read: every member). */
+export const secretsQuery = (org: string) =>
   queryOptions({
-    queryKey: keys.credentials(org),
-    queryFn: ({ signal }) => listCredentials(org, signal),
+    queryKey: keys.secrets(org),
+    queryFn: ({ signal }) => listSecrets(org, signal),
     staleTime: 30_000,
+  });
+
+/** One secret by name. */
+export const secretQuery = (org: string, name: string) =>
+  queryOptions({
+    queryKey: keys.secret(org, name),
+    queryFn: ({ signal }) => getSecret(org, name, signal),
+    staleTime: 30_000,
+  });
+
+/** The newest audit entries about one secret, by its id (audit:read: a 403 is the page's "Not available"). */
+export const secretActivityQuery = (org: string, id: string) =>
+  queryOptions({
+    queryKey: keys.secretActivity(org, id),
+    queryFn: ({ signal }) => listSecretActivity(org, id, signal),
+    staleTime: 30_000,
+    retry: false,
   });
 
 /** The organization's knowledge sources; `factory` (an id) narrows them to what its current version lists. */

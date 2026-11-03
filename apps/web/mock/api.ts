@@ -63,7 +63,7 @@ import type { IntakeEvent, TriggerTry, TriggerTryStep } from '../src/api/types.t
 import { authSettings, createMockAuth } from './auth.ts';
 import { createBakeOffs } from './bake-offs.ts';
 import { createConnections } from './connections.ts';
-import { createCredentials } from './credentials.ts';
+import { createSecrets } from './secrets.ts';
 import { createDefinitions } from './definitions.ts';
 import { createEvals } from './evals.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
@@ -307,7 +307,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     acme: acmeOrg,
   });
 
-  const credentials = createCredentials({
+  const secrets = createSecrets({
     clock,
     actor: (req) => auth.actor(req),
     stale: (req, res) => stale(req, res),
@@ -1649,7 +1649,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       if (grants) withRole(state, grants);
       apiKeys.reset(clock());
       connections.reset(clock());
-      credentials.reset(clock());
+      secrets.reset(clock());
       knowledge.reset(clock());
       evals.reset();
       bakeOffs.reset();
@@ -1765,7 +1765,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await definitions.handle(org, rest, method, url, req, res)) return;
     if (await apiKeys.handle(forCaller(req, org), rest, method, req, res, () => readBody(req))) return;
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
-    if (await credentials.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (await secrets.handle(org, rest, method, url, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);
     // Bake-offs sit under /evals, and the evals handler answers every sub-path it does not know,
