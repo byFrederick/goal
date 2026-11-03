@@ -87,7 +87,7 @@ func (h *harness) expectMergeUsed(t *testing.T, item domain.ItemID, conn string)
 func (h *harness) expectRefusedMerge(t *testing.T, item domain.ItemID, err error, removed bool) {
 	t.Helper()
 
-	if removed && !strings.Contains(err.Error(), "publish a version with connections") {
+	if removed && !strings.Contains(err.Error(), "publish a version on environment files and secrets (ADR 0037)") {
 		t.Errorf("Merge = %v; want it to say how to fix the version", err)
 	}
 

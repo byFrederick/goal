@@ -98,9 +98,12 @@ const (
 	codeEnvironmentNameMismatch   = "environment-name-mismatch"
 	codeEnvironmentDefaultMissing = "environment-default-missing"
 	codeEnvironmentUnknown        = "environment-unknown"
-	codeForgeMissing              = "forge-missing"
-	codeSecretPlacement           = "secret-placement"
-	codeReferenceInvalid          = "secret-ref-invalid"
+	// codeEnvironmentImage: an environment names an image, which a box on Cloudflare cannot run
+	// (the control Worker runs only its own images). A warning: Compose runs it.
+	codeEnvironmentImage = "environment-image"
+	codeForgeMissing     = "forge-missing"
+	codeSecretPlacement  = "secret-placement"
+	codeReferenceInvalid = "secret-ref-invalid"
 
 	// codeMovedToEnvironment: a key ADR 0037 moved (spec.connections, an agent's connections,
 	// runtime.modelConnection, size, tools and repository.connection, modelAgrees.connection). An

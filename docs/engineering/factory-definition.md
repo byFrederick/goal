@@ -157,7 +157,7 @@ An environment file, `environments/<name>.yaml`, says what an agent's box instal
 
 - It opens every `{{secret}}` of `env`, `files`, `mcp.<server>.headers`, a stdio server's `env` and `runtime.modelKey` together, once, through the secrets store, which checks each secret's scope against the factory and writes one `secret.used` per secret. A missing or out-of-scope secret fails the run with a reason that names the secret and the environment and never a value. Every opened value is scrubbed from what the run reports.
 - The agent's box gets `env` with the values filled in, each `files` entry's content in a platform-reserved variable `GOAL_FILE_<n>` (numbered from 1 by sorted path, `domain.FileEnv`), and the value of each secret an MCP header or stdio `env` names in `GOAL_SECRET_<NAME>` (the name upper-cased, every other character `_`, `domain.SecretEnv`). The resolved MCP servers name `${GOAL_SECRET_<NAME>}` in place of the reference, so they hold no value.
-- The box takes the file's `size` (medium when omitted) and its `image` (Goal's agent image when omitted). The Docker and Cloudflare sandboxes fail the run with an error that names an image they cannot run.
+- The box takes the file's `size` (medium when omitted) and its `image` (Goal's agent image when omitted). The Docker and Cloudflare sandboxes fail the run with an error that names an image they cannot run. A box on Cloudflare runs only the control Worker's own images, so publishing warns at `spec.image` of each file that sets one (`environment-image`, a warning that does not block).
 - The organization policy's Use credentials `off` drops `env`, `files` and `mcp`; the model key and the repository still reach the run.
 
 **In the run bundle** the gateway describes the agent's file, never a value (`internal/gateway/bundle.go`, decisions 5, 8 and 11; the fields are in [the worker's README](../../apps/worker/README.md#specjson)). The bundle's `tools` are the file's `tools`, and `spec.environment` carries the MCP servers with their secrets as `${GOAL_SECRET_<NAME>}`, `setup` in order, each file path with its `GOAL_FILE_<n>`, and the names of `env` and of the tools. A version on secrets gets no connection in the bundle. Each server's tool modes come from `domain.ServerToolModes`, as a list the worker matches first to last:
@@ -195,6 +195,7 @@ spec:
 
 - `env` holds plain values and `{{secret}}` references, as the whole value or part of it.
 - `files` keys are absolute paths or start with `~/`, and each value is one reference.
+- An `mcp` server's name is a slug: 3 to 40 lowercase letters, digits and hyphens, starting with a letter and ending with a letter or digit (`$defs.slug`), the name environment tests and standing rules take. A name like `play_wright` is a schema error at that server.
 - An `mcp` server is remote (`url`, optional `headers`) or stdio (`command`, optional `env`), never both. `tools` maps a tool name or glob to `allow`, `ask` or `off`; the most specific match wins, and a tool nothing matches is `allow`.
 
 ### Secret references
