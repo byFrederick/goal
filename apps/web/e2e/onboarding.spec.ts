@@ -70,33 +70,48 @@ test('Save and finish later signs out when there is no organization yet', async 
   await expect(page).toHaveURL(/\/sign-in$/);
 });
 
-test('step 2 lists the repositories, keeps the choice in the URL and continues to step 3', async ({ page }) => {
+/** Step 2: the repository's address and a token, tested by the mock, then Continue. */
+async function connectCode(page: Page, url = 'https://github.com/acme/goal') {
+  await page.getByLabel('Repository', { exact: true }).fill(url);
+  await page.getByLabel('Token').fill('test-token');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('Goal cloned acme/goal and can push a branch.')).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
+}
+
+test('step 2 takes a URL and a token, tests them, keeps the URL and the secret name in the address and continues', async ({
+  page,
+}) => {
   await signIn(page.request);
   await page.goto('/o/goal/get-started/code');
 
   await expect(page.getByRole('heading', { level: 1, name: 'Connect your code' })).toBeVisible();
-  await expect(page.getByText('Connected as acme')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
-  await page.locator('label', { hasText: 'acme/goal' }).first().getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Continue with 1 repository' }).click();
+  await connectCode(page);
 
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/factory\?/);
+  await expect(page).toHaveURL(/secret=github-token/);
+  expect(page.url()).not.toContain('test-token');
 });
 
-test('step 2 says GitLab is not available yet', async ({ page }) => {
+test('step 2 shows the host’s reason when the token cannot push, and keeps Continue disabled', async ({ page }) => {
   await signIn(page.request);
   await page.goto('/o/goal/get-started/code');
+  await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/goal-readonly');
+  await page.getByLabel('Token').fill('test-token');
+  await page.getByRole('button', { name: 'Continue' }).click();
 
-  await expect(page.getByRole('button', { name: 'GitLab is coming.' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByText(/can’t push a branch\. The token has no write access/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
 });
 
 test('step 3 creates the factory from the first template, and step 4 shapes its line', async ({ page }) => {
   await signIn(page.request);
   await page.goto('/o/goal/get-started/code');
-  await page.locator('label', { hasText: 'acme/goal' }).first().getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Continue with 1 repository' }).click();
+  await connectCode(page);
 
   // The templates are listed by title, and the first is chosen.
   await expect(page.getByRole('heading', { level: 1, name: 'Start your first factory' })).toBeVisible();
@@ -125,8 +140,7 @@ test('step 4 continues to step 5, which publishes the factory, step 6 turns on a
 }) => {
   await signIn(page.request);
   await page.goto('/o/goal/get-started/code');
-  await page.locator('label', { hasText: 'acme/goal' }).first().getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Continue with 1 repository' }).click();
+  await connectCode(page);
   await page.getByRole('button', { name: /^Use / }).click();
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/line\?.*factory=/);
 

@@ -333,11 +333,19 @@ export function createKnowledge({
     const title = typeof b.title === 'string' ? b.title.trim() : '';
     const kind = kinds.find((k) => k === b.kind);
     const connection = typeof b.connection === 'string' ? b.connection : '';
+    // A synced source reads with a secret (ADR 0037), not a connection.
+    const secret = typeof b.secret === 'string' ? b.secret : '';
     const every = typeof b.sync_every_seconds === 'number' ? b.sync_every_seconds : 3600;
     if (!namePattern.test(name))
       return refuse(res, 400, `name "${name}" must be 3 to 40 lowercase letters, digits or dashes`);
     if (title.length === 0 || title.length > 120) return refuse(res, 400, 'a source title has 1 to 120 characters');
     if (!kind) return refuse(res, 400, `source kind "${String(b.kind)}" is not upload, synced or live`);
+    if (kind === 'synced' && secret !== '' && connection === '') {
+      if (every < 900) return refuse(res, 400, 'a source syncs at most every 15 minutes');
+      if (named(org.id, name))
+        return refuse(res, 409, `knowledge source "${name}" is taken`, 'knowledge-source-name-taken');
+      return createOn(org, req, res, { name, title, kind, connection: '', secret, every, config: strings(b.config) });
+    }
     if ((kind === 'upload') !== (connection === '')) {
       return refuse(
         res,
@@ -353,6 +361,24 @@ export function createKnowledge({
     }
     if (named(org.id, name))
       return refuse(res, 409, `knowledge source "${name}" is taken`, 'knowledge-source-name-taken');
+    return createOn(org, req, res, { name, title, kind, connection, secret: '', every, config: strings(b.config) });
+  }
+
+  function createOn(
+    org: Org,
+    req: IncomingMessage,
+    res: ServerResponse,
+    v: {
+      name: string;
+      title: string;
+      kind: (typeof kinds)[number];
+      connection: string;
+      secret: string;
+      every: number;
+      config: Record<string, string>;
+    },
+  ) {
+    const { name, title, kind, connection, secret, every } = v;
     const by = actor(req);
     const now = new Date(clock()).toISOString();
     const s: MockSource = {
@@ -362,7 +388,8 @@ export function createKnowledge({
         title,
         kind,
         ...(connection ? { connection } : {}),
-        config: strings(b.config),
+        ...(secret ? { secret } : {}),
+        config: v.config,
         sync_every_seconds: every,
         status: 'idle',
         last_synced_at: null,
@@ -394,6 +421,7 @@ export function createKnowledge({
     s.source.title = title;
     s.source.sync_every_seconds = every;
     if (b.config !== undefined) s.source.config = strings(b.config);
+    if (s.source.kind === 'synced' && typeof b.secret === 'string' && b.secret !== '') s.source.secret = b.secret;
     s.source.updated_at = new Date(clock()).toISOString();
     audit(
       org.id,
