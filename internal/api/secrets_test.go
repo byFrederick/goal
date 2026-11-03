@@ -3,6 +3,7 @@ package api_test
 import (
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -17,12 +18,13 @@ import (
 //
 //nolint:gosec // routes and names, not secrets
 const (
-	secretsPath       = "/v1/orgs/acme/secrets"
-	secretImportPath  = secretsPath + "/import"
-	secretName        = "acme-token"
-	secretPath        = secretsPath + "/" + secretName
-	secretValuePath   = secretPath + "/value"
-	codeSecretInvalid = "secret-invalid"
+	secretsPath        = "/v1/orgs/acme/secrets"
+	secretImportPath   = secretsPath + "/import"
+	secretName         = "acme-token"
+	secretPath         = secretsPath + "/" + secretName
+	secretValuePath    = secretPath + "/value"
+	codeSecretInvalid  = "secret-invalid"
+	codeSecretNotFound = "secret-not-found"
 )
 
 // The values the secret tests send; none may come back.
@@ -44,17 +46,13 @@ func (h *harness) createSecret(t *testing.T) gen.Secret {
 	return decode[gen.Secret](t, h.request(t, http.MethodPost, secretsPath, body, nil), http.StatusCreated)
 }
 
-// openSecret is secret name's value, opened as a run of factory acme would.
+// openSecret is secret name's value, opened as a run of factory acme, which its scope must allow.
 func (h *harness) openSecret(t *testing.T, name string) string {
 	t.Helper()
 
-	if _, err := h.secrets.Patch(inOrg(t), name, domain.SecretPatch{Scope: &domain.SecretScope{All: true}}, domain.LocalUser); err != nil {
-		t.Fatal(err)
-	}
-
 	got, err := h.secrets.Resolve(inOrg(t), []string{name}, domain.SecretUse{Factory: acmeID, Run: "r1"})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("open secret %s: %v", name, err)
 	}
 
 	return got[0].Value
@@ -68,11 +66,7 @@ func TestAPI_SecretCreateListGetPatchReplaceDelete(t *testing.T) {
 	h := newHarness(t)
 
 	created := h.createSecret(t)
-	if created.Name != secretName || created.Source != gen.SecretSourceValue || created.Description != "the acme API" ||
-		created.Scope.AllFactories || !slices.Equal(created.Scope.Factories, []string{string(acmeID)}) ||
-		created.ExpiresAt == nil || created.RemindDays != 14 || len(created.Uses) != 0 || created.CreatedBy.Id != domain.LocalUser.ID {
-		t.Errorf("created = %+v; want acme-token, a value scoped to acme, expiring, used by nothing", created)
-	}
+	expectCreatedSecret(t, created)
 
 	list := decode[gen.SecretList](t, h.request(t, http.MethodGet, secretsPath, "", nil), http.StatusOK)
 	if len(list.Secrets) != 1 || list.Secrets[0].Id != created.Id {
@@ -99,17 +93,27 @@ func TestAPI_SecretCreateListGetPatchReplaceDelete(t *testing.T) {
 		t.Fatalf("delete = %d %s; want 204", r.status, r.body)
 	}
 
-	refused(t, "get after delete", h.request(t, http.MethodGet, secretPath, "", nil), http.StatusNotFound, "secret-not-found")
+	refused(t, "get after delete", h.request(t, http.MethodGet, secretPath, "", nil), http.StatusNotFound, codeSecretNotFound)
 
 	audit := decode[gen.AuditPage](t, h.request(t, http.MethodGet, "/v1/orgs/acme/audit?target_kind=secret", "", nil), http.StatusOK)
 
-	// openSecret's scope change is the second secret.updated.
 	want := []string{
-		domain.AuditSecretDeleted, domain.AuditSecretUsed, domain.AuditSecretUpdated, domain.AuditSecretValueReplaced,
-		domain.AuditSecretUpdated, domain.AuditSecretCreated,
+		domain.AuditSecretDeleted, domain.AuditSecretUsed, domain.AuditSecretValueReplaced, domain.AuditSecretUpdated, domain.AuditSecretCreated,
 	}
 	if got := actions(audit.Entries); !slices.Equal(got, want) {
 		t.Errorf("audit = %v; want %v", got, want)
+	}
+}
+
+// expectCreatedSecret checks created is createSecret's acme-token: a value scoped to acme,
+// expiring with a reminder, used by nothing.
+func expectCreatedSecret(t *testing.T, created gen.Secret) {
+	t.Helper()
+
+	if created.Name != secretName || created.Source != gen.SecretSourceValue || created.Description != "the acme API" ||
+		created.Scope.AllFactories || !slices.Equal(created.Scope.Factories, []string{string(acmeID)}) ||
+		created.ExpiresAt == nil || created.RemindDays != 14 || len(created.Uses) != 0 || created.CreatedBy.Id != domain.LocalUser.ID {
+		t.Errorf("created = %+v; want acme-token, a value scoped to acme, expiring, used by nothing", created)
 	}
 }
 
@@ -134,11 +138,11 @@ func TestAPI_SecretRefusals(t *testing.T) {
 		},
 		{"empty patch", http.MethodPatch, secretPath, `{}`, http.StatusBadRequest, codeSecretInvalid},
 		{"empty value", http.MethodPut, secretValuePath, `{"value":""}`, http.StatusBadRequest, codeSecretInvalid},
-		{"name taken", http.MethodPost, secretsPath, `{"name":"acme-token","value":"v"}`, http.StatusConflict, "secret-name-taken"},
-		{"unknown secret", http.MethodGet, secretsPath + "/nothing", "", http.StatusNotFound, "secret-not-found"},
-		{"patch of no secret", http.MethodPatch, secretsPath + "/nothing", `{"description":"nobody"}`, http.StatusNotFound, "secret-not-found"},
-		{"value of no secret", http.MethodPut, secretsPath + "/nothing/value", `{"value":"v"}`, http.StatusNotFound, "secret-not-found"},
-		{"delete of no secret", http.MethodDelete, secretsPath + "/nothing", "", http.StatusNotFound, "secret-not-found"},
+		{"name in use", http.MethodPost, secretsPath, `{"name":"acme-token","value":"v"}`, http.StatusConflict, "secret-name-taken"},
+		{"unknown secret", http.MethodGet, secretsPath + "/nothing", "", http.StatusNotFound, codeSecretNotFound},
+		{"patch of no secret", http.MethodPatch, secretsPath + "/nothing", `{"description":"nobody"}`, http.StatusNotFound, codeSecretNotFound},
+		{"value of no secret", http.MethodPut, secretsPath + "/nothing/value", `{"value":"v"}`, http.StatusNotFound, codeSecretNotFound},
+		{"delete of no secret", http.MethodDelete, secretsPath + "/nothing", "", http.StatusNotFound, codeSecretNotFound},
 	}
 
 	for _, tt := range tests {
@@ -198,12 +202,12 @@ func TestAPI_SecretDeleteInUse(t *testing.T) {
 	h := newHarness(t)
 	h.createSecret(t)
 
-	for _, name := range []string{"github", "github-ci"} {
+	for _, name := range []string{kindGitHub, "github-ci"} {
 		decode[gen.Connection](t, h.request(t, http.MethodPost, connectionsPath,
 			`{"name":"`+name+`","kind":"github","secrets":{"token":"{{acme-token}}"}}`, nil), http.StatusCreated)
 	}
 
-	want := []gen.SecretUse{{Kind: gen.SecretUseConnection, Name: "github"}, {Kind: gen.SecretUseConnection, Name: "github-ci"}}
+	want := []gen.SecretUse{{Kind: gen.SecretUseConnection, Name: kindGitHub}, {Kind: gen.SecretUseConnection, Name: "github-ci"}}
 
 	if got := decode[gen.Secret](t, h.request(t, http.MethodGet, secretPath, "", nil), http.StatusOK); !slices.Equal(got.Uses, want) {
 		t.Errorf("uses = %+v; want %+v", got.Uses, want)
@@ -223,7 +227,7 @@ func TestAPI_SecretDeleteInUse(t *testing.T) {
 
 // An import's dry run answers each name as new or existing, with what uses the existing one, and
 // stores nothing; a real run creates the new names open to no factory, and skips or replaces the
-// existing ones. A refused import stores nothing.
+// existing ones.
 func TestAPI_SecretImport(t *testing.T) {
 	t.Parallel()
 
@@ -240,13 +244,7 @@ func TestAPI_SecretImport(t *testing.T) {
 
 	importBody := func(extra string) string { return `{"format":"env","text":` + string(text) + extra + `}` }
 
-	dry := decode[gen.SecretImportResult](t, h.request(t, http.MethodPost, secretImportPath, importBody(`,"dry_run":true`), nil), http.StatusOK)
-	if !dry.DryRun || len(dry.Secrets) != 2 || dry.Secrets[0].Name != secretName || !dry.Secrets[0].Exists ||
-		!slices.Equal(dry.Secrets[0].Uses, []gen.SecretUse{{Kind: gen.SecretUseConnection, Name: "github"}}) ||
-		dry.Secrets[1].Name != "sentry-token" || dry.Secrets[1].Exists || len(dry.Secrets[1].Uses) != 0 ||
-		dry.Secrets[0].Outcome != nil || dry.Secrets[1].Outcome != nil {
-		t.Errorf("dry run = %+v; want acme-token existing, used by github, and sentry-token new, no outcomes", dry)
-	}
+	expectDryRun(t, decode[gen.SecretImportResult](t, h.request(t, http.MethodPost, secretImportPath, importBody(`,"dry_run":true`), nil), http.StatusOK))
 
 	if _, err := h.secrets.Get(inOrg(t), "sentry-token"); err == nil {
 		t.Error("a dry run created sentry-token")
@@ -274,6 +272,29 @@ func TestAPI_SecretImport(t *testing.T) {
 	if v := h.openSecret(t, secretName); v != secretReplacedValue {
 		t.Error("an import with replace left acme-token's value")
 	}
+}
+
+// expectDryRun checks an import's dry run of acme-token, used by the github connection, and
+// sentry-token, which is new: what each is, and no outcome.
+func expectDryRun(t *testing.T, dry gen.SecretImportResult) {
+	t.Helper()
+
+	want := []gen.SecretImportOutcome{
+		{Name: secretName, Exists: true, Uses: []gen.SecretUse{{Kind: gen.SecretUseConnection, Name: kindGitHub}}},
+		{Name: "sentry-token", Uses: []gen.SecretUse{}},
+	}
+
+	if !dry.DryRun || !reflect.DeepEqual(dry.Secrets, want) {
+		t.Errorf("dry run = %+v; want %+v", dry, want)
+	}
+}
+
+// An import of an unknown format, of text that does not parse, of a reserved name or of nothing,
+// or with an unknown on_conflict, is refused and stores nothing.
+func TestAPI_SecretImportRefusals(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
 
 	for _, bad := range []struct{ name, body string }{
 		{"unknown format", `{"format":"toml","text":"a = 1"}`},
@@ -285,8 +306,8 @@ func TestAPI_SecretImport(t *testing.T) {
 		refused(t, bad.name, h.request(t, http.MethodPost, secretImportPath, bad.body, nil), http.StatusBadRequest, codeSecretInvalid)
 	}
 
-	if list := decode[gen.SecretList](t, h.request(t, http.MethodGet, secretsPath, "", nil), http.StatusOK); len(list.Secrets) != 2 {
-		t.Errorf("secrets after refused imports = %+v; want acme-token and sentry-token only", list.Secrets)
+	if list := decode[gen.SecretList](t, h.request(t, http.MethodGet, secretsPath, "", nil), http.StatusOK); len(list.Secrets) != 0 {
+		t.Errorf("secrets after refused imports = %+v; want none", list.Secrets)
 	}
 }
 

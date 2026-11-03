@@ -53,7 +53,7 @@ Each tool of an MCP connection is `allow`, `ask` or `off`. A tool with no mode i
 - `goal connection test <name>` runs the kind's test from goald and exits 1 when it fails. The connection records when it was last tested and the outcome.
 - `goal connection list`, `show`, `update` and `delete` manage a connection. Deleting is refused while a factory's current version uses the connection.
 - `goal connection kinds` lists the kinds, the platform's and the organization's.
-- `goal credential list`, `create`, `replace`, `rm` and `import` manage credentials.
+- `goal secret list`, `show`, `create`, `replace`, `delete` and `import` manage the organization's secrets, which a connection refers to as `{{name}}`. A value comes only from stdin or the import file and is never shown. `goal credential` moved to `goal secret`: it prints where and exits 2.
 
 Flags and output are in the [CLI reference](../../reference/).
 

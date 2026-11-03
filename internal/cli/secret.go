@@ -177,10 +177,14 @@ func secretShow(ctx context.Context, out *printer, getenv func(string) string, a
 	out.printf("%s\n", s.Name)
 
 	for _, row := range [][2]string{
-		{"source", string(s.Source)}, {"description", description}, {"factories", secretFactories(s.Scope)},
-		{"used by", secretUses(s.Uses)}, {"expires", expires}, {"last used", lastUsed(s.LastUsedAt, time.Now())},
-		{"created", s.CreatedAt.UTC().Format(time.DateOnly) + " by " + s.CreatedBy.Name},
-		{"updated", s.UpdatedAt.UTC().Format(time.DateOnly) + " by " + s.UpdatedBy.Name},
+		{"source", string(s.Source)},
+		{"description", description},
+		{"factories", secretFactories(s.Scope)},
+		{"used by", secretUses(s.Uses)},
+		{"expires", expires},
+		{"last used", lastUsed(s.LastUsedAt, time.Now())},
+		{"created on", s.CreatedAt.UTC().Format(time.DateOnly) + " by " + s.CreatedBy.Name},
+		{"changed on", s.UpdatedAt.UTC().Format(time.DateOnly) + " by " + s.UpdatedBy.Name},
 	} {
 		out.printf("  %-12s %s\n", row[0], row[1])
 	}

@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	cmdSecret  = "secret"
-	secretName = "acme-token"
+	cmdSecret     = "secret"
+	cmdCredential = "credential"
+	secretName    = "acme-token"
 	// secretValue is the value the secret tests store; no output may hold it.
 	secretValue = "sk-acme-secret-value-91c4" //nolint:gosec // a test value, not a secret
 )
@@ -77,6 +78,14 @@ func TestSecretCommand_CreateFromStdin(t *testing.T) {
 		s.ExpiresAt == nil || s.ExpiresAt.Format("2006-01-02T15:04Z07:00") != "2027-03-01T00:00Z" {
 		t.Errorf("stored = %+v; want all factories, the description, expiry at UTC midnight and 14 days", s)
 	}
+}
+
+// goal secret create --factory scopes the secret to those factories; without a scope flag it is
+// open to no factory, and --all-factories with --factory is a usage error.
+func TestSecretCommand_CreateScope(t *testing.T) {
+	t.Parallel()
+
+	g := newDefGoald(t)
 
 	if _, err := g.goalIn(t, "other", cmdSecret, verbCreate, "scoped", "--factory", "f-1", "--factory", "f-2"); err != nil {
 		t.Fatal(err)
@@ -92,6 +101,10 @@ func TestSecretCommand_CreateFromStdin(t *testing.T) {
 
 	if s := g.secretMeta(t, "unscoped"); s.Scope.All || len(s.Scope.Factories) != 0 {
 		t.Errorf("scope = %+v; want no factory", s.Scope)
+	}
+
+	if _, err := g.goalIn(t, "other", cmdSecret, verbCreate, "both", "--all-factories", "--factory", "f-1"); !errors.Is(err, errUsage) {
+		t.Errorf("--all-factories with --factory = %v; want a usage error", err)
 	}
 }
 
@@ -247,6 +260,19 @@ func TestSecretCommand_ImportDryRun(t *testing.T) {
 	if out := g.mustGoal(t, cmdSecret, verbImport, file, "--format", "env"); !strings.Contains(out, "skipped  acme-token") {
 		t.Errorf("import again = %q; want acme-token skipped", out)
 	}
+}
+
+// goal secret import refuses an unknown format, an unknown --on-conflict and a file whose
+// extension names no format, before goald is called.
+func TestSecretCommand_ImportUsage(t *testing.T) {
+	t.Parallel()
+
+	g := newDefGoald(t)
+
+	file := filepath.Join(t.TempDir(), "secrets.env")
+	if err := os.WriteFile(file, []byte("ACME_TOKEN="+secretValue+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, line := range [][]string{
 		{cmdSecret, verbImport, file, "--format", "toml"},
@@ -339,10 +365,10 @@ func TestCredentialCommand_Moved(t *testing.T) {
 	g := newDefGoald(t)
 
 	for _, args := range [][]string{
-		{"credential"},
-		{"credential", subList},
-		{"credential", verbCreate, secretName, "--type", "api_key"},
-		{"credential", "rm", secretName},
+		{cmdCredential},
+		{cmdCredential, subList},
+		{cmdCredential, verbCreate, secretName, "--type", "api_key"},
+		{cmdCredential, "rm", secretName},
 	} {
 		stdout, stderr, code := g.goalRun(t, secretValue, args...)
 		if code != 2 || stdout != "" || !strings.Contains(stderr, "goal credential moved to goal secret") ||

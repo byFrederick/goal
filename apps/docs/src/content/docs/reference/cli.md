@@ -13,7 +13,7 @@ Every command of the `goal` CLI, in the order its usage text lists them: each se
 
 Factory definitions live in goald (drafts and published versions), not in files: goal factory push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, credential, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
+Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, secret, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
 
 With sign-in on (GOAL\_AUTH=session), commands send GOAL\_API\_KEY (an API key goal\_sk\_… or a personal token goal\_pat\_…) when it is set, else what goal login stored for goald's origin, and only over https or to this machine; a refused credential or permission exits 77
 
@@ -480,49 +480,65 @@ goal connection kind delete <name>
 
 delete an organization kind no connection is of
 
-## goal credential list
+## goal secret list
 
 ```text
-goal credential list
+goal secret list
 ```
 
-the organization's credentials: type, factories, what uses them, last use and expiry (never a value)
+the organization's secrets: factories, what uses them, last use and expiry (never a value)
 
-## goal credential create
+## goal secret show
 
 ```text
-goal credential create <name> --type T [--description D] [--factory <id>]... [--all-factories] [--expires YYYY-MM-DD] [--remind-days N]
+goal secret show <name>
 ```
 
-create a credential (owners and admins; types api\_key, oauth\_token, ssh\_key, cloud\_role, app\_key); its value comes from stdin, never argv: ... &lt; value-file
+one secret: source, description, factories, what uses it, expiry and reminder, last use, who changed it
 
-Flags: `--type T`, `--description D`, `--factory <id>`, `--all-factories`, `--expires YYYY-MM-DD`, `--remind-days N`.
-
-## goal credential replace
+## goal secret create
 
 ```text
-goal credential replace <name>
+goal secret create <name> [--description D] [--factory <id>]... [--all-factories] [--expires YYYY-MM-DD] [--remind-days N]
+```
+
+create a secret (owners and admins), open to no factory unless --factory or --all-factories; its value comes from stdin, never argv: ... &lt; value-file
+
+Flags: `--description D`, `--factory <id>`, `--all-factories`, `--expires YYYY-MM-DD`, `--remind-days N`.
+
+## goal secret replace
+
+```text
+goal secret replace <name>
 ```
 
 replace its value with the one on stdin
 
-## goal credential rm
+## goal secret delete
 
 ```text
-goal credential rm <name>
+goal secret delete <name>
 ```
 
-delete it (refused while a connection refers to it as {{name}}; the error names them)
+delete it (refused while something uses it; the error names each use)
 
-## goal credential import
+## goal secret import
 
 ```text
-goal credential import <file> [--format env|yaml] [--on-conflict replace|skip] [--dry-run]
+goal secret import <file> [--format env|yaml] [--on-conflict replace|skip] [--dry-run]
 ```
 
-import a .env or YAML file's credentials (format from the extension by default; a name that exists is skipped unless --on-conflict replace); prints each name as new or exists (--dry-run) or what was done with it
+import a .env file or a YAML file's credentials: map (format from the extension by default; new names are open to no factory, a name that exists is skipped unless --on-conflict replace); prints each name as new or exists (--dry-run) or what was done with it
 
 Flags: `--format env|yaml`, `--on-conflict replace|skip`, `--dry-run`.
+
+## goal credential
+
+```text
+goal credential ...
+```
+
+moved to goal secret; prints where and exits 2
 
 ## goal knowledge sources
 
