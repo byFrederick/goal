@@ -70,6 +70,25 @@ func (q *Queries) ClaimKnowledgeSource(ctx context.Context, arg ClaimKnowledgeSo
 	return i, err
 }
 
+const convertKnowledgeSource = `-- name: ConvertKnowledgeSource :exec
+UPDATE knowledge_sources
+SET kind = $1, connection_id = NULL, config = $2::jsonb, next_sync_at = now(), updated_at = now()
+WHERE id = $3 AND kind = 'synced' AND secret_id IS NOT NULL
+`
+
+type ConvertKnowledgeSourceParams struct {
+	Kind   string
+	Config []byte
+	ID     uuid.UUID
+}
+
+// Moves a synced source over to its kind (ports.Knowledge.ConvertSource): off its connection,
+// with the config it keeps, due at once.
+func (q *Queries) ConvertKnowledgeSource(ctx context.Context, arg ConvertKnowledgeSourceParams) error {
+	_, err := q.db.Exec(ctx, convertKnowledgeSource, arg.Kind, arg.Config, arg.ID)
+	return err
+}
+
 const deleteDocumentChunks = `-- name: DeleteDocumentChunks :exec
 DELETE FROM knowledge_chunks WHERE document_id = $1
 `

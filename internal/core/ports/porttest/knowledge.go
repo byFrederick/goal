@@ -368,6 +368,40 @@ func (k *Knowledge) UpdateSource(ctx context.Context, name string, p domain.Know
 	return out, err
 }
 
+// ConvertSource implements ports.Knowledge.
+func (k *Knowledge) ConvertSource(ctx context.Context, name string, kind domain.KnowledgeSourceKind, by domain.Actor) (domain.KnowledgeSource, error) {
+	var out domain.KnowledgeSource
+
+	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
+		s, ok := o.sources[name]
+		if !ok {
+			return fmt.Errorf("knowledge source %q: %w", name, ports.ErrNotFound)
+		}
+
+		if err := s.src.CheckConvert(kind); err != nil {
+			return err
+		}
+
+		if err := k.audit.Append(ctx, sourceEntry(by, domain.AuditKnowledgeSourceUpdated, s.src.ID,
+			map[string]any{auditName: name, auditKind: string(kind)})); err != nil {
+			return err
+		}
+
+		now := time.Now().UTC()
+		s.src.Kind, s.src.Connection, s.connID = kind, "", ""
+		s.src.Config = s.src.ConvertedConfig()
+		s.src.NextSyncAt, s.src.UpdatedAt = &now, now
+		out = o.view(s)
+
+		return nil
+	})
+	if err != nil {
+		return domain.KnowledgeSource{}, fmt.Errorf("convert knowledge source: %w", err)
+	}
+
+	return out, nil
+}
+
 // sourceAudit is the data of a new source's created entry: its name, kind and what it reads.
 func sourceAudit(n domain.NewKnowledgeSource) map[string]any {
 	out := map[string]any{auditName: n.Name, auditKind: string(n.Kind), "connection": n.Connection}

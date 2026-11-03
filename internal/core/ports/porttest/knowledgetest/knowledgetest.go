@@ -68,6 +68,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Reads_AddToOneRowPerSourcePathFactoryAndDay", testReads},
 		{"Files_OtherOrgSeesNothing", testFilesIsolation},
 		{"Sources_RepositoryAndConfluenceWithReadWhen", testNewKinds},
+		{"ConvertSource_SyncedBecomesItsKind", testConvertSource},
 		{"Methods_NoOrgIsAnError", testNoOrg},
 	}
 
@@ -1069,4 +1070,71 @@ func testNoOrg(f *fixture) {
 	for name, call := range calls {
 		f.refused(name+" without an organization", call(), domain.ErrNoOrg)
 	}
+}
+
+// Moving over (ADR 0038 decision 16) turns a synced source on a secret into its kind: gitdocs's a
+// repository source off its connection, which no source reads any more, confluence's a
+// Confluence source; each keeps its secret and its config but the reader, is due at once and is
+// audited. Nothing else converts.
+func testConvertSource(f *fixture) {
+	ctx := f.ctx()
+
+	if _, err := f.Secrets.Create(ctx, domain.NewSecret{Name: docsSecret, Value: "test-token", Scope: domain.SecretScope{All: true}}, admin); err != nil {
+		f.t.Fatalf("Create secret: %v", err)
+	}
+
+	f.synced(f.org, handbook)
+
+	secret := docsSecret
+	if _, err := f.Knowledge.UpdateSource(ctx, handbook, domain.KnowledgeSourcePatch{
+		Secret: &secret, Config: map[string]string{domain.SourceReaderKey: readerGitDocs, "paths": "docs/**/*.md"},
+	}, admin); err != nil {
+		f.t.Fatalf("point %s at its secret: %v", handbook, err)
+	}
+
+	wiki := f.source(f.org, domain.NewKnowledgeSource{
+		Name: "wiki", Kind: domain.SourceSynced, Secret: docsSecret, Config: map[string]string{domain.SourceReaderKey: "confluence", "spaces": "ENG"},
+	})
+	f.synced(f.org, runbooks)
+	f.upload("notes")
+
+	before := len(f.audit(f.org, domain.AuditKnowledgeSourceUpdated))
+
+	for _, bad := range []struct {
+		what, name string
+		kind       domain.KnowledgeSourceKind
+		want       error
+	}{
+		{"a synced source on its connection", runbooks, domain.SourceRepository, domain.ErrInvalid},
+		{"an upload source", "notes", domain.SourceRepository, domain.ErrInvalid},
+		{"a gitdocs source into Confluence", handbook, domain.SourceConfluence, domain.ErrInvalid},
+		{"a source into synced", handbook, domain.SourceSynced, domain.ErrInvalid},
+		{"an unknown source", "ghost", domain.SourceRepository, ports.ErrNotFound},
+	} {
+		_, err := f.Knowledge.ConvertSource(ctx, bad.name, bad.kind, admin)
+		f.refused("ConvertSource of "+bad.what, err, bad.want)
+	}
+
+	repo, err := f.Knowledge.ConvertSource(ctx, handbook, domain.SourceRepository, admin)
+	f.must(err)
+	f.want("the converted repository source", repo, repo.Kind == domain.SourceRepository, repo.Connection == "", repo.Secret == docsSecret,
+		reflect.DeepEqual(repo.Config, map[string]string{"paths": "docs/**/*.md"}), repo.NextSyncAt != nil && !repo.NextSyncAt.After(time.Now()))
+	f.want("the source as read", f.get(f.org, handbook), f.get(f.org, handbook).Kind == domain.SourceRepository)
+
+	conf, err := f.Knowledge.ConvertSource(ctx, wiki.Name, domain.SourceConfluence, admin)
+	f.must(err)
+	f.want("the converted Confluence source", conf, conf.Kind == domain.SourceConfluence, conf.Secret == docsSecret,
+		reflect.DeepEqual(conf.Config, map[string]string{"spaces": "ENG"}))
+
+	_, err = f.Knowledge.ConvertSource(ctx, handbook, domain.SourceRepository, admin)
+	f.refused("ConvertSource of a converted source", err, domain.ErrInvalid)
+
+	entries := f.audit(f.org, domain.AuditKnowledgeSourceUpdated)
+	if len(entries) != before+2 || entries[0].Data["kind"] != string(domain.SourceConfluence) || entries[1].Data["kind"] != string(domain.SourceRepository) {
+		f.t.Errorf("updated entries %+v; want one a conversion, with its kind", entries)
+	}
+
+	// Only runbooks reads the connection now.
+	f.must(f.Knowledge.DeleteSource(ctx, runbooks, admin, nil))
+	f.must(f.Connections.Delete(ctx, docsConn, admin))
 }
