@@ -31,7 +31,11 @@ The worker writes the rules a run gets into the agent's user-level configuration
 
 ## Tools that ask first
 
-An agent's MCP server tools can be `allow`, `ask` or `off` (the modes are set in the agent's environment file, see [access and secrets](../access-and-secrets/)). The strictest of the environment's mode, the factory's `toolRule` and the agent's own tool lists wins. An `ask` call does not run. The run ends, and the item waits for a person:
+An agent's MCP server tools can be `allow`, `ask` or `off` (the modes are set in the agent's environment file, see [access and secrets](../access-and-secrets/)). The strictest of the environment's mode, the factory's `toolRule` and the agent's own tool lists wins.
+
+The agent's `tools.allow` and `tools.deny` rules name a server's tools as `<server>__<pattern>`, such as `github__merge_*`. They apply to the servers of the agent's environment file as to connections: a deny rule that matches a tool removes it, an allow list for a server keeps only the tools it matches, and then the tool's mode applies. A denied tool never asks first. Converting a factory to secrets keeps these rules, because each server in the environment file keeps the name of the connection it came from.
+
+An `ask` call does not run. The run ends, and the item waits for a person:
 
 1. The person sees the call, with its input and the agent's role, and chooses Approve or Deny. Deny can carry a note that the next run reads.
 2. Approve runs the call once, in the next run. Deny sends the item back with the denial in its brief.
