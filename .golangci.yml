@@ -210,6 +210,10 @@ linters:
               desc: container access belongs in internal/adapters/sandboxes/docker
             - pkg: github.com/byFrederick/goal/internal/connkind
               desc: handlers reach connection kinds through an interface declared in internal/api; cmd/goald wires connkind
+            - pkg: github.com/byFrederick/goal/internal/catalog
+              desc: handlers get the tool templates as api.Deps.Catalog; cmd/goald loads them with catalog.Templates
+            - pkg: github.com/modelcontextprotocol/go-sdk
+              desc: handlers call MCP servers through ports.ToolLister; cmd/goald wires internal/adapters/toollister
             - pkg: github.com/byFrederick/goal/internal/knowledge
               desc: handlers reach uploads and search through interfaces declared in internal/api; cmd/goald wires knowledge
         connkind:
@@ -221,6 +225,14 @@ linters:
               desc: the engine receives domain kinds; connkind never calls it
             - pkg: github.com/byFrederick/goal/internal/api
               desc: the HTTP API calls connkind, never the reverse
+        catalog:
+          # The tool templates are data (ADR 0037 decision 15): they read nothing and call nothing.
+          list-mode: strict
+          files: ["**/internal/catalog/**", "!$test"]
+          allow:
+            - $gostd
+            - github.com/byFrederick/goal/internal/core/domain
+            - go.yaml.in/yaml/v3
         knowledge:
           # Indexing and search reach the database, the bucket, the embedding model and the sources
           # through ports only (spec 4 §5.11).

@@ -1,0 +1,12 @@
+apiVersion: goal/v1
+kind: Template
+metadata:
+  name: pagerduty
+  title: PagerDuty
+  description: A PagerDuty REST API key.
+spec:
+  secrets:
+    - {slot: token, title: API key, description: A read-only key unless agents should change incidents., suggest: pagerduty-key}
+  env:
+    PAGERDUTY_API_TOKEN: "{{token}}"
+  test: {method: GET, url: "https://api.pagerduty.com/abilities", headers: {Authorization: "Token token={{token}}"}, expect: 200}
