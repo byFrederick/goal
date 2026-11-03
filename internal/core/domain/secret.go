@@ -275,7 +275,7 @@ func (u SecretUse) AuditData(name string) map[string]any {
 }
 
 // ResolvedSecret is a secret opened for one run: its metadata and its value. Only
-// ports.Secrets.Resolve returns one. String and GoString hide the value.
+// ports.OrgSecrets.Resolve returns one. String and GoString hide the value.
 type ResolvedSecret struct {
 	Secret Secret
 	Value  string
