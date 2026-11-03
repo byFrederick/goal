@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -36,7 +37,7 @@ func (h *harness) seedTitled(t *testing.T, title string) domain.Item {
 
 // searchLine renders a search's results as one line: each group's hits, best first.
 func searchLine(s gen.OrgSearch) string {
-	var items, agents, factories, conns []string
+	var items, agents, factories, conns, secrets []string
 
 	for _, it := range s.Items {
 		items = append(items, fmt.Sprintf("%s#%d %s", it.FactoryName, it.Number, it.Title))
@@ -54,8 +55,12 @@ func searchLine(s gen.OrgSearch) string {
 		conns = append(conns, c.Name+" ("+c.Kind+")")
 	}
 
-	return fmt.Sprintf("items [%s] agents [%s] factories [%s] connections [%s]",
-		strings.Join(items, "; "), strings.Join(agents, "; "), strings.Join(factories, "; "), strings.Join(conns, "; "))
+	for _, sec := range s.Secrets {
+		secrets = append(secrets, sec.Name)
+	}
+
+	return fmt.Sprintf("items [%s] agents [%s] factories [%s] connections [%s] secrets [%s]",
+		strings.Join(items, "; "), strings.Join(agents, "; "), strings.Join(factories, "; "), strings.Join(conns, "; "), strings.Join(secrets, "; "))
 }
 
 // A viewer of acme alone finds nothing of line: no item, agent or factory; its owner finds both.
@@ -75,14 +80,14 @@ func TestSearchOrg_HidesFactoriesTheCallerCannotRead(t *testing.T) {
 	for _, c := range []struct{ name, token, q, want string }{
 		{
 			"the viewer", viewerToken, "e",
-			"items [acme#1 Write the user guide] agents [acme/writer at ] factories [acme] connections []",
+			"items [acme#1 Write the user guide] agents [acme/writer at ] factories [acme] connections [] secrets []",
 		},
 		{
 			"the owner", ownerToken, "e",
 			"items [line#1 Fix the backend build; acme#1 Write the user guide] agents [acme/writer at ; line/backend at build; line/frontend at build] " +
-				"factories [acme; line] connections []",
+				"factories [acme; line] connections [] secrets []",
 		},
-		{"the viewer, line's agent", viewerToken, "backend", "items [] agents [] factories [] connections []"},
+		{"the viewer, line's agent", viewerToken, "backend", "items [] agents [] factories [] connections [] secrets []"},
 	} {
 		got := decode[gen.OrgSearch](t, h.as(t, c.token, http.MethodGet, searchFor(c.q), ""), http.StatusOK)
 		if line := searchLine(got); line != c.want {
@@ -111,6 +116,72 @@ func TestSearchOrg_ConnectionsNeedConnectionRead(t *testing.T) {
 	got = decode[gen.OrgSearch](t, h.as(t, viewerToken, http.MethodGet, searchFor("git"), ""), http.StatusOK)
 	if !slices.Equal(got.Connections, []gen.ConnectionHit{{Name: kindGitHub, Kind: kindGitHub}}) {
 		t.Errorf("a member finds connections %+v; want github", got.Connections)
+	}
+}
+
+// Secrets are found by name, the exact one first, then those starting with q, then those
+// containing it, each with its scope and expiry; limit caps the group.
+func TestSearchOrg_FindsSecretsByName(t *testing.T) {
+	t.Parallel()
+
+	h := keyed(t)
+
+	for _, body := range []string{
+		`{"name":"docs-token","value":"v1","scope":{"all_factories":true,"factories":[]}}`,
+		`{"name":"token-x","value":"v2","expires_at":"2027-01-31T00:00:00Z"}`,
+		`{"name":"api-token","value":"v3","scope":{"all_factories":false,"factories":["` + string(acmeID) + `"]}}`,
+		`{"name":"github-app","value":"v4"}`,
+	} {
+		if res := h.as(t, freshToken, http.MethodPost, secretsPath, body); res.status != http.StatusCreated {
+			t.Fatalf("create the secret %s = %d %s; want 201", body, res.status, res.body)
+		}
+	}
+
+	got := decode[gen.OrgSearch](t, h.as(t, viewerToken, http.MethodGet, searchFor("TOKEN"), ""), http.StatusOK)
+	if line := searchLine(got); !strings.HasSuffix(line, "secrets [token-x; api-token; docs-token]") {
+		t.Errorf("searching TOKEN: %s; want secrets [token-x; api-token; docs-token]", line)
+	}
+
+	if len(got.Secrets) == 3 {
+		if x := got.Secrets[0]; x.ExpiresAt == nil || !x.ExpiresAt.Equal(time.Date(2027, 1, 31, 0, 0, 0, 0, time.UTC)) {
+			t.Errorf("token-x expires_at = %v; want 2027-01-31", x.ExpiresAt)
+		}
+
+		if a := got.Secrets[1]; a.Scope.AllFactories || !slices.Equal(a.Scope.Factories, []string{string(acmeID)}) || a.ExpiresAt != nil {
+			t.Errorf("api-token = %+v; want scoped to acme, no expiry", a)
+		}
+
+		if d := got.Secrets[2]; !d.Scope.AllFactories || d.Scope.Factories == nil {
+			t.Errorf("docs-token scope = %+v; want every factory, factories []", d.Scope)
+		}
+	}
+
+	got = decode[gen.OrgSearch](t, h.as(t, viewerToken, http.MethodGet, searchFor("token", "limit=1"), ""), http.StatusOK)
+	if len(got.Secrets) != 1 || got.Secrets[0].Name != "token-x" {
+		t.Errorf("limit=1 finds secrets %+v; want token-x", got.Secrets)
+	}
+}
+
+// Secrets are found only with secret:read: a member's, not a token without it.
+func TestSearchOrg_SecretsNeedSecretRead(t *testing.T) {
+	t.Parallel()
+
+	h := keyed(t)
+
+	if res := h.as(t, freshToken, http.MethodPost, secretsPath, `{"name":"acme-token","value":"v"}`); res.status != http.StatusCreated {
+		t.Fatalf("create the secret = %d %s; want 201", res.status, res.body)
+	}
+
+	created, _ := h.createToken(t, freshToken, laptop) // org:read and factory:read, no secret:read
+
+	got := decode[gen.OrgSearch](t, h.request(t, http.MethodGet, searchFor("acme"), "", bearer(created.Secret)), http.StatusOK)
+	if got.Secrets == nil || len(got.Secrets) != 0 {
+		t.Errorf("a token without secret:read finds secrets %+v; want []", got.Secrets)
+	}
+
+	got = decode[gen.OrgSearch](t, h.as(t, viewerToken, http.MethodGet, searchFor("acme"), ""), http.StatusOK)
+	if len(got.Secrets) != 1 || got.Secrets[0].Name != "acme-token" {
+		t.Errorf("a member finds secrets %+v; want acme-token", got.Secrets)
 	}
 }
 

@@ -16,7 +16,7 @@ import (
 )
 
 // The shell's search box (tag shell): one read over the organization's items, agents, factories
-// and connections, each group best first and only what the caller sees.
+// connections and secrets, each group best first and only what the caller sees.
 
 // Limits of a search.
 const (
@@ -25,8 +25,13 @@ const (
 	maxSearchLimit     = 20
 )
 
-// permConnectionRead reads the organization's connections' names and kinds.
-const permConnectionRead domain.Permission = "connection:read"
+// The permissions a search's groups need; without one its group is empty.
+const (
+	// permConnectionRead reads the organization's connections' names and kinds.
+	permConnectionRead domain.Permission = "connection:read"
+	// permSecretRead reads the organization's secrets' metadata, never a value.
+	permSecretRead domain.Permission = "secret:read"
+)
 
 func (s *server) SearchOrg(ctx context.Context, req gen.SearchOrgRequestObject) (gen.SearchOrgResponseObject, error) {
 	q := strings.TrimSpace(req.Params.Q)
@@ -55,8 +60,13 @@ func (s *server) SearchOrg(ctx context.Context, req gen.SearchOrgRequestObject) 
 		return nil, err
 	}
 
+	secrets, err := s.searchSecrets(ctx, q, limit)
+	if err != nil {
+		return nil, err
+	}
+
 	return gen.SearchOrg200JSONResponse{
-		Items: items, Agents: searchAgents(fs, q, limit), Factories: searchFactories(fs, q, limit), Connections: conns,
+		Items: items, Agents: searchAgents(fs, q, limit), Factories: searchFactories(fs, q, limit), Connections: conns, Secrets: secrets,
 	}, nil
 }
 
@@ -172,6 +182,34 @@ func (s *server) searchConnections(ctx context.Context, q string, limit int) ([]
 	}
 
 	slices.SortFunc(out, func(a, b gen.ConnectionHit) int {
+		return cmp.Or(cmp.Compare(matchRank(a.Name, q), matchRank(b.Name, q)), cmp.Compare(a.Name, b.Name))
+	})
+
+	return firstOf(out, limit), nil
+}
+
+// searchSecrets finds the organization's secrets whose name contains q, with their scope and
+// expiry and never a value, for a caller who holds secret:read; anyone else finds none.
+func (s *server) searchSecrets(ctx context.Context, q string, limit int) ([]gen.SecretHit, error) {
+	out := []gen.SecretHit{}
+
+	// Without secret:read the group is empty, not a refusal: the search still answers.
+	if err := s.ask(ctx, permSecretRead, ""); err != nil {
+		return out, nil //nolint:nilerr // a denial empties the group
+	}
+
+	secrets, err := s.secrets.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, sec := range secrets {
+		if matchRank(sec.Name, q) >= 0 {
+			out = append(out, gen.SecretHit{Name: sec.Name, Scope: secretScopeOut(sec.Scope), ExpiresAt: sec.ExpiresAt})
+		}
+	}
+
+	slices.SortFunc(out, func(a, b gen.SecretHit) int {
 		return cmp.Or(cmp.Compare(matchRank(a.Name, q), matchRank(b.Name, q)), cmp.Compare(a.Name, b.Name))
 	})
 
