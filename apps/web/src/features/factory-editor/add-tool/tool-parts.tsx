@@ -95,7 +95,8 @@ export function useCreateSecrets() {
       });
       made.current.add(c.name);
     }
-    if (creates.length > 0) await client.invalidateQueries({ queryKey: keys.secrets(org.id) });
+    // The list refetches in the background: the pickers show the new secret when it arrives.
+    if (creates.length > 0) void client.invalidateQueries({ queryKey: keys.secrets(org.id) });
   };
 }
 

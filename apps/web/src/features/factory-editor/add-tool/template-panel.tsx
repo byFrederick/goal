@@ -48,6 +48,10 @@ export function TemplatePanel({
     Object.fromEntries(servers.map(([name, s]) => [name, { ...s.tools } as Record<string, ToolMode>])),
   );
   const names = pickedNames(template, picks);
+  // The preview names the secret a slot has so far, a suggested new one included.
+  const shownNames = Object.fromEntries(
+    Object.entries(picks).flatMap(([slot, p]) => (p.name.trim() !== '' ? [[slot, p.name.trim()]] : [])),
+  );
   const plainEnv = Object.entries(template.adds.env).filter(([, v]) => plainValue(v));
 
   const envValues = useMemo(
@@ -55,8 +59,8 @@ export function TemplatePanel({
     [template, plainEnv, plain],
   );
   const adds = useMemo(
-    () => fillAdds({ ...template.adds, env: envValues }, names ?? {}, { ...(url ? { url } : {}), modes }),
-    [template, envValues, names, url, modes],
+    () => fillAdds({ ...template.adds, env: envValues }, shownNames, { ...(url ? { url } : {}), modes }),
+    [template, envValues, shownNames, url, modes],
   );
 
   const test = useMutation({

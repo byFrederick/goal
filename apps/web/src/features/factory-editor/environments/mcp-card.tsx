@@ -65,7 +65,7 @@ export function knownTools(server: McpServer, test: ServerTest | undefined): str
 function StatusLine({ test, testing }: { test: ServerTest | undefined; testing: boolean }) {
   if (testing) {
     return (
-      <span role="status" className="inline-flex items-center gap-1.5 text-secondary text-muted">
+      <span className="inline-flex items-center gap-1.5 text-secondary text-muted">
         <Loader2 size={13} aria-hidden="true" className="animate-spin" />
         Testing…
       </span>
@@ -105,8 +105,18 @@ export function McpCard({
   const params = useFactoryParams();
   const org = useOrg();
   const servers = Object.entries(spec.mcp);
+  const said = Object.values(results)
+    .map(
+      (t) =>
+        `${t.server}: ${t.ok ? `${t.tools.length} found` : t.tested ? `failed, ${t.error ?? 'no answer'}` : 'runs in the box'}`,
+    )
+    .join('. ');
   return (
     <Card title="MCP servers" hint="Each tool: Allow, Ask first or Off">
+      {/* The answers are read out as they arrive: the rows themselves sit inside buttons. */}
+      <p role="status" className="sr-only">
+        {said}
+      </p>
       {servers.length === 0 ? (
         <p className={cn('m-0 py-4 text-body text-muted', rowPad)}>None. Add one from the catalog or write your own.</p>
       ) : (
