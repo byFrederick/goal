@@ -2845,8 +2845,8 @@ paths:
       tags: [access]
       summary: Test an environment's MCP servers or a template
       description: >-
-        Tests the environment of the draft, or of the version the body names (draft, current or a
-        number). Each remote MCP server, or only the one server names, is called with tools/list,
+        Tests the environment of the draft (of the current version while no draft is open), or of
+        the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list,
         its headers' {{secret}} references opened inside goald for the factory (audited as
         secret.used without a run), through public addresses only, following no redirect, within
         10 seconds; stdio servers answer tested false. With template, the template's remote MCP
@@ -9802,7 +9802,7 @@ components:
     EnvironmentTestRequest:
       type: object
       properties:
-        version: { type: string, description: "draft (the default), current or a version number" }
+        version: { type: string, description: "draft (the default while one is open), current (the default otherwise) or a version number" }
         server: { type: string, description: Only this MCP server }
         template: { $ref: "#/components/schemas/EnvironmentTestTemplate" }
     EnvironmentTestTemplate:

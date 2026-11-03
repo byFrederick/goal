@@ -75,7 +75,12 @@ func (s *server) TestEnvironment(ctx context.Context, req gen.TestEnvironmentReq
 		return nil, err
 	}
 
+	// The draft by default, or the version that runs while none is open.
 	sel := authoring.VersionSelector{Kind: authoring.SelectDraft}
+	if rec.Draft == nil {
+		sel.Kind = authoring.SelectCurrent
+	}
+
 	if body.Version != nil {
 		if sel, err = authoring.ParseVersion(*body.Version); err != nil {
 			return nil, err
