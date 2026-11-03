@@ -626,3 +626,27 @@ func (w *world) text(id domain.KnowledgeDocumentID) string {
 
 	return text
 }
+
+// A source on a secret reads the site and email its config names with the secret's value as the
+// API token; a config without them is refused before anything is sent.
+func TestReader_ReadsWithASecret(t *testing.T) {
+	t.Parallel()
+
+	s := newSite(t, pages...)
+	spec := domain.SyncSpec{
+		Source: domain.KnowledgeSource{Name: nameWiki, Kind: domain.SourceSynced, Secret: "wiki-token", Config: map[string]string{
+			domain.SourceReaderKey: "confluence", fieldSite: s.host(), "email": email, cfgSpaces: spaceENG,
+		}},
+		Secret: &domain.ResolvedSecret{Secret: domain.Secret{Name: "wiki-token"}, Value: token},
+	}
+
+	if got := list(t, s.reader(), spec); !slices.Equal(slices.Sorted(maps.Keys(got)), []string{"11", "12", "13"}) {
+		t.Errorf("listed %v; want ENG's current pages", slices.Sorted(maps.Keys(got)))
+	}
+
+	delete(spec.Source.Config, "email")
+
+	if err := listErr(t, s.reader(), spec); !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("no email: err = %v; want domain.ErrInvalid", err)
+	}
+}

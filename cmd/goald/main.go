@@ -179,7 +179,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 
 	definitionStore := postgres.NewDefinitions(pool, objects, log)
-	kb := openKnowledge(s, store, connections, objects, clock, log)
+	kb := openKnowledge(s, store, connections, orgSecrets, objects, clock, log)
 
 	// The organization policy (ADR 0024) is a ceiling over every definition: publishing checks a
 	// version's models against it, and the engine applies it at each run's start.
@@ -356,10 +356,11 @@ type knowledgeBase struct {
 
 // openKnowledge wires the knowledge base: uploads of at most GOAL_UPLOAD_MAX_BYTES each, read
 // from the bucket; embeddings from GOAL_EMBED_URL's model or, without one, keyword search only;
-// GOAL_KB_WORKERS workers syncing due sources. A synced source is read by its connection kind's
-// sync reader through the public-only transport: gitdocs (GitHub and GitLab repositories) or
+// GOAL_KB_WORKERS workers syncing due sources. A synced source is read with its secret by the
+// reader its config names, or by its connection kind's sync reader while it is still on a
+// connection, through the public-only transport: gitdocs (GitHub and GitLab repositories) or
 // confluence (the spaces of a Confluence Cloud site).
-func openKnowledge(s settings, store *postgres.Store, connections *postgres.Connections, objects ports.ObjectStore,
+func openKnowledge(s settings, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets, objects ports.ObjectStore,
 	clock ports.Clock, log *slog.Logger,
 ) knowledgeBase {
 	kb := postgres.NewKnowledge(store)
@@ -391,7 +392,7 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 	return knowledgeBase{
 		kb: kb, uploads: uploads, searcher: knowledge.NewSearcher(kb, embedder, log),
 		ingestor: knowledge.NewIngestor(knowledge.IngestorConfig{
-			Knowledge: kb, Connections: connections, Uploads: uploads,
+			Knowledge: kb, Connections: connections, Secrets: secrets, Uploads: uploads,
 			Readers: readers, Embedder: embedder, Clock: clock, Log: log, Workers: s.KBWorkers,
 		}),
 	}

@@ -88,6 +88,7 @@ type reader struct {
 	docs    map[string]string
 	fetched []string
 	conn    *domain.ResolvedConnection
+	secret  string // the value of the secret it was given
 	block   map[string]chan struct{}
 	down    bool // every fetch fails, as a server answering 503
 }
@@ -114,6 +115,11 @@ func (r *reader) fetches() []string {
 func (r *reader) List(_ context.Context, s domain.SyncSpec) iter.Seq2[domain.SourceItem, error] {
 	r.mu.Lock()
 	r.conn = s.Connection
+
+	if s.Secret != nil {
+		r.secret = s.Secret.Value
+	}
+
 	docs := maps.Clone(r.docs)
 	r.mu.Unlock()
 
@@ -159,6 +165,7 @@ type world struct {
 	org     domain.OrgID
 	tenancy *porttest.Tenancy
 	conns   *porttest.Connections
+	secrets *porttest.OrgSecrets
 	kb      ports.Knowledge
 	objects *porttest.ObjectStore
 	uploads *knowledge.Uploads
@@ -177,7 +184,10 @@ func newWorld(t *testing.T) *world {
 	}
 	w.tenancy = porttest.NewTenancy(w.clock.Now)
 	w.conns = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), w.tenancy)
-	w.kb = porttest.NewKnowledge(w.conns, w.tenancy)
+	w.secrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), w.tenancy, w.conns)
+	kb := porttest.NewKnowledge(w.conns, w.tenancy)
+	kb.ReadSecrets(w.secrets)
+	w.kb = kb
 	w.uploads = knowledge.NewUploads(w.kb, w.objects, 0)
 
 	o, err := w.tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: "acme", Name: "Acme"})
@@ -220,7 +230,7 @@ func (w *world) ingestor(e ports.Embedder, kb ports.Knowledge) *knowledge.Ingest
 	}
 
 	return knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: kb, Connections: w.conns, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: w.docs},
+		Knowledge: kb, Connections: w.conns, Secrets: w.secrets, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: w.docs},
 		Embedder: e, Clock: w.clock,
 	})
 }
@@ -826,4 +836,53 @@ func TestIngestor_LeasesSurviveAKilledGoald(t *testing.T) {
 	if src := w.source("runbooks"); src.Status != domain.SyncIdle || src.Documents != 1 {
 		t.Errorf("runbooks = %+v, want synced by the second goald", src)
 	}
+}
+
+// A synced source on a secret is read by the reader its config names, with the secret opened at
+// sync time: a value replaced since the source was made is the one read. A secret limited to some
+// factories fails the source's sync, naming the secret.
+func TestIngest_SyncOpensTheSecret(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	ctx := w.ctx()
+
+	for _, n := range []domain.NewSecret{
+		{Name: "docs-token", Value: "test-token-1", Scope: domain.SecretScope{All: true}},
+		{Name: "acme-only", Value: "test-token-2", Scope: domain.SecretScope{Factories: []domain.FactoryID{"0b6f1c9e-0000-7000-8000-000000000001"}}},
+	} {
+		if _, err := w.secrets.Create(ctx, n, admin); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := w.kb.DeleteSource(ctx, "runbooks", admin, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, n := range []domain.NewKnowledgeSource{
+		{Name: "runbooks", Title: "Runbooks", Kind: domain.SourceSynced, Secret: "docs-token", Config: map[string]string{domain.SourceReaderKey: gitdocsSync}},
+		{Name: "scoped", Title: "Scoped", Kind: domain.SourceSynced, Secret: "acme-only", Config: map[string]string{domain.SourceReaderKey: gitdocsSync}},
+	} {
+		if _, err := w.kb.CreateSource(ctx, n, admin); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	replaced := "test-token-3"
+	if _, err := w.secrets.Patch(ctx, "docs-token", domain.SecretPatch{Replace: &replaced}, admin); err != nil {
+		t.Fatal(err)
+	}
+
+	w.docs.set(map[string]string{deployMD: "# Deploy\n\nShip on Tuesdays."})
+	w.syncDue(w.ingestor(nil, nil))
+
+	w.want("the reader's secret (opened at sync time)", w.docs.secret == replaced, w.docs.secret == replaced)
+	w.want("the reader's connection", w.docs.conn, w.docs.conn == nil)
+
+	src := w.source("runbooks")
+	w.want("runbooks after its sync", src, src.Status == domain.SyncIdle, src.Documents == 1)
+
+	scoped := w.source("scoped")
+	w.want("the source on a scoped secret", scoped, scoped.Status == domain.SyncFailed, strings.Contains(scoped.LastError, "acme-only"))
 }
