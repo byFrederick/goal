@@ -1,10 +1,11 @@
 // Package github implements ports.CodeHost with GitHub's REST API, called from the goald host
-// with the credential of a connection whose kind's code host is github (spec 4 §5.5).
+// with a code host login (domain.CodeHostLogin), built today from a connection whose kind's code
+// host is github (spec 4 §5.5).
 //
 // It reads pull requests, merges them, updates their branches with their base and deletes
 // branches, reads a repository's branch heads and the commits between two commits, and lists the
-// owners and repositories the connection reaches, nothing else. The connection's
-// rendered git login says which host it serves and holds the token; a pull request URL on any
+// owners and repositories the login reaches, nothing else. The login says which host it serves
+// and holds the token; a pull request URL on any
 // other host is refused before anything is sent, and the repository is the URL's own. The API is
 // https://api.github.com for github.com, https://api.<host> for a GitHub Enterprise Cloud host
 // (<name>.ghe.com) and https://<host>/api/v3 for a GitHub Enterprise Server. A merge names the
@@ -110,7 +111,7 @@ func New(cfg Config) *Client {
 		http: &http.Client{
 			Timeout:   cfg.Timeout,
 			Transport: cfg.Transport,
-			// A credentialed request is never sent anywhere but the connection's API.
+			// A credentialed request is never sent anywhere but the login's API.
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}
@@ -130,12 +131,13 @@ func (p pull) repoPath(rest string) string {
 
 var pullPath = regexp.MustCompile(`^/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/([1-9][0-9]*)/?$`)
 
-// open checks that prURL is a pull request on the host of c's git login and names it.
-func (cl *Client) open(c domain.ResolvedConnection, prURL string) (pull, error) {
-	host, token, err := c.GitLogin()
-	if err != nil {
+// open checks that prURL is a pull request on the login's host and names it.
+func (cl *Client) open(login domain.CodeHostLogin, prURL string) (pull, error) {
+	if err := login.Validate(); err != nil {
 		return pull{}, err
 	}
+
+	host, token := login.Host, login.Token
 
 	pu, err := url.Parse(prURL)
 	if err != nil {
@@ -148,7 +150,7 @@ func (cl *Client) open(c domain.ResolvedConnection, prURL string) (pull, error) 
 	}
 
 	if !strings.EqualFold(pu.Host, host) {
-		return pull{}, fmt.Errorf("%s is not on %s, the host of connection %s: %w", prURL, host, c.Connection.Name, ports.ErrNotMergeable)
+		return pull{}, fmt.Errorf("%s is not on %s, the host of connection %s: %w", prURL, host, login.Name, ports.ErrNotMergeable)
 	}
 
 	return pull{api: cl.apiFor(host), token: token, owner: m[1], repo: m[2], number: m[3]}, nil
@@ -156,12 +158,13 @@ func (cl *Client) open(c domain.ResolvedConnection, prURL string) (pull, error) 
 
 var repoPath = regexp.MustCompile(`^/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$`)
 
-// openRepo checks that repoURL is a repository on the host of c's git login and names it.
-func (cl *Client) openRepo(c domain.ResolvedConnection, repoURL string) (pull, error) {
-	host, token, err := c.GitLogin()
-	if err != nil {
+// openRepo checks that repoURL is a repository on the login's host and names it.
+func (cl *Client) openRepo(login domain.CodeHostLogin, repoURL string) (pull, error) {
+	if err := login.Validate(); err != nil {
 		return pull{}, err
 	}
+
+	host, token := login.Host, login.Token
 
 	u, err := url.Parse(repoURL)
 	if err != nil {
@@ -174,7 +177,7 @@ func (cl *Client) openRepo(c domain.ResolvedConnection, repoURL string) (pull, e
 	}
 
 	if !strings.EqualFold(u.Host, host) {
-		return pull{}, fmt.Errorf("%s is not on %s, the host of connection %s", repoURL, host, c.Connection.Name)
+		return pull{}, fmt.Errorf("%s is not on %s, the host of connection %s", repoURL, host, login.Name)
 	}
 
 	return pull{api: cl.apiFor(host), token: token, owner: m[1], repo: m[2]}, nil
@@ -267,8 +270,8 @@ func sleep(ctx context.Context, d time.Duration) error {
 }
 
 // PullRequest implements ports.CodeHost.
-func (cl *Client) PullRequest(ctx context.Context, c domain.ResolvedConnection, prURL string) (ports.PullRequest, error) {
-	p, err := cl.open(c, prURL)
+func (cl *Client) PullRequest(ctx context.Context, login domain.CodeHostLogin, prURL string) (ports.PullRequest, error) {
+	p, err := cl.open(login, prURL)
 	if err != nil {
 		return ports.PullRequest{}, err
 	}
@@ -302,8 +305,8 @@ const headWasModified = "head branch was modified"
 // refuses with 409 "Head branch was modified". Merge reads the pull request again after each of
 // cl.retries and merges at the head it reports now; a pull request found merged meanwhile is not
 // merged twice. Any other refusal, or the last 409, is ErrNotMergeable.
-func (cl *Client) Merge(ctx context.Context, c domain.ResolvedConnection, prURL string, m ports.Merge) (string, error) {
-	p, err := cl.open(c, prURL)
+func (cl *Client) Merge(ctx context.Context, login domain.CodeHostLogin, prURL string, m ports.Merge) (string, error) {
+	p, err := cl.open(login, prURL)
 	if err != nil {
 		return "", err
 	}
@@ -400,8 +403,8 @@ const dirty = "dirty"
 // background once it answers 202. The pull request is read once first: a dirty one is a conflict
 // without asking. A branch already up to date is a success; a 422 is a conflict only when GitHub
 // names one, and any other refusal is ErrNotMergeable.
-func (cl *Client) UpdateBranch(ctx context.Context, c domain.ResolvedConnection, prURL, headSHA string) error {
-	p, err := cl.open(c, prURL)
+func (cl *Client) UpdateBranch(ctx context.Context, login domain.CodeHostLogin, prURL, headSHA string) error {
+	p, err := cl.open(login, prURL)
 	if err != nil {
 		return err
 	}
@@ -451,8 +454,8 @@ func updateAnswer(prURL string, status int, msg string) error {
 }
 
 // DeleteBranch implements ports.CodeHost.
-func (cl *Client) DeleteBranch(ctx context.Context, c domain.ResolvedConnection, prURL, branch string) error {
-	p, err := cl.open(c, prURL)
+func (cl *Client) DeleteBranch(ctx context.Context, login domain.CodeHostLogin, prURL, branch string) error {
+	p, err := cl.open(login, prURL)
 	if err != nil {
 		return err
 	}
@@ -475,8 +478,8 @@ func (cl *Client) DeleteBranch(ctx context.Context, c domain.ResolvedConnection,
 }
 
 // BranchHead implements ports.CodeHost. An empty branch is the repository's default_branch.
-func (cl *Client) BranchHead(ctx context.Context, c domain.ResolvedConnection, repoURL, branch string) (string, error) {
-	p, err := cl.openRepo(c, repoURL)
+func (cl *Client) BranchHead(ctx context.Context, login domain.CodeHostLogin, repoURL, branch string) (string, error) {
+	p, err := cl.openRepo(login, repoURL)
 	if err != nil {
 		return "", err
 	}
@@ -531,8 +534,8 @@ type commitJSON struct {
 // read once more for its own (up to ports.MaxCompareCommits+1 requests in all); any failure
 // fails the whole call. GitHub lists at most 300 files of one commit, and Compare does not page
 // past them.
-func (cl *Client) Compare(ctx context.Context, c domain.ResolvedConnection, repoURL, base, head string) (ports.Comparison, error) {
-	p, err := cl.openRepo(c, repoURL)
+func (cl *Client) Compare(ctx context.Context, login domain.CodeHostLogin, repoURL, base, head string) (ports.Comparison, error) {
+	p, err := cl.openRepo(login, repoURL)
 	if err != nil {
 		return ports.Comparison{}, err
 	}
@@ -594,11 +597,12 @@ var loginName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 // page. Each repository's languages are read once more (GET /repos/{full_name}/languages),
 // languageReads at a time, the largest by bytes first: up to ports.MaxRepositories+3 requests in
 // all, and any failure fails the whole call.
-func (cl *Client) Repositories(ctx context.Context, c domain.ResolvedConnection, owner string) (ports.RepositoryList, error) {
-	host, token, err := c.GitLogin()
-	if err != nil {
+func (cl *Client) Repositories(ctx context.Context, login domain.CodeHostLogin, owner string) (ports.RepositoryList, error) {
+	if err := login.Validate(); err != nil {
 		return ports.RepositoryList{}, err
 	}
+
+	host, token := login.Host, login.Token
 
 	if owner != "" && !loginName.MatchString(owner) {
 		return ports.RepositoryList{}, fmt.Errorf("repositories of %q: not an account or organization name", owner)
@@ -768,7 +772,7 @@ func refPath(ref string) string {
 	return strings.Join(segments, "/")
 }
 
-// call sends one API request with the connection's token and decodes a successful JSON answer
+// call sends one API request with the login's token and decodes a successful JSON answer
 // into out (when out is not nil). It returns the status and GitHub's message, if any; err is
 // only for requests that got no answer or an unreadable one. The token is scrubbed from the
 // message and from errors.

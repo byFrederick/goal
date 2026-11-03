@@ -8,9 +8,12 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"net/url"
 	"path"
 	"slices"
+	"strings"
 
+	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
@@ -34,8 +37,9 @@ type runBundle struct {
 	// Git configures a credential helper per login: the repository connection's and those of the
 	// agent's connections.
 	Git []gitCredential `json:"git_credentials"`
-	// Tools are mise tool specs installed after the repository's own: the runtime's, then the CLI
-	// tools of the agent's connections.
+	// Tools are mise tool specs installed after the repository's own: on secrets the agent's
+	// environment's, in file order; otherwise the runtime's, then the CLI tools of the agent's
+	// connections.
 	Tools []string `json:"tools"`
 	// Definition is a draft request's draft (definitionBundle), written into the workspace
 	// instead of a repository; nil for every other run.
@@ -75,8 +79,11 @@ type bundleSpec struct {
 	MaxTurns   int                        `json:"max_turns,omitempty"`
 	MaxUSD     float64                    `json:"max_usd,omitempty"`
 	// Connections are the agent's organization connections its token grants, in its order: the
-	// worker configures their MCP servers and tells the agent about them.
+	// worker configures their MCP servers and tells the agent about them. None on secrets.
 	Connections []bundleConnection `json:"connections"`
+	// Environment is the agent's environment file on a version on secrets (ADR 0037); nil on
+	// connections.
+	Environment *bundleEnvironment `json:"environment,omitempty"`
 	// KnowledgeSources are the knowledge sources the gateway's knowledge tools search for the
 	// run, which the worker's prompt names.
 	KnowledgeSources []string `json:"knowledge_sources,omitempty"`
@@ -130,6 +137,49 @@ type bundleConnection struct {
 	AlwaysAllowOffered []string `json:"always_allow_offered"`
 }
 
+// bundleEnvironment is what the worker sets up and tells the agent of the agent's environment file
+// (ADR 0037 decisions 5, 8 and 11), never a value: the box's env already holds the values, the
+// files' contents and the MCP servers' secrets (domain.FileEnv, domain.SecretEnv).
+type bundleEnvironment struct {
+	Name string `json:"name"`
+	// MCPServers are the file's MCP servers, sorted by name.
+	MCPServers []bundleMCPServer `json:"mcp_servers"`
+	// Setup are the commands prepare runs after the clone and the tools, in file order.
+	Setup []string `json:"setup"`
+	// Files are the files the worker writes, sorted by path, each from its variable.
+	Files []bundleFile `json:"files"`
+	// Env are the names of the file's env variables, sorted.
+	Env []string `json:"env"`
+	// CLIs are the names of the file's tools, in file order, without their versions.
+	CLIs []string `json:"clis"`
+}
+
+// bundleMCPServer is one MCP server of an environment: remote (URL and Headers) or stdio (Command
+// and Env), each secret in them as ${GOAL_SECRET_<NAME>}.
+type bundleMCPServer struct {
+	Name    string            `json:"name"`
+	URL     string            `json:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+	Command []string          `json:"command,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+	// ToolModes are the server's tool modes for the run's agent (domain.ServerToolModes): a tool's
+	// mode is the first entry whose tool matches it as path.Match does, and allow when none does.
+	// Every ask offers Always allow.
+	ToolModes []bundleToolMode `json:"tool_modes"`
+}
+
+// bundleToolMode is one entry of a server's tool modes: a tool name or glob and its mode.
+type bundleToolMode struct {
+	Tool string                    `json:"tool"`
+	Mode domain.ConnectionToolMode `json:"mode"`
+}
+
+// bundleFile is one file of an environment: its path and the variable that holds its content.
+type bundleFile struct {
+	Path string `json:"path"`
+	Env  string `json:"env"`
+}
+
 // bundleRepository is the factory's repository and the run's branch, which prepare checks out:
 // the remote branch when it exists, otherwise a new one from Base. Base is the branch the run
 // builds on and opens its pull request into, an assembly's integration branch for its parts in
@@ -143,11 +193,15 @@ type bundleRepository struct {
 }
 
 // gitCredential is a login git uses for https://<Host>: Username and the value of the variable
-// PasswordEnv, read when git asks, so the password is never written to disk.
+// PasswordEnv. Without Store prepare's helper reads the variable when git asks, so the password is
+// never written to disk. With Store, the repository token's login (ADR 0037 decision 7), prepare
+// saves it in git's credential store under the box's home, so the agent's own push signs in
+// without the variable in its env.
 type gitCredential struct {
 	Host        string `json:"host"`
 	Username    string `json:"username"`
 	PasswordEnv string `json:"password_env"`
+	Store       bool   `json:"store,omitempty"`
 }
 
 // ServeRun serves GET /run: the bundle of the run whose task token the request carries, from
@@ -396,7 +450,13 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 		b.Files[path.Join("agent", p)] = body
 	}
 
-	if err := g.addConnections(ctx, c, line, agent, &b); err != nil {
+	if line.OnSecrets() {
+		err = g.addEnvironment(ctx, c, line, agent, &b)
+	} else {
+		err = g.addConnections(ctx, c, line, agent, &b)
+	}
+
+	if err != nil {
 		return runBundle{}, err
 	}
 
@@ -588,8 +648,9 @@ func withoutPlan(schema []byte) ([]byte, error) {
 	return json.Marshal(s)
 }
 
-// addRepository puts the repository in b with the git login of its connection, which clones it;
-// a public repository needs none.
+// addRepository puts the repository in b with the git login that clones it: the repository
+// token's on a version on secrets (repositoryLogin), otherwise its connection's; a public
+// repository needs none.
 func (g *Gateway) addRepository(
 	ctx context.Context, repo domain.Repository, branch, base string, fresh domain.FreshBase, b *runBundle,
 ) error {
@@ -598,6 +659,17 @@ func (g *Gateway) addRepository(
 	}
 
 	b.Repository = &bundleRepository{URL: repo.URL, Branch: branch, Base: base, FreshBase: fresh}
+
+	if repo.Token != "" {
+		c, err := repositoryLogin(repo)
+		if err != nil {
+			return err
+		}
+
+		b.addGit(c)
+
+		return nil
+	}
 
 	if repo.Connection == "" {
 		return nil
@@ -613,6 +685,69 @@ func (g *Gateway) addRepository(
 	}
 
 	return nil
+}
+
+// addEnvironment describes the agent's environment file in b on a version on secrets, as the
+// engine resolved it at run start (engine.agentEnvironment): its MCP servers with their tool modes
+// for the agent, its setup, files, variable names and tools.
+func (g *Gateway) addEnvironment(ctx context.Context, c domain.TaskClaims, line domain.Line, agent domain.AgentSpec, b *runBundle) error {
+	env, ok := line.Environment(agent.Environment)
+	if !ok {
+		name := cmp.Or(agent.Environment, domain.DefaultEnvironment)
+		return fmt.Errorf("agent %s gets environment %s, which version %d has no environments/%s.yaml for", agent.Name, name, line.Number, name)
+	}
+
+	e := &bundleEnvironment{
+		Name: env.Name, MCPServers: []bundleMCPServer{}, Setup: append([]string{}, env.Setup...), Files: []bundleFile{},
+		Env: append([]string{}, slices.Sorted(maps.Keys(env.Env))...), CLIs: []string{},
+	}
+
+	var rules standingRules
+
+	for _, name := range slices.Sorted(maps.Keys(env.MCP)) {
+		s := env.MCP[name].Rendered()
+		file := s.ToolModes()
+
+		active, err := rules.of(ctx, g.connections, slices.Contains(slices.Collect(maps.Values(file)), domain.ToolModeAsk))
+		if err != nil {
+			return err
+		}
+
+		// ADR 0037 decision 12 caps the file's modes by the organization policy, which has no MCP cap
+		// yet: the cap is empty.
+		modes := []bundleToolMode{}
+		for _, m := range domain.ServerToolModes(file, nil, active, c.FactoryID, env.Name, name, agent.Name) {
+			modes = append(modes, bundleToolMode{Tool: m.Tool, Mode: m.Mode})
+		}
+
+		e.MCPServers = append(e.MCPServers, bundleMCPServer{
+			Name: name, URL: s.URL, Headers: s.Headers, Command: s.Command, Env: s.Env, ToolModes: modes,
+		})
+	}
+
+	fileEnv := domain.FileEnv(env.Files)
+	for _, p := range slices.Sorted(maps.Keys(env.Files)) {
+		e.Files = append(e.Files, bundleFile{Path: p, Env: fileEnv[p]})
+	}
+
+	b.Tools = append([]string{}, env.Tools...)
+	for _, t := range env.Tools {
+		e.CLIs = append(e.CLIs, toolName(t))
+	}
+
+	b.Spec.Environment = e
+
+	return nil
+}
+
+// toolName is mise tool spec t without its version: go for go@1.26, npm:@acme/cli for
+// npm:@acme/cli@2. An @ right after : or / starts a package scope, not a version.
+func toolName(t string) string {
+	if i := strings.LastIndexByte(t, '@'); i > 0 && t[i-1] != ':' && t[i-1] != '/' {
+		return t[:i]
+	}
+
+	return t
 }
 
 // addConnections describes the agent's organization connections that its token grants in b, with
@@ -631,7 +766,7 @@ func (g *Gateway) addConnections(ctx context.Context, c domain.TaskClaims, line 
 			return err
 		}
 
-		active, err := rules.of(ctx, g.connections, conn)
+		active, err := rules.of(ctx, g.connections, slices.Contains(slices.Collect(maps.Values(conn.ToolModes)), domain.ToolModeAsk))
 		if err != nil {
 			return err
 		}
@@ -655,15 +790,16 @@ func (g *Gateway) addConnections(ctx context.Context, c domain.TaskClaims, line 
 }
 
 // standingRules are the organization's active standing rules, read once for a bundle and only
-// when one of its connections has a tool that asks first.
+// when one of its connections or MCP servers has a tool that asks first.
 type standingRules struct {
 	rules  []domain.StandingRule
 	loaded bool
 }
 
-// of returns the active rules when conn has a tool that asks first, and none otherwise.
-func (s *standingRules) of(ctx context.Context, connections Connections, conn domain.Connection) ([]domain.StandingRule, error) {
-	if s.loaded || !slices.Contains(slices.Collect(maps.Values(conn.ToolModes)), domain.ToolModeAsk) {
+// of returns the active rules when asks, a connection or server having a tool that asks first,
+// and none otherwise.
+func (s *standingRules) of(ctx context.Context, connections Connections, asks bool) ([]domain.StandingRule, error) {
+	if s.loaded || !asks {
 		return s.rules, nil
 	}
 
@@ -691,6 +827,28 @@ func (g *Gateway) outline(ctx context.Context, name string) (domain.Connection, 
 	}
 
 	return conn, k.Outline(conn), k, nil
+}
+
+// forgeUsers are the user names a forge takes with a token as the password.
+var forgeUsers = map[string]string{"github": "x-access-token", "gitlab": "oauth2"}
+
+// repositoryLogin is the stored git login of repo's token for the host of its URL: the engine
+// gives prepare the token as domain.RepositoryTokenEnv, and the forge (repo.Forge, or the one the
+// host names) says the user name.
+func repositoryLogin(repo domain.Repository) (gitCredential, error) {
+	u, err := url.Parse(repo.URL)
+	if err != nil || u.Host == "" {
+		return gitCredential{}, fmt.Errorf("runtime.repository.url %q has no host", repo.URL)
+	}
+
+	forge := cmp.Or(repo.Forge, config.KnownForge(u.Hostname()))
+
+	user, ok := forgeUsers[forge]
+	if !ok {
+		return gitCredential{}, fmt.Errorf("runtime.repository: host %s names no forge; set runtime.repository.forge", u.Host)
+	}
+
+	return gitCredential{Host: u.Host, Username: user, PasswordEnv: domain.RepositoryTokenEnv, Store: true}, nil
 }
 
 func gitCredentialOf(g domain.KindGit) gitCredential {

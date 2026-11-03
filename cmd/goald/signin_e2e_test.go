@@ -325,8 +325,9 @@ func (s *e2eStack) checkAPIKeys(t *testing.T) {
 	}
 }
 
-// startE2EStack starts the throwaway stack, removed when the test ends.
-func startE2EStack(t *testing.T) *e2eStack {
+// startE2EStack starts the throwaway stack, removed when the test ends. extraEnv are more of
+// goald's variables (NAME=value), as the run on secrets test sets its gateway and agents network.
+func startE2EStack(t *testing.T, extraEnv ...string) *e2eStack {
 	t.Helper()
 
 	suffix := randomSuffix(t)
@@ -360,6 +361,8 @@ func startE2EStack(t *testing.T) *e2eStack {
 	if docker := os.Getenv("DOCKER_HOST"); docker != "" {
 		goaldEnv = append(goaldEnv, "DOCKER_HOST="+docker)
 	}
+
+	goaldEnv = append(goaldEnv, extraEnv...)
 
 	// goald first: it migrates the database, whose schema the auth service checks at its start.
 	s.start(t, "goald", e2eListen, "/v1/health", []string{"../../bin/goald"}, goaldEnv)

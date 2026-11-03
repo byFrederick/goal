@@ -16,7 +16,7 @@ A secret is an organization's named value. It has:
 - an optional description, an optional expiry and a reminder of 1 to 90 days before it;
 - a scope: all factories, including ones created later, or a list of factories.
 
-The Secrets page lists them with where each is used, when it was last used and what expires soon. **New secret** opens a side sheet, and **Import** reads a `.env` or YAML file and checks it before anything is saved. A secret's page shows its scope, its expiry and its uses, and has Replace value and Delete. Delete is disabled, with the reason, while a published definition, a knowledge source, a webhook or the organization's Slack setting uses the secret. Changing a secret needs an owner or admin who has signed in within the last 10 minutes. Everyone in the organization can read the list, never a value.
+The Secrets page lists them with where each is used, when it was last used and what expires soon. **New secret** opens a side sheet, and **Import** reads a `.env` or YAML file and checks it before anything is saved. A secret's page shows its scope, its expiry and its uses, and has Replace value and Delete. Delete is disabled, with the reason, while something uses the secret: a factory's current published version that refers to it as its repository token, its model key, a trigger's model-agrees key or from an environment file, a knowledge source that reads with it, or a connection that refers to it. An archived factory doesn't count. Changing a secret needs an owner or admin who has signed in within the last 10 minutes. Everyone in the organization can read the list, never a value.
 
 Values come in only by pasting them, through standard input or from an import file, never on the command line, and no command prints one.
 
@@ -52,19 +52,25 @@ In the Definition, the **Environments** section has a tab per environment, and *
 
 Two secrets are named in the factory's runtime, not in an environment file:
 
-- `runtime.repository` is `{url, token}`. The token clones, pushes and reads and merges pull requests. There is no app to install: the token's own scope is the limit, so a fine-grained token for one repository is the right choice. The host picks the code host: `github.com` is GitHub and `gitlab.com` is GitLab.
+- `runtime.repository` is `{url, token}`. The token clones, pushes and reads and merges pull requests. There is no app to install: the token's own scope is the limit, so a fine-grained token for one repository is the right choice. The host picks the code host: `github.com` is GitHub and `gitlab.com` is GitLab. Any other host needs `forge: github` or `forge: gitlab`; publishing refuses a version without it, and so does a merge.
 - `runtime.modelKey` is the secret that gives every run its model. A value that starts with `sk-ant-oat` is a Claude subscription token and a run gets it as `CLAUDE_CODE_OAUTH_TOKEN`. Any other value is an Anthropic API key and becomes `ANTHROPIC_API_KEY`.
 
 Neither reaches the agent's environment unless an environment file names it, for example as `GH_TOKEN` for `gh`. Both are set on the factory's Settings page (see [Factory settings](../../guides/factory-settings/)).
+
+The repository token signs git in to the repository's host for three things: the clone, the push of a new base branch (an assembly's integration branch), and the agent's own `git push`. Git signs in as `x-access-token` on GitHub and as `oauth2` on GitLab, with the token as the password. Goal keeps the token in git's credential store inside the run's box, outside the workspace, so the agent's push works without the token in its environment. The box and its store are thrown away after the run. The agent's prompt says that git signs in with the repository token. A public repository needs no token: it clones without a login.
+
+goald reads and merges pull requests with the same token: a person's merge, a gate's merge on approval, the landing pull request of an integration branch, and the reads of a part's pull request base and of the default branch's head and history that an item's base commit and its "changed since your plan" note come from. A pull request on a host other than the repository's is refused before the token is opened, and so is a merge for a repository with no token. Each of these opens the token and writes one `secret.used` audit entry for the factory, with no run.
 
 ## What a run receives
 
 1. The run starts the agent's environment from the version the run is pinned to. A secret you replace applies to runs that start afterwards.
 2. goald checks that every referenced secret is open to the factory, then opens each one.
-3. It sets each `env` value in the box's environment, writes the `files` and renders the MCP configuration. A header that names a secret reaches Claude Code as a variable the box expands, so the run's bundle never holds a value.
+3. It puts each `env` value, each file's content and each MCP secret in the box's environment, and renders the MCP configuration. A header that names a secret reaches Claude Code as a variable the box expands, so the run's bundle never holds a value.
 4. Every opened value goes on the run's scrub list, and one `secret.used` audit entry is written per secret per run, without a value.
-5. The prompt lists the box's command-line tools, the names of its variables, its file paths and its MCP servers, never a value.
-6. The worker checks every tool call against the agent's rules before it runs (see [skills and rules](../skills-and-rules/)).
+5. The box clones the repository and installs its tools, then the environment's `tools`.
+6. Before the agent starts, the box writes each of the `files` at its path, `~/` being the agent's home, with mode 0600. Then it runs the `setup` commands in order in the checkout, each with a 30-minute limit. A command that exits non-zero or runs past its limit fails the run, and the run's error names the command and shows its last 50 lines of output with secret values removed. Setup runs again when a run is retried in the same box, so write commands that are safe to repeat.
+7. The agent gets the environment's MCP servers. The prompt has a **Your box** section that lists the box's command-line tools, the names of its variables, its file paths and its MCP servers, never a value. It takes the place of the Connections section that runs on connections get.
+8. Each call to an MCP server's tool follows the environment's mode for it: `allow` runs, `ask` waits for a person, and `off` is refused. The worker checks the agent's other tool calls against its rules (see [skills and rules](../skills-and-rules/)).
 
 An agent holds the secrets of its environment for the whole run, and it has network access from the box. A prompt-injected agent can misuse what its tokens reach. The control for that is a narrow token, with only the repositories and permissions the agent needs. The organization policy's **Use secrets** can switch an agent's environment off: it then gets no `env`, `files` or MCP servers, while the repository and model keys still reach the run. ADR 0008 and ADR 0037 (`docs/adr/` in the repository) record these decisions and their accepted risks.
 
@@ -90,10 +96,11 @@ Organizations that used connections, kinds and credentials were moved to secrets
    - `runtime.size` and `runtime.tools` move into every environment file;
    - `runtime.repository.connection` becomes `runtime.repository.token`, `runtime.modelConnection` becomes `runtime.modelKey`, and a trigger's `modelAgrees.connection` becomes `modelAgrees.key`;
    - each tool mode set on a connection, other than `allow`, becomes that server's `tools:` entry.
-3. Reopens a draft that was open on the new version, converted, for its author. A draft that does not convert is reopened as it was, and publishing it shows what to fix.
+3. Tests the converted version before it publishes it. The repository token must be able to read `runtime.repository.url` and push to it: goald asks the code host's API, as `goal repository test` does, since it runs no git. Each remote MCP server in each environment file must answer `tools/list` with its headers' secrets filled in, as the environment test does. A check that fails, or gets no answer within 10 seconds, publishes nothing.
+4. Reopens a draft that was open on the new version, converted, for its author. A draft that does not convert is reopened as it was, and publishing it shows what to fix.
 
 It also points each synced knowledge source still on a connection at the secret its connection's token became, and copies the reader and the connection's other values into the source's config ([Knowledge](../knowledge/)).
 
-Running items keep the version they started on. goald logs one `moved over` line per organization, with how many factories it converted and refused, how many secrets it created and how many knowledge sources it moved. A knowledge source it can't move gets its own `knowledge source not moved over` line with the reason. Running it again changes nothing.
+Running items keep the version they started on. goald logs one `moved over` line per organization, with how many factories it converted and refused, how many secrets it created and how many knowledge sources it moved. A knowledge source it can't move gets its own `knowledge source not moved over` line with the reason. Running it again changes nothing for a factory it converted.
 
-A factory Goal cannot convert keeps its version and runs on connections. Needs you shows a conversion entry for it that names each problem, for example "connection aws-prod uses the aws kind, which Goal no longer converts: remove it from the factory". Goal refuses connections of the `aws` and `bedrock` kinds, and custom kinds that start a command with no fields. The entry goes away once the factory publishes a version with environment files.
+A factory Goal cannot convert keeps its version and runs on connections. Needs you shows a conversion entry for it that names each problem, for example "connection aws-prod uses the aws kind, which Goal no longer converts: remove it from the factory". Goal refuses connections of the `aws` and `bedrock` kinds, and custom kinds that start a command with no fields. A converted version that fails its test is refused the same way, and its entry names what to fix: the repository and whether the token can't read it or can't push to it, with the host's reason, or the environment file, the MCP server and its error. No problem shows a secret's value. Each time goald starts, it tries a refused factory again, so fixing the token's access or the server is enough: the next start publishes the converted version once. The entry goes away once the factory publishes a version with environment files.

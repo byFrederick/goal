@@ -37,4 +37,26 @@ task test               # unit tests with -race
 task test-integration   # starts PostgreSQL 18 and RustFS via compose, runs integration-tagged tests
 task check              # everything the pre-push hook and CI (pull requests into main) run
 task check:changed      # only the checks of the parts this branch changed since origin/main (README, Development)
+task e2e:secrets        # a run on secrets against a private repository, the check before deploying main (below)
 ```
+
+### A run on secrets end to end
+
+`task e2e:secrets` runs `TestE2E_RunOnSecrets` (`cmd/goald/secrets_e2e_test.go`, build tag `e2e`). It is the check to run before deploying main ([cloudflare-operations.md](cloudflare-operations.md#deploys)). It starts a throwaway goald and auth service as `task e2e:auth` does, on their own database and bucket, with an agents network and egress proxy of its own, so the install's goald, network and proxy are never touched. It then publishes a version whose repository token and model key are organization secrets, runs one item with a real model on `claude-haiku-5-5`, and checks:
+
+- the coder's push lands on the part's branch, and the part's pull request has that commit as its head;
+- the assembly's integration branch (`goal/a<n>-…`) exists on the remote and holds the part's file;
+- the integrator's approval merges the pull request into the integration branch, with a `merged` event, and the default branch does not move;
+- the environment's MCP server tool that its `tools` map allows runs, with no `tool_denied` or `tool_approval_requested` event for it;
+- `task --version` runs in the box;
+- every `sandbox_started` event of the part has `size` large.
+
+It needs Docker, `goal db init` (the roles) and three variables, in `.env` or the shell:
+
+| Variable | Example | What it is |
+| --- | --- | --- |
+| `GOAL_E2E_REPOSITORY_URL` | `https://github.com/acme/goal-e2e.git` | a private github.com repository used for nothing else, with a default branch |
+| `GOAL_E2E_REPOSITORY_TOKEN` | `github_pat_example` | a fine-grained token for that repository: contents and pull requests, read and write |
+| `GOAL_E2E_MODEL_KEY` | `sk-ant-api03-example` | an Anthropic API key; a run costs a few dollars of it |
+
+Without any one of them the test skips, as in CI. It takes up to 45 minutes (`-timeout 45m`). It never writes the repository's default branch: the line holds the merged part at a human station, so the assembly never lands. Whether it passes or fails, it deletes every `goal/` branch it created on the remote. `task e2e:auth` leaves this test out.

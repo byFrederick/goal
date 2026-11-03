@@ -560,3 +560,210 @@ func expectConflictEvent(t *testing.T, events []domain.Event, station string) {
 		}
 	}
 }
+
+// repositoryLogin is the name the code host login of a version on secrets goes by, and
+// repositoryToken the token its tests' repositories are cloned and merged with.
+const (
+	repositoryLogin = "runtime.repository.token"
+	repositoryToken = "{{" + secGitHub + "}}"
+)
+
+// onSecrets makes l a version on secrets whose model key is {{claude-key}} and whose repository
+// is repo. Its organization connections stay, leftovers a version on secrets never opens.
+func onSecrets(l domain.Line, repo domain.Repository) domain.Line {
+	l.Runtime.ModelConnection, l.Runtime.ModelKey = "", "{{"+secClaude+"}}"
+	l.Runtime.Repository = repo
+	l.Environments = []domain.Environment{{Name: domain.DefaultEnvironment}}
+
+	return l
+}
+
+// expectRepositoryLogin fails unless every code host call was made with the repository token,
+// the token was opened as secret.used for the factory outside any run, and no connection was
+// opened for item.
+func (h *harness) expectRepositoryLogin(t *testing.T, item domain.ItemID, hosts ...*porttest.CodeHost) {
+	t.Helper()
+
+	var tokens []string
+	for _, c := range hosts {
+		tokens = append(tokens, c.LoginTokens()...)
+	}
+
+	if len(tokens) == 0 || slices.ContainsFunc(tokens, func(s string) bool { return s != githubTokenValue }) {
+		t.Errorf("code host calls were made with %d logins, not all the repository token's", len(tokens))
+	}
+
+	if used := h.secretsUsedOutsideRuns(t); !slices.Contains(used, secGitHub) || slices.ContainsFunc(used, func(n string) bool { return n != secGitHub }) {
+		t.Errorf("secrets used outside runs %v; want %s alone", used, secGitHub)
+	}
+
+	if used := h.mergesUsed(t, item); len(used) != 0 {
+		t.Errorf("connection.used %+v; want no connection opened on secrets", used)
+	}
+}
+
+// secretsUsedOutsideRuns are the names of the secret.used entries that name no run, failing the
+// test unless each names the test factory.
+func (h *harness) secretsUsedOutsideRuns(t *testing.T) []string {
+	t.Helper()
+
+	entries, err := h.tenancy.AuditLog(inOrg(t), ports.AuditQuery{Action: domain.AuditSecretUsed, Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var names []string
+
+	for _, e := range entries {
+		if e.Data["run_id"] != nil {
+			continue
+		}
+
+		name, _ := e.Data["name"].(string)
+		names = append(names, name)
+
+		if f, _ := e.Data["factory_id"].(string); f != string(factoryID) {
+			t.Errorf("secret.used of %s has factory %q; want %s", name, f, factoryID)
+		}
+	}
+
+	return names
+}
+
+// On secrets, a person's merge reaches the code host through runtime.repository: its host picks
+// the adapter and its token, opened as secret.used, signs in; no connection is opened.
+func TestMerge_OnSecretsUsesTheRepositoryToken(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, onSecrets(mergeLine(domain.ActionMerge), domain.Repository{URL: appRepo, Token: repositoryToken}), porttest.Succeed(`{"pull_request":"`+prURL+`"}`))
+	h.addSecrets(t)
+	h.codehost.Add(openPR(prURL))
+
+	it := h.atMerge(t)
+
+	got, err := h.e.Merge(inOrg(t), it.ID, human, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Position() != (domain.Position{Station: stDone, State: domain.StateDone}) {
+		t.Errorf("item at %+v, want done", got.Position())
+	}
+
+	if merges := h.codehost.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{squashOf(prURL, repositoryLogin)}) {
+		t.Errorf("merges %+v, want app#7 with the repository token", merges)
+	}
+
+	if deleted := h.codehost.DeletedBranches(); !slices.Equal(deleted, []string{itBranch}) {
+		t.Errorf("deleted branches %v, want %s", deleted, itBranch)
+	}
+
+	h.expectRepositoryLogin(t, it.ID, h.codehost)
+}
+
+// On secrets, runtime.repository.forge picks the adapter on a host whose name says none.
+func TestMerge_OnSecretsForgePicksTheAdapter(t *testing.T) {
+	t.Parallel()
+
+	const selfHosted = "https://" + gitHost + "/acme/web/-/merge_requests/3"
+
+	repo := domain.Repository{URL: "https://" + gitHost + "/acme/web.git", Token: repositoryToken, Forge: codeHostGitLab}
+	h := newHarness(t, onSecrets(mergeLine(domain.ActionMerge), repo), porttest.Succeed(`{"pull_request":"`+selfHosted+`"}`))
+	h.addSecrets(t)
+	h.gitlab.Add(openPR(selfHosted))
+
+	it := h.atMerge(t)
+
+	if _, err := h.e.Merge(inOrg(t), it.ID, human, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if merges := h.gitlab.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{squashOf(selfHosted, repositoryLogin)}) {
+		t.Errorf("gitlab merges %+v, want the merge request with the repository token", merges)
+	}
+
+	if merges := h.codehost.Merges(); len(merges) != 0 {
+		t.Errorf("github merges %+v, want none", merges)
+	}
+
+	h.expectRepositoryLogin(t, it.ID, h.gitlab)
+}
+
+// On secrets, a pull request on another host than the repository's is refused before any
+// secret is opened or anything merged, naming the repository.
+func TestMerge_OnSecretsRefusesAnotherHost(t *testing.T) {
+	t.Parallel()
+
+	output := `{"pull_requests":["` + prURL + `","` + mrURL + `"]}`
+	h := newHarness(t, onSecrets(mergeLine(domain.ActionMerge), domain.Repository{URL: appRepo, Token: repositoryToken}), porttest.Succeed(output))
+	h.addSecrets(t)
+	h.codehost.Add(openPR(prURL))
+	h.gitlab.Add(openPR(mrURL))
+
+	it := h.atMerge(t)
+
+	_, err := h.e.Merge(inOrg(t), it.ID, human, "")
+	if !errors.Is(err, engine.ErrNoCodeHost) {
+		t.Fatalf("Merge = %v, want ErrNoCodeHost", err)
+	}
+
+	if msg := err.Error(); !strings.Contains(msg, appRepo) || !strings.Contains(msg, mrURL) || strings.Contains(msg, "connection") {
+		t.Errorf("Merge = %q; want it to name the repository and the pull request, and no connection", msg)
+	}
+
+	if merges := append(h.codehost.Merges(), h.gitlab.Merges()...); len(merges) != 0 {
+		t.Errorf("merges %+v, want none", merges)
+	}
+
+	if used := h.secretsUsedOutsideRuns(t); len(used) != 0 {
+		t.Errorf("secrets used outside runs %v; want none opened", used)
+	}
+
+	if got := h.item(t, it.ID); got.Position() != (domain.Position{Station: stMerge, State: domain.StateWaitingHuman}) {
+		t.Errorf("item at %+v, want still waiting at the merge station", got.Position())
+	}
+}
+
+// On secrets, a repository on a host whose name says no adapter needs forge, and a repository
+// with no token cannot merge; each refusal names the key to set and opens nothing.
+func TestMerge_OnSecretsNeedsForgeOnAnUnknownHost(t *testing.T) {
+	t.Parallel()
+
+	const selfHosted = "https://" + gitHost + "/acme/app/pull/7"
+
+	tests := []struct {
+		name string
+		repo domain.Repository
+		pr   string
+		want string
+	}{
+		{name: "unknown host, no forge", repo: domain.Repository{URL: repoURL, Token: repositoryToken}, pr: selfHosted, want: "runtime.repository.forge"},
+		{name: "forge goald has no adapter for", repo: domain.Repository{URL: repoURL, Token: repositoryToken, Forge: "gitea"}, pr: selfHosted, want: "gitea"},
+		{name: "public repository", repo: domain.Repository{URL: appRepo}, pr: prURL, want: "runtime.repository.token"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t, onSecrets(mergeLine(domain.ActionMerge), tt.repo), porttest.Succeed(`{"pull_request":"`+tt.pr+`"}`))
+			h.addSecrets(t)
+			h.codehost.Add(openPR(tt.pr))
+
+			it := h.atMerge(t)
+
+			_, err := h.e.Merge(inOrg(t), it.ID, human, "")
+			if !errors.Is(err, engine.ErrNoCodeHost) || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Merge = %v, want ErrNoCodeHost naming %s", err, tt.want)
+			}
+
+			if merges := h.codehost.Merges(); len(merges) != 0 {
+				t.Errorf("merges %+v, want none", merges)
+			}
+
+			if used := h.secretsUsedOutsideRuns(t); len(used) != 0 {
+				t.Errorf("secrets used outside runs %v; want none opened", used)
+			}
+		})
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1338,5 +1339,259 @@ func TestServeRun_DraftRequestStaleRevision(t *testing.T) {
 
 	if status, _, body := request(t, http.MethodPost, h.url, h.token(t, h.draftClaims(r, rev+1))); status != http.StatusForbidden {
 		t.Errorf("tools for a draft request: status = %d, want 403 (%s)", status, body)
+	}
+}
+
+// secretsBundleYAML is a factory on secrets (ADR 0037) whose repository at url clones with the
+// {{github-token}} secret, and on a host other than github.com and gitlab.com with forge.
+func secretsBundleYAML(url, forge string) string {
+	repo := `{ url: "` + url + `", token: "{{github-token}}" }`
+	if forge != "" {
+		repo = `{ url: "` + url + `", token: "{{github-token}}", forge: ` + forge + ` }`
+	}
+
+	return `apiVersion: goal/v1
+kind: Factory
+metadata: { id: ` + string(factoryID) + `, name: acme-bundle, purpose: Ship small changes to acme's API. }
+spec:
+  runtime:
+    model: claude-sonnet-5-5
+    modelKey: "{{claude-key}}"
+    repository: ` + repo + `
+  agents:
+    - { name: engineer, prompt: ./agents/engineer.md }
+  board:
+    stations:
+      - { id: spec, kind: human }
+      - { id: build, kind: agent, agent: engineer }
+      - { id: done, kind: done }
+`
+}
+
+// secretsBundleFiles are the files secretsBundleYAML needs besides factory.yaml.
+var secretsBundleFiles = map[string]string{"environments/default.yaml": "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n"}
+
+// serveRunBundle serves the bundle of a run of a new item of the factory yaml describes.
+func serveRunBundle(t *testing.T, yaml string, files map[string]string) (runBundle, []byte) {
+	t.Helper()
+
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: yaml, files: files})
+	it := h.submit(t, factoryID, "Add a health endpoint", "")
+	c := h.claims()
+	c.ItemID = it.ID
+
+	status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", status, body)
+	}
+
+	var got runBundle
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	return got, body
+}
+
+// On a version on secrets, the repository token signs git in to the repository's host: one
+// stored login whose password is GOAL_REPOSITORY_TOKEN, as the forge names its user, never the
+// secret's name or value.
+func TestServeRun_GitLoginFromRepositoryToken(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, url, forge string
+		want             gitCredential
+	}{
+		{
+			name: "GitHub", url: "https://github.com/acme/api.git",
+			want: gitCredential{Host: "github.com", Username: "x-access-token", PasswordEnv: domain.RepositoryTokenEnv, Store: true},
+		},
+		{
+			name: "GitLab", url: "https://gitlab.com/acme/api.git",
+			want: gitCredential{Host: "gitlab.com", Username: "oauth2", PasswordEnv: domain.RepositoryTokenEnv, Store: true},
+		},
+		{
+			name: "a GitLab of its own", url: "https://git.example.com/acme/api.git", forge: "gitlab",
+			want: gitCredential{Host: "git.example.com", Username: "oauth2", PasswordEnv: domain.RepositoryTokenEnv, Store: true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, body := serveRunBundle(t, secretsBundleYAML(tt.url, tt.forge), secretsBundleFiles)
+
+			if len(got.Git) != 1 || got.Git[0] != tt.want {
+				t.Errorf("git credentials %+v; want [%+v]", got.Git, tt.want)
+			}
+
+			if got.Repository == nil || got.Repository.URL != tt.url {
+				t.Errorf("repository %+v; want %s", got.Repository, tt.url)
+			}
+
+			if strings.Contains(string(body), "github-token") {
+				t.Errorf("the bundle names the token's secret:\n%s", body)
+			}
+		})
+	}
+}
+
+// A public repository on secrets clones without a login.
+func TestServeRun_PublicRepositoryWithoutToken(t *testing.T) {
+	t.Parallel()
+
+	yaml := strings.Replace(secretsBundleYAML("https://github.com/acme/api.git", ""), `, token: "{{github-token}}"`, "", 1)
+	got, body := serveRunBundle(t, yaml, secretsBundleFiles)
+
+	if got.Repository == nil || len(got.Git) != 0 {
+		t.Errorf("repository %+v, git credentials %+v; want the repository and no login", got.Repository, got.Git)
+	}
+
+	if strings.Contains(string(body), `"store"`) {
+		t.Errorf("the bundle has a stored login:\n%s", body)
+	}
+}
+
+// envCI is the environment file environmentBundle gives the agent.
+const envCI = "ci-box"
+
+// environmentBundle serves the bundle of a run on secrets whose agent gets environment ci-box,
+// environments/ci-box.yaml being env, with the token granting connTracker.
+func environmentBundle(t *testing.T, env string, rules ...domain.NewServerStandingRule) (runBundle, []byte) {
+	t.Helper()
+
+	yaml := strings.Replace(secretsBundleYAML("https://github.com/acme/api.git", ""),
+		"{ name: engineer, prompt: ./agents/engineer.md }", "{ name: engineer, prompt: ./agents/engineer.md, environment: ci-box }", 1)
+	files := maps.Clone(secretsBundleFiles)
+	files["environments/ci-box.yaml"] = "apiVersion: goal/v1\nkind: Environment\nspec:\n" + env
+
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: yaml, files: files})
+	it := h.submit(t, factoryID, "Add a health endpoint", "")
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	for _, r := range rules {
+		r.Item = it.ID
+		if _, err := h.connections.CreateServerStandingRule(ctx, r, domain.LocalUser); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	c := h.claims()
+	c.ItemID, c.Connections = it.ID, []string{connTracker, connDocs}
+
+	status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", status, body)
+	}
+
+	var got runBundle
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Spec.Environment == nil || got.Spec.Environment.Name != envCI {
+		t.Fatalf("environment %+v; want ci-box's", got.Spec.Environment)
+	}
+
+	return got, body
+}
+
+// ADR 0037 decision 8: on secrets the bundle lists the agent's environment's MCP servers, sorted,
+// with their secrets as ${GOAL_SECRET_<NAME>}, and no connection; no value reaches its JSON.
+func TestBundle_EnvironmentServersOnSecrets(t *testing.T) {
+	t.Parallel()
+
+	got, body := environmentBundle(t, `  mcp:
+    playwright:
+      command: [npx, "@playwright/mcp@0.0.41"]
+      env: {PW_LOGIN: "{{pw-login}}", PW_MODE: headless}
+    linear:
+      url: https://mcp.linear.example.com/mcp
+      headers: {Authorization: "Bearer {{linear-key}}", X-Org: acme}
+`)
+
+	want := []bundleMCPServer{
+		{
+			Name: "linear", URL: "https://mcp.linear.example.com/mcp",
+			Headers:   map[string]string{"Authorization": "Bearer ${GOAL_SECRET_LINEAR_KEY}", "X-Org": "acme"},
+			ToolModes: []bundleToolMode{},
+		},
+		{
+			Name: "playwright", Command: []string{"npx", "@playwright/mcp@0.0.41"},
+			Env: map[string]string{"PW_LOGIN": "${GOAL_SECRET_PW_LOGIN}", "PW_MODE": "headless"}, ToolModes: []bundleToolMode{}, //nolint:gosec // a variable's name, not a credential
+		},
+	}
+	if !reflect.DeepEqual(got.Spec.Environment.MCPServers, want) {
+		t.Errorf("mcp_servers %+v; want %+v", got.Spec.Environment.MCPServers, want)
+	}
+
+	if got.Spec.Connections == nil || len(got.Spec.Connections) != 0 {
+		t.Errorf("connections %+v; want [] on secrets", got.Spec.Connections)
+	}
+
+	for _, value := range []string{modelAPIKey, cloneToken, issuesToken, "{{", "linear-key"} {
+		if strings.Contains(string(body), value) {
+			t.Errorf("the bundle holds %q:\n%s", value, body)
+		}
+	}
+}
+
+// ADR 0037 decision 8: a server's tool modes follow the file, most specific first, and an active
+// standing rule for the factory, environment, server and role lifts an ask, never off.
+func TestBundle_EnvironmentToolModesWithStandingRule(t *testing.T) {
+	t.Parallel()
+
+	rule := func(tool, agent string) domain.NewServerStandingRule {
+		return domain.NewServerStandingRule{Factory: factoryID, Environment: envCI, Server: "linear", Tool: tool, Agent: agent}
+	}
+	got, _ := environmentBundle(t, `  mcp:
+    linear:
+      url: https://mcp.linear.example.com/mcp
+      tools: {create_comment: ask, "delete_*": off, "close_*": ask}
+`,
+		rule("create_comment", agentEngineer), rule("delete_issue", agentEngineer), rule("close_issue", "reviewer"),
+		domain.NewServerStandingRule{Factory: factoryID, Environment: domain.DefaultEnvironment, Server: "linear", Tool: "close_pr", Agent: agentEngineer},
+	)
+
+	want := []bundleToolMode{
+		{Tool: "create_comment", Mode: domain.ToolModeAllow}, {Tool: "delete_*", Mode: domain.ToolModeOff}, {Tool: "close_*", Mode: domain.ToolModeAsk},
+	}
+	if servers := got.Spec.Environment.MCPServers; len(servers) != 1 || !reflect.DeepEqual(servers[0].ToolModes, want) {
+		t.Errorf("mcp_servers %+v; want linear with tool_modes %+v", servers, want)
+	}
+}
+
+// ADR 0037 decisions 5 and 11: the bundle's tools are the environment's, in file order; setup
+// keeps its order, files carry each path's GOAL_FILE_<n>, and env and clis are names only.
+func TestBundle_EnvironmentToolsSetupAndFiles(t *testing.T) {
+	t.Parallel()
+
+	got, body := environmentBundle(t, `  tools: [node@22, go@1.26, "npm:@acme/cli@2", gh]
+  setup: [pnpm install --frozen-lockfile, make generate]
+  env: {SENTRY_ORG: acme-sentry-org, GH_TOKEN: "{{github-token}}"}
+  files:
+    ~/.npmrc: "{{npmrc}}"
+    /etc/acme.conf: "{{acme-conf}}"
+`)
+
+	if want := []string{"node@22", "go@1.26", "npm:@acme/cli@2", "gh"}; !slices.Equal(got.Tools, want) {
+		t.Errorf("tools %v; want %v", got.Tools, want)
+	}
+
+	e := got.Spec.Environment
+	want := bundleEnvironment{
+		Name: envCI, MCPServers: []bundleMCPServer{}, Setup: []string{"pnpm install --frozen-lockfile", "make generate"},
+		Files: []bundleFile{{Path: "/etc/acme.conf", Env: "GOAL_FILE_1"}, {Path: "~/.npmrc", Env: "GOAL_FILE_2"}},
+		Env:   []string{"GH_TOKEN", "SENTRY_ORG"}, CLIs: []string{"node", "go", "npm:@acme/cli", "gh"},
+	}
+
+	if !reflect.DeepEqual(*e, want) {
+		t.Errorf("environment %+v; want %+v", *e, want)
+	}
+
+	if strings.Contains(string(body), "acme-sentry-org") {
+		t.Errorf("the bundle holds an env value:\n%s", body)
 	}
 }

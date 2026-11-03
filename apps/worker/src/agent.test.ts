@@ -540,3 +540,145 @@ describe('taskPrompt', () => {
     expect(prompt).toContain('- go.mod\n\nAdd a health endpoint');
   });
 });
+
+describe('the environment on a version on secrets', () => {
+  const gateway = 'http://gateway.internal/mcp';
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: Claude Code's ${NAME} reference, not a template
+  const linearAuth = 'Bearer ${GOAL_SECRET_LINEAR_KEY}';
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: Claude Code's ${NAME} reference, not a template
+  const pwToken = '${GOAL_SECRET_PW_TOKEN}';
+  /** The `environment` example of apps/worker/README.md. */
+  const environment = {
+    name: 'default',
+    mcp_servers: [
+      {
+        name: 'linear',
+        url: 'https://mcp.linear.example.com/mcp',
+        headers: { Authorization: linearAuth },
+        tool_modes: [
+          { tool: 'create_comment', mode: 'allow' },
+          { tool: 'delete_*', mode: 'off' },
+          { tool: '*', mode: 'ask' },
+        ],
+      },
+      {
+        name: 'play_wright',
+        command: ['npx', '@playwright/mcp@0.0.41'],
+        env: { PW_TOKEN: pwToken },
+        tool_modes: [],
+      },
+    ],
+    setup: ['pnpm install --frozen-lockfile'],
+    files: [{ path: '~/.kube/config', env: 'GOAL_FILE_1' }],
+    env: ['GH_TOKEN', 'SENTRY_ORG'],
+    clis: ['go', 'node', 'gh'],
+  };
+  const onSecrets = { gateway_url: gateway, connections: [], environment } as unknown as Partial<TaskSpec>;
+  const permission = (reach: { fetch: typeof globalThis.fetch }, extra: Partial<TaskSpec> = {}) =>
+    connectionPermission(parseSpec(JSON.stringify({ ...base, ...onSecrets, ...extra })), {
+      token: 'gateway-token',
+      ...reach,
+    });
+
+  beforeEach(() => {
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('parses the README example, and a spec without it as before', () => {
+    expect(parseSpec(JSON.stringify({ ...base, ...onSecrets })).environment).toEqual(environment);
+    expect(parseSpec(JSON.stringify(base))).toEqual(parseSpec(JSON.stringify({ ...base, connections: [] })));
+    expect('environment' in parseSpec(JSON.stringify(base))).toBe(false);
+  });
+
+  it('configures each server, its secrets left for Claude Code to expand', () => {
+    expect(optionsOf(onSecrets).mcpServers).toEqual({
+      goal: { type: 'http', url: gateway, headers: { Authorization: 'Bearer gateway-token' }, alwaysLoad: true },
+      linear: {
+        type: 'http',
+        url: 'https://mcp.linear.example.com/mcp',
+        headers: { Authorization: linearAuth },
+        alwaysLoad: true,
+      },
+      play_wright: {
+        type: 'stdio',
+        command: 'npx',
+        args: ['@playwright/mcp@0.0.41'],
+        env: { PW_TOKEN: pwToken },
+        alwaysLoad: true,
+      },
+    });
+  });
+
+  it('allows a tool whose first matching mode is allow, and one no entry matches', async () => {
+    const gw = gatewayAnswering(202);
+    const check = { canUseTool: permission(gw) };
+
+    expect(await decide(check, 'mcp__linear__create_comment')).toBe('allow');
+    expect(await decide(check, 'mcp__play_wright__browser_click')).toBe('allow');
+    expect(gw.requests).toEqual([]);
+  });
+
+  it('denies an off tool without a request', async () => {
+    const gw = gatewayAnswering(202);
+
+    expect(await verdictOf({ canUseTool: permission(gw) }, 'mcp__linear__delete_issue')).toEqual({
+      behavior: 'deny',
+      message: "The environment's tool modes do not let it call linear__delete_issue.",
+    });
+    expect(gw.requests).toEqual([]);
+  });
+
+  it('reports an ask tool to /run/tool-approval with the server as its connection', async () => {
+    const gw = gatewayAnswering(202);
+    const verdict = await verdictOf({ canUseTool: permission(gw) }, 'mcp__linear__update_issue', { id: 7 });
+
+    expect(verdict).toMatchObject({ behavior: 'deny', interrupt: true });
+    expect(gw.requests).toHaveLength(1);
+    expect(gw.requests[0]?.url).toBe('http://gateway.internal/run/tool-approval');
+    expect(JSON.parse(String(gw.requests[0]?.init.body))).toEqual({
+      connection: 'linear',
+      tool: 'update_issue',
+      input: { id: 7 },
+    });
+  });
+
+  it('runs an ask tool once when a granted call matches it', async () => {
+    const gw = gatewayAnswering(202);
+    const check = {
+      canUseTool: permission(gw, {
+        granted_calls: [{ connection: 'linear', tool: 'update_issue', input: { id: 7 } }],
+      }),
+    };
+
+    expect(await decide(check, 'mcp__linear__update_issue', { id: 7 })).toBe('allow');
+    expect(gw.requests).toEqual([]);
+    expect(await decide(check, 'mcp__linear__update_issue', { id: 7 })).toBe('deny');
+    expect(gw.requests).toHaveLength(1);
+  });
+
+  it('denies a server the environment does not have', async () => {
+    expect(await decide({ canUseTool: permission(gatewayAnswering(202)) }, 'mcp__github__get_issue')).toBe('deny');
+  });
+
+  it('tells the agent what its box has in place of the Connections section, never a value', () => {
+    const prompt = systemPromptOf({
+      ...onSecrets,
+      connections: [issues],
+    } as Partial<TaskSpec>);
+
+    expect(prompt).toContain('## Your box');
+    expect(prompt).toContain('- CLIs: `go`, `node`, `gh`.');
+    expect(prompt).toContain('- Environment variables: `GH_TOKEN`, `SENTRY_ORG`.');
+    expect(prompt).toContain('- Files: `~/.kube/config`.');
+    expect(prompt).toContain('- MCP server `linear`: its tools are `mcp__linear__*`.');
+    expect(prompt).toContain('- MCP server `play_wright`: its tools are `mcp__play_wright__*`.');
+    expect(prompt).not.toContain('## Connections');
+    expect(prompt).not.toContain('GOAL_SECRET');
+    expect(prompt).not.toContain('pnpm install');
+    expect(systemPromptOf({ connections: [issues] })).toContain('## Connections');
+    expect(systemPromptOf({ connections: [issues] })).not.toContain('## Your box');
+  });
+});

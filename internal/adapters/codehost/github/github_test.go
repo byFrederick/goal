@@ -42,8 +42,9 @@ const (
 	octo = "octo"
 )
 
-// connection is a connection of the platform's github kind with values (token and host).
-func connection(t *testing.T, values map[string]string) domain.ResolvedConnection {
+// connection is the code host login of a connection of the platform's github kind with values
+// (token and host).
+func connection(t *testing.T, values map[string]string) domain.CodeHostLogin {
 	t.Helper()
 
 	kinds, err := connkind.Platform()
@@ -56,11 +57,18 @@ func connection(t *testing.T, values map[string]string) domain.ResolvedConnectio
 		t.Fatal("the platform has no github kind")
 	}
 
-	return domain.ResolvedConnection{Connection: domain.Connection{Name: "github", Kind: "github"}, Kind: kinds[i], Values: values}
+	rc := domain.ResolvedConnection{Connection: domain.Connection{Name: "github", Kind: "github"}, Kind: kinds[i], Values: values}
+
+	login, err := rc.CodeHostLogin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return login
 }
 
-// dotComConn is a github.com connection with the token.
-func dotComConn(t *testing.T) domain.ResolvedConnection {
+// dotComConn is a github.com login with the token.
+func dotComConn(t *testing.T) domain.CodeHostLogin {
 	t.Helper()
 
 	return connection(t, map[string]string{"token": token})
@@ -414,7 +422,7 @@ func TestPullRequest_OnlyOnTheConnectionsHost(t *testing.T) {
 	ghe := connection(t, map[string]string{"token": token, "host": "ghe.example.com"})
 
 	for _, tt := range []struct {
-		conn domain.ResolvedConnection
+		conn domain.CodeHostLogin
 		url  string
 	}{
 		{dotComConn(t), "https://code.example.com/acme/app/pull/7"},
@@ -438,9 +446,12 @@ func TestPullRequest_OnlyOnTheConnectionsHost(t *testing.T) {
 		}
 	}
 
-	// A connection without a token has no git login: nothing is sent either.
-	if _, err := c.PullRequest(t.Context(), connection(t, map[string]string{}), prURL); err == nil {
-		t.Error("PullRequest with a connection without a token succeeded; want an error")
+	// A login without a token: nothing is sent either.
+	noToken := dotComConn(t)
+	noToken.Token = ""
+
+	if _, err := c.PullRequest(t.Context(), noToken, prURL); err == nil {
+		t.Error("PullRequest with a login without a token succeeded; want an error")
 	}
 
 	if got := f.sent(); len(got) != 0 {
@@ -831,7 +842,7 @@ func TestBranchHead_OnlyOnTheConnectionsHost(t *testing.T) {
 	ghe := connection(t, map[string]string{"token": token, "host": "ghe.example.com"})
 
 	for _, tt := range []struct {
-		conn domain.ResolvedConnection
+		conn domain.CodeHostLogin
 		repo string
 	}{
 		{dotComConn(t), "https://code.example.com/acme/app"},
