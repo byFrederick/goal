@@ -16,7 +16,7 @@ import { FactorySettingsPage } from './settings-page';
 // uses, so each test reads what the session saved for a section.
 /** The fields of the sections the settings write, as the session saved them. */
 interface Saved {
-  repository?: { url?: string; connection?: string };
+  repository?: { url?: string; connection?: string; token?: string };
   size?: string;
   tools?: string[];
   work_types?: string[];

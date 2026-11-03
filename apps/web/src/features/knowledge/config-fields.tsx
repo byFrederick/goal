@@ -1,7 +1,7 @@
-// What a synced source reads (its config), by the reader its connection's kind syncs with (spec 4
-// §4.8): gitdocs takes a repository's https URL, a branch and path globs to include and leave out
-// (include **/*.md when empty); confluence takes space keys. Globs and keys are separated by
-// commas or new lines, as goald reads them.
+// What a synced source reads (its config), by its reader (spec 4 §4.8, ADR 0037): gitdocs takes a
+// repository's https URL, a branch and path globs to include and leave out (include **/*.md when empty);
+// confluence takes the site, the account's email and space keys. The secret holds the token. Globs and
+// keys are separated by commas or new lines, as goald reads them.
 import { defaultInclude } from '../../shared/knowledge';
 import { Field, Input } from '../../ui/field';
 
@@ -12,7 +12,7 @@ interface FieldSpec {
   label: string;
   required?: boolean;
   placeholder?: string;
-  help: (connection: string) => string;
+  help: (secret: string) => string;
 }
 
 const readers: Record<string, FieldSpec[]> = {
@@ -22,7 +22,7 @@ const readers: Record<string, FieldSpec[]> = {
       label: 'Repository',
       required: true,
       placeholder: 'https://github.com/acme/docs',
-      help: (c) => `Its https URL. Read with ${c}’s token.`,
+      help: (c) => `Its https URL. Read with the token in ${c || 'the secret'}.`,
     },
     { name: 'branch', label: 'Branch (optional)', placeholder: 'main', help: () => 'Empty means its default branch.' },
     {
@@ -40,17 +40,38 @@ const readers: Record<string, FieldSpec[]> = {
   ],
   confluence: [
     {
+      name: 'site',
+      label: 'Site',
+      required: true,
+      placeholder: 'https://acme.atlassian.net',
+      help: () => 'The address of your Confluence site.',
+    },
+    {
+      name: 'email',
+      label: 'Account email',
+      required: true,
+      placeholder: 'bot@example.com',
+      help: (c) => `The account the token in ${c || 'the secret'} belongs to.`,
+    },
+    {
       name: 'spaces',
       label: 'Spaces',
       required: true,
       placeholder: 'ENG, SUP',
-      help: (c) => `Space keys, separated by commas. Read with ${c}’s account.`,
+      help: () => 'Space keys, separated by commas.',
     },
   ],
 };
 
-/** The reader a source's config is for: its connection kind's sync, else what its keys say. */
+/** The readers a synced source can use, with how they read to a person. */
+export const readerChoices = [
+  { value: 'gitdocs', label: 'Repository docs' },
+  { value: 'confluence', label: 'Confluence' },
+] as const;
+
+/** The reader a source's config is for: the one it names, else what a connection kind syncs with, else what its keys say. */
 export function readerOf(sync: string | undefined, config: Config): string | undefined {
+  if (config.reader && readers[config.reader]) return config.reader;
   if (sync && readers[sync]) return sync;
   if ('repository' in config) return 'gitdocs';
   if ('spaces' in config) return 'confluence';
@@ -82,13 +103,13 @@ export function trimmed(config: Config): Config {
 
 export function ConfigFields({
   reader,
-  connection,
+  secret,
   config,
   errors,
   onChange,
 }: {
   reader: string | undefined;
-  connection: string;
+  secret: string;
   config: Config;
   errors: Record<string, string>;
   onChange: (config: Config) => void;
@@ -96,7 +117,7 @@ export function ConfigFields({
   return (
     <>
       {(readers[reader ?? ''] ?? []).map((f) => (
-        <Field key={f.name} label={f.label} help={f.help(connection)} error={errors[f.name]}>
+        <Field key={f.name} label={f.label} help={f.help(secret)} error={errors[f.name]}>
           <Input
             value={config[f.name] ?? ''}
             placeholder={f.placeholder}

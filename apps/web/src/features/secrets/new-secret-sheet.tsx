@@ -30,7 +30,7 @@ export function NewSecretSheet({
   onOpenChange: (open: boolean) => void;
   factories: readonly Factory[];
   /** Fills the form: the suggested name, and a value moved out of a file (Move to Secrets). */
-  initial?: { name?: string; value?: string } | undefined;
+  initial?: { name?: string; value?: string; allFactories?: boolean } | undefined;
   /** Called with the secret's name once it is created (Add a tool picks it, Move to Secrets writes its reference). */
   onCreated?: ((name: string) => void) | undefined;
 }) {
@@ -58,7 +58,7 @@ function NewSecretForm({
 }: {
   org: string;
   factories: readonly Factory[];
-  initial: { name?: string; value?: string } | undefined;
+  initial: { name?: string; value?: string; allFactories?: boolean } | undefined;
   onCreated: ((name: string) => void) | undefined;
   onDone: () => void;
 }) {
@@ -66,7 +66,7 @@ function NewSecretForm({
   const [name, setName] = useState(initial?.name ?? '');
   const [value, setValue] = useState(initial?.value ?? '');
   const [description, setDescription] = useState('');
-  const [scope, setScope] = useState<ScopeState>({ all: false, chosen: [] });
+  const [scope, setScope] = useState<ScopeState>({ all: initial?.allFactories ?? false, chosen: [] });
   const [expires, setExpires] = useState('');
   const [remind, setRemind] = useState(14);
   const [attempted, setAttempted] = useState(false);

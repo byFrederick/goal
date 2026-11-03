@@ -8,23 +8,34 @@ import {
   Outlet,
   RouterProvider,
 } from '@tanstack/react-router';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { type ReactNode, Suspense, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createKnowledgeSource } from '../../api/knowledge';
 import {
-  connectionKindsQuery,
-  connectionsQuery,
   factoriesQuery,
   knowledgeDocumentsQuery,
   knowledgeSourceQuery,
   knowledgeSourcesQuery,
   orgQuery,
+  secretsQuery,
 } from '../../api/queries';
-import type { KnowledgeDocument, KnowledgeSource, Org, OrgSummary } from '../../api/types';
+import type { KnowledgeDocument, KnowledgeSource, Org, OrgSummary, Secret } from '../../api/types';
+import '../../test/select';
 import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { TooltipProvider } from '../../ui/tooltip';
 import { NewSourcePage } from './new-source-page';
 import { SourcePage } from './source-page';
+
+vi.mock('../../api/knowledge', async (original) => ({
+  ...(await original<typeof import('../../api/knowledge')>()),
+  createKnowledgeSource: vi.fn(),
+}));
+
+const secrets = [
+  { name: 'github-token', scope: { all_factories: true, factories: [] } },
+  { name: 'limited-key', scope: { all_factories: false, factories: ['f1'] } },
+] as unknown as Secret[];
 
 afterEach(() => {
   cleanup();
@@ -38,9 +49,9 @@ const synced = {
   name: 'eng-docs',
   title: 'Engineering docs',
   kind: 'synced',
-  connection: 'github',
+  secret: 'github-token',
   status: 'idle',
-  config: { repository: 'https://github.com/acme/goal', branch: 'main', include: 'docs/**/*.md' },
+  config: { reader: 'gitdocs', repository: 'https://github.com/acme/goal', branch: 'main', include: 'docs/**/*.md' },
   sync_every_seconds: 3600,
   last_synced_at: '2026-10-27T14:00:00Z',
   next_sync_at: '2026-10-27T15:00:00Z',
@@ -79,8 +90,7 @@ function renderPage(url: string, documents: KnowledgeDocument[] = [doc]) {
   client.setQueryData(factoriesQuery(org.id).queryKey, []);
   client.setQueryData(knowledgeSourceQuery(org.id, 'eng-docs').queryKey, synced);
   client.setQueryData(knowledgeSourcesQuery(org.id).queryKey, [synced]);
-  client.setQueryData(connectionsQuery(org.id).queryKey, []);
-  client.setQueryData(connectionKindsQuery(org.id).queryKey, []);
+  client.setQueryData(secretsQuery(org.id).queryKey, secrets);
   client.setQueryData(knowledgeDocumentsQuery(org.id, 'eng-docs').queryKey, {
     pages: [{ documents }],
     pageParams: [undefined],
@@ -170,7 +180,39 @@ describe('the document rows', () => {
   });
 });
 
+describe('a synced source', () => {
+  it('names the secret it reads with and no connection', async () => {
+    renderPage('/o/acme/knowledge/eng-docs');
+    const link = await screen.findByRole('link', { name: 'github-token' });
+    expect(link.getAttribute('href')).toBe('/o/acme/secrets/github-token');
+    expect(screen.getByRole('combobox', { name: 'Secret' }).textContent).toContain('github-token');
+    expect(screen.queryByText(/connection/i)).toBeNull();
+  });
+});
+
 describe('the New source page', () => {
+  it('picks a secret open to all factories for a synced source and sends it, not a connection', async () => {
+    vi.mocked(createKnowledgeSource).mockRejectedValue(new Error('stop here'));
+    renderPage('/o/acme/knowledge/new?kind=synced');
+    await screen.findByRole('button', { name: 'Add source' });
+    expect(screen.queryByText(/connection/i)).toBeNull();
+
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Secret' }), { key: 'Enter' });
+    const list = await screen.findByRole('listbox');
+    expect(within(list).queryByRole('option', { name: 'limited-key' })).toBeNull();
+    fireEvent.click(within(list).getByRole('option', { name: 'github-token' }));
+
+    fireEvent.change(screen.getByLabelText('Repository'), { target: { value: 'https://github.com/acme/docs' } });
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Docs' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add source' }));
+
+    await waitFor(() => expect(createKnowledgeSource).toHaveBeenCalled());
+    const body = vi.mocked(createKnowledgeSource).mock.calls[0]?.[1];
+    expect(body).toMatchObject({ kind: 'synced', secret: 'github-token' });
+    expect(body).not.toHaveProperty('connection');
+  });
+
+
   it('shows Kind as a radio group of three cards, and Cancel and Add source inside the form', async () => {
     renderPage('/o/acme/knowledge/new');
     const group = await screen.findByRole('group', { name: 'Kind' });
