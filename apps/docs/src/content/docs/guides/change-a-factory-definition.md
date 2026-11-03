@@ -90,6 +90,16 @@ You can also change the line in the draft's form: open the factory's Definition 
 - Open Rules under a row to set its checks, rework rule, merge step and note. A row that has a problem opens its rules for you.
 - Checks on this line, under the table, lists what passed, what to know and what must be fixed before you can publish.
 
+## Edit knowledge and factory memory in the app
+
+Open the factory's Definition and choose Knowledge. It has three cards.
+
+- **Sources** lists the sources the factory reads, each with who reads it (every agent, or the agents, stations, lanes and work types its `appliesTo` names), the line that tells agents when to open it, and its size. **Add source** lists another of the organization's sources in the draft, and the remove button on a row takes one out of the draft. Use the YAML view to give an entry its own `appliesTo` or `readWhen`.
+- **Factory memory** lists the short facts every run of the factory starts with, each with the date it was added and the items it came from. Add a fact in the field under the list, change a fact by editing it and leaving the field, and remove one with its button. A fact is at most 300 characters, and the list is at most 50 facts and 8 KB. The facts are `memory.yaml`, which the YAML view shows too. A version whose only change is `memory.yaml` publishes without evals.
+- **What agents see** shows the Knowledge section of the prompt as the agent you pick gets it, built from the draft's sources and facts. It reads what the draft has saved, so it follows your edits a moment after you make them.
+
+Knowledge edits go into the draft like any other; publish from Review and publish.
+
 ## Check the result
 
 ```sh

@@ -17,7 +17,7 @@ A source has a name, a kind, a read-when line and the settings of its kind.
 
 | Kind | Where the files come from |
 | --- | --- |
-| Upload | Files people drop on the page or send with `goal knowledge upload`: text, Markdown, HTML, JSON or YAML. The originals stay in the bucket. |
+| Upload | Files people drop on the page or send with `goal knowledge upload`: text, Markdown, HTML, JSON or YAML, and PDF and Office files when goald has a conversion service (`GOAL_WORKERS_AI_URL`; without one it refuses them). The originals stay in the bucket. |
 | Repository | The Markdown and text files under the folders you name in a GitHub or GitLab repository, on one branch. The URL's host picks the code host. Folders and leave-outs are globs, such as `docs/runbooks/**` and `**/drafts/**`. A public repository needs no secret. |
 | Confluence | The pages of one or more spaces of a Confluence Cloud site, at the path of their page tree. It reads with the site, the account's email and a secret that holds the API token. |
 
@@ -82,7 +82,7 @@ Goal counts how often runs read each file and search each folder under `/knowled
 
 ## In the web app
 
-- **Knowledge** lists the sources. Each shows its name and read-when line, its kind and where it reads from, the factories that list it, its sync, its size and its reads of the last 7 days. A source whose last sync failed gets an alert that names it and says which files runs use meanwhile. **Find a file** searches paths and titles across every source, and **Most read** lists the files runs open most.
+- **Knowledge** lists the sources. Each shows its name and read-when line, its kind and where it reads from, the factories that list it, its sync, its size and its reads of the last 7 days. A source whose last sync failed gets an alert on this page that names it and says which files runs use meanwhile. After its last three syncs fail, Needs you shows an alert under each factory that lists it, with what the last sync said. **Find a file** searches paths and titles across every source, and **Most read** lists the files runs open most.
 - **Add a source** is one page. Pick the kind, fill in its settings, give the name and the read-when line, and tick the factories that read it. The **Check** panel reads the source with the settings you typed, before anything is saved. It says whether the source can be read, how many files and how much Markdown it has against the limits, what each picked factory's draft would say about it, and the line agents will see.
 - A source's page shows its files with their reads, the latest sync, its settings, the line agents see, and the factories and agents that read it. **Add to a factory** lists the source in another factory.
 
