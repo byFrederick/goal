@@ -1,6 +1,9 @@
-// Package gitdocs implements ports.SourceReader for the knowledge base's synced sources whose
-// connection's kind syncs with gitdocs (spec 4 §4.8, §5.6): the documents of one repository on
-// GitHub or GitLab, read through the code host's REST API with the connection's token.
+// Package gitdocs implements ports.SourceReader for the knowledge base's synced sources that sync
+// with gitdocs (spec 4 §4.8, §5.6): the documents of one repository on GitHub or GitLab, read
+// through the code host's REST API with the token of the source's secret (ADR 0037 decision 14)
+// or, until moving over gives it one, of its connection. A source on a secret reads on its
+// repository's host, github.com or gitlab.com, or another whose code host its config names
+// (code_host: github or gitlab).
 //
 // A source's config names the repository (repository: its https URL on the connection's git host,
 // such as https://github.com/acme/docs), the branch (branch; the repository's default branch when
@@ -145,29 +148,30 @@ type source struct {
 	include, exclude [][]string
 }
 
-// open reads s: the connection's code host and git login, and the source's config.
-func open(s domain.SyncSpec) (source, error) {
-	if s.Connection == nil {
-		return source{}, fmt.Errorf("source %s has no connection to read: %w", s.Source.Name, domain.ErrInvalid)
-	}
+// cfgCodeHost is the config key of a source on a secret naming its code host (github or gitlab),
+// for a repository on a host other than github.com and gitlab.com.
+const cfgCodeHost = "code_host"
 
-	c := s.Connection
+// dotComHosts are the code hosts a repository's host names without code_host.
+var dotComHosts = map[string]string{githubDotCom: "github", "gitlab.com": "gitlab"}
+
+// open reads s: the code host and its login (the secret's value on the repository's host, or the
+// connection's git login), and the source's config.
+func open(s domain.SyncSpec) (source, error) {
+	login, token, hostName, owner, err := credential(s)
+	if err != nil {
+		return source{}, err
+	}
 
 	var host codeHost
 
-	switch c.Kind.Spec.CodeHost {
+	switch hostName {
 	case "github":
 		host = github{}
 	case "gitlab":
 		host = gitlab{}
 	default:
-		return source{}, fmt.Errorf("gitdocs reads repositories on GitHub or GitLab, and kind %s of connection %s has neither as its code host: %w",
-			c.Kind.Name, c.Connection.Name, domain.ErrInvalid)
-	}
-
-	login, token, err := c.GitLogin()
-	if err != nil {
-		return source{}, err
+		return source{}, fmt.Errorf("gitdocs reads repositories on GitHub or GitLab, and %s names neither as its code host: %w", owner, domain.ErrInvalid)
 	}
 
 	cfg := s.Source.Config
@@ -193,6 +197,42 @@ func open(s domain.SyncSpec) (source, error) {
 	}
 
 	return src, nil
+}
+
+// credential is what s reads with: the git host, the token, the code host's name and who names
+// it. A source on a secret reads on its repository's host, whose code host its config names
+// (code_host) or the host is (github.com, gitlab.com); one on a connection on the host of the
+// connection's git login, whose kind names the code host.
+func credential(s domain.SyncSpec) (login, token, host, owner string, err error) {
+	switch {
+	case s.Secret != nil:
+		cfg := s.Source.Config
+
+		u, perr := url.Parse(strings.TrimSpace(cfg["repository"]))
+		if perr != nil || u.Host == "" {
+			return "", "", "", "", fmt.Errorf("source %s: the config names no repository URL: %w", s.Source.Name, domain.ErrInvalid)
+		}
+
+		login = strings.ToLower(u.Host)
+
+		host = strings.TrimSpace(cfg[cfgCodeHost])
+		if host == "" {
+			host = dotComHosts[login]
+		}
+
+		return login, s.Secret.Value, host, "source " + s.Source.Name + " (" + cfgCodeHost + ", or a repository on github.com or gitlab.com)", nil
+	case s.Connection != nil:
+		c := s.Connection
+
+		login, token, err = c.GitLogin()
+		if err != nil {
+			return "", "", "", "", err
+		}
+
+		return login, token, c.Kind.Spec.CodeHost, "kind " + c.Kind.Name + " of connection " + c.Connection.Name, nil
+	default:
+		return "", "", "", "", fmt.Errorf("source %s has no secret or connection to read with: %w", s.Source.Name, domain.ErrInvalid)
+	}
 }
 
 // repository checks that raw is an https URL of a repository on host (the connection's git

@@ -3,7 +3,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { afterEach, describe, expect, it } from 'vitest';
 import { connectionsQuery } from '../../api/queries';
 import type { Factory, OrgSummary } from '../../api/types';
-import { connectionFixture } from '../../test/connections-route';
+import { connectionFixture } from '../../test/connection-fixture';
 import { renderFactoryPage } from '../../test/route';
 import { NewTriggerDialog } from './new-trigger-dialog';
 
@@ -163,7 +163,7 @@ describe('New trigger picker', () => {
     for (const title of ['Built in', 'Connected', 'Not connected']) {
       expect(screen.getByRole('heading', { level: 3, name: title })).toBeTruthy();
     }
-    expect(screen.getByRole('link', { name: 'Connect Cloudflare' }).getAttribute('href')).toBe('/o/acme/connections');
+    expect(screen.getByRole('link', { name: 'Connect Cloudflare' }).getAttribute('href')).toBe('/o/acme/access');
     expect(screen.getByRole('list', { name: 'New trigger steps' })).toBeTruthy();
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search sources' }), { target: { value: 'jir' } });

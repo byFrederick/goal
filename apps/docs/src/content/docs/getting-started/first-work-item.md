@@ -52,12 +52,12 @@ An item at a human station waits for an approval. Read its outputs with `goal it
 goal approve <item>
 ```
 
-The same command also approves a tool call that the item's agent is waiting on. Pass `--always-allow` only if that agent role should call that tool without asking from now on. That is a standing rule, and it needs the `connection:manage` permission.
+The same command also approves a tool call that the item's agent is waiting on. Pass `--always-allow` only if that agent role should call that tool without asking from now on. That is a standing rule, and it needs the permission to manage secrets and access (`connection:manage` in the API today).
 
 To refuse a tool call instead, deny it with a note. The agent's next run receives the denial and the note:
 
 ```sh
-goal deny <item> --note "Use the staging connection, not production."
+goal deny <item> --note "Use the staging server, not production."
 ```
 
 At a station that merges the item's pull request, `goal merge` merges it and then approves the item:

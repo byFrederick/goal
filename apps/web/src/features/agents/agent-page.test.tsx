@@ -53,6 +53,7 @@ const factory: Factory = {
 };
 
 const promptPath = 'agents/frontend-engineer.md';
+const factoryYaml = 'spec:\n  agents:\n    - name: frontend-engineer\n      environment: deploy\n';
 const promptText = '# frontend-engineer\n\nBuild the change the spec describes in web/.';
 
 const stats: AgentStats = {
@@ -94,7 +95,6 @@ const model = {
         max_turns: 250,
         per_item_usd: 20,
         skills: [],
-        connections: ['github', 'context7'],
       },
     ],
   },
@@ -115,10 +115,32 @@ function seeds({
       agentStatsQuery(org.id, factory.id, 'frontend-engineer').queryKey,
       reasons ? agentStats : { ...agentStats, reasons: [] },
     ],
-    [factoryQuery(org.id, factory.id).queryKey, factory],
+    [
+      factoryQuery(org.id, factory.id).queryKey,
+      {
+        ...factory,
+        current: {
+          id: 'v1',
+          number: 1,
+          published_at: '2026-10-01T00:00:00Z',
+          published_by: { kind: 'user', id: 'u-1', name: 'Acme Owner' },
+        },
+      },
+    ],
     [builderMetaQuery(org.id).queryKey, { capabilities: { tool_approvals: false } }],
-    [versionQuery(org.id, factory.id, 'current').queryKey, { files: [{ path: promptPath, sha256: 'sha-prompt' }] }],
+    [
+      versionQuery(org.id, factory.id, 'current').queryKey,
+      {
+        files: [
+          { path: promptPath, sha256: 'sha-prompt' },
+          { path: 'factory.yaml', sha256: 'sha-f' },
+          { path: 'environments/default.yaml', sha256: 'sha-d' },
+          { path: 'environments/deploy.yaml', sha256: 'sha-e' },
+        ],
+      },
+    ],
     [versionFileQuery(org.id, factory.id, 'current', promptPath, 'sha-prompt').queryKey, { text: promptText }],
+    [versionFileQuery(org.id, factory.id, 'current', 'factory.yaml', 'sha-f').queryKey, { text: factoryYaml }],
   ];
   // `version: false` leaves the version that runs unread, as the page sees it while it loads.
   if (version !== false) seed.push([versionModelQuery(org.id, factory.id, 'current').queryKey, version]);
@@ -235,7 +257,15 @@ describe('the Agent page, ready', () => {
     expect(within(settings).getByText('Default 150')).toBeTruthy();
     expect(within(settings).getByText('$20.00')).toBeTruthy();
     expect(within(settings).getByText('Default $12.00')).toBeTruthy();
-    expect(within(settings).getAllByText('Own value')).toHaveLength(3);
+    expect(within(settings).getAllByText('Own value')).toHaveLength(4);
+  });
+
+  it("shows an Environment select with the agent's environment instead of connections", async () => {
+    await renderPage();
+    const settings = screen.getByRole('region', { name: 'Settings' });
+    const pick = await within(settings).findByRole('combobox', { name: 'Environment of frontend-engineer' });
+    expect(pick.textContent).toContain('deploy');
+    expect(within(settings).queryByText('Connections')).toBeNull();
   });
 
   it('shows the start of the prompt and links to all of it on the Prompt view', async () => {

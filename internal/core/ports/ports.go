@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -206,7 +207,13 @@ type Store interface {
 
 	// FinishRun records a run's result, adds its cost to the item and appends a run_finished
 	// event with its status, error, cost and turns. Finishing a run twice is a no-op.
+	// It also keeps the run's own output and the head it pushed (res.PushedHead).
 	FinishRun(ctx context.Context, id domain.RunID, res domain.RunResult, endedAt time.Time) error
+
+	// RecordRunInput records what a run was given: its brief and the heads before prepare's
+	// rebase (ADR 0039, decision 8), replacing any recorded before; empty fields are stored as
+	// unknown. A run of another organization, or none, is ErrNotFound.
+	RecordRunInput(ctx context.Context, id domain.RunID, in domain.RunInput) error
 
 	// Runs returns up to limit of an item's runs, oldest first (by start, then id). An unknown
 	// item has none.
@@ -863,6 +870,25 @@ type CodeHost interface {
 	// RepositoryList.Truncated set when there are more. An unknown owner is an error wrapping
 	// ErrNotFound; a host that cannot list them, one wrapping errors.ErrUnsupported. It only reads.
 	Repositories(ctx context.Context, c domain.ResolvedConnection, owner string) (RepositoryList, error)
+
+	// RepositoryAccess reports what token can do in the repository at repo
+	// (https://<host>/<owner>/<repo>, optionally ending in .git), without a connection: whether it
+	// can read the repository and whether it can push to it, each with a one-line reason from the
+	// host. The token is sent only to repo's host. A refusal the host answers (an unknown
+	// repository, a bad token, no push) is in the result; err is a repo that is not a repository
+	// URL (wrapping domain.ErrInvalid), or a host that gave no answer it could read. It only reads.
+	RepositoryAccess(ctx context.Context, repo, token string) (RepositoryAccess, error)
+}
+
+// RepositoryAccess is what CodeHost.RepositoryAccess found a token can do in a repository.
+type RepositoryAccess struct {
+	Read, Push AccessCheck
+}
+
+// AccessCheck is one check of RepositoryAccess: whether it passed, and the host's one-line reason.
+type AccessCheck struct {
+	OK     bool
+	Reason string
 }
 
 // MaxCompareCommits bounds the commits one CodeHost.Compare returns.
@@ -983,8 +1009,20 @@ type ObjectStore interface {
 	// Get returns the object at key, or an error wrapping ErrNotFound when there is none.
 	Get(ctx context.Context, key string) (Object, error)
 
+	// GetRange reads length bytes of the object at key from offset without holding the object in
+	// memory, as a box reads one file of a knowledge snapshot's zip: fewer when the object ends
+	// first, none when offset is at or past its end, the rest of it when length is negative. The
+	// caller closes the reader. ErrNotFound when there is no object at key; a negative offset is
+	// domain.ErrInvalid.
+	GetRange(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error)
+
 	// Put stores body at key, replacing what was there, and returns it.
 	Put(ctx context.Context, key string, body []byte) (ObjectInfo, error)
+
+	// PutStream stores what r yields at key, replacing what was there, and returns it. It holds at
+	// most one part of the object in memory, so a knowledge snapshot's zip streams from disk. When
+	// r fails, the object at key is left as it was.
+	PutStream(ctx context.Context, key string, r io.Reader) (ObjectInfo, error)
 
 	// PutIfAbsent stores body at key unless an object is there; created reports which, and info
 	// is the object now at key. Content-addressed writes (definition blobs, domain.BlobKey) use

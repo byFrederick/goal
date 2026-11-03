@@ -163,6 +163,7 @@ describe('prepare', () => {
     expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'))).toEqual({
       ...served.spec,
       gateway_url: gateway,
+      branch: 'goal/1-add-a-health-endpoint',
     });
     expect(await readFile(join(dirs.goal, 'agent/prompt.md'), 'utf8')).toBe('# engineer\n');
     expect(await readFile(join(dirs.goal, 'agent/output.schema.json'), 'utf8')).toBe('{"type":"object"}');
@@ -215,7 +216,7 @@ describe('prepare', () => {
       gateway_url: gateway,
     });
     expect(prepared).toEqual({ type: 'prepared', at: later.toISOString(), seconds: 12.3, tools: 0 });
-    // No repository: nothing cloned, no repository tools.
+    // No repository: nothing cloned, no repository tools, no heads.
     expect(calls).toEqual([]);
   });
 
@@ -305,6 +306,33 @@ describe('prepare', () => {
     expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'))).not.toHaveProperty('base_conflicts');
   });
 
+  it("reports the branch's and the base's heads from before the rebase, and writes the branch into spec.json", async () => {
+    const branch = 'goal/11-heads';
+    const url = await origin(branch, { moved: { 'main.txt': 'from main\n' } });
+    const bare = join(root, 'origin.git');
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch } });
+    const { exec } = recorder();
+
+    const prepared = await prepare(depsWith(fake, exec));
+
+    const pushed = git(bare, 'rev-parse', `refs/heads/${branch}`);
+    expect(prepared).toMatchObject({ branch_head: pushed, base_head: git(bare, 'rev-parse', 'refs/heads/main') });
+    // The rebase moved the branch past the head it reports.
+    expect(git(dirs.workspace, 'rev-parse', 'HEAD')).not.toBe(pushed);
+    expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'))).toMatchObject({ branch });
+  });
+
+  it("reports a new branch's head as the default branch's", async () => {
+    const url = await origin();
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch: 'goal/12-new' } });
+    const { exec } = recorder();
+
+    const prepared = await prepare(depsWith(fake, exec));
+
+    const main = git(join(root, 'origin.git'), 'rev-parse', 'refs/heads/main');
+    expect(prepared).toMatchObject({ branch_head: main, base_head: main });
+  });
+
   it('merges the default branch when fresh_base is merge', async () => {
     const branch = 'goal/11-merge';
     const url = await origin(branch, { moved: { 'main.txt': 'from main\n' } });
@@ -365,6 +393,18 @@ describe('prepare', () => {
       expect(git(ws, 'branch', '--show-current')).toBe('goal/20-part');
       expect(git(ws, 'merge-base', '--is-ancestor', `origin/${base}`, 'HEAD')).toBe('');
       expect(() => git(ws, 'merge-base', '--is-ancestor', 'origin/main', 'HEAD')).toThrow();
+    });
+
+    it("reports the base branch's head as base_head", async () => {
+      const url = await origin(undefined, { moved: { 'main.txt': 'from main\n' }, base });
+      const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch: 'goal/21-part', base } });
+      const { exec } = recorder();
+
+      const prepared = await prepare(depsWith(fake, exec));
+
+      const head = git(bare(), 'rev-parse', `refs/heads/${base}`);
+      expect(head).not.toBe(git(bare(), 'rev-parse', 'refs/heads/main'));
+      expect(prepared).toMatchObject({ branch_head: head, base_head: head });
     });
 
     it('rebases an existing branch on the base branch', async () => {

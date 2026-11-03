@@ -41,10 +41,11 @@ describe('what a personal token can do', () => {
     for (const s of highImpactScopes) expect(cliWorkPreset).not.toContain(s);
     expect([...cliWorkPreset].sort()).toEqual(
       [
+        'access:read',
         'andon:manage',
         'connection:browse',
         'connection:read',
-        'credential:read',
+        'secret:read',
         'factory:read',
         'intake:read',
         'item:create',

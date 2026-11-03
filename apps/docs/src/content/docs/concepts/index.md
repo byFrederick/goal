@@ -1,7 +1,7 @@
 ---
 
 title: Concepts
-description: What a factory, its flow, agents, connections, knowledge, Jonah and questions are.
+description: What a factory, its flow, agents, access and secrets, knowledge, Jonah and questions are.
 ---
 
 The factory and its flow come first. Read them in this order, or jump to the one you need.

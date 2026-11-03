@@ -98,6 +98,9 @@ type Deps struct {
 	// Credentials fill the connections' secret fields that refer to one and give each agent the
 	// ones listed for it (ADR 0017 decisions 5 and 6).
 	Credentials ports.Credentials
+	// OrgSecrets give a run of a version on secrets the values its model key and its agent's
+	// environment refer to (ADR 0037 decision 10); nil fails every such run.
+	OrgSecrets ports.OrgSecrets
 	// CodeHosts are the code host adapters by the name a connection kind gives (KindSpec.CodeHost).
 	CodeHosts map[string]ports.CodeHost
 	// Minters are the minters by the name a connection kind gives (KindSpec.Mint): a run of a
@@ -209,6 +212,7 @@ type Engine struct {
 	secrets     ports.Secrets
 	connections ports.Connections
 	credentials ports.Credentials
+	orgSecrets  ports.OrgSecrets
 	codehosts   map[string]ports.CodeHost
 	minters     map[string]ports.Minter
 	policies    ports.OrgPolicies
@@ -280,7 +284,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 
 	return &Engine{
 		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, connections: d.Connections,
-		credentials: d.Credentials, codehosts: d.CodeHosts, minters: d.Minters, policies: d.Policies, intake: d.Intake, modelCheck: d.ModelCheck, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
+		credentials: d.Credentials, orgSecrets: d.OrgSecrets, codehosts: d.CodeHosts, minters: d.Minters, policies: d.Policies, intake: d.Intake, modelCheck: d.ModelCheck, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
 		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{}, warned: map[domain.FactoryID]bool{},
 	}, nil
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
+	"github.com/byFrederick/goal/internal/catalog"
 	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/engine"
@@ -44,7 +45,7 @@ const acme = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + acmeID + `, name: acme, title: Acme }
 spec:
-  runtime: { modelConnection: claude }
+  runtime: { modelKey: "{{claude-key}}" }
   agents:
     - { name: writer, prompt: ./agents/writer.md }
   board:
@@ -111,6 +112,12 @@ spec:
 
 const lineID = "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a10"
 
+// defaultEnvFile and defaultEnv are acme's default environment (ADR 0037).
+const (
+	defaultEnvFile = "environments/default.yaml"
+	defaultEnv     = "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n"
+)
+
 // typeFeature is acme's first work type.
 const typeFeature = "feature"
 
@@ -175,10 +182,13 @@ type harness struct {
 	// conns keeps the organizations' connections, sealed under key k1, with goald's platform
 	// kinds. Connection tests dial through egress.PublicDialer, private addresses (the tests'
 	// servers) allowed unless publicOnly is set.
-	conns      *porttest.Connections
-	publicOnly atomic.Bool
+	conns         *porttest.Connections
+	publicOnly    atomic.Bool
+	connTransport *http.Transport
 	// creds keeps the organizations' credentials, sealed under key k1, referred to by conns.
 	creds *porttest.Credentials
+	// secrets keeps the organizations' secrets, sealed under key k1, referred to by conns.
+	secrets *porttest.OrgSecrets
 	// intake keeps the factories' webhook endpoints, sealed under key k1, their deliveries and
 	// trigger firings, over store.
 	intake *porttest.Intake
@@ -200,6 +210,13 @@ type harness struct {
 	judgeScores *porttest.JudgeScores
 	// drafts are the factories' draft requests; nothing runs them, so tests finish them.
 	drafts *porttest.DraftRequests
+	// catalog are goald's tool templates; envTests keep the environments' MCP server tests, which
+	// tools answers.
+	catalog  []domain.ToolTemplate
+	envTests *porttest.EnvironmentTests
+	// conversions are the factories' conversions to secrets, which the inbox lists when refused.
+	conversions *porttest.FactoryConversions
+	tools       *porttest.ToolLister
 }
 
 // acme's one prompt and its path.
@@ -211,7 +228,7 @@ const (
 
 // The two factories' files.
 var (
-	acmeFiles = map[string]string{yamlFile: acme, writerFile: writerPrompt}
+	acmeFiles = map[string]string{yamlFile: acme, writerFile: writerPrompt, defaultEnvFile: defaultEnv}
 	lineFiles = map[string]string{
 		yamlFile: line, "agents/backend.md": "# backend\n", "agents/frontend.md": "# frontend\n",
 		"contracts/change.schema.json": `{"type": "object"}`,
@@ -236,7 +253,12 @@ func (h *harness) publishImport(t *testing.T, authors *authoring.Service, files 
 		t.Fatal(err)
 	}
 
-	if _, err := authors.Publish(ctx, c.Factory.ID, authoring.PublishRequest{Revision: c.Draft.Revision}); err != nil {
+	// The fixtures are versions published before ADR 0037, which run on the old path: they are
+	// published in the store, since publish refuses the keys the ADR moved (moved-to-environment).
+	if _, err := h.defs.Publish(ctx, ports.Publish{
+		Factory: c.Factory.ID, DraftRevision: c.Draft.Revision, Name: c.Factory.Name, Title: c.Factory.Title,
+		Start: true, By: domain.LocalUser, At: h.clock.Now(),
+	}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -439,6 +461,17 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.drafts.AddFactory(testOrg, acmeID)
 	h.drafts.AddFactory(testOrg, lineID)
 
+	h.envTests, h.tools = porttest.NewEnvironmentTests(), porttest.NewToolLister()
+	h.envTests.AddFactory(testOrg, acmeID)
+	h.envTests.AddFactory(testOrg, lineID)
+
+	templates, err := catalog.Templates()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.catalog = templates
+
 	e, err := engine.New(engine.Deps{
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock, Intake: h.intake, Audit: tenancy,
@@ -481,6 +514,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.keys.AddOrg(domain.Org{ID: otherOrg, Slug: labsSlug, Name: "Example Labs"})
 	h.keys.AddFactory(testOrg, acmeID)
 	h.keys.AddFactory(testOrg, lineID)
+	h.conversions = conversionsOf(testOrg, acmeID, lineID)
 
 	h.platform = porttest.NewPlatform(h.keys)
 	h.notifications = porttest.NewNotificationPreferences()
@@ -490,13 +524,14 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
 		Access: h.keys, OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: h.platform, Feed: feed,
-		Builder: h.builder, Connections: h.conns, Credentials: h.creds, Intake: h.intake, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
+		Builder: h.builder, Connections: h.conns, Credentials: h.creds, OrgSecrets: h.secrets, Intake: h.intake, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
 		// GitLab's code host lists no repositories, as the gitlab adapter.
-		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()},
+		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()}, RepositoryTestTimeout: 50 * time.Millisecond,
 		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,
 		OrgPolicies: porttest.NewOrgPolicies([]string{modelOpus, modelHaiku}, tenancy, h.clock.Now), BoxSizes: testBoxSizes, EgressAddresses: testEgressAddresses,
 		NotificationPreferences: h.notifications,
 		DraftRequests:           h.drafts,
+		Catalog:                 h.catalog, EnvironmentTests: h.envTests, ToolLister: h.tools, Conversions: h.conversions,
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
@@ -630,7 +665,10 @@ func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 
 	h.conns = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), audit)
 	h.creds = porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
-	h.kb, h.kbObjects = porttest.NewKnowledge(h.conns, audit), porttest.NewObjectStore()
+	h.secrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
+	kb := porttest.NewKnowledge(h.conns, audit)
+	kb.ReadSecrets(h.secrets)
+	h.kb, h.kbObjects = kb, porttest.NewObjectStore()
 	h.uploads = knowledge.NewUploads(h.kb, h.kbObjects, testUploadMax)
 
 	kinds, err := connkind.Platform()
@@ -646,6 +684,7 @@ func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 		return egress.PublicDialer{AllowPrivate: !h.publicOnly.Load()}.DialContext(ctx, network, addr)
 	}}
 	t.Cleanup(tr.CloseIdleConnections)
+	h.connTransport = tr
 
 	return tr
 }
@@ -901,4 +940,14 @@ func TestAPI_SubmitRecordsItsSource(t *testing.T) {
 			t.Errorf("submit with %s: source %q, want %q", c.name, it.Source, c.want)
 		}
 	}
+}
+
+// conversionsOf are factory conversions that know org's factories.
+func conversionsOf(org domain.OrgID, factories ...domain.FactoryID) *porttest.FactoryConversions {
+	c := porttest.NewFactoryConversions()
+	for _, f := range factories {
+		c.AddFactory(org, f)
+	}
+
+	return c
 }

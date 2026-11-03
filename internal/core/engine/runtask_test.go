@@ -31,7 +31,7 @@ func jonahRequest() domain.RunRequest {
 
 // A Jonah run records a run of kind jonah without an item, prepares its sandbox without a
 // repository's git login, gives its agent only the model connection's env (no connection or
-// credential of the factory's agents, even one listed for its agent name), signs a jonah token
+// credential of the factory's agents), signs a jonah token
 // with the review's window and no connection, writes no item event, returns the run's result and
 // deletes its sandbox.
 func TestRunTask_Jonah(t *testing.T) {
@@ -44,7 +44,6 @@ func TestRunTask_Jonah(t *testing.T) {
 	h.store.AddFactory(testOrg, factoryID) // the factory exists before any item does
 	h.addCredential(t, domain.NewCredential{
 		Name: credDeploy, Scope: domain.CredentialScope{All: true}, Value: deployKeyValue,
-		Agents: map[domain.FactoryID][]string{factoryID: {agJonah, agWorker}},
 	})
 
 	res, err := h.e.RunTask(t.Context(), jonahRequest())

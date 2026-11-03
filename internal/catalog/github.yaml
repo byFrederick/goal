@@ -1,0 +1,18 @@
+apiVersion: goal/v1
+kind: Template
+metadata:
+  name: github
+  title: GitHub
+  description: The gh CLI and GitHub's MCP server with a fine-grained token for the repositories agents may use.
+spec:
+  secrets:
+    - {slot: token, title: Token, description: "A fine-grained token: only the repositories and permissions agents need.", suggest: github-token}
+  tools: [gh]
+  env:
+    GH_TOKEN: "{{token}}"
+  mcp:
+    github:
+      url: https://api.githubcopilot.com/mcp/
+      headers: {Authorization: "Bearer {{token}}"}
+      tools: {merge_pull_request: ask, "delete_*": ask}
+  test: {method: GET, url: "https://api.github.com/user", headers: {Authorization: "Bearer {{token}}"}, expect: 200}

@@ -1,7 +1,7 @@
 // Step 3, "Start your first factory" (docs/design/screens/get-started/template.jpg, ADR 0032 decision 4). The
 // catalog's templates as cards (the first is chosen), the factory's name and what it does, and "Use <template>",
-// which creates the factory from the template with POST /factories. The repository chosen in step 2 and its
-// connection then go into the new draft, as RepositoryField saves them, with the purpose; only then does
+// which creates the factory from the template with POST /factories. The repository entered in step 2 and its
+// token secret then go into the new draft, as RepositoryField saves them, with the purpose; only then does
 // Continue reach step 4 with ?factory=<id>. The template list, the create call and the draft are the wizard's
 // (factory-editor/start and draft): nothing here is a second copy of them.
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -24,7 +24,7 @@ import { DraftSessionProvider, useDraft, useDraftSession } from '../factory-edit
 import { stationLabel } from '../factory-editor/line/labels';
 import { nameProblem, newFactoryRequest, suggestedName } from '../factory-editor/start/start-choice';
 import { useTemplates } from '../factory-editor/start/template-picker';
-import type { OnboardingSearch } from './code-search';
+import { type OnboardingSearch, repoOf } from './code-search';
 import {
   codeCard,
   FactoryCard,
@@ -48,7 +48,7 @@ type Panel = ReturnType<typeof previewSlots>;
 
 /** The URL state the steps carry: the Code step's choice, and the factory once step 3 made it. */
 function searchOf(search: OnboardingSearch, factory?: string): OnboardingSearch {
-  return { connection: search.connection, owner: search.owner, repos: search.repos, factory };
+  return { url: search.url, secret: search.secret, factory };
 }
 
 export function FactoryStep({ org, search }: { org: OrgSummary; search: OnboardingSearch }) {
@@ -68,7 +68,7 @@ export function FactoryStep({ org, search }: { org: OrgSummary; search: Onboardi
   const picked = choice ?? templates[0]?.name ?? blank;
   const pickedTitle = picked === blank ? 'Start empty' : (templates.find((t) => t.name === picked)?.title ?? picked);
   const organization = organizationCard(org, window.location.host);
-  const code = codeCard(search.repos?.[0]);
+  const code = codeCard(repoOf(search.url), search.secret);
 
   if (search.factory) return <ContinueFactory org={org} search={search} />;
   if (created) {
@@ -137,7 +137,7 @@ function ContinueFactory({ org, search }: { org: OrgSummary; search: OnboardingS
       }
       preview={{
         organization: organizationCard(org, window.location.host),
-        second: codeCard(search.repos?.[0]),
+        second: codeCard(repoOf(search.url), search.secret),
       }}
     >
       <div className="flex flex-col gap-2">
@@ -215,7 +215,7 @@ function CreateFactory({
       void client.invalidateQueries({ queryKey: keys.overviews(org.id) });
       const text = purpose.trim();
       // Nothing to save beyond the factory itself: step 4 opens at once.
-      if (!search.repos?.[0] && text === '') {
+      if (!search.url && text === '') {
         void navigate({
           to: '/o/$org/get-started/$step',
           params: { org: org.slug, step: 'line' },
@@ -415,22 +415,19 @@ function SaveDraft({
   const error = useDraft((s) => s.error);
   const dirty = useDraft((s) => s.sections.basics.dirty);
   const [sent, setSent] = useState(false);
-  const repo = search.repos?.[0];
-  const connection = search.connection;
+  const url = search.url;
+  const secret = search.secret;
 
   // Once the draft is open, the setup goes in as one save: the repository, then the purpose.
   useEffect(() => {
     if (!ready || sent) return;
     let basics = session.getSnapshot().sections.basics.local;
     const edits: AnyEdit[] = [];
-    if (repo) {
+    if (url) {
       const e = setBasics(
         basics,
         'repository',
-        patchRepository(basics.repository, {
-          url: `https://github.com/${repo}`,
-          ...(connection ? { connection } : {}),
-        }),
+        patchRepository(basics.repository, { url, ...(secret ? { token: `{{${secret}}}` } : {}) }),
       );
       edits.push(e);
       basics = e.value;
@@ -438,7 +435,7 @@ function SaveDraft({
     if (created.purpose !== '') edits.push(setBasics(basics, 'purpose', created.purpose));
     session.edit(edits);
     setSent(true);
-  }, [ready, sent, session, repo, connection, created.purpose]);
+  }, [ready, sent, session, url, secret, created.purpose]);
 
   // Saved, with nothing waiting in the draft: step 4 can open it.
   useEffect(() => {

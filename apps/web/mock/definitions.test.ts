@@ -75,7 +75,8 @@ async function lineSave(change: (stations: Station[]) => void) {
 describe('the draft', () => {
   it('opens goal with its changes, problems, etags and edited fields', async () => {
     const { body: draft } = await call<Draft>(`${goal}/draft`);
-    expect(draft).toMatchObject({ revision: 42, next_number: 9, change_count: 3, problem_count: 1 });
+    // The second problem is the plain LINEAR_API_KEY of environments/default.yaml (mock/environments.ts).
+    expect(draft).toMatchObject({ revision: 42, next_number: 9, change_count: 3, problem_count: 2 });
     expect(draft.base?.number).toBe(8);
     expect(draft.sections.find((s) => s.section === 'line')).toMatchObject({ changes: 2, problems: 0 });
     expect(draft.sections.find((s) => s.section === 'agents')).toMatchObject({ changes: 1, problems: 1 });

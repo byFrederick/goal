@@ -8,7 +8,7 @@ sidebar:
 
 Goal runs AI agent factories. A factory is a line of stations that work items move through, from a spec to a reviewed change, and agents do the work at each station. People approve the steps that need a person, answer an agent's questions, and watch the line on screen or from the CLI.
 
-A factory's stations, agents and work types are data in its definition, not code in Goal. The same platform runs any factory a team defines. [Concepts](/docs/concepts/) explains the parts: the factory and its flow, agents, connections, knowledge, Jonah and questions.
+A factory's stations, agents and work types are data in its definition, not code in Goal. The same platform runs any factory a team defines. [Concepts](/docs/concepts/) explains the parts: the factory and its flow, agents, access and secrets, knowledge, Jonah and questions.
 
 You use Goal in two places:
 

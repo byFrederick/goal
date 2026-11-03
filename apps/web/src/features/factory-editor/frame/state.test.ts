@@ -119,7 +119,7 @@ describe('section tiles', () => {
     expect(viewTileText('basics', model)).toBe('Purpose and repository');
     expect(viewTileText('line', model)).toBe('2 stations');
     expect(viewTileText('agents', model)).toBe('1 agent');
-    expect(viewTileText('connections', model)).toBe('0 connections');
+    expect(viewTileText('connections', model)).toBe('0 tools');
   });
 
   test('Review and publish says what stands between the draft and a publish', () => {

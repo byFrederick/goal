@@ -27,12 +27,20 @@ type KnowledgeDocumentID string
 // KnowledgeSourceKind is how a source gets its documents.
 type KnowledgeSourceKind string
 
-// The kinds of knowledge sources.
+// The kinds of knowledge sources. ADR 0038 makes them upload, repository and confluence; synced
+// and live stay until the cut-over converts their sources (decision 16).
 const (
-	SourceUpload KnowledgeSourceKind = "upload"
-	SourceSynced KnowledgeSourceKind = "synced"
-	SourceLive   KnowledgeSourceKind = "live"
+	SourceUpload     KnowledgeSourceKind = "upload"
+	SourceRepository KnowledgeSourceKind = "repository"
+	SourceConfluence KnowledgeSourceKind = "confluence"
+	SourceSynced     KnowledgeSourceKind = "synced"
+	SourceLive       KnowledgeSourceKind = "live"
 )
+
+// readsSecret reports whether a source of kind k may read with a secret.
+func (k KnowledgeSourceKind) readsSecret() bool {
+	return k == SourceSynced || k == SourceRepository || k == SourceConfluence
+}
 
 // SyncStatus is a source's sync state: idle between syncs, syncing while a goald holds its lease,
 // failed after a sync that stopped (LastError says why).
@@ -98,13 +106,21 @@ type KnowledgeSource struct {
 	Name  string
 	Title string
 	Kind  KnowledgeSourceKind
-	// Connection is the connection a synced or live source reads; "" for an upload source.
+	// Connection is the connection a live source reads, or a synced source not yet on a secret;
+	// "" otherwise.
 	Connection string
+	// Secret is the secret a synced source reads with (ADR 0037 decision 14), opened at each
+	// sync; "" for an upload or live source and a synced one still on its connection.
+	Secret string
 	// Config is the source's settings for its reader (a repository, a branch and path globs; a
-	// Confluence space).
-	Config     map[string]string
-	SyncEvery  time.Duration
-	NextSyncAt *time.Time
+	// Confluence space). A synced source on a secret names its reader too (SourceReaderKey).
+	Config map[string]string
+	// ReadWhen is the line that tells agents when to open the source (ADR 0038 decision 1).
+	ReadWhen string
+	// CurrentSnapshot is the snapshot runs read; "" before its first.
+	CurrentSnapshot KnowledgeSnapshotID
+	SyncEvery       time.Duration
+	NextSyncAt      *time.Time
 	// LeaseUntil is when the lease of the goald syncing it ends.
 	LeaseUntil   *time.Time
 	Status       SyncStatus
@@ -125,37 +141,70 @@ type NewKnowledgeSource struct {
 	Name, Title string
 	Kind        KnowledgeSourceKind
 	Connection  string
+	Secret      string
 	Config      map[string]string
+	ReadWhen    string
 	SyncEvery   time.Duration
 }
 
-// Check enforces a new source's rules: its name as a connection's, a title, a kind, a connection
-// exactly when it is not an upload source, its config's size and the schedule. Errors wrap
-// ErrInvalid.
-func (n NewKnowledgeSource) Check() error {
-	errs := []error{CheckConnectionName(n.Name), checkSourceTitle(n.Title), checkSourceConfig(n.Config), checkSyncEvery(n.SyncEvery)}
+// SourceReaderKey is the config key naming the reader of a synced source on a secret (gitdocs,
+// confluence): a source on a connection takes it from the connection's kind.
+const SourceReaderKey = "reader"
 
-	switch n.Kind {
-	case SourceUpload:
-		if n.Connection != "" {
-			errs = append(errs, fmt.Errorf("an upload source reads no connection: %w", ErrInvalid))
-		}
-	case SourceSynced, SourceLive:
-		if n.Connection == "" {
-			errs = append(errs, fmt.Errorf("a %s source reads a connection: %w", n.Kind, ErrInvalid))
-		}
-	default:
-		errs = append(errs, fmt.Errorf("source kind %q is not upload, synced or live: %w", n.Kind, ErrInvalid))
+// Check enforces a new source's rules: its name as a connection's, a title, a kind; an upload
+// source reads neither a connection nor a secret, a repository no connection and a secret or
+// none, Confluence a secret, a synced one exactly one of a connection and a secret (a secret
+// with its reader in its config; a connection until moving over gives it a secret), a live one
+// a connection; its config's size, its read-when line and the schedule. Errors wrap ErrInvalid.
+func (n NewKnowledgeSource) Check() error {
+	errs := []error{
+		CheckConnectionName(n.Name), checkSourceTitle(n.Title), checkSourceConfig(n.Config), checkSyncEvery(n.SyncEvery),
+		CheckReadWhen(n.ReadWhen),
 	}
 
-	return errors.Join(errs...)
+	if n.Secret != "" {
+		errs = append(errs, CheckSecretName(n.Secret))
+	}
+
+	return errors.Join(append(errs, n.checkReads())...)
 }
 
-// KnowledgeSourcePatch changes a source: Title and SyncEvery when set, Config when not nil.
+// checkReads enforces what a new source of each kind reads: a connection, a secret or neither.
+func (n NewKnowledgeSource) checkReads() error {
+	conn, secret := n.Connection != "", n.Secret != ""
+
+	rule, ok := map[KnowledgeSourceKind]struct {
+		holds bool
+		says  string
+	}{
+		SourceUpload:     {!conn && !secret, "an upload source reads no connection or secret"},
+		SourceRepository: {!conn, "a repository source reads with a secret, not a connection"},
+		SourceConfluence: {!conn && secret, "a Confluence source reads with a secret and no connection"},
+		SourceSynced:     {conn != secret, "a synced source reads with a secret"},
+		SourceLive:       {conn && !secret, "a live source reads a connection and no secret"},
+	}[n.Kind]
+
+	switch {
+	case !ok:
+		return fmt.Errorf("source kind %q is not upload, repository, confluence, synced or live: %w", n.Kind, ErrInvalid)
+	case !rule.holds:
+		return fmt.Errorf("%s: %w", rule.says, ErrInvalid)
+	case n.Kind == SourceSynced && secret:
+		return checkSourceReader(n.Config)
+	}
+
+	return nil
+}
+
+// KnowledgeSourcePatch changes a source: Title, ReadWhen, SyncEvery and Secret when set, Config
+// when not nil. Secret is a synced, repository or Confluence source's only: it moves a synced
+// source on a connection over to the secret.
 type KnowledgeSourcePatch struct {
 	Title     *string
+	ReadWhen  *string
 	Config    map[string]string
 	SyncEvery *time.Duration
+	Secret    *string
 }
 
 // Check enforces the rules of what p sets. Errors wrap ErrInvalid.
@@ -174,7 +223,44 @@ func (p KnowledgeSourcePatch) Check() error {
 		errs = append(errs, checkSyncEvery(*p.SyncEvery))
 	}
 
+	if p.Secret != nil {
+		errs = append(errs, CheckSecretName(*p.Secret))
+	}
+
+	if p.ReadWhen != nil {
+		errs = append(errs, CheckReadWhen(*p.ReadWhen))
+	}
+
 	return errors.Join(append(errs, checkSourceConfig(p.Config))...)
+}
+
+// CheckOn enforces p's rules on src, the source it changes: a secret only on a synced, repository
+// or Confluence source, and a synced source on a secret keeps naming its reader. Errors wrap
+// ErrInvalid.
+func (p KnowledgeSourcePatch) CheckOn(src KnowledgeSource) error {
+	if p.Secret != nil && !src.Kind.readsSecret() {
+		return fmt.Errorf("only a synced, repository or Confluence source reads with a secret, and %s is %s: %w", src.Name, src.Kind, ErrInvalid)
+	}
+
+	if src.Kind != SourceSynced || (p.Secret == nil && src.Secret == "") {
+		return nil
+	}
+
+	cfg := src.Config
+	if p.Config != nil {
+		cfg = p.Config
+	}
+
+	return checkSourceReader(cfg)
+}
+
+// checkSourceReader refuses a synced source on a secret whose config names no reader.
+func checkSourceReader(c map[string]string) error {
+	if strings.TrimSpace(c[SourceReaderKey]) == "" {
+		return fmt.Errorf("a synced source on a secret names its reader in its config (%s: gitdocs or confluence): %w", SourceReaderKey, ErrInvalid)
+	}
+
+	return nil
 }
 
 func checkSourceTitle(t string) error {
@@ -290,10 +376,11 @@ type KnowledgeHit struct {
 	Score    float64
 }
 
-// SyncSpec is what a source reader reads: the source and, for a synced source, its connection
-// opened with its values.
+// SyncSpec is what a source reader reads: the source and, for a synced source, its secret
+// opened with its value, or the connection it still reads opened with its values.
 type SyncSpec struct {
 	Source     KnowledgeSource
+	Secret     *ResolvedSecret
 	Connection *ResolvedConnection
 }
 

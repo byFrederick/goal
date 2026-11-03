@@ -104,7 +104,7 @@ export function EndpointCard({
             <KeyRound size={12} strokeWidth={1.5} aria-hidden="true" />
             {endpoint.secret_name}
           </Chip>
-          <span className="text-meta text-muted">in Credentials, HMAC SHA-256</span>
+          <span className="text-meta text-muted">in Secrets, HMAC SHA-256</span>
           {canManage ? (
             <Button variant="ghost" size="sm" onClick={openRotate}>
               <RotateCw size={14} strokeWidth={1.5} aria-hidden="true" />

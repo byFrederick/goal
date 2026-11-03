@@ -27,7 +27,8 @@ func TestKnowledge_Conformance(t *testing.T) {
 		d := newConnectionsDB(t)
 
 		return knowledgetest.Harness{
-			Knowledge: NewKnowledge(d.store), Connections: NewConnections(d.store, testKey(t, "k1")), Audit: d.store,
+			Knowledge: NewKnowledge(d.store), Connections: NewConnections(d.store, testKey(t, "k1")),
+			Secrets: NewSecrets(d.store, testKey(t, "k1")), Audit: d.store,
 			NewOrg: func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, d.store) },
 		}
 	})

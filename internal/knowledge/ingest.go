@@ -23,6 +23,11 @@ type Connections interface {
 	Resolve(ctx context.Context, names []string, use domain.ConnectionUse) ([]domain.ResolvedConnection, error)
 }
 
+// Secrets open the secrets synced sources read with: ports.OrgSecrets.
+type Secrets interface {
+	Resolve(ctx context.Context, names []string, use domain.SecretUse) ([]domain.ResolvedSecret, error)
+}
+
 // Defaults of the ingestion loop.
 const (
 	// DefaultWorkers is how many sources one goald syncs at once (GOAL_KB_WORKERS).
@@ -44,6 +49,7 @@ const (
 type IngestorConfig struct {
 	Knowledge   ports.Knowledge
 	Connections Connections
+	Secrets     Secrets
 	Uploads     ports.SourceReader
 	Readers     map[string]ports.SourceReader
 	Embedder    ports.Embedder
@@ -341,6 +347,10 @@ func (in *Ingestor) reader(ctx context.Context, src domain.KnowledgeSource) (dom
 		return spec, in.cfg.Uploads, nil
 	}
 
+	if src.Secret != "" {
+		return in.secretReader(ctx, spec)
+	}
+
 	conns, err := in.cfg.Connections.Resolve(ctx, []string{src.Connection}, domain.ConnectionUse{Source: src.Name})
 	if err != nil {
 		return spec, nil, fmt.Errorf("connection %s: %w", src.Connection, err)
@@ -354,6 +364,37 @@ func (in *Ingestor) reader(ctx context.Context, src domain.KnowledgeSource) (dom
 	if !ok {
 		return spec, nil, fmt.Errorf("connection %s's kind syncs with %q, which this goald cannot read", src.Connection, sync)
 	}
+
+	return spec, reader, nil
+}
+
+// secretReader opens the secret spec's source reads with, now, without a factory (audited as
+// secret.used), so a value replaced since is the one read, and picks the reader its config
+// names. A secret open to some factories only does not open.
+func (in *Ingestor) secretReader(ctx context.Context, spec domain.SyncSpec) (domain.SyncSpec, ports.SourceReader, error) {
+	src := spec.Source
+
+	if in.cfg.Secrets == nil {
+		return spec, nil, fmt.Errorf("source %s reads with secret %s, and this goald opens no secrets", src.Name, src.Secret)
+	}
+
+	name := src.Config[domain.SourceReaderKey]
+
+	reader, ok := in.cfg.Readers[name]
+	if !ok {
+		return spec, nil, fmt.Errorf("source %s names reader %q, which this goald cannot read", src.Name, name)
+	}
+
+	opened, err := in.cfg.Secrets.Resolve(ctx, []string{src.Secret}, domain.SecretUse{})
+	if errors.Is(err, ports.ErrSecretNotAllowed) {
+		return spec, nil, fmt.Errorf("secret %s is open to some factories only; a knowledge source reads with a secret open to all: %w", src.Secret, err)
+	}
+
+	if err != nil {
+		return spec, nil, fmt.Errorf("secret %s: %w", src.Secret, err)
+	}
+
+	spec.Secret = &opened[0]
 
 	return spec, reader, nil
 }

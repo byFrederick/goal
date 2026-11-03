@@ -5,7 +5,7 @@ description: Pull a factory's files into a folder, edit them, validate and publi
 
 You end with a new published version of a factory, and the work that runs from then on follows it. The folder you edit is a working copy: Goal keeps the definition itself, and `goal factory push` makes your folder the factory's draft.
 
-Use the web app's Definition page to edit the same definition by hand. In its Agents section, an agent's prompt has a Reset to default button that restores the prompt file from the running version; the [Add an agent, skill or rule](../add-an-agent-skill-or-rule/) guide describes when it is off. Each entry in the page's section nav shows a summary of its section, such as the number of stations on the Line or the agents and models in Agents. A count of changes and problems appears beside the section name when there are some. Use the steps below when you want the files in your editor and in version control.
+Use the web app's Definition page to edit the same definition by hand. In its Agents section, an agent's prompt has a Reset to default button that restores the prompt file from the running version; the [Add an agent, skill or rule](../add-an-agent-skill-or-rule/) guide describes when it is off. The Environments section edits `environments/<name>.yaml`, which says what an agent's box installs and which secrets and servers it reaches; Add a tool puts an MCP server, a command-line tool or an API into it (see [Access and secrets](../../concepts/access-and-secrets/)). On an agent's page, the Environment select picks which file the agent gets. Each entry in the page's section nav shows a summary of its section, such as the number of stations on the Line or the agents and models in Agents. A count of changes and problems appears beside the section name when there are some. Use the steps below when you want the files in your editor and in version control.
 
 ## Edit in the YAML view
 
@@ -42,7 +42,7 @@ Check the schema and every reference inside the folder, without a server:
 goal factory validate --offline ./acme-line
 ```
 
-`goal validate ./acme-line` runs the same check; without `--offline`, `goal factory validate` also asks the server to check the organization's connections and knowledge sources. Validation reports each problem with the file and the line it is in. Fix them and run the command again until it passes.
+`goal validate ./acme-line` runs the same check; without `--offline`, `goal factory validate` also asks the server to check the organization's secrets and knowledge sources: a `{{secret}}` that does not exist or is not open to the factory is reported at its key. Validation reports each problem with the file and the line it is in. Fix them and run the command again until it passes.
 
 Run the server check before you publish:
 

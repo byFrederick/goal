@@ -13,8 +13,8 @@ The sidebar sits on the left of every organization page, from 768 px wide up.
 - **Search.** Choose the search icon, or press `⌘K` (`Ctrl K` on Windows and Linux). See [Search](#search).
 - **Collapse.** Choose the collapse icon, or drag the sidebar's right edge narrower than about 160 px, to fold it into the rail. Drag it back wider, or choose the expand icon, to open it again. Double-click the edge to reset its width.
 - **New item.** Choose New item, or press `C`, to open the composer. See [Submit and follow items](../submit-and-follow-items/).
-- **Organization pages.** Home, Needs you (with the number of items waiting on you), Runs, Connections, Credentials and Knowledge. Pages you may not open are not listed.
-- **Factories.** Each factory opens to its pages: Floor, Board, Items, Agents, Intake, Jonah, Definition and Settings. A factory's count shows the items waiting on you. A red dot means a connection or the line needs attention.
+- **Organization pages.** Home, Needs you (with the number of items waiting on you), Runs, Access, Secrets and Knowledge. Pages you may not open are not listed.
+- **Factories.** Each factory opens to its pages: Floor, Board, Items, Agents, Intake, Jonah, Definition and Settings. A factory's count shows the items waiting on you. A red dot means a secret, a tool or the line needs attention.
 - **Spend this week.** A row above the account shows this week's spend, with a bar against the budget when one is set. It opens Spend and billing.
 - **Account.** The person at the bottom of the sidebar, marked with an up and down chevron, opens the account menu.
 
@@ -40,7 +40,7 @@ Press `⌘K` (or `Ctrl K`), or choose the search icon. Type to search the organi
 
 - **Items** match by number, title or station.
 - **Pages** match the names of the pages you may open. When a factory is open, its pages are listed too.
-- **Agents** and **Connections** match by name.
+- **Agents** and **Secrets** match by name.
 - **Factories** match by name.
 - **Actions** offer New item about your query, Pause or Resume the line of the open factory, and Approve for each item waiting on you.
 

@@ -1,0 +1,10 @@
+apiVersion: goal/v1
+kind: Template
+metadata:
+  name: mcp-server
+  title: MCP server
+  description: A remote MCP server without a key, such as a public documentation server; change its name and URL.
+spec:
+  mcp:
+    docs:
+      url: https://mcp.example.com/mcp

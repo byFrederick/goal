@@ -16,7 +16,7 @@ const rows: { key: keyof ToolPolicy; title: string; help: string }[] = [
   },
   { key: 'merge_pull_request', title: 'Merge a pull request', help: 'Only a review station with merge on approval' },
   { key: 'read_web', title: 'Read the web and docs', help: 'Search, fetch, context7' },
-  { key: 'use_credentials', title: 'Use credentials', help: 'Only the ones attached to the agent' },
+  { key: 'use_credentials', title: 'Use secrets', help: 'What the agent’s environment names' },
 ];
 
 export function ToolCard({ form, onChange }: { form: PolicyForm; onChange: (next: PolicyForm) => void }) {

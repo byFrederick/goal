@@ -91,7 +91,7 @@ export function KnowledgePage() {
           actions={addSource}
         >
           {manage
-            ? 'Upload the runbooks and docs your agents should read first, or sync a repository’s docs through a connection.'
+            ? 'Upload the runbooks and docs your agents should read first, or sync a repository’s docs with a secret.'
             : `Owners and admins of ${org.name} add knowledge sources.`}
         </EmptyState>
       ) : (
@@ -175,7 +175,7 @@ function SourcesCard({
         <p className="m-0 border-t border-line px-5 py-4 text-body text-muted">
           {missing
             ? `${org.name} has no factory named ${factory}.`
-            : `${factory}’s current version lists no knowledge source. Its definition’s Connections and knowledge says which sources its agents may search.`}
+            : `${factory}’s current version lists no knowledge source. Its definition says which sources its agents may search.`}
         </p>
       ) : (
         <>

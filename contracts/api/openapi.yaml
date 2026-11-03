@@ -60,7 +60,25 @@ tags:
       The organization's credentials (ADR 0017): named secrets sealed under the platform's master
       key, never readable back, that connections refer to as {{name}} and listed agents get as env.
       Members read names and metadata; owners and admins create, change, replace, delete and
-      import them, after a recent sign-in.
+      import them, after a recent sign-in. Deprecated: the secrets API replaces these routes (ADR
+      0037), and they go away when the web moves to it. They need secret:read and secret:manage.
+  - name: secrets
+    description: >-
+      The organization's secrets (ADR 0037): the only place a value lives, sealed under the
+      platform's master key and never readable back. Members, keys and personal tokens read names,
+      metadata and where each secret is used (secret:read); owners and admins create, change,
+      replace, delete and import them, after a recent sign-in (secret:manage).
+  - name: catalog
+    description: >-
+      The tool templates goald ships (ADR 0037 decision 15), the catalog of Add a tool: what one
+      MCP server, command-line tool or API adds to an environment file, its secret slots and its
+      optional HTTP test. Any signed-in caller reads them.
+  - name: access
+    description: >-
+      What the organization's agents reach (ADR 0037 decisions 9 and 16): tests of an
+      environment's remote MCP servers and of a template, which open secrets inside goald and
+      never answer a value, and the Access read model over every factory's published
+      environments, their tests and their secrets.
   - name: knowledge
     description: >-
       The organization's knowledge base (spec 4 §4.8): sources of uploaded files, of connections
@@ -173,6 +191,23 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DeviceRequest" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/catalog:
+    get:
+      operationId: getCatalog
+      x-goal-scope: authenticated
+      tags: [catalog]
+      summary: The tool templates
+      description: >-
+        Every template goald ships, by name: its title, description, secret slots with suggested
+        secret names, what it adds (tools, env, files and MCP servers with suggested tool modes)
+        and its HTTP test, if any. Values are plain or {{slot}} references to its slots.
+      responses:
+        "200":
+          description: The templates
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ToolTemplateList" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/me:
     get:
@@ -2795,6 +2830,77 @@ paths:
               schema: { $ref: "#/components/schemas/AndonPull" }
         "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/environments/{environment}/test:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - name: environment
+        in: path
+        required: true
+        description: The environment's name, its file environments/<name>.yaml
+        schema: { type: string }
+    post:
+      operationId: testEnvironment
+      x-goal-scope: definition:edit
+      tags: [access]
+      summary: Test an environment's MCP servers or a template
+      description: >-
+        Tests the environment of the draft (of the current version while no draft is open), or of
+        the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list,
+        its headers' {{secret}} references opened inside goald for the factory (audited as
+        secret.used without a run), through public addresses only, following no redirect, within
+        10 seconds; stdio servers answer tested false. With template, the template's remote MCP
+        servers and HTTP test run instead, with the secrets the body puts in its slots and its
+        plain env values changed by env. Each server's result is kept per factory, environment
+        and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an
+        error; its error is scrubbed of every value the test opened. 404 environment-not-found,
+        environment-server-not-found or template-not-found; 400 environment-test-invalid for a
+        template slot without a secret; 503 secrets-unavailable while goald has no master key.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EnvironmentTestRequest" }
+      responses:
+        "200":
+          description: The results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnvironmentTestResult" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/repositories/test:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    post:
+      operationId: testRepository
+      x-goal-scope: factory:create
+      tags: [access]
+      summary: Test a token's read and push access to a repository
+      description: >-
+        Tests, before any factory exists, whether the token in the named secret can read the
+        repository at url and push to it, through the code host's API (github.com: GET
+        /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its
+        access level, Developer or more pushes), never git. The secret is opened inside goald
+        without a factory (audited as secret.used), so it must be open to all factories. Each
+        check answers ok with a one-line reason from the host; a check that fails is an answer,
+        not an error. For a classic GitHub token, permissions.push reflects the account's role,
+        not the token's scopes, so push ok can be optimistic; a fine-grained token answers its
+        own grant. A host that gives no answer within 10 seconds answers tested false with
+        "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found;
+        400 repository-host-unknown for a host other than github.com and gitlab.com,
+        repository-url-invalid for a URL that names no repository, and secret-not-allowed for a
+        secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RepositoryTestRequest" }
+      responses:
+        "200":
+          description: The results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RepositoryTestResult" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/webhooks:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -4061,7 +4167,8 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: listCredentials
-      x-goal-scope: credential:read
+      x-goal-scope: secret:read
+      deprecated: true
       tags: [credentials]
       summary: The organization's credentials
       description: >-
@@ -4077,7 +4184,8 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     post:
       operationId: createCredential
-      x-goal-scope: credential:manage
+      x-goal-scope: secret:manage
+      deprecated: true
       tags: [credentials]
       summary: Create a credential
       description: >-
@@ -4104,7 +4212,8 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     post:
       operationId: importCredentials
-      x-goal-scope: credential:manage
+      x-goal-scope: secret:manage
+      deprecated: true
       tags: [credentials]
       summary: Import credentials from a .env or YAML text
       description: >-
@@ -4136,7 +4245,8 @@ paths:
       - $ref: "#/components/parameters/CredentialRef"
     get:
       operationId: getCredential
-      x-goal-scope: credential:read
+      x-goal-scope: secret:read
+      deprecated: true
       tags: [credentials]
       summary: One credential, never its value
       responses:
@@ -4148,7 +4258,8 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     patch:
       operationId: patchCredential
-      x-goal-scope: credential:manage
+      x-goal-scope: secret:manage
+      deprecated: true
       tags: [credentials]
       summary: Change a credential's metadata, or replace its value
       description: >-
@@ -4173,7 +4284,8 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     delete:
       operationId: deleteCredential
-      x-goal-scope: credential:manage
+      x-goal-scope: secret:manage
+      deprecated: true
       tags: [credentials]
       summary: Delete a credential
       description: >-
@@ -4183,6 +4295,191 @@ paths:
       responses:
         "204":
           description: Deleted
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/access:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: getAccess
+      x-goal-scope: access:read
+      tags: [access]
+      summary: What the organization's agents reach
+      description: >-
+        Computed from each factory's current published version, the environment tests and the
+        secrets, over the factories the caller sees that are not archived: every MCP server, and
+        every env variable and file that references a secret. Each row lists the factories and
+        environments that use it with their agents, the secrets it references, and a status:
+        missing (a secret it references does not exist), failed (its last test failed), expired
+        or expiring (a secret's expiry has passed, or is within its reminder days), untested (a
+        remote MCP server never tested), tested, or ok. by groups the rows by what agents reach
+        (MCP servers, env variables, files; the default), by factory or by secret; factory keeps
+        one factory's. reached counts what agents reach and need_attention what is missing,
+        failed, expired or expiring, whatever by is.
+      parameters:
+        - name: by
+          in: query
+          schema: { type: string, enum: [reach, factory, secret], default: reach }
+        - name: factory
+          in: query
+          description: Only this factory's, by metadata.id or metadata.name
+          schema: { type: string }
+      responses:
+        "200":
+          description: The read model
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Access" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/secrets:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listSecrets
+      x-goal-scope: secret:read
+      tags: [secrets]
+      summary: The organization's secrets
+      description: >-
+        By name, each with its source, description, factory scope, expiry, reminder, last use and
+        what uses it. Never a value.
+      responses:
+        "200":
+          description: The secrets
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecretList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createSecret
+      x-goal-scope: secret:manage
+      tags: [secrets]
+      summary: Create a secret
+      description: >-
+        A named secret with its value, sealed under the platform's master key and never returned
+        (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a
+        name that is not a secret name, a missing or oversized value, a description over 500
+        characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all
+        factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no
+        master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewSecret" }
+      responses:
+        "201":
+          description: The secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Secret" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/secrets/import:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    post:
+      operationId: importSecrets
+      x-goal-scope: secret:manage
+      tags: [secrets]
+      summary: Import secrets from a .env or YAML text
+      description: >-
+        env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is
+        sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked
+        before anything is written: 400 secret-invalid for an unknown format, text that does not
+        parse, an empty import, or a name that is not a secret name or whose env variable is
+        reserved. A dry run answers each name as new or existing, with what uses the existing one,
+        and stores nothing. A real run creates each new name open to no factory, and replaces
+        (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the
+        default) each existing one. A real run is not one transaction: should a write fail, the
+        names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs
+        a sign-in from the last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SecretImport" }
+      responses:
+        "200":
+          description: What the import does, or did
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecretImportResult" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/secrets/{secret}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/SecretRef"
+    get:
+      operationId: getSecret
+      x-goal-scope: secret:read
+      tags: [secrets]
+      summary: One secret, never its value
+      description: 404 secret-not-found.
+      responses:
+        "200":
+          description: The secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Secret" }
+        default: { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: patchSecret
+      x-goal-scope: secret:manage
+      tags: [secrets]
+      summary: Change a secret's description, scope, expiry or reminder
+      description: >-
+        Each property present replaces its own: scope replaces the factory scope, expiry replaces
+        the expiry and the reminder together (an empty expiry clears both). The value changes only
+        through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes
+        nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SecretPatch" }
+      responses:
+        "200":
+          description: The secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Secret" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteSecret
+      x-goal-scope: secret:manage
+      tags: [secrets]
+      summary: Delete a secret
+      description: >-
+        409 secret-in-use, deleting nothing, while something uses it: the problem's uses names each
+        use. 404 secret-not-found. Needs a sign-in from the last 10 minutes. Audited as
+        secret.deleted.
+      responses:
+        "204":
+          description: Deleted
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/secrets/{secret}/value:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/SecretRef"
+    put:
+      operationId: replaceSecretValue
+      x-goal-scope: secret:manage
+      tags: [secrets]
+      summary: Replace a secret's value
+      description: >-
+        Runs that start afterwards get the new value; nothing else changes, and the answer holds no
+        value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized
+        value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a
+        sign-in from the last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SecretValue" }
+      responses:
+        "200":
+          description: The secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Secret" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/knowledge/sources:
     parameters:
@@ -4213,13 +4510,14 @@ paths:
       tags: [knowledge]
       summary: Add a source to the knowledge base
       description: >-
-        An upload source holds files people upload; a synced source reads a connection whose kind
-        syncs (its config names what: a repository, a branch and paths, a Confluence space); a
-        live source is a connection whose own tools search, which nothing indexes. Due to sync at
-        once. 400 for a broken rule (a name, a title, a connection on an upload source or none on
-        another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a
-        connection whose kind cannot sync, 404 connection-not-found, 409
-        knowledge-source-name-taken. Audited as knowledge_source.created.
+        An upload source holds files people upload; a synced source reads with a secret, its
+        config naming its reader and what it reads (a repository, a branch and paths; Confluence
+        spaces); a live source is a connection whose own tools search, which nothing indexes. Due
+        to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an
+        upload source, a synced source without a secret or reader or with a connection, a live
+        source without a connection, a schedule under 15 minutes), 404 secret-not-found or
+        connection-not-found, 409 knowledge-source-name-taken. Audited as
+        knowledge_source.created.
       requestBody:
         required: true
         content:
@@ -4255,8 +4553,10 @@ paths:
       tags: [knowledge]
       summary: Change a source's title, config or schedule
       description: >-
-        config, when present, replaces the source's config. The name, kind and connection never
-        change. Audited as knowledge_source.updated.
+        config, when present, replaces the source's config. secret, when present, is a synced
+        source's new secret, which moves a source still on its connection over to it (400 for
+        another kind, 404 secret-not-found). The name, kind and connection never change. Audited
+        as knowledge_source.updated.
       requestBody:
         required: true
         content:
@@ -4566,6 +4866,12 @@ components:
       required: true
       description: The credential's name
       schema: { type: string }
+    SecretRef:
+      name: secret
+      in: path
+      required: true
+      description: The secret's name
+      schema: { type: string }
     SourceRef:
       name: source
       in: path
@@ -4748,6 +5054,12 @@ components:
             Credentials (ADR 0017): credential-not-found (404), credential-invalid (400),
             credential-name-taken and credential-in-use (409, naming the connections),
             credentials-unavailable (503: goald has no master key).
+            Secrets (ADR 0037): secret-not-found (404), secret-invalid (400),
+            secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use),
+            secrets-unavailable (503: goald has no master key).
+            Environment tests (ADR 0037 decision 9): environment-not-found,
+            environment-server-not-found and template-not-found (404), environment-test-invalid
+            (400).
             Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found
             (404), connection-cannot-sync (400), knowledge-source-name-taken,
             knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413),
@@ -4789,6 +5101,10 @@ components:
         estimate:
           allOf: [{ $ref: "#/components/schemas/EvalEstimate" }]
           description: learning-budget-exhausted only, the estimate of the bake-off it refused
+        uses:
+          type: array
+          description: secret-in-use only, what uses the secret
+          items: { $ref: "#/components/schemas/SecretUse" }
     EvalList:
       type: object
       required: [summary, cases]
@@ -8136,8 +8452,11 @@ components:
       type: string
       description: >-
         What waits; later phases add kinds, which clients that do not know them show as a generic
-        row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny
-      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite]
+        row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny.
+        conversion: a factory Goal could not move from connections to secrets and environment files
+        (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and
+        publishes
+      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite, conversion]
     InboxEntry:
       type: object
       required: [id, kind, factory, since, item, station, action, approval, blocked, andon, rework]
@@ -8146,7 +8465,7 @@ components:
           type: string
           description: >-
             "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>,
-            andon:<pull id>, rework_warning:<factory id>:<gate station>
+            andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>
         kind: { $ref: "#/components/schemas/InboxEntryKind" }
         factory:
           type: object
@@ -8160,7 +8479,7 @@ components:
           format: date-time
           description: >-
             Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation
-            (expedite), the pull (andon), now (rework_warning)
+            (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion)
         item:
           description: The item it is about, or null for an entry that is about no item
           nullable: true
@@ -8202,6 +8521,27 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/ReworkWarning"
+        conversion:
+          description: Why Goal could not convert the factory; absent or null for other kinds
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/InboxConversion"
+    InboxConversion:
+      type: object
+      description: >-
+        A factory Goal could not move from connections to secrets and environment files. It runs
+        on its version, on connections, until a version on secrets is published.
+      required: [reason, problems]
+      properties:
+        reason:
+          type: string
+          description: Every problem in one sentence each, for a row that shows one line
+        problems:
+          type: array
+          description: >-
+            What to fix, one entry each, such as "connection aws-prod uses the aws kind, which Goal no
+            longer converts: remove it from the factory"
+          items: { type: string }
     ApprovalBrief:
       type: object
       description: >-
@@ -9421,6 +9761,334 @@ components:
           type: string
           enum: [created, replaced, skipped]
           description: A real run only, what it did
+    SecretName:
+      type: string
+      description: >-
+        3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the
+        organization
+      pattern: "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
+    SecretSource:
+      type: string
+      description: "Where the value comes from. value: pasted or imported, and the run gets it as it is"
+      enum: [value]
+      x-enum-varnames: [SecretSourceValue]
+    SecretScope:
+      type: object
+      description: The factories whose runs may open it; neither all nor any listed reaches no run
+      required: [all_factories, factories]
+      properties:
+        all_factories: { type: boolean, description: Every factory, ones created later included }
+        factories:
+          type: array
+          description: The factories' metadata.id, when not all_factories
+          items: { type: string }
+    SecretUse:
+      type: object
+      description: One thing that uses a secret; while one does, it cannot be deleted
+      required: [kind, name]
+      properties:
+        kind:
+          type: string
+          enum: [definition, knowledge_source, webhook, slack, connection]
+          x-enum-varnames: [SecretUseDefinition, SecretUseKnowledgeSource, SecretUseWebhook, SecretUseSlack, SecretUseConnection]
+          description: >-
+            What uses it: a factory's published definition, a knowledge source, a webhook, the
+            organization's Slack setting, or a connection that refers to it as {{name}}
+        name: { type: string, description: "The factory, knowledge source, webhook or connection that uses it; slack: the organization's Slack setting" }
+    ToolTemplateList:
+      type: object
+      required: [templates]
+      properties:
+        templates:
+          type: array
+          items: { $ref: "#/components/schemas/ToolTemplate" }
+    ToolTemplate:
+      type: object
+      description: A tool template (ADR 0037 decision 15)
+      required: [name, title, description, secrets, adds, test]
+      properties:
+        name: { type: string }
+        title: { type: string }
+        description: { type: string, description: One line }
+        secrets:
+          type: array
+          description: Its secret slots, in order
+          items: { $ref: "#/components/schemas/TemplateSecret" }
+        adds: { $ref: "#/components/schemas/TemplateAdds" }
+        test:
+          allOf: [{ $ref: "#/components/schemas/TemplateTest" }]
+          nullable: true
+    TemplateSecret:
+      type: object
+      required: [slot, title, description, suggest]
+      properties:
+        slot: { type: string, description: "The {{slot}} its values refer to" }
+        title: { type: string }
+        description: { type: string }
+        suggest: { type: string, description: The name a new secret for it is suggested to have }
+    TemplateAdds:
+      type: object
+      description: What the template writes into an environment file
+      required: [tools, env, files, mcp]
+      properties:
+        tools: { type: array, items: { type: string }, description: mise tool specs }
+        env: { type: object, additionalProperties: { type: string } }
+        files: { type: object, additionalProperties: { type: string }, description: By absolute or ~/ path }
+        mcp: { type: object, additionalProperties: { $ref: "#/components/schemas/TemplateMCP" } }
+    TemplateMCP:
+      type: object
+      description: A remote (url, headers) or stdio (command, env) MCP server, with suggested tool modes
+      required: [tools]
+      properties:
+        url: { type: string }
+        headers: { type: object, additionalProperties: { type: string } }
+        command: { type: array, items: { type: string } }
+        env: { type: object, additionalProperties: { type: string } }
+        tools: { type: object, additionalProperties: { type: string, enum: [allow, ask, off] } }
+    TemplateTest:
+      type: object
+      description: "An HTTP test request; its values may hold {{slot}} and ${VAR} of the template's plain env values"
+      required: [method, url, headers, expect]
+      properties:
+        method: { type: string }
+        url: { type: string }
+        headers: { type: object, additionalProperties: { type: string } }
+        basic:
+          type: object
+          required: [username, password]
+          properties:
+            username: { type: string }
+            password: { type: string }
+        expect: { type: integer, description: The status that passes }
+    EnvironmentTestRequest:
+      type: object
+      properties:
+        version: { type: string, description: "draft (the default while one is open), current (the default otherwise) or a version number" }
+        server: { type: string, description: Only this MCP server }
+        template: { $ref: "#/components/schemas/EnvironmentTestTemplate" }
+    EnvironmentTestTemplate:
+      type: object
+      required: [name, secrets]
+      properties:
+        name: { type: string }
+        secrets:
+          type: object
+          description: The secret each slot takes, by slot
+          additionalProperties: { $ref: "#/components/schemas/SecretName" }
+        env:
+          type: object
+          description: The template's plain env values to use instead of its own, by name
+          additionalProperties: { type: string }
+    RepositoryTestRequest:
+      type: object
+      required: [url, secret]
+      properties:
+        url: { type: string, description: "The repository's https URL, such as https://github.com/acme/app" }
+        secret: { $ref: "#/components/schemas/SecretName" }
+    RepositoryTestResult:
+      type: object
+      required: [tested, read, push]
+      properties:
+        tested: { type: boolean, description: "false when the host gave no answer within 10 seconds: read and push then say couldn't test" }
+        read: { $ref: "#/components/schemas/RepositoryCheck" }
+        push: { $ref: "#/components/schemas/RepositoryCheck" }
+    RepositoryCheck:
+      type: object
+      required: [ok, reason]
+      properties:
+        ok: { type: boolean }
+        reason: { type: string, description: The host's one-line reason }
+    EnvironmentTestResult:
+      type: object
+      required: [environment, version, servers]
+      properties:
+        environment: { type: string }
+        version: { type: string, description: "The version tested: draft or its number" }
+        servers:
+          type: array
+          items: { $ref: "#/components/schemas/ServerTest" }
+        template: { $ref: "#/components/schemas/TemplateTestResult" }
+    ServerTest:
+      type: object
+      required: [server, tested, ok, tools]
+      properties:
+        server: { type: string }
+        tested: { type: boolean, description: "False for a stdio server, which goald does not start" }
+        ok: { type: boolean }
+        tools: { type: array, items: { type: string }, description: The tool names tools/list answered, sorted }
+        error: { type: string, description: Why it failed, without a secret value }
+        at: { type: string, format: date-time }
+    TemplateTestResult:
+      type: object
+      required: [name, ok, at]
+      properties:
+        name: { type: string }
+        ok: { type: boolean }
+        status: { type: integer, description: The status the test request got }
+        error: { type: string, description: Why it failed, without a secret value }
+        at: { type: string, format: date-time }
+    Access:
+      type: object
+      required: [by, reached, need_attention, groups]
+      properties:
+        by: { type: string, enum: [reach, factory, secret] }
+        reached: { type: integer, description: What agents reach, counted by kind and name }
+        need_attention: { type: integer, description: "Of those, the missing, failed, expired or expiring" }
+        groups:
+          type: array
+          items: { $ref: "#/components/schemas/AccessGroup" }
+    AccessGroup:
+      type: object
+      description: "One group: a kind (mcp, env, file), a factory's id or a secret's name, by by"
+      required: [key, title, rows]
+      properties:
+        key: { type: string }
+        title: { type: string }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/AccessRow" }
+    AccessRow:
+      type: object
+      required: [kind, name, uses, secrets, status]
+      properties:
+        kind: { type: string, enum: [mcp, env, file] }
+        name: { type: string, description: The MCP server, the variable or the file path }
+        uses:
+          type: array
+          items: { $ref: "#/components/schemas/AccessUse" }
+        secrets: { type: array, items: { type: string }, description: The secrets it references, by name }
+        status: { $ref: "#/components/schemas/AccessStatus" }
+        tested_at: { type: string, format: date-time, description: Its latest test }
+        test_error: { type: string, description: Why its latest failed test failed }
+        last_used_at: { type: string, format: date-time, description: When a run last opened one of its secrets }
+        expires_at: { type: string, format: date-time, description: The soonest expiry of its secrets }
+    AccessStatus:
+      type: string
+      description: The worst of its uses' statuses, in this order
+      enum: [missing, failed, expired, expiring, untested, tested, ok]
+    AccessUse:
+      type: object
+      required: [factory, environment, agents, status]
+      properties:
+        factory: { $ref: "#/components/schemas/AccessFactory" }
+        environment: { type: string }
+        agents: { type: array, items: { type: string }, description: The agents on the environment }
+        status: { $ref: "#/components/schemas/AccessStatus" }
+        test: { $ref: "#/components/schemas/AccessTest" }
+    AccessFactory:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+    AccessTest:
+      type: object
+      required: [at, ok, tools]
+      properties:
+        at: { type: string, format: date-time }
+        ok: { type: boolean }
+        error: { type: string }
+        tools: { type: integer, description: How many tools it listed }
+    SecretList:
+      type: object
+      required: [secrets]
+      properties:
+        secrets:
+          type: array
+          items: { $ref: "#/components/schemas/Secret" }
+    Secret:
+      type: object
+      description: An organization's secret (ADR 0037), never its value
+      required: [id, name, source, description, scope, expires_at, remind_days, last_used_at, uses, created_by, created_at, updated_by, updated_at]
+      properties:
+        id: { type: string }
+        name: { $ref: "#/components/schemas/SecretName" }
+        source: { $ref: "#/components/schemas/SecretSource" }
+        description: { type: string }
+        scope: { $ref: "#/components/schemas/SecretScope" }
+        expires_at: { type: string, format: date-time, nullable: true, description: When the value expires }
+        remind_days: { type: integer, description: "Days before expires_at a reminder is due; 0: none" }
+        last_used_at: { type: string, format: date-time, nullable: true, description: When a run last opened it }
+        uses:
+          type: array
+          description: What uses it, by kind then name
+          items: { $ref: "#/components/schemas/SecretUse" }
+        created_by: { $ref: "#/components/schemas/Actor" }
+        created_at: { type: string, format: date-time }
+        updated_by: { $ref: "#/components/schemas/Actor" }
+        updated_at: { type: string, format: date-time }
+    NewSecret:
+      type: object
+      required: [name, value]
+      properties:
+        name: { $ref: "#/components/schemas/SecretName" }
+        description: { type: string, maxLength: 500 }
+        scope: { $ref: "#/components/schemas/SecretScope" }
+        expires_at: { type: string, format: date-time }
+        remind_days: { type: integer, minimum: 0, maximum: 90 }
+        value:
+          type: string
+          writeOnly: true
+          maxLength: 65536
+          description: The value; sealed and never answered
+    SecretPatch:
+      type: object
+      properties:
+        description: { type: string, maxLength: 500 }
+        scope: { $ref: "#/components/schemas/SecretScope" }
+        expiry: { $ref: "#/components/schemas/SecretExpiry" }
+    SecretExpiry:
+      type: object
+      description: An expiry and its reminder; without expires_at, neither
+      properties:
+        expires_at: { type: string, format: date-time }
+        remind_days: { type: integer, minimum: 0, maximum: 90 }
+    SecretValue:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: string
+          writeOnly: true
+          maxLength: 65536
+          description: The new value; sealed and never answered
+    SecretImport:
+      type: object
+      required: [format, text]
+      properties:
+        format: { type: string, enum: [env, yaml] }
+        text:
+          type: string
+          writeOnly: true
+          description: The .env or YAML text; its values are sealed and never answered
+        on_conflict:
+          type: string
+          enum: [replace, skip]
+          description: What a real run does with a name that exists; skip when absent
+        dry_run: { type: boolean, description: Answer what the import would do and store nothing }
+    SecretImportResult:
+      type: object
+      required: [dry_run, secrets]
+      properties:
+        dry_run: { type: boolean }
+        secrets:
+          type: array
+          description: Each name of the import, in its order
+          items: { $ref: "#/components/schemas/SecretImportOutcome" }
+    SecretImportOutcome:
+      type: object
+      required: [name, exists, uses]
+      properties:
+        name: { type: string }
+        exists: { type: boolean, description: A secret had the name before the import }
+        uses:
+          type: array
+          description: What uses the existing one
+          items: { $ref: "#/components/schemas/SecretUse" }
+        outcome:
+          type: string
+          enum: [created, replaced, skipped]
+          description: A real run only, what it did
     ConnectionTestResult:
       type: object
       required: [ok, at]
@@ -9492,10 +10160,14 @@ components:
         name: { $ref: "#/components/schemas/KnowledgeSourceName" }
         title: { type: string }
         kind: { $ref: "#/components/schemas/KnowledgeSourceKind" }
-        connection: { type: string, description: "The connection a synced or live source reads; absent for an upload source" }
+        connection: { type: string, description: "The connection a live source reads, or a synced one not yet on a secret; absent for an upload source" }
+        secret: { type: string, description: "The secret a synced source reads with, opened at each sync; absent for an upload or live source and a synced one still on its connection" }
         config:
           type: object
-          description: What its reader reads (a repository, a branch and path globs; a Confluence space)
+          description: >-
+            What its reader reads (a repository, a branch and path globs; a Confluence space). A
+            synced source on a secret also names its reader (reader: gitdocs or confluence) and,
+            for confluence, the site and the account's email.
           additionalProperties: { type: string }
         sync_every_seconds: { type: integer, description: How often it syncs }
         status:
@@ -9530,15 +10202,28 @@ components:
         name: { $ref: "#/components/schemas/KnowledgeSourceName" }
         title: { type: string, minLength: 1, maxLength: 120 }
         kind: { $ref: "#/components/schemas/KnowledgeSourceKind" }
-        connection: { type: string, description: The connection a synced or live source reads }
+        connection: { type: string, description: The connection a live source reads }
+        secret:
+          allOf: [{ $ref: "#/components/schemas/SecretName" }]
+          description: >-
+            The secret a synced source reads with: the code host's token for gitdocs, the API token
+            for confluence. It must be open to all factories.
         config:
           type: object
+          description: >-
+            What its reader reads. A synced source names its reader (reader: gitdocs or
+            confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or
+            on the host code_host names: github or gitlab), branch, include and exclude;
+            confluence reads site, email and spaces.
           additionalProperties: { type: string }
         sync_every_seconds: { type: integer, minimum: 900, description: "How often it syncs (default 3600)" }
     KnowledgeSourcePatch:
       type: object
       properties:
         title: { type: string, minLength: 1, maxLength: 120 }
+        secret:
+          allOf: [{ $ref: "#/components/schemas/SecretName" }]
+          description: "A synced source's new secret: it reads with it from its next sync"
         config:
           type: object
           description: Replaces the config

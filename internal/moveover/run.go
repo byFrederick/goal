@@ -1,0 +1,454 @@
+package moveover
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"maps"
+	"slices"
+
+	"github.com/byFrederick/goal/internal/authoring"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
+)
+
+// Actor is who the conversion acts as: Goal publishes the converted versions.
+var Actor = domain.Actor{Kind: domain.ActorSystem, ID: "goal", Name: "Goal"}
+
+// Publisher publishes a draft with the publish checks: authoring.Service.
+type Publisher interface {
+	Publish(ctx context.Context, f domain.FactoryID, r authoring.PublishRequest) (domain.DefinitionVersion, error)
+}
+
+// Orgs lists the install's organizations: ports.Tenancy.
+type Orgs interface {
+	ActiveOrgs(ctx context.Context) ([]domain.OrgID, error)
+}
+
+// Deps is what Run works with; every one is required.
+type Deps struct {
+	Orgs        Orgs
+	Connections ports.Connections
+	Secrets     ports.OrgSecrets
+	Knowledge   ports.Knowledge
+	Definitions ports.DefinitionStore
+	Publisher   Publisher
+	Conversions ports.FactoryConversions
+	Clock       ports.Clock
+	Logger      *slog.Logger
+}
+
+// Mover converts every organization.
+type Mover struct {
+	d Deps
+}
+
+// New returns the mover.
+func New(d Deps) *Mover { return &Mover{d: d} }
+
+// Tally is what the conversion did in one organization.
+type Tally struct {
+	Converted, Refused, Secrets int
+	// Sources are the knowledge sources pointed at a secret.
+	Sources int
+}
+
+// Run converts every organization once, under the install's conversion lock, and logs one line
+// per organization (moved over). Another goald holding the lock runs it instead; a factory with a
+// conversion recorded is never converted again, so a second Run changes nothing. An organization
+// that fails is logged and the others go on.
+func (m *Mover) Run(ctx context.Context) error {
+	ran, err := m.d.Conversions.WithLock(ctx, func(ctx context.Context) error {
+		orgs, err := m.d.Orgs.ActiveOrgs(ctx)
+		if err != nil {
+			return fmt.Errorf("move over: list organizations: %w", err)
+		}
+
+		for _, org := range orgs {
+			t, err := m.Org(domain.WithActor(domain.WithOrg(ctx, org), Actor))
+			if err != nil {
+				m.d.Logger.ErrorContext(ctx, "move over failed", slog.String("org", string(org)), slog.Any("error", err))
+
+				continue
+			}
+
+			m.d.Logger.InfoContext(ctx, "moved over", slog.String("org", string(org)),
+				slog.Int("converted", t.Converted), slog.Int("refused", t.Refused), slog.Int("secrets", t.Secrets), slog.Int("sources", t.Sources))
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	if !ran {
+		m.d.Logger.InfoContext(ctx, "move over skipped", slog.String("reason", "another goald holds the conversion lock"))
+	}
+
+	return nil
+}
+
+// Org converts the organization in ctx: its connections' secrets first, then its synced
+// knowledge sources still on a connection, then each factory with no conversion recorded whose
+// current version is on connections.
+func (m *Mover) Org(ctx context.Context) (Tally, error) {
+	var t Tally
+
+	conns, err := m.opened(ctx)
+	if err != nil {
+		return t, err
+	}
+
+	if t.Secrets, err = m.secrets(ctx, conns); err != nil {
+		return t, err
+	}
+
+	if t.Sources, err = m.sources(ctx, conns); err != nil {
+		return t, err
+	}
+
+	return t, m.factories(ctx, conns, &t)
+}
+
+// factories converts each factory with no conversion recorded whose current version is on
+// connections, counting them in t.
+func (m *Mover) factories(ctx context.Context, conns []domain.ResolvedConnection, t *Tally) error {
+	done, err := m.d.Conversions.List(ctx)
+	if err != nil {
+		return fmt.Errorf("list conversions: %w", err)
+	}
+
+	recs, err := m.d.Definitions.FactoryRecords(ctx)
+	if err != nil {
+		return fmt.Errorf("list factories: %w", err)
+	}
+
+	for _, rec := range recs {
+		if rec.Current == nil || rec.Archived() || slices.ContainsFunc(done, func(c ports.FactoryConversion) bool { return c.Factory == rec.ID }) {
+			continue
+		}
+
+		c, err := m.factory(ctx, rec, conns)
+		if err != nil {
+			return fmt.Errorf("factory %s: %w", rec.ID, err)
+		}
+
+		if c == nil {
+			continue
+		}
+
+		if _, err := m.d.Conversions.Record(ctx, *c); err != nil {
+			return err
+		}
+
+		if c.Refused() {
+			t.Refused++
+		} else {
+			t.Converted++
+		}
+	}
+
+	return nil
+}
+
+// opened are the organization's connections with their values. A failure names the connection,
+// never a value.
+func (m *Mover) opened(ctx context.Context) ([]domain.ResolvedConnection, error) {
+	list, err := m.d.Connections.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list connections: %w", err)
+	}
+
+	out := make([]domain.ResolvedConnection, 0, len(list))
+
+	for _, c := range list {
+		rc, err := m.d.Connections.Open(ctx, c.Name)
+		if err != nil {
+			return nil, fmt.Errorf("open connection %s: %w", c.Name, err)
+		}
+
+		out = append(out, rc)
+	}
+
+	return out, nil
+}
+
+// secrets creates the secrets conns become, skipping each that exists by name, and counts the
+// ones it created.
+func (m *Mover) secrets(ctx context.Context, conns []domain.ResolvedConnection) (int, error) {
+	n := 0
+
+	for _, s := range Secrets(conns) {
+		_, err := m.d.Secrets.Get(ctx, s.Name)
+
+		switch {
+		case err == nil:
+			continue
+		case !errors.Is(err, ports.ErrNotFound):
+			return n, fmt.Errorf("read secret %s: %w", s.Name, err)
+		}
+
+		if _, err := m.d.Secrets.Create(ctx, s, Actor); err != nil && !errors.Is(err, ports.ErrNameTaken) {
+			return n, fmt.Errorf("create secret %s: %w", s.Name, err)
+		}
+
+		n++
+	}
+
+	return n, nil
+}
+
+// sources points each synced knowledge source that reads a connection and no secret at the
+// secret its connection's token became (SecretName), with its reader, its code host and the
+// connection's other set values in its config, which keeps its own keys; it keeps the connection
+// until connections go. A source it cannot map is logged (knowledge source not moved over) with
+// the reason, never a value, and keeps reading its connection. It counts the sources it changed;
+// a second run finds none.
+func (m *Mover) sources(ctx context.Context, conns []domain.ResolvedConnection) (int, error) {
+	list, err := m.d.Knowledge.Sources(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list knowledge sources: %w", err)
+	}
+
+	n := 0
+
+	for _, src := range list {
+		if src.Kind != domain.SourceSynced || src.Connection == "" || src.Secret != "" {
+			continue
+		}
+
+		p, reason, err := m.sourcePatch(ctx, src, conns)
+		if err != nil {
+			return n, err
+		}
+
+		if reason != "" {
+			m.d.Logger.WarnContext(ctx, "knowledge source not moved over", slog.String("source", src.Name),
+				slog.String("connection", src.Connection), slog.String("reason", reason))
+
+			continue
+		}
+
+		if _, err := m.d.Knowledge.UpdateSource(ctx, src.Name, p, Actor); err != nil {
+			return n, fmt.Errorf("point knowledge source %s at its secret: %w", src.Name, err)
+		}
+
+		n++
+	}
+
+	return n, nil
+}
+
+// sourcePatch is what points src at its connection's secret, or why it cannot ("" when it can).
+func (m *Mover) sourcePatch(ctx context.Context, src domain.KnowledgeSource, conns []domain.ResolvedConnection) (domain.KnowledgeSourcePatch, string, error) {
+	i := slices.IndexFunc(conns, func(rc domain.ResolvedConnection) bool { return rc.Connection.Name == src.Connection })
+	if i < 0 {
+		return domain.KnowledgeSourcePatch{}, "its connection was not found", nil
+	}
+
+	rc := conns[i]
+
+	if rc.Kind.Spec.Sync == "" {
+		return domain.KnowledgeSourcePatch{}, "its connection's kind " + rc.Kind.Name + " names no reader", nil
+	}
+
+	field, ok := tokenField(rc.Kind)
+	if !ok {
+		return domain.KnowledgeSourcePatch{}, "its connection's kind " + rc.Kind.Name + " has no one secret field that holds its token", nil
+	}
+
+	name := SecretName(rc.Connection, rc.Kind, field)
+
+	_, err := m.d.Secrets.Get(ctx, name)
+
+	switch {
+	case errors.Is(err, ports.ErrNotFound):
+		return domain.KnowledgeSourcePatch{}, "there is no secret " + name, nil
+	case err != nil:
+		return domain.KnowledgeSourcePatch{}, "", fmt.Errorf("read secret %s: %w", name, err)
+	}
+
+	config := maps.Clone(src.Config)
+	if config == nil {
+		config = map[string]string{}
+	}
+
+	config[domain.SourceReaderKey] = rc.Kind.Spec.Sync
+
+	if rc.Kind.Spec.CodeHost != "" {
+		config["code_host"] = rc.Kind.Spec.CodeHost
+	}
+
+	for _, f := range rc.Kind.Spec.Fields {
+		if _, set := config[f.Name]; !f.Secret && !set && rc.Values[f.Name] != "" {
+			config[f.Name] = rc.Values[f.Name]
+		}
+	}
+
+	return domain.KnowledgeSourcePatch{Secret: &name, Config: config}, "", nil
+}
+
+// tokenField is the secret field of k that holds the token a reader reads with: its one secret
+// field, or the one named token among several.
+func tokenField(k domain.ConnectionKind) (string, bool) {
+	fields := secretFields(k)
+
+	switch {
+	case len(fields) == 1:
+		return fields[0], true
+	case slices.Contains(fields, "token"):
+		return "token", true
+	default:
+		return "", false
+	}
+}
+
+// files reads version v's tree.
+func (m *Mover) files(ctx context.Context, v domain.DefinitionVersion) (map[string][]byte, error) {
+	out := make(map[string][]byte, len(v.Manifest))
+
+	for _, p := range slices.Sorted(maps.Keys(v.Manifest)) {
+		b, err := m.d.Definitions.Blob(ctx, v.Manifest[p])
+		if err != nil {
+			return nil, fmt.Errorf("read %s of version %s: %w", p, v.ID, err)
+		}
+
+		out[p] = b
+	}
+
+	return out, nil
+}
+
+// factory converts rec's current version and returns its conversion: nil for a version on
+// secrets already, refused with the problems for one that cannot convert or fails its publish
+// checks.
+func (m *Mover) factory(ctx context.Context, rec ports.FactoryRecord, conns []domain.ResolvedConnection) (*ports.FactoryConversion, error) {
+	current, err := m.d.Definitions.Version(ctx, rec.Current.ID)
+	if err != nil {
+		return nil, fmt.Errorf("read version %s: %w", rec.Current.ID, err)
+	}
+
+	tree, err := m.files(ctx, current)
+	if err != nil {
+		return nil, err
+	}
+
+	r := Convert(tree, conns)
+	if r.OnSecrets {
+		return nil, nil
+	}
+
+	c := &ports.FactoryConversion{Factory: rec.ID, From: current.ID, Names: r.Names, At: m.d.Clock.Now()}
+	if len(r.Problems) > 0 {
+		c.Problems = r.Problems
+
+		return c, nil
+	}
+
+	open, err := m.d.Definitions.Draft(ctx, rec.ID)
+
+	switch {
+	case errors.Is(err, ports.ErrNotFound):
+		open = domain.DefinitionVersion{}
+	case err != nil:
+		return nil, fmt.Errorf("read draft: %w", err)
+	}
+
+	v, pubErr := m.publish(ctx, rec, r.Files)
+	if pubErr != nil {
+		c.Problems = []string{fmt.Sprintf("the converted version does not publish: %v", pubErr)}
+	} else {
+		c.To = v.ID
+	}
+
+	if err := m.reopen(ctx, rec.ID, open, cmpOr(v.ID, current.ID), conns); err != nil {
+		return nil, err
+	}
+
+	return c, nil
+}
+
+func cmpOr(a, b domain.DefinitionVersionID) domain.DefinitionVersionID {
+	if a != "" {
+		return a
+	}
+
+	return b
+}
+
+// publish opens a draft of Goal's on the current version, saves the converted tree in it and
+// publishes it with the publish checks.
+func (m *Mover) publish(ctx context.Context, rec ports.FactoryRecord, tree map[string][]byte) (domain.DefinitionVersion, error) {
+	d, _, err := m.d.Definitions.OpenDraft(ctx, ports.OpenDraft{Factory: rec.ID, Base: rec.Current.ID, Replace: true, By: Actor})
+	if err != nil {
+		return domain.DefinitionVersion{}, fmt.Errorf("open draft: %w", err)
+	}
+
+	manifest, err := m.d.Definitions.PutBlobs(ctx, tree)
+	if err != nil {
+		return domain.DefinitionVersion{}, fmt.Errorf("store files: %w", err)
+	}
+
+	d, err = m.d.Definitions.SaveDraft(ctx, ports.DraftChange{Factory: rec.ID, ExpectedRevision: d.Revision, Set: manifest, Replace: true, By: Actor})
+	if err != nil {
+		return domain.DefinitionVersion{}, fmt.Errorf("save draft: %w", err)
+	}
+
+	return m.d.Publisher.Publish(ctx, rec.ID, authoring.PublishRequest{Revision: d.Revision, ExpectedCurrent: rec.Current.ID, Message: Message})
+}
+
+// reopen puts back the draft open before the conversion, on base, converted when it converts and
+// as it was when it does not, saved by its own author; without one it discards the draft Goal
+// left after a publish that failed.
+func (m *Mover) reopen(ctx context.Context, f domain.FactoryID, open domain.DefinitionVersion, base domain.DefinitionVersionID,
+	conns []domain.ResolvedConnection,
+) error {
+	if open.ID == "" {
+		d, err := m.d.Definitions.Draft(ctx, f)
+
+		switch {
+		case errors.Is(err, ports.ErrNotFound):
+			return nil
+		case err != nil:
+			return fmt.Errorf("read draft: %w", err)
+		}
+
+		if err := m.d.Definitions.DiscardDraft(ctx, f, d.Revision, Actor); err != nil {
+			return fmt.Errorf("discard draft: %w", err)
+		}
+
+		return nil
+	}
+
+	tree, err := m.files(ctx, open)
+	if err != nil {
+		return err
+	}
+
+	if r := Convert(tree, conns); r.Files != nil {
+		tree = r.Files
+	}
+
+	author := open.UpdatedBy
+	if author == (domain.Actor{}) {
+		author = open.CreatedBy
+	}
+
+	d, _, err := m.d.Definitions.OpenDraft(ctx, ports.OpenDraft{Factory: f, Base: base, Replace: true, By: author})
+	if err != nil {
+		return fmt.Errorf("reopen draft: %w", err)
+	}
+
+	manifest, err := m.d.Definitions.PutBlobs(ctx, tree)
+	if err != nil {
+		return fmt.Errorf("store draft files: %w", err)
+	}
+
+	if _, err := m.d.Definitions.SaveDraft(ctx, ports.DraftChange{Factory: f, ExpectedRevision: d.Revision, Set: manifest, Replace: true, By: author}); err != nil {
+		return fmt.Errorf("save reopened draft: %w", err)
+	}
+
+	return nil
+}

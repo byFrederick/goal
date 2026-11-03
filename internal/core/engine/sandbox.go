@@ -48,15 +48,19 @@ type prepared struct {
 	Seconds       float64 `json:"seconds"`
 	Tools         int     `json:"tools"`
 	BranchExisted bool    `json:"branch_existed"`
+	// BranchHead and BaseHead are the item branch's and its base's commits before prepare brought
+	// the branch up to date; absent without a repository.
+	BranchHead string `json:"branch_head"`
+	BaseHead   string `json:"base_head"`
 }
 
 // open creates the run's sandbox when it has none (a claim's first run) and prepares it with env
-// (the run's task token and what clones the repository, if any); a box already open is left as it
-// is. scrub holds the run's secrets.
-func (e *Engine) open(ctx context.Context, t runTask, runID domain.RunID, env map[string]string, scrub scrubber) error {
+// (the run's task token and what clones the repository, if any), returning prepare's line; a box
+// already open is left as it is, and nil returned. scrub holds the run's secrets.
+func (e *Engine) open(ctx context.Context, t runTask, runID domain.RunID, env map[string]string, scrub scrubber) (*prepared, error) {
 	b := t.box
 	if b.sandbox != nil {
-		return nil
+		return nil, nil
 	}
 
 	started := e.clock.Now()
@@ -68,7 +72,7 @@ func (e *Engine) open(ctx context.Context, t runTask, runID domain.RunID, env ma
 		Deadline: started.Add(boxLife(t.RunRequest, e.cfg)),
 	})
 	if err != nil {
-		return fmt.Errorf("create sandbox: %w", scrub.err(err))
+		return nil, fmt.Errorf("create sandbox: %w", scrub.err(err))
 	}
 
 	b.sandbox = sb
@@ -88,9 +92,9 @@ func (e *Engine) open(ctx context.Context, t runTask, runID domain.RunID, env ma
 
 	switch {
 	case err != nil:
-		return fmt.Errorf("prepare the sandbox: %w", scrub.err(err))
+		return nil, fmt.Errorf("prepare the sandbox: %w", scrub.err(err))
 	case st.Code != 0 || line == nil:
-		return fmt.Errorf("prepare the sandbox: goal-agent prepare exited %d: %s", st.Code, scrub.string(strings.TrimSpace(st.StderrTail)))
+		return nil, fmt.Errorf("prepare the sandbox: goal-agent prepare exited %d: %s", st.Code, scrub.string(strings.TrimSpace(st.StderrTail)))
 	}
 
 	data := map[string]any{"seconds": line.Seconds, "tools": line.Tools}
@@ -102,7 +106,7 @@ func (e *Engine) open(ctx context.Context, t runTask, runID domain.RunID, env ma
 	e.log.InfoContext(ctx, "sandbox exec", slog.String("run", string(runID)), slog.String("step", "prepare"),
 		slog.Int("exit", st.Code), slog.Float64("seconds", e.since(started)))
 
-	return nil
+	return line, nil
 }
 
 // boxLife is how long a run's sandbox may live: as long as both attempts of a claim may, since a

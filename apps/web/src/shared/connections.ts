@@ -2,11 +2,8 @@
 // Basics and Connections sections and the shell's "1 failing": a status never said by colour
 // alone, when it was last tested and used, the variables a run gets (the kind's env names with
 // their {{field}} filled in, never a value) and how runs use a kind.
-import { useQuery } from '@tanstack/react-query';
-import { connectionsQuery } from '../api/queries';
 import type { Connection, ConnectionKind } from '../api/types';
 import { formatAge } from './format';
-import { useOrgHolds } from './org';
 
 export type Tone = 'ok' | 'rework' | 'muted';
 
@@ -88,13 +85,3 @@ export function modeLabels(kind: ConnectionKind | undefined): string[] {
 
 /** The name pattern goald enforces (ConnectionName): 3 to 40 lowercase letters, digits and inner dashes. */
 export const connectionName = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/;
-
-/**
- * How many of the organization's connections failed their last test, for the shell's dot and its
- * "1 failing"; 0 for whoever may not read connections.
- */
-export function useConnectionTrouble(org: string): number {
-  const read = useOrgHolds('connection:read');
-  const { data } = useQuery({ ...connectionsQuery(org), enabled: read });
-  return data?.filter((c) => c.status === 'failing').length ?? 0;
-}

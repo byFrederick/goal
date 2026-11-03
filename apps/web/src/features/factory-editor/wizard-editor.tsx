@@ -26,7 +26,7 @@ import { UnsavedGuard } from './frame/unsaved-guard';
 import { DraftSaved, WizardFooter, WizardHeader, WizardViewToggle } from './frame/wizard-frame';
 import { WizardSteps } from './frame/wizard-steps';
 import { yamlView } from './section-views';
-import type { DefinitionSearch } from './sections';
+import { type DefinitionSearch, routeSection } from './sections';
 import { sourceSentence } from './start/start-choice';
 import {
   doneSteps,
@@ -166,7 +166,7 @@ export function WizardEditor({
       {viewOnly ? <ViewOnlyBanner>{reasons.definition(name)}</ViewOnlyBanner> : null}
       <WizardSteps current={step} done={done} factory={factory} />
 
-      <SectionView place="wizard" section={step} search={search} />
+      <SectionView place="wizard" section={routeSection(step)} search={search} />
 
       <WizardFooter
         step={step}

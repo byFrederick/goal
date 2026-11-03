@@ -1,0 +1,14 @@
+apiVersion: goal/v1
+kind: Template
+metadata:
+  name: gitlab
+  title: GitLab
+  description: The glab CLI with an access token for the GitLab projects agents may use.
+spec:
+  secrets:
+    - {slot: token, title: Token, description: "An access token with the api scope, for only the projects agents need.", suggest: gitlab-token}
+  tools: [glab]
+  env:
+    GITLAB_TOKEN: "{{token}}"
+    GITLAB_HOST: gitlab.com
+  test: {method: GET, url: "https://${GITLAB_HOST}/api/v4/user", headers: {PRIVATE-TOKEN: "{{token}}"}, expect: 200}

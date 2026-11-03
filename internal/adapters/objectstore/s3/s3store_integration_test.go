@@ -3,20 +3,24 @@
 package s3
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
 	"testing"
+	"testing/iotest"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/core/ports/porttest/objectstoretest"
 )
 
 // newTestStore returns a store on a fresh bucket, created by EnsureBucket and so without
@@ -103,6 +107,45 @@ func versioning(t *testing.T, s *Store) types.BucketVersioningStatus {
 }
 
 // The bucket needs no versioning (R2 has none): EnsureBucket never turns it on.
+// The ranged read and the streamed write behave as the fake's, on a bucket without versioning.
+func TestObjectStore_Conformance(t *testing.T) {
+	t.Parallel()
+
+	objectstoretest.Run(t, func(t *testing.T) ports.ObjectStore {
+		t.Helper()
+
+		return newTestStore(t)
+	})
+}
+
+// A streamed write of more than one part leaves no multipart upload behind, and neither does
+// one whose reader fails after its first part.
+func TestPutStream_LeavesNoUploadBehind(t *testing.T) {
+	t.Parallel()
+
+	s := newTestStore(t)
+	big := make([]byte, objectstoretest.StreamBytes)
+
+	if _, err := s.PutStream(t.Context(), "orgs/acme/knowledge/a.zip", bytes.NewReader(big)); err != nil {
+		t.Fatalf("PutStream: %v", err)
+	}
+
+	boom := errors.New("disk gone")
+	if _, err := s.PutStream(t.Context(), "orgs/acme/knowledge/b.zip",
+		io.MultiReader(bytes.NewReader(big[:PartSize+1]), iotest.ErrReader(boom))); !errors.Is(err, boom) {
+		t.Fatalf("PutStream with a failing reader = %v, want its error", err)
+	}
+
+	out, err := s.client.ListMultipartUploads(t.Context(), &s3.ListMultipartUploadsInput{Bucket: aws.String(s.bucket)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(out.Uploads) != 0 {
+		t.Errorf("multipart uploads left = %d, want 0", len(out.Uploads))
+	}
+}
+
 func TestEnsureBucket_IsIdempotentAndLeavesVersioningOff(t *testing.T) {
 	t.Parallel()
 

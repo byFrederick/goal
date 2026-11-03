@@ -121,7 +121,9 @@ func TestTemplateCatalog_PushRefusesInvalidTemplates(t *testing.T) {
 		{name: "real-id", meta: meta, files: acmeFiles(acmeYAML), want: []string{"template-id@factory/factory.yaml:5"}},
 		{name: "no-title", meta: "summary: x\n", files: acmeFiles(nilIDYAML), want: []string{"template-meta-invalid@template.yaml:0"}},
 		{name: "unknown-key", meta: "title: x\nauthor: y\n", files: acmeFiles(nilIDYAML), want: []string{"template-meta-invalid@template.yaml:0"}},
-		{name: "broken", meta: meta, files: map[string][]byte{yamlFile: []byte(nilIDYAML)}, want: []string{"prompt-not-found@factory/factory.yaml:15"}},
+		{name: "broken", meta: meta, files: map[string][]byte{yamlFile: []byte(nilIDYAML)}, want: []string{
+			"prompt-not-found@factory/factory.yaml:15", "environment-default-missing@factory/environments/default.yaml:0",
+		}},
 	}
 
 	for _, tt := range tests {

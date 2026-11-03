@@ -394,7 +394,7 @@ function JudgeEditor({
             <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 text-secondary">
               <RunsOnRow term="Box" value={judge.runs_on.size} />
               <RunsOnRow
-                term="Connections"
+                term="Tools"
                 value={judge.runs_on.connections.length === 0 ? none : judge.runs_on.connections.join(', ')}
               />
               <RunsOnRow term="Sees" value={seesText(judge.runs_on.sees)} />

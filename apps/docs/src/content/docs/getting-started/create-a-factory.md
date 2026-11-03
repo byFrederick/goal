@@ -13,7 +13,7 @@ A factory runs from a published version. You can get one in two ways: the web ap
 Setup starts after you create an organization and takes you through eight steps. Step 3 (Factory) makes the factory from a template, and step 5 (Budget) publishes it. The steps, in order:
 
 1. **Organization** names the organization and asks what its factories will do. Goal suggests templates from the answer.
-2. **Code** connects GitHub, the code the factory's agents work on.
+2. **Code** takes the repository's https address and a token, the code the factory's agents work on. Goal saves the token as the secret `github-token`, then tries to clone the repository and push a branch with it, and shows the host's answer. Continue stays off until the test passes. There is no app to install: a fine-grained token for that one repository, with Contents and Pull requests read and write, is enough. See [Access and secrets](../../concepts/access-and-secrets/).
 3. **Factory** starts a factory from a template and lets you name what it works on.
 4. **Line** shows the factory's stations.
 5. **Budget** sets the spend and the targets. Continuing from this step publishes the factory.

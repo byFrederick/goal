@@ -19,7 +19,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { stationLabel } from '../factory-editor/line/labels';
 import { touchSentence } from '../items/touch-words';
-import type { OnboardingSearch } from './code-search';
+import { type OnboardingSearch, repoOf } from './code-search';
 import { OnboardingLayout } from './onboarding-layout';
 import { stepPanel } from './step-panel';
 
@@ -67,7 +67,7 @@ function Back({ org, search, factory }: { org: OrgSummary; search: OnboardingSea
         <Link
           to="/o/$org/get-started/$step"
           params={{ org: org.slug, step: 'factory' }}
-          search={{ connection: search.connection, owner: search.owner, repos: search.repos }}
+          search={{ url: search.url, secret: search.secret }}
         >
           Back
         </Link>
@@ -349,7 +349,7 @@ function Ready({
     stations.map((s) => s.id),
   )[0];
   const pullNumber = pullRequest ? /\/pull\/(\d+)/.exec(pullRequest)?.[1] : undefined;
-  const repo = search.repos?.[0];
+  const repo = repoOf(search.url);
   const station = labelOf(item.station);
 
   return (
