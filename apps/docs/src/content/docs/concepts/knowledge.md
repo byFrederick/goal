@@ -30,6 +30,7 @@ Sources made before this model keep their older kinds, `synced` and `live`, unti
 A sync reads the source, converts what is not Markdown, and writes a snapshot, one zip of its files, only when something changed. A source syncs every hour or every day, or when someone presses **Sync now**. An upload source changes when its files do. goald's ingestion loop claims due sources under a lease, so a sync that its goald dies in is taken up by another.
 
 - A file that fails to fetch or convert keeps its last good version, or stays out, and the snapshot counts it as failed. It doesn't fail the sync.
+- A Repository sync that changes 50 files or more downloads the branch's archive once instead of fetching each file. It takes only the listed files that are still the version it listed, and fetches the rest one by one. An archive over 200 MB, or one that fails to download or read, doesn't fail the sync: it fetches the files one by one instead.
 - A file that looks like it holds a key stays out.
 - goald keeps the current snapshot and any snapshot an open claim pinned, and deletes the rest.
 
