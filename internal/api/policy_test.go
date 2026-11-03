@@ -269,8 +269,8 @@ func TestPutOrgPolicy_MCPToolModesRoundTrip(t *testing.T) {
 	}
 
 	// An explicit empty cap clears it.
-	clear := strings.Replace(policyWithCap, `{"*":"ask","delete_*":"off"}`, `{}`, 1)
-	decode[gen.OrgPolicyView](t, h.request(t, http.MethodPut, policyPath, clear, quoted("1")), http.StatusOK)
+	none := strings.Replace(policyWithCap, `{"*":"ask","delete_*":"off"}`, `{}`, 1)
+	decode[gen.OrgPolicyView](t, h.request(t, http.MethodPut, policyPath, none, quoted("1")), http.StatusOK)
 
 	if got := readCap(t, h); len(got) != 0 {
 		t.Errorf("GET after saving {}: cap %v; want none", got)

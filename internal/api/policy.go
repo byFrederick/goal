@@ -76,7 +76,7 @@ func (s *server) PutOrgPolicy(ctx context.Context, req gen.PutOrgPolicyRequestOb
 	// A cap that is no tool name or glob to allow, ask or off is a malformed body (400), not a
 	// domain refusal, so the domain error is not wrapped.
 	if err := domain.CheckMCPToolCap(p.MCPToolModes); err != nil {
-		return nil, fmt.Errorf("%w: %v", errInvalid, err) //nolint:errorlint // 400, not domain.ErrInvalid's 409
+		return nil, fmt.Errorf("%w: %s", errInvalid, err.Error())
 	}
 
 	// PUT replaces the policy, but a client that predates the cap sends none: keep the stored one.
@@ -128,6 +128,7 @@ func (s *server) checkPolicy(ctx context.Context, p domain.OrgPolicy) error {
 // policyIn is b as a policy; a b without mcp_tool_modes has no cap.
 func policyIn(b gen.OrgPolicyInput) domain.OrgPolicy {
 	modes := map[string]domain.ConnectionToolMode{}
+
 	if b.McpToolModes != nil {
 		for tool, m := range *b.McpToolModes {
 			modes[tool] = domain.ConnectionToolMode(m)
