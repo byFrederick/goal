@@ -17,8 +17,7 @@ import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
 import { Field, Textarea } from '../../ui/field';
 import { SegmentedControl } from '../../ui/segmented-control';
-import { refusalText } from '../connections/words';
-import { fileNames, importCount, importFormat, usedInText } from './words';
+import { fileNames, importCount, importFormat, refusalText, usedInText } from './words';
 
 type OnConflict = 'replace' | 'skip';
 

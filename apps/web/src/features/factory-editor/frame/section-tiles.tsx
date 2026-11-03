@@ -11,7 +11,8 @@ import { type Section, sections } from '../../../shared/definition/model';
 import { useFactoryParams } from '../../../shared/factory';
 import { cn } from '../../../ui/cn';
 import { useModel } from '../draft/use-draft';
-import { type EditorSection, sectionInfo } from '../sections';
+import { useEnvironmentNames } from '../environments/use-environments';
+import { type EditorSection, routeSection, sectionInfo } from '../sections';
 import { parseErrorTile, reviewTile, sectionTile, viewTileText, yamlTileText } from './state';
 
 interface TilesProps {
@@ -41,6 +42,7 @@ export function SectionTiles({
   viewOnly = false,
 }: TilesProps) {
   const model = useModel();
+  const envs = useEnvironmentNames();
   const shown = viewOnly ? sections.filter((s) => s !== 'review') : sections;
   return (
     <nav
@@ -67,10 +69,16 @@ export function SectionTiles({
             <li key={s} className="min-w-[176px] shrink-0 @[880px]:min-w-0">
               <Tile
                 section={s}
-                current={current === s}
+                current={current === routeSection(s)}
                 problem={tile.state === 'problem'}
                 badge={yaml ? undefined : badge}
-                text={yaml ? yamlTileText(s, summary?.lines) : tile.text}
+                text={
+                  yaml
+                    ? yamlTileText(s, summary?.lines)
+                    : s === 'connections' && envs.ready
+                      ? envs.names.join(', ') || 'None yet'
+                      : tile.text
+                }
                 state={yaml ? tile.text : undefined}
                 line={yaml ? (line && line > 0 ? line : null) : undefined}
               />
@@ -106,7 +114,7 @@ function Tile({
   // A tile is the current location in the editor (aria-current="location"), not a page.
   const { 'aria-current': _page, ...link } = useLinkProps({
     to: '/o/$org/f/$factory/definition/$section',
-    params: { ...params, section },
+    params: { ...params, section: routeSection(section) },
     search: line === undefined ? {} : { mode: 'yaml' as const, ...(line ? { line } : {}) },
   });
   const label = sectionInfo[section].label;

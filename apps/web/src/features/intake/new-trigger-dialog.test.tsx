@@ -3,7 +3,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { afterEach, describe, expect, it } from 'vitest';
 import { connectionsQuery } from '../../api/queries';
 import type { Factory, OrgSummary } from '../../api/types';
-import { connectionFixture } from '../../test/connections-route';
+import { connectionFixture } from '../../test/connection-fixture';
 import { renderFactoryPage } from '../../test/route';
 import { NewTriggerDialog } from './new-trigger-dialog';
 

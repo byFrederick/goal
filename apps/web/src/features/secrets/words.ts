@@ -1,6 +1,7 @@
 // What the Secrets screens say and count, as pure functions (words.test.ts): a secret's expiry and
 // its reminder, where it is used, when it was last used, and what the audit log says about it. Times
 // come in as `now` so a test sets the clock.
+import { ApiError } from '../../api/client';
 import type { AuditEntry, Secret, SecretUse } from '../../api/types';
 import { since } from '../../shared/connections';
 import { formatDay, plural } from '../../shared/format';
@@ -172,3 +173,14 @@ export function activityText(e: AuditEntry): string {
       return e.action;
   }
 }
+
+/** The sentence for a refusal of a secret change (goald's Problem detail, or why it could not ask). */
+export function refusalText(err: unknown): string {
+  if (!(err instanceof ApiError)) return 'goald is not answering. Try again once it is running.';
+  if (err.code === 'connections-unavailable') return unavailableText;
+  return err.detail ?? err.title;
+}
+
+/** goald has no master key (503 connections-unavailable). */
+export const unavailableText =
+  'This installation has no master key, so it can’t seal or open secrets: secrets can’t be created, tested or changed. Whoever runs it sets GOAL_MASTER_KEYS and restarts it.';

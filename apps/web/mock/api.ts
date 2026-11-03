@@ -60,10 +60,12 @@ import type {
 } from '@goal/api-client';
 import { parse } from 'yaml';
 import type { IntakeEvent, TriggerTry, TriggerTryStep } from '../src/api/types.ts';
+import { createAccess } from './access.ts';
 import { authSettings, createMockAuth } from './auth.ts';
 import { createBakeOffs } from './bake-offs.ts';
 import { createConnections } from './connections.ts';
 import { createDefinitions } from './definitions.ts';
+import { createEnvironments, serveCatalog } from './environments.ts';
 import { createEvals } from './evals.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
 import {
@@ -306,6 +308,12 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     sources: (org, name) => knowledge.readers(org, name),
     acme: acmeOrg,
   });
+
+  const environments = createEnvironments({
+    clock,
+    fileText: (org, factory, path) => definitions.fileText(org, factory, path),
+  });
+  const access = createAccess({ clock, acme: acmeOrg });
 
   const secrets = createSecrets({
     clock,
@@ -1714,6 +1722,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (auth.refuse(req, res, path, method)) return;
 
     if (path === '/v1/health') return json(res, 200, { status: 'ok' });
+    if (path === '/v1/catalog' && serveCatalog(req, res)) return;
 
     if (path === '/v1/orgs' && method === 'GET') {
       const orgs = [...state.orgs].sort((a, b) => a.name.localeCompare(b.name)).map(withCount);
@@ -1762,9 +1771,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (refused(method, path, forCaller(req, org))) {
       return json(res, 403, { title: 'Forbidden', status: 403, code: 'forbidden' });
     }
+    if (await environments.handle(org, rest, method, res, () => readBody(req))) return;
     if (await definitions.handle(org, rest, method, url, req, res)) return;
     if (await apiKeys.handle(forCaller(req, org), rest, method, req, res, () => readBody(req))) return;
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (access.handle(org, rest, method, url, res)) return;
     if (await secrets.handle(org, rest, method, url, req, res, () => readBody(req))) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);

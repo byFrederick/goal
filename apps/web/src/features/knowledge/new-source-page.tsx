@@ -176,8 +176,9 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
             {noConnection}{' '}
             {mayConnect ? (
               <Link
-                to="/o/$org/connections/new"
+                to="/o/$org/secrets"
                 params={{ org: org.slug }}
+                search={{ new: true }}
                 className="text-ink underline underline-offset-3"
               >
                 New connection
@@ -197,8 +198,9 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
                     : 'Only connections that run an MCP server.'}{' '}
                   {mayConnect ? (
                     <Link
-                      to="/o/$org/connections/new"
+                      to="/o/$org/secrets"
                       params={{ org: org.slug }}
+                      search={{ new: true }}
                       className="text-ink underline underline-offset-3"
                     >
                       New connection

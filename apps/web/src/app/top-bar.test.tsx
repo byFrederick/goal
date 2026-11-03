@@ -57,8 +57,8 @@ function ItemStub() {
   );
 }
 
-/** A connection page: it names itself in the top bar's crumb. */
-function ConnectionStub() {
+/** A secret page: it names itself in the top bar's crumb. */
+function SecretStub() {
   return <TopBarSlot crumb="Deploy key" />;
 }
 
@@ -87,8 +87,8 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
   const home = createRoute({ getParentRoute: () => orgPages, path: '/', component: () => <p>Home page</p> });
   const connection = createRoute({
     getParentRoute: () => orgPages,
-    path: 'connections/$connection',
-    component: ConnectionStub,
+    path: 'secrets/$secret',
+    component: SecretStub,
   });
   const spend = createRoute({
     getParentRoute: () => orgPages,
@@ -209,11 +209,11 @@ describe('TopBar', () => {
     expect(within(nav).getAllByRole('listitem')).toHaveLength(2);
   });
 
-  it('starts a connection page with the organization, then Connections, then its name', async () => {
-    renderBar({ at: '/o/acme/connections/c1' });
+  it('starts a secret page with the organization, then Secrets, then its name', async () => {
+    renderBar({ at: '/o/acme/secrets/c1' });
     const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
     expect(within(nav).getByRole('link', { name: 'Acme' }).getAttribute('href')).toBe('/o/acme');
-    expect(within(nav).getByRole('link', { name: 'Connections' }).getAttribute('href')).toBe('/o/acme/connections');
+    expect(within(nav).getByRole('link', { name: 'Secrets' }).getAttribute('href')).toBe('/o/acme/secrets');
     expect(within(nav).getByText('Deploy key').getAttribute('aria-current')).toBe('page');
     expect(within(nav).getAllByRole('listitem')).toHaveLength(3);
   });
@@ -253,9 +253,9 @@ describe('TopBar', () => {
   });
 
   it('truncates the crumbs of an organization page and keeps its actions from shrinking', async () => {
-    renderBar({ at: '/o/acme/connections/c1' });
+    renderBar({ at: '/o/acme/secrets/c1' });
     const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
-    for (const name of ['Acme', 'Connections']) {
+    for (const name of ['Acme', 'Secrets']) {
       const link = within(nav).getByRole('link', { name });
       expect(link.className).toContain('truncate');
       expect(link.getAttribute('title')).toBe(name);

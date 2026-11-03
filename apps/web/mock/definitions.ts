@@ -41,6 +41,7 @@ import { parse as parseYaml } from 'yaml';
 import type { ConnectionOutline } from './connections.ts';
 import { checkConnections, connectionNames, knowledgeSourceNames } from './connections-check.ts';
 import { localUser, type MockDefinition, type MockSkill, type MockVersion, type Tree } from './definition-seed.ts';
+import { environmentProblems } from './environments.ts';
 import type { MockFault } from './faults.ts';
 import { factoryCan, type MockState } from './fixtures.ts';
 import {
@@ -520,6 +521,7 @@ function validate(
   });
 
   checkConnections(model, opts.connections, opts.sources, add);
+  problems.push(...environmentProblems(t));
 
   // name
   const taken = opts.state.factories.some((f) => f.org_id === opts.org && f.name === name && f.id !== opts.factory);
@@ -816,6 +818,8 @@ export interface Definitions {
   knowledgeSourceNames: (factory: Factory) => string[];
   /** The lanes the current version's stations route by, sorted: the lanes an item may be set to. */
   laneNames: (factory: Factory) => string[];
+  /** A file of the factory's draft, else of its current version. */
+  fileText: (org: string, factory: string, path: string) => string | undefined;
 }
 
 export function createDefinitions(deps: DefinitionsDeps): Definitions {
@@ -1903,6 +1907,15 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
         }
         throw err;
       }
+    },
+
+    fileText: (org, factory, path) => {
+      const f = st().factories.find((x) => x.org_id === org && (x.id === factory || x.name === factory));
+      if (!f) return undefined;
+      const def = defOf(f);
+      const files = (def.draft ?? byId(def, def.current))?.files;
+      const bytes = files?.get(path);
+      return bytes ? decode(bytes) : undefined;
     },
 
     connectionNames: (f) => {

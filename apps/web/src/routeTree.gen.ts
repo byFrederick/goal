@@ -20,6 +20,7 @@ import { Route as OOrgRouteImport } from './routes/o.$org'
 import { Route as SignInCodeRouteImport } from './routes/sign-in_.code'
 import { Route as OOrgOrgRouteImport } from './routes/o.$org._org'
 import { Route as OOrgOrgIndexRouteImport } from './routes/o.$org._org.index'
+import { Route as OOrgOrgAccessRouteImport } from './routes/o.$org._org.access'
 import { Route as OOrgOrgApiKeysRouteImport } from './routes/o.$org._org.api-keys'
 import { Route as OOrgOrgMembersRouteImport } from './routes/o.$org._org.members'
 import { Route as OOrgOrgModelsRouteImport } from './routes/o.$org._org.models'
@@ -30,9 +31,6 @@ import { Route as OOrgOrgSpendRouteImport } from './routes/o.$org._org.spend'
 import { Route as OOrgFFactoryRouteImport } from './routes/o.$org.f.$factory'
 import { Route as OOrgNewStepRouteImport } from './routes/o.$org.new.$step'
 import { Route as OOrgGetStartedStepRouteImport } from './routes/o.$org_.get-started.$step'
-import { Route as OOrgOrgConnectionsIndexRouteImport } from './routes/o.$org._org.connections.index'
-import { Route as OOrgOrgConnectionsConnectionRouteImport } from './routes/o.$org._org.connections.$connection'
-import { Route as OOrgOrgConnectionsNewRouteImport } from './routes/o.$org._org.connections.new'
 import { Route as OOrgOrgCredentialsIndexRouteImport } from './routes/o.$org._org.credentials.index'
 import { Route as OOrgOrgCredentialsNewRouteImport } from './routes/o.$org._org.credentials.new'
 import { Route as OOrgOrgKnowledgeIndexRouteImport } from './routes/o.$org._org.knowledge.index'
@@ -49,6 +47,7 @@ import { Route as OOrgFFactoryAgentsIndexRouteImport } from './routes/o.$org.f.$
 import { Route as OOrgFFactoryAgentsAgentRouteImport } from './routes/o.$org.f.$factory.agents.$agent'
 import { Route as OOrgFFactoryDefinitionIndexRouteImport } from './routes/o.$org.f.$factory.definition.index'
 import { Route as OOrgFFactoryDefinitionSectionRouteImport } from './routes/o.$org.f.$factory.definition.$section'
+import { Route as OOrgFFactoryDefinitionAddToolRouteImport } from './routes/o.$org.f.$factory.definition_.add-tool'
 import { Route as OOrgFFactoryIntakeIndexRouteImport } from './routes/o.$org.f.$factory.intake.index'
 import { Route as OOrgFFactoryIntakeTriggerRouteImport } from './routes/o.$org.f.$factory.intake.$trigger'
 import { Route as OOrgFFactoryIntakeNewRouteImport } from './routes/o.$org.f.$factory.intake.new'
@@ -117,6 +116,11 @@ const OOrgOrgIndexRoute = OOrgOrgIndexRouteImport.update({
   path: '/',
   getParentRoute: () => OOrgOrgRoute,
 } as any)
+const OOrgOrgAccessRoute = OOrgOrgAccessRouteImport.update({
+  id: '/access',
+  path: '/access',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
 const OOrgOrgApiKeysRoute = OOrgOrgApiKeysRouteImport.update({
   id: '/api-keys',
   path: '/api-keys',
@@ -166,22 +170,6 @@ const OOrgGetStartedStepRoute = OOrgGetStartedStepRouteImport.update({
   id: '/o/$org_/get-started/$step',
   path: '/o/$org/get-started/$step',
   getParentRoute: () => rootRouteImport,
-} as any)
-const OOrgOrgConnectionsIndexRoute = OOrgOrgConnectionsIndexRouteImport.update({
-  id: '/connections/',
-  path: '/connections/',
-  getParentRoute: () => OOrgOrgRoute,
-} as any)
-const OOrgOrgConnectionsConnectionRoute =
-  OOrgOrgConnectionsConnectionRouteImport.update({
-    id: '/connections/$connection',
-    path: '/connections/$connection',
-    getParentRoute: () => OOrgOrgRoute,
-  } as any)
-const OOrgOrgConnectionsNewRoute = OOrgOrgConnectionsNewRouteImport.update({
-  id: '/connections/new',
-  path: '/connections/new',
-  getParentRoute: () => OOrgOrgRoute,
 } as any)
 const OOrgOrgCredentialsIndexRoute = OOrgOrgCredentialsIndexRouteImport.update({
   id: '/credentials/',
@@ -264,6 +252,12 @@ const OOrgFFactoryDefinitionSectionRoute =
     id: '/$section',
     path: '/$section',
     getParentRoute: () => OOrgFFactoryDefinitionRoute,
+  } as any)
+const OOrgFFactoryDefinitionAddToolRoute =
+  OOrgFFactoryDefinitionAddToolRouteImport.update({
+    id: '/definition_/add-tool',
+    path: '/definition/add-tool',
+    getParentRoute: () => OOrgFFactoryRoute,
   } as any)
 const OOrgFFactoryIntakeIndexRoute = OOrgFFactoryIntakeIndexRouteImport.update({
   id: '/intake/',
@@ -348,6 +342,7 @@ export interface FileRoutesByFullPath {
   '/invite/$invitation': typeof InviteInvitationRoute
   '/o/$org': typeof OOrgRouteWithChildren
   '/sign-in/code': typeof SignInCodeRoute
+  '/o/$org/access': typeof OOrgOrgAccessRoute
   '/o/$org/api-keys': typeof OOrgOrgApiKeysRoute
   '/o/$org/members': typeof OOrgOrgMembersRoute
   '/o/$org/models': typeof OOrgOrgModelsRoute
@@ -359,8 +354,6 @@ export interface FileRoutesByFullPath {
   '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/get-started/$step': typeof OOrgGetStartedStepRoute
   '/o/$org/': typeof OOrgOrgIndexRoute
-  '/o/$org/connections/$connection': typeof OOrgOrgConnectionsConnectionRoute
-  '/o/$org/connections/new': typeof OOrgOrgConnectionsNewRoute
   '/o/$org/credentials/new': typeof OOrgOrgCredentialsNewRoute
   '/o/$org/knowledge/$source': typeof OOrgOrgKnowledgeSourceRoute
   '/o/$org/knowledge/new': typeof OOrgOrgKnowledgeNewRoute
@@ -369,13 +362,13 @@ export interface FileRoutesByFullPath {
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionRouteWithChildren
   '/o/$org/f/$factory/settings': typeof OOrgFFactorySettingsRoute
-  '/o/$org/connections/': typeof OOrgOrgConnectionsIndexRoute
   '/o/$org/credentials/': typeof OOrgOrgCredentialsIndexRoute
   '/o/$org/knowledge/': typeof OOrgOrgKnowledgeIndexRoute
   '/o/$org/secrets/': typeof OOrgOrgSecretsIndexRoute
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
+  '/o/$org/f/$factory/definition/add-tool': typeof OOrgFFactoryDefinitionAddToolRoute
   '/o/$org/f/$factory/intake/$trigger': typeof OOrgFFactoryIntakeTriggerRoute
   '/o/$org/f/$factory/intake/new': typeof OOrgFFactoryIntakeNewRoute
   '/o/$org/f/$factory/intake/webhooks': typeof OOrgFFactoryIntakeWebhooksRoute
@@ -402,6 +395,7 @@ export interface FileRoutesByTo {
   '/invite/$invitation': typeof InviteInvitationRoute
   '/o/$org': typeof OOrgOrgIndexRoute
   '/sign-in/code': typeof SignInCodeRoute
+  '/o/$org/access': typeof OOrgOrgAccessRoute
   '/o/$org/api-keys': typeof OOrgOrgApiKeysRoute
   '/o/$org/members': typeof OOrgOrgMembersRoute
   '/o/$org/models': typeof OOrgOrgModelsRoute
@@ -411,8 +405,6 @@ export interface FileRoutesByTo {
   '/o/$org/spend': typeof OOrgOrgSpendRoute
   '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org/get-started/$step': typeof OOrgGetStartedStepRoute
-  '/o/$org/connections/$connection': typeof OOrgOrgConnectionsConnectionRoute
-  '/o/$org/connections/new': typeof OOrgOrgConnectionsNewRoute
   '/o/$org/credentials/new': typeof OOrgOrgCredentialsNewRoute
   '/o/$org/knowledge/$source': typeof OOrgOrgKnowledgeSourceRoute
   '/o/$org/knowledge/new': typeof OOrgOrgKnowledgeNewRoute
@@ -420,13 +412,13 @@ export interface FileRoutesByTo {
   '/o/$org/secrets/import': typeof OOrgOrgSecretsImportRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory/settings': typeof OOrgFFactorySettingsRoute
-  '/o/$org/connections': typeof OOrgOrgConnectionsIndexRoute
   '/o/$org/credentials': typeof OOrgOrgCredentialsIndexRoute
   '/o/$org/knowledge': typeof OOrgOrgKnowledgeIndexRoute
   '/o/$org/secrets': typeof OOrgOrgSecretsIndexRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
+  '/o/$org/f/$factory/definition/add-tool': typeof OOrgFFactoryDefinitionAddToolRoute
   '/o/$org/f/$factory/intake/$trigger': typeof OOrgFFactoryIntakeTriggerRoute
   '/o/$org/f/$factory/intake/new': typeof OOrgFFactoryIntakeNewRoute
   '/o/$org/f/$factory/intake/webhooks': typeof OOrgFFactoryIntakeWebhooksRoute
@@ -455,6 +447,7 @@ export interface FileRoutesById {
   '/o/$org': typeof OOrgRouteWithChildren
   '/sign-in_/code': typeof SignInCodeRoute
   '/o/$org/_org': typeof OOrgOrgRouteWithChildren
+  '/o/$org/_org/access': typeof OOrgOrgAccessRoute
   '/o/$org/_org/api-keys': typeof OOrgOrgApiKeysRoute
   '/o/$org/_org/members': typeof OOrgOrgMembersRoute
   '/o/$org/_org/models': typeof OOrgOrgModelsRoute
@@ -466,8 +459,6 @@ export interface FileRoutesById {
   '/o/$org/new/$step': typeof OOrgNewStepRoute
   '/o/$org_/get-started/$step': typeof OOrgGetStartedStepRoute
   '/o/$org/_org/': typeof OOrgOrgIndexRoute
-  '/o/$org/_org/connections/$connection': typeof OOrgOrgConnectionsConnectionRoute
-  '/o/$org/_org/connections/new': typeof OOrgOrgConnectionsNewRoute
   '/o/$org/_org/credentials/new': typeof OOrgOrgCredentialsNewRoute
   '/o/$org/_org/knowledge/$source': typeof OOrgOrgKnowledgeSourceRoute
   '/o/$org/_org/knowledge/new': typeof OOrgOrgKnowledgeNewRoute
@@ -476,13 +467,13 @@ export interface FileRoutesById {
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionRouteWithChildren
   '/o/$org/f/$factory/settings': typeof OOrgFFactorySettingsRoute
-  '/o/$org/_org/connections/': typeof OOrgOrgConnectionsIndexRoute
   '/o/$org/_org/credentials/': typeof OOrgOrgCredentialsIndexRoute
   '/o/$org/_org/knowledge/': typeof OOrgOrgKnowledgeIndexRoute
   '/o/$org/_org/secrets/': typeof OOrgOrgSecretsIndexRoute
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
+  '/o/$org/f/$factory/definition_/add-tool': typeof OOrgFFactoryDefinitionAddToolRoute
   '/o/$org/f/$factory/intake/$trigger': typeof OOrgFFactoryIntakeTriggerRoute
   '/o/$org/f/$factory/intake/new': typeof OOrgFFactoryIntakeNewRoute
   '/o/$org/f/$factory/intake/webhooks': typeof OOrgFFactoryIntakeWebhooksRoute
@@ -511,6 +502,7 @@ export interface FileRouteTypes {
     | '/invite/$invitation'
     | '/o/$org'
     | '/sign-in/code'
+    | '/o/$org/access'
     | '/o/$org/api-keys'
     | '/o/$org/members'
     | '/o/$org/models'
@@ -522,8 +514,6 @@ export interface FileRouteTypes {
     | '/o/$org/new/$step'
     | '/o/$org/get-started/$step'
     | '/o/$org/'
-    | '/o/$org/connections/$connection'
-    | '/o/$org/connections/new'
     | '/o/$org/credentials/new'
     | '/o/$org/knowledge/$source'
     | '/o/$org/knowledge/new'
@@ -532,13 +522,13 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory/definition'
     | '/o/$org/f/$factory/settings'
-    | '/o/$org/connections/'
     | '/o/$org/credentials/'
     | '/o/$org/knowledge/'
     | '/o/$org/secrets/'
     | '/o/$org/f/$factory/'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
+    | '/o/$org/f/$factory/definition/add-tool'
     | '/o/$org/f/$factory/intake/$trigger'
     | '/o/$org/f/$factory/intake/new'
     | '/o/$org/f/$factory/intake/webhooks'
@@ -565,6 +555,7 @@ export interface FileRouteTypes {
     | '/invite/$invitation'
     | '/o/$org'
     | '/sign-in/code'
+    | '/o/$org/access'
     | '/o/$org/api-keys'
     | '/o/$org/members'
     | '/o/$org/models'
@@ -574,8 +565,6 @@ export interface FileRouteTypes {
     | '/o/$org/spend'
     | '/o/$org/new/$step'
     | '/o/$org/get-started/$step'
-    | '/o/$org/connections/$connection'
-    | '/o/$org/connections/new'
     | '/o/$org/credentials/new'
     | '/o/$org/knowledge/$source'
     | '/o/$org/knowledge/new'
@@ -583,13 +572,13 @@ export interface FileRouteTypes {
     | '/o/$org/secrets/import'
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory/settings'
-    | '/o/$org/connections'
     | '/o/$org/credentials'
     | '/o/$org/knowledge'
     | '/o/$org/secrets'
     | '/o/$org/f/$factory'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
+    | '/o/$org/f/$factory/definition/add-tool'
     | '/o/$org/f/$factory/intake/$trigger'
     | '/o/$org/f/$factory/intake/new'
     | '/o/$org/f/$factory/intake/webhooks'
@@ -617,6 +606,7 @@ export interface FileRouteTypes {
     | '/o/$org'
     | '/sign-in_/code'
     | '/o/$org/_org'
+    | '/o/$org/_org/access'
     | '/o/$org/_org/api-keys'
     | '/o/$org/_org/members'
     | '/o/$org/_org/models'
@@ -628,8 +618,6 @@ export interface FileRouteTypes {
     | '/o/$org/new/$step'
     | '/o/$org_/get-started/$step'
     | '/o/$org/_org/'
-    | '/o/$org/_org/connections/$connection'
-    | '/o/$org/_org/connections/new'
     | '/o/$org/_org/credentials/new'
     | '/o/$org/_org/knowledge/$source'
     | '/o/$org/_org/knowledge/new'
@@ -638,13 +626,13 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory/definition'
     | '/o/$org/f/$factory/settings'
-    | '/o/$org/_org/connections/'
     | '/o/$org/_org/credentials/'
     | '/o/$org/_org/knowledge/'
     | '/o/$org/_org/secrets/'
     | '/o/$org/f/$factory/'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
+    | '/o/$org/f/$factory/definition_/add-tool'
     | '/o/$org/f/$factory/intake/$trigger'
     | '/o/$org/f/$factory/intake/new'
     | '/o/$org/f/$factory/intake/webhooks'
@@ -754,6 +742,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgOrgIndexRouteImport
       parentRoute: typeof OOrgOrgRoute
     }
+    '/o/$org/_org/access': {
+      id: '/o/$org/_org/access'
+      path: '/access'
+      fullPath: '/o/$org/access'
+      preLoaderRoute: typeof OOrgOrgAccessRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
     '/o/$org/_org/api-keys': {
       id: '/o/$org/_org/api-keys'
       path: '/api-keys'
@@ -823,27 +818,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/o/$org/get-started/$step'
       preLoaderRoute: typeof OOrgGetStartedStepRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/o/$org/_org/connections/': {
-      id: '/o/$org/_org/connections/'
-      path: '/connections'
-      fullPath: '/o/$org/connections/'
-      preLoaderRoute: typeof OOrgOrgConnectionsIndexRouteImport
-      parentRoute: typeof OOrgOrgRoute
-    }
-    '/o/$org/_org/connections/$connection': {
-      id: '/o/$org/_org/connections/$connection'
-      path: '/connections/$connection'
-      fullPath: '/o/$org/connections/$connection'
-      preLoaderRoute: typeof OOrgOrgConnectionsConnectionRouteImport
-      parentRoute: typeof OOrgOrgRoute
-    }
-    '/o/$org/_org/connections/new': {
-      id: '/o/$org/_org/connections/new'
-      path: '/connections/new'
-      fullPath: '/o/$org/connections/new'
-      preLoaderRoute: typeof OOrgOrgConnectionsNewRouteImport
-      parentRoute: typeof OOrgOrgRoute
     }
     '/o/$org/_org/credentials/': {
       id: '/o/$org/_org/credentials/'
@@ -957,6 +931,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgFFactoryDefinitionSectionRouteImport
       parentRoute: typeof OOrgFFactoryDefinitionRoute
     }
+    '/o/$org/f/$factory/definition_/add-tool': {
+      id: '/o/$org/f/$factory/definition_/add-tool'
+      path: '/definition/add-tool'
+      fullPath: '/o/$org/f/$factory/definition/add-tool'
+      preLoaderRoute: typeof OOrgFFactoryDefinitionAddToolRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
+    }
     '/o/$org/f/$factory/intake/': {
       id: '/o/$org/f/$factory/intake/'
       path: '/intake'
@@ -1052,6 +1033,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface OOrgOrgRouteChildren {
+  OOrgOrgAccessRoute: typeof OOrgOrgAccessRoute
   OOrgOrgApiKeysRoute: typeof OOrgOrgApiKeysRoute
   OOrgOrgMembersRoute: typeof OOrgOrgMembersRoute
   OOrgOrgModelsRoute: typeof OOrgOrgModelsRoute
@@ -1060,20 +1042,18 @@ interface OOrgOrgRouteChildren {
   OOrgOrgSettingsRoute: typeof OOrgOrgSettingsRoute
   OOrgOrgSpendRoute: typeof OOrgOrgSpendRoute
   OOrgOrgIndexRoute: typeof OOrgOrgIndexRoute
-  OOrgOrgConnectionsConnectionRoute: typeof OOrgOrgConnectionsConnectionRoute
-  OOrgOrgConnectionsNewRoute: typeof OOrgOrgConnectionsNewRoute
   OOrgOrgCredentialsNewRoute: typeof OOrgOrgCredentialsNewRoute
   OOrgOrgKnowledgeSourceRoute: typeof OOrgOrgKnowledgeSourceRoute
   OOrgOrgKnowledgeNewRoute: typeof OOrgOrgKnowledgeNewRoute
   OOrgOrgSecretsSecretRoute: typeof OOrgOrgSecretsSecretRoute
   OOrgOrgSecretsImportRoute: typeof OOrgOrgSecretsImportRoute
-  OOrgOrgConnectionsIndexRoute: typeof OOrgOrgConnectionsIndexRoute
   OOrgOrgCredentialsIndexRoute: typeof OOrgOrgCredentialsIndexRoute
   OOrgOrgKnowledgeIndexRoute: typeof OOrgOrgKnowledgeIndexRoute
   OOrgOrgSecretsIndexRoute: typeof OOrgOrgSecretsIndexRoute
 }
 
 const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
+  OOrgOrgAccessRoute: OOrgOrgAccessRoute,
   OOrgOrgApiKeysRoute: OOrgOrgApiKeysRoute,
   OOrgOrgMembersRoute: OOrgOrgMembersRoute,
   OOrgOrgModelsRoute: OOrgOrgModelsRoute,
@@ -1082,14 +1062,11 @@ const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
   OOrgOrgSettingsRoute: OOrgOrgSettingsRoute,
   OOrgOrgSpendRoute: OOrgOrgSpendRoute,
   OOrgOrgIndexRoute: OOrgOrgIndexRoute,
-  OOrgOrgConnectionsConnectionRoute: OOrgOrgConnectionsConnectionRoute,
-  OOrgOrgConnectionsNewRoute: OOrgOrgConnectionsNewRoute,
   OOrgOrgCredentialsNewRoute: OOrgOrgCredentialsNewRoute,
   OOrgOrgKnowledgeSourceRoute: OOrgOrgKnowledgeSourceRoute,
   OOrgOrgKnowledgeNewRoute: OOrgOrgKnowledgeNewRoute,
   OOrgOrgSecretsSecretRoute: OOrgOrgSecretsSecretRoute,
   OOrgOrgSecretsImportRoute: OOrgOrgSecretsImportRoute,
-  OOrgOrgConnectionsIndexRoute: OOrgOrgConnectionsIndexRoute,
   OOrgOrgCredentialsIndexRoute: OOrgOrgCredentialsIndexRoute,
   OOrgOrgKnowledgeIndexRoute: OOrgOrgKnowledgeIndexRoute,
   OOrgOrgSecretsIndexRoute: OOrgOrgSecretsIndexRoute,
@@ -1120,6 +1097,7 @@ interface OOrgFFactoryRouteChildren {
   OOrgFFactorySettingsRoute: typeof OOrgFFactorySettingsRoute
   OOrgFFactoryIndexRoute: typeof OOrgFFactoryIndexRoute
   OOrgFFactoryAgentsAgentRoute: typeof OOrgFFactoryAgentsAgentRoute
+  OOrgFFactoryDefinitionAddToolRoute: typeof OOrgFFactoryDefinitionAddToolRoute
   OOrgFFactoryIntakeTriggerRoute: typeof OOrgFFactoryIntakeTriggerRoute
   OOrgFFactoryIntakeNewRoute: typeof OOrgFFactoryIntakeNewRoute
   OOrgFFactoryIntakeWebhooksRoute: typeof OOrgFFactoryIntakeWebhooksRoute
@@ -1142,6 +1120,7 @@ const OOrgFFactoryRouteChildren: OOrgFFactoryRouteChildren = {
   OOrgFFactorySettingsRoute: OOrgFFactorySettingsRoute,
   OOrgFFactoryIndexRoute: OOrgFFactoryIndexRoute,
   OOrgFFactoryAgentsAgentRoute: OOrgFFactoryAgentsAgentRoute,
+  OOrgFFactoryDefinitionAddToolRoute: OOrgFFactoryDefinitionAddToolRoute,
   OOrgFFactoryIntakeTriggerRoute: OOrgFFactoryIntakeTriggerRoute,
   OOrgFFactoryIntakeNewRoute: OOrgFFactoryIntakeNewRoute,
   OOrgFFactoryIntakeWebhooksRoute: OOrgFFactoryIntakeWebhooksRoute,

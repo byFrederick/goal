@@ -18,8 +18,8 @@ import { useOrg } from '../shared/org';
 import { cn } from '../ui/cn';
 import { FactoryBadge } from './factory-badge';
 import {
+  accessScreen,
   apiKeysScreen,
-  connectionsScreen,
   homeScreen,
   knowledgeScreen,
   membersScreen,
@@ -74,6 +74,7 @@ const factoryRoutePages: Record<string, string> = {
   '/o/$org/f/$factory/agents/$agent': 'agents',
   '/o/$org/f/$factory/definition/': 'definition',
   '/o/$org/f/$factory/definition/$section': 'definition',
+  '/o/$org/f/$factory/definition_/add-tool': 'definition',
   '/o/$org/f/$factory/intake/': 'intake',
   '/o/$org/f/$factory/intake/webhooks': 'intake',
   '/o/$org/f/$factory/intake/$trigger': 'intake',
@@ -99,11 +100,10 @@ export const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/o/$org/_org/needs-you': needsYouScreen,
   '/o/$org/_org/settings': settingsScreen,
   '/o/$org/_org/spend': spendScreen,
-  '/o/$org/_org/connections/': connectionsScreen,
-  '/o/$org/_org/connections/$connection': connectionsScreen,
-  '/o/$org/_org/connections/new': connectionsScreen,
-  '/o/$org/_org/credentials/': secretsScreen,
-  '/o/$org/_org/credentials/new': secretsScreen,
+  '/o/$org/_org/access': accessScreen,
+  '/o/$org/_org/secrets/': secretsScreen,
+  '/o/$org/_org/secrets/$secret': secretsScreen,
+  '/o/$org/_org/secrets/import': secretsScreen,
   '/o/$org/_org/knowledge/': knowledgeScreen,
   '/o/$org/_org/knowledge/$source': knowledgeScreen,
   '/o/$org/_org/knowledge/new': knowledgeScreen,
