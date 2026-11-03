@@ -17,7 +17,7 @@ var defaultIntegration = domain.IntegrationPolicy{Mode: domain.IntegrationModeTr
 func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 	t.Parallel()
 
-	f, err := LoadDir("testdata/support")
+	f, err := LoadDir("testdata/.support")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 		t.Errorf("expedite target = %v, want 1h", got)
 	}
 
-	plain, err := LoadDir("testdata/line")
+	plain, err := LoadDir("testdata/.line")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestLine_PurposeFallsBackToDescription(t *testing.T) {
 func TestLine_CarriesTheVersionsRules(t *testing.T) {
 	t.Parallel()
 
-	f, err := LoadDir("testdata/line")
+	f, err := LoadDir("testdata/.line")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +398,7 @@ func TestLoad_RefusesTargetsThatAreNotPositive(t *testing.T) {
 func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 	t.Parallel()
 
-	f, err := LoadDir("testdata/line")
+	f, err := LoadDir("testdata/.line")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -645,7 +645,7 @@ const workIncident = "incident"
 func TestLine_Triggers(t *testing.T) {
 	t.Parallel()
 
-	f, err := LoadDir("testdata/support")
+	f, err := LoadDir("testdata/.support")
 	if err != nil {
 		t.Fatal(err)
 	}

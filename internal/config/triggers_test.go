@@ -200,7 +200,7 @@ func checkOneProblem(t *testing.T, doc, code string, message []string) {
 func TestLoad_ParsesTriggers(t *testing.T) {
 	t.Parallel()
 
-	f, err := LoadDir("testdata/support")
+	f, err := LoadDir("testdata/.support")
 	if err != nil {
 		t.Fatal(err)
 	}

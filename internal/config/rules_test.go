@@ -12,7 +12,7 @@ import (
 func TestLoad_ParsesRules(t *testing.T) {
 	t.Parallel()
 
-	f, err := LoadDir("testdata/line")
+	f, err := LoadDir("testdata/.line")
 	if err != nil {
 		t.Fatal(err)
 	}
