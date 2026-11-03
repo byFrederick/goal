@@ -71,15 +71,22 @@ type Connections interface {
 	// repeats; the tool modes stay. ErrNotFound when there is none.
 	RecordTest(ctx context.Context, name string, r domain.ConnectionTest, by domain.Actor) error
 
-	// StandingRules are the organization's standing rules (ADR 0031 decision 7), oldest first:
-	// the active ones, and the revoked ones too with includeRevoked.
+	// StandingRules are the organization's standing rules (ADR 0031 decision 7), oldest first,
+	// keyed by connection or by server: the active ones, and the revoked ones too with
+	// includeRevoked.
 	StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error)
 	// CreateStandingRule creates a standing rule for the connection named n.Connection
 	// (standing_rule.created). When its key (connection, tool, agent) has an active rule already,
 	// it returns that rule and audits nothing. ErrNotFound for an unknown connection;
 	// domain.ErrInvalid for a malformed n (NewStandingRule.Check).
 	CreateStandingRule(ctx context.Context, n domain.NewStandingRule, by domain.Actor) (domain.StandingRule, error)
-	// RevokeStandingRule revokes rule id (standing_rule.revoked). ErrNotFound when there is none;
+	// CreateServerStandingRule creates a standing rule keyed by n's factory, environment and MCP
+	// server, for a run on secrets (ADR 0037 decision 8; standing_rule.created). When its key
+	// (factory, environment, server, tool, agent) has an active rule already, it returns that rule
+	// and audits nothing. The factory, environment and server need not exist: a rule outlives
+	// them. domain.ErrInvalid for a malformed n (NewServerStandingRule.Check).
+	CreateServerStandingRule(ctx context.Context, n domain.NewServerStandingRule, by domain.Actor) (domain.StandingRule, error)
+	// RevokeStandingRule revokes rule id of either key (standing_rule.revoked). ErrNotFound when there is none;
 	// ErrConflict when it is revoked already.
 	RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error)
 

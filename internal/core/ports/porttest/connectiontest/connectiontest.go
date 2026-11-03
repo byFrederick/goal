@@ -72,6 +72,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"StandingRules_ActiveUnlessRevoked", testStandingRulesActiveUnlessRevoked},
 		{"Delete_RevokesStandingRules", testDeleteRevokesStandingRules},
 		{"StandingRules_OtherOrgSeesNothing", testStandingRulesIsolation},
+		{"CreateServerStandingRule_OneActivePerKey", testCreateServerStandingRule},
+		{"RevokeStandingRule_ServerKey", testRevokeServerStandingRule},
 		{"OtherOrg_SeesNothing", testIsolation},
 		{"NoMasterKey_SecretsUnavailable", testNoKey},
 		{"Rekey_ResealsEveryOrg", testRekey},
@@ -972,6 +974,8 @@ func testNoOrg(f *fixture) {
 	f.refused("StandingRules", err, domain.ErrNoOrg)
 	_, err = f.c.CreateStandingRule(ctx, domain.NewStandingRule{Connection: connDocs, Tool: toolComment, Agent: architect, Item: approvedOn}, admin)
 	f.refused("CreateStandingRule", err, domain.ErrNoOrg)
+	_, err = f.c.CreateServerStandingRule(ctx, serverRule(domain.DefaultEnvironment, connDocs, toolComment, architect), admin)
+	f.refused("CreateServerStandingRule", err, domain.ErrNoOrg)
 	_, err = f.c.RevokeStandingRule(ctx, "00000000-0000-7000-8000-0000000000cc", admin)
 	f.refused("RevokeStandingRule", err, domain.ErrNoOrg)
 }

@@ -104,7 +104,7 @@ func (e *Engine) modelEnv(ctx context.Context, l domain.Line, run domain.RunID) 
 			return runEnv{}, fmt.Errorf("factory %s has no runtime.modelKey", l.FactoryID)
 		}
 
-		return e.secretEnv(ctx, domain.SecretUse{Factory: l.FactoryID, Run: run}, l.Runtime.ModelKey, domain.Environment{})
+		return e.secretEnv(ctx, domain.SecretUse{Factory: l.FactoryID, Run: run}, l.Runtime.ModelKey, domain.Environment{}, domain.Repository{})
 	}
 
 	model := l.Runtime.ModelConnection

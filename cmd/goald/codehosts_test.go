@@ -60,12 +60,17 @@ func TestCodeHosts_ReachPublicAddressesOnly(t *testing.T) {
 			Values: map[string]string{"token": "a-token-never-sent", "host": host}, //nolint:gosec // a made-up token
 		}
 
+		login, err := conn.CodeHostLogin()
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+
 		url := "https://" + host + "/acme/app/pull/1"
 		if name == "gitlab" {
 			url = "https://" + host + "/acme/app/-/merge_requests/1"
 		}
 
-		if _, err := ch.PullRequest(t.Context(), conn, url); err == nil || strings.Contains(err.Error(), "a-token-never-sent") {
+		if _, err := ch.PullRequest(t.Context(), login, url); err == nil || strings.Contains(err.Error(), "a-token-never-sent") {
 			t.Errorf("%s: PullRequest on a loopback host = %v; want it refused, without the token", name, err)
 		}
 	}

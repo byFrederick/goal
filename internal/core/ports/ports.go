@@ -822,20 +822,21 @@ type OrgEvent struct {
 	Data json.RawMessage
 }
 
-// CodeHost reaches the API of a code host (GitHub, GitLab) from goald, with the credential of a
-// connection whose kind names the adapter (domain.KindSpec.CodeHost): the password of its
-// rendered git login (domain.ResolvedConnection.GitLogin), sent only to that login's host. A
-// pull request's repository comes from its URL, which must be on that host (otherwise an error
-// wrapping ErrNotMergeable, before anything is sent). Adapters follow no redirects and never put
-// the credential in errors or logs.
+// CodeHost reaches the API of a code host (GitHub, GitLab) from goald with a code host login
+// (domain.CodeHostLogin): a host and a token, which callers build today from the git login of a
+// connection whose kind names the adapter (domain.ResolvedConnection.CodeHostLogin,
+// domain.KindSpec.CodeHost). The token is sent only to the login's host. A pull request's
+// repository comes from its URL, which must be on that host (otherwise an error wrapping
+// ErrNotMergeable, before anything is sent). Adapters follow no redirects and never put the token
+// in errors or logs.
 type CodeHost interface {
 	// PullRequest returns the state of the pull request (a GitLab merge request) at url.
-	PullRequest(ctx context.Context, c domain.ResolvedConnection, url string) (PullRequest, error)
+	PullRequest(ctx context.Context, login domain.CodeHostLogin, url string) (PullRequest, error)
 
 	// Merge merges the pull request at url only while its head is still m.HeadSHA, and never
 	// forces: a pull request the host refuses to merge is an error wrapping ErrNotMergeable.
 	// It returns the merge commit's SHA.
-	Merge(ctx context.Context, c domain.ResolvedConnection, url string, m Merge) (string, error)
+	Merge(ctx context.Context, login domain.CodeHostLogin, url string, m Merge) (string, error)
 
 	// UpdateBranch brings the head branch of the pull request at url up to date with its base
 	// (GitHub merges the base into it; GitLab rebases it) only while its head is still headSHA,
@@ -845,31 +846,31 @@ type CodeHost interface {
 	// accepted the update, and the head changes later, so callers read the pull request again
 	// before merging. GitLab's rebase takes no expected head, so there the check is the adapter's
 	// own read just before it: best effort against a push landing in between.
-	UpdateBranch(ctx context.Context, c domain.ResolvedConnection, url, headSHA string) error
+	UpdateBranch(ctx context.Context, login domain.CodeHostLogin, url, headSHA string) error
 
 	// DeleteBranch deletes a branch of the repository the pull request at url merges into; a
 	// branch that is already gone is not an error.
-	DeleteBranch(ctx context.Context, c domain.ResolvedConnection, url, branch string) error
+	DeleteBranch(ctx context.Context, login domain.CodeHostLogin, url, branch string) error
 
 	// BranchHead returns the SHA of the head commit of branch in the repository at repo
-	// (https://<host>/<owner>/<repo>, optionally ending in .git), which must be on the host of c's
-	// git login (otherwise an error, before anything is sent). An empty branch means the
-	// repository's default branch. An unknown repository or branch is an error wrapping
-	// ErrNotFound. It only reads.
-	BranchHead(ctx context.Context, c domain.ResolvedConnection, repo, branch string) (string, error)
+	// (https://<host>/<owner>/<repo>, optionally ending in .git), which must be on login's host
+	// (otherwise an error, before anything is sent). An empty branch means the repository's
+	// default branch. An unknown repository or branch is an error wrapping ErrNotFound. It only
+	// reads.
+	BranchHead(ctx context.Context, login domain.CodeHostLogin, repo, branch string) (string, error)
 
 	// Compare returns the commits of the repository at repo (as for BranchHead) reachable from
 	// head and not from base, oldest first, each with its subject and the paths it changed. It
 	// returns at most MaxCompareCommits, the oldest ones, and sets Comparison.Truncated when there
 	// are more. An unknown repository or commit is an error wrapping ErrNotFound. It only reads.
-	Compare(ctx context.Context, c domain.ResolvedConnection, repo, base, head string) (Comparison, error)
+	Compare(ctx context.Context, login domain.CodeHostLogin, repo, base, head string) (Comparison, error)
 
-	// Repositories returns the account c's credential signs in as, the owners it can list
+	// Repositories returns the account login's token signs in as, the owners it can list
 	// repositories of (the account and its organizations) and the repositories of owner (the
 	// account when owner is empty): at most MaxRepositories, the most recently updated first, with
 	// RepositoryList.Truncated set when there are more. An unknown owner is an error wrapping
 	// ErrNotFound; a host that cannot list them, one wrapping errors.ErrUnsupported. It only reads.
-	Repositories(ctx context.Context, c domain.ResolvedConnection, owner string) (RepositoryList, error)
+	Repositories(ctx context.Context, login domain.CodeHostLogin, owner string) (RepositoryList, error)
 
 	// RepositoryAccess reports what token can do in the repository at repo
 	// (https://<host>/<owner>/<repo>, optionally ending in .git), without a connection: whether it

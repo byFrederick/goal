@@ -5099,12 +5099,19 @@ export interface components {
         StandingRuleList: {
             rules: components["schemas"]["StandingRule"][];
         };
-        /** @description Lets one agent role call one tool of one organization connection without asking, in every factory of the organization (ADR 0031 decision 7) */
+        /** @description Lets one agent role call one tool without asking (ADR 0031 decision 7). A rule is keyed by an organization connection, for every factory of the organization (connection_id set), or, for a factory on secrets, by one MCP server of one environment of one factory (factory_id, environment and server set, connection_id null; ADR 0037 decision 8) */
         StandingRule: {
             id: string;
-            connection_id: string;
-            /** @description The connection's name; null once the connection is deleted */
+            /** @description The connection the rule is keyed by; null for a rule keyed by server */
+            connection_id: string | null;
+            /** @description The connection's name; null once the connection is deleted, and for a rule keyed by server */
             connection: string | null;
+            /** @description The factory of a rule keyed by server; null for a connection's rule */
+            factory_id: string | null;
+            /** @description The environment file's name of a rule keyed by server, as in default; null for a connection's rule */
+            environment: string | null;
+            /** @description The MCP server's name in the environment file (mcp.<server>) of a rule keyed by server; null for a connection's rule */
+            server: string | null;
             tool: string;
             /** @description The agent's role, its name in the definition, as in architect */
             agent: string;

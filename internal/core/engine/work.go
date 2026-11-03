@@ -312,7 +312,7 @@ func (e *Engine) applyPolicy(ctx context.Context, c *claimed) (string, error) {
 	c.noMerge = p.MergePullRequest == domain.ToolOff
 
 	if p.UseCredentials == domain.ToolOff {
-		c.agent.Connections, c.env.Env = nil, nil
+		c.agent.Connections, c.env.Env, c.env.Files, c.env.MCP = nil, nil, nil, nil
 	}
 
 	if p.BoxTimeLimitMinutes > 0 {
@@ -486,7 +486,8 @@ func (e *Engine) runOnce(ctx context.Context, c claimed, b *box, feedback string
 }
 
 // request is the claim's next run as a RunRequest, with brief added to its bundle's brief. A
-// version on secrets gives the run its model key and the agent's environment and no connection.
+// version on secrets gives the run its model key and the agent's environment and no connection,
+// and its box the environment's size (medium when it names none) and image.
 func (c claimed) request(brief string) domain.RunRequest {
 	rt := c.line.Runtime
 
@@ -500,6 +501,7 @@ func (c claimed) request(brief string) domain.RunRequest {
 	if c.line.OnSecrets() {
 		r.ModelConnection, r.Connections, r.Repository.Connection = "", nil, ""
 		r.ModelKey, r.Environment = rt.ModelKey, c.env
+		r.Size, r.Image = cmp.Or(c.env.Size, domain.SandboxMedium), c.env.Image
 	}
 
 	return r

@@ -31,7 +31,11 @@ The worker writes the rules a run gets into the agent's user-level configuration
 
 ## Tools that ask first
 
-An agent's MCP server tools can be `allow`, `ask` or `off` (the modes are set in the agent's environment file, see [access and secrets](../access-and-secrets/)). The strictest of the environment's mode, the factory's `toolRule` and the agent's own tool lists wins. An `ask` call does not run. The run ends, and the item waits for a person:
+An agent's MCP server tools can be `allow`, `ask` or `off` (the modes are set in the agent's environment file, see [access and secrets](../access-and-secrets/)). The strictest of the environment's mode, the factory's `toolRule` and the agent's own tool lists wins.
+
+The agent's `tools.allow` and `tools.deny` rules name a server's tools as `<server>__<pattern>`, such as `github__merge_*`. They apply to the servers of the agent's environment file as to connections: a deny rule that matches a tool removes it, an allow list for a server keeps only the tools it matches, and then the tool's mode applies. A denied tool never asks first. Converting a factory to secrets keeps these rules, because each server in the environment file keeps the name of the connection it came from.
+
+An `ask` call does not run. The run ends, and the item waits for a person:
 
 1. The person sees the call, with its input and the agent's role, and chooses Approve or Deny. Deny can carry a note that the next run reads.
 2. Approve runs the call once, in the next run. Deny sends the item back with the denial in its brief.
@@ -41,7 +45,14 @@ The built-in tools do not ask first. `builtins` set to `ask` is served as `off` 
 
 ## Standing rules
 
-A standing rule lets one agent role call one tool of one MCP server without asking. It is created only by Always allow on a tool approval, and it covers the role, the server and the tool name. It lasts until someone revokes it.
+A standing rule lets one agent role call one tool of one MCP server without asking. It is created only by Always allow on a tool approval, and it lasts until someone revokes it. What it covers depends on where the factory keeps its keys:
+
+- In a factory on secrets, the rule covers the role, the tool name, and the server in the environment file the agent runs with (`mcp.<server>` in `environments/<name>.yaml`), in that factory only. The same server in another environment or another factory still asks.
+- In a factory still on connections, the rule covers the role, the tool name and the connection, in every factory of the organization. Deleting the connection revokes it.
+
+A standing rule only turns `ask` into allowed for its role. A tool set to `off` stays off.
+
+When Goal moves a factory over to secrets, it copies each active connection rule onto every environment of that factory whose file has a server named after the connection, so nobody approves the same tool again. The connection rules stay as they were.
 
 Approving with Always allow needs the permission to decide on the item and the permission to manage secrets and access. A standing rule never turns a call that the factory's definition marks `approval: required` into an automatic one.
 

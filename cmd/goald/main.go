@@ -192,7 +192,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Store: definitionStore, Loads: store, Templates: objects, Policies: policies, Clock: clock,
 		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.kb},
 	})
-	moveOver(ctx, store, connections, orgSecrets, definitionStore, authors, clock, log)
+	// The code host adapters: moving over tests a converted version's repository token with them,
+	// the engine merges with them and the API lists what a connection reaches.
+	hosts := codeHosts(s.AllowPrivateUpstreams)
+	toolLister := toollister.New(connectionTransport(s.AllowPrivateUpstreams))
+	moveOver(ctx, store, connections, orgSecrets, definitionStore, authors, hosts, toolLister, clock, log)
 
 	boxes, err := sandboxes(ctx, s, log)
 	if err != nil {
@@ -217,9 +221,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-
-	// The code host adapters: the engine merges with them, the API lists what a connection reaches.
-	hosts := codeHosts(s.AllowPrivateUpstreams)
 
 	// The engine runs each claim in a sandbox with the run's connections, merges with the
 	// factory's code host connections and, at its start and every ReapEvery, deletes the
@@ -260,7 +261,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 			Mode: api.AuthMode(s.Auth), EmailCodes: s.EmailCodes, Google: s.Google, SecureCookies: s.strictTransport(),
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
-		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), Conversions: postgres.NewFactoryConversions(store), ToolLister: toollister.New(connectionTransport(s.AllowPrivateUpstreams)),
+		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), Conversions: postgres.NewFactoryConversions(store), ToolLister: toolLister,
 		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes, KnowledgeObjects: objects, KnowledgeCheck: kb.ingestor,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
@@ -283,14 +284,17 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 // moveOver moves every organization from connections and credentials to secrets and environment
 // files, once (ADR 0037 decision 19), and points synced knowledge sources at their connections'
-// secrets: run before the lines load, so they load the converted
-// versions. A failure is logged and goald starts, an unconverted factory running on the old path.
+// secrets: run before the lines load, so they load the converted versions. A converted version is
+// published only after its repository token (on hosts) and remote MCP servers (through tools)
+// pass their test. A failure is logged and goald starts, an unconverted factory running on the
+// old path.
 func moveOver(ctx context.Context, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets,
-	definitions ports.DefinitionStore, authors *authoring.Service, clock ports.Clock, log *slog.Logger,
+	definitions ports.DefinitionStore, authors *authoring.Service, hosts map[string]ports.CodeHost, tools ports.ToolLister,
+	clock ports.Clock, log *slog.Logger,
 ) {
 	err := moveover.New(moveover.Deps{
 		Orgs: store, Connections: connections, Secrets: secrets, Knowledge: postgres.NewKnowledge(store), Definitions: definitions,
-		Publisher: authors, Conversions: postgres.NewFactoryConversions(store), Clock: clock, Logger: log,
+		Publisher: authors, Conversions: postgres.NewFactoryConversions(store), CodeHosts: hosts, Tools: tools, Clock: clock, Logger: log,
 	}).Run(ctx)
 	if err != nil {
 		log.ErrorContext(ctx, "move over failed", slog.Any("error", err))

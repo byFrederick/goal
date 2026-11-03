@@ -44,6 +44,22 @@ Limits keep every box fast. A sync that goes past one fails and names it.
 
 When you upgrade to knowledge as files, goald converts each source once, at its start. A synced source that reads with a secret becomes a `repository` source (the `gitdocs` reader) or a `confluence` source. It keeps its name, its secret and its config, without `reader`. Live sources are deleted: give their MCP servers to agents in the factory's environment files instead. Uploads keep their originals. Every source then syncs once, and runs read its files from the next claim on. A factory keeps listing a converted source by its name, so no definition changes. A factory that listed a live source gets a `knowledge-source-unknown` error at its next publish, with a fix that removes the line. A synced source that goald can't convert stays as it is, and goald logs why (`knowledge source not converted`).
 
+### A synced source's secret and config
+
+A synced source names a secret (`goal secret`, [Access and secrets](../access-and-secrets/)) and a config. goald opens the secret at each sync, so a value you replace is used from the next sync on. The secret must be open to all factories, because a source belongs to the organization, not to one factory. Renaming the secret keeps the source on it. You can't delete a secret while a source reads with it: the error names the source.
+
+| Reader | Config | The secret holds |
+| --- | --- | --- |
+| `gitdocs` | `reader: gitdocs`, `repository` (its https URL), and optionally `branch`, `include` and `exclude`. A repository off github.com and gitlab.com also needs `code_host: github` or `gitlab`. | The code host's token. |
+| `confluence` | `reader: confluence`, `site` (such as `acme.atlassian.net`), `email` (the Atlassian account) and `spaces` (such as `ENG, SUP`). | The account's API token. |
+
+```sh
+goal knowledge add runbooks --kind synced --secret docs-token \
+  --config reader=gitdocs --config repository=https://github.com/acme/docs
+```
+
+Sources made before secrets read a connection. When goald moves an organization over to secrets, each such source gets the secret made from its connection's token, and the connection's other values go into its config. A source it can't move keeps reading its connection, and goald logs why.
+
 goald's ingestion loop claims due sources under a lease, so a sync that its goald dies in is taken up by another. A source can sync on an interval, `--every 1h` for example, or on demand.
 
 ## What runs get

@@ -151,7 +151,22 @@ Nothing reads the settings yet: the store, the engine and the worker follow in t
 
 ## Environment files
 
-An environment file, `environments/<name>.yaml`, says what an agent's box installs and what it can reach ([ADR 0037](../adr/0037-secrets-and-environment-files.md), decisions 5 to 8). Every factory has `environments/default.yaml`. An agent names its file with `environment: <name>`, and an agent without one gets `default`; a judge's front matter and an eval case's `spec` take `environment` the same way. `config.Check` loads and checks the files (`internal/config/environment.go`); run start does not read them yet, so runs still take the [old path](#keys-moved-to-environment-files).
+An environment file, `environments/<name>.yaml`, says what an agent's box installs and what it can reach ([ADR 0037](../adr/0037-secrets-and-environment-files.md), decisions 5 to 8). Every factory has `environments/default.yaml`. An agent names its file with `environment: <name>`, and an agent without one gets `default`; a judge's front matter and an eval case's `spec` take `environment` the same way. `config.Check` loads and checks the files (`internal/config/environment.go`), and the published version keeps every key on `domain.Environment`.
+
+**At run start** the engine resolves the agent's file from the pinned version (`internal/core/engine/environment.go`, decision 10):
+
+- It opens every `{{secret}}` of `env`, `files`, `mcp.<server>.headers`, a stdio server's `env` and `runtime.modelKey` together, once, through the secrets store, which checks each secret's scope against the factory and writes one `secret.used` per secret. A missing or out-of-scope secret fails the run with a reason that names the secret and the environment and never a value. Every opened value is scrubbed from what the run reports.
+- The agent's box gets `env` with the values filled in, each `files` entry's content in a platform-reserved variable `GOAL_FILE_<n>` (numbered from 1 by sorted path, `domain.FileEnv`), and the value of each secret an MCP header or stdio `env` names in `GOAL_SECRET_<NAME>` (the name upper-cased, every other character `_`, `domain.SecretEnv`). The resolved MCP servers name `${GOAL_SECRET_<NAME>}` in place of the reference, so they hold no value.
+- The box takes the file's `size` (medium when omitted) and its `image` (Goal's agent image when omitted). The Docker and Cloudflare sandboxes fail the run with an error that names an image they cannot run.
+- The organization policy's Use credentials `off` drops `env`, `files` and `mcp`; the model key and the repository still reach the run.
+
+**In the run bundle** the gateway describes the agent's file, never a value (`internal/gateway/bundle.go`, decisions 5, 8 and 11; the fields are in [the worker's README](../../apps/worker/README.md#specjson)). The bundle's `tools` are the file's `tools`, and `spec.environment` carries the MCP servers with their secrets as `${GOAL_SECRET_<NAME>}`, `setup` in order, each file path with its `GOAL_FILE_<n>`, and the names of `env` and of the tools. A version on secrets gets no connection in the bundle. Each server's tool modes come from `domain.ServerToolModes`, as a list the worker matches first to last:
+
+- The file's `tools` patterns, most specific first: an exact name, then globs with more characters other than `*`, a tie going to the pattern that sorts first.
+- An active standing rule for the factory, environment, server, tool and agent role lifts a tool that resolves to `ask` to `allow`, as its own exact entry. Nothing lifts `off`.
+- A cap of the organization policy makes a mode stricter, never looser. The policy has no MCP cap yet, so the gateway passes none (decision 12).
+
+The task token does not carry the policy's Use credentials, so with it `off` the bundle still names the file's servers, files and variables, whose values the box does not get. The worker does not read `spec.environment` yet, so it writes no file, runs no setup and starts no MCP server from it.
 
 ```yaml
 apiVersion: goal/v1

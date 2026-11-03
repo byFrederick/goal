@@ -65,9 +65,20 @@ type world struct {
 	kb          *porttest.Knowledge
 	defs        *porttest.Definitions
 	conversions *porttest.FactoryConversions
+	hosts       *porttest.CodeHost
+	tools       *porttest.ToolLister
 	mover       *moveover.Mover
 	logs        *logBuffer
 }
+
+// repoURL is the production factory's repository.
+const (
+	repoURL      = "https://github.com/acme/app.git"
+	githubMCPURL = "https://api.githubcopilot.com/mcp/"
+)
+
+// canPush is a token's access that can read the repository and push to it.
+var canPush = ports.RepositoryAccess{Read: ports.AccessCheck{OK: true, Reason: "can read"}, Push: ports.AccessCheck{OK: true, Reason: "can push"}}
 
 var person = domain.Actor{Kind: domain.ActorUser, ID: "0b6f1c9e-0000-7000-8000-00000000aaaa", Name: "Ada"}
 
@@ -89,6 +100,13 @@ func newWorld(t *testing.T) *world {
 	w.kb.ReadSecrets(w.secrets)
 	w.defs = porttest.NewDefinitions(porttest.DefinitionsDeps{Objects: porttest.NewObjectStore(), Items: w.store, Audit: w.tenancy, Now: w.clock.Now})
 	w.conversions = porttest.NewFactoryConversions()
+
+	// The converted versions' checks pass unless a test says otherwise: the repository token can
+	// read and push, and the github and context7 MCP servers answer tools/list.
+	w.hosts, w.tools = porttest.NewCodeHost(), porttest.NewToolLister()
+	w.hosts.SetAccess(repoURL, githubValue, canPush)
+	w.tools.Serve(context7URL, "query-docs", "resolve-library-id")
+	w.tools.Serve(githubMCPURL, "create_pull_request")
 
 	platform, err := connkind.Platform()
 	if err != nil {
@@ -136,7 +154,8 @@ func newWorld(t *testing.T) *world {
 
 	w.mover = moveover.New(moveover.Deps{
 		Orgs: w.tenancy, Connections: w.conns, Secrets: w.secrets, Knowledge: w.kb, Definitions: w.defs, Publisher: authors,
-		Conversions: w.conversions, Clock: w.clock, Logger: slog.New(slog.NewJSONHandler(w.logs, nil)),
+		Conversions: w.conversions, CodeHosts: map[string]ports.CodeHost{connGitHub: w.hosts}, Tools: w.tools,
+		Clock: w.clock, Logger: slog.New(slog.NewJSONHandler(w.logs, nil)),
 	})
 
 	return w

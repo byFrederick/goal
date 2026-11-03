@@ -68,7 +68,7 @@ func (e *Engine) open(ctx context.Context, t runTask, runID domain.RunID, env ma
 
 	sb, err := e.sandboxes.Create(ctx, ports.SandboxSpec{
 		OrgID: t.OrgID, FactoryID: t.FactoryID, ItemID: t.Item, RunID: runID, Station: t.Station, Agent: t.Agent,
-		Image: e.cfg.Image, Size: t.Size, Env: map[string]string{envGatewayURL: e.cfg.GatewayURL},
+		Image: cmp.Or(t.Image, e.cfg.Image), Size: t.Size, Env: map[string]string{envGatewayURL: e.cfg.GatewayURL},
 		Deadline: started.Add(boxLife(t.RunRequest, e.cfg)),
 	})
 	if err != nil {

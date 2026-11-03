@@ -1,7 +1,8 @@
 // Package conversiontest is the conformance suite for ports.FactoryConversions (ADR 0037
 // decision 19). The in-memory fake in porttest and the PostgreSQL adapter run it, so tests on the
 // fake hold for the database's rules: one conversion per factory, kept, a factory the
-// organization has, organizations kept apart and one holder of the lock.
+// organization has, a refusal replaced by a later try and a conversion kept for good,
+// organizations kept apart and one holder of the lock.
 package conversiontest
 
 import (
@@ -43,6 +44,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	}{
 		{"Record_OncePerFactory", testOnce},
 		{"Record_RefusedWithProblems", testRefused},
+		{"Record_RefusedReplaced", testRefusedReplaced},
 		{"Record_InvalidRefused", testInvalid},
 		{"Record_UnknownFactoryNotFound", testUnknownFactory},
 		{"OtherOrg_SeesNothing", testIsolation},
@@ -102,6 +104,38 @@ func testRefused(t *testing.T, h Harness) {
 
 	if len(got) != 1 || !got[0].Refused() || !slices.Equal(got[0].Problems, problems) || len(got[0].Names) != 0 {
 		t.Errorf("List = %+v; want the refusal with its problems", got)
+	}
+}
+
+func testRefusedReplaced(t *testing.T, h Harness) {
+	t.Helper()
+
+	org := h.NewOrg(t)
+	f := h.NewFactory(t, org)
+	ctx := domain.WithOrg(t.Context(), org)
+
+	for i, c := range []ports.FactoryConversion{
+		{Factory: f, From: v1, Problems: []string{"the token can't push"}, At: at},
+		{Factory: f, From: v1, Problems: []string{"MCP server docs did not answer"}, At: at.Add(time.Hour)},
+		{Factory: f, From: v1, To: v2, Names: map[string]map[string]string{"gitlab": {"token": "gitlab"}}, At: at.Add(2 * time.Hour)},
+	} {
+		if ok, err := h.Conversions.Record(ctx, c); err != nil || !ok {
+			t.Fatalf("Record %d = %v, %v; want it to replace the refusal", i, ok, err)
+		}
+	}
+
+	if ok, err := h.Conversions.Record(ctx, ports.FactoryConversion{Factory: f, From: v2, Problems: []string{"later"}, At: at.Add(3 * time.Hour)}); err != nil || ok {
+		t.Fatalf("Record after the conversion = %v, %v; want false: a conversion is kept", ok, err)
+	}
+
+	got, err := h.Conversions.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(got) != 1 || got[0].Refused() || got[0].To != v2 || len(got[0].Problems) != 0 || !got[0].At.Equal(at.Add(2*time.Hour)) ||
+		got[0].Names["gitlab"]["token"] != "gitlab" {
+		t.Errorf("List = %+v; want the conversion that replaced the refusals", got)
 	}
 }
 

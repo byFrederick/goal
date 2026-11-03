@@ -1,9 +1,11 @@
 package domain
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"maps"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -175,6 +177,26 @@ type Repository struct {
 	// Token is the {{secret}} that clones and merges it on secrets, and Forge its forge on a host
 	// other than github.com and gitlab.com (ADR 0037 decision 12); both empty on connections.
 	Token, Forge string
+}
+
+// knownForges are the code hosts whose host names say which adapter serves them; any other host
+// needs runtime.repository.forge (ADR 0037 decision 12).
+var knownForges = map[string]string{"github.com": "github", "gitlab.com": "gitlab"}
+
+// KnownForge is the code host adapter host's name says (github or gitlab), or "" for a host
+// whose adapter only runtime.repository.forge names.
+func KnownForge(host string) string { return knownForges[strings.ToLower(host)] }
+
+// CodeHost is the host of r's URL in lower case, with its port if it has one, and the code host
+// adapter that serves it: Forge, else the one the host's name says (KnownForge). forge is ""
+// when neither says, and both are "" when the URL has no host.
+func (r Repository) CodeHost() (host, forge string) {
+	u, err := url.Parse(r.URL)
+	if err != nil || u.Host == "" {
+		return "", ""
+	}
+
+	return strings.ToLower(u.Host), cmp.Or(r.Forge, KnownForge(u.Hostname()))
 }
 
 // Station is one step of the line.

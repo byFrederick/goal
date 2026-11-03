@@ -1,5 +1,6 @@
 import type { SDKMessage, query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 import { agentQuery } from './agent.js';
+import { applyEnvironment, type EnvironmentDeps } from './environment.js';
 import { EventMapper, type Finished, type WorkerEvent } from './events.js';
 import { NotePoller, notePollMs, PromptQueue } from './notes.js';
 import { isCommitId } from './prepare.js';
@@ -19,16 +20,30 @@ export interface RunDeps {
    * has no such branch. Absent, the finished event names no pushed head.
    */
   remoteHead?: (branch: string) => Promise<string | undefined>;
+  /** Where and how the spec's environment is applied before the agent starts; needed when the spec has one. */
+  environment?: Omit<EnvironmentDeps, 'env'>;
 }
 
 /**
  * Runs one task and emits its events, ending with exactly one finished event. It returns the
  * process exit code: 0 when the agent produced a result (succeeded or not), 1 when it crashed.
  *
+ * On a spec with an environment (ADR 0037) its files and setup are applied first; a failure there
+ * ends the run with a failed event before the agent is queried.
+ *
  * The agent's input is a stream: the task's prompt first, then each note left on the item while
  * it works. The stream ends at the result, so the query ends with it.
  */
 export async function runTask(spec: TaskSpec, files: AgentFiles, deps: RunDeps): Promise<number> {
+  if (spec.environment) {
+    try {
+      if (!deps.environment) throw new Error('environment setup: the worker has no shell to apply it');
+      await applyEnvironment(spec.environment, { ...deps.environment, env: deps.env });
+    } catch (err) {
+      deps.emit(failed(deps.now, err instanceof Error ? err.message : String(err)));
+      return 1;
+    }
+  }
   const mapper = new EventMapper(deps.now, spec.skills);
   const { prompt, options } = agentQuery(spec, files, deps.env, deps.abortController, deps.fetch);
   const inbox = new PromptQueue();

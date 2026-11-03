@@ -1,10 +1,9 @@
 // Package gitlab implements ports.CodeHost with GitLab's REST API (v4, merge requests), called
-// from the goald host with the credential of a connection whose kind's code host is gitlab (spec
-// 4 §5.5).
+// from the goald host with a code host login (domain.CodeHostLogin), built today from a
+// connection whose kind's code host is gitlab (spec 4 §5.5).
 //
 // It reads merge requests, merges them, rebases them on their target and deletes branches,
-// nothing else. The connection's
-// rendered git login says which host it serves (gitlab.com or a self-managed GitLab) and holds
+// nothing else. The login says which host it serves (gitlab.com or a self-managed GitLab) and holds
 // the access token; a merge request URL on any other host is refused before anything is sent,
 // and the project is the URL's own (https://<host>/<namespace>/<project>/-/merge_requests/<iid>).
 // The API is https://<host>/api/v4. A merge names the head SHA it was asked for, so GitLab
@@ -71,7 +70,7 @@ func New(cfg Config) *Client {
 		http: &http.Client{
 			Timeout:   cfg.Timeout,
 			Transport: cfg.Transport,
-			// A credentialed request is never sent anywhere but the connection's API.
+			// A credentialed request is never sent anywhere but the login's API.
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}
@@ -92,12 +91,13 @@ func (m mergeRequest) path(rest string) string {
 // mrPath is a merge request's path: a namespace (groups and subgroups), a project, its iid.
 var mrPath = regexp.MustCompile(`^/((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+)/-/merge_requests/([1-9][0-9]*)/?$`)
 
-// open checks that mrURL is a merge request on the host of c's git login and names it.
-func (cl *Client) open(c domain.ResolvedConnection, mrURL string) (mergeRequest, error) {
-	host, token, err := c.GitLogin()
-	if err != nil {
+// open checks that mrURL is a merge request on the login's host and names it.
+func (cl *Client) open(login domain.CodeHostLogin, mrURL string) (mergeRequest, error) {
+	if err := login.Validate(); err != nil {
 		return mergeRequest{}, err
 	}
+
+	host, token := login.Host, login.Token
 
 	u, err := url.Parse(mrURL)
 	if err != nil {
@@ -110,7 +110,7 @@ func (cl *Client) open(c domain.ResolvedConnection, mrURL string) (mergeRequest,
 	}
 
 	if !strings.EqualFold(u.Host, host) {
-		return mergeRequest{}, fmt.Errorf("%s is not on %s, the host of connection %s: %w", mrURL, host, c.Connection.Name, ports.ErrNotMergeable)
+		return mergeRequest{}, fmt.Errorf("%s is not on %s, the host of connection %s: %w", mrURL, host, login.Name, ports.ErrNotMergeable)
 	}
 
 	api := cl.api
@@ -167,8 +167,8 @@ func (cl *Client) read(ctx context.Context, m mergeRequest, mrURL string) (mrJSO
 }
 
 // PullRequest implements ports.CodeHost.
-func (cl *Client) PullRequest(ctx context.Context, c domain.ResolvedConnection, mrURL string) (ports.PullRequest, error) {
-	m, err := cl.open(c, mrURL)
+func (cl *Client) PullRequest(ctx context.Context, login domain.CodeHostLogin, mrURL string) (ports.PullRequest, error) {
+	m, err := cl.open(login, mrURL)
 	if err != nil {
 		return ports.PullRequest{}, err
 	}
@@ -194,8 +194,8 @@ func (cl *Client) PullRequest(ctx context.Context, c domain.ResolvedConnection, 
 }
 
 // Merge implements ports.CodeHost.
-func (cl *Client) Merge(ctx context.Context, c domain.ResolvedConnection, mrURL string, mm ports.Merge) (string, error) {
-	m, err := cl.open(c, mrURL)
+func (cl *Client) Merge(ctx context.Context, login domain.CodeHostLogin, mrURL string, mm ports.Merge) (string, error) {
+	m, err := cl.open(login, mrURL)
 	if err != nil {
 		return "", err
 	}
@@ -230,8 +230,8 @@ func (cl *Client) Merge(ctx context.Context, c domain.ResolvedConnection, mrURL 
 
 // UpdateBranch implements ports.CodeHost: GitLab rebases the source branch on the target, in
 // the background once it answers 202.
-func (cl *Client) UpdateBranch(ctx context.Context, c domain.ResolvedConnection, mrURL, headSHA string) error {
-	m, err := cl.open(c, mrURL)
+func (cl *Client) UpdateBranch(ctx context.Context, login domain.CodeHostLogin, mrURL, headSHA string) error {
+	m, err := cl.open(login, mrURL)
 	if err != nil {
 		return err
 	}
@@ -269,8 +269,8 @@ func (cl *Client) UpdateBranch(ctx context.Context, c domain.ResolvedConnection,
 }
 
 // DeleteBranch implements ports.CodeHost.
-func (cl *Client) DeleteBranch(ctx context.Context, c domain.ResolvedConnection, mrURL, branch string) error {
-	m, err := cl.open(c, mrURL)
+func (cl *Client) DeleteBranch(ctx context.Context, login domain.CodeHostLogin, mrURL, branch string) error {
+	m, err := cl.open(login, mrURL)
 	if err != nil {
 		return err
 	}
@@ -292,7 +292,7 @@ func (cl *Client) DeleteBranch(ctx context.Context, c domain.ResolvedConnection,
 	}
 }
 
-// call sends one API request with the connection's token and decodes a successful JSON answer
+// call sends one API request with the login's token and decodes a successful JSON answer
 // into out (when out is not nil). It returns the status and GitLab's message, if any; err is
 // only for requests that got no answer or an unreadable one. The token is scrubbed from the
 // message and from errors.
@@ -386,17 +386,17 @@ func problem(raw []byte) string {
 }
 
 // BranchHead implements ports.CodeHost: GitLab does not support it yet, and nothing is sent.
-func (cl *Client) BranchHead(context.Context, domain.ResolvedConnection, string, string) (string, error) {
+func (cl *Client) BranchHead(context.Context, domain.CodeHostLogin, string, string) (string, error) {
 	return "", fmt.Errorf("gitlab: branch head: %w", errors.ErrUnsupported)
 }
 
 // Compare implements ports.CodeHost: GitLab does not support it yet, and nothing is sent.
-func (cl *Client) Compare(context.Context, domain.ResolvedConnection, string, string, string) (ports.Comparison, error) {
+func (cl *Client) Compare(context.Context, domain.CodeHostLogin, string, string, string) (ports.Comparison, error) {
 	return ports.Comparison{}, fmt.Errorf("gitlab: compare: %w", errors.ErrUnsupported)
 }
 
 // Repositories implements ports.CodeHost: GitLab does not support it yet, and nothing is sent.
-func (cl *Client) Repositories(context.Context, domain.ResolvedConnection, string) (ports.RepositoryList, error) {
+func (cl *Client) Repositories(context.Context, domain.CodeHostLogin, string) (ports.RepositoryList, error) {
 	return ports.RepositoryList{}, fmt.Errorf("gitlab: repositories: %w", errors.ErrUnsupported)
 }
 

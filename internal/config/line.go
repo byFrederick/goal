@@ -85,11 +85,27 @@ func (f *Factory) Line() domain.Line {
 	return l
 }
 
-// environments maps the environment files to what the engine gives a run of them.
+// environments maps the environment files, every key, to what the engine gives a run of them.
 func environments(files []Environment) []domain.Environment {
 	var out []domain.Environment
+
 	for _, e := range files {
-		out = append(out, domain.Environment{Name: e.Name, Env: maps.Clone(e.Spec.Env)})
+		s := e.Spec
+		env := domain.Environment{
+			Name: e.Name, Size: domain.SandboxSize(s.Size), Image: s.Image, Tools: slices.Clone(s.Tools), Setup: slices.Clone(s.Setup),
+			Env: maps.Clone(s.Env), Files: maps.Clone(s.Files),
+		}
+
+		if s.MCP != nil {
+			env.MCP = make(map[string]domain.MCPServer, len(s.MCP))
+			for name, m := range s.MCP {
+				env.MCP[name] = domain.MCPServer{
+					URL: m.URL, Headers: maps.Clone(m.Headers), Command: slices.Clone(m.Command), Env: maps.Clone(m.Env), Tools: maps.Clone(m.Tools),
+				}
+			}
+		}
+
+		out = append(out, env)
 	}
 
 	return out

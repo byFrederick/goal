@@ -1,7 +1,11 @@
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { CanUseTool, Options, query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Shell } from './environment.js';
 import type { WorkerEvent } from './events.js';
-import { lsRemoteHead, runTask } from './run.js';
+import { lsRemoteHead, type RunDeps, runTask } from './run.js';
 import { type AgentFiles, parseSpec, type TaskSpec } from './spec.js';
 
 const spec: TaskSpec = parseSpec(
@@ -91,6 +95,7 @@ async function run(
     env?: NodeJS.ProcessEnv;
     fetch?: typeof globalThis.fetch;
     remoteHead?: (branch: string) => Promise<string | undefined>;
+    environment?: RunDeps['environment'];
   } = {},
 ) {
   const { fake, calls } = scripted(messages, opts);
@@ -104,6 +109,7 @@ async function run(
     fetch: opts.fetch ?? gateway().fetch,
     notePollMs: 0,
     ...(opts.remoteHead ? { remoteHead: opts.remoteHead } : {}),
+    ...(opts.environment ? { environment: opts.environment } : {}),
   });
   for (const call of calls) await call.read;
   return { code, events, calls };
@@ -629,5 +635,71 @@ describe('runTask Ask-first tool calls', () => {
     expect(events.some((e) => e.type === 'tool_result')).toBe(false);
     expect(events.at(-1)).toMatchObject({ type: 'finished', status: 'failed' });
     expect(code).toBe(1);
+  });
+});
+
+describe('runTask environment', () => {
+  const withEnvironment = (setup: string[]) =>
+    parseSpec(
+      JSON.stringify({
+        ...spec,
+        environment: { name: 'default', files: [{ path: '~/.npmrc', env: 'GOAL_FILE_1' }], setup },
+      }),
+    );
+  let home = '';
+
+  afterEach(async () => {
+    if (home) await rm(home, { recursive: true, force: true });
+  });
+
+  it('writes the files and runs setup before it queries the agent', async () => {
+    home = await mkdtemp(join(tmpdir(), 'goal-run-home-'));
+    const ran: string[] = [];
+    const shell: Shell = async (command) => {
+      ran.push(`${command}:${await readFile(join(home, '.npmrc'), 'utf8')}`);
+      return { code: 0, timedOut: false };
+    };
+
+    const { code, events, calls } = await run([success], {
+      spec: withEnvironment(['pnpm install']),
+      env: { ...env, GOAL_FILE_1: 'registry=https://npm.example.com/' },
+      environment: { home, workspace: '/workspace', shell },
+    });
+
+    expect(code).toBe(0);
+    expect(ran).toEqual(['pnpm install:registry=https://npm.example.com/']);
+    expect((await stat(join(home, '.npmrc'))).mode & 0o777).toBe(0o600);
+    expect(calls).toHaveLength(1);
+    expect(events.at(-1)).toMatchObject({ type: 'finished', status: 'succeeded' });
+  });
+
+  it('fails the run with the command and its last lines when setup fails, and never queries the agent', async () => {
+    home = await mkdtemp(join(tmpdir(), 'goal-run-home-'));
+    const shell: Shell = async (_command, opts) => {
+      opts.onOutput(`${Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join('\n')}\n`);
+      return { code: 2, timedOut: false };
+    };
+
+    const { code, events, calls } = await run([success], {
+      spec: withEnvironment(['make deps']),
+      env: { ...env, GOAL_FILE_1: 'x' },
+      environment: { home, workspace: '/workspace', shell },
+    });
+
+    expect(code).toBe(1);
+    expect(calls).toEqual([]);
+    expect(events).toHaveLength(1);
+    const finished = events[0];
+    expect(finished).toMatchObject({ type: 'finished', status: 'failed' });
+    const error = finished?.type === 'finished' ? (finished.error ?? '') : '';
+    expect(error).toMatch(/^environment setup: `make deps` exited 2; its last 50 lines:\nline 11\n/);
+    expect(error).toMatch(/line 60$/);
+    expect(error).not.toContain('line 10\n');
+  });
+
+  it('runs a spec without an environment as before, with no shell', async () => {
+    const { code, calls } = await run([success]);
+    expect(code).toBe(0);
+    expect(calls).toHaveLength(1);
   });
 });
