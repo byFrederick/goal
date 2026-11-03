@@ -3,7 +3,9 @@ package config
 import (
 	"cmp"
 	"encoding/json"
+	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -123,6 +125,10 @@ var locatedCases = []struct {
 		code: "json-invalid", section: domain.SectionFiles, file: answerContract,
 	},
 	{name: "no factory.yaml", code: "factory-yaml-missing", section: domain.SectionFiles},
+	{
+		name: "too many knowledge sources", doc: edited(specAgents, "  knowledge: { sources: [s01, s02, s03, s04, s05, s06, s07, s08, s09, s10, s11] } #here\n"+specAgents),
+		code: codeKnowledgeTooMany, section: domain.SectionBasics, pointer: "/basics/knowledge_sources",
+	},
 	{
 		name: "missing required key", doc: edited("      - id: work\n        kind: agent\n", "      - id: work #here\n"),
 		code: "schema-required", section: domain.SectionLine, pointer: "/line/stations/1/kind",
@@ -722,5 +728,115 @@ func TestCheck_AssemblyIntegration(t *testing.T) {
 				t.Errorf("problems %+v, want %s", problems, tt.code)
 			}
 		})
+	}
+}
+
+// srcHandbook is the knowledge source the cases list.
+const srcHandbook = "handbook"
+
+// knowledgeDoc is baseFactory with a lane, a work type and the knowledge sources entries as written.
+func knowledgeDoc(entries string) string {
+	return edited(workAgentLine, "        route: { "+laneBackend+": worker }\n", specAgents, "  knowledge:\n    sources:\n"+entries+specAgents,
+		"  board:\n", "  board:\n    workTypes: [bug]\n")
+}
+
+// A knowledge source entry is a name or an object that scopes who reads it and says when; its
+// scope names only what the definition declares, and a factory lists at most ten sources.
+func TestCheck_KnowledgeEntries(t *testing.T) {
+	t.Parallel()
+
+	t.Run("names and objects", knowledgeNamesAndObjects)
+
+	t.Run("an unknown name in appliesTo", knowledgeUnknownScope)
+
+	t.Run("an entry the schema refuses", knowledgeSchemaRefuses)
+
+	t.Run("ten sources at most", knowledgeTenAtMost)
+}
+
+func knowledgeNamesAndObjects(t *testing.T) {
+	t.Parallel()
+
+	f, problems := Check(checkTree(knowledgeDoc("      - handbook\n"+
+		"      - name: runbooks\n        appliesTo: { agents: [worker], stations: [work], lanes: ["+laneBackend+"], workTypes: [bug] }\n"+
+		"        readWhen: Before you touch production, find the runbook for the alert.\n"), nil))
+	if f == nil || len(problems) > 0 {
+		t.Fatalf("problems = %+v, want none", problems)
+	}
+
+	if got := f.Spec.Knowledge.Names(); !slices.Equal(got, []string{srcHandbook, "runbooks"}) {
+		t.Errorf("names = %v, want [handbook runbooks]", got)
+	}
+
+	want := []KnowledgeSource{
+		{Name: srcHandbook},
+		{
+			Name: "runbooks", ReadWhen: "Before you touch production, find the runbook for the alert.",
+			AppliesTo: domain.RuleScope{Agents: []string{"worker"}, Stations: []string{"work"}, Lanes: []string{laneBackend}, WorkTypes: []string{"bug"}},
+		},
+	}
+	if !reflect.DeepEqual(f.Spec.Knowledge.Sources, want) {
+		t.Errorf("sources = %+v\nwant %+v", f.Spec.Knowledge.Sources, want)
+	}
+
+	if got := f.Line().KnowledgeSources; !slices.Equal(got, []string{srcHandbook, "runbooks"}) {
+		t.Errorf("line's knowledge sources = %v, want the names", got)
+	}
+}
+
+func knowledgeUnknownScope(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct{ scope, code, pointer string }{
+		{"agents: [ghost]", codeUnknownAgent, "/basics/knowledge_sources/0/appliesTo/agents/0"},
+		{"stations: [ghost]", codeUnknownStation, "/basics/knowledge_sources/0/appliesTo/stations/0"},
+		{"lanes: [ghost]", codeUnknownLane, "/basics/knowledge_sources/0/appliesTo/lanes/0"},
+		{"workTypes: [ghost]", codeUnknownWorkType, "/basics/knowledge_sources/0/appliesTo/workTypes/0"},
+	} {
+		_, problems := Check(checkTree(knowledgeDoc("      - { name: runbooks, appliesTo: { "+tt.scope+" } }\n"), nil))
+
+		i := indexOf(problems, tt.code)
+		if i < 0 || len(problems) != 1 {
+			t.Errorf("%s: problems = %+v, want one %s", tt.scope, problems, tt.code)
+
+			continue
+		}
+
+		if p := problems[i]; p.Pointer != tt.pointer || p.Severity != domain.SeverityError || !strings.Contains(p.Message, "knowledge source runbooks") {
+			t.Errorf("%s: problem = %+v, want an error at %s naming the source", tt.scope, p, tt.pointer)
+		}
+	}
+}
+
+func knowledgeSchemaRefuses(t *testing.T) {
+	t.Parallel()
+
+	for _, entry := range []string{
+		"      - { appliesTo: { agents: [worker] } }\n",
+		"      - { name: runbooks, appliesTo: { agents: [] } }\n",
+		"      - { name: runbooks, colour: red }\n",
+		"      - { name: runbooks, readWhen: \"" + strings.Repeat("a", 161) + "\" }\n",
+	} {
+		if f, problems := Check(checkTree(knowledgeDoc(entry), nil)); f != nil || len(problems) == 0 {
+			t.Errorf("%q: factory %v, problems %+v; want a schema problem", entry, f != nil, problems)
+		}
+	}
+}
+
+func knowledgeTenAtMost(t *testing.T) {
+	t.Parallel()
+
+	var ten strings.Builder
+	for i := range 10 {
+		fmt.Fprintf(&ten, "      - s%02d\n", i+1)
+	}
+
+	if _, problems := Check(checkTree(knowledgeDoc(ten.String()), nil)); len(problems) > 0 {
+		t.Errorf("ten sources: problems = %+v, want none", problems)
+	}
+
+	_, problems := Check(checkTree(knowledgeDoc(ten.String()+"      - { name: s11, readWhen: One too many. }\n"), nil))
+	if i := indexOf(problems, codeKnowledgeTooMany); i < 0 || problems[i].Severity != domain.SeverityError {
+		t.Errorf("eleven sources: problems = %+v, want a knowledge-too-many error", problems)
 	}
 }

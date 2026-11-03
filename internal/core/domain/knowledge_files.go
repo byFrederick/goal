@@ -35,6 +35,16 @@ const (
 	MaxSnapshotFailures = 100
 	// MaxFilePage bounds one page of a source's files.
 	MaxFilePage = 1000
+	// MaxFactorySources is how many sources a factory's knowledge.sources lists (decision 4).
+	MaxFactorySources = 10
+)
+
+// Limits of a factory's memory, its memory.yaml (decision 6): an entry's text in characters, and
+// the file's bytes and entries.
+const (
+	MaxMemoryText    = 300
+	MaxMemoryBytes   = 8 << 10
+	MaxMemoryEntries = 50
 )
 
 // KnowledgeSnapshotKey is the bucket key of a source's snapshot zip:

@@ -30,7 +30,7 @@ func TestKnowledge_SourceInUseByAFactory(t *testing.T) {
 
 	f := &config.Factory{}
 	f.Metadata.ID, f.Metadata.Name = string(mxF), factoryBuilder
-	f.Spec.Knowledge = &config.Knowledge{Sources: []string{kbHandbook}}
+	f.Spec.Knowledge = &config.Knowledge{Sources: []config.KnowledgeSource{{Name: kbHandbook}}}
 
 	s := &server{
 		factories: oneFactory{f}, defs: definitionsOf(ctx, t, f, false), knowledge: kb, uploads: knowledge.NewUploads(kb, porttest.NewObjectStore(), 0),
@@ -69,7 +69,7 @@ func TestKnowledge_AnArchivedFactoryUsesNoSource(t *testing.T) {
 
 	f := &config.Factory{}
 	f.Metadata.ID, f.Metadata.Name = string(mxF), factoryBuilder
-	f.Spec.Knowledge = &config.Knowledge{Sources: []string{kbHandbook}}
+	f.Spec.Knowledge = &config.Knowledge{Sources: []config.KnowledgeSource{{Name: kbHandbook}}}
 
 	s := &server{
 		factories: oneFactory{f}, defs: definitionsOf(ctx, t, f, true), knowledge: kb, uploads: knowledge.NewUploads(kb, porttest.NewObjectStore(), 0),
