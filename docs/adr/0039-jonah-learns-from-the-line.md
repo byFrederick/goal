@@ -245,7 +245,7 @@ A person meets six ideas: evidence, observation, proposal, try, kept test and wa
         share: 5%               # of the line's last 7 days of spend
         proposeAfter: 3         # items with the same cause
     ```
-    - **Removed keys:** `weeklyUsd`, `learning.librarian` and `learning.kaizen` go through the field-removed path (`factory.schema.json`, `config.Load`). They warn; they don't fail the load the way v29's `evals/` did.
+    - **Removed keys:** `weeklyUsd`, `learning.librarian` and `learning.kaizen` get a new warning-only check, `field-ignored`, and stay in the schema marked deprecated. They are never added to `removedKeys`: that path records a key in `Line.Removed`, and `Line.Refusal` then refuses every run of a version that has it, which would stop the live factory.
     - **`evals/`** gets the warning `evals-ignored` until it is removed.
     - **Defaults** change in the schema and in `DefaultJonahPolicy` together.
     - **`GOAL_BAKEOFF_MODELS` goes.** A person picks the model.
@@ -384,7 +384,7 @@ A person meets six ideas: evidence, observation, proposal, try, kept test and wa
 | 5 | **Review: schedule and box.** Decisions 3 and 4. | backend | The daily schedule, spread by factory id. Look for improvements now turned on. The window on success, two retries, `error` and `run_id`. Goal-agent's `jonah` mode with Read, Grep and Glob over the box, 40 turns and the cost cap. | 3 |
 | 6 | **Review: proposals.** Decisions 5 and 6. | backend | Persistent observations. Stored replacements, re-applied at Approve and Edit. Superseding on overlap only. The file and path allowlist and the Unicode check. | 4, 5 |
 | 7 | **Review: memory facts.** Decision 7. | backend | Facts quoted from people's events and checked against them. The `memory.yaml` path in the CHECK. | 6 |
-| 8 | **Budget and config.** Decisions 16 and 17. | backend | `share` and the per-review cap. Jonah's spend kept out of `onExhausted`. The field-removed path for `weeklyUsd`, `librarian` and `kaizen`, and their builder and API fields. New defaults in the schema and `DefaultJonahPolicy`. | 5 |
+| 8 | **Budget and config.** Decisions 16 and 17. | backend | `share` and the per-review cap. Jonah's spend kept out of `onExhausted`. The warning-only `field-ignored` check for `weeklyUsd`, `librarian` and `kaizen` (never `removedKeys`), and their builder and API fields. New defaults in the schema and `DefaultJonahPolicy`. | 5 |
 | 9 | **Tries: the run.** Decisions 9 and 11. | backend | The `try` run kind and its migration, the `tries` table, the try box (the model key only, the credential dropped, a full clone by SHA), and the fair, capped try loop. | 2, 8 |
 | 10 | **Tries: grading.** Decision 10. | backend | Checks first; the grader with its two hit rates; people's verdicts for gate changes; Try again; Not tried: budget used. `POST …/try` and `goal jonah try`. | 9 |
 | 11 | **Kept tests.** Decision 12. | backend | `kept_tests`, its API and `goal test`; the run when the publish dialog opens; reusing a proposal's tries; purges. | 10 |
