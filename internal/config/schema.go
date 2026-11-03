@@ -3,7 +3,9 @@ package config
 import (
 	"bytes"
 	"errors"
+	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -79,7 +81,40 @@ func failedRules(s *jsonschema.Schema, v any) ([]leaf, error) {
 		return nil, err
 	}
 
-	return leaves(ve), nil
+	out := leaves(ve)
+	for i, l := range out {
+		if l.propertyName != "" {
+			out[i] = l.at(keyPath(v, l.propertyName))
+		}
+	}
+
+	return out, nil
+}
+
+// keyPath is the path of the first object key named name in v, keys in sorted order, or nil.
+// The schema library validates a propertyNames name on its own, so its error has no place.
+func keyPath(v any, name string) []string {
+	switch t := v.(type) {
+	case map[string]any:
+		keys := slices.Sorted(maps.Keys(t))
+		if slices.Contains(keys, name) {
+			return []string{name}
+		}
+
+		for _, k := range keys {
+			if p := keyPath(t[k], name); p != nil {
+				return append([]string{k}, p...)
+			}
+		}
+	case []any:
+		for i, e := range t {
+			if p := keyPath(e, name); p != nil {
+				return append([]string{strconv.Itoa(i)}, p...)
+			}
+		}
+	}
+
+	return nil
 }
 
 // appendNew appends p unless out has a problem at the same place saying the same.
@@ -102,6 +137,17 @@ type leaf struct {
 	path          []string
 	code, message string
 	fixes         []domain.ProblemFix
+	// propertyName is the key a failed propertyNames rule is about, whose path failedRules finds.
+	propertyName string
+}
+
+// at is a propertyNames leaf placed at the key's path, when one was found.
+func (l leaf) at(path []string) leaf {
+	if path != nil {
+		l.path, l.message = path, where(path)+l.message
+	}
+
+	return l
 }
 
 // leaves flattens a validation error into the rules that failed. A failed oneOf or anyOf is
@@ -116,6 +162,8 @@ func leaves(e *jsonschema.ValidationError) []leaf {
 		if len(e.Causes) > 0 {
 			return []leaf{alternatives(e)}
 		}
+	case *kind.PropertyNames:
+		return []leaf{propertyNameLeaf(e, k.Property)}
 	}
 
 	if len(e.Causes) == 0 {
@@ -146,6 +194,23 @@ func alternatives(e *jsonschema.ValidationError) leaf {
 		path: e.InstanceLocation, code: codeSchemaInvalid,
 		message: where(e.InstanceLocation) + "none of the allowed forms matches: " + strings.Join(branches, " / "),
 	}
+}
+
+// propertyNameLeaf is a key that breaks propertyNames. Its causes validate the name alone, so
+// they carry no place of their own; failedRules places it at the key.
+func propertyNameLeaf(e *jsonschema.ValidationError, name string) leaf {
+	var msgs []string
+	for _, c := range e.Causes {
+		for _, l := range leaves(c) {
+			msgs = append(msgs, l.message)
+		}
+	}
+
+	if len(msgs) == 0 {
+		msgs = append(msgs, e.ErrorKind.LocalizedString(english))
+	}
+
+	return leaf{code: codeSchemaInvalid, message: "the name " + strings.Join(msgs, "; "), propertyName: name}
 }
 
 // ruleLeaf names one failed rule. Its path is the value it is about: the instance, or the
