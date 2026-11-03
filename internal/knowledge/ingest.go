@@ -44,14 +44,21 @@ const (
 )
 
 // IngestorConfig wires an Ingestor. Embedder nil indexes keywords only; Readers are the source
-// readers of synced connections by their kind's sync name (KindSpec.Sync); Uploads reads upload
-// sources.
+// readers by name: a synced connection's kind's sync name (KindSpec.Sync), the reader a synced
+// source on a secret names, gitdocs for repository and confluence for Confluence sources; Uploads
+// reads upload sources. Objects stores the snapshots upload, repository and Confluence sources
+// sync into, written first in TempDir ("" is the system's); nil writes none, and repository and
+// Confluence sources then fail. Converter turns what is neither text nor HTML into Markdown; nil
+// refuses it.
 type IngestorConfig struct {
 	Knowledge   ports.Knowledge
 	Connections Connections
 	Secrets     Secrets
 	Uploads     ports.SourceReader
 	Readers     map[string]ports.SourceReader
+	Objects     ports.ObjectStore
+	Converter   ports.Converter
+	TempDir     string
 	Embedder    ports.Embedder
 	Clock       ports.Clock
 	Log         *slog.Logger
@@ -65,10 +72,12 @@ type IngestorConfig struct {
 // due first, whichever its organization): it claims one with a lease (renewed while it works
 // and fencing its writes), lists its documents, fetches, extracts, chunks and embeds the
 // new and changed ones, replaces their chunks, deletes those its source no longer lists and
-// schedules the next sync. Any goald runs one; a goald that dies mid-sync leaves its source to
+// schedules the next sync. Upload, repository and Confluence sources sync into a snapshot too
+// (ADR 0038 decision 3, snapshot.go); upload sources keep their chunks until the cut-over. Any goald runs one; a goald that dies mid-sync leaves its source to
 // the next claim once the lease ends, and every step is safe to repeat.
 type Ingestor struct {
-	cfg IngestorConfig
+	cfg    IngestorConfig
+	limits byteLimits
 }
 
 // NewIngestor returns an ingestor for cfg.
@@ -89,7 +98,7 @@ func NewIngestor(cfg IngestorConfig) *Ingestor {
 		cfg.Log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Ingestor{cfg: cfg}
+	return &Ingestor{cfg: cfg, limits: defaultLimits}
 }
 
 // Run syncs due sources with cfg.Workers workers until ctx ends; each looks every cfg.Tick.
@@ -203,7 +212,9 @@ func (in *Ingestor) sync(ctx context.Context, c domain.SourceClaim) error {
 
 	in.cfg.Log.InfoContext(ctx, "knowledge sync", slog.String("source", src.Name), slog.String("source_id", string(src.ID)),
 		slog.Int("listed", stats.listed), slog.Int("fetched", stats.fetched), slog.Int("deleted", stats.deleted),
-		slog.Int("chunks", stats.chunks), slog.Float64("seconds", r.At.Sub(started).Seconds()), slog.String("error", r.Error))
+		slog.Int("chunks", stats.chunks), slog.Int("files", stats.snapshot.files), slog.Int("files_fetched", stats.snapshot.fetched),
+		slog.Int("files_failed", stats.snapshot.failed), slog.Bool("snapshot", stats.snapshot.written),
+		slog.Float64("seconds", r.At.Sub(started).Seconds()), slog.String("error", r.Error))
 
 	err = in.cfg.Knowledge.FinishSync(context.WithoutCancel(ctx), c.Lease, r)
 	if errors.Is(err, ports.ErrLeaseLost) {
@@ -250,11 +261,13 @@ func (in *Ingestor) renew(ctx context.Context, cancel context.CancelCauseFunc, l
 
 type syncStats struct {
 	listed, fetched, deleted, chunks int
+	snapshot                         snapshotStats
 }
 
-// pass is one sync of src: every listed document whose version changed (all of them when its
-// chunks are of another model) indexed, the others marked seen, and for a synced source the ones
-// it no longer lists deleted.
+// pass is one sync of src: for an upload or synced source every listed document whose version
+// changed (all of them when its chunks are of another model) indexed, the others marked seen,
+// and for a synced source the ones it no longer lists deleted; then for an upload, repository or
+// Confluence source its snapshot.
 func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim, started time.Time) (syncStats, error) {
 	var stats syncStats
 
@@ -265,27 +278,57 @@ func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim, started time
 		return stats, err
 	}
 
-	versions, err := in.cfg.Knowledge.Versions(ctx, src.ID)
-	if err != nil {
-		return stats, err
-	}
-
-	seen, err := in.list(ctx, spec, reader, versions, started, &stats)
-	if err != nil {
-		return stats, err
-	}
-
-	if err := in.cfg.Knowledge.MarkSeen(ctx, c.Lease, seen, started); err != nil {
-		return stats, err
-	}
-
-	if src.Kind == domain.SourceSynced {
-		if stats.deleted, err = in.cfg.Knowledge.DeleteUnseen(ctx, c.Lease, started); err != nil {
+	if src.Kind == domain.SourceUpload || src.Kind == domain.SourceSynced {
+		if err := in.chunks(ctx, c, spec, reader, started, &stats); err != nil {
 			return stats, err
 		}
 	}
 
-	return stats, nil
+	if !writesSnapshots(src.Kind) {
+		return stats, nil
+	}
+
+	if in.cfg.Objects == nil {
+		if src.Kind == domain.SourceUpload {
+			return stats, nil
+		}
+
+		return stats, fmt.Errorf("source %s syncs into snapshots, and this goald stores none", src.Name)
+	}
+
+	stats.snapshot, err = in.snapshot(ctx, c, spec, reader)
+
+	return stats, err
+}
+
+// chunks indexes the documents of an upload or synced source that changed, marks the others
+// seen and, for a synced source, deletes those it no longer lists.
+func (in *Ingestor) chunks(ctx context.Context, c domain.SourceClaim, spec domain.SyncSpec, reader ports.SourceReader, started time.Time,
+	stats *syncStats,
+) error {
+	src := c.Source
+
+	versions, err := in.cfg.Knowledge.Versions(ctx, src.ID)
+	if err != nil {
+		return err
+	}
+
+	seen, err := in.list(ctx, spec, reader, versions, started, stats)
+	if err != nil {
+		return err
+	}
+
+	if err := in.cfg.Knowledge.MarkSeen(ctx, c.Lease, seen, started); err != nil {
+		return err
+	}
+
+	if src.Kind == domain.SourceSynced {
+		if stats.deleted, err = in.cfg.Knowledge.DeleteUnseen(ctx, c.Lease, started); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // list indexes the listed documents of spec's source that changed (every one when its chunks
@@ -338,8 +381,9 @@ func (in *Ingestor) list(ctx context.Context, spec domain.SyncSpec, reader ports
 	return seen, nil
 }
 
-// reader is what reads src: the uploads, or its connection's kind's reader with the connection
-// opened.
+// reader is what reads src: the uploads; a repository's or Confluence source's kind's reader,
+// with its secret opened when it has one; a synced source's reader its config names, with its
+// secret opened; or its connection's kind's reader with the connection opened.
 func (in *Ingestor) reader(ctx context.Context, src domain.KnowledgeSource) (domain.SyncSpec, ports.SourceReader, error) {
 	spec := domain.SyncSpec{Source: src}
 
@@ -347,8 +391,21 @@ func (in *Ingestor) reader(ctx context.Context, src domain.KnowledgeSource) (dom
 		return spec, in.cfg.Uploads, nil
 	}
 
+	if name, ok := kindReaders[src.Kind]; ok {
+		if src.Secret == "" {
+			reader, ok := in.cfg.Readers[name]
+			if !ok {
+				return spec, nil, fmt.Errorf("source %s reads with %q, which this goald cannot read", src.Name, name)
+			}
+
+			return spec, reader, nil
+		}
+
+		return in.secretReader(ctx, spec, name)
+	}
+
 	if src.Secret != "" {
-		return in.secretReader(ctx, spec)
+		return in.secretReader(ctx, spec, src.Config[domain.SourceReaderKey])
 	}
 
 	conns, err := in.cfg.Connections.Resolve(ctx, []string{src.Connection}, domain.ConnectionUse{Source: src.Name})
@@ -369,16 +426,14 @@ func (in *Ingestor) reader(ctx context.Context, src domain.KnowledgeSource) (dom
 }
 
 // secretReader opens the secret spec's source reads with, now, without a factory (audited as
-// secret.used), so a value replaced since is the one read, and picks the reader its config
-// names. A secret open to some factories only does not open.
-func (in *Ingestor) secretReader(ctx context.Context, spec domain.SyncSpec) (domain.SyncSpec, ports.SourceReader, error) {
+// secret.used), so a value replaced since is the one read, and picks the reader name. A secret
+// open to some factories only does not open.
+func (in *Ingestor) secretReader(ctx context.Context, spec domain.SyncSpec, name string) (domain.SyncSpec, ports.SourceReader, error) {
 	src := spec.Source
 
 	if in.cfg.Secrets == nil {
 		return spec, nil, fmt.Errorf("source %s reads with secret %s, and this goald opens no secrets", src.Name, src.Secret)
 	}
-
-	name := src.Config[domain.SourceReaderKey]
 
 	reader, ok := in.cfg.Readers[name]
 	if !ok {
