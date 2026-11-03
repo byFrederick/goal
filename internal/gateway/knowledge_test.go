@@ -3,6 +3,7 @@ package gateway
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -62,7 +63,14 @@ const (
 func newKnowledgeHarness(t *testing.T, yaml string) *harness {
 	t.Helper()
 
-	h := newHarnessWith(t, Config{}, harnessDeps{yaml: yaml, files: map[string]string{"memory.yaml": knowledgeMemory}, knowledge: true})
+	return newKnowledgeHarnessWith(t, yaml, Config{})
+}
+
+// newKnowledgeHarnessWith is newKnowledgeHarness with cfg.
+func newKnowledgeHarnessWith(t *testing.T, yaml string, cfg Config) *harness {
+	t.Helper()
+
+	h := newHarnessWith(t, cfg, harnessDeps{yaml: yaml, files: map[string]string{"memory.yaml": knowledgeMemory}, knowledge: true})
 	h.putSnapshot(t, srcHandbook, snapHandbook, "How we work.", map[string]string{
 		"onboarding/first-week.md": "# First week", "onboarding/tools.md": "# Tools", "policies/leave.md": "# Leave", "README.md": "# Handbook",
 	})
@@ -206,6 +214,106 @@ func TestBundle_KnowledgeSectionFromAppliesToAndReadWhen(t *testing.T) {
 	if strings.Contains(section, "design") {
 		t.Errorf("section names design, which applies to the designer only:\n%s", section)
 	}
+}
+
+// A cloud box (Config.KnowledgeURLTTL set) downloads each pinned snapshot from the store's
+// presigned URL, a local one from the gateway's /run/knowledge/<source>; a URL the store cannot
+// sign falls back to the gateway, logged without any signed URL (ADR 0038 decision 7).
+func TestBundle_KnowledgeURLs(t *testing.T) {
+	t.Parallel()
+
+	const ttl = 15 * time.Minute
+
+	// presigned is the fake store's URL for the snapshot of source that h pinned.
+	presigned := func(t *testing.T, h *harness, source string, id domain.KnowledgeSnapshotID) string {
+		t.Helper()
+
+		ctx := domain.WithOrg(t.Context(), h.org)
+
+		snaps, err := h.kb.Snapshots(ctx, source)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		i := slices.IndexFunc(snaps, func(s domain.KnowledgeSnapshot) bool { return s.ID == id })
+		if i < 0 {
+			t.Fatalf("no snapshot %s of %s", id, source)
+		}
+
+		u, err := h.objects.PresignGet(ctx, snaps[i].Key, ttl)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return u
+	}
+
+	t.Run("Cloud", func(t *testing.T) {
+		t.Parallel()
+
+		h := newKnowledgeHarnessWith(t, knowledgeYAML, Config{KnowledgeURLTTL: ttl})
+		it := h.queue(t, "build")
+
+		b := h.fetchBundle(t, h.runServer(t), h.pinnedClaims(it.ID))
+		if b.Spec.Knowledge == nil {
+			t.Fatal("the bundle has no knowledge")
+		}
+
+		want := []knowledgeSnapshot{
+			{Source: srcHandbook, URL: presigned(t, h, srcHandbook, snapHandbook)},
+			{Source: "runbooks", URL: presigned(t, h, "runbooks", snapRunbooks)},
+		}
+		if !slices.Equal(b.Spec.Knowledge.Snapshots, want) {
+			t.Errorf("snapshots = %+v, want %+v", b.Spec.Knowledge.Snapshots, want)
+		}
+	})
+
+	t.Run("Local", func(t *testing.T) {
+		t.Parallel()
+
+		h := newKnowledgeHarness(t, knowledgeYAML)
+		it := h.queue(t, "build")
+
+		b := h.fetchBundle(t, h.runServer(t), h.pinnedClaims(it.ID))
+		if b.Spec.Knowledge == nil {
+			t.Fatal("the bundle has no knowledge")
+		}
+
+		want := []knowledgeSnapshot{{Source: srcHandbook, URL: KnowledgePath + srcHandbook}, {Source: "runbooks", URL: KnowledgePath + "runbooks"}}
+		if !slices.Equal(b.Spec.Knowledge.Snapshots, want) {
+			t.Errorf("snapshots = %+v, want %+v", b.Spec.Knowledge.Snapshots, want)
+		}
+	})
+
+	t.Run("PresignFailureFallsBack", func(t *testing.T) {
+		t.Parallel()
+
+		h := newKnowledgeHarnessWith(t, knowledgeYAML, Config{KnowledgeURLTTL: ttl})
+		signed := presigned(t, h, srcHandbook, snapHandbook)
+		h.objects.FailPresign(errors.New("signer unavailable"))
+
+		it := h.queue(t, "build")
+
+		b := h.fetchBundle(t, h.runServer(t), h.pinnedClaims(it.ID))
+		if b.Spec.Knowledge == nil {
+			t.Fatal("the bundle has no knowledge")
+		}
+
+		want := []knowledgeSnapshot{{Source: srcHandbook, URL: KnowledgePath + srcHandbook}, {Source: "runbooks", URL: KnowledgePath + "runbooks"}}
+		if !slices.Equal(b.Spec.Knowledge.Snapshots, want) {
+			t.Errorf("snapshots = %+v, want %+v", b.Spec.Knowledge.Snapshots, want)
+		}
+
+		logs := h.logs.String()
+		if !strings.Contains(logs, "knowledge snapshot url unsigned") || !strings.Contains(logs, "source="+srcHandbook) ||
+			!strings.Contains(logs, "signer unavailable") {
+			t.Errorf("logs lack the presign warning with its source and error:\n%s", logs)
+		}
+
+		if strings.Contains(logs, signed) || strings.Contains(logs, "X-Amz-") {
+			t.Errorf("logs hold a signed URL:\n%s", logs)
+		}
+	})
 }
 
 // A draft request's bundle has the section its agent's runs get, saying the box holds no files,
