@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://goal.local/schema/memory.schema.json",
+  "title": "Goal factory memory",
+  "description": "memory.yaml, beside factory.yaml, is the factory's memory (ADR 0038 decision 6): short facts its runs should know. The file holds at most 8 KB and 50 entries (memory-too-big), and an entry's text at most 300 characters (memory-too-long).",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["text", "added"],
+    "additionalProperties": false,
+    "properties": {
+      "text": { "type": "string", "minLength": 1, "description": "One fact, at most 300 characters." },
+      "from": {
+        "type": "array",
+        "description": "The items the fact came from, as <factory>#<number>.",
+        "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]#[1-9][0-9]*$" }
+      },
+      "added": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "description": "The date the fact was added, YYYY-MM-DD." }
+    }
+  }
+}

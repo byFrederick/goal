@@ -38,9 +38,7 @@ func (f *Factory) Line() domain.Line {
 		}
 	}
 
-	if s.Knowledge != nil {
-		l.KnowledgeSources = slices.Clone(s.Knowledge.Sources)
-	}
+	l.KnowledgeSources = s.Knowledge.Names()
 
 	for _, r := range s.Rules {
 		l.Rules = append(l.Rules, domain.Rule{

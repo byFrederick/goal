@@ -71,6 +71,13 @@ const (
 	codeRuleNotFound      = "rule-not-found"
 	codeRuleInvalid       = "rule-invalid"
 
+	// codeKnowledgeTooMany: knowledge.sources lists more than domain.MaxFactorySources.
+	codeKnowledgeTooMany = "knowledge-too-many"
+	// codeMemoryTooLong and codeMemoryTooBig: a memory.yaml entry's text is over
+	// domain.MaxMemoryText characters; the file is over domain.MaxMemoryBytes or MaxMemoryEntries.
+	codeMemoryTooLong = "memory-too-long"
+	codeMemoryTooBig  = "memory-too-big"
+
 	codeContractNotToolSchema = "contract-not-tool-schema"
 
 	codeToolSpecInvalid = "tool-spec-invalid"
@@ -135,6 +142,8 @@ func (c *checker) run() []domain.DefinitionProblem {
 	c.files()
 	c.agentRefs()
 	c.rules()
+	c.knowledge()
+	c.memory()
 	c.line()
 	c.flowAndLearning()
 	c.tools()
@@ -204,6 +213,28 @@ func dup(c *checker, what string, ids []string, list, sub, key string) {
 
 		c.errorf(checkReferences, codeDuplicateName, append(p, strconv.Itoa(i), key),
 			"%s %s: the name is used by another %s", what, id, what)
+	}
+}
+
+// knowledge checks knowledge.sources: at most domain.MaxFactorySources, and each entry's appliesTo
+// names only what the definition declares. Whether the organization has the sources is
+// authoring's.
+func (c *checker) knowledge() {
+	k := c.f.Spec.Knowledge
+	if k == nil {
+		return
+	}
+
+	if n := len(k.Sources); n > domain.MaxFactorySources {
+		c.errorf(checkReferences, codeKnowledgeTooMany, at("spec", "knowledge", "sources"),
+			"knowledge.sources lists %d sources, more than the %d a factory may list, so that every box gets its files fast; remove some",
+			n, domain.MaxFactorySources)
+	}
+
+	for i, s := range k.Sources {
+		c.scope("knowledge source "+s.Name, s.AppliesTo, func(key string, j int) []string {
+			return at("spec", "knowledge", "sources", i, "appliesTo", key, j)
+		})
 	}
 }
 
