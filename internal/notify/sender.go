@@ -1,18 +1,16 @@
 // Package notify sends the notification outbox's email and Slack rows (ADR 0023, decisions 3, 4
 // and 5): every goald instance runs one Sender, which claims due rows of each live organization
 // under a lease, renders each event's message and sends it through ports.Mailer, or as a direct
-// message through ports.DirectMessenger with the token of the organization's oldest Slack
-// connection. It keeps no state of its own, so a row whose sender died returns to the queue when
+// message through ports.DirectMessenger with the token held by the secret the organization's
+// notification settings name (ADR 0037, Consequences). It keeps no state of its own, so a row whose sender died returns to the queue when
 // its lease ends.
 package notify
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -45,19 +43,13 @@ const (
 	reasonSlackError   = "slack-error"
 )
 
-// The connection kind whose connections send Slack rows (internal/connkind/kinds/slack.yaml), and
-// the field that holds its bot token.
-const (
-	slackKind  = "slack"
-	slackToken = "token"
-)
-
-// The Slack outcomes that come from the organization's connections, not from Slack. Neither is
-// retried: an admin must add or change a connection first.
+// The Slack outcomes that come from the organization's notification setting and secrets, not
+// from Slack. None names the secret or holds its value. The first two are not retried, since an
+// admin must choose or fix the secret first; a store error is.
 var (
-	errNoSlackConnection = &ports.DMError{Code: "slack-no-connection", Permanent: true}
-	errSlackToken        = &ports.DMError{Code: "slack-token-unavailable", Permanent: true}
-	errSlackConnection   = &ports.DMError{Code: "slack-connection-error"}
+	errSlackNotSet = &ports.DMError{Code: "slack-not-set", Permanent: true}
+	errSlackToken  = &ports.DMError{Code: "slack-token-unavailable", Permanent: true}
+	errSlackSecret = &ports.DMError{Code: "slack-secret-error"}
 )
 
 // Orgs lists the live organizations; ports.Tenancy satisfies it.
@@ -65,23 +57,23 @@ type Orgs interface {
 	ActiveOrgs(ctx context.Context) ([]domain.OrgID, error)
 }
 
-// SlackConnections finds and opens the organization's Slack connection; ports.Connections
-// satisfies it.
-type SlackConnections interface {
-	List(ctx context.Context) ([]domain.Connection, error)
-	Open(ctx context.Context, name string) (domain.ResolvedConnection, error)
+// Secrets opens the organization's secrets; ports.OrgSecrets satisfies it.
+type Secrets interface {
+	Resolve(ctx context.Context, names []string, use domain.SecretUse) ([]domain.ResolvedSecret, error)
 }
 
 // Deps are what a Sender works through. Email rows are claimed only with a Mailer, and Slack rows
-// only with Slack and Connections; a channel without them stays pending for an instance that has
+// only with Slack, Settings and Secrets: the Slack token is the value of the secret Settings
+// names, opened through Secrets. A channel without them stays pending for an instance that has
 // them.
 type Deps struct {
-	Orgs        Orgs
-	Outbox      ports.NotificationDeliveries
-	Mailer      ports.Mailer
-	Slack       ports.DirectMessenger
-	Connections SlackConnections
-	Clock       ports.Clock
+	Orgs     Orgs
+	Outbox   ports.NotificationDeliveries
+	Mailer   ports.Mailer
+	Slack    ports.DirectMessenger
+	Settings ports.NotificationSettings
+	Secrets  Secrets
+	Clock    ports.Clock
 	// PublicURL is the origin every link starts with (GOAL_PUBLIC_URL).
 	PublicURL string
 	// Log may be nil.
@@ -107,7 +99,7 @@ func New(d Deps) *Sender {
 		channels = append(channels, ports.ChannelEmail)
 	}
 
-	if d.Slack != nil && d.Connections != nil {
+	if slackReady(d.Slack, d.Settings, d.Secrets) {
 		channels = append(channels, ports.ChannelSlack)
 	}
 
@@ -274,7 +266,7 @@ func sendOutcome(channel string, attempt int, err error, now time.Time) ports.No
 
 // sendSlack sends m's text to m.To as a direct message with the organization's Slack token.
 func (s *Sender) sendSlack(ctx context.Context, m ports.Message, token *tokenOnce) error {
-	t, err := token.get(ctx, s.d.Connections)
+	t, err := token.get(ctx, s.d.Settings, s.d.Secrets)
 	if err != nil {
 		return err
 	}
@@ -282,54 +274,55 @@ func (s *Sender) sendSlack(ctx context.Context, m ports.Message, token *tokenOnc
 	return s.d.Slack.Send(ctx, t, ports.DirectMessage{To: m.To, Text: m.Text})
 }
 
-// tokenOnce is the Slack token of one claimed batch, looked up at its first Slack row.
+// slackReady reports whether a job can send Slack messages: it has a messenger, the
+// notification settings and the secrets to open.
+func slackReady(slack ports.DirectMessenger, settings ports.NotificationSettings, secrets Secrets) bool {
+	return slack != nil && settings != nil && secrets != nil
+}
+
+// tokenOnce is the Slack token of one organization and round, looked up at its first Slack row.
 type tokenOnce struct {
 	done  bool
 	token string
 	err   error
 }
 
-func (o *tokenOnce) get(ctx context.Context, conns SlackConnections) (string, error) {
+func (o *tokenOnce) get(ctx context.Context, settings ports.NotificationSettings, secrets Secrets) (string, error) {
 	if !o.done {
-		o.token, o.err = slackTokenOf(ctx, conns)
-		// A failed lookup is tried again at the next row; a missing connection is not.
+		o.token, o.err = slackTokenOf(ctx, settings, secrets)
+		// A failed lookup is tried again at the next row; a missing setting or secret is not.
 		o.done = o.err == nil || errors.Is(o.err, ports.ErrDMPermanent)
 	}
 
 	return o.token, o.err
 }
 
-// slackTokenOf is the bot token of the organization's oldest Slack connection (ADR 0023,
-// decision 5). A token that refers to a credential is not opened here: the row fails.
-func slackTokenOf(ctx context.Context, conns SlackConnections) (string, error) {
-	all, err := conns.List(ctx)
+// slackTokenOf is the value of the secret the Slack notification setting of the organization in
+// ctx names (ADR 0037, Consequences), opened without a factory and audited as secret.used. A
+// secret that is gone, open to some factories only, or that goald cannot open without a master
+// key fails the row for good; any other error is temporary. No error names the secret.
+func slackTokenOf(ctx context.Context, settings ports.NotificationSettings, secrets Secrets) (string, error) {
+	set, err := settings.NotificationSettings(ctx)
 	if err != nil {
-		return "", errSlackConnection
+		return "", errSlackSecret
 	}
 
-	all = slices.DeleteFunc(all, func(c domain.Connection) bool { return c.Kind != slackKind })
-	if len(all) == 0 {
-		return "", errNoSlackConnection
+	if set.SlackSecret == "" {
+		return "", errSlackNotSet
 	}
 
-	oldest := slices.MinFunc(all, func(a, b domain.Connection) int {
-		return cmp.Or(a.CreatedAt.Compare(b.CreatedAt), cmp.Compare(a.ID, b.ID))
-	})
+	opened, err := secrets.Resolve(ctx, []string{set.SlackSecret}, domain.SecretUse{})
 
-	if _, ref := oldest.SecretRefs[slackToken]; ref {
+	switch {
+	case errors.Is(err, ports.ErrNotFound) || errors.Is(err, ports.ErrSecretNotAllowed) || errors.Is(err, ports.ErrNoMasterKey):
 		return "", errSlackToken
-	}
-
-	c, err := conns.Open(ctx, oldest.Name)
-	if err != nil {
-		return "", errSlackConnection
-	}
-
-	if _, ref := c.SecretRefs[slackToken]; ref || c.Values[slackToken] == "" {
+	case err != nil:
+		return "", errSlackSecret
+	case len(opened) != 1 || opened[0].Value == "":
 		return "", errSlackToken
+	default:
+		return opened[0].Value, nil
 	}
-
-	return c.Values[slackToken], nil
 }
 
 // logOutcome logs a sent or failed row by its id, event and channel only: never an address, a
