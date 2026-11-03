@@ -177,6 +177,8 @@ type RunRequest struct {
 	Environment Environment
 	// DeniedCommands are added to the agent's deny rules (TaskClaims.DeniedCommands).
 	DeniedCommands []string
+	// Knowledge are the knowledge snapshots the run reads (TaskClaims.Knowledge).
+	Knowledge []KnowledgePin
 	// Size is the sandbox's size; empty is medium.
 	Size SandboxSize
 	// Timeout bounds the run; BoxLimit, when set, bounds how long its sandbox may live (the

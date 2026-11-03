@@ -1,384 +1,291 @@
 package gateway
 
 import (
+	"archive/zip"
+	"bytes"
+	"cmp"
 	"context"
-	"encoding/json"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"slices"
+	"strconv"
 	"strings"
-	"time"
-	"unicode/utf8"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// Knowledge searches and reads the knowledge base of the organization in ctx, over the named
-// sources only (*knowledge.Searcher): a document of another source is ports.ErrNotFound. It
-// records which documents a run used and the verdicts its agent gives them (ADR 0027).
+// Knowledge reads a knowledge source's snapshots of the organization in ctx, newest first, an
+// unknown source being ports.ErrNotFound; ports.Knowledge satisfies it.
 type Knowledge interface {
-	Search(ctx context.Context, text string, sources []string, limit int) ([]domain.KnowledgeHit, error)
-	Read(ctx context.Context, id domain.KnowledgeDocumentID, sources []string) (domain.KnowledgeDocument, string, error)
-	// RecordSearch records a search use of each document among hits, for use's factory, item,
-	// run and time.
-	RecordSearch(ctx context.Context, use domain.KnowledgeUse, hits []domain.KnowledgeHit) error
-	RecordUse(ctx context.Context, u domain.KnowledgeUse) error
-	RunUses(ctx context.Context, run domain.RunID) ([]domain.KnowledgeUse, error)
-	// Verdict records v on a document of sources and returns it as stored.
-	Verdict(ctx context.Context, v domain.KnowledgeVerdict, sources []string) (domain.KnowledgeVerdict, error)
+	Snapshots(ctx context.Context, source string) ([]domain.KnowledgeSnapshot, error)
 }
 
-// Goal's own tools (spec 4 §5.9), served to every run whose factory's version lists knowledge
-// sources: "knowledge__search", "knowledge__read" and "knowledge__verdict" (ADR 0027), in the
-// <server>__<tool> form of connections' tools.
-const (
-	knowledgeServer = "knowledge"
-	toolSearch      = "search"
-	toolRead        = "read"
-	toolVerdict     = "verdict"
-)
-
-// Limits of the knowledge tools.
-const (
-	defaultHits   = 8
-	maxHits       = 20
-	maxQueryRunes = 1000
-	// maxReadBytes is the most of a document's text knowledge__read returns (200 KiB).
-	maxReadBytes = 200 << 10
-	// useTimeout bounds the recording of a call's knowledge uses, which never fails the call.
-	useTimeout = 2 * time.Second
-)
-
-// The knowledge tools' input schemas.
-const (
-	searchSchema = `{"type":"object","additionalProperties":false,"required":["query"],"properties":{
-"query":{"type":"string","minLength":1,"maxLength":1000,"description":"What to look for, in words"},
-"limit":{"type":"integer","minimum":1,"maximum":20,"default":8,"description":"How many passages at most"},
-"source":{"type":"string","description":"Only this one of the sources"}}}`
-	readSchema = `{"type":"object","additionalProperties":false,"required":["document"],"properties":{
-"document":{"type":"string","description":"A document id from knowledge__search"}}}`
-	verdictSchema = `{"type":"object","additionalProperties":false,"required":["document","verdict"],"properties":{
-"document":{"type":"string","description":"A document id this run searched or read"},
-"verdict":{"type":"string","enum":["helped","misled"],"description":"Whether the document helped or misled you"},
-"note":{"type":"string","maxLength":500,"description":"Why, in a sentence or two"}}}`
-)
-
-// knowledgeTools are Goal's tools as tools/list describes them, for a run that may search sources.
-func knowledgeTools(sources []string) []*mcp.Tool {
-	return []*mcp.Tool{
-		{
-			Name: knowledgeServer + sep + toolSearch,
-			Description: "Search the organization's knowledge base (sources: " + strings.Join(sources, ", ") + ") by keywords and meaning. " +
-				"Returns the best matching passages, best first, each with its document id, title, source and a link back when it has one.",
-			InputSchema: json.RawMessage(searchSchema),
-			Annotations: &mcp.ToolAnnotations{Title: "Search the knowledge base", ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: new(bool)},
-		},
-		{
-			Name:        knowledgeServer + sep + toolRead,
-			Description: "Read a whole document of the knowledge base by the id knowledge__search gave, up to 200 KiB of its text.",
-			InputSchema: json.RawMessage(readSchema),
-			Annotations: &mcp.ToolAnnotations{Title: "Read a knowledge document", ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: new(bool)},
-		},
-		{
-			Name: knowledgeServer + sep + toolVerdict,
-			Description: "Say whether a document this run searched or read helped or misled you, with an optional note of up to 500 characters. " +
-				"A later verdict on the same document replaces this run's earlier one.",
-			InputSchema: json.RawMessage(verdictSchema),
-			// A verdict replaces the run's earlier one and deletes nothing.
-			Annotations: &mcp.ToolAnnotations{Title: "Judge a knowledge document", IdempotentHint: true, DestructiveHint: new(bool), OpenWorldHint: new(bool)},
-		},
-	}
+// Objects reads a knowledge snapshot's zip from the bucket by range; ports.ObjectStore satisfies it.
+type Objects interface {
+	GetRange(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error)
 }
 
-// searchable are the knowledge sources the runs of line may search through the gateway: none
-// without a knowledge base.
-func (g *Gateway) searchable(line domain.Line) []string {
-	if g.knowledge == nil {
-		return nil
-	}
+// KnowledgePath is where a run downloads one of its pinned snapshots: GET KnowledgePath<source>.
+const KnowledgePath = "/run/knowledge/"
 
-	return line.KnowledgeSources
+// bundleKnowledge is what a run gets of its knowledge (ADR 0038 decisions 7 and 8): its prompt's
+// Knowledge section and the snapshots prepare unpacks into /knowledge/<source>/, none for a
+// draft request's run.
+type bundleKnowledge struct {
+	Section   string              `json:"section"`
+	Snapshots []knowledgeSnapshot `json:"snapshots"`
 }
 
-// knowledgeTool reports whether name is one of Goal's tools this run is served, and which.
-func (s *session) knowledgeTool(name string) (string, bool) {
-	tool, ok := strings.CutPrefix(name, knowledgeServer+sep)
-
-	return tool, ok && len(s.sources) > 0 && (tool == toolSearch || tool == toolRead || tool == toolVerdict)
+// knowledgeSnapshot is one pinned snapshot: its source, which is its folder, and the URL of its
+// zip, a path on the gateway that the worker resolves against its gateway URL.
+type knowledgeSnapshot struct {
+	Source string `json:"source"`
+	URL    string `json:"url"`
 }
 
-// callKnowledge answers one call of Goal's tools and records it. Arguments the tool refuses and
-// documents it may not read are tool errors the agent can act on; a document of a source the
-// factory does not list answers as one that does not exist.
-func (s *session) callKnowledge(ctx context.Context, tool string, args json.RawMessage) *mcp.CallToolResult {
-	start := s.g.clock.Now()
-	rec := call{connection: knowledgeServer, tool: tool, requestBytes: len(args)}
-
-	var (
-		text string
-		err  error
-	)
-
-	switch tool {
-	case toolSearch:
-		text, err = s.search(ctx, args)
-	case toolVerdict:
-		text, err = s.verdict(ctx, args)
-	default:
-		text, err = s.read(ctx, args)
+// knowledgeOf is the run's knowledge: the line's sources that apply to run, each pinned one (c's
+// pins) with its snapshot's line, file count and top folders, the others named as not synced yet,
+// and the factory's memory. files says whether the box gets the snapshots. It is nil for an agent
+// that may not read files and when there is nothing to say. A pinned snapshot the store no longer
+// has counts as not synced; one whose zip cannot be read lists no folders, and the run goes on.
+func (g *Gateway) knowledgeOf(
+	ctx context.Context, c domain.TaskClaims, line domain.Line, agent domain.AgentSpec, run domain.RuleTarget, files bool,
+) (*bundleKnowledge, error) {
+	if !agent.ReadsFiles() {
+		return nil, nil
 	}
 
-	rec.outcome = outcomeOK
+	idx := domain.KnowledgeIndex{Files: files, Memory: line.Memory}
+	k := &bundleKnowledge{Snapshots: []knowledgeSnapshot{}}
 
-	var refusal *refusalError
-
-	switch {
-	case errors.As(err, &refusal):
-		rec.outcome, rec.err, text = outcomeToolError, refusal.msg, refusal.msg
-	case err != nil:
-		rec.outcome, rec.err, text = outcomeFailed, err.Error(), "the knowledge base did not answer; try again"
-		s.g.log.WarnContext(ctx, "gateway knowledge call failed", claimAttrs(s.claims, "tool", tool, "error", err)...)
-	}
-
-	rec.responseBytes = len(text)
-	s.record(ctx, start, rec)
-
-	return &mcp.CallToolResult{IsError: err != nil, Content: []mcp.Content{&mcp.TextContent{Text: text}}}
-}
-
-// refusalError is a call the tool refuses, with the message the agent reads.
-type refusalError struct{ msg string }
-
-func (r *refusalError) Error() string { return r.msg }
-
-func refuse(format string, a ...any) error { return &refusalError{msg: fmt.Sprintf(format, a...)} }
-
-// search answers knowledge__search: the hits of the run's sources, or of the one it names among
-// them, as JSON.
-func (s *session) search(ctx context.Context, args json.RawMessage) (string, error) {
-	var in struct {
-		Query  string `json:"query"`
-		Limit  *int   `json:"limit"`
-		Source string `json:"source"`
-	}
-
-	if err := json.Unmarshal(args, &in); err != nil {
-		return "", refuse("the arguments are not {query, limit?, source?}: %v", err)
-	}
-
-	query := strings.TrimSpace(in.Query)
-	if query == "" || utf8.RuneCountInString(query) > maxQueryRunes {
-		return "", refuse("query is 1 to %d characters", maxQueryRunes)
-	}
-
-	limit := defaultHits
-	if in.Limit != nil {
-		limit = *in.Limit
-	}
-
-	if limit < 1 || limit > maxHits {
-		return "", refuse("limit is 1 to %d", maxHits)
-	}
-
-	sources := s.sources
-	if in.Source != "" {
-		if !slices.Contains(s.sources, in.Source) {
-			return "", refuse("source %q is not one this factory may search: %s", in.Source, strings.Join(s.sources, ", "))
+	for _, e := range domain.ApplyingKnowledge(line.Knowledge, run) {
+		snap, ok, err := g.pinned(ctx, c, e.Name)
+		if err != nil {
+			return nil, err
 		}
 
-		sources = []string{in.Source}
-	}
+		if !ok {
+			idx.Unsynced = append(idx.Unsynced, e.Name)
+			continue
+		}
 
-	hits, err := s.g.knowledge.Search(ctx, query, sources, limit)
-	if err != nil {
-		return "", fmt.Errorf("search: %w", err)
-	}
-
-	s.recordUse(ctx, toolSearch, func(ctx context.Context) error {
-		return s.g.knowledge.RecordSearch(ctx, s.use(), hits)
-	})
-
-	type hit struct {
-		Document string  `json:"document"`
-		Source   string  `json:"source"`
-		Title    string  `json:"title"`
-		URL      string  `json:"url,omitempty"`
-		Heading  string  `json:"heading,omitempty"`
-		Snippet  string  `json:"snippet"`
-		Score    float64 `json:"score"`
-	}
-
-	out := struct {
-		Hits []hit `json:"hits"`
-	}{Hits: make([]hit, 0, len(hits))}
-
-	for _, h := range hits {
-		out.Hits = append(out.Hits, hit{
-			Document: string(h.Document), Source: h.Source, Title: h.Title, URL: h.URL, Heading: h.Heading, Snippet: h.Text, Score: h.Score,
+		idx.Sources = append(idx.Sources, domain.IndexedSource{
+			Name: e.Name, ReadWhen: cmp.Or(e.ReadWhen, snap.ReadWhen), Files: snap.Files, Folders: g.topFolders(ctx, c, snap),
 		})
-	}
 
-	b, err := json.Marshal(out)
-	if err != nil {
-		return "", fmt.Errorf("encode hits: %w", err)
-	}
-
-	return string(b), nil
-}
-
-// read answers knowledge__read: a document of the run's sources, its title and link first, then
-// its text, cut at maxReadBytes.
-func (s *session) read(ctx context.Context, args json.RawMessage) (string, error) {
-	var in struct {
-		Document string `json:"document"`
-	}
-
-	if err := json.Unmarshal(args, &in); err != nil || in.Document == "" {
-		return "", refuse("the arguments are {document}: a document id from knowledge__search")
-	}
-
-	d, text, err := s.g.knowledge.Read(ctx, domain.KnowledgeDocumentID(in.Document), s.sources)
-	if errors.Is(err, ports.ErrNotFound) {
-		return "", refuse("no document %q in the knowledge sources this factory may search", in.Document)
-	}
-
-	if err != nil {
-		return "", fmt.Errorf("read: %w", err)
-	}
-
-	s.recordUse(ctx, toolRead, func(ctx context.Context) error {
-		u := s.use()
-		u.Source, u.Document, u.Kind = d.Source, d.ID, domain.KnowledgeRead
-
-		return s.g.knowledge.RecordUse(ctx, u)
-	})
-
-	var b strings.Builder
-
-	fmt.Fprintf(&b, "Title: %s\n", d.Title)
-
-	if d.URL != "" {
-		fmt.Fprintf(&b, "URL: %s\n", d.URL)
-	}
-
-	b.WriteString("\n")
-
-	if len(text) > maxReadBytes {
-		cut := maxReadBytes
-		for cut > 0 && !utf8.RuneStart(text[cut]) {
-			cut--
+		if files {
+			k.Snapshots = append(k.Snapshots, knowledgeSnapshot{Source: e.Name, URL: KnowledgePath + e.Name})
 		}
-
-		fmt.Fprintf(&b, "%s\n\n[truncated: the document's text has %d bytes; this is the first %d]", text[:cut], len(text), cut)
-
-		return b.String(), nil
 	}
 
-	b.WriteString(text)
+	if k.Section = idx.Section(); k.Section == "" {
+		return nil, nil
+	}
 
-	return b.String(), nil
+	return k, nil
 }
 
-// use is a knowledge use by this run, now; the caller names its document.
-func (s *session) use() domain.KnowledgeUse {
-	return domain.KnowledgeUse{Factory: s.claims.FactoryID, Item: s.claims.ItemID, Run: s.claims.RunID, At: s.g.clock.Now()}
-}
-
-// recordUse records a call's knowledge use, best effort (ADR 0027): the call has its answer, so a
-// failure is logged with ids only, never a document's text, and the agent's cancellation does
-// not drop it.
-func (s *session) recordUse(ctx context.Context, tool string, record func(context.Context) error) {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), useTimeout)
-	defer cancel()
-
-	if err := record(ctx); err != nil {
-		s.g.log.WarnContext(ctx, "gateway knowledge use failed", claimAttrs(s.claims, "tool", tool, "error", err)...)
-	}
-}
-
-// verdict answers knowledge__verdict: the agent's verdict on a document this run searched or
-// read, of the run's sources, as stored, as JSON.
-func (s *session) verdict(ctx context.Context, args json.RawMessage) (string, error) {
-	var in struct {
-		Document string `json:"document"`
-		Verdict  string `json:"verdict"`
-		Note     string `json:"note"`
+// pinned is the snapshot c pinned of source, and whether it pinned one the store still has.
+func (g *Gateway) pinned(ctx context.Context, c domain.TaskClaims, source string) (domain.KnowledgeSnapshot, bool, error) {
+	i := slices.IndexFunc(c.Knowledge, func(p domain.KnowledgePin) bool { return p.Source == source })
+	if i < 0 || g.knowledge == nil {
+		return domain.KnowledgeSnapshot{}, false, nil
 	}
 
-	if err := json.Unmarshal(args, &in); err != nil || in.Document == "" {
-		return "", refuse("the arguments are {document, verdict: helped|misled, note?}: a document id this run searched or read")
-	}
-
-	v := domain.KnowledgeVerdict{
-		Document: domain.KnowledgeDocumentID(in.Document), Run: s.claims.RunID, Item: s.claims.ItemID,
-		Verdict: domain.KnowledgeVerdictKind(in.Verdict), Note: strings.TrimSpace(in.Note),
-		By: domain.Actor{Kind: domain.ActorAgent, ID: s.claims.Agent},
-	}
-
-	switch {
-	case v.Verdict != domain.KnowledgeHelped && v.Verdict != domain.KnowledgeMisled:
-		return "", refuse("verdict %q is not helped or misled", in.Verdict)
-	case utf8.RuneCountInString(v.Note) > domain.MaxVerdictNote:
-		return "", refuse("note has at most %d characters", domain.MaxVerdictNote)
-	}
-
-	if err := s.used(ctx, v.Document); err != nil {
-		return "", err
-	}
-
-	got, err := s.g.knowledge.Verdict(ctx, v, s.sources)
-	if errors.Is(err, ports.ErrNotFound) {
-		return "", refuse("no document %q in the knowledge sources this factory may search", in.Document)
-	}
-
-	if err != nil {
-		return "", fmt.Errorf("verdict: %w", err)
-	}
-
-	b, err := json.Marshal(struct {
-		Document string    `json:"document"`
-		Source   string    `json:"source"`
-		Run      string    `json:"run"`
-		Item     string    `json:"item"`
-		Verdict  string    `json:"verdict"`
-		Note     string    `json:"note,omitempty"`
-		By       string    `json:"by"`
-		At       time.Time `json:"at"`
-	}{
-		Document: string(got.Document), Source: string(got.Source), Run: string(got.Run), Item: string(got.Item),
-		Verdict: string(got.Verdict), Note: got.Note, By: got.By.Ref(), At: got.At,
-	})
-	if err != nil {
-		return "", fmt.Errorf("encode verdict: %w", err)
-	}
-
-	return string(b), nil
-}
-
-// used is nil when this run searched or read document; otherwise a refusal that says why: the
-// document is not one of the run's sources, or the run has not used it.
-func (s *session) used(ctx context.Context, document domain.KnowledgeDocumentID) error {
-	uses, err := s.g.knowledge.RunUses(ctx, s.claims.RunID)
-	if err != nil {
-		return fmt.Errorf("run uses: %w", err)
-	}
-
-	if slices.ContainsFunc(uses, func(u domain.KnowledgeUse) bool { return u.Document == document }) {
-		return nil
-	}
-
-	_, _, err = s.g.knowledge.Read(ctx, document, s.sources)
+	snaps, err := g.knowledge.Snapshots(ctx, source)
 
 	switch {
 	case errors.Is(err, ports.ErrNotFound):
-		return refuse("no document %q in the knowledge sources this factory may search", document)
+		return domain.KnowledgeSnapshot{}, false, nil
 	case err != nil:
-		return fmt.Errorf("read: %w", err)
-	default:
-		// A use that failed to record lands here too, so the refusal does not blame the agent.
-		return refuse("this run has not searched or read document %q, or its use was not recorded: search or read it first", document)
+		return domain.KnowledgeSnapshot{}, false, fmt.Errorf("snapshots of knowledge source %s: %w", source, err)
 	}
+
+	j := slices.IndexFunc(snaps, func(s domain.KnowledgeSnapshot) bool { return s.ID == c.Knowledge[i].Snapshot })
+	if j < 0 {
+		return domain.KnowledgeSnapshot{}, false, nil
+	}
+
+	return snaps[j], true, nil
+}
+
+// topFolders are the top folders of snap's zip (domain.TopFolders), read from its central
+// directory, so the prompt names the folders of the files the box gets. A zip that cannot be read
+// lists none, logged.
+func (g *Gateway) topFolders(ctx context.Context, c domain.TaskClaims, snap domain.KnowledgeSnapshot) []string {
+	if g.objects == nil || snap.Files == 0 {
+		return nil
+	}
+
+	paths, err := zipPaths(ctx, g.objects, snap.Key, snap.ZipBytes)
+	if err != nil {
+		g.log.WarnContext(ctx, "knowledge snapshot folders unread", claimAttrs(c, "snapshot", snap.ID, "error", err)...)
+		return nil
+	}
+
+	return domain.TopFolders(paths)
+}
+
+// Sizes of a zip's end of central directory record: its fixed part and the longest comment.
+const (
+	eocdSize       = 22
+	maxZipComment  = 1<<16 - 1
+	eocdSignature  = 0x06054b50
+	zip64Marker    = 0xffffffff
+	eocdDirSize    = 12
+	eocdDirOffset  = 16
+	maxZipDirBytes = 16 << 20
+)
+
+// zipPaths are the names of the files of the zip at key, size bytes long, read in two ranges: its
+// end of central directory record, then its central directory, never the files themselves.
+func zipPaths(ctx context.Context, objects Objects, key string, size int64) ([]string, error) {
+	tailLen := min(size, eocdSize+maxZipComment)
+
+	tail, err := readRange(ctx, objects, key, size-tailLen, tailLen)
+	if err != nil {
+		return nil, err
+	}
+
+	at := bytes.LastIndex(tail, binary.LittleEndian.AppendUint32(nil, eocdSignature))
+	if at < 0 || len(tail)-at < eocdSize {
+		return nil, errors.New("no end of central directory record")
+	}
+
+	dirSize := int64(binary.LittleEndian.Uint32(tail[at+eocdDirSize:]))
+	dirOffset := int64(binary.LittleEndian.Uint32(tail[at+eocdDirOffset:]))
+
+	if dirOffset == zip64Marker || dirSize > maxZipDirBytes || dirOffset+dirSize > size {
+		return nil, fmt.Errorf("a central directory of %d bytes at %d does not fit a %d-byte zip", dirSize, dirOffset, size)
+	}
+
+	dir, err := readRange(ctx, objects, key, dirOffset, size-dirOffset)
+	if err != nil {
+		return nil, err
+	}
+
+	zr, err := zip.NewReader(offsetReader{data: dir, base: dirOffset}, size)
+	if err != nil {
+		return nil, fmt.Errorf("read the central directory: %w", err)
+	}
+
+	paths := make([]string, 0, len(zr.File))
+	for _, f := range zr.File {
+		paths = append(paths, f.Name)
+	}
+
+	return paths, nil
+}
+
+func readRange(ctx context.Context, objects Objects, key string, offset, length int64) ([]byte, error) {
+	rc, err := objects.GetRange(ctx, key, offset, length)
+	if err != nil {
+		return nil, fmt.Errorf("read %d bytes of %s at %d: %w", length, key, offset, err)
+	}
+	defer func() { _ = rc.Close() }()
+
+	b, err := io.ReadAll(io.LimitReader(rc, length))
+	if err != nil {
+		return nil, fmt.Errorf("read %d bytes of %s at %d: %w", length, key, offset, err)
+	}
+
+	return b, nil
+}
+
+// offsetReader is a zip's bytes from base on, its central directory and end record, which is all
+// a zip.Reader reads to list its files. The bytes before base read as zeros: the reader searches
+// windows of the zip's end for the end record's signature, which zeros never hold.
+type offsetReader struct {
+	data []byte
+	base int64
+}
+
+func (r offsetReader) ReadAt(p []byte, off int64) (int, error) {
+	if off < 0 || off > r.base+int64(len(r.data)) {
+		return 0, fmt.Errorf("read at %d, outside the zip", off)
+	}
+
+	n := 0
+	if off < r.base {
+		n = int(min(r.base-off, int64(len(p))))
+		clear(p[:n])
+		off += int64(n)
+	}
+
+	n += copy(p[n:], r.data[off-r.base:])
+	if n < len(p) {
+		return n, io.EOF
+	}
+
+	return n, nil
+}
+
+// ServeKnowledge serves GET /run/knowledge/<source>: the zip of the snapshot of source the run's
+// task token pinned (ADR 0038 decision 7). A token that does not verify is 401; a source it did not
+// pin, or a pinned snapshot the store no longer has, is 404, as is any draft request's token,
+// whose box gets no files.
+func (g *Gateway) ServeKnowledge(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+
+		return
+	}
+
+	claims, err := g.authenticate(r)
+	if err != nil {
+		g.unauthorized(w, r, err)
+		return
+	}
+
+	ctx := domain.WithOrg(r.Context(), claims.OrgID)
+	source := strings.TrimPrefix(r.URL.Path, KnowledgePath)
+
+	var snap domain.KnowledgeSnapshot
+
+	ok := claims.Kind != domain.TaskKindDraftRequest && g.objects != nil
+	if ok {
+		snap, ok, err = g.pinned(ctx, claims, source)
+	}
+
+	switch {
+	case err != nil:
+		g.log.ErrorContext(ctx, "knowledge snapshot failed", claimAttrs(claims, "source", source, "error", err)...)
+		http.Error(w, "gateway unavailable", http.StatusServiceUnavailable)
+
+		return
+	case !ok:
+		g.log.WarnContext(ctx, "knowledge snapshot not pinned", claimAttrs(claims, "source", source)...)
+		http.NotFound(w, r)
+
+		return
+	}
+
+	rc, err := g.objects.GetRange(ctx, snap.Key, 0, -1)
+	if err != nil {
+		g.log.ErrorContext(ctx, "knowledge snapshot failed", claimAttrs(claims, "source", source, "error", err)...)
+		http.Error(w, "gateway unavailable", http.StatusServiceUnavailable)
+
+		return
+	}
+	defer func() { _ = rc.Close() }()
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Cache-Control", "no-store")
+
+	if snap.ZipBytes > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(snap.ZipBytes, 10))
+	}
+
+	n, err := io.Copy(w, rc)
+	if err != nil {
+		g.log.WarnContext(ctx, "write knowledge snapshot", claimAttrs(claims, "source", source, "error", err)...)
+		return
+	}
+
+	g.log.InfoContext(ctx, "knowledge snapshot served", claimAttrs(claims, "source", source, "snapshot", snap.ID, "bytes", n)...)
 }

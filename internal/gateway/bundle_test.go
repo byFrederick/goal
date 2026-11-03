@@ -63,7 +63,7 @@ func testKinds() []domain.ConnectionKind {
 
 // newConnections makes an organization and its connections of testKinds: claude (the model),
 // code (git to github.com), issues, docs (a stdio server) and wiki (a stdio server too).
-func newConnections(t *testing.T, clock *porttest.Clock) (domain.OrgID, *porttest.Connections) {
+func newConnections(t *testing.T, clock *porttest.Clock) (domain.OrgID, *porttest.Connections, *porttest.Tenancy) {
 	t.Helper()
 
 	tenancy := porttest.NewTenancy(clock.Now)
@@ -90,7 +90,7 @@ func newConnections(t *testing.T, clock *porttest.Clock) (domain.OrgID, *porttes
 		}
 	}
 
-	return org.ID, c
+	return org.ID, c, tenancy
 }
 
 // bundleYAML is a factory on connections with a private repository, a contract at the agent's
@@ -455,7 +455,7 @@ func TestServeRun_RefusesWhatTheTokenDoesNotName(t *testing.T) {
 		token  string
 		status int
 	}{
-		{name: "no token", status: http.StatusUnauthorized},
+		{name: noToken, status: http.StatusUnauthorized},
 		{name: "garbage", token: "not-a-token", status: http.StatusUnauthorized},
 		{name: "expired", token: h.token(t, expired), status: http.StatusUnauthorized},
 		{name: "another audience", token: h.tokenFor(t, valid, "goal-api"), status: http.StatusUnauthorized},

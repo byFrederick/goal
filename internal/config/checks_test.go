@@ -779,8 +779,9 @@ func knowledgeNamesAndObjects(t *testing.T) {
 		t.Errorf("sources = %+v\nwant %+v", f.Spec.Knowledge.Sources, want)
 	}
 
-	if got := f.Line().KnowledgeSources; !slices.Equal(got, []string{srcHandbook, "runbooks"}) {
-		t.Errorf("line's knowledge sources = %v, want the names", got)
+	wantLine := []domain.KnowledgeEntry{{Name: srcHandbook}, {Name: "runbooks", ReadWhen: want[1].ReadWhen, AppliesTo: want[1].AppliesTo}}
+	if got := f.Line().Knowledge; !reflect.DeepEqual(got, wantLine) {
+		t.Errorf("line's knowledge = %+v, want %+v", got, wantLine)
 	}
 }
 
