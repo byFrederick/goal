@@ -107,9 +107,10 @@ const spend: OrgSearch = {
   agents: [{ name: 'builder', stations: ['build'], factory_id: 'goal-id', factory_name: 'goal' }],
   factories: [],
   connections: [{ name: 'acme-spend-warehouse', kind: 'github' }],
+  secrets: [],
 };
 
-const empty: OrgSearch = { items: [], agents: [], factories: [], connections: [] };
+const empty: OrgSearch = { items: [], agents: [], factories: [], connections: [], secrets: [] };
 
 interface Setup {
   path?: string;

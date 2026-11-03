@@ -26,6 +26,8 @@ interface Deps {
 
 export interface MockSecrets {
   reset: (now: number) => void;
+  /** The organization's secrets by name, as GET /secrets lists them; never a value. */
+  outlines: (org: string) => Secret[];
   handle: (
     org: Org,
     rest: string,
@@ -293,8 +295,14 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
 
   const invalid = (res: ServerResponse, detail: string) => refuse(res, 400, detail, 'secret-invalid');
 
+  const outlines = (org: string): Secret[] =>
+    list(org)
+      .map((s) => out(org, s))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
   return {
     reset,
+    outlines,
     async handle(org, rest, method, url, req, res, body) {
       if (rest === '/repositories/test' && method === 'POST') {
         // The token's read and push check (ADR 0037): a repository named *-readonly refuses the push, one named *-missing the read.
@@ -330,10 +338,7 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
         return true;
       }
       if (rest === '/secrets' && method === 'GET') {
-        const secrets = list(org.id)
-          .map((s) => out(org.id, s))
-          .sort((a, b) => a.name.localeCompare(b.name));
-        send(res, 200, { secrets });
+        send(res, 200, { secrets: outlines(org.id) });
         return true;
       }
       if (rest === '/secrets' && method === 'POST') {
