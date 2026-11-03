@@ -20,6 +20,7 @@ const hour = 60 * min;
 
 const source = (patch: Partial<KnowledgeSource>): KnowledgeSource => ({
   id: 's1',
+  read_when: '',
   name: 'goal-docs',
   title: 'goal docs',
   kind: 'synced',

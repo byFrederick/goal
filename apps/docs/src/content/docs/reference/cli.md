@@ -13,7 +13,7 @@ Every command of the `goal` CLI, in the order its usage text lists them: each se
 
 Factory definitions live in goald (drafts and published versions), not in files: goal factory push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
+Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
 
 With sign-in on (GOAL\_AUTH=session), commands send GOAL\_API\_KEY (an API key goal\_sk\_… or a personal token goal\_pat\_…) when it is set, else what goal login stored for goald's origin, and only over https or to this machine; a refused credential or permission exits 77
 
@@ -506,19 +506,29 @@ Flags: `--factory <f>`, `--group reach|factory|secret`.
 goal knowledge sources [--factory F]
 ```
 
-the knowledge base's sources: kind, status, documents, last and next sync, the factories that search them
+the knowledge sources: kind, status, last and next sync, the factories that list them, the read-when line
 
 Flags: `--factory F`.
 
 ## goal knowledge add
 
 ```text
-goal knowledge add <name> --kind upload|synced|live [--secret S] [--connection C] [--config k=v]... [--title T] [--every 1h]
+goal knowledge add <name> --kind upload|repository|confluence --read-when "<line>" [--factories a,b] [--secret S] [--config k=v]... [--title T] [--every 1h]
 ```
 
-add a source (owners and admins); a synced one reads with secret S, --config names its reader and what it reads (reader=gitdocs repository=URL, or reader=confluence site=… email=… spaces=ENG); a live one reads connection C
+add a source (owners and admins); a repository or Confluence one reads with secret S, --config says what (repository=URL branch=… include=…, or site=… email=… spaces=ENG); --factories lists it in each one's draft factory.yaml, never publishing
 
-Flags: `--kind upload|synced|live`, `--secret S`, `--connection C`, `--config k=v`, `--title T`, `--every 1h`.
+Flags: `--kind upload|repository|confluence`, `--read-when "<line>"`, `--factories a,b`, `--secret S`, `--config k=v`, `--title T`, `--every 1h`.
+
+## goal knowledge check
+
+```text
+goal knowledge check <name> --kind … [same flags as add]
+```
+
+a dry run of add: whether goald can read it, its file count against the limits, each factory's warnings and the line agents will see; saves nothing
+
+Flags: `--kind …`.
 
 ## goal knowledge sync
 
@@ -528,69 +538,78 @@ goal knowledge sync <source>
 
 sync it now
 
+## goal knowledge files
+
+```text
+goal knowledge files <source> [--find P]
+goal knowledge files --find P
+```
+
+its current files: path, size, title (--find: those whose path or title starts with P)
+
+find a file across every source
+
+Flags: `--find P`.
+
+## goal knowledge cat
+
+```text
+goal knowledge cat <source> <path>
+```
+
+one file's Markdown, as runs read it under /knowledge/&lt;source&gt;/&lt;path&gt;
+
 ## goal knowledge upload
 
 ```text
-goal knowledge upload <source> <file>...
+goal knowledge upload <source> <file|dir>...
 ```
 
-upload text, Markdown, HTML, JSON or YAML files to an upload source; indexed at its next sync
-
-## goal knowledge documents
-
-```text
-goal knowledge documents <source>
-```
-
-its documents: id, title, status, size
+upload text, Markdown, HTML, JSON or YAML files to an upload source, a folder's files at their paths below it; its next sync takes them
 
 ## goal knowledge rm
 
 ```text
-goal knowledge rm <document>
+goal knowledge rm <source> [<path>]
 ```
 
-delete an uploaded document
+delete the source, or one of an upload source's files
 
-## goal knowledge search
+## goal knowledge reads
 
 ```text
-goal knowledge search "<query>" [--source S]... [--limit N]
+goal knowledge reads [--source S] [--days N]
 ```
 
-search as agents do: the best passages first, with their document ids or links
+how often runs read each file and searched each folder under /knowledge over the window (default 7 days, at most 90), by factory, the most read first
 
-Flags: `--source S`, `--limit N`.
+Flags: `--source S`, `--days N`.
 
-## goal knowledge usage
+## goal memory list
 
 ```text
-goal knowledge usage [--source S] [--days N] [--json]
+goal memory list <factory>
 ```
 
-each document's use over the window (default 7 days, at most 90), of S or every source: runs, helped and misled, the people's share in brackets
+the factory memory in its draft (memory.yaml), numbered
 
-Flags: `--source S`, `--days N`, `--json`.
-
-## goal knowledge uses
+## goal memory add
 
 ```text
-goal knowledge uses <document> [--json]
+goal memory add <factory> "<text>" [--from <factory>#<n>] [--publish]
 ```
 
-the runs that used it, newest first: item, factory, search or read, first use
+add a fact to the draft's memory.yaml, dated today (--from: the items it came from, comma-separated; --publish: publish the draft after it)
 
-Flags: `--json`.
+Flags: `--from <factory>#<n>`, `--publish`.
 
-## goal knowledge verdict
+## goal memory rm
 
 ```text
-goal knowledge verdict <document> helped|misled [--run R] [--note TEXT] [--json]
+goal memory rm <factory> <n>
 ```
 
-give your verdict on it, of a run that used it with --run
-
-Flags: `--run R`, `--note TEXT`, `--json`.
+remove the n-th fact from the draft's memory.yaml
 
 ## goal search
 
