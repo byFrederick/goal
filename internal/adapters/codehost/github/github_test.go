@@ -1177,3 +1177,107 @@ func TestClient_RepositoriesRefusals(t *testing.T) {
 		t.Errorf("Repositories(../user) = %v after %d requests; want an error and none sent", err, len(f.sent())-before)
 	}
 }
+
+func TestRepositoryAccess(t *testing.T) {
+	t.Parallel()
+
+	// The fake GitHub answers GET /repos/acme/<repo> for the token: app can be pushed to, docs only
+	// read, and any other repository is one the token cannot see.
+	var mu sync.Mutex
+
+	var paths []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.Method+" "+r.URL.Path)
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.Header.Get("Authorization") != "Bearer "+token {
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{message: "Bad credentials"})
+
+			return
+		}
+
+		switch r.URL.Path {
+		case "/repos/acme/app":
+			_ = json.NewEncoder(w).Encode(map[string]any{keyName: "acme/app", "permissions": map[string]bool{"pull": true, "push": true}})
+		case "/repos/acme/docs":
+			_ = json.NewEncoder(w).Encode(map[string]any{keyName: "acme/docs", "permissions": map[string]bool{"pull": true, "push": false}})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{message: "Not Found"})
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	c := New(Config{APIURL: srv.URL})
+
+	for _, tc := range []struct {
+		name, repo, token string
+		read, push        bool
+		reason            string // in the failed check's reason
+	}{
+		{name: "read and push", repo: "https://github.com/acme/app.git", token: token, read: true, push: true},
+		{name: "read only", repo: "https://github.com/acme/docs", token: token, read: true, reason: "push"},
+		{name: "unknown repository", repo: "https://github.com/acme/gone", token: token, reason: "Not Found"},
+		{name: "bad token", repo: "https://github.com/acme/app", token: "ghp_wrong", reason: "Bad credentials"},
+	} {
+		got, err := c.RepositoryAccess(t.Context(), tc.repo, tc.token)
+		if err != nil {
+			t.Fatalf("%s: err = %v", tc.name, err)
+		}
+
+		if got.Read.OK != tc.read || got.Push.OK != tc.push || got.Read.Reason == "" || got.Push.Reason == "" {
+			t.Errorf("%s: access = %+v; want read %v, push %v, each with a reason", tc.name, got, tc.read, tc.push)
+		}
+
+		failed := got.Push.Reason
+		if !tc.read {
+			failed = got.Read.Reason
+		}
+
+		if tc.reason != "" && !strings.Contains(failed, tc.reason) {
+			t.Errorf("%s: reason %q; want it to say %q", tc.name, failed, tc.reason)
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	for _, p := range paths {
+		if !strings.HasPrefix(p, "GET /repos/") {
+			t.Errorf("sent %s; want only reads of the repository", p)
+		}
+	}
+
+	// Not a repository URL: refused before anything is sent.
+	for _, bad := range []string{"http://github.com/acme/app", "https://github.com/acme", "https://user:pw@github.com/acme/app", "github.com/acme/app"} {
+		if _, err := c.RepositoryAccess(t.Context(), bad, token); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("RepositoryAccess(%q) err = %v; want domain.ErrInvalid", bad, err)
+		}
+	}
+
+	// GitHub echoing the token back puts it in no reason.
+	echo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{message: "token " + token + " lacks a scope"})
+	}))
+	t.Cleanup(echo.Close)
+
+	got, err := New(Config{APIURL: echo.URL}).RepositoryAccess(t.Context(), "https://github.com/acme/app", token)
+	if err != nil || got.Read.OK || strings.Contains(got.Read.Reason+got.Push.Reason, token) {
+		t.Errorf("access = %+v, err = %v; want read failed without the token", got, err)
+	}
+
+	// No answer is an error, not a failed check.
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	dead.Close()
+
+	if _, err := New(Config{APIURL: dead.URL}).RepositoryAccess(t.Context(), "https://github.com/acme/app", token); err == nil {
+		t.Error("a host that does not answer: err = nil; want an error")
+	}
+}

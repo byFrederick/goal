@@ -399,3 +399,91 @@ func (cl *Client) Compare(context.Context, domain.ResolvedConnection, string, st
 func (cl *Client) Repositories(context.Context, domain.ResolvedConnection, string) (ports.RepositoryList, error) {
 	return ports.RepositoryList{}, fmt.Errorf("gitlab: repositories: %w", errors.ErrUnsupported)
 }
+
+// projectPath is a project's path: a namespace (groups and subgroups) and a project, optionally
+// ending in .git.
+var projectPath = regexp.MustCompile(`^/((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+?)(?:\.git)?/?$`)
+
+// accessLevels are GitLab's role names by access level.
+var accessLevels = map[int]string{10: "Guest", 15: "Planner", 20: "Reporter", 30: "Developer", 40: "Maintainer", 50: "Owner"}
+
+// pushLevel is the least access level that can push: Developer.
+const pushLevel = 30
+
+// RepositoryAccess implements ports.CodeHost with GET /projects/:id: a project GitLab shows the
+// token can be read, and it can be pushed to when the higher of its project and group access
+// levels is Developer (30) or more. A refusal (401, 403, 404) is a failed read with GitLab's
+// message; a 5xx or no answer is an error.
+func (cl *Client) RepositoryAccess(ctx context.Context, repoURL, token string) (ports.RepositoryAccess, error) {
+	u, err := url.Parse(repoURL)
+	if err != nil {
+		return ports.RepositoryAccess{}, fmt.Errorf("repository %q: %w", repoURL, domain.ErrInvalid)
+	}
+
+	m := projectPath.FindStringSubmatch(u.Path)
+	if u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || m == nil {
+		return ports.RepositoryAccess{}, fmt.Errorf("%q is not a repository URL such as https://gitlab.com/acme/app: %w", repoURL, domain.ErrInvalid)
+	}
+
+	api := cl.api
+	if api == "" {
+		api = "https://" + strings.ToLower(u.Host) + "/api/v4"
+	}
+
+	mr := mergeRequest{api: api, token: token, project: url.PathEscape(m[1])}
+
+	type access struct {
+		Level int `json:"access_level"`
+	}
+
+	var p struct {
+		Permissions struct {
+			Project *access `json:"project_access"`
+			Group   *access `json:"group_access"`
+		} `json:"permissions"`
+	}
+
+	status, msg, err := cl.call(ctx, mr, http.MethodGet, mr.path(""), nil, &p)
+
+	switch {
+	case err != nil:
+		return ports.RepositoryAccess{}, fmt.Errorf("repository access of %s: %w", m[1], err)
+	case status >= http.StatusInternalServerError:
+		return ports.RepositoryAccess{}, fmt.Errorf("repository access of %s: GitLab answered %d %s", m[1], status, msg)
+	case status != http.StatusOK:
+		return ports.RepositoryAccess{
+			Read: ports.AccessCheck{Reason: strings.TrimSpace(fmt.Sprintf("GitLab answered %d: %s", status, msg))},
+			Push: ports.AccessCheck{Reason: "not checked: the token cannot read " + m[1]},
+		}, nil
+	}
+
+	level := 0
+
+	for _, a := range []*access{p.Permissions.Project, p.Permissions.Group} {
+		if a != nil {
+			level = max(level, a.Level)
+		}
+	}
+
+	out := ports.RepositoryAccess{Read: ports.AccessCheck{OK: true, Reason: "GitLab shows " + m[1] + " to the token"}}
+
+	switch role, ok := accessLevels[level]; {
+	case level >= pushLevel:
+		out.Push = ports.AccessCheck{OK: true, Reason: fmt.Sprintf("the token has %s access (%d) to %s", roleName(role, ok), level, m[1])}
+	case level == 0:
+		out.Push.Reason = "the token is no member of " + m[1] + ", so it cannot push"
+	default:
+		out.Push.Reason = fmt.Sprintf("the token has %s access (%d) to %s; pushing needs Developer (30)", roleName(role, ok), level, m[1])
+	}
+
+	return out, nil
+}
+
+// roleName is a level's role name, or "custom" for a level GitLab names otherwise.
+func roleName(role string, ok bool) string {
+	if ok {
+		return role
+	}
+
+	return "custom"
+}

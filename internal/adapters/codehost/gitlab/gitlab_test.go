@@ -503,3 +503,84 @@ func TestClient_RepositoriesUnsupported(t *testing.T) {
 		t.Errorf("requests %v; want none", got)
 	}
 }
+
+func TestRepositoryAccess(t *testing.T) {
+	t.Parallel()
+
+	// The fake GitLab answers GET /projects/acme%2F<project>: app with Developer access (30) through
+	// its group, docs with Reporter (20), any other one is not found.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.Method != http.MethodGet || r.Header.Get("PRIVATE-TOKEN") != token {
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{keyMessage: "401 Unauthorized"})
+
+			return
+		}
+
+		level := func(project, group any) map[string]any {
+			return map[string]any{"permissions": map[string]any{"project_access": project, "group_access": group}}
+		}
+
+		switch r.URL.EscapedPath() {
+		case "/projects/acme%2Fplatform%2Fapp":
+			_ = json.NewEncoder(w).Encode(level(nil, map[string]int{"access_level": 30}))
+		case "/projects/acme%2Fdocs":
+			_ = json.NewEncoder(w).Encode(level(map[string]int{"access_level": 20}, nil))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{keyMessage: "404 Project Not Found"})
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	c := New(Config{APIURL: srv.URL})
+
+	for _, tc := range []struct {
+		name, repo, token string
+		read, push        bool
+		reason            string
+	}{
+		{name: "developer", repo: "https://gitlab.com/acme/platform/app.git", token: token, read: true, push: true},
+		{name: "reporter", repo: "https://gitlab.com/acme/docs", token: token, read: true, reason: "Reporter"},
+		{name: "unknown project", repo: "https://gitlab.com/acme/gone", token: token, reason: "404 Project Not Found"},
+		{name: "bad token", repo: "https://gitlab.com/acme/docs", token: "glpat-wrong", reason: "401 Unauthorized"},
+	} {
+		got, err := c.RepositoryAccess(t.Context(), tc.repo, tc.token)
+		if err != nil {
+			t.Fatalf("%s: err = %v", tc.name, err)
+		}
+
+		if got.Read.OK != tc.read || got.Push.OK != tc.push || got.Read.Reason == "" || got.Push.Reason == "" {
+			t.Errorf("%s: access = %+v; want read %v, push %v, each with a reason", tc.name, got, tc.read, tc.push)
+		}
+
+		failed := got.Push.Reason
+		if !tc.read {
+			failed = got.Read.Reason
+		}
+
+		if tc.reason != "" && !strings.Contains(failed, tc.reason) {
+			t.Errorf("%s: reason %q; want it to say %q", tc.name, failed, tc.reason)
+		}
+	}
+
+	for _, bad := range []string{"http://gitlab.com/acme/app", "https://gitlab.com/acme", "https://u:p@gitlab.com/acme/app"} {
+		if _, err := c.RepositoryAccess(t.Context(), bad, token); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("RepositoryAccess(%q) err = %v; want domain.ErrInvalid", bad, err)
+		}
+	}
+
+	echo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{keyMessage: "token " + token + " is revoked"})
+	}))
+	t.Cleanup(echo.Close)
+
+	got, err := New(Config{APIURL: echo.URL}).RepositoryAccess(t.Context(), "https://gitlab.com/acme/docs", token)
+	if err != nil || got.Read.OK || strings.Contains(got.Read.Reason+got.Push.Reason, token) {
+		t.Errorf("access = %+v, err = %v; want read failed without the token", got, err)
+	}
+}
