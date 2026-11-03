@@ -261,6 +261,12 @@ func TestAPI_SecretDeleteRefusedWhileASourceUsesIt(t *testing.T) {
 var acmeWithRepoToken = strings.Replace(acme, `runtime: { modelKey: "{{claude-key}}" }`,
 	`runtime: { modelKey: "{{claude-key}}", repository: { url: "https://github.com/acme/app.git", token: "{{`+repoSecret+`}}" } }`, 1)
 
+// acmeName is acme's metadata.name, the name of its definition use of a secret.
+const acmeName = "acme"
+
+// acmeDefinitionUse is the use acme's current version makes of a secret it refers to.
+var acmeDefinitionUse = []gen.SecretUse{{Kind: gen.SecretUseDefinition, Name: acmeName}}
+
 // publishRepoToken publishes acmeWithRepoToken and refreshes the definitions cache.
 func (h *harness) publishRepoToken(t *testing.T) {
 	t.Helper()
@@ -289,7 +295,7 @@ func TestAPI_SecretUsesListDefinitions(t *testing.T) {
 	h.createRepoSecret(t)
 	h.publishRepoToken(t)
 
-	want := []gen.SecretUse{{Kind: gen.SecretUseDefinition, Name: "acme"}}
+	want := acmeDefinitionUse
 	if got := decode[gen.Secret](t, h.request(t, http.MethodGet, secretsPath+"/"+repoSecret, "", nil), http.StatusOK); !slices.Equal(got.Uses, want) {
 		t.Errorf("repository token uses = %+v; want %+v", got.Uses, want)
 	}
@@ -311,7 +317,7 @@ func TestAPI_SecretDeleteRefusedWhileADefinitionUsesIt(t *testing.T) {
 	h.publishRepoToken(t)
 
 	path := secretsPath + "/" + repoSecret
-	want := []gen.SecretUse{{Kind: gen.SecretUseDefinition, Name: "acme"}}
+	want := acmeDefinitionUse
 
 	p := refused(t, "delete in use", h.request(t, http.MethodDelete, path, "", nil), http.StatusConflict, "secret-in-use")
 	if p.Uses == nil || !slices.Equal(*p.Uses, want) || !strings.Contains(valueOf(p.Detail), "definition acme") {
