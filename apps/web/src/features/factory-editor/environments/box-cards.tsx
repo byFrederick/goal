@@ -148,7 +148,7 @@ export function ToolsCard({ spec, change, readOnly }: CardProps) {
           {spec.tools.map((tool) => (
             <li
               key={tool}
-              className="flex items-center gap-1 rounded-control border border-rule bg-card pl-2.5 font-mono text-secondary"
+              className="flex items-center gap-1 rounded-control border border-rule bg-card pl-2.5 font-mono text-secondary max-md:min-h-11"
             >
               {tool}
               {readOnly ? (
@@ -166,7 +166,7 @@ export function ToolsCard({ spec, change, readOnly }: CardProps) {
                       ),
                     )
                   }
-                  className="press relative inline-flex size-6 cursor-pointer items-center justify-center rounded-control text-muted hover:text-ink max-md:size-8"
+                  className="press relative inline-flex size-6 cursor-pointer items-center justify-center rounded-control text-muted hover:text-ink max-md:size-11"
                 >
                   <X size={12} strokeWidth={1.75} aria-hidden="true" />
                 </button>
