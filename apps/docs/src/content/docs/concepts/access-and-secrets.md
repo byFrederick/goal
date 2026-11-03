@@ -89,7 +89,7 @@ Flags and output are in the [CLI reference](../../reference/).
 
 Organizations that used connections, kinds and credentials were moved to secrets and environment files once, when goald started, with no person needed ([ADR 0037](https://github.com/byFrederick/goal/blob/main/docs/adr/0037-secrets-and-environment-files.md), decision 19). For each organization it:
 
-1. Makes each sealed connection field a secret open to every factory. The secret is named after the connection, or `<connection>-<field>` when the kind has several secret fields. A field that referred to a credential uses that credential, which is a secret already. A secret that already exists by name is left as it is.
+1. Makes each sealed connection field a secret open to every factory. The secret is named after the connection, or `<connection>-<field>` when the kind has several secret fields. A field that referred to a credential uses that credential, which is a secret already. A secret that already has the name is reused when it is open to every factory and holds the connection's value. Otherwise that secret is left as it is, and the connection's secret takes the next free name with a number: `github-2`, then `github-3`. The new name is the one the converted factory and its knowledge sources refer to, and goald logs a `secret renamed` line naming the connection, the old name and the new one, never a value.
 2. Converts each factory's current version into a new version, published by Goal with the message "Moved connections to environments (ADR 0037)":
    - the factory's connections become `environments/default.yaml`, rendered from their kinds: the kind's variables, its command-line tool and its MCP server, with each secret field as a `{{secret}}` reference;
    - an agent whose connections differ from the factory's gets `environments/<agent>.yaml` and `environment: <agent>`;
@@ -99,7 +99,7 @@ Organizations that used connections, kinds and credentials were moved to secrets
 3. Tests the converted version before it publishes it. The repository token must be able to read `runtime.repository.url` and push to it: goald asks the code host's API, as `goal repository test` does, since it runs no git. Each remote MCP server in each environment file must answer `tools/list` with its headers' secrets filled in, as the environment test does. A check that fails, or gets no answer within 10 seconds, publishes nothing.
 4. Reopens a draft that was open on the new version, converted, for its author. A draft that does not convert is reopened as it was, and publishing it shows what to fix.
 
-It also points each synced knowledge source still on a connection at the secret its connection's token became, and copies the reader and the connection's other values into the source's config ([Knowledge](../knowledge/)).
+It also points each synced knowledge source still on a connection at the secret its connection's token became, and copies the reader and the connection's other values into the source's config ([Knowledge](../knowledge/)). A source stays on its connection when that secret is open to some factories only, since a knowledge source syncs only with a secret open to all.
 
 Running items keep the version they started on. goald logs one `moved over` line per organization, with how many factories it converted and refused, how many secrets it created and how many knowledge sources it moved. A knowledge source it can't move gets its own `knowledge source not moved over` line with the reason. Running it again changes nothing for a factory it converted.
 
