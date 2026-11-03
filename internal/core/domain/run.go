@@ -177,6 +177,8 @@ type RunRequest struct {
 	Environment Environment
 	// DeniedCommands are added to the agent's deny rules (TaskClaims.DeniedCommands).
 	DeniedCommands []string
+	// NoEnvironment says the agent gets no env, files or MCP servers (TaskClaims.NoEnvironment).
+	NoEnvironment bool
 	// Size is the sandbox's size; empty is medium. Image is the sandbox's image; empty is the
 	// engine's, Goal's own.
 	Size  SandboxSize

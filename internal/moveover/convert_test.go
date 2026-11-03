@@ -498,3 +498,38 @@ func TestSuffixed_StaysAValidName(t *testing.T) {
 		}
 	}
 }
+
+// TestConvert_KeepsAgentToolRules: an agent's <server>__<pattern> rules survive the conversion,
+// and its environment names the MCP server as the rules do, so the worker still applies them.
+func TestConvert_KeepsAgentToolRules(t *testing.T) {
+	t.Parallel()
+
+	allow := []string{"Read", "github__get_*", "github__list_*"}
+	deny := []string{"github__merge_*", "github__push_*"}
+	withRules := strings.Replace(productionFactory, "      connections: [github]\n", `      connections: [github]
+      tools:
+        allow: ["Read", "github__get_*", "github__list_*"]
+        deny: ["github__merge_*", "github__push_*"]
+`, 1)
+
+	got := moveover.Convert(files(withRules), productionConnections(t))
+	if len(got.Problems) > 0 {
+		t.Fatalf("problems %v", got.Problems)
+	}
+
+	f := factoryOf(t, got.Files)
+
+	i := slices.IndexFunc(f.Spec.Agents, func(a config.Agent) bool { return a.Environment != "" })
+	if i < 0 {
+		t.Fatalf("no agent with its own environment in\n%s", got.Files[config.FileName])
+	}
+
+	a := f.Spec.Agents[i]
+	if a.Tools == nil || !slices.Equal(a.Tools.Allow, allow) || !slices.Equal(a.Tools.Deny, deny) {
+		t.Errorf("agent tools %+v; want allow %v and deny %v", a.Tools, allow, deny)
+	}
+
+	if _, ok := environment(t, got.Files, a.Environment).MCP[connGitHub]; !ok {
+		t.Errorf("environment %s has no MCP server %s, the rules' server name", a.Environment, connGitHub)
+	}
+}

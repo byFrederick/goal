@@ -72,7 +72,8 @@ func (s *server) PutOrgPolicy(ctx context.Context, req gen.PutOrgPolicyRequestOb
 		return nil, fmt.Errorf("%w: If-Match %q is not a policy revision", errInvalid, tag)
 	}
 
-	p := policyIn(*req.Body)
+	// Normalized saves the deprecated use_credentials attached_only as environment.
+	p := policyIn(*req.Body).Normalized()
 	// A cap that is no tool name or glob to allow, ask or off is a malformed body (400), not a
 	// domain refusal, so the domain error is not wrapped.
 	if err := domain.CheckMCPToolCap(p.MCPToolModes); err != nil {

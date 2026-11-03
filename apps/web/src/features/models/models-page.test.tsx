@@ -44,7 +44,7 @@ function acme(overrides: Partial<OrgPolicyView['policy']> = {}): OrgPolicyView {
         write_outside_branch: 'ask',
         merge_pull_request: 'review_approval',
         read_web: 'allowed',
-        use_credentials: 'attached_only',
+        use_credentials: 'environment',
       },
       box_time_limit_minutes: 180,
       ...overrides,
@@ -231,6 +231,23 @@ describe('Models and policies', () => {
     expect(orgId).toBe('org-1');
     expect(etag).toBe('"3"');
     expect(body.allowed_models).not.toContain('claude-fable-5-1');
+  });
+
+  it('shows Environment for Use secrets and saves environment', async () => {
+    api.putOrgPolicy.mockResolvedValue({ view: acme(), etag: '"4"' });
+    renderPage();
+    await screen.findByRole('heading', { name: 'Models agents may use' });
+
+    const select = screen.getByRole('combobox', { name: /Use secrets/ }) as HTMLSelectElement;
+    expect(select.value).toBe('environment');
+    expect(select.selectedOptions[0]?.textContent).toBe('Environment');
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Allow Claude Fable 5.1' }));
+    fireEvent.click(save());
+
+    await waitFor(() => expect(api.putOrgPolicy).toHaveBeenCalledTimes(1));
+    const [, body] = api.putOrgPolicy.mock.calls[0] as [string, { tools: { use_credentials: string } }];
+    expect(body.tools.use_credentials).toBe('environment');
   });
 
   it('keeps the edits and asks for a save again when the policy changed while editing', async () => {

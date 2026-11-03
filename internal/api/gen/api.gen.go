@@ -1914,6 +1914,7 @@ func (e ToolPolicyReadWeb) Valid() bool {
 // Defines values for ToolPolicyUseCredentials.
 const (
 	ToolPolicyUseCredentialsAttachedOnly ToolPolicyUseCredentials = "attached_only"
+	ToolPolicyUseCredentialsEnvironment  ToolPolicyUseCredentials = "environment"
 	ToolPolicyUseCredentialsOff          ToolPolicyUseCredentials = "off"
 )
 
@@ -1921,6 +1922,8 @@ const (
 func (e ToolPolicyUseCredentials) Valid() bool {
 	switch e {
 	case ToolPolicyUseCredentialsAttachedOnly:
+		return true
+	case ToolPolicyUseCredentialsEnvironment:
 		return true
 	case ToolPolicyUseCredentialsOff:
 		return true
@@ -7229,7 +7232,9 @@ type ToolPolicy struct {
 	MergePullRequest ToolPolicyMergePullRequest `json:"merge_pull_request"`
 
 	// ReadWeb Search, fetch and documentation tools
-	ReadWeb        ToolPolicyReadWeb        `json:"read_web"`
+	ReadWeb ToolPolicyReadWeb `json:"read_web"`
+
+	// UseCredentials Use secrets: environment gives an agent what its environment names; off gives it no env, files or MCP servers. attached_only is a deprecated alias for environment: a save stores it as environment, and every read returns environment.
 	UseCredentials ToolPolicyUseCredentials `json:"use_credentials"`
 
 	// WriteOutsideBranch Comments, issues, tickets and messages outside the item's branch
@@ -7242,7 +7247,7 @@ type ToolPolicyMergePullRequest string
 // ToolPolicyReadWeb Search, fetch and documentation tools
 type ToolPolicyReadWeb string
 
-// ToolPolicyUseCredentials defines model for ToolPolicy.UseCredentials.
+// ToolPolicyUseCredentials Use secrets: environment gives an agent what its environment names; off gives it no env, files or MCP servers. attached_only is a deprecated alias for environment: a save stores it as environment, and every read returns environment.
 type ToolPolicyUseCredentials string
 
 // ToolPolicyWriteOutsideBranch Comments, issues, tickets and messages outside the item's branch

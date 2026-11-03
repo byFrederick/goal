@@ -26,7 +26,7 @@ const (
 // policyBody is a valid policy: both of the install's models, haiku the default.
 const policyBody = `{"allowed_models":["claude-opus-5-5","claude-haiku-5-5"],"default_model":"claude-haiku-5-5",
 "denied_commands":["Bash(terraform apply:*)"],
-"tools":{"write_outside_branch":"off","merge_pull_request":"review_approval","read_web":"ask","use_credentials":"attached_only"},
+"tools":{"write_outside_branch":"off","merge_pull_request":"review_approval","read_web":"ask","use_credentials":"environment"},
 "box_time_limit_minutes":90}`
 
 // An organization that saved nothing reads the default policy of the install's models at
@@ -48,7 +48,7 @@ func TestGetOrgPolicy_DefaultAtRevisionZero(t *testing.T) {
 		t.Errorf("policy = %+v; want every model, opus the default, nothing denied, 180 minutes", p)
 	}
 
-	want := gen.ToolPolicy{WriteOutsideBranch: "ask", MergePullRequest: "review_approval", ReadWeb: "allowed", UseCredentials: "attached_only"}
+	want := gen.ToolPolicy{WriteOutsideBranch: "ask", MergePullRequest: "review_approval", ReadWeb: "allowed", UseCredentials: "environment"}
 	if p.Tools != want {
 		t.Errorf("tools = %+v; want %+v", p.Tools, want)
 	}
@@ -134,6 +134,25 @@ func TestPutOrgPolicy_SavesAtTheNextRevision(t *testing.T) {
 
 	if next := h.request(t, http.MethodPut, policyPath, policyBody, quoted("1")); next.status != http.StatusOK || next.header.Get("ETag") != `"2"` {
 		t.Errorf("a save on revision 1 = %d ETag %q; want 200 \"2\"", next.status, next.header.Get("ETag"))
+	}
+}
+
+// A save with the deprecated use_credentials attached_only, as an older client sends it, is saved
+// as environment: the save answers environment and so does every read after it.
+func TestPutOrgPolicy_AttachedOnlyReadsBackEnvironment(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	body := strings.Replace(policyBody, `"use_credentials":"environment"`, `"use_credentials":"attached_only"`, 1)
+	saved := decode[gen.OrgPolicyView](t, h.request(t, http.MethodPut, policyPath, body, quoted("0")), http.StatusOK)
+
+	if saved.Policy.Tools.UseCredentials != gen.ToolPolicyUseCredentialsEnvironment {
+		t.Errorf("save answered use_credentials %q; want environment", saved.Policy.Tools.UseCredentials)
+	}
+
+	read := decode[gen.OrgPolicyView](t, h.request(t, http.MethodGet, policyPath, "", nil), http.StatusOK)
+	if read.Policy.Tools.UseCredentials != gen.ToolPolicyUseCredentialsEnvironment {
+		t.Errorf("read use_credentials %q; want environment", read.Policy.Tools.UseCredentials)
 	}
 }
 
