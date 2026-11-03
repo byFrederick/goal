@@ -281,7 +281,6 @@ func (f *fixture) serverRuleOf(org domain.OrgID, n domain.NewServerStandingRule,
 
 func testCreateServerStandingRule(f *fixture) {
 	acme := f.NewOrg(f.t)
-	ctx := f.in(acme)
 	f.docs(acme)
 	byConn := f.rule(acme, connDocs, toolComment, architect, admin)
 
@@ -290,7 +289,21 @@ func testCreateServerStandingRule(f *fixture) {
 		r.Environment == domain.DefaultEnvironment && r.Server == connDocs && isNewRule(r, toolComment, architect),
 		"CreateServerStandingRule = %+v; want a new active rule keyed by server, apart from the connection's", r)
 
-	created := f.audit(acme, domain.AuditStandingRuleCreated)
+	f.serverRuleAudited(acme, r)
+
+	again := f.serverRuleOf(acme, serverRule(domain.DefaultEnvironment, connDocs, toolComment, architect), editor)
+	f.expect(again.ID == r.ID && again.CreatedBy.ID == admin.ID, "CreateServerStandingRule of an active key = %+v; want the rule %s", again, r.ID)
+	f.expect(len(f.audit(acme, domain.AuditStandingRuleCreated)) == 2, "a create of an active key was audited")
+
+	f.serverRulesApart(acme, r, byConn)
+}
+
+// serverRuleAudited checks that org has two standing_rule.created entries, the connection
+// rule's and server rule r's, by admin with r's key.
+func (f *fixture) serverRuleAudited(org domain.OrgID, r domain.StandingRule) {
+	f.t.Helper()
+
+	created := f.audit(org, domain.AuditStandingRuleCreated)
 	f.expect(len(created) == 2, "standing_rule.created entries = %d; want the connection's and the server's", len(created))
 
 	i := slices.IndexFunc(created, func(e domain.AuditEntry) bool { return e.TargetID == string(r.ID) })
@@ -298,25 +311,29 @@ func testCreateServerStandingRule(f *fixture) {
 		created[i].Data["environment"] == domain.DefaultEnvironment && created[i].Data["server"] == connDocs &&
 		created[i].Data["tool"] == toolComment && created[i].Data["agent"] == architect,
 		"the server rule's standing_rule.created = %+v", created)
+}
 
-	again := f.serverRuleOf(acme, serverRule(domain.DefaultEnvironment, connDocs, toolComment, architect), editor)
-	f.expect(again.ID == r.ID && again.CreatedBy.ID == admin.ID, "CreateServerStandingRule of an active key = %+v; want the rule %s", again, r.ID)
-	f.expect(len(f.audit(acme, domain.AuditStandingRuleCreated)) == 2, "a create of an active key was audited")
+// serverRulesApart checks that another environment, server or agent is another rule than r, that
+// a malformed key is refused, and that deleting the connection named like r's server revokes
+// only its own rule byConn.
+func (f *fixture) serverRulesApart(org domain.OrgID, r, byConn domain.StandingRule) {
+	f.t.Helper()
+
+	ctx := f.in(org)
 
 	for name, n := range map[string]domain.NewServerStandingRule{
 		"another environment": serverRule("backend", connDocs, toolComment, architect),
 		"another server":      serverRule(domain.DefaultEnvironment, connGit, toolComment, architect),
 		"another agent":       serverRule(domain.DefaultEnvironment, connDocs, toolComment, reviewer),
 	} {
-		other := f.serverRuleOf(acme, n, admin)
+		other := f.serverRuleOf(org, n, admin)
 		f.expect(other.ID != r.ID, "a rule for %s is the same rule", name)
 	}
 
-	bad := serverRule("Default", connDocs, toolComment, architect)
-	_, err := f.c.CreateServerStandingRule(ctx, bad, admin)
+	_, err := f.c.CreateServerStandingRule(ctx, serverRule("Default", connDocs, toolComment, architect), admin)
 	f.refused("CreateServerStandingRule of a malformed environment", err, domain.ErrInvalid)
 
-	all := f.rules(acme, false)
+	all := f.rules(org, false)
 	f.expect(len(all) == 5 && all[0].ID == byConn.ID && all[1].ID == r.ID && all[1].Server == connDocs && all[1].Factory == ruleFactory,
 		"StandingRules = %+v; want the connection's rule, then the four server rules", all)
 
@@ -324,7 +341,7 @@ func testCreateServerStandingRule(f *fixture) {
 		f.t.Fatal(err)
 	}
 
-	active := f.rules(acme, false)
+	active := f.rules(org, false)
 	f.expect(len(active) == 4 && !slices.ContainsFunc(active, func(x domain.StandingRule) bool { return x.ID == byConn.ID }),
 		"active rules after the connection's delete = %+v; want the server rules kept", active)
 }

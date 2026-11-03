@@ -95,7 +95,7 @@ func TestNewServerStandingRule_Check(t *testing.T) {
 	t.Parallel()
 
 	valid := NewServerStandingRule{
-		Factory: "00000000-0000-7000-8000-0000000000f1", Environment: DefaultEnvironment, Server: "acme-git", Tool: toolCreateComment,
+		Factory: "00000000-0000-7000-8000-00000000f00d", Environment: DefaultEnvironment, Server: "acme-git", Tool: toolCreateComment,
 		Agent: "architect", Item: "00000000-0000-7000-8000-0000000000aa",
 	}
 	if err := valid.Check(); err != nil {
@@ -103,8 +103,8 @@ func TestNewServerStandingRule_Check(t *testing.T) {
 	}
 
 	for name, change := range map[string]func(*NewServerStandingRule){
-		"no factory":              func(n *NewServerStandingRule) { n.Factory = "" },
-		"a factory that is no id": func(n *NewServerStandingRule) { n.Factory = "acme" },
+		"an empty factory":        func(n *NewServerStandingRule) { n.Factory = "" },
+		"a factory that is no id": func(n *NewServerStandingRule) { n.Factory = "f-1" },
 		"no environment":          func(n *NewServerStandingRule) { n.Environment = "" },
 		"a malformed environment": func(n *NewServerStandingRule) { n.Environment = "Default" },
 		"no server":               func(n *NewServerStandingRule) { n.Server = "" },
