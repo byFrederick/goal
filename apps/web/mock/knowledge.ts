@@ -157,7 +157,8 @@ function seed(now: number, by: Actor): MockSource[] {
     last_synced_at: at(-1 * dayMs),
     next_sync_at: at(-1 * dayMs + hourMs),
     documents: 0,
-    used_by: { factories: [] },
+    latest_snapshot: null,
+    used_by: { factories: [], readers: [] },
     created_by: by,
     created_at: at(-30 * dayMs),
     updated_at: at(-30 * dayMs),
@@ -299,8 +300,45 @@ export function createKnowledge({
   const out = (org: string, s: MockSource): KnowledgeSource => ({
     ...structuredClone(s.source),
     documents: s.docs.length,
-    used_by: { factories: usersOf(org, s).map((f) => ({ id: f.id, name: f.name })) },
+    latest_snapshot: snapshotOf(s),
+    used_by: {
+      factories: usersOf(org, s).map((f) => ({ id: f.id, name: f.name })),
+      readers: usersOf(org, s).map((f) => ({
+        id: f.id,
+        name: f.name,
+        agents: [],
+        stations: [],
+        lanes: [],
+        work_types: [],
+      })),
+    },
   });
+
+  /** A source's files as the mock has them: one per document, at its title as path. */
+  const filesOf = (s: MockSource) =>
+    s.docs
+      .map((d) => ({
+        source: s.source.name,
+        path: d.document.title,
+        title: d.document.title,
+        bytes: d.document.bytes,
+        version: d.document.id,
+      }))
+      .sort((a, b) => a.path.localeCompare(b.path));
+  const snapshotOf = (s: MockSource) =>
+    s.docs.length === 0
+      ? null
+      : {
+          files: s.docs.length,
+          failed: 0,
+          bytes: s.docs.reduce((n, d) => n + d.document.bytes, 0),
+          synced_at: s.source.last_synced_at ?? s.source.created_at,
+        };
+  const findIn = (files: ReturnType<typeof filesOf>, find: string) =>
+    files.filter(
+      (f) =>
+        f.path.toLowerCase().startsWith(find.toLowerCase()) || f.title.toLowerCase().startsWith(find.toLowerCase()),
+    );
 
   const event = (org: string, s: MockSource) =>
     broadcast(org, 'knowledge', {
@@ -397,7 +435,8 @@ export function createKnowledge({
         last_synced_at: null,
         next_sync_at: kind === 'live' ? null : now,
         documents: 0,
-        used_by: { factories: [] },
+        latest_snapshot: null,
+        used_by: { factories: [], readers: [] },
         created_by: by,
         created_at: now,
         updated_at: now,
@@ -624,6 +663,56 @@ export function createKnowledge({
       }
       if (rest === '/knowledge/search' && method === 'GET') {
         search(org, url, res);
+        return true;
+      }
+      if (rest === '/knowledge/check' && method === 'POST') {
+        const input = await body();
+        send(res, 200, {
+          access: { ok: true },
+          files: 12,
+          bytes: 2_400_000,
+          limits: { files: 20000, bytes: 50 << 20, file_bytes: 5 << 20 },
+          over_limit: [],
+          warnings: [],
+          line: `/knowledge/${String(input.name ?? '')} — ${String(input.read_when ?? '')} 12 files.`,
+        });
+        return true;
+      }
+      if (rest === '/knowledge/files' && method === 'GET') {
+        const find = url.searchParams.get('find') ?? '';
+        send(res, 200, {
+          files: list(org.id)
+            .flatMap((s) => findIn(filesOf(s), find))
+            .slice(0, 8),
+        });
+        return true;
+      }
+      if (rest === '/knowledge/reads' && method === 'GET') {
+        const only = url.searchParams.get('source');
+        const day = new Date().toISOString().slice(0, 10);
+        const reads = list(org.id)
+          .filter((s) => !only || s.source.name === only)
+          .flatMap((s) =>
+            filesOf(s)
+              .slice(0, 3)
+              .map((f, i) => ({
+                source: s.source.name,
+                path: f.path,
+                factory_id: '',
+                factory: 'Software',
+                day,
+                reads: 9 - i * 3,
+                searches: 0,
+              })),
+          );
+        send(res, 200, { reads });
+        return true;
+      }
+      const filesRoute = rest.match(/^\/knowledge\/sources\/([^/]+)\/files$/);
+      if (filesRoute && method === 'GET') {
+        const s = named(org.id, decodeURIComponent(filesRoute[1] ?? ''));
+        if (!s) refuse(res, 404, 'knowledge source not found', 'knowledge-source-not-found');
+        else send(res, 200, { files: findIn(filesOf(s), url.searchParams.get('find') ?? '') });
         return true;
       }
       const src = rest.match(/^\/knowledge\/sources\/([^/]+)(\/sync|\/documents)?$/);

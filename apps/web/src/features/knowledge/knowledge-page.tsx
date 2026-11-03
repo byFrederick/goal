@@ -1,57 +1,48 @@
-// Knowledge (canvas "Knowledge", ADR 0016): the organization's knowledge base. The Sources card
-// lists each source with its sync, the factories that read it and its document count; managers
-// sync, retry, upload and add from it. Below it, "Look something up" searches every source, and
-// "Where it was used" (usage-card.tsx) shows the runs that opened one source's documents. ?factory=
-// (the factory sidebar's Knowledge) shows only the sources that factory's current version lists.
-
+// Knowledge (ADR 0038 decision 12, canvas "Knowledge" and "Mobile-Knowledge"): the organization's
+// sources as folders of files. Each source shows what it says agents should read it for, where it is
+// read from, the factories that list it, its sync, its size and its reads of the last 7 days. A
+// failing source gets an alert. Find a file looks across every source by path or title; Most read
+// lists the files runs opened. ?factory= (the factory sidebar's Knowledge) shows only the sources that
+// factory's current version lists.
 import { useQuery } from '@tanstack/react-query';
-import { Link, useSearch } from '@tanstack/react-router';
+import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { BookOpen } from 'lucide-react';
-import { useState } from 'react';
-import { connectionsQuery, factoriesQuery, knowledgeSourcesQuery } from '../../api/queries';
+import { useDeferredValue } from 'react';
+import { factoriesQuery, knowledgeFindQuery, knowledgeReadsQuery, knowledgeSourcesQuery } from '../../api/queries';
 import type { KnowledgeSource } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
 import { formatClock, plural } from '../../shared/format';
-import { sourceKinds, sourceSummary } from '../../shared/knowledge';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
-import { ConnectionGlyph } from '../../ui/connection-glyph';
 import { EmptyState } from '../../ui/empty-state';
+import { SearchField } from '../../ui/search-field';
+import { Skeleton, SkeletonRows } from '../../ui/skeleton';
 import { touchLink } from '../../ui/touch-target';
-import { StatusText, SyncNowButton, UsedBy, useSyncSource } from './parts';
-import { SearchCard } from './search-card';
-import { UploadDialog } from './upload';
-import { UsageCard } from './usage-card';
-import { everyLabel, sourceStatus, syncTimes } from './words';
+import { fromDetail, mostRead, readsBySource, sizeOf } from './facts';
+import { KindLabel, StatusText, UsedBy } from './parts';
+import { formatBytes, sourceStatus } from './words';
+
+const card = 'flex min-w-0 flex-col rounded-card border border-line bg-card';
 
 export function KnowledgePage() {
   const org = useOrg();
   const search = useSearch({ from: '/o/$org/_org/knowledge/' });
   const manage = useOrgHolds('knowledge:manage');
   const listed = useQuery(factoriesQuery(org.id));
-  const factory = search.factory ? (listed.data ?? []).find((f) => f.name === search.factory) : undefined;
-  // A ?factory= the organization has no factory of (a typo, a renamed factory) is said, never unfiltered.
-  const missing = search.factory !== undefined && listed.isSuccess && !factory;
-  // The search and the usage card read every source; the Sources card is narrowed by ?factory=.
-  const everything = useQuery(knowledgeSourcesQuery(org.id));
-  const list = useQuery({
-    ...knowledgeSourcesQuery(org.id, factory ? { factory: factory.id } : {}),
-    enabled: !search.factory || factory !== undefined,
-  });
-  const sync = useSyncSource(org.id);
-  // A source holds only its connection's name; a member who can read connections gets the kind's glyph.
-  const readConnections = useOrgHolds('connection:read');
-  const connections = useQuery({ ...connectionsQuery(org.id), enabled: readConnections }).data ?? [];
-  const connectionKind = (s: KnowledgeSource) => connections.find((c) => c.name === s.connection)?.kind ?? s.kind;
-  const [uploading, setUploading] = useState<KnowledgeSource | null>(null);
+  const sourcesQ = useQuery(knowledgeSourcesQuery(org.id));
+  const readsQ = useQuery(knowledgeReadsQuery(org.id));
   const now = Date.now();
 
-  const sources = missing ? [] : (list.data ?? []);
-  const all = everything.data ?? [];
-  const selected = pickSource(sources);
+  // A ?factory= the organization has no factory of (a typo, a renamed factory) is said, never unfiltered.
+  const missing = Boolean(search.factory) && listed.isSuccess && !listed.data.some((f) => f.name === search.factory);
+  const all = sourcesQ.data ?? [];
+  const sources = search.factory ? all.filter((s) => s.used_by.factories.some((f) => f.name === search.factory)) : all;
+  const reads = readsBySource(readsQ.data ?? []);
+  const failing = all.filter((s) => s.status === 'failed');
+  const totalBytes = all.reduce((n, s) => n + (s.latest_snapshot?.bytes ?? 0), 0);
 
   const addSource = manage ? (
     <Button asChild variant="primary" className="h-11 md:h-8.5">
@@ -66,90 +57,100 @@ export function KnowledgePage() {
       <TopBarSlot crumb="Knowledge" actions={addSource} />
       <header className="flex flex-col gap-1">
         <h1 className="m-0 text-page-title">Knowledge</h1>
-        <p className="m-0 text-body text-muted">
-          What agents can look up before they act: synced documents, searched on every run.
+        <p className="m-0 max-w-[680px] text-body text-muted">
+          Folders of files agents read before they act. A factory’s definition lists the ones its runs get, read-only,
+          under <code className="font-mono">/knowledge</code>.
         </p>
       </header>
 
-      {list.isPending && !missing ? (
-        <div aria-busy="true" className="rounded-card border border-line bg-card">
-          <span role="status" className="sr-only">
-            Loading knowledge sources
-          </span>
-        </div>
-      ) : list.isError ? (
-        <div role="alert" className="flex flex-col items-start gap-3 rounded-card border border-line bg-card p-5">
-          <Callout tone="rework">Couldn’t load the knowledge sources. Check your connection and try again.</Callout>
-          <Button variant="secondary" onClick={() => void list.refetch()}>
-            Try again
+      {failing.map((s) => (
+        <div key={s.id} role="alert" className="flex flex-wrap items-center gap-3 rounded-card bg-rework-tint p-4">
+          <div className="min-w-0 flex-1">
+            <Callout tone="rework">
+              <span translate="no" className="font-medium">
+                {s.name}
+              </span>{' '}
+              couldn’t sync: {s.last_error ?? 'it stopped before the end'}.
+              {s.last_synced_at
+                ? ` Runs use its files from ${formatClock(s.last_synced_at, new Date(now))} until it syncs again.`
+                : ''}
+            </Callout>
+          </div>
+          <Button asChild variant="white" className="h-11 md:h-8.5">
+            <Link to="/o/$org/knowledge/$source" params={{ org: org.slug, source: s.name }}>
+              Open source
+            </Link>
           </Button>
         </div>
-      ) : sources.length === 0 && !search.factory ? (
-        <EmptyState
-          icon={<BookOpen size={20} strokeWidth={1.5} />}
-          title="No knowledge sources yet"
-          actions={addSource}
-        >
-          {manage
-            ? 'Upload the runbooks and docs your agents should read first, or sync a repository’s docs with a secret.'
-            : `Owners and admins of ${org.name} add knowledge sources.`}
-        </EmptyState>
-      ) : (
-        <SourcesCard
-          sources={sources}
-          factory={search.factory}
-          missing={missing}
-          manage={manage}
-          sync={sync}
-          connectionKind={connectionKind}
-          onUpload={setUploading}
-          now={now}
-        />
-      )}
+      ))}
 
-      <div className="grid items-start gap-4 @[960px]:grid-cols-2">
-        <SearchCard sources={all} />
-        <UsageCard source={selected} factories={listed.data ?? []} />
-      </div>
+      <Skeleton ready={!sourcesQ.isPending} placeholder={<ListPlaceholder />}>
+        {sourcesQ.isError ? (
+          <div role="alert" className="flex flex-col items-start gap-3 rounded-card border border-line bg-card p-5">
+            <Callout tone="rework">Couldn’t load the knowledge sources. Check your connection and try again.</Callout>
+            <Button variant="secondary" onClick={() => void sourcesQ.refetch()}>
+              Try again
+            </Button>
+          </div>
+        ) : all.length === 0 ? (
+          <EmptyState
+            icon={<BookOpen size={20} strokeWidth={1.5} />}
+            title="No knowledge sources yet"
+            actions={addSource}
+          >
+            {manage
+              ? 'Upload the runbooks and docs your agents should read first, or sync a repository or a Confluence space.'
+              : `Owners and admins of ${org.name} add knowledge sources.`}
+          </EmptyState>
+        ) : (
+          <SourcesCard
+            sources={sources}
+            reads={reads}
+            factory={search.factory}
+            missing={missing}
+            totalBytes={totalBytes}
+            now={now}
+          />
+        )}
+      </Skeleton>
 
-      <UploadDialog source={uploading} onClose={() => setUploading(null)} />
+      {all.length > 0 ? (
+        <div className="grid items-start gap-4 @[960px]:grid-cols-2">
+          <FindFile />
+          <MostRead reads={readsQ.data ?? []} pending={readsQ.isPending} />
+        </div>
+      ) : null}
     </>
   );
 }
 
-/**
- * The source whose documents the usage card lists: the stored source with the most documents, the first
- * of them on a tie. The usage is read per source, so one source is shown (ADR 0027, decision 3).
- */
-function pickSource(sources: KnowledgeSource[]): KnowledgeSource | undefined {
-  const stored = sources.filter((s) => s.kind !== 'live');
-  return stored.toSorted((a, b) => b.documents - a.documents)[0];
+function ListPlaceholder() {
+  return (
+    <div className={cn(card, 'p-5')}>
+      <SkeletonRows rows={5} />
+    </div>
+  );
 }
 
 function SourcesCard({
   sources,
+  reads,
   factory,
   missing,
-  manage,
-  sync,
-  connectionKind,
-  onUpload,
+  totalBytes,
   now,
 }: {
   sources: KnowledgeSource[];
+  reads: Map<string, number>;
   factory: string | undefined;
-  /** No factory of the organization is named `factory`. */
   missing: boolean;
-  manage: boolean;
-  sync: ReturnType<typeof useSyncSource>;
-  connectionKind: (s: KnowledgeSource) => string;
-  onUpload: (s: KnowledgeSource) => void;
+  totalBytes: number;
   now: number;
 }) {
   const org = useOrg();
 
   return (
-    <section aria-labelledby="sources-h" className="flex min-w-0 flex-col rounded-card border border-line bg-card">
+    <section aria-labelledby="sources-h" className={card}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 pt-4 pb-3">
         <h2 id="sources-h" className="m-0 text-heading">
           Sources
@@ -157,13 +158,16 @@ function SourcesCard({
         <Chip>
           <span className="tabular-nums">{sources.length}</span>
         </Chip>
+        {totalBytes > 0 && !factory ? (
+          <span className="text-secondary text-muted">{formatBytes(totalBytes)}</span>
+        ) : null}
         {factory ? (
           <>
-            <span className="text-secondary text-muted">{factory} may search</span>
+            <span className="text-secondary text-muted">{factory} reads</span>
             <Link
               to="/o/$org/knowledge"
               params={{ org: org.slug }}
-              className="ml-auto text-secondary text-ink underline underline-offset-3 hover:text-link"
+              className={cn(touchLink, 'ml-auto text-secondary text-ink underline underline-offset-3 hover:text-link')}
             >
               Show every source
             </Link>
@@ -175,7 +179,7 @@ function SourcesCard({
         <p className="m-0 border-t border-line px-5 py-4 text-body text-muted">
           {missing
             ? `${org.name} has no factory named ${factory}.`
-            : `${factory}’s current version lists no knowledge source. Its definition says which sources its agents may search.`}
+            : `${factory}’s current version lists no knowledge source.`}
         </p>
       ) : (
         <>
@@ -184,73 +188,53 @@ function SourcesCard({
             <thead>
               <tr className="bg-panel text-left text-secondary text-muted [&>th]:border-t [&>th]:border-line [&>th]:px-4 [&>th]:py-2 [&>th]:font-control">
                 <th scope="col">Source</th>
+                <th scope="col">From</th>
+                <th scope="col">Factories</th>
                 <th scope="col">Sync</th>
-                <th scope="col">Read by</th>
-                <th scope="col" className="w-30 text-right">
-                  Documents
+                <th scope="col" className="text-right">
+                  Size
+                </th>
+                <th scope="col" className="text-right">
+                  Reads, 7 days
                 </th>
               </tr>
             </thead>
             <tbody>
               {sources.map((s) => {
-                const status = sourceStatus(s);
-                const times = syncTimes(s, now);
+                const size = sizeOf(s);
                 return (
-                  <tr key={s.id} className="align-top [&>td]:border-t [&>td]:border-line [&>td]:px-4 [&>td]:py-3">
+                  <tr
+                    key={s.id}
+                    className="animate-row-in align-top [&>td]:border-t [&>td]:border-line [&>td]:px-4 [&>td]:py-3"
+                  >
                     <td className="min-w-0">
-                      <span className="flex min-w-0 items-center gap-3">
-                        <ConnectionGlyph kind={connectionKind(s)} title={sourceKinds[s.kind].label} />
-                        <span className="flex min-w-0 flex-col">
-                          <Link
-                            to="/o/$org/knowledge/$source"
-                            params={{ org: org.slug, source: s.name }}
-                            translate="no"
-                            className="font-mono text-body text-ink underline-offset-3 break-words hover:underline"
-                          >
-                            {s.name}
-                          </Link>
-                          <span className="text-meta break-words text-muted">
-                            {s.title}, {sourceSummary(s)}
-                          </span>
-                        </span>
-                      </span>
+                      <SourceName s={s} />
                     </td>
                     <td className="min-w-0">
                       <span className="flex flex-col items-start gap-1">
-                        <StatusText line={status} time={syncedAt(s, now)} busy={s.status === 'syncing'} />
-                        <span className="text-secondary text-muted">{scheduleText(s, times)}</span>
-                        {manage && s.kind === 'synced' ? (
-                          <SyncNowButton
-                            source={s}
-                            sync={sync}
-                            label={s.status === 'failed' ? 'Retry now' : 'Sync now'}
-                            className="mt-1"
-                          />
-                        ) : null}
+                        <Chip>
+                          <KindLabel kind={s.kind} />
+                        </Chip>
+                        <span className="text-secondary break-words text-muted">{fromDetail(s)}</span>
                       </span>
                     </td>
                     <td className="min-w-0">
                       <UsedBy source={s} />
                     </td>
-                    <td className="text-right">
-                      {s.kind === 'live' ? (
-                        <span className="text-muted">None stored</span>
-                      ) : (
-                        <Link
-                          to="/o/$org/knowledge/$source"
-                          params={{ org: org.slug, source: s.name }}
-                          className="tabular-nums text-ink underline underline-offset-3 hover:text-link"
-                        >
-                          {s.documents}
-                          <span className="sr-only"> documents of {s.title}, open the source</span>
-                        </Link>
-                      )}
-                      {manage && s.kind === 'upload' ? (
-                        <div className="mt-2 flex justify-end">
-                          <UploadButton source={s} onUpload={onUpload} />
-                        </div>
-                      ) : null}
+                    <td className="min-w-0">
+                      <SyncCell s={s} now={now} />
                     </td>
+                    <td className="text-right tabular-nums">
+                      {size ? (
+                        <span className="flex flex-col">
+                          <span>{size.files}</span>
+                          <span className="text-secondary text-muted">{size.bytes}</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted">None yet</span>
+                      )}
+                    </td>
+                    <td className="text-right tabular-nums">{reads.get(s.name) ?? 0}</td>
                   </tr>
                 );
               })}
@@ -262,48 +246,24 @@ function SourcesCard({
             className="m-0 flex list-none flex-col gap-3 border-t border-line p-4 @[960px]:hidden"
           >
             {sources.map((s) => {
-              const status = sourceStatus(s);
-              const times = syncTimes(s, now);
+              const size = sizeOf(s);
               return (
-                <li key={s.id} className="flex flex-col gap-2 rounded-card border border-line px-3 py-3">
-                  <div className="flex items-center gap-3">
-                    <ConnectionGlyph kind={connectionKind(s)} title={sourceKinds[s.kind].label} />
-                    <div className="flex min-w-0 flex-1 items-baseline justify-between gap-3">
-                      <Link
-                        to="/o/$org/knowledge/$source"
-                        params={{ org: org.slug, source: s.name }}
-                        translate="no"
-                        className={cn(
-                          touchLink,
-                          'min-w-0 font-mono text-body text-ink break-words underline-offset-3 hover:underline',
-                        )}
-                      >
-                        {s.name}
-                      </Link>
-                      {s.kind === 'live' ? null : (
-                        <span className="shrink-0 text-secondary text-muted">{plural(s.documents, 'document')}</span>
-                      )}
-                    </div>
-                  </div>
-                  <StatusText
-                    line={status}
-                    time={syncedAt(s, now)}
-                    busy={s.status === 'syncing'}
-                    className="text-secondary"
-                  />
-                  <span className="text-secondary text-muted">{scheduleText(s, times)}</span>
+                <li key={s.id} className="flex animate-row-in flex-col gap-2 rounded-card border border-line px-3 py-3">
+                  <SourceName s={s} />
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-secondary text-muted">
+                    <Chip>
+                      <KindLabel kind={s.kind} />
+                    </Chip>
+                    <span className="break-words">{fromDetail(s)}</span>
+                  </span>
+                  <SyncCell s={s} now={now} />
+                  <span className="flex flex-wrap items-center gap-x-3 text-secondary text-muted">
+                    <span>{size ? `${size.files}, ${size.bytes}` : 'None yet'}</span>
+                    <span className="tabular-nums">{plural(reads.get(s.name) ?? 0, 'read')}, 7 days</span>
+                  </span>
                   <span className="flex flex-wrap items-center gap-x-2 text-secondary text-muted">
                     Read by <UsedBy source={s} />
                   </span>
-                  {manage && s.kind === 'synced' ? (
-                    <SyncNowButton
-                      source={s}
-                      sync={sync}
-                      label={s.status === 'failed' ? 'Retry now' : 'Sync now'}
-                      className="h-11 self-start"
-                    />
-                  ) : null}
-                  {manage && s.kind === 'upload' ? <UploadButton source={s} onUpload={onUpload} /> : null}
                 </li>
               );
             })}
@@ -314,24 +274,147 @@ function SourcesCard({
   );
 }
 
-/** Upload… for an upload source; its name says which source the button adds to. */
-function UploadButton({ source, onUpload }: { source: KnowledgeSource; onUpload: (s: KnowledgeSource) => void }) {
+function SourceName({ s }: { s: KnowledgeSource }) {
+  const org = useOrg();
   return (
-    <Button variant="secondary" size="sm" aria-label={`Upload…, ${source.title}`} onClick={() => onUpload(source)}>
-      Upload…
-    </Button>
+    <span className="flex min-w-0 flex-col">
+      <Link
+        to="/o/$org/knowledge/$source"
+        params={{ org: org.slug, source: s.name }}
+        translate="no"
+        className={cn(touchLink, 'font-mono text-body text-ink break-words underline-offset-3 hover:underline')}
+      >
+        {s.name}
+      </Link>
+      {s.read_when ? <span className="text-secondary break-words text-muted">{s.read_when}</span> : null}
+    </span>
   );
 }
 
-/** "14:00" for a source that has synced; nothing before its first sync or while it syncs. */
-function syncedAt(s: KnowledgeSource, now: number): string | undefined {
-  if (s.kind === 'live' || s.status === 'syncing' || !s.last_synced_at) return undefined;
-  return formatClock(s.last_synced_at, new Date(now));
+function SyncCell({ s, now }: { s: KnowledgeSource; now: number }) {
+  const at =
+    s.status === 'syncing' || !s.last_synced_at || s.kind === 'live'
+      ? undefined
+      : formatClock(s.last_synced_at, new Date(now));
+  return <StatusText line={sourceStatus(s)} time={at} busy={s.status === 'syncing'} />;
 }
 
-/** Under the status: "Every hour" for a synced source, else when it next runs or what it does. */
-function scheduleText(s: KnowledgeSource, times: ReturnType<typeof syncTimes>): string {
-  if (s.kind === 'synced' && s.status !== 'syncing')
-    return `Every ${everyLabel(s.sync_every_seconds).replace(/^1 /, '')}`;
-  return times.next ?? times.last;
+/** Find a file: files whose path or title starts with the query, across every source; the query is in the URL (?q=). */
+function FindFile() {
+  const org = useOrg();
+  const search = useSearch({ from: '/o/$org/_org/knowledge/' });
+  const navigate = useNavigate({ from: '/o/$org/knowledge/' });
+  const q = search.q ?? '';
+  const asked = useDeferredValue(q.trim());
+  const found = useQuery({ ...knowledgeFindQuery(org.id, asked), enabled: asked !== '' });
+
+  return (
+    <section aria-labelledby="find-h" className={card}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 px-5 py-3">
+        <h2 id="find-h" className="m-0 text-heading">
+          Find a file
+        </h2>
+        <span className="text-secondary text-muted">By path or title, across every source</span>
+      </div>
+      <div className="flex flex-col gap-3 border-t border-line p-4">
+        <SearchField
+          value={q}
+          onChange={(v) =>
+            void navigate({ search: (prev) => ({ ...prev, q: v === '' ? undefined : v }), replace: true })
+          }
+          label="Find a file"
+        />
+        {asked === '' ? null : found.isError ? (
+          <Callout tone="rework">Couldn’t search the files. Try again.</Callout>
+        ) : found.data && found.data.length === 0 ? (
+          <p className="m-0 text-body text-muted">No file matches “{asked}”.</p>
+        ) : (
+          <ul aria-label="Files found" className="m-0 flex list-none flex-col p-0">
+            {(found.data ?? []).map((f) => (
+              <li key={`${f.source}/${f.path}`} className="animate-row-in border-t border-line first:border-t-0">
+                <Link
+                  to="/o/$org/knowledge/$source"
+                  params={{ org: org.slug, source: f.source }}
+                  search={{ find: f.path }}
+                  className={cn(
+                    touchLink,
+                    'flex min-w-0 items-start justify-between gap-3 py-2 text-ink hover:text-link',
+                  )}
+                >
+                  <span className="flex min-w-0 flex-col">
+                    <span translate="no" className="font-mono text-body break-all">
+                      {f.source}/{f.path}
+                    </span>
+                    <span className="text-secondary break-words text-muted">{f.title}</span>
+                  </span>
+                  <span className="shrink-0 text-secondary text-muted tabular-nums">{formatBytes(f.bytes)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function MostRead({ reads, pending }: { reads: Parameters<typeof mostRead>[0]; pending: boolean }) {
+  const org = useOrg();
+  const rows = mostRead(reads);
+
+  return (
+    <section aria-labelledby="most-h" className={card}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 px-5 py-3">
+        <h2 id="most-h" className="m-0 text-heading">
+          Most read
+        </h2>
+        <span className="text-secondary text-muted">Files runs opened, last 7 days</span>
+      </div>
+      <Skeleton
+        ready={!pending}
+        placeholder={
+          <div className="border-t border-line p-4">
+            <SkeletonRows rows={5} />
+          </div>
+        }
+      >
+        {rows.length === 0 ? (
+          <p className="m-0 border-t border-line px-5 py-4 text-body text-muted">No run has opened a file yet.</p>
+        ) : (
+          <table className="w-full border-collapse text-body">
+            <caption className="sr-only">Most read files</caption>
+            <thead>
+              <tr className="text-left text-secondary text-muted [&>th]:border-t [&>th]:border-line [&>th]:px-5 [&>th]:py-2 [&>th]:font-control">
+                <th scope="col">File</th>
+                <th scope="col" className="text-right">
+                  Runs
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr
+                  key={`${r.source}/${r.path}`}
+                  className="animate-row-in [&>td]:border-t [&>td]:border-line [&>td]:px-5 [&>td]:py-2.5"
+                >
+                  <td className="min-w-0">
+                    <Link
+                      to="/o/$org/knowledge/$source"
+                      params={{ org: org.slug, source: r.source }}
+                      search={{ find: r.path }}
+                      translate="no"
+                      className={cn(touchLink, 'font-mono text-ink break-all underline-offset-3 hover:underline')}
+                    >
+                      {r.source}/{r.path}
+                    </Link>
+                  </td>
+                  <td className="text-right tabular-nums">{r.reads}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Skeleton>
+    </section>
+  );
 }
