@@ -1462,12 +1462,22 @@ const envCI = "ci-box"
 func environmentBundle(t *testing.T, env string, rules ...domain.NewServerStandingRule) (runBundle, []byte) {
 	t.Helper()
 
+	return cappedEnvironmentBundle(t, env, nil, rules...)
+}
+
+// cappedEnvironmentBundle is environmentBundle with mcpCap as the organization policy's MCP tool
+// mode cap.
+func cappedEnvironmentBundle(
+	t *testing.T, env string, mcpCap map[string]domain.ConnectionToolMode, rules ...domain.NewServerStandingRule,
+) (runBundle, []byte) {
+	t.Helper()
+
 	yaml := strings.Replace(secretsBundleYAML("https://github.com/acme/api.git", ""),
 		"{ name: engineer, prompt: ./agents/engineer.md }", "{ name: engineer, prompt: ./agents/engineer.md, environment: ci-box }", 1)
 	files := maps.Clone(secretsBundleFiles)
 	files["environments/ci-box.yaml"] = "apiVersion: goal/v1\nkind: Environment\nspec:\n" + env
 
-	h := newHarnessWith(t, Config{}, harnessDeps{yaml: yaml, files: files})
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: yaml, files: files, mcpCap: mcpCap})
 	it := h.submit(t, factoryID, "Add a health endpoint", "")
 	ctx := domain.WithOrg(t.Context(), h.org)
 
@@ -1557,6 +1567,29 @@ func TestBundle_EnvironmentToolModesWithStandingRule(t *testing.T) {
 
 	want := []bundleToolMode{
 		{Tool: "create_comment", Mode: domain.ToolModeAllow}, {Tool: "delete_*", Mode: domain.ToolModeOff}, {Tool: "close_*", Mode: domain.ToolModeAsk},
+	}
+	if servers := got.Spec.Environment.MCPServers; len(servers) != 1 || !reflect.DeepEqual(servers[0].ToolModes, want) {
+		t.Errorf("mcp_servers %+v; want linear with tool_modes %+v", servers, want)
+	}
+}
+
+// ADR 0037 decisions 8 and 12: the organization policy's MCP tool mode cap applies to the file's
+// modes, the stricter winning: allow under an ask cap is ask, off stays off, and a standing rule
+// does not lift an ask the cap keeps.
+func TestBundle_EnvironmentToolModesUnderThePolicyCap(t *testing.T) {
+	t.Parallel()
+
+	got, _ := cappedEnvironmentBundle(t, `  mcp:
+    linear:
+      url: https://mcp.linear.example.com/mcp
+      tools: {create_issue: allow, create_comment: ask, "delete_*": off}
+`, map[string]domain.ConnectionToolMode{"*": domain.ToolModeAsk},
+		domain.NewServerStandingRule{Factory: factoryID, Environment: envCI, Server: "linear", Tool: "create_comment", Agent: agentEngineer},
+	)
+
+	want := []bundleToolMode{
+		{Tool: "create_comment", Mode: domain.ToolModeAsk}, {Tool: "create_issue", Mode: domain.ToolModeAsk},
+		{Tool: "delete_*", Mode: domain.ToolModeOff}, {Tool: "*", Mode: domain.ToolModeAsk},
 	}
 	if servers := got.Spec.Environment.MCPServers; len(servers) != 1 || !reflect.DeepEqual(servers[0].ToolModes, want) {
 		t.Errorf("mcp_servers %+v; want linear with tool_modes %+v", servers, want)
