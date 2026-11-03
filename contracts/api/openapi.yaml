@@ -10327,7 +10327,7 @@ components:
     KnowledgeSource:
       type: object
       description: One source of the organization's knowledge base (spec 4 §4.8)
-      required: [id, name, title, kind, config, read_when, sync_every_seconds, status, last_synced_at, next_sync_at, documents, used_by, created_by, created_at, updated_at]
+      required: [id, name, title, kind, config, read_when, sync_every_seconds, status, last_synced_at, next_sync_at, documents, latest_snapshot, used_by, created_by, created_at, updated_at]
       properties:
         id: { type: string }
         name: { $ref: "#/components/schemas/KnowledgeSourceName" }
@@ -10351,21 +10351,48 @@ components:
         last_error: { type: string }
         last_synced_at: { type: string, format: date-time, nullable: true }
         next_sync_at: { type: string, format: date-time, nullable: true, description: "When it is due next; null for a live source" }
-        documents: { type: integer, description: How many documents it has }
+        documents: { type: integer, description: "Deprecated: use latest_snapshot.files. How many files its latest snapshot holds; 0 without one" }
+        latest_snapshot:
+          description: Its newest snapshot; null before the first sync
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/KnowledgeSnapshotSummary" }]
         embed_model: { type: string, description: "The model its chunks are embedded with; absent when they have no embeddings" }
         used_by: { $ref: "#/components/schemas/KnowledgeSourceUsers" }
         created_by: { $ref: "#/components/schemas/Actor" }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+    KnowledgeSnapshotSummary:
+      type: object
+      description: A source's newest snapshot
+      required: [files, failed, bytes, synced_at]
+      properties:
+        files: { type: integer, description: How many files it holds }
+        failed: { type: integer, description: How many files failed to fetch or convert }
+        bytes: { type: integer, format: int64, description: Its files' Markdown together }
+        synced_at: { type: string, format: date-time, description: When it was written }
     KnowledgeSourceUsers:
       type: object
       description: What uses a source, so it cannot be deleted meanwhile
-      required: [factories]
+      required: [factories, readers]
       properties:
         factories:
           type: array
           description: The factories whose current version may search it (those the caller sees)
           items: { $ref: "#/components/schemas/ConnectionFactory" }
+        readers:
+          type: array
+          description: The same factories with who reads it in each; every list empty means every run
+          items: { $ref: "#/components/schemas/KnowledgeSourceReader" }
+    KnowledgeSourceReader:
+      type: object
+      required: [id, name, agents, stations, lanes, work_types]
+      properties:
+        id: { type: string, description: The factory's metadata.id }
+        name: { type: string }
+        agents: { type: array, items: { type: string } }
+        stations: { type: array, items: { type: string } }
+        lanes: { type: array, items: { type: string } }
+        work_types: { type: array, items: { type: string } }
     KnowledgeSourceKind:
       type: string
       description: >-

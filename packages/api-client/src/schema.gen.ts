@@ -8471,8 +8471,10 @@ export interface components {
              * @description When it is due next; null for a live source
              */
             next_sync_at: string | null;
-            /** @description How many documents it has */
+            /** @description Deprecated: use latest_snapshot.files. How many files its latest snapshot holds; 0 without one */
             documents: number;
+            /** @description Its newest snapshot; null before the first sync */
+            latest_snapshot: components["schemas"]["KnowledgeSnapshotSummary"] | null;
             /** @description The model its chunks are embedded with; absent when they have no embeddings */
             embed_model?: string;
             used_by: components["schemas"]["KnowledgeSourceUsers"];
@@ -8482,10 +8484,38 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description A source's newest snapshot */
+        KnowledgeSnapshotSummary: {
+            /** @description How many files it holds */
+            files: number;
+            /** @description How many files failed to fetch or convert */
+            failed: number;
+            /**
+             * Format: int64
+             * @description Its files' Markdown together
+             */
+            bytes: number;
+            /**
+             * Format: date-time
+             * @description When it was written
+             */
+            synced_at: string;
+        };
         /** @description What uses a source, so it cannot be deleted meanwhile */
         KnowledgeSourceUsers: {
             /** @description The factories whose current version may search it (those the caller sees) */
             factories: components["schemas"]["ConnectionFactory"][];
+            /** @description The same factories with who reads it in each; every list empty means every run */
+            readers: components["schemas"]["KnowledgeSourceReader"][];
+        };
+        KnowledgeSourceReader: {
+            /** @description The factory's metadata.id */
+            id: string;
+            name: string;
+            agents: string[];
+            stations: string[];
+            lanes: string[];
+            work_types: string[];
         };
         /**
          * @description upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over

@@ -5,11 +5,16 @@
 import { orgPath, unwrap } from '@goal/api-client';
 import { apiBase, cancel, goal } from './client';
 import type {
+  KnowledgeCheck,
+  KnowledgeCheckInput,
   KnowledgeDocument,
   KnowledgeDocumentPage,
   KnowledgeDocumentText,
   KnowledgeDocumentUsePage,
+  KnowledgeFile,
+  KnowledgeFilePage,
   KnowledgeHit,
+  KnowledgeReadCount,
   KnowledgeSource,
   KnowledgeSourcePatch,
   KnowledgeUsage,
@@ -178,4 +183,69 @@ export function listKnowledgeDocumentUses(
       ...cancel(signal),
     }),
   );
+}
+
+/** Checks a source's settings as Add a source has them, storing nothing. */
+export function checkKnowledgeSource(
+  org: string,
+  input: KnowledgeCheckInput,
+  signal?: AbortSignal,
+): Promise<KnowledgeCheck> {
+  return unwrap(goal.POST(orgPath('/knowledge/check'), { params: { path: { org } }, body: input, ...cancel(signal) }));
+}
+
+/** The files whose path or title starts with `find`, across every source. */
+export async function findKnowledgeFiles(
+  org: string,
+  find: string,
+  limit?: number,
+  signal?: AbortSignal,
+): Promise<KnowledgeFile[]> {
+  const body = await unwrap(
+    goal.GET(orgPath('/knowledge/files'), {
+      params: { path: { org }, query: { find, ...(limit ? { limit } : {}) } },
+      ...cancel(signal),
+    }),
+  );
+  return body.files;
+}
+
+/** One page of a source's current files in path order; `find` narrows them by path or title. */
+export function listKnowledgeFiles(
+  org: string,
+  source: string,
+  page: { find?: string | undefined; after?: string | undefined; limit?: number },
+  signal?: AbortSignal,
+): Promise<KnowledgeFilePage> {
+  return unwrap(
+    goal.GET(orgPath('/knowledge/sources/{source}/files'), {
+      params: {
+        path: { org, source },
+        query: {
+          ...(page.find ? { find: page.find } : {}),
+          ...(page.after ? { after: page.after } : {}),
+          ...(page.limit ? { limit: page.limit } : {}),
+        },
+      },
+      ...cancel(signal),
+    }),
+  );
+}
+
+/** The daily reads and searches of one source, or of every one, over the last `days` days (7 when absent). */
+export async function listKnowledgeReads(
+  org: string,
+  filter: { source?: string | undefined; days?: number } = {},
+  signal?: AbortSignal,
+): Promise<KnowledgeReadCount[]> {
+  const body = await unwrap(
+    goal.GET(orgPath('/knowledge/reads'), {
+      params: {
+        path: { org },
+        query: { ...(filter.source ? { source: filter.source } : {}), ...(filter.days ? { days: filter.days } : {}) },
+      },
+      ...cancel(signal),
+    }),
+  );
+  return body.reads;
 }

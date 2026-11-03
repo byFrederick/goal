@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -19,6 +20,7 @@ import (
 const (
 	factoryBuilder = "builder"
 	kbHandbook     = "handbook"
+	kbArchive      = "archive"
 )
 
 // A source a factory's published version lists, as a name or an entry, is listed as used by it,
@@ -38,7 +40,7 @@ func TestKnowledge_DeleteRefusedWhileAPublishedVersionListsIt(t *testing.T) {
 		authz: AllowAll{}, clock: porttest.NewClock(mxNow),
 	}
 
-	for _, n := range []string{kbHandbook, "archive"} {
+	for _, n := range []string{kbHandbook, kbArchive} {
 		if _, err := kb.CreateSource(ctx, domain.NewKnowledgeSource{Name: n, Title: n, Kind: domain.SourceUpload}, domain.LocalUser); err != nil {
 			t.Fatal(err)
 		}
@@ -56,7 +58,7 @@ func TestKnowledge_DeleteRefusedWhileAPublishedVersionListsIt(t *testing.T) {
 		t.Errorf("delete of a source in use = %v (%d %s); want 409 knowledge-source-in-use", err, p.Status, deref(p.Code))
 	}
 
-	if _, err := s.DeleteKnowledgeSource(ctx, gen.DeleteKnowledgeSourceRequestObject{Source: "archive"}); err != nil {
+	if _, err := s.DeleteKnowledgeSource(ctx, gen.DeleteKnowledgeSourceRequestObject{Source: kbArchive}); err != nil {
 		t.Errorf("delete of a source no factory searches = %v", err)
 	}
 }
@@ -116,5 +118,67 @@ func TestKnowledgeProblem_Codes(t *testing.T) {
 		if p := problemOf(tt.err); p.Status != tt.status || deref(p.Code) != tt.code {
 			t.Errorf("%v = %d %q, want %d %q", tt.err, p.Status, deref(p.Code), tt.status, tt.code)
 		}
+	}
+}
+
+// A source's readers are the visible factories whose current version lists it, each with the
+// scope of its entry; a plain entry has empty lists, which means every run.
+func TestKnowledge_SourceReaders(t *testing.T) {
+	t.Parallel()
+
+	tenancy, ctx := builderOrg(t)
+	kb := porttest.NewKnowledge(porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy), tenancy)
+
+	f := &config.Factory{}
+	f.Metadata.ID, f.Metadata.Name = string(mxF), factoryBuilder
+	f.Spec.Knowledge = &config.Knowledge{Sources: []config.KnowledgeSource{
+		{Name: kbHandbook, AppliesTo: domain.RuleScope{Agents: []string{"reviewer"}, Lanes: []string{"fix"}}},
+		{Name: kbArchive},
+	}}
+
+	s := &server{
+		factories: oneFactory{f}, defs: definitionsOf(ctx, t, f, false), knowledge: kb, uploads: knowledge.NewUploads(kb, porttest.NewObjectStore(), 0),
+		authz: AllowAll{}, clock: porttest.NewClock(mxNow),
+	}
+
+	for _, n := range []string{kbHandbook, kbArchive} {
+		if _, err := kb.CreateSource(ctx, domain.NewKnowledgeSource{Name: n, Title: n, Kind: domain.SourceUpload}, domain.LocalUser); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	list, err := s.ListKnowledgeSources(ctx, gen.ListKnowledgeSourcesRequestObject{})
+
+	got, ok := list.(gen.ListKnowledgeSources200JSONResponse)
+	if err != nil || !ok || len(got.Sources) != 2 {
+		t.Fatalf("sources = %+v, %v; want two", list, err)
+	}
+
+	byName := map[string]gen.KnowledgeSource{}
+	for _, src := range got.Sources {
+		byName[src.Name] = src
+	}
+
+	checkReaders(t, byName[kbHandbook].UsedBy.Readers, []string{"reviewer"}, []string{"fix"})
+	checkReaders(t, byName[kbArchive].UsedBy.Readers, nil, nil)
+
+	one, err := s.GetKnowledgeSource(ctx, gen.GetKnowledgeSourceRequestObject{Source: kbHandbook})
+	if g, ok := one.(gen.GetKnowledgeSource200JSONResponse); err != nil || !ok || len(g.UsedBy.Readers) != 1 {
+		t.Errorf("get = %+v, %v; want the same reader", one, err)
+	}
+}
+
+// checkReaders checks that readers is the builder factory alone, scoped to agents and lanes, with
+// the other lists empty and not null.
+func checkReaders(t *testing.T, readers []gen.KnowledgeSourceReader, agents, lanes []string) {
+	t.Helper()
+
+	if len(readers) != 1 || readers[0].Name != factoryBuilder {
+		t.Fatalf("readers = %+v; want builder alone", readers)
+	}
+
+	r := readers[0]
+	if !slices.Equal(r.Agents, agents) || !slices.Equal(r.Lanes, lanes) || r.Stations == nil || len(r.Stations) != 0 || r.WorkTypes == nil || len(r.WorkTypes) != 0 {
+		t.Errorf("reader = %+v; want agents %v, lanes %v, no stations or work types", r, agents, lanes)
 	}
 }

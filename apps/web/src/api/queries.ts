@@ -84,6 +84,7 @@ import {
 import { definitionFile, getIntake, getIntakeTrigger, tryIntakeTrigger } from './intake';
 import { listApiKeys, listMemberTokens, listPersonalTokens } from './keys';
 import {
+  findKnowledgeFiles,
   getKnowledgeDocument,
   getKnowledgeSource,
   getKnowledgeUsage,
@@ -91,6 +92,8 @@ import {
   type KnowledgeSourceFilter,
   listKnowledgeDocuments,
   listKnowledgeDocumentUses,
+  listKnowledgeFiles,
+  listKnowledgeReads,
   listKnowledgeSources,
   searchKnowledge,
 } from './knowledge';
@@ -198,6 +201,11 @@ export const keys = {
   spend: (org: string, window: SpendWindow) => ['org', org, 'spend', window] as const,
   knowledgeSources: (org: string, filter: KnowledgeSourceFilter) =>
     ['org', org, 'knowledge', 'sources', filter] as const,
+  knowledgeFiles: (org: string, name: string, find: string) =>
+    ['org', org, 'knowledge', 'source', name, 'files', find] as const,
+  knowledgeFind: (org: string, find: string) => ['org', org, 'knowledge', 'find', find] as const,
+  knowledgeReads: (org: string, source: string, days: number) =>
+    ['org', org, 'knowledge', 'reads', source, days] as const,
   knowledgeSource: (org: string, name: string) => ['org', org, 'knowledge', 'source', name] as const,
   knowledgeDocuments: (org: string, name: string) => ['org', org, 'knowledge', 'source', name, 'documents'] as const,
   knowledgeDocument: (org: string, id: string) => ['org', org, 'knowledge', 'document', id] as const,
@@ -453,6 +461,31 @@ export const knowledgeSourcesQuery = (org: string, filter: KnowledgeSourceFilter
   queryOptions({
     queryKey: keys.knowledgeSources(org, filter),
     queryFn: ({ signal }) => listKnowledgeSources(org, filter, signal),
+    staleTime: 30_000,
+  });
+
+/** The files of a source's current snapshot, in path order; `find` narrows by path or title. */
+export const knowledgeFilesQuery = (org: string, name: string, find = '') =>
+  queryOptions({
+    queryKey: keys.knowledgeFiles(org, name, find),
+    queryFn: ({ signal }) => listKnowledgeFiles(org, name, { find, limit: 1000 }, signal).then((p) => p.files),
+    staleTime: 30_000,
+  });
+
+/** The files whose path or title starts with `find`, across every source. */
+export const knowledgeFindQuery = (org: string, find: string) =>
+  queryOptions({
+    queryKey: keys.knowledgeFind(org, find),
+    queryFn: ({ signal }) => findKnowledgeFiles(org, find, 8, signal),
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
+
+/** The reads of every source, or of one, over the last `days` days (UTC days, today counting). */
+export const knowledgeReadsQuery = (org: string, source = '', days = 7) =>
+  queryOptions({
+    queryKey: keys.knowledgeReads(org, source, days),
+    queryFn: ({ signal }) => listKnowledgeReads(org, { source, days }, signal),
     staleTime: 30_000,
   });
 
