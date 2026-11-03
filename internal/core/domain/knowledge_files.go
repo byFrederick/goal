@@ -1,9 +1,12 @@
 package domain
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
+	"net/url"
 	"path"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -122,6 +125,131 @@ type KnowledgeFileReads struct {
 	Searches int
 }
 
+// KnowledgeSourceRoot is the path a search of a whole source counts at: a search names a folder,
+// and the source's own folder has no path of its own.
+const KnowledgeSourceRoot = "."
+
+// KnowledgeTouch is what one Read, Grep or Glob call of a run did under KnowledgeRoot (ADR 0038
+// decision 10): a Read of the file Path of Source, or with Search a Grep or Glob of the folder or
+// file Path (KnowledgeSourceRoot for the whole source).
+type KnowledgeTouch struct {
+	Source string
+	Path   string
+	Search bool
+}
+
+// TouchOfKnowledge is what the call of tool on the path p, as the worker reports it, did under
+// KnowledgeRoot: ok only for a Read of a file in a source's folder, or a Grep or Glob of a source's
+// folder or anything in it. Every other tool, a relative path, a path outside the sources' folders
+// or one that is no file's path is no touch.
+func TouchOfKnowledge(tool, p string) (KnowledgeTouch, bool) {
+	search := tool == "Grep" || tool == "Glob"
+	if (!search && tool != "Read") || !path.IsAbs(p) {
+		return KnowledgeTouch{}, false
+	}
+
+	rest, ok := strings.CutPrefix(path.Clean(p), KnowledgeRoot+"/")
+	if !ok {
+		return KnowledgeTouch{}, false
+	}
+
+	source, rel, _ := strings.Cut(rest, "/")
+
+	switch {
+	case rel == "" && search:
+		rel = KnowledgeSourceRoot
+	case rel == "" || CheckFilePath(rel) != nil:
+		return KnowledgeTouch{}, false
+	}
+
+	return KnowledgeTouch{Source: source, Path: rel, Search: search}, true
+}
+
+// KnowledgeTally adds up one run's touches of the sources it pinned, to count them once the run
+// ends (ports.Knowledge.AddReads).
+type KnowledgeTally struct {
+	pinned map[string]bool
+	counts map[KnowledgeTouch]int
+}
+
+// NewKnowledgeTally counts the touches of the sources of pins only.
+func NewKnowledgeTally(pins []KnowledgePin) *KnowledgeTally {
+	t := &KnowledgeTally{pinned: make(map[string]bool, len(pins)), counts: map[KnowledgeTouch]int{}}
+	for _, p := range pins {
+		t.pinned[p.Source] = true
+	}
+
+	return t
+}
+
+// Add counts the call of tool on the path p when it touched a pinned source (TouchOfKnowledge).
+func (t *KnowledgeTally) Add(tool, p string) {
+	if k, ok := TouchOfKnowledge(tool, p); ok && t.pinned[k.Source] {
+		t.counts[k]++
+	}
+}
+
+// Sources are the names of the sources touched, sorted.
+func (t *KnowledgeTally) Sources() []string {
+	seen := map[string]bool{}
+
+	var out []string
+
+	for k := range t.counts {
+		if !seen[k.Source] {
+			seen[k.Source] = true
+			out = append(out, k.Source)
+		}
+	}
+
+	slices.Sort(out)
+
+	return out
+}
+
+// Reads are the counts as factory's on the day of at, one per source and path, by source name then
+// path; ids gives each source's id by name, and a source without one is left out.
+func (t *KnowledgeTally) Reads(ids map[string]KnowledgeSourceID, factory FactoryID, at time.Time) []KnowledgeFileReads {
+	type key struct{ source, path string }
+
+	sums := map[key]*KnowledgeFileReads{}
+
+	var keys []key
+
+	for k, n := range t.counts {
+		id, ok := ids[k.Source]
+		if !ok {
+			continue
+		}
+
+		kk := key{k.Source, k.Path}
+
+		r := sums[kk]
+		if r == nil {
+			r = &KnowledgeFileReads{Source: id, Path: k.Path, Factory: factory, Day: KnowledgeDay(at)}
+			sums[kk] = r
+			keys = append(keys, kk)
+		}
+
+		if k.Search {
+			r.Searches += n
+		} else {
+			r.Reads += n
+		}
+	}
+
+	slices.SortFunc(keys, func(a, b key) int {
+		return cmp.Or(strings.Compare(a.source, b.source), strings.Compare(a.path, b.path))
+	})
+
+	out := make([]KnowledgeFileReads, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, *sums[k])
+	}
+
+	return out
+}
+
 // KnowledgeDay is the day t counts on: its UTC date, at midnight.
 func KnowledgeDay(t time.Time) time.Time {
 	y, m, d := t.UTC().Date()
@@ -129,10 +257,18 @@ func KnowledgeDay(t time.Time) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
-// Check enforces the rules of one count: a source, a file's path, a factory, a day and counts
-// that are not negative and not both zero. Errors wrap ErrInvalid.
+// Check enforces the rules of one count: a source, a file's path (or KnowledgeSourceRoot for
+// searches only), a factory, a day and counts that are not negative and not both zero. Errors wrap
+// ErrInvalid.
 func (r KnowledgeFileReads) Check() error {
-	errs := []error{CheckFilePath(r.Path)}
+	var errs []error
+
+	switch {
+	case r.Path != KnowledgeSourceRoot:
+		errs = append(errs, CheckFilePath(r.Path))
+	case r.Reads != 0:
+		errs = append(errs, fmt.Errorf("a source's own folder is searched, never read: %w", ErrInvalid))
+	}
 
 	if r.Source == "" || r.Factory == "" || r.Day.IsZero() {
 		errs = append(errs, fmt.Errorf("a read count names its source, factory and day: %w", ErrInvalid))
@@ -253,6 +389,47 @@ func CheckReadWhen(s string) error {
 	}
 
 	return nil
+}
+
+// SourceRepositoryKey is the config key of the repository a Repository source, or a synced source
+// read by gitdocs, reads.
+const SourceRepositoryKey = "repository"
+
+// CopiesCheckout reports whether s reads the repository at checkout: a Repository source, or a
+// synced source that gitdocs reads, until the cut-over converts it (ADR 0038 decision 16), whose
+// repository has the same host and path, whatever their case, a trailing slash or .git.
+func (s KnowledgeSource) CopiesCheckout(checkout string) bool {
+	if s.Kind != SourceRepository && s.Kind != SourceSynced {
+		return false
+	}
+
+	a, b := repositoryKey(s.Config[SourceRepositoryKey]), repositoryKey(checkout)
+
+	return a != "" && a == b
+}
+
+// repositoryKey is a repository URL as host/owner/repo in lower case, "" for a value that is not
+// an absolute URL.
+func repositoryKey(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" {
+		return ""
+	}
+
+	p := strings.TrimSuffix(strings.Trim(u.Path, "/"), ".git")
+	if p == "" {
+		return ""
+	}
+
+	return strings.ToLower(u.Host + "/" + p)
+}
+
+// SourceCheck is what listing a source with settings not saved yet found (ADR 0038 decision 12's
+// Check): Error says why it could not be listed ("" when it could), and Files how many items it
+// lists, counting at most MaxSourceFiles+1, past which a sync fails.
+type SourceCheck struct {
+	Error string
+	Files int
 }
 
 // KnowledgeEntry is one source of a factory's knowledge.sources (ADR 0038 decision 5): the source's

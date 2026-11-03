@@ -66,9 +66,10 @@ The gateway no longer serves `knowledge__search`, `knowledge__read` or `knowledg
 ## Where you meet it
 
 - In the web app, Knowledge lists the sources with their status and schedule, and **Add a source** is in its top bar. A source's page has **Sync now** in its top bar for a synced source, and shows its documents, settings and the factories that read it.
-- `goal knowledge sources` lists the sources with their kind, status and document count.
-- `goal knowledge add`, `sync`, `upload`, `documents` and `rm` manage sources and their documents.
-- `goal knowledge search "<query>"` searches the documents.
-- `goal knowledge usage` and `uses` show how the documents are used, and `verdict` records a rating by hand.
+- `goal knowledge sources` lists the sources with their kind, status and read-when line.
+- `goal knowledge add`, `check`, `sync`, `upload` and `rm` manage sources and their uploaded files. `add --factories a,b` lists the new source in each factory's draft and never publishes.
+- `goal knowledge files` lists a source's files or finds one across sources, and `cat` prints one as runs read it.
+- `goal knowledge reads` shows how often runs read each file and searched each folder under `/knowledge`.
+- `goal memory list`, `add` and `rm` edit the factory memory in a factory's draft; `add --publish` publishes the draft too.
 
 The flags are in the [CLI reference](../../reference/). The [glossary](../../reference/) defines the terms.

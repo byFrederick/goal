@@ -143,31 +143,37 @@ usage:
                                                   and file with a secret, with its factories and
                                                   environments, secrets and status (tested, failed,
                                                   untested, expiring, expired, missing, ok)
-  goal knowledge sources [--factory F]            the knowledge base's sources: kind, status, documents,
-                                                  last and next sync, the factories that search them
-  goal knowledge add <name> --kind upload|synced|live [--secret S] [--connection C] [--config k=v]... [--title T] [--every 1h]
-                                                  add a source (owners and admins); a synced one reads
-                                                  with secret S, --config names its reader and what it
-                                                  reads (reader=gitdocs repository=URL, or
-                                                  reader=confluence site=… email=… spaces=ENG); a live
-                                                  one reads connection C
+  goal knowledge sources [--factory F]            the knowledge sources: kind, status, last and next
+                                                  sync, the factories that list them, the read-when line
+  goal knowledge add <name> --kind upload|repository|confluence --read-when "<line>" [--factories a,b] [--secret S] [--config k=v]... [--title T] [--every 1h]
+                                                  add a source (owners and admins); a repository or
+                                                  Confluence one reads with secret S, --config says what
+                                                  (repository=URL branch=… include=…, or site=… email=…
+                                                  spaces=ENG); --factories lists it in each one's draft
+                                                  factory.yaml, never publishing
+  goal knowledge check <name> --kind … [same flags as add]
+                                                  a dry run of add: whether goald can read it, its file
+                                                  count against the limits, each factory's warnings and
+                                                  the line agents will see; saves nothing
   goal knowledge sync <source>                    sync it now
-  goal knowledge upload <source> <file>...        upload text, Markdown, HTML, JSON or YAML files to an
-                                                  upload source; indexed at its next sync
-  goal knowledge documents <source>               its documents: id, title, status, size
-  goal knowledge rm <document>                    delete an uploaded document
-  goal knowledge search "<query>" [--source S]... [--limit N]
-                                                  search as agents do: the best passages first, with
-                                                  their document ids or links
-  goal knowledge usage [--source S] [--days N] [--json]
-                                                  each document's use over the window (default 7
-                                                  days, at most 90), of S or every source: runs,
-                                                  helped and misled, the people's share in brackets
-  goal knowledge uses <document> [--json]         the runs that used it, newest first: item, factory,
-                                                  search or read, first use
-  goal knowledge verdict <document> helped|misled [--run R] [--note TEXT] [--json]
-                                                  give your verdict on it, of a run that used it
-                                                  with --run
+  goal knowledge files <source> [--find P]        its current files: path, size, title (--find: those
+                                                  whose path or title starts with P)
+  goal knowledge files --find P                   find a file across every source
+  goal knowledge cat <source> <path>              one file's Markdown, as runs read it under
+                                                  /knowledge/<source>/<path>
+  goal knowledge upload <source> <file|dir>...    upload text, Markdown, HTML, JSON or YAML files to an
+                                                  upload source, a folder's files at their paths below
+                                                  it; its next sync takes them
+  goal knowledge rm <source> [<path>]             delete the source, or one of an upload source's files
+  goal knowledge reads [--source S] [--days N]    how often runs read each file and searched each folder
+                                                  under /knowledge over the window (default 7 days, at
+                                                  most 90), by factory, the most read first
+  goal memory list <factory>                      the factory memory in its draft (memory.yaml), numbered
+  goal memory add <factory> "<text>" [--from <factory>#<n>] [--publish]
+                                                  add a fact to the draft's memory.yaml, dated today
+                                                  (--from: the items it came from, comma-separated;
+                                                  --publish: publish the draft after it)
+  goal memory rm <factory> <n>                    remove the n-th fact from the draft's memory.yaml
   goal search "<query>" [--limit N] [--json]      search the organization's items, agents, factories
                                                   and connections, by group, best first (--limit: per
                                                   group, 1 to 20, default 5; --json: goald's answer as
@@ -285,7 +291,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one
+Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or

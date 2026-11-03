@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/byFrederick/goal/internal/api/gen"
@@ -20,9 +21,9 @@ const (
 	kbHandbook     = "handbook"
 )
 
-// A source a factory's current version may search is listed as used by it, filtered by it, and
-// not deleted (409 knowledge-source-in-use, naming the factory).
-func TestKnowledge_SourceInUseByAFactory(t *testing.T) {
+// A source a factory's published version lists, as a name or an entry, is listed as used by it,
+// filtered by it, and not deleted (409 knowledge-source-in-use, naming the factory).
+func TestKnowledge_DeleteRefusedWhileAPublishedVersionListsIt(t *testing.T) {
 	t.Parallel()
 
 	tenancy, ctx := builderOrg(t)
@@ -30,7 +31,7 @@ func TestKnowledge_SourceInUseByAFactory(t *testing.T) {
 
 	f := &config.Factory{}
 	f.Metadata.ID, f.Metadata.Name = string(mxF), factoryBuilder
-	f.Spec.Knowledge = &config.Knowledge{Sources: []config.KnowledgeSource{{Name: kbHandbook}}}
+	f.Spec.Knowledge = &config.Knowledge{Sources: []config.KnowledgeSource{{Name: kbHandbook, ReadWhen: "Before you answer about leave."}}}
 
 	s := &server{
 		factories: oneFactory{f}, defs: definitionsOf(ctx, t, f, false), knowledge: kb, uploads: knowledge.NewUploads(kb, porttest.NewObjectStore(), 0),
@@ -50,7 +51,8 @@ func TestKnowledge_SourceInUseByAFactory(t *testing.T) {
 	}
 
 	_, err = s.DeleteKnowledgeSource(ctx, gen.DeleteKnowledgeSourceRequestObject{Source: kbHandbook})
-	if p := problemOf(err); p.Status != http.StatusConflict || deref(p.Code) != "knowledge-source-in-use" || !errors.Is(err, errSourceInUse) {
+	if p := problemOf(err); p.Status != http.StatusConflict || deref(p.Code) != "knowledge-source-in-use" || !errors.Is(err, errSourceInUse) ||
+		!strings.Contains(deref(p.Detail), factoryBuilder) {
 		t.Errorf("delete of a source in use = %v (%d %s); want 409 knowledge-source-in-use", err, p.Status, deref(p.Code))
 	}
 
@@ -107,8 +109,7 @@ func TestKnowledgeProblem_Codes(t *testing.T) {
 		{documentError(ports.ErrNotFound, "d"), http.StatusNotFound, "knowledge-document-not-found"},
 		{uploadError(ports.ErrTooLarge), http.StatusRequestEntityTooLarge, "upload-too-large"},
 		{uploadError(domain.ErrUnsupportedDocument), http.StatusUnsupportedMediaType, "unsupported-document-type"},
-		{fmt.Errorf("%w: run r", errDocumentNotUsed), http.StatusUnprocessableEntity, "knowledge-document-not-used"},
-		{fmt.Errorf("%w: note", errVerdictInvalid), http.StatusBadRequest, ""},
+		{fmt.Errorf("%w: db/disk.md", errFileNotFound), http.StatusNotFound, "knowledge-file-not-found"},
 	}
 
 	for _, tt := range tests {

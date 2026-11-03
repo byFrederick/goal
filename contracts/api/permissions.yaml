@@ -56,12 +56,10 @@ permissions:
   # Browsing what a code host connection reaches (its owners and repositories) uses its
   # credential from goald, which connection:read never does; members, keys and tokens may.
   - {name: connection:browse,  level: org, org_roles: [owner, admin, member], keys: true, pat: true}
-  # The organization's knowledge base (spec 4 §8.1): members, keys and tokens search and read it;
-  # owners, admins and keys add, sync and delete sources and documents.
+  # The organization's knowledge base (ADR 0038 decision 13): members, keys and tokens read its
+  # sources, files and reads; owners, admins and keys add, check, sync and delete sources and uploads.
   - {name: knowledge:read,     level: org, org_roles: [owner, admin, member], keys: true, pat: true}
   - {name: knowledge:manage,   level: org, org_roles: [owner, admin], keys: true}
-  # Giving a verdict on a document (ADR 0027, decision 4): members, keys and tokens may.
-  - {name: knowledge:verdict,  level: org, org_roles: [owner, admin, member], keys: true, pat: true}
   - {name: factory:create,     level: org, org_roles: [owner, admin], keys: true, pat: true}   # high impact
   - {name: factory:archive,    level: org, org_roles: [owner, admin], keys: true, pat: true}   # high impact
   - {name: factory:delete,     level: org, org_roles: [owner, admin], keys: true, pat: true}   # high impact

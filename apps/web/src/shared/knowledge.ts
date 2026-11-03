@@ -1,11 +1,13 @@
 // The organization's knowledge sources in words (spec 4 §4.8, §10), for the Knowledge pages and
 // the builder's "Knowledge … may search": each kind's name and icon, and what a source reads
 // ("github, acme/goal main, docs/**/*.md", "confluence, spaces ENG, SUP").
-import { type LucideIcon, RefreshCw, Upload, Zap } from 'lucide-react';
+import { BookOpen, FolderGit2, type LucideIcon, RefreshCw, Upload, Zap } from 'lucide-react';
 import type { KnowledgeSource, KnowledgeSourceKind } from '../api/types';
 
 export const sourceKinds: Record<KnowledgeSourceKind, { label: string; icon: LucideIcon }> = {
   upload: { label: 'Upload', icon: Upload },
+  repository: { label: 'Repository', icon: FolderGit2 },
+  confluence: { label: 'Confluence', icon: BookOpen },
   synced: { label: 'Synced', icon: RefreshCw },
   live: { label: 'Live', icon: Zap },
 };

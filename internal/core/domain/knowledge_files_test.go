@@ -2,12 +2,16 @@ package domain
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
 
 const (
+	toolRead  = "Read"
+	toolGrep  = "Grep"
+	toolBash  = "Bash"
 	fileA     = "a.md"
 	srcID     = "src"
 	docsTitle = "Docs"
@@ -134,17 +138,23 @@ func TestKnowledgeFileReads_Check(t *testing.T) {
 	}
 
 	for what, r := range map[string]KnowledgeFileReads{
-		"no source":         {Path: fileA, Factory: "f", Day: time.Unix(1, 0), Reads: 1},
-		"without a factory": {Source: srcID, Path: fileA, Day: time.Unix(1, 0), Reads: 1},
-		"no day":            {Source: srcID, Path: fileA, Factory: "f", Reads: 1},
-		"a bad path":        {Source: srcID, Path: "/a.md", Factory: "f", Day: time.Unix(1, 0), Reads: 1},
-		"negative reads":    {Source: srcID, Path: fileA, Factory: "f", Day: time.Unix(1, 0), Reads: -1, Searches: 2},
-		"neither one":       {Source: srcID, Path: fileA, Factory: "f", Day: time.Unix(1, 0)},
-		"negative searches": {Source: srcID, Path: fileA, Factory: "f", Day: time.Unix(1, 0), Reads: 1, Searches: -1},
+		"no source":          {Path: fileA, Factory: "f", Day: time.Unix(1, 0), Reads: 1},
+		"without a factory":  {Source: srcID, Path: fileA, Day: time.Unix(1, 0), Reads: 1},
+		"no day":             {Source: srcID, Path: fileA, Factory: "f", Reads: 1},
+		"a bad path":         {Source: srcID, Path: "/a.md", Factory: "f", Day: time.Unix(1, 0), Reads: 1},
+		"negative reads":     {Source: srcID, Path: fileA, Factory: "f", Day: time.Unix(1, 0), Reads: -1, Searches: 2},
+		"neither one":        {Source: srcID, Path: fileA, Factory: "f", Day: time.Unix(1, 0)},
+		"negative searches":  {Source: srcID, Path: fileA, Factory: "f", Day: time.Unix(1, 0), Reads: 1, Searches: -1},
+		"a read of the root": {Source: srcID, Path: KnowledgeSourceRoot, Factory: "f", Day: time.Unix(1, 0), Reads: 1},
 	} {
 		if err := r.Check(); !errors.Is(err, ErrInvalid) {
 			t.Errorf("Check of reads with %s = %v, want ErrInvalid", what, err)
 		}
+	}
+
+	root := KnowledgeFileReads{Source: srcID, Path: KnowledgeSourceRoot, Factory: "f", Day: time.Unix(1, 0), Searches: 1}
+	if err := root.Check(); err != nil {
+		t.Errorf("Check of a search of the whole source = %v", err)
 	}
 
 	late := time.Date(2026, 11, 3, 23, 30, 0, 0, time.FixedZone("x", -2*3600))
@@ -184,5 +194,63 @@ func TestNewKnowledgeSource_RepositoryAndConfluence(t *testing.T) {
 	secret := "gh-token"
 	if err := (KnowledgeSourcePatch{Secret: &secret}).CheckOn(KnowledgeSource{Kind: SourceRepository}); err != nil {
 		t.Errorf("CheckOn a repository given a secret = %v", err)
+	}
+}
+
+func TestKnowledgeTouch_CountsAReadAndAGrep(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		tool, path string
+		want       KnowledgeTouch
+		ok         bool
+	}{
+		{tool: toolRead, path: "/knowledge/runbooks/db/disk.md", want: KnowledgeTouch{Source: srcRunbooks, Path: "db/disk.md"}, ok: true},
+		{tool: toolGrep, path: "/knowledge/runbooks", want: KnowledgeTouch{Source: srcRunbooks, Path: KnowledgeSourceRoot, Search: true}, ok: true},
+		{tool: "Glob", path: "/knowledge/runbooks/db/", want: KnowledgeTouch{Source: srcRunbooks, Path: "db", Search: true}, ok: true},
+		{tool: toolRead, path: "/knowledge/runbooks/x/../db/disk.md", want: KnowledgeTouch{Source: srcRunbooks, Path: "db/disk.md"}, ok: true},
+		{tool: toolRead, path: "/knowledge/runbooks"},
+		{tool: toolGrep, path: "/knowledge"},
+		{tool: toolRead, path: "/workspace/knowledge/runbooks/a.md"},
+		{tool: toolRead, path: "knowledge/runbooks/a.md"},
+		{tool: toolRead, path: "/knowledge/../etc/passwd"},
+		{tool: toolBash, path: "/knowledge/runbooks/a.md"},
+		{tool: toolRead},
+	} {
+		got, ok := TouchOfKnowledge(tt.tool, tt.path)
+		if ok != tt.ok || got != tt.want {
+			t.Errorf("TouchOfKnowledge(%s, %q) = %+v, %t; want %+v, %t", tt.tool, tt.path, got, ok, tt.want, tt.ok)
+		}
+	}
+
+	day := time.Date(2026, 11, 3, 15, 0, 0, 0, time.UTC)
+	tally := NewKnowledgeTally([]KnowledgePin{{Source: srcRunbooks, Snapshot: "r1"}, {Source: "handbook", Snapshot: "h1"}})
+
+	for _, c := range [][2]string{
+		{toolRead, "/knowledge/runbooks/db/disk.md"},
+		{toolRead, "/knowledge/runbooks/db/disk.md"},
+		{toolGrep, "/knowledge/runbooks"},
+		{toolRead, "/knowledge/unpinned/a.md"},
+		{toolRead, "/workspace/README.md"},
+	} {
+		tally.Add(c[0], c[1])
+	}
+
+	if got := tally.Sources(); !reflect.DeepEqual(got, []string{srcRunbooks}) {
+		t.Errorf("Sources = %v, want only the touched pinned source", got)
+	}
+
+	got := tally.Reads(map[string]KnowledgeSourceID{srcRunbooks: "r-id"}, "f", day)
+	want := []KnowledgeFileReads{
+		{Source: "r-id", Path: KnowledgeSourceRoot, Factory: "f", Day: KnowledgeDay(day), Searches: 1},
+		{Source: "r-id", Path: "db/disk.md", Factory: "f", Day: KnowledgeDay(day), Reads: 2},
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Reads = %+v\nwant %+v", got, want)
+	}
+
+	if got := tally.Reads(nil, "f", day); len(got) != 0 {
+		t.Errorf("Reads without the sources' ids = %+v, want none", got)
 	}
 }

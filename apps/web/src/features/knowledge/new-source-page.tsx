@@ -33,6 +33,8 @@ const kindText: Record<KnowledgeSourceKind, (org: string) => string> = {
     'A repository’s docs or a Confluence space, read with a secret. Goal copies the text on a schedule, indexes it and links back.',
   live: () =>
     'A server that searches by itself, such as a Slack MCP server. Nothing is stored; factories listing it get its tools.',
+  repository: () => 'A repository’s Markdown and text files, read with a secret and kept in sync.',
+  confluence: () => 'A Confluence site’s pages, read with a secret and kept in sync.',
 };
 
 export function NewSourcePage() {
@@ -164,7 +166,13 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
     create.mutate();
   };
 
-  const heading = { upload: 'Upload', synced: 'Synced with a secret', live: 'Live from a server' }[kind];
+  const heading = {
+    upload: 'Upload',
+    synced: 'Synced with a secret',
+    live: 'Live from a server',
+    repository: 'Repository',
+    confluence: 'Confluence',
+  }[kind];
   const noServer = `${org.name} has no MCP server a live source can read yet. Add one to an environment.`;
 
   return (

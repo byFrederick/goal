@@ -1128,6 +1128,24 @@ func (e JudgeScoreState) Valid() bool {
 	}
 }
 
+// Defines values for KnowledgeCheckOverLimit.
+const (
+	Bytes KnowledgeCheckOverLimit = "bytes"
+	Files KnowledgeCheckOverLimit = "files"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeCheckOverLimit enum.
+func (e KnowledgeCheckOverLimit) Valid() bool {
+	switch e {
+	case Bytes:
+		return true
+	case Files:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for KnowledgeDocumentStatus.
 const (
 	KnowledgeDocumentStatusFailed  KnowledgeDocumentStatus = "failed"
@@ -1196,15 +1214,21 @@ func (e KnowledgeSourceStatus) Valid() bool {
 
 // Defines values for KnowledgeSourceKind.
 const (
-	KnowledgeSourceKindLive   KnowledgeSourceKind = "live"
-	KnowledgeSourceKindSynced KnowledgeSourceKind = "synced"
-	KnowledgeSourceKindUpload KnowledgeSourceKind = "upload"
+	KnowledgeSourceKindConfluence KnowledgeSourceKind = "confluence"
+	KnowledgeSourceKindLive       KnowledgeSourceKind = "live"
+	KnowledgeSourceKindRepository KnowledgeSourceKind = "repository"
+	KnowledgeSourceKindSynced     KnowledgeSourceKind = "synced"
+	KnowledgeSourceKindUpload     KnowledgeSourceKind = "upload"
 )
 
 // Valid indicates whether the value is a known member of the KnowledgeSourceKind enum.
 func (e KnowledgeSourceKind) Valid() bool {
 	switch e {
+	case KnowledgeSourceKindConfluence:
+		return true
 	case KnowledgeSourceKindLive:
+		return true
+	case KnowledgeSourceKindRepository:
 		return true
 	case KnowledgeSourceKindSynced:
 		return true
@@ -1235,34 +1259,16 @@ func (e KnowledgeUseKind) Valid() bool {
 
 // Defines values for KnowledgeVerdictVerdict.
 const (
-	KnowledgeVerdictVerdictHelped KnowledgeVerdictVerdict = "helped"
-	KnowledgeVerdictVerdictMisled KnowledgeVerdictVerdict = "misled"
+	Helped KnowledgeVerdictVerdict = "helped"
+	Misled KnowledgeVerdictVerdict = "misled"
 )
 
 // Valid indicates whether the value is a known member of the KnowledgeVerdictVerdict enum.
 func (e KnowledgeVerdictVerdict) Valid() bool {
 	switch e {
-	case KnowledgeVerdictVerdictHelped:
+	case Helped:
 		return true
-	case KnowledgeVerdictVerdictMisled:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for KnowledgeVerdictInputVerdict.
-const (
-	KnowledgeVerdictInputVerdictHelped KnowledgeVerdictInputVerdict = "helped"
-	KnowledgeVerdictInputVerdictMisled KnowledgeVerdictInputVerdict = "misled"
-)
-
-// Valid indicates whether the value is a known member of the KnowledgeVerdictInputVerdict enum.
-func (e KnowledgeVerdictInputVerdict) Valid() bool {
-	switch e {
-	case KnowledgeVerdictInputVerdictHelped:
-		return true
-	case KnowledgeVerdictInputVerdictMisled:
+	case Misled:
 		return true
 	default:
 		return false
@@ -4937,6 +4943,70 @@ type JudgeWrite struct {
 	Title  string  `json:"title"`
 }
 
+// KnowledgeCheck defines model for KnowledgeCheck.
+type KnowledgeCheck struct {
+	Access KnowledgeCheckAccess `json:"access"`
+
+	// Bytes Their Markdown's size, only when goald knows it: the current snapshot of a source of that name and kind that exists. A listing does not say how big each file is.
+	Bytes *int64 `json:"bytes,omitempty"`
+
+	// Files How many files it lists; 0 when access failed
+	Files int `json:"files"`
+
+	// Limits A source's limits (ADR 0038 decision 4)
+	Limits KnowledgeLimits `json:"limits"`
+
+	// Line The line agents will see for it in their prompt's Knowledge section
+	Line string `json:"line"`
+
+	// OverLimit The limits it is over, which a sync would fail on
+	OverLimit []KnowledgeCheckOverLimit `json:"over_limit"`
+	Warnings  []KnowledgeCheckWarning   `json:"warnings"`
+}
+
+// KnowledgeCheckOverLimit defines model for KnowledgeCheck.OverLimit.
+type KnowledgeCheckOverLimit string
+
+// KnowledgeCheckAccess defines model for KnowledgeCheckAccess.
+type KnowledgeCheckAccess struct {
+	// Error Why it could not; never holds the secret's value
+	Error *string `json:"error,omitempty"`
+
+	// Ok Whether goald could list the source with these settings
+	Ok bool `json:"ok"`
+}
+
+// KnowledgeCheckInput A source's settings, not saved, as Add a source has them
+type KnowledgeCheckInput struct {
+	// Config What its reader reads, as createKnowledgeSource takes it
+	Config *map[string]string `json:"config,omitempty"`
+
+	// Factories The factories that would read it (each one's metadata.id or metadata.name)
+	Factories *[]string `json:"factories,omitempty"`
+
+	// Kind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over
+	Kind KnowledgeSourceKind `json:"kind"`
+
+	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
+	Name KnowledgeSourceName `json:"name"`
+
+	// ReadWhen One line that tells agents when to open the source, as "How to fix what pages us. Read before acting on an alert."
+	ReadWhen *KnowledgeReadWhen `json:"read_when,omitempty"`
+
+	// Secret 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+	Secret *SecretName `json:"secret,omitempty"`
+}
+
+// KnowledgeCheckWarning defines model for KnowledgeCheckWarning.
+type KnowledgeCheckWarning struct {
+	// Code knowledge-secret-not-in-scope, knowledge-copies-checkout and knowledge-too-many are the definition checks the factory's draft would fail or warn with; knowledge-source-name-taken and knowledge-source-listed say the name is in use or the factory lists it already
+	Code string `json:"code"`
+
+	// Factory The picked factory's name; absent for a warning about the source
+	Factory *string `json:"factory,omitempty"`
+	Message string  `json:"message"`
+}
+
 // KnowledgeDocument defines model for KnowledgeDocument.
 type KnowledgeDocument struct {
 	Bytes     int64      `json:"bytes"`
@@ -5025,6 +5095,35 @@ type KnowledgeEvent struct {
 // KnowledgeEventStatus defines model for KnowledgeEvent.Status.
 type KnowledgeEventStatus string
 
+// KnowledgeFile One file of a source's current snapshot
+type KnowledgeFile struct {
+	// Bytes Its Markdown's size
+	Bytes int64 `json:"bytes"`
+
+	// Path Its path in the source's folder, /knowledge/<source>/<path> in a run
+	Path string `json:"path"`
+
+	// Source Its source's name
+	Source string `json:"source"`
+	Title  string `json:"title"`
+
+	// Version Changes whenever its content does: a content hash, a blob id, a page version
+	Version string `json:"version"`
+}
+
+// KnowledgeFileList defines model for KnowledgeFileList.
+type KnowledgeFileList struct {
+	Files []KnowledgeFile `json:"files"`
+}
+
+// KnowledgeFilePage defines model for KnowledgeFilePage.
+type KnowledgeFilePage struct {
+	Files []KnowledgeFile `json:"files"`
+
+	// NextAfter The after of the next page; absent on the last
+	NextAfter *string `json:"next_after,omitempty"`
+}
+
 // KnowledgeHit defines model for KnowledgeHit.
 type KnowledgeHit struct {
 	// Document The document's id, which getKnowledgeDocument and knowledge__read take
@@ -5042,6 +5141,39 @@ type KnowledgeHit struct {
 	// Url A synced document's link back
 	Url *string `json:"url,omitempty"`
 }
+
+// KnowledgeLimits A source's limits (ADR 0038 decision 4)
+type KnowledgeLimits struct {
+	Bytes     int64 `json:"bytes"`
+	FileBytes int64 `json:"file_bytes"`
+	Files     int   `json:"files"`
+}
+
+// KnowledgeReadCount defines model for KnowledgeReadCount.
+type KnowledgeReadCount struct {
+	// Day The UTC day
+	Day openapi_types.Date `json:"day"`
+
+	// Factory The factory's name
+	Factory   string `json:"factory"`
+	FactoryId string `json:"factory_id"`
+
+	// Path The file read, or the folder searched ("." for the whole source)
+	Path     string `json:"path"`
+	Reads    int    `json:"reads"`
+	Searches int    `json:"searches"`
+
+	// Source The source's name
+	Source string `json:"source"`
+}
+
+// KnowledgeReadList defines model for KnowledgeReadList.
+type KnowledgeReadList struct {
+	Reads []KnowledgeReadCount `json:"reads"`
+}
+
+// KnowledgeReadWhen One line that tells agents when to open the source, as "How to fix what pages us. Read before acting on an alert."
+type KnowledgeReadWhen = string
 
 // KnowledgeSearchResult defines model for KnowledgeSearchResult.
 type KnowledgeSearchResult struct {
@@ -5064,8 +5196,10 @@ type KnowledgeSource struct {
 	Documents int `json:"documents"`
 
 	// EmbedModel The model its chunks are embedded with; absent when they have no embeddings
-	EmbedModel   *string             `json:"embed_model,omitempty"`
-	Id           string              `json:"id"`
+	EmbedModel *string `json:"embed_model,omitempty"`
+	Id         string  `json:"id"`
+
+	// Kind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over
 	Kind         KnowledgeSourceKind `json:"kind"`
 	LastError    *string             `json:"last_error,omitempty"`
 	LastSyncedAt *time.Time          `json:"last_synced_at"`
@@ -5075,6 +5209,9 @@ type KnowledgeSource struct {
 
 	// NextSyncAt When it is due next; null for a live source
 	NextSyncAt *time.Time `json:"next_sync_at"`
+
+	// ReadWhen The line that tells agents when to open it; empty when it has none
+	ReadWhen string `json:"read_when"`
 
 	// Secret The secret a synced source reads with, opened at each sync; absent for an upload or live source and a synced one still on its connection
 	Secret *string `json:"secret,omitempty"`
@@ -5094,7 +5231,7 @@ type KnowledgeSource struct {
 // KnowledgeSourceStatus syncing while a goald holds it; failed after a sync that stopped (last_error says why)
 type KnowledgeSourceStatus string
 
-// KnowledgeSourceKind defines model for KnowledgeSourceKind.
+// KnowledgeSourceKind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over
 type KnowledgeSourceKind string
 
 // KnowledgeSourceList defines model for KnowledgeSourceList.
@@ -5110,6 +5247,9 @@ type KnowledgeSourcePatch struct {
 	// Config Replaces the config
 	Config *map[string]string `json:"config,omitempty"`
 
+	// ReadWhen One line that tells agents when to open the source, as "How to fix what pages us. Read before acting on an alert."
+	ReadWhen *KnowledgeReadWhen `json:"read_when,omitempty"`
+
 	// Secret A synced source's new secret: it reads with it from its next sync
 	Secret           *SecretName `json:"secret,omitempty"`
 	SyncEverySeconds *int        `json:"sync_every_seconds,omitempty"`
@@ -5120,6 +5260,14 @@ type KnowledgeSourcePatch struct {
 type KnowledgeSourceUsers struct {
 	// Factories The factories whose current version may search it (those the caller sees)
 	Factories []ConnectionFactory `json:"factories"`
+}
+
+// KnowledgeUploadList defines model for KnowledgeUploadList.
+type KnowledgeUploadList struct {
+	Files []struct {
+		Bytes int64  `json:"bytes"`
+		Path  string `json:"path"`
+	} `json:"files"`
 }
 
 // KnowledgeUsage defines model for KnowledgeUsage.
@@ -5157,18 +5305,6 @@ type KnowledgeVerdict struct {
 
 // KnowledgeVerdictVerdict defines model for KnowledgeVerdict.Verdict.
 type KnowledgeVerdictVerdict string
-
-// KnowledgeVerdictInput defines model for KnowledgeVerdictInput.
-type KnowledgeVerdictInput struct {
-	Note *string `json:"note,omitempty"`
-
-	// RunId A run of the organization that used the document
-	RunId   *string                      `json:"run_id,omitempty"`
-	Verdict KnowledgeVerdictInputVerdict `json:"verdict"`
-}
-
-// KnowledgeVerdictInputVerdict defines model for KnowledgeVerdictInput.Verdict.
-type KnowledgeVerdictInputVerdict string
 
 // LeadTimeBridge defines model for LeadTimeBridge.
 type LeadTimeBridge struct {
@@ -5542,11 +5678,16 @@ type NewKnowledgeSource struct {
 	Config *map[string]string `json:"config,omitempty"`
 
 	// Connection The connection a live source reads
-	Connection *string             `json:"connection,omitempty"`
-	Kind       KnowledgeSourceKind `json:"kind"`
+	Connection *string `json:"connection,omitempty"`
+
+	// Kind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over
+	Kind KnowledgeSourceKind `json:"kind"`
 
 	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
 	Name KnowledgeSourceName `json:"name"`
+
+	// ReadWhen One line that tells agents when to open the source, as "How to fix what pages us. Read before acting on an alert."
+	ReadWhen *KnowledgeReadWhen `json:"read_when,omitempty"`
 
 	// Secret The secret a synced source reads with: the code host's token for gitdocs, the API token for confluence. It must be open to all factories.
 	Secret *SecretName `json:"secret,omitempty"`
@@ -7795,6 +7936,9 @@ type JudgeRef = string
 // KindRef defines model for KindRef.
 type KindRef = string
 
+// KnowledgeFilePath defines model for KnowledgeFilePath.
+type KnowledgeFilePath = string
+
 // OrgRef defines model for OrgRef.
 type OrgRef = string
 
@@ -8093,6 +8237,19 @@ type ListKnowledgeDocumentUsesParams struct {
 	Limit *int    `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// FindKnowledgeFilesParams defines parameters for FindKnowledgeFiles.
+type FindKnowledgeFilesParams struct {
+	Find  string `form:"find" json:"find"`
+	Limit *int   `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListKnowledgeReadsParams defines parameters for ListKnowledgeReads.
+type ListKnowledgeReadsParams struct {
+	// Source Only this source's reads
+	Source *string `form:"source,omitempty" json:"source,omitempty"`
+	Days   *int    `form:"days,omitempty" json:"days,omitempty"`
+}
+
 // SearchKnowledgeParams defines parameters for SearchKnowledge.
 type SearchKnowledgeParams struct {
 	Q string `form:"q" json:"q"`
@@ -8117,6 +8274,27 @@ type ListKnowledgeDocumentsParams struct {
 
 // UploadKnowledgeDocumentsMultipartBody defines parameters for UploadKnowledgeDocuments.
 type UploadKnowledgeDocumentsMultipartBody struct {
+	Files []openapi_types.File `json:"files"`
+}
+
+// ListKnowledgeFilesParams defines parameters for ListKnowledgeFiles.
+type ListKnowledgeFilesParams struct {
+	// Find Only the files whose path, or title in any case, starts with this
+	Find *string `form:"find,omitempty" json:"find,omitempty"`
+
+	// After The last path of the previous page
+	After *string `form:"after,omitempty" json:"after,omitempty"`
+	Limit *int    `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// DeleteKnowledgeUploadParams defines parameters for DeleteKnowledgeUpload.
+type DeleteKnowledgeUploadParams struct {
+	// Path The upload's path in the source
+	Path string `form:"path" json:"path"`
+}
+
+// UploadKnowledgeFilesMultipartBody defines parameters for UploadKnowledgeFiles.
+type UploadKnowledgeFilesMultipartBody struct {
 	Files []openapi_types.File `json:"files"`
 }
 
@@ -8387,8 +8565,8 @@ type DecideToolApprovalJSONRequestBody = ToolDecision
 // SetTouchReasonJSONRequestBody defines body for SetTouchReason for application/json ContentType.
 type SetTouchReasonJSONRequestBody = TouchReasonChange
 
-// GiveKnowledgeVerdictJSONRequestBody defines body for GiveKnowledgeVerdict for application/json ContentType.
-type GiveKnowledgeVerdictJSONRequestBody = KnowledgeVerdictInput
+// CheckKnowledgeSourceJSONRequestBody defines body for CheckKnowledgeSource for application/json ContentType.
+type CheckKnowledgeSourceJSONRequestBody = KnowledgeCheckInput
 
 // CreateKnowledgeSourceJSONRequestBody defines body for CreateKnowledgeSource for application/json ContentType.
 type CreateKnowledgeSourceJSONRequestBody = NewKnowledgeSource
@@ -8398,6 +8576,9 @@ type UpdateKnowledgeSourceJSONRequestBody = KnowledgeSourcePatch
 
 // UploadKnowledgeDocumentsMultipartRequestBody defines body for UploadKnowledgeDocuments for multipart/form-data ContentType.
 type UploadKnowledgeDocumentsMultipartRequestBody UploadKnowledgeDocumentsMultipartBody
+
+// UploadKnowledgeFilesMultipartRequestBody defines body for UploadKnowledgeFiles for multipart/form-data ContentType.
+type UploadKnowledgeFilesMultipartRequestBody UploadKnowledgeFilesMultipartBody
 
 // SetFactoryRoleJSONRequestBody defines body for SetFactoryRole for application/json ContentType.
 type SetFactoryRoleJSONRequestBody = FactoryRoleChange
@@ -10245,6 +10426,24 @@ type ClientInterface interface {
 	// Corresponds with PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason (the `SetTouchReason` operationId).
 	SetTouchReason(ctx context.Context, org OrgRef, item ItemRef, event int64, body SetTouchReasonJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// CheckKnowledgeSourceWithBody Check a source's settings before saving them
+	//
+	// The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/knowledge/check (the `CheckKnowledgeSource` operationId).
+	CheckKnowledgeSourceWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CheckKnowledgeSource Check a source's settings before saving them
+	//
+	// The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/knowledge/check (the `CheckKnowledgeSource` operationId).
+	CheckKnowledgeSource(ctx context.Context, org OrgRef, body CheckKnowledgeSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// DeleteKnowledgeDocument Delete an uploaded document
 	//
 	// With its chunks, and its file when no other document holds the same content. 409 not-an-upload-source for a synced document, which its next sync would bring back. Audited as knowledge_document.deleted.
@@ -10273,23 +10472,19 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document}/uses (the `ListKnowledgeDocumentUses` operationId).
 	ListKnowledgeDocumentUses(ctx context.Context, org OrgRef, document DocumentRef, params *ListKnowledgeDocumentUsesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GiveKnowledgeVerdictWithBody Say whether a document helped or misled
+	// FindKnowledgeFiles Find a file across every source
 	//
-	// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+	// The current files of every source whose path, or title in any case, starts with find, by source name then path, at most limit.
 	//
-	// Takes any type of body and a specified content type.
-	//
-	// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
-	GiveKnowledgeVerdictWithBody(ctx context.Context, org OrgRef, document DocumentRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with GET /v1/orgs/{org}/knowledge/files (the `FindKnowledgeFiles` operationId).
+	FindKnowledgeFiles(ctx context.Context, org OrgRef, params *FindKnowledgeFilesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GiveKnowledgeVerdict Say whether a document helped or misled
+	// ListKnowledgeReads How often runs read and searched the sources' files
 	//
-	// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+	// The daily rollup of runs' reads and searches under /knowledge (ADR 0038 decision 10), of one source or every one, over the last days days counting today (UTC): one row per source, path, factory and day, by day, source, path and factory. A search of a whole source counts at the path ".". Factories the caller may not see are left out. 404 knowledge-source-not-found.
 	//
-	// Takes a body of the `application/json` content type.
-	//
-	// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
-	GiveKnowledgeVerdict(ctx context.Context, org OrgRef, document DocumentRef, body GiveKnowledgeVerdictJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with GET /v1/orgs/{org}/knowledge/reads (the `ListKnowledgeReads` operationId).
+	ListKnowledgeReads(ctx context.Context, org OrgRef, params *ListKnowledgeReadsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SearchKnowledge Search the knowledge base as agents do
 	//
@@ -10371,12 +10566,42 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/documents (the `UploadKnowledgeDocuments` operationId).
 	UploadKnowledgeDocumentsWithBody(ctx context.Context, org OrgRef, source SourceRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListKnowledgeFiles One page of a source's current files
+	//
+	// The files of the source's current snapshot (ADR 0038 decision 3), in path order, after the path after; next_after, when set, is the after of the next page. With find, only those whose path, or title in any case, starts with it. None before the first snapshot. 404 knowledge-source-not-found.
+	//
+	// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/files (the `ListKnowledgeFiles` operationId).
+	ListKnowledgeFiles(ctx context.Context, org OrgRef, source SourceRef, params *ListKnowledgeFilesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetKnowledgeFile One file's Markdown
+	//
+	// The file as runs read it under /knowledge/<source>/, from the source's current snapshot. goald reads it from the snapshot's zip by range (the end record, the central directory, then the one entry), never the whole zip. 404 knowledge-source-not-found, 404 knowledge-file-not-found for a path the snapshot does not hold or a source with no snapshot yet.
+	//
+	// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/files/{path} (the `GetKnowledgeFile` operationId).
+	GetKnowledgeFile(ctx context.Context, org OrgRef, source SourceRef, path KnowledgeFilePath, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SyncKnowledgeSource Sync a source now
 	//
 	// The source is due at once; the next free goald syncs it, and `event: knowledge` on the stream says when that starts and ends. 409 for a live source, which never syncs.
 	//
 	// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/sync (the `SyncKnowledgeSource` operationId).
 	SyncKnowledgeSource(ctx context.Context, org OrgRef, source SourceRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteKnowledgeUpload Delete an uploaded file
+	//
+	// The upload at path, with its stored file when no other upload holds the same content; the next sync, which the deletion makes due, leaves it out of the snapshot. 404 knowledge-file-not-found, 409 not-an-upload-source. Audited as knowledge_document.deleted.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/knowledge/sources/{source}/uploads (the `DeleteKnowledgeUpload` operationId).
+	DeleteKnowledgeUpload(ctx context.Context, org OrgRef, source SourceRef, params *DeleteKnowledgeUploadParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UploadKnowledgeFilesWithBody Upload files to an upload source
+	//
+	// Each part named files is one file at the path its file name gives, which may hold folders (runbooks/db/disk.md); a path that is not relative and clean is 400. Text, Markdown, HTML, JSON or YAML of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most that and 1 MiB more. The upload makes the source due, and its next sync writes the snapshot that holds them. Every file is checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as knowledge_document.uploaded.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/uploads (the `UploadKnowledgeFiles` operationId).
+	UploadKnowledgeFilesWithBody(ctx context.Context, org OrgRef, source SourceRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetKnowledgeUsage Where a source's documents were used
 	//
@@ -14179,6 +14404,44 @@ func (c *Client) SetTouchReason(ctx context.Context, org OrgRef, item ItemRef, e
 	return c.Client.Do(req)
 }
 
+// CheckKnowledgeSourceWithBody Check a source's settings before saving them
+//
+// The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/knowledge/check (the `CheckKnowledgeSource` operationId).
+func (c *Client) CheckKnowledgeSourceWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCheckKnowledgeSourceRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CheckKnowledgeSource Check a source's settings before saving them
+//
+// The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/knowledge/check (the `CheckKnowledgeSource` operationId).
+func (c *Client) CheckKnowledgeSource(ctx context.Context, org OrgRef, body CheckKnowledgeSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCheckKnowledgeSourceRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // DeleteKnowledgeDocument Delete an uploaded document
 //
 // With its chunks, and its file when no other document holds the same content. 409 not-an-upload-source for a synced document, which its next sync would bring back. Audited as knowledge_document.deleted.
@@ -14247,15 +14510,13 @@ func (c *Client) ListKnowledgeDocumentUses(ctx context.Context, org OrgRef, docu
 	return c.Client.Do(req)
 }
 
-// GiveKnowledgeVerdictWithBody Say whether a document helped or misled
+// FindKnowledgeFiles Find a file across every source
 //
-// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+// The current files of every source whose path, or title in any case, starts with find, by source name then path, at most limit.
 //
-// Takes any type of body and a specified content type.
-//
-// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
-func (c *Client) GiveKnowledgeVerdictWithBody(ctx context.Context, org OrgRef, document DocumentRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGiveKnowledgeVerdictRequestWithBody(c.Server, org, document, contentType, body)
+// Corresponds with GET /v1/orgs/{org}/knowledge/files (the `FindKnowledgeFiles` operationId).
+func (c *Client) FindKnowledgeFiles(ctx context.Context, org OrgRef, params *FindKnowledgeFilesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFindKnowledgeFilesRequest(c.Server, org, params)
 	if err != nil {
 		return nil, err
 	}
@@ -14266,15 +14527,13 @@ func (c *Client) GiveKnowledgeVerdictWithBody(ctx context.Context, org OrgRef, d
 	return c.Client.Do(req)
 }
 
-// GiveKnowledgeVerdict Say whether a document helped or misled
+// ListKnowledgeReads How often runs read and searched the sources' files
 //
-// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+// The daily rollup of runs' reads and searches under /knowledge (ADR 0038 decision 10), of one source or every one, over the last days days counting today (UTC): one row per source, path, factory and day, by day, source, path and factory. A search of a whole source counts at the path ".". Factories the caller may not see are left out. 404 knowledge-source-not-found.
 //
-// Takes a body of the `application/json` content type.
-//
-// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
-func (c *Client) GiveKnowledgeVerdict(ctx context.Context, org OrgRef, document DocumentRef, body GiveKnowledgeVerdictJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGiveKnowledgeVerdictRequest(c.Server, org, document, body)
+// Corresponds with GET /v1/orgs/{org}/knowledge/reads (the `ListKnowledgeReads` operationId).
+func (c *Client) ListKnowledgeReads(ctx context.Context, org OrgRef, params *ListKnowledgeReadsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListKnowledgeReadsRequest(c.Server, org, params)
 	if err != nil {
 		return nil, err
 	}
@@ -14465,6 +14724,40 @@ func (c *Client) UploadKnowledgeDocumentsWithBody(ctx context.Context, org OrgRe
 	return c.Client.Do(req)
 }
 
+// ListKnowledgeFiles One page of a source's current files
+//
+// The files of the source's current snapshot (ADR 0038 decision 3), in path order, after the path after; next_after, when set, is the after of the next page. With find, only those whose path, or title in any case, starts with it. None before the first snapshot. 404 knowledge-source-not-found.
+//
+// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/files (the `ListKnowledgeFiles` operationId).
+func (c *Client) ListKnowledgeFiles(ctx context.Context, org OrgRef, source SourceRef, params *ListKnowledgeFilesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListKnowledgeFilesRequest(c.Server, org, source, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetKnowledgeFile One file's Markdown
+//
+// The file as runs read it under /knowledge/<source>/, from the source's current snapshot. goald reads it from the snapshot's zip by range (the end record, the central directory, then the one entry), never the whole zip. 404 knowledge-source-not-found, 404 knowledge-file-not-found for a path the snapshot does not hold or a source with no snapshot yet.
+//
+// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/files/{path} (the `GetKnowledgeFile` operationId).
+func (c *Client) GetKnowledgeFile(ctx context.Context, org OrgRef, source SourceRef, path KnowledgeFilePath, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetKnowledgeFileRequest(c.Server, org, source, path)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // SyncKnowledgeSource Sync a source now
 //
 // The source is due at once; the next free goald syncs it, and `event: knowledge` on the stream says when that starts and ends. 409 for a live source, which never syncs.
@@ -14472,6 +14765,42 @@ func (c *Client) UploadKnowledgeDocumentsWithBody(ctx context.Context, org OrgRe
 // Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/sync (the `SyncKnowledgeSource` operationId).
 func (c *Client) SyncKnowledgeSource(ctx context.Context, org OrgRef, source SourceRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSyncKnowledgeSourceRequest(c.Server, org, source)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteKnowledgeUpload Delete an uploaded file
+//
+// The upload at path, with its stored file when no other upload holds the same content; the next sync, which the deletion makes due, leaves it out of the snapshot. 404 knowledge-file-not-found, 409 not-an-upload-source. Audited as knowledge_document.deleted.
+//
+// Corresponds with DELETE /v1/orgs/{org}/knowledge/sources/{source}/uploads (the `DeleteKnowledgeUpload` operationId).
+func (c *Client) DeleteKnowledgeUpload(ctx context.Context, org OrgRef, source SourceRef, params *DeleteKnowledgeUploadParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteKnowledgeUploadRequest(c.Server, org, source, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UploadKnowledgeFilesWithBody Upload files to an upload source
+//
+// Each part named files is one file at the path its file name gives, which may hold folders (runbooks/db/disk.md); a path that is not relative and clean is 400. Text, Markdown, HTML, JSON or YAML of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most that and 1 MiB more. The upload makes the source due, and its next sync writes the snapshot that holds them. Every file is checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as knowledge_document.uploaded.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/uploads (the `UploadKnowledgeFiles` operationId).
+func (c *Client) UploadKnowledgeFilesWithBody(ctx context.Context, org OrgRef, source SourceRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUploadKnowledgeFilesRequestWithBody(c.Server, org, source, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -22979,6 +23308,53 @@ func NewSetTouchReasonRequestWithBody(server string, org OrgRef, item ItemRef, e
 	return req, nil
 }
 
+// NewCheckKnowledgeSourceRequest calls the generic CheckKnowledgeSource builder with application/json body
+func NewCheckKnowledgeSourceRequest(server string, org OrgRef, body CheckKnowledgeSourceJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCheckKnowledgeSourceRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewCheckKnowledgeSourceRequestWithBody constructs an http.Request for the CheckKnowledgeSource method, with any body, and a specified content type
+func NewCheckKnowledgeSourceRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/check", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewDeleteKnowledgeDocumentRequest constructs an http.Request for the DeleteKnowledgeDocument method
 func NewDeleteKnowledgeDocumentRequest(server string, org OrgRef, document DocumentRef) (*http.Request, error) {
 	var err error
@@ -23182,19 +23558,8 @@ func NewListKnowledgeDocumentUsesRequest(server string, org OrgRef, document Doc
 	return req, nil
 }
 
-// NewGiveKnowledgeVerdictRequest calls the generic GiveKnowledgeVerdict builder with application/json body
-func NewGiveKnowledgeVerdictRequest(server string, org OrgRef, document DocumentRef, body GiveKnowledgeVerdictJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewGiveKnowledgeVerdictRequestWithBody(server, org, document, "application/json", bodyReader)
-}
-
-// NewGiveKnowledgeVerdictRequestWithBody constructs an http.Request for the GiveKnowledgeVerdict method, with any body, and a specified content type
-func NewGiveKnowledgeVerdictRequestWithBody(server string, org OrgRef, document DocumentRef, contentType string, body io.Reader) (*http.Request, error) {
+// NewFindKnowledgeFilesRequest constructs an http.Request for the FindKnowledgeFiles method
+func NewFindKnowledgeFilesRequest(server string, org OrgRef, params *FindKnowledgeFilesParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -23204,19 +23569,12 @@ func NewGiveKnowledgeVerdictRequestWithBody(server string, org OrgRef, document 
 		return nil, err
 	}
 
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "document", document, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
 	serverURL, err := url.Parse(server)
 	if err != nil {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/documents/%s/verdict", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/files", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -23226,12 +23584,118 @@ func NewGiveKnowledgeVerdictRequestWithBody(server string, org OrgRef, document 
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "find", params.Find, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Add("Content-Type", contentType)
+	return req, nil
+}
+
+// NewListKnowledgeReadsRequest constructs an http.Request for the ListKnowledgeReads method
+func NewListKnowledgeReadsRequest(server string, org OrgRef, params *ListKnowledgeReadsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/reads", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Source != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "source", *params.Source, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Days != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "days", *params.Days, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -23684,6 +24148,146 @@ func NewUploadKnowledgeDocumentsRequestWithBody(server string, org OrgRef, sourc
 	return req, nil
 }
 
+// NewListKnowledgeFilesRequest constructs an http.Request for the ListKnowledgeFiles method
+func NewListKnowledgeFilesRequest(server string, org OrgRef, source SourceRef, params *ListKnowledgeFilesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "source", source, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/sources/%s/files", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Find != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "find", *params.Find, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.After != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetKnowledgeFileRequest constructs an http.Request for the GetKnowledgeFile method
+func NewGetKnowledgeFileRequest(server string, org OrgRef, source SourceRef, path KnowledgeFilePath) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "source", source, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "path", path, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/sources/%s/files/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewSyncKnowledgeSourceRequest constructs an http.Request for the SyncKnowledgeSource method
 func NewSyncKnowledgeSourceRequest(server string, org OrgRef, source SourceRef) (*http.Request, error) {
 	var err error
@@ -23721,6 +24325,113 @@ func NewSyncKnowledgeSourceRequest(server string, org OrgRef, source SourceRef) 
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewDeleteKnowledgeUploadRequest constructs an http.Request for the DeleteKnowledgeUpload method
+func NewDeleteKnowledgeUploadRequest(server string, org OrgRef, source SourceRef, params *DeleteKnowledgeUploadParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "source", source, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/sources/%s/uploads", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "path", params.Path, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUploadKnowledgeFilesRequestWithBody constructs an http.Request for the UploadKnowledgeFiles method, with any body, and a specified content type
+func NewUploadKnowledgeFilesRequestWithBody(server string, org OrgRef, source SourceRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "source", source, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/sources/%s/uploads", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -27624,6 +28335,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason (the `SetTouchReason` operationId).
 	SetTouchReasonWithResponse(ctx context.Context, org OrgRef, item ItemRef, event int64, body SetTouchReasonJSONRequestBody, reqEditors ...RequestEditorFn) (*SetTouchReasonResponse, error)
 
+	// CheckKnowledgeSourceWithBodyWithResponse Check a source's settings before saving them
+	//
+	// The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/knowledge/check (the `CheckKnowledgeSource` operationId).
+	CheckKnowledgeSourceWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CheckKnowledgeSourceResponse, error)
+
+	// CheckKnowledgeSourceWithResponse Check a source's settings before saving them
+	//
+	// The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/knowledge/check (the `CheckKnowledgeSource` operationId).
+	CheckKnowledgeSourceWithResponse(ctx context.Context, org OrgRef, body CheckKnowledgeSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*CheckKnowledgeSourceResponse, error)
+
 	// DeleteKnowledgeDocumentWithResponse Delete an uploaded document
 	//
 	// With its chunks, and its file when no other document holds the same content. 409 not-an-upload-source for a synced document, which its next sync would bring back. Audited as knowledge_document.deleted.
@@ -27660,23 +28389,23 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document}/uses (the `ListKnowledgeDocumentUses` operationId).
 	ListKnowledgeDocumentUsesWithResponse(ctx context.Context, org OrgRef, document DocumentRef, params *ListKnowledgeDocumentUsesParams, reqEditors ...RequestEditorFn) (*ListKnowledgeDocumentUsesResponse, error)
 
-	// GiveKnowledgeVerdictWithBodyWithResponse Say whether a document helped or misled
+	// FindKnowledgeFilesWithResponse Find a file across every source
 	//
-	// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+	// The current files of every source whose path, or title in any case, starts with find, by source name then path, at most limit.
 	//
-	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	// Returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
-	GiveKnowledgeVerdictWithBodyWithResponse(ctx context.Context, org OrgRef, document DocumentRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GiveKnowledgeVerdictResponse, error)
+	// Corresponds with GET /v1/orgs/{org}/knowledge/files (the `FindKnowledgeFiles` operationId).
+	FindKnowledgeFilesWithResponse(ctx context.Context, org OrgRef, params *FindKnowledgeFilesParams, reqEditors ...RequestEditorFn) (*FindKnowledgeFilesResponse, error)
 
-	// GiveKnowledgeVerdictWithResponse Say whether a document helped or misled
+	// ListKnowledgeReadsWithResponse How often runs read and searched the sources' files
 	//
-	// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+	// The daily rollup of runs' reads and searches under /knowledge (ADR 0038 decision 10), of one source or every one, over the last days days counting today (UTC): one row per source, path, factory and day, by day, source, path and factory. A search of a whole source counts at the path ".". Factories the caller may not see are left out. 404 knowledge-source-not-found.
 	//
-	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	// Returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
-	GiveKnowledgeVerdictWithResponse(ctx context.Context, org OrgRef, document DocumentRef, body GiveKnowledgeVerdictJSONRequestBody, reqEditors ...RequestEditorFn) (*GiveKnowledgeVerdictResponse, error)
+	// Corresponds with GET /v1/orgs/{org}/knowledge/reads (the `ListKnowledgeReads` operationId).
+	ListKnowledgeReadsWithResponse(ctx context.Context, org OrgRef, params *ListKnowledgeReadsParams, reqEditors ...RequestEditorFn) (*ListKnowledgeReadsResponse, error)
 
 	// SearchKnowledgeWithResponse Search the knowledge base as agents do
 	//
@@ -27768,6 +28497,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/documents (the `UploadKnowledgeDocuments` operationId).
 	UploadKnowledgeDocumentsWithBodyWithResponse(ctx context.Context, org OrgRef, source SourceRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadKnowledgeDocumentsResponse, error)
 
+	// ListKnowledgeFilesWithResponse One page of a source's current files
+	//
+	// The files of the source's current snapshot (ADR 0038 decision 3), in path order, after the path after; next_after, when set, is the after of the next page. With find, only those whose path, or title in any case, starts with it. None before the first snapshot. 404 knowledge-source-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/files (the `ListKnowledgeFiles` operationId).
+	ListKnowledgeFilesWithResponse(ctx context.Context, org OrgRef, source SourceRef, params *ListKnowledgeFilesParams, reqEditors ...RequestEditorFn) (*ListKnowledgeFilesResponse, error)
+
+	// GetKnowledgeFileWithResponse One file's Markdown
+	//
+	// The file as runs read it under /knowledge/<source>/, from the source's current snapshot. goald reads it from the snapshot's zip by range (the end record, the central directory, then the one entry), never the whole zip. 404 knowledge-source-not-found, 404 knowledge-file-not-found for a path the snapshot does not hold or a source with no snapshot yet.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/files/{path} (the `GetKnowledgeFile` operationId).
+	GetKnowledgeFileWithResponse(ctx context.Context, org OrgRef, source SourceRef, path KnowledgeFilePath, reqEditors ...RequestEditorFn) (*GetKnowledgeFileResponse, error)
+
 	// SyncKnowledgeSourceWithResponse Sync a source now
 	//
 	// The source is due at once; the next free goald syncs it, and `event: knowledge` on the stream says when that starts and ends. 409 for a live source, which never syncs.
@@ -27776,6 +28523,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/sync (the `SyncKnowledgeSource` operationId).
 	SyncKnowledgeSourceWithResponse(ctx context.Context, org OrgRef, source SourceRef, reqEditors ...RequestEditorFn) (*SyncKnowledgeSourceResponse, error)
+
+	// DeleteKnowledgeUploadWithResponse Delete an uploaded file
+	//
+	// The upload at path, with its stored file when no other upload holds the same content; the next sync, which the deletion makes due, leaves it out of the snapshot. 404 knowledge-file-not-found, 409 not-an-upload-source. Audited as knowledge_document.deleted.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/knowledge/sources/{source}/uploads (the `DeleteKnowledgeUpload` operationId).
+	DeleteKnowledgeUploadWithResponse(ctx context.Context, org OrgRef, source SourceRef, params *DeleteKnowledgeUploadParams, reqEditors ...RequestEditorFn) (*DeleteKnowledgeUploadResponse, error)
+
+	// UploadKnowledgeFilesWithBodyWithResponse Upload files to an upload source
+	//
+	// Each part named files is one file at the path its file name gives, which may hold folders (runbooks/db/disk.md); a path that is not relative and clean is 400. Text, Markdown, HTML, JSON or YAML of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most that and 1 MiB more. The upload makes the source due, and its next sync writes the snapshot that holds them. Every file is checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as knowledge_document.uploaded.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/uploads (the `UploadKnowledgeFiles` operationId).
+	UploadKnowledgeFilesWithBodyWithResponse(ctx context.Context, org OrgRef, source SourceRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadKnowledgeFilesResponse, error)
 
 	// GetKnowledgeUsageWithResponse Where a source's documents were used
 	//
@@ -35081,6 +35846,54 @@ func (r SetTouchReasonResponse) ContentType() string {
 	return ""
 }
 
+type CheckKnowledgeSourceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *KnowledgeCheck
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r CheckKnowledgeSourceResponse) GetJSON200() *KnowledgeCheck {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CheckKnowledgeSourceResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CheckKnowledgeSourceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CheckKnowledgeSourceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CheckKnowledgeSourceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CheckKnowledgeSourceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type DeleteKnowledgeDocumentResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -35267,32 +36080,32 @@ func (r ListKnowledgeDocumentUsesResponse) ContentType() string {
 	return ""
 }
 
-type GiveKnowledgeVerdictResponse struct {
+type FindKnowledgeFilesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *KnowledgeVerdict
+	JSON200 *KnowledgeFileList
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Problem
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GiveKnowledgeVerdictResponse) GetJSON200() *KnowledgeVerdict {
+func (r FindKnowledgeFilesResponse) GetJSON200() *KnowledgeFileList {
 	return r.JSON200
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r GiveKnowledgeVerdictResponse) GetApplicationproblemJSONDefault() *Problem {
+func (r FindKnowledgeFilesResponse) GetApplicationproblemJSONDefault() *Problem {
 	return r.ApplicationproblemJSONDefault
 }
 
 // GetBody returns the raw response body bytes
-func (r GiveKnowledgeVerdictResponse) GetBody() []byte {
+func (r FindKnowledgeFilesResponse) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r GiveKnowledgeVerdictResponse) Status() string {
+func (r FindKnowledgeFilesResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -35300,7 +36113,7 @@ func (r GiveKnowledgeVerdictResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GiveKnowledgeVerdictResponse) StatusCode() int {
+func (r FindKnowledgeFilesResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -35308,7 +36121,55 @@ func (r GiveKnowledgeVerdictResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r GiveKnowledgeVerdictResponse) ContentType() string {
+func (r FindKnowledgeFilesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListKnowledgeReadsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *KnowledgeReadList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListKnowledgeReadsResponse) GetJSON200() *KnowledgeReadList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListKnowledgeReadsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListKnowledgeReadsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListKnowledgeReadsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListKnowledgeReadsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListKnowledgeReadsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -35692,6 +36553,95 @@ func (r UploadKnowledgeDocumentsResponse) ContentType() string {
 	return ""
 }
 
+type ListKnowledgeFilesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *KnowledgeFilePage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListKnowledgeFilesResponse) GetJSON200() *KnowledgeFilePage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListKnowledgeFilesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListKnowledgeFilesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListKnowledgeFilesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListKnowledgeFilesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListKnowledgeFilesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetKnowledgeFileResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetKnowledgeFileResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetKnowledgeFileResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetKnowledgeFileResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetKnowledgeFileResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetKnowledgeFileResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type SyncKnowledgeSourceResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -35727,6 +36677,95 @@ func (r SyncKnowledgeSourceResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r SyncKnowledgeSourceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteKnowledgeUploadResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DeleteKnowledgeUploadResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteKnowledgeUploadResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteKnowledgeUploadResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteKnowledgeUploadResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteKnowledgeUploadResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UploadKnowledgeFilesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *KnowledgeUploadList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r UploadKnowledgeFilesResponse) GetJSON202() *KnowledgeUploadList {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r UploadKnowledgeFilesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r UploadKnowledgeFilesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UploadKnowledgeFilesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UploadKnowledgeFilesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UploadKnowledgeFilesResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -40556,6 +41595,36 @@ func (c *ClientWithResponses) SetTouchReasonWithResponse(ctx context.Context, or
 	return ParseSetTouchReasonResponse(rsp)
 }
 
+// CheckKnowledgeSourceWithBodyWithResponse Check a source's settings before saving them
+//
+// The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/knowledge/check (the `CheckKnowledgeSource` operationId).
+func (c *ClientWithResponses) CheckKnowledgeSourceWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CheckKnowledgeSourceResponse, error) {
+	rsp, err := c.CheckKnowledgeSourceWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCheckKnowledgeSourceResponse(rsp)
+}
+
+// CheckKnowledgeSourceWithResponse Check a source's settings before saving them
+//
+// The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/knowledge/check (the `CheckKnowledgeSource` operationId).
+func (c *ClientWithResponses) CheckKnowledgeSourceWithResponse(ctx context.Context, org OrgRef, body CheckKnowledgeSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*CheckKnowledgeSourceResponse, error) {
+	rsp, err := c.CheckKnowledgeSource(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCheckKnowledgeSourceResponse(rsp)
+}
+
 // DeleteKnowledgeDocumentWithResponse Delete an uploaded document
 //
 // With its chunks, and its file when no other document holds the same content. 409 not-an-upload-source for a synced document, which its next sync would bring back. Audited as knowledge_document.deleted.
@@ -40616,34 +41685,34 @@ func (c *ClientWithResponses) ListKnowledgeDocumentUsesWithResponse(ctx context.
 	return ParseListKnowledgeDocumentUsesResponse(rsp)
 }
 
-// GiveKnowledgeVerdictWithBodyWithResponse Say whether a document helped or misled
+// FindKnowledgeFilesWithResponse Find a file across every source
 //
-// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+// The current files of every source whose path, or title in any case, starts with find, by source name then path, at most limit.
 //
-// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+// Returns a wrapper object for the known response body format(s).
 //
-// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
-func (c *ClientWithResponses) GiveKnowledgeVerdictWithBodyWithResponse(ctx context.Context, org OrgRef, document DocumentRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GiveKnowledgeVerdictResponse, error) {
-	rsp, err := c.GiveKnowledgeVerdictWithBody(ctx, org, document, contentType, body, reqEditors...)
+// Corresponds with GET /v1/orgs/{org}/knowledge/files (the `FindKnowledgeFiles` operationId).
+func (c *ClientWithResponses) FindKnowledgeFilesWithResponse(ctx context.Context, org OrgRef, params *FindKnowledgeFilesParams, reqEditors ...RequestEditorFn) (*FindKnowledgeFilesResponse, error) {
+	rsp, err := c.FindKnowledgeFiles(ctx, org, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGiveKnowledgeVerdictResponse(rsp)
+	return ParseFindKnowledgeFilesResponse(rsp)
 }
 
-// GiveKnowledgeVerdictWithResponse Say whether a document helped or misled
+// ListKnowledgeReadsWithResponse How often runs read and searched the sources' files
 //
-// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+// The daily rollup of runs' reads and searches under /knowledge (ADR 0038 decision 10), of one source or every one, over the last days days counting today (UTC): one row per source, path, factory and day, by day, source, path and factory. A search of a whole source counts at the path ".". Factories the caller may not see are left out. 404 knowledge-source-not-found.
 //
-// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+// Returns a wrapper object for the known response body format(s).
 //
-// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
-func (c *ClientWithResponses) GiveKnowledgeVerdictWithResponse(ctx context.Context, org OrgRef, document DocumentRef, body GiveKnowledgeVerdictJSONRequestBody, reqEditors ...RequestEditorFn) (*GiveKnowledgeVerdictResponse, error) {
-	rsp, err := c.GiveKnowledgeVerdict(ctx, org, document, body, reqEditors...)
+// Corresponds with GET /v1/orgs/{org}/knowledge/reads (the `ListKnowledgeReads` operationId).
+func (c *ClientWithResponses) ListKnowledgeReadsWithResponse(ctx context.Context, org OrgRef, params *ListKnowledgeReadsParams, reqEditors ...RequestEditorFn) (*ListKnowledgeReadsResponse, error) {
+	rsp, err := c.ListKnowledgeReads(ctx, org, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGiveKnowledgeVerdictResponse(rsp)
+	return ParseListKnowledgeReadsResponse(rsp)
 }
 
 // SearchKnowledgeWithResponse Search the knowledge base as agents do
@@ -40796,6 +41865,36 @@ func (c *ClientWithResponses) UploadKnowledgeDocumentsWithBodyWithResponse(ctx c
 	return ParseUploadKnowledgeDocumentsResponse(rsp)
 }
 
+// ListKnowledgeFilesWithResponse One page of a source's current files
+//
+// The files of the source's current snapshot (ADR 0038 decision 3), in path order, after the path after; next_after, when set, is the after of the next page. With find, only those whose path, or title in any case, starts with it. None before the first snapshot. 404 knowledge-source-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/files (the `ListKnowledgeFiles` operationId).
+func (c *ClientWithResponses) ListKnowledgeFilesWithResponse(ctx context.Context, org OrgRef, source SourceRef, params *ListKnowledgeFilesParams, reqEditors ...RequestEditorFn) (*ListKnowledgeFilesResponse, error) {
+	rsp, err := c.ListKnowledgeFiles(ctx, org, source, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListKnowledgeFilesResponse(rsp)
+}
+
+// GetKnowledgeFileWithResponse One file's Markdown
+//
+// The file as runs read it under /knowledge/<source>/, from the source's current snapshot. goald reads it from the snapshot's zip by range (the end record, the central directory, then the one entry), never the whole zip. 404 knowledge-source-not-found, 404 knowledge-file-not-found for a path the snapshot does not hold or a source with no snapshot yet.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/files/{path} (the `GetKnowledgeFile` operationId).
+func (c *ClientWithResponses) GetKnowledgeFileWithResponse(ctx context.Context, org OrgRef, source SourceRef, path KnowledgeFilePath, reqEditors ...RequestEditorFn) (*GetKnowledgeFileResponse, error) {
+	rsp, err := c.GetKnowledgeFile(ctx, org, source, path, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetKnowledgeFileResponse(rsp)
+}
+
 // SyncKnowledgeSourceWithResponse Sync a source now
 //
 // The source is due at once; the next free goald syncs it, and `event: knowledge` on the stream says when that starts and ends. 409 for a live source, which never syncs.
@@ -40809,6 +41908,36 @@ func (c *ClientWithResponses) SyncKnowledgeSourceWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseSyncKnowledgeSourceResponse(rsp)
+}
+
+// DeleteKnowledgeUploadWithResponse Delete an uploaded file
+//
+// The upload at path, with its stored file when no other upload holds the same content; the next sync, which the deletion makes due, leaves it out of the snapshot. 404 knowledge-file-not-found, 409 not-an-upload-source. Audited as knowledge_document.deleted.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/knowledge/sources/{source}/uploads (the `DeleteKnowledgeUpload` operationId).
+func (c *ClientWithResponses) DeleteKnowledgeUploadWithResponse(ctx context.Context, org OrgRef, source SourceRef, params *DeleteKnowledgeUploadParams, reqEditors ...RequestEditorFn) (*DeleteKnowledgeUploadResponse, error) {
+	rsp, err := c.DeleteKnowledgeUpload(ctx, org, source, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteKnowledgeUploadResponse(rsp)
+}
+
+// UploadKnowledgeFilesWithBodyWithResponse Upload files to an upload source
+//
+// Each part named files is one file at the path its file name gives, which may hold folders (runbooks/db/disk.md); a path that is not relative and clean is 400. Text, Markdown, HTML, JSON or YAML of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most that and 1 MiB more. The upload makes the source due, and its next sync writes the snapshot that holds them. Every file is checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as knowledge_document.uploaded.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/uploads (the `UploadKnowledgeFiles` operationId).
+func (c *ClientWithResponses) UploadKnowledgeFilesWithBodyWithResponse(ctx context.Context, org OrgRef, source SourceRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadKnowledgeFilesResponse, error) {
+	rsp, err := c.UploadKnowledgeFilesWithBody(ctx, org, source, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUploadKnowledgeFilesResponse(rsp)
 }
 
 // GetKnowledgeUsageWithResponse Where a source's documents were used
@@ -46392,6 +47521,39 @@ func ParseSetTouchReasonResponse(rsp *http.Response) (*SetTouchReasonResponse, e
 	return response, nil
 }
 
+// ParseCheckKnowledgeSourceResponse parses an HTTP response from a CheckKnowledgeSourceWithResponse call
+func ParseCheckKnowledgeSourceResponse(rsp *http.Response) (*CheckKnowledgeSourceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CheckKnowledgeSourceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest KnowledgeCheck
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseDeleteKnowledgeDocumentResponse parses an HTTP response from a DeleteKnowledgeDocumentWithResponse call
 func ParseDeleteKnowledgeDocumentResponse(rsp *http.Response) (*DeleteKnowledgeDocumentResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -46533,22 +47695,55 @@ func ParseListKnowledgeDocumentUsesResponse(rsp *http.Response) (*ListKnowledgeD
 	return response, nil
 }
 
-// ParseGiveKnowledgeVerdictResponse parses an HTTP response from a GiveKnowledgeVerdictWithResponse call
-func ParseGiveKnowledgeVerdictResponse(rsp *http.Response) (*GiveKnowledgeVerdictResponse, error) {
+// ParseFindKnowledgeFilesResponse parses an HTTP response from a FindKnowledgeFilesWithResponse call
+func ParseFindKnowledgeFilesResponse(rsp *http.Response) (*FindKnowledgeFilesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GiveKnowledgeVerdictResponse{
+	response := &FindKnowledgeFilesResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest KnowledgeVerdict
+		var dest KnowledgeFileList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListKnowledgeReadsResponse parses an HTTP response from a ListKnowledgeReadsWithResponse call
+func ParseListKnowledgeReadsResponse(rsp *http.Response) (*ListKnowledgeReadsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListKnowledgeReadsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest KnowledgeReadList
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -46826,6 +48021,65 @@ func ParseUploadKnowledgeDocumentsResponse(rsp *http.Response) (*UploadKnowledge
 	return response, nil
 }
 
+// ParseListKnowledgeFilesResponse parses an HTTP response from a ListKnowledgeFilesWithResponse call
+func ParseListKnowledgeFilesResponse(rsp *http.Response) (*ListKnowledgeFilesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListKnowledgeFilesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest KnowledgeFilePage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetKnowledgeFileResponse parses an HTTP response from a GetKnowledgeFileWithResponse call
+func ParseGetKnowledgeFileResponse(rsp *http.Response) (*GetKnowledgeFileResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetKnowledgeFileResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseSyncKnowledgeSourceResponse parses an HTTP response from a SyncKnowledgeSourceWithResponse call
 func ParseSyncKnowledgeSourceResponse(rsp *http.Response) (*SyncKnowledgeSourceResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -46842,6 +48096,68 @@ func ParseSyncKnowledgeSourceResponse(rsp *http.Response) (*SyncKnowledgeSourceR
 	switch {
 	case rsp.StatusCode == 202:
 		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteKnowledgeUploadResponse parses an HTTP response from a DeleteKnowledgeUploadWithResponse call
+func ParseDeleteKnowledgeUploadResponse(rsp *http.Response) (*DeleteKnowledgeUploadResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteKnowledgeUploadResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUploadKnowledgeFilesResponse parses an HTTP response from a UploadKnowledgeFilesWithResponse call
+func ParseUploadKnowledgeFilesResponse(rsp *http.Response) (*UploadKnowledgeFilesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UploadKnowledgeFilesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest KnowledgeUploadList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
@@ -48719,6 +50035,9 @@ type ServerInterface interface {
 	// SetTouchReason Say why a person had to act on an item
 	// (PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason)
 	SetTouchReason(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, event int64)
+	// CheckKnowledgeSource Check a source's settings before saving them
+	// (POST /v1/orgs/{org}/knowledge/check)
+	CheckKnowledgeSource(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// DeleteKnowledgeDocument Delete an uploaded document
 	// (DELETE /v1/orgs/{org}/knowledge/documents/{document})
 	DeleteKnowledgeDocument(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef)
@@ -48731,9 +50050,12 @@ type ServerInterface interface {
 	// ListKnowledgeDocumentUses One page of the runs that used a document
 	// (GET /v1/orgs/{org}/knowledge/documents/{document}/uses)
 	ListKnowledgeDocumentUses(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef, params ListKnowledgeDocumentUsesParams)
-	// GiveKnowledgeVerdict Say whether a document helped or misled
-	// (PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict)
-	GiveKnowledgeVerdict(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef)
+	// FindKnowledgeFiles Find a file across every source
+	// (GET /v1/orgs/{org}/knowledge/files)
+	FindKnowledgeFiles(w http.ResponseWriter, r *http.Request, org OrgRef, params FindKnowledgeFilesParams)
+	// ListKnowledgeReads How often runs read and searched the sources' files
+	// (GET /v1/orgs/{org}/knowledge/reads)
+	ListKnowledgeReads(w http.ResponseWriter, r *http.Request, org OrgRef, params ListKnowledgeReadsParams)
 	// SearchKnowledge Search the knowledge base as agents do
 	// (GET /v1/orgs/{org}/knowledge/search)
 	SearchKnowledge(w http.ResponseWriter, r *http.Request, org OrgRef, params SearchKnowledgeParams)
@@ -48758,9 +50080,21 @@ type ServerInterface interface {
 	// UploadKnowledgeDocuments Upload files to an upload source
 	// (POST /v1/orgs/{org}/knowledge/sources/{source}/documents)
 	UploadKnowledgeDocuments(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef)
+	// ListKnowledgeFiles One page of a source's current files
+	// (GET /v1/orgs/{org}/knowledge/sources/{source}/files)
+	ListKnowledgeFiles(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef, params ListKnowledgeFilesParams)
+	// GetKnowledgeFile One file's Markdown
+	// (GET /v1/orgs/{org}/knowledge/sources/{source}/files/{path})
+	GetKnowledgeFile(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef, path KnowledgeFilePath)
 	// SyncKnowledgeSource Sync a source now
 	// (POST /v1/orgs/{org}/knowledge/sources/{source}/sync)
 	SyncKnowledgeSource(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef)
+	// DeleteKnowledgeUpload Delete an uploaded file
+	// (DELETE /v1/orgs/{org}/knowledge/sources/{source}/uploads)
+	DeleteKnowledgeUpload(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef, params DeleteKnowledgeUploadParams)
+	// UploadKnowledgeFiles Upload files to an upload source
+	// (POST /v1/orgs/{org}/knowledge/sources/{source}/uploads)
+	UploadKnowledgeFiles(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef)
 	// GetKnowledgeUsage Where a source's documents were used
 	// (GET /v1/orgs/{org}/knowledge/usage)
 	GetKnowledgeUsage(w http.ResponseWriter, r *http.Request, org OrgRef, params GetKnowledgeUsageParams)
@@ -54761,6 +56095,32 @@ func (siw *ServerInterfaceWrapper) SetTouchReason(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// CheckKnowledgeSource operation middleware
+func (siw *ServerInterfaceWrapper) CheckKnowledgeSource(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CheckKnowledgeSource(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // DeleteKnowledgeDocument operation middleware
 func (siw *ServerInterfaceWrapper) DeleteKnowledgeDocument(w http.ResponseWriter, r *http.Request) {
 
@@ -54930,8 +56290,8 @@ func (siw *ServerInterfaceWrapper) ListKnowledgeDocumentUses(w http.ResponseWrit
 	handler.ServeHTTP(w, r)
 }
 
-// GiveKnowledgeVerdict operation middleware
-func (siw *ServerInterfaceWrapper) GiveKnowledgeVerdict(w http.ResponseWriter, r *http.Request) {
+// FindKnowledgeFiles operation middleware
+func (siw *ServerInterfaceWrapper) FindKnowledgeFiles(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -54945,17 +56305,92 @@ func (siw *ServerInterfaceWrapper) GiveKnowledgeVerdict(w http.ResponseWriter, r
 		return
 	}
 
-	// ------------- Path parameter "document" -------------
-	var document DocumentRef
+	// Parameter object where we will unmarshal all parameters from the context
+	var params FindKnowledgeFilesParams
 
-	err = runtime.BindStyledParameterWithOptions("simple", "document", r.PathValue("document"), &document, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	// ------------- Required query parameter "find" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "find", r.URL.Query(), &params.Find, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "document", Err: err})
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "find"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "find", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GiveKnowledgeVerdict(w, r, org, document)
+		siw.Handler.FindKnowledgeFiles(w, r, org, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListKnowledgeReads operation middleware
+func (siw *ServerInterfaceWrapper) ListKnowledgeReads(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListKnowledgeReadsParams
+
+	// ------------- Optional query parameter "source" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "source", r.URL.Query(), &params.Source, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "source"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "source", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "days" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "days", r.URL.Query(), &params.Days, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "days"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "days", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListKnowledgeReads(w, r, org, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -55305,6 +56740,127 @@ func (siw *ServerInterfaceWrapper) UploadKnowledgeDocuments(w http.ResponseWrite
 	handler.ServeHTTP(w, r)
 }
 
+// ListKnowledgeFiles operation middleware
+func (siw *ServerInterfaceWrapper) ListKnowledgeFiles(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "source" -------------
+	var source SourceRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "source", r.PathValue("source"), &source, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "source", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListKnowledgeFilesParams
+
+	// ------------- Optional query parameter "find" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "find", r.URL.Query(), &params.Find, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "find"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "find", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListKnowledgeFiles(w, r, org, source, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetKnowledgeFile operation middleware
+func (siw *ServerInterfaceWrapper) GetKnowledgeFile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "source" -------------
+	var source SourceRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "source", r.PathValue("source"), &source, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "source", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "path" -------------
+	var path KnowledgeFilePath
+
+	err = runtime.BindStyledParameterWithOptions("simple", "path", r.PathValue("path"), &path, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetKnowledgeFile(w, r, org, source, path)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SyncKnowledgeSource operation middleware
 func (siw *ServerInterfaceWrapper) SyncKnowledgeSource(w http.ResponseWriter, r *http.Request) {
 
@@ -55331,6 +56887,92 @@ func (siw *ServerInterfaceWrapper) SyncKnowledgeSource(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SyncKnowledgeSource(w, r, org, source)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteKnowledgeUpload operation middleware
+func (siw *ServerInterfaceWrapper) DeleteKnowledgeUpload(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "source" -------------
+	var source SourceRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "source", r.PathValue("source"), &source, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "source", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteKnowledgeUploadParams
+
+	// ------------- Required query parameter "path" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "path", r.URL.Query(), &params.Path, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "path"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteKnowledgeUpload(w, r, org, source, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadKnowledgeFiles operation middleware
+func (siw *ServerInterfaceWrapper) UploadKnowledgeFiles(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "source" -------------
+	var source SourceRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "source", r.PathValue("source"), &source, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "source", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadKnowledgeFiles(w, r, org, source)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -57244,13 +58886,19 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}", wrapper.GetKnowledgeSource)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}", wrapper.UpdateKnowledgeSource)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}/sync", wrapper.SyncKnowledgeSource)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}/files", wrapper.ListKnowledgeFiles)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}/files/{path}", wrapper.GetKnowledgeFile)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}/uploads", wrapper.DeleteKnowledgeUpload)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}/uploads", wrapper.UploadKnowledgeFiles)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/check", wrapper.CheckKnowledgeSource)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/files", wrapper.FindKnowledgeFiles)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/reads", wrapper.ListKnowledgeReads)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}/documents", wrapper.ListKnowledgeDocuments)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}/documents", wrapper.UploadKnowledgeDocuments)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/documents/{document}", wrapper.DeleteKnowledgeDocument)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/documents/{document}", wrapper.GetKnowledgeDocument)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/documents/{document}/content", wrapper.GetKnowledgeDocumentContent)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/documents/{document}/uses", wrapper.ListKnowledgeDocumentUses)
-	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/documents/{document}/verdict", wrapper.GiveKnowledgeVerdict)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/usage", wrapper.GetKnowledgeUsage)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/search", wrapper.SearchKnowledge)
 
@@ -63221,6 +64869,46 @@ func (response SetTouchReasondefaultApplicationProblemPlusJSONResponse) VisitSet
 	return err
 }
 
+type CheckKnowledgeSourceRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *CheckKnowledgeSourceJSONRequestBody
+}
+
+type CheckKnowledgeSourceResponseObject interface {
+	VisitCheckKnowledgeSourceResponse(w http.ResponseWriter) error
+}
+
+type CheckKnowledgeSource200JSONResponse KnowledgeCheck
+
+func (response CheckKnowledgeSource200JSONResponse) VisitCheckKnowledgeSourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CheckKnowledgeSourcedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CheckKnowledgeSourcedefaultApplicationProblemPlusJSONResponse) VisitCheckKnowledgeSourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DeleteKnowledgeDocumentRequestObject struct {
 	Org      OrgRef      `json:"org"`
 	Document DocumentRef `json:"document"`
@@ -63390,19 +65078,18 @@ func (response ListKnowledgeDocumentUsesdefaultApplicationProblemPlusJSONRespons
 	return err
 }
 
-type GiveKnowledgeVerdictRequestObject struct {
-	Org      OrgRef      `json:"org"`
-	Document DocumentRef `json:"document"`
-	Body     *GiveKnowledgeVerdictJSONRequestBody
+type FindKnowledgeFilesRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params FindKnowledgeFilesParams
 }
 
-type GiveKnowledgeVerdictResponseObject interface {
-	VisitGiveKnowledgeVerdictResponse(w http.ResponseWriter) error
+type FindKnowledgeFilesResponseObject interface {
+	VisitFindKnowledgeFilesResponse(w http.ResponseWriter) error
 }
 
-type GiveKnowledgeVerdict200JSONResponse KnowledgeVerdict
+type FindKnowledgeFiles200JSONResponse KnowledgeFileList
 
-func (response GiveKnowledgeVerdict200JSONResponse) VisitGiveKnowledgeVerdictResponse(w http.ResponseWriter) error {
+func (response FindKnowledgeFiles200JSONResponse) VisitFindKnowledgeFilesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -63414,12 +65101,52 @@ func (response GiveKnowledgeVerdict200JSONResponse) VisitGiveKnowledgeVerdictRes
 	return err
 }
 
-type GiveKnowledgeVerdictdefaultApplicationProblemPlusJSONResponse struct {
+type FindKnowledgeFilesdefaultApplicationProblemPlusJSONResponse struct {
 	Body       Problem
 	StatusCode int
 }
 
-func (response GiveKnowledgeVerdictdefaultApplicationProblemPlusJSONResponse) VisitGiveKnowledgeVerdictResponse(w http.ResponseWriter) error {
+func (response FindKnowledgeFilesdefaultApplicationProblemPlusJSONResponse) VisitFindKnowledgeFilesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListKnowledgeReadsRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params ListKnowledgeReadsParams
+}
+
+type ListKnowledgeReadsResponseObject interface {
+	VisitListKnowledgeReadsResponse(w http.ResponseWriter) error
+}
+
+type ListKnowledgeReads200JSONResponse KnowledgeReadList
+
+func (response ListKnowledgeReads200JSONResponse) VisitListKnowledgeReadsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListKnowledgeReadsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListKnowledgeReadsdefaultApplicationProblemPlusJSONResponse) VisitListKnowledgeReadsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -63748,6 +65475,94 @@ func (response UploadKnowledgeDocumentsdefaultApplicationProblemPlusJSONResponse
 	return err
 }
 
+type ListKnowledgeFilesRequestObject struct {
+	Org    OrgRef    `json:"org"`
+	Source SourceRef `json:"source"`
+	Params ListKnowledgeFilesParams
+}
+
+type ListKnowledgeFilesResponseObject interface {
+	VisitListKnowledgeFilesResponse(w http.ResponseWriter) error
+}
+
+type ListKnowledgeFiles200JSONResponse KnowledgeFilePage
+
+func (response ListKnowledgeFiles200JSONResponse) VisitListKnowledgeFilesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListKnowledgeFilesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListKnowledgeFilesdefaultApplicationProblemPlusJSONResponse) VisitListKnowledgeFilesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetKnowledgeFileRequestObject struct {
+	Org    OrgRef            `json:"org"`
+	Source SourceRef         `json:"source"`
+	Path   KnowledgeFilePath `json:"path"`
+}
+
+type GetKnowledgeFileResponseObject interface {
+	VisitGetKnowledgeFileResponse(w http.ResponseWriter) error
+}
+
+type GetKnowledgeFile200TextmarkdownResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response GetKnowledgeFile200TextmarkdownResponse) VisitGetKnowledgeFileResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/markdown")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetKnowledgeFiledefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetKnowledgeFiledefaultApplicationProblemPlusJSONResponse) VisitGetKnowledgeFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type SyncKnowledgeSourceRequestObject struct {
 	Org    OrgRef    `json:"org"`
 	Source SourceRef `json:"source"`
@@ -63771,6 +65586,82 @@ type SyncKnowledgeSourcedefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response SyncKnowledgeSourcedefaultApplicationProblemPlusJSONResponse) VisitSyncKnowledgeSourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteKnowledgeUploadRequestObject struct {
+	Org    OrgRef    `json:"org"`
+	Source SourceRef `json:"source"`
+	Params DeleteKnowledgeUploadParams
+}
+
+type DeleteKnowledgeUploadResponseObject interface {
+	VisitDeleteKnowledgeUploadResponse(w http.ResponseWriter) error
+}
+
+type DeleteKnowledgeUpload204Response struct {
+}
+
+func (response DeleteKnowledgeUpload204Response) VisitDeleteKnowledgeUploadResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteKnowledgeUploaddefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteKnowledgeUploaddefaultApplicationProblemPlusJSONResponse) VisitDeleteKnowledgeUploadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadKnowledgeFilesRequestObject struct {
+	Org    OrgRef    `json:"org"`
+	Source SourceRef `json:"source"`
+	Body   *multipart.Reader
+}
+
+type UploadKnowledgeFilesResponseObject interface {
+	VisitUploadKnowledgeFilesResponse(w http.ResponseWriter) error
+}
+
+type UploadKnowledgeFiles202JSONResponse KnowledgeUploadList
+
+func (response UploadKnowledgeFiles202JSONResponse) VisitUploadKnowledgeFilesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadKnowledgeFilesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UploadKnowledgeFilesdefaultApplicationProblemPlusJSONResponse) VisitUploadKnowledgeFilesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -65982,6 +67873,9 @@ type StrictServerInterface interface {
 	// SetTouchReason Say why a person had to act on an item
 	// (PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason)
 	SetTouchReason(ctx context.Context, request SetTouchReasonRequestObject) (SetTouchReasonResponseObject, error)
+	// CheckKnowledgeSource Check a source's settings before saving them
+	// (POST /v1/orgs/{org}/knowledge/check)
+	CheckKnowledgeSource(ctx context.Context, request CheckKnowledgeSourceRequestObject) (CheckKnowledgeSourceResponseObject, error)
 	// DeleteKnowledgeDocument Delete an uploaded document
 	// (DELETE /v1/orgs/{org}/knowledge/documents/{document})
 	DeleteKnowledgeDocument(ctx context.Context, request DeleteKnowledgeDocumentRequestObject) (DeleteKnowledgeDocumentResponseObject, error)
@@ -65994,9 +67888,12 @@ type StrictServerInterface interface {
 	// ListKnowledgeDocumentUses One page of the runs that used a document
 	// (GET /v1/orgs/{org}/knowledge/documents/{document}/uses)
 	ListKnowledgeDocumentUses(ctx context.Context, request ListKnowledgeDocumentUsesRequestObject) (ListKnowledgeDocumentUsesResponseObject, error)
-	// GiveKnowledgeVerdict Say whether a document helped or misled
-	// (PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict)
-	GiveKnowledgeVerdict(ctx context.Context, request GiveKnowledgeVerdictRequestObject) (GiveKnowledgeVerdictResponseObject, error)
+	// FindKnowledgeFiles Find a file across every source
+	// (GET /v1/orgs/{org}/knowledge/files)
+	FindKnowledgeFiles(ctx context.Context, request FindKnowledgeFilesRequestObject) (FindKnowledgeFilesResponseObject, error)
+	// ListKnowledgeReads How often runs read and searched the sources' files
+	// (GET /v1/orgs/{org}/knowledge/reads)
+	ListKnowledgeReads(ctx context.Context, request ListKnowledgeReadsRequestObject) (ListKnowledgeReadsResponseObject, error)
 	// SearchKnowledge Search the knowledge base as agents do
 	// (GET /v1/orgs/{org}/knowledge/search)
 	SearchKnowledge(ctx context.Context, request SearchKnowledgeRequestObject) (SearchKnowledgeResponseObject, error)
@@ -66021,9 +67918,21 @@ type StrictServerInterface interface {
 	// UploadKnowledgeDocuments Upload files to an upload source
 	// (POST /v1/orgs/{org}/knowledge/sources/{source}/documents)
 	UploadKnowledgeDocuments(ctx context.Context, request UploadKnowledgeDocumentsRequestObject) (UploadKnowledgeDocumentsResponseObject, error)
+	// ListKnowledgeFiles One page of a source's current files
+	// (GET /v1/orgs/{org}/knowledge/sources/{source}/files)
+	ListKnowledgeFiles(ctx context.Context, request ListKnowledgeFilesRequestObject) (ListKnowledgeFilesResponseObject, error)
+	// GetKnowledgeFile One file's Markdown
+	// (GET /v1/orgs/{org}/knowledge/sources/{source}/files/{path})
+	GetKnowledgeFile(ctx context.Context, request GetKnowledgeFileRequestObject) (GetKnowledgeFileResponseObject, error)
 	// SyncKnowledgeSource Sync a source now
 	// (POST /v1/orgs/{org}/knowledge/sources/{source}/sync)
 	SyncKnowledgeSource(ctx context.Context, request SyncKnowledgeSourceRequestObject) (SyncKnowledgeSourceResponseObject, error)
+	// DeleteKnowledgeUpload Delete an uploaded file
+	// (DELETE /v1/orgs/{org}/knowledge/sources/{source}/uploads)
+	DeleteKnowledgeUpload(ctx context.Context, request DeleteKnowledgeUploadRequestObject) (DeleteKnowledgeUploadResponseObject, error)
+	// UploadKnowledgeFiles Upload files to an upload source
+	// (POST /v1/orgs/{org}/knowledge/sources/{source}/uploads)
+	UploadKnowledgeFiles(ctx context.Context, request UploadKnowledgeFilesRequestObject) (UploadKnowledgeFilesResponseObject, error)
 	// GetKnowledgeUsage Where a source's documents were used
 	// (GET /v1/orgs/{org}/knowledge/usage)
 	GetKnowledgeUsage(ctx context.Context, request GetKnowledgeUsageRequestObject) (GetKnowledgeUsageResponseObject, error)
@@ -70380,6 +72289,39 @@ func (sh *strictHandler) SetTouchReason(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// CheckKnowledgeSource operation middleware
+func (sh *strictHandler) CheckKnowledgeSource(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request CheckKnowledgeSourceRequestObject
+
+	request.Org = org
+
+	var body CheckKnowledgeSourceJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CheckKnowledgeSource(ctx, request.(CheckKnowledgeSourceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CheckKnowledgeSource")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CheckKnowledgeSourceResponseObject); ok {
+		if err := validResponse.VisitCheckKnowledgeSourceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // DeleteKnowledgeDocument operation middleware
 func (sh *strictHandler) DeleteKnowledgeDocument(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef) {
 	var request DeleteKnowledgeDocumentRequestObject
@@ -70489,33 +72431,53 @@ func (sh *strictHandler) ListKnowledgeDocumentUses(w http.ResponseWriter, r *htt
 	}
 }
 
-// GiveKnowledgeVerdict operation middleware
-func (sh *strictHandler) GiveKnowledgeVerdict(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef) {
-	var request GiveKnowledgeVerdictRequestObject
+// FindKnowledgeFiles operation middleware
+func (sh *strictHandler) FindKnowledgeFiles(w http.ResponseWriter, r *http.Request, org OrgRef, params FindKnowledgeFilesParams) {
+	var request FindKnowledgeFilesRequestObject
 
 	request.Org = org
-	request.Document = document
-
-	var body GiveKnowledgeVerdictJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GiveKnowledgeVerdict(ctx, request.(GiveKnowledgeVerdictRequestObject))
+		return sh.ssi.FindKnowledgeFiles(ctx, request.(FindKnowledgeFilesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GiveKnowledgeVerdict")
+		handler = middleware(handler, "FindKnowledgeFiles")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GiveKnowledgeVerdictResponseObject); ok {
-		if err := validResponse.VisitGiveKnowledgeVerdictResponse(w); err != nil {
+	} else if validResponse, ok := response.(FindKnowledgeFilesResponseObject); ok {
+		if err := validResponse.VisitFindKnowledgeFilesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListKnowledgeReads operation middleware
+func (sh *strictHandler) ListKnowledgeReads(w http.ResponseWriter, r *http.Request, org OrgRef, params ListKnowledgeReadsParams) {
+	var request ListKnowledgeReadsRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListKnowledgeReads(ctx, request.(ListKnowledgeReadsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListKnowledgeReads")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListKnowledgeReadsResponseObject); ok {
+		if err := validResponse.VisitListKnowledgeReadsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -70760,6 +72722,62 @@ func (sh *strictHandler) UploadKnowledgeDocuments(w http.ResponseWriter, r *http
 	}
 }
 
+// ListKnowledgeFiles operation middleware
+func (sh *strictHandler) ListKnowledgeFiles(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef, params ListKnowledgeFilesParams) {
+	var request ListKnowledgeFilesRequestObject
+
+	request.Org = org
+	request.Source = source
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListKnowledgeFiles(ctx, request.(ListKnowledgeFilesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListKnowledgeFiles")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListKnowledgeFilesResponseObject); ok {
+		if err := validResponse.VisitListKnowledgeFilesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetKnowledgeFile operation middleware
+func (sh *strictHandler) GetKnowledgeFile(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef, path KnowledgeFilePath) {
+	var request GetKnowledgeFileRequestObject
+
+	request.Org = org
+	request.Source = source
+	request.Path = path
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetKnowledgeFile(ctx, request.(GetKnowledgeFileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetKnowledgeFile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetKnowledgeFileResponseObject); ok {
+		if err := validResponse.VisitGetKnowledgeFileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // SyncKnowledgeSource operation middleware
 func (sh *strictHandler) SyncKnowledgeSource(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef) {
 	var request SyncKnowledgeSourceRequestObject
@@ -70780,6 +72798,68 @@ func (sh *strictHandler) SyncKnowledgeSource(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SyncKnowledgeSourceResponseObject); ok {
 		if err := validResponse.VisitSyncKnowledgeSourceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteKnowledgeUpload operation middleware
+func (sh *strictHandler) DeleteKnowledgeUpload(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef, params DeleteKnowledgeUploadParams) {
+	var request DeleteKnowledgeUploadRequestObject
+
+	request.Org = org
+	request.Source = source
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteKnowledgeUpload(ctx, request.(DeleteKnowledgeUploadRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteKnowledgeUpload")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteKnowledgeUploadResponseObject); ok {
+		if err := validResponse.VisitDeleteKnowledgeUploadResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UploadKnowledgeFiles operation middleware
+func (sh *strictHandler) UploadKnowledgeFiles(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef) {
+	var request UploadKnowledgeFilesRequestObject
+
+	request.Org = org
+	request.Source = source
+
+	if reader, err := r.MultipartReader(); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode multipart body: %w", err))
+		return
+	} else {
+		request.Body = reader
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UploadKnowledgeFiles(ctx, request.(UploadKnowledgeFilesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UploadKnowledgeFiles")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UploadKnowledgeFilesResponseObject); ok {
+		if err := validResponse.VisitUploadKnowledgeFilesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

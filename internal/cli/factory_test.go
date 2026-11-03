@@ -139,7 +139,8 @@ func newDefGoald(t *testing.T) *defGoald {
 	kb := porttest.NewKnowledge(conns, tenancy)
 	creds := porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, conns)
 	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, conns)
-	uploads := knowledge.NewUploads(kb, porttest.NewObjectStore(), 0)
+	kbObjects := porttest.NewObjectStore()
+	uploads := knowledge.NewUploads(kb, kbObjects, 0)
 
 	// Its own transport: parallel tests closing their httptest servers call CloseIdleConnections on
 	// http.DefaultTransport, which breaks a connection test's request in flight.
@@ -160,6 +161,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		Builder: builder.New(objects, clock, builder.Config{}), Connections: conns, ParseKind: connkind.Parse,
 		Credentials: creds, OrgSecrets: secrets, EnvironmentTests: envTests, ToolLister: tools, Intake: porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store), DraftRequests: porttest.NewDraftRequests(tenancy, clock.Now),
 		ConnectionTransport: transport, CodeHosts: map[string]ports.CodeHost{"github": codehost}, Knowledge: kb, KnowledgeUploads: uploads, KnowledgeSearch: knowledge.NewSearcher(kb, nil, nil),
+		KnowledgeObjects: kbObjects, KnowledgeCheck: knowledge.NewIngestor(knowledge.IngestorConfig{Knowledge: kb, Secrets: secrets, Uploads: uploads, Objects: kbObjects, Clock: clock}),
 		UploadMaxBytes: domain.DefaultMaxUpload, Clock: clock, NotificationPreferences: porttest.NewNotificationPreferences(),
 		OrgPolicies: porttest.NewOrgPolicies(nil, tenancy, clock.Now), BoxSizes: []domain.BoxSize{{Size: domain.SandboxMedium, VCPUs: 2, MemoryBytes: 4 << 30}},
 	})
@@ -174,6 +176,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		// The knowledge fake dates sources by the time of day, so the loop's clock is too.
 		in := knowledge.NewIngestor(knowledge.IngestorConfig{
 			Knowledge: kb, Connections: conns, Uploads: uploads, Clock: porttest.NewClock(time.Now().Add(time.Second)),
+			Objects: kbObjects, TempDir: t.TempDir(),
 		})
 		if _, err := in.SyncDue(t.Context()); err != nil {
 			t.Fatal(err)

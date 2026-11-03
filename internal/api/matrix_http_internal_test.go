@@ -307,6 +307,7 @@ func mxServer(t *testing.T, identity Identity) *httptest.Server {
 		Builder: struct{ Builder }{}, Connections: struct{ ports.Connections }{}, Credentials: struct{ ports.Credentials }{}, OrgSecrets: struct{ ports.OrgSecrets }{}, EnvironmentTests: struct{ ports.EnvironmentTests }{}, ToolLister: struct{ ports.ToolLister }{}, Intake: struct{ ports.Intake }{}, DraftRequests: struct{ ports.DraftRequests }{}, ParseKind: connkind.Parse,
 		ConnectionTransport: http.DefaultTransport, Knowledge: struct{ ports.Knowledge }{}, KnowledgeUploads: struct{ KnowledgeUploads }{},
 		KnowledgeSearch: struct{ KnowledgeSearch }{}, UploadMaxBytes: 1 << 20, Clock: clock,
+		KnowledgeObjects: struct{ KnowledgeObjects }{}, KnowledgeCheck: struct{ KnowledgeCheck }{},
 		OrgPolicies: struct{ ports.OrgPolicies }{}, BoxSizes: []domain.BoxSize{{Size: domain.SandboxMedium}},
 		NotificationPreferences: mxNotifications{},
 	})

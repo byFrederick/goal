@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/config"
@@ -12,22 +11,14 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// Where knowledge was used and what people said of it (ADR 0027): a source's usage, the runs that
-// used a document and a run's documents need knowledge:read (a run's, factory:read); a person's
-// verdict needs knowledge:verdict. ports.Knowledge audits the verdict and sends the stream's
-// knowledge event.
+// Where knowledge was used and what people said of it (ADR 0027), until the cut-over (ADR 0038
+// decision 16): a source's usage, the runs that used a document and a run's documents need
+// knowledge:read (a run's, factory:read). Verdicts are no longer given (decision 9).
 
 // Limits of a document's uses.
 const (
 	defaultDocumentUses = 50
 	maxDocumentUses     = 100
-)
-
-// Errors of verdicts, answered by knowledgeProblem: a run with no use of the document (422), and
-// a verdict the rules refuse (400).
-var (
-	errDocumentNotUsed = errors.New("the run did not use the knowledge document")
-	errVerdictInvalid  = errors.New("knowledge verdict invalid")
 )
 
 func (s *server) GetKnowledgeUsage(ctx context.Context, req gen.GetKnowledgeUsageRequestObject) (gen.GetKnowledgeUsageResponseObject, error) {
@@ -113,74 +104,6 @@ func (s *server) ListKnowledgeDocumentUses(ctx context.Context, req gen.ListKnow
 	}
 
 	return out, nil
-}
-
-// GiveKnowledgeVerdict stores the caller's verdict; with a run_id, of a run the caller sees that
-// used the document, and of its item.
-func (s *server) GiveKnowledgeVerdict(ctx context.Context, req gen.GiveKnowledgeVerdictRequestObject) (gen.GiveKnowledgeVerdictResponseObject, error) {
-	by, ok := domain.ActorFrom(ctx)
-	if !ok {
-		return nil, errors.New("give knowledge verdict: the request has no actor")
-	}
-
-	if req.Body == nil {
-		return nil, fmt.Errorf("%w: a verdict needs a body", errInvalid)
-	}
-
-	doc := domain.KnowledgeDocumentID(req.Document)
-	v := domain.KnowledgeVerdict{Document: doc, Verdict: domain.KnowledgeVerdictKind(req.Body.Verdict), Note: deref(req.Body.Note), By: by}
-
-	if err := v.Check(); err != nil {
-		return nil, fmt.Errorf("%w: %w", errVerdictInvalid, err)
-	}
-
-	if id := deref(req.Body.RunId); id != "" {
-		r, err := s.run(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := s.usedBy(ctx, doc, r.ID); err != nil {
-			return nil, err
-		}
-
-		v.Run, v.Item = r.ID, r.ItemID
-	}
-
-	stored, err := s.knowledge.GiveVerdict(ctx, v)
-	if errors.Is(err, domain.ErrInvalid) {
-		return nil, fmt.Errorf("%w: %w", errVerdictInvalid, err)
-	}
-
-	if err != nil {
-		return nil, documentError(err, req.Document)
-	}
-
-	names, err := s.sourceNames(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return gen.GiveKnowledgeVerdict200JSONResponse(s.verdictOut(stored, names)), nil
-}
-
-// usedBy is nil when run used the document, errDocumentNotUsed when the document exists but
-// run did not use it, and errDocumentNotFound for no such document.
-func (s *server) usedBy(ctx context.Context, doc domain.KnowledgeDocumentID, run domain.RunID) error {
-	uses, err := s.knowledge.RunUses(ctx, run)
-	if err != nil {
-		return fmt.Errorf("run %s knowledge uses: %w", run, err)
-	}
-
-	if slices.ContainsFunc(uses, func(u domain.KnowledgeUse) bool { return u.Document == doc }) {
-		return nil
-	}
-
-	if _, _, err := s.knowledge.Document(ctx, doc); err != nil {
-		return documentError(err, string(doc))
-	}
-
-	return fmt.Errorf("%w: run %s, document %s", errDocumentNotUsed, run, doc)
 }
 
 func (s *server) ListRunKnowledge(ctx context.Context, req gen.ListRunKnowledgeRequestObject) (gen.ListRunKnowledgeResponseObject, error) {

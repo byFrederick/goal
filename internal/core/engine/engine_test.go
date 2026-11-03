@@ -82,6 +82,8 @@ type harness struct {
 	policies ports.OrgPolicies
 	// knowledge holds the test organization's knowledge snapshots (knowledge_test.go); nil pins none.
 	knowledge *porttest.Knowledge
+	// knowledgeDeps, when set, is the engine's knowledge base instead of knowledge.
+	knowledgeDeps engine.KnowledgeSnapshots
 	// intake holds the trigger firings and the schedule lock every engine of the harness shares.
 	intake *porttest.Intake
 	// modelCheck answers triggers' model checks; nil builds the engine without one.
@@ -221,6 +223,10 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 
 // snapshots are the engine's knowledge snapshots: none without h.knowledge.
 func (h *harness) snapshots() engine.KnowledgeSnapshots {
+	if h.knowledgeDeps != nil {
+		return h.knowledgeDeps
+	}
+
 	if h.knowledge == nil {
 		return nil
 	}

@@ -151,6 +151,7 @@ function seed(now: number, by: Actor): MockSource[] {
   ): KnowledgeSource => ({
     id: `019a1c00-0000-7000-8000-0000000000e${i}`,
     config: {},
+    read_when: '',
     sync_every_seconds: 3600,
     status: 'idle',
     last_synced_at: at(-1 * dayMs),
@@ -390,6 +391,7 @@ export function createKnowledge({
         ...(connection ? { connection } : {}),
         ...(secret ? { secret } : {}),
         config: v.config,
+        read_when: '',
         sync_every_seconds: every,
         status: 'idle',
         last_synced_at: null,

@@ -21,9 +21,10 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// The organization's knowledge base (spec 4 §4.8, §8.2): members and keys list, read and search
-// it (knowledge:read); owners, admins and keys add, change, sync and delete sources, upload files
-// and delete them (knowledge:manage). A search here is the one agents run through the gateway.
+// The organization's knowledge base (spec 4 §4.8, ADR 0038 decision 13): members, keys and
+// personal tokens list and read its sources, files and reads (knowledge:read); owners, admins and
+// keys add, check, change, sync and delete sources, upload files and delete them
+// (knowledge:manage). The documents and search routes stay until the cut-over (decision 16).
 
 // KnowledgeUploads keeps the files uploaded to upload sources (*knowledge.Uploads): Check refuses
 // a file Upload would (ports.ErrTooLarge, domain.ErrUnsupportedDocument) before anything is
@@ -76,6 +77,7 @@ func knowledgeProblem(err error) (gen.Problem, bool) {
 	}{
 		{errSourceNotFound, http.StatusNotFound, "knowledge-source-not-found"},
 		{errDocumentNotFound, http.StatusNotFound, "knowledge-document-not-found"},
+		{errFileNotFound, http.StatusNotFound, "knowledge-file-not-found"},
 		{errSourceTaken, http.StatusConflict, "knowledge-source-name-taken"},
 		{errSourceInUse, http.StatusConflict, "knowledge-source-in-use"},
 		{errSourceLive, http.StatusConflict, "knowledge-source-live"},
@@ -83,9 +85,7 @@ func knowledgeProblem(err error) (gen.Problem, bool) {
 		{errUploadTooLarge, http.StatusRequestEntityTooLarge, "upload-too-large"},
 		{domain.ErrUnsupportedDocument, http.StatusUnsupportedMediaType, "unsupported-document-type"},
 		{domain.ErrConnectionCannotSync, http.StatusBadRequest, "connection-cannot-sync"},
-		{errDocumentNotUsed, http.StatusUnprocessableEntity, "knowledge-document-not-used"},
 		{errSourceInvalid, http.StatusBadRequest, ""},
-		{errVerdictInvalid, http.StatusBadRequest, ""},
 	}
 
 	for _, a := range answers {
@@ -182,7 +182,7 @@ func (s *server) CreateKnowledgeSource(ctx context.Context, req gen.CreateKnowle
 
 	src, err := s.knowledge.CreateSource(ctx, domain.NewKnowledgeSource{
 		Name: b.Name, Title: b.Title, Kind: domain.KnowledgeSourceKind(b.Kind), Connection: deref(b.Connection), Secret: deref(b.Secret),
-		Config: deref(b.Config), SyncEvery: seconds(b.SyncEverySeconds),
+		Config: deref(b.Config), ReadWhen: deref(b.ReadWhen), SyncEvery: seconds(b.SyncEverySeconds),
 	}, by)
 
 	switch {
@@ -219,7 +219,7 @@ func (s *server) UpdateKnowledgeSource(ctx context.Context, req gen.UpdateKnowle
 	}
 
 	b := req.Body
-	p := domain.KnowledgeSourcePatch{Title: b.Title, Secret: b.Secret}
+	p := domain.KnowledgeSourcePatch{Title: b.Title, ReadWhen: b.ReadWhen, Secret: b.Secret}
 
 	if err := s.sourceSecret(ctx, b.Secret); err != nil {
 		return nil, err
@@ -269,7 +269,7 @@ func (s *server) DeleteKnowledgeSource(ctx context.Context, req gen.DeleteKnowle
 			names = append(names, f.name)
 		}
 
-		return nil, fmt.Errorf("%w: knowledge source %q may be searched by the current version of %s; publish them without it first",
+		return nil, fmt.Errorf("%w: knowledge source %q is listed by the published version of %s; publish them without it first",
 			errSourceInUse, req.Source, strings.Join(names, ", "))
 	}
 
@@ -601,7 +601,7 @@ func (s *server) sourceSecret(ctx context.Context, name *string) error {
 func (s *server) sourceOut(ctx context.Context, src domain.KnowledgeSource, by []factoryUse) gen.KnowledgeSource {
 	out := gen.KnowledgeSource{
 		Id: string(src.ID), Name: src.Name, Title: src.Title, Kind: gen.KnowledgeSourceKind(src.Kind), Connection: optional(src.Connection),
-		Secret: optional(src.Secret), Config: map[string]string{}, SyncEverySeconds: int(src.SyncEvery / time.Second), Status: gen.KnowledgeSourceStatus(src.Status),
+		Secret: optional(src.Secret), Config: map[string]string{}, ReadWhen: src.ReadWhen, SyncEverySeconds: int(src.SyncEvery / time.Second), Status: gen.KnowledgeSourceStatus(src.Status),
 		LastError: optional(src.LastError), LastSyncedAt: src.LastSyncedAt, NextSyncAt: src.NextSyncAt, Documents: src.Documents,
 		EmbedModel: optional(src.EmbedModel), UsedBy: gen.KnowledgeSourceUsers{Factories: []gen.ConnectionFactory{}},
 		CreatedBy: s.actorOut(src.CreatedBy), CreatedAt: src.CreatedAt, UpdatedAt: src.UpdatedAt,

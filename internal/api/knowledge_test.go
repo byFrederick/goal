@@ -48,6 +48,14 @@ func (h *harness) createHandbook(t *testing.T) gen.KnowledgeSource {
 func (h *harness) upload(t *testing.T, source string, files ...[2]string) response {
 	t.Helper()
 
+	return h.uploadTo(t, sourcesPath+"/"+source+"/documents", files...)
+}
+
+// uploadTo posts files (path → content) to path as multipart/form-data, each file name as given,
+// folders and all.
+func (h *harness) uploadTo(t *testing.T, path string, files ...[2]string) response {
+	t.Helper()
+
 	var buf bytes.Buffer
 
 	mw := multipart.NewWriter(&buf)
@@ -67,17 +75,18 @@ func (h *harness) upload(t *testing.T, source string, files ...[2]string) respon
 		t.Fatal(err)
 	}
 
-	return h.request(t, http.MethodPost, sourcesPath+"/"+source+"/documents", buf.String(),
-		http.Header{"Content-Type": {mw.FormDataContentType()}})
+	return h.request(t, http.MethodPost, path, buf.String(), http.Header{contentType: {mw.FormDataContentType()}})
 }
 
-// syncAll runs one ingestion pass over the organizations' due sources, as goald's loop does: on a
-// clock of its own, since the knowledge fake dates sources by the time of day.
+// syncAll runs one ingestion pass over the organizations' due sources, as goald's loop does,
+// writing snapshots into the harness's objects: on a clock of its own, since the knowledge fake
+// dates sources by the time of day.
 func (h *harness) syncAll(t *testing.T) {
 	t.Helper()
 
 	in := knowledge.NewIngestor(knowledge.IngestorConfig{
 		Knowledge: h.kb, Connections: h.conns, Uploads: h.uploads, Clock: porttest.NewClock(time.Now().Add(time.Second)),
+		Objects: h.kbObjects, TempDir: t.TempDir(),
 	})
 
 	if _, err := in.SyncDue(t.Context()); err != nil {
