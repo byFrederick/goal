@@ -1,6 +1,6 @@
 # ADR 0038 — Knowledge is files: synced folders, factory memory, an index in every prompt
 
-Status: proposed · 2026-11-03 · Amended by [ADR 0039](0039-jonah-learns-from-the-line.md) (decision 11: how Jonah fills factory memory)
+Status: proposed · 2026-11-03 · Amended by [ADR 0039](0039-jonah-learns-from-the-line.md) (decision 11: how Jonah fills factory memory) and [ADR 0041](0041-code-and-github-without-an-app.md) (a repository source's secret opens only for the factories that list it; hosts come from the organization's list)
 
 - **Replaces:**
   - Decision 6 of [ADR 0008](0008-portable-runs-connections-and-knowledge.md): the knowledge base of chunks and vectors, searched through gateway tools.

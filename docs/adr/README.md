@@ -43,3 +43,4 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0038](0038-knowledge-is-files.md): Knowledge is files: synced folders, factory memory, an index in every prompt. Status: proposed.
 - [ADR 0039](0039-jonah-learns-from-the-line.md): Jonah learns from the line: evidence from every item, tries on past items, a watch on every change. Status: proposed.
 - [ADR 0040](0040-one-door-for-every-source.md): One door for every source: start times, follow-ups that say where they go, webhooks that work. Status: proposed.
+- [ADR 0041](0041-code-and-github-without-an-app.md): Code and GitHub without an App: optional code access, a repository per item, webhooks the organization connects once. Status: proposed.

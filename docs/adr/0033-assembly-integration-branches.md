@@ -1,6 +1,6 @@
 # ADR 0033 — Assembly integration branches: an opt-in branch that collects an assembly's parts and lands at a gate
 
-Status: accepted · 2026-10-28 · Builds on [ADR 0012](0012-assemblies-and-parts.md) (a plan becomes an assembly whose parts ship together) and [ADR 0015](0015-overlapping-in-flight-work.md) (how parts in flight share the default branch)
+Status: accepted · 2026-10-28 · Amended by [ADR 0041](0041-code-and-github-without-an-app.md) (integration branches live in the assembly's repository) · Builds on [ADR 0012](0012-assemblies-and-parts.md) (a plan becomes an assembly whose parts ship together) and [ADR 0015](0015-overlapping-in-flight-work.md) (how parts in flight share the default branch)
 
 ## Context
 

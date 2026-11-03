@@ -1,6 +1,6 @@
 # ADR 0032 — Self-serve onboarding: anyone signed in creates an organization, and progress comes from existing data
 
-Status: accepted · 2026-10-27 · Amended by [ADR 0040](0040-one-door-for-every-source.md) (the Intake step offers the definition's disabled triggers and says `goal run`) · Builds on [ADR 0016](0016-ui-revamp.md) (decision 6 orders onboarding among the new features built end to end) · Amends [ADR 0007](0007-identity-better-auth.md) decision 5 (only platform admins created organizations)
+Status: accepted · 2026-10-27 · Amended by [ADR 0040](0040-one-door-for-every-source.md) (the Intake step offers the definition's disabled triggers and says `goal run`) and [ADR 0041](0041-code-and-github-without-an-app.md) (onboarding asks for code after the factory, as no code, read only, or read and write) · Builds on [ADR 0016](0016-ui-revamp.md) (decision 6 orders onboarding among the new features built end to end) · Amends [ADR 0007](0007-identity-better-auth.md) decision 5 (only platform admins created organizations)
 
 ## Context
 

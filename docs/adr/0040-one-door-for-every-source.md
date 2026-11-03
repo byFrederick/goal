@@ -1,12 +1,12 @@
 # ADR 0040 — One door for every source: start times, follow-ups that say where they go, webhooks that work
 
-Status: proposed · 2026-11-03
+Status: proposed · 2026-11-03 · Amended by [ADR 0041](0041-code-and-github-without-an-app.md) (a trigger can set the item's repository; GitHub webhooks are connected once for the organization)
 
 - **Replaces:**
   - [ADR 0028](0028-trigger-try-and-model-check.md), decisions 3–7: the model check in Only if goes (decision 18). Decisions 1 and 2, one evaluation function and Try as a dry run, stay; Try now covers webhook deliveries too.
   - [ADR 0026](0026-intake-triggers.md), decision 3's `X-Goal-Signature` scheme and decision 6's list of what is not built.
 - **Amends:**
-  - [ADR 0026](0026-intake-triggers.md), intake triggers: what a trigger matches and checks, where an endpoint's secret lives, and how a firing is written (decisions 12–18).
+  - [ADR 0026](0026-intake-triggers.md), intake triggers: webhooks belong to the organization and are opened to factories, senders sign as a catalog says, and the decisions also cover what a trigger matches and checks, where a webhook's secret lives and how a firing is written (decisions 12–18).
   - [ADR 0012](0012-assemblies-and-parts.md): parts are filed through the same door as every other item (decisions 1 and 2).
   - [ADR 0015](0015-overlapping-in-flight-work.md): people and follow-ups can set `after` when they file an item, and an item held by `after` waits at the first station (decisions 3 and 4).
   - [ADR 0032](0032-self-serve-onboarding.md): the onboarding Intake step offers the definition's disabled triggers, not a list in the web code (decision 17).
@@ -145,58 +145,118 @@ The owner chose option C of three on 2026-11-03: one door for every source, star
 
 ### Webhooks
 
-12. **`POST /hooks/{endpoint id}` receives deliveries.** It takes no session or API key. It reads at most 1 MiB, then checks the signature against the raw body before parsing anything, in constant time.
-    - **`github` endpoints:** `X-Hub-Signature-256`, the HMAC-SHA256 of the body. `X-GitHub-Event` names the event and `X-GitHub-Delivery` is the delivery id.
-    - **`standard` endpoints** (today's `generic`, which stays an alias for one release): [Standard Webhooks](https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md).
-      - The secret is `whsec_` plus base64.
-      - `webhook-signature` holds one or more space-separated `v1,<base64 HMAC-SHA256 of id.timestamp.body>` values, and any one that matches passes.
-      - `webhook-id` is the delivery id.
-      - A `webhook-timestamp` more than 5 minutes from goald's clock is refused.
-      - The event is `on`'s last part, matched against the body's `type`, or `event` when there is no `type`.
+12. **Webhooks belong to the organization, and `POST /hooks/{webhook id}` receives them.**
+    - **Connected once, opened to factories.** An organization admin creates a webhook once per sender, such as a GitHub organization or PagerDuty.
+      - **Openings:** the admin opens it to factories, each opening optionally limited to some repositories. The opening rows are `webhook_openings`: webhook, factory and an optional repository list. A new webhook is open to no factory.
+      - **Delivery limits:** a delivery from a repository outside an opening never reaches that factory.
+      - **Names and routes:**
+        - `webhook_endpoints` loses `factory_id`, and names are unique in the organization;
+        - the sender names, `schedule` and `webhook` are reserved;
+        - routes move to `/v1/orgs/{org}/webhooks…`, with `PATCH …/webhooks/{webhook}` to open, close, limit or rename;
+        - `webhook:manage` becomes an organization permission, for owners and admins.
+      - **Refusals:** deleting, closing or renaming a webhook that published triggers use answers 409, listing them.
+    - **Who sees what.**
+      - A delivery's body and headers can be read only with `webhook:manage`. An organization webhook carries every repository's events, private ones included.
+      - A factory's Intake and its routes show only that factory's evaluations, with the fields its triggers used.
+      - Try uses only the trigger's own firings.
+    - **The receiver** takes no session or API key. It reads at most 1 MiB, then checks the signature against the raw body before parsing anything, in constant time.
+    - **How each sender signs is data,** in a catalog under `internal/catalog/senders/`, apart from ADR 0037's tool templates. An entry gives:
+      - its `scheme`: `hmac`, or `token` for a plain shared value;
+      - the header that carries the signature, its prefix, and whether it may hold several values, any of which passes;
+      - what is signed: the body, or the id, timestamp and body;
+      - the encodings of the signature and of the secret, such as `whsec_` base64;
+      - where the delivery id is (a header or a body path), with a hash of the body when there is none;
+      - the timestamp and its tolerance;
+      - where the event name is (a header or a body path);
+      - the event table of decision 14.
+
+      A sender added later is an entry with its tests, not code. This ADR adds:
+      - **`github`** (`hmac`): `X-Hub-Signature-256`, `sha256=` and hex of the body. `X-GitHub-Event` and `X-GitHub-Delivery` give the event and the id. It serves organization and repository webhooks, on github.com and the organization's Enterprise hosts (ADR 0041, decision 1).
+      - **`gitlab`** (`token`): `X-Gitlab-Token`. The event is the body's `object_kind`, and the id is `X-Gitlab-Event-UUID`.
+      - **`standard`** ([Standard Webhooks](https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md), `hmac`):
+        - a `whsec_` base64 secret;
+        - `webhook-signature` with several `v1,` values allowed;
+        - `webhook-id`;
+        - a `webhook-timestamp` refused when more than 5 minutes off;
+        - the event is the body's `type`, or `event`;
+        - today's `generic` stays an alias for one release.
+      - **`pagerduty`** (`hmac`): `X-PagerDuty-Signature`, with several `v1=` values allowed. The event is the body's `event.event_type`, and the id is `event.id`.
+      - **`sentry`** (`hmac`): `Sentry-Hook-Signature`. `Sentry-Hook-Resource` names the event, and `Request-ID` is the id.
+      - **`token`** (`token`), for a sender that can only add a header, such as Datadog or a script:
+        - the header, `Authorization: Bearer` by default;
+        - the body path of the event;
+        - the body path of an id, if any.
+
+        These settings are columns on `webhook_endpoints`.
 
     The answers:
     - **202** with the delivery's id when accepted.
-    - **200** for a delivery id the endpoint has already taken. Nothing is created, and the first delivery's row counts the duplicate.
+    - **200** for a delivery id the webhook has already taken. Nothing is created, and the first delivery's row counts the duplicate.
     - **401** for a missing or wrong signature.
-    - **404** for an unknown or disabled endpoint. `webhook_endpoints` gains `enabled`.
+    - **404** for an unknown or disabled webhook. `webhook_endpoints` gains `enabled`.
     - **413** over 1 MiB.
-    - **429** with `Retry-After` past 30 refused deliveries a minute per endpoint, and past 60 requests a minute per address for unknown endpoints, counted in each instance's memory.
+    - **429** with `Retry-After` past 30 refused deliveries a minute per webhook, and past 60 requests a minute per address for unknown webhooks, counted in each instance's memory.
 
     Signed deliveries are never rate-limited, because GitHub doesn't resend a refused one. The items they create are limited instead (decision 14).
 
     What is kept:
-    - A delivery's body is kept only when an enabled trigger of the endpoint can match its event; otherwise only its metadata.
-    - Refused deliveries keep metadata only.
-    - Delivery ids go into a ledger without bodies, kept for a year, so a captured GitHub delivery, which carries no signed timestamp, can't be replayed after the 30 days that deliveries are kept.
+    - **The ledger:** every accepted delivery id goes into a ledger without bodies, kept for a year. A captured GitHub delivery carries no signed timestamp, and deliveries are kept only 30 days, so the ledger stops a replay after that.
+    - **A delivery no enabled trigger names** (by its webhook or sender and event, in a factory it's open to) keeps only its ledger id and a daily count, with no row and no body.
+    - **Other deliveries** keep their row and body for 30 days.
+    - **Refused deliveries** keep metadata only.
 
-13. **Deliveries are evaluated by a loop on every instance, not in the request.**
-    - **Receiving:** the receiver stores an accepted delivery as pending and answers.
-    - **Evaluating:** each goald instance's loop claims pending deliveries with `FOR UPDATE SKIP LOCKED`. It evaluates each against the factory's triggers in one transaction with its firings and items (decision 1's helper), so instances share the work and a crash loses nothing.
-    - **Failing:** a delivery that fails is retried with backoff and marked `failed` after five attempts, with the error, as the notification outbox does.
-    - **GitHub's ping,** sent when a repository webhook is added, is accepted and shown on the endpoint as "Received GitHub's ping".
-    - **Each delivery shows what it led to:** created item N, skipped with the reason, no trigger matched, duplicate, or failed.
-    - **Grants:** the app's role gains UPDATE on `webhook_deliveries`, for the pending state, and DELETE on `trigger_firings`, for pruning.
+13. **Deliveries are evaluated for each factory that names them, by a loop on every instance.**
+    - **Receiving:** the receiver stores the delivery's receipt (accepted, duplicate or refused) and answers.
+    - **Evaluating:**
+      - The receiver adds one row to `delivery_evaluations` for each factory with an enabled trigger that names the delivery's webhook or sender and its event, and that passes `create.repository`'s repository check (ADR 0041, decision 13). The lines are already in memory.
+      - Each row holds the state (pending, done or failed), attempts, the next attempt, a lease, and the outcome with its reason and item.
+      - Each goald instance's loop claims pending rows with `FOR UPDATE SKIP LOCKED`, as the notification outbox does. It evaluates each row in one transaction with that factory's firings and items (decision 1's helper).
+      - A failure in one factory is retried there with backoff, and marked `failed` after five attempts, with the error. Instances share the work, and a crash loses nothing.
+    - **GitHub's ping,** sent when a webhook is added in GitHub, is accepted and shown on the webhook as "Received GitHub's ping".
+    - **The delivery log uses one vocabulary in two parts.**
+      - **Receipt:** Accepted, Duplicate or Refused.
+      - **Per factory:** Created item N, Skipped with the reason, or Failed.
+    - **Grants:** the app's role gains UPDATE on `delivery_evaluations` and DELETE on `trigger_firings`, for pruning.
 
-14. **A trigger matches any event of its source.**
-    - **GitHub events:** `on: github.<event>` takes any `X-GitHub-Event` value: `check_run`, `workflow_run`, `issues`, `pull_request`, `push` and the rest.
-      - A table kept as data maps each event to the normalized fields it supplies, as dot paths into its payload, such as `check_run`'s `name`, `conclusion`, `branch`, `repo` and `sender`.
+14. **A trigger names a sender or one webhook, and matches any event the sender supplies.**
+    - **The forms of `on`:**
+      - `on: <sender>.<event>`, such as `on: github.check_run`, matches that event from every webhook of the sender open to the factory. This form fits a template, which can't know an organization's webhook names.
+      - `on: <webhook>.<event>`, such as `on: github-byfrederick.check_run`, names one webhook.
+      - `on: <webhook>` takes all of that webhook's events.
+      - Today's keys `github.check_run.failed` and `github.issues.labeled` read as `on: github.check_run` and `on: github.issues` with their filters.
+      - Publish refuses a webhook that isn't open to the factory.
+    - **Event tables are data,** in the sender's catalog entry. Each event maps to the normalized fields it supplies, as dot paths into its payload, such as `check_run`'s `name`, `conclusion`, `branch`, `repo` and `sender`.
+      - Config refuses a filter that a sender form can't supply, for example "pull_request carries no changed paths", because it can read the catalog.
+      - Publish does the same for the webhook form, because it knows the organization's webhooks.
+    - **Filters:**
       - `filter` gains `action` and `conclusion` next to `branch`, `repo`, `label`, `paths`, `authors` and `skipBots`.
-      - Config and Try refuse a filter the event can't supply, for example "pull_request carries no changed paths", instead of never firing.
-      - The two keys of today, `github.check_run.failed` and `github.issues.labeled`, stay as shorthands.
-    - **Standard webhooks:** `on: webhook.<endpoint>[.<event>]` matches that endpoint's deliveries. `filter.match` matches payload fields by dot path, each against a value or a list of values, and all must match.
+      - `filter.match` matches payload fields by dot path, each against a value or a list of values, and all must match.
+      - `repo` takes a list, so one trigger watches several repositories; leaving it out watches all of them.
     - **Templates:** they read the normalized fields (`{{check.name}}`, `{{repo}}`) and any field of the stored body as `{{payload.<path>}}`. The untrusted block holds the fields the trigger used and stays under 8 KiB.
+    - **The item's repository** can come from the event, with `create.repository: "{{repo}}"` ([ADR 0041](0041-code-and-github-without-an-app.md), decision 13).
     - **Limits:** `limits.perHour` (default 10) joins `perDay` and `pauseOnBudget`, so a burst of matching events can't flood the line.
-    - **GitHub needs no App.** A repository webhook (Settings, Webhooks) with the endpoint's address and secret, sending only the events the triggers use, is enough, and the Webhooks page lists those events.
+    - **GitHub needs no App.**
+      - One organization webhook, added by an owner of the GitHub organization, covers every repository, including ones created later.
+      - A repository webhook does the same for one repository, posting to the same address.
+      - The webhook's page lists the events the triggers use, so the admin sends only those.
 
-15. **An endpoint's secret is a secret (ADR 0037).**
-    - **Naming the secret:** an endpoint names an organization secret through a foreign key, with `ON UPDATE CASCADE`, so a rename follows and a delete is refused while the endpoint uses it.
+15. **A webhook's secret is a secret (ADR 0037), used only for signatures.**
+    - **Naming the secret:** a webhook names an organization secret through a foreign key, with `ON UPDATE CASCADE`. A rename follows, and a delete is refused while the webhook uses it.
     - **New webhook** either:
-      - creates a secret named `<factory>-<endpoint>` (cut to 40 characters) with a generated value, `whsec_` plus base64 for a standard endpoint, shown once; or
-      - uses an existing secret, for a sender that issues its own.
-    - **Checking a signature** opens the secret without an audit entry per delivery. The secret's Uses list shows the endpoint and its last delivery.
-    - **Changing the value:** a secret that an endpoint uses keeps its previous value for 24 hours, so deliveries signed with either pass while the sender is updated.
-    - **Headers never stored:** `webhook-signature` joins them, with `X-Hub-Signature-256`.
-    - **The conversion** turns each sealed endpoint secret into a secret, as ADR 0037 decision 19 step 5 planned. It runs in goald, because unsealing needs the master key. The sealed columns, and `goal_connection_key_ids()`'s read of them, go in a later item (decision 23).
+      - creates a secret named `webhook-<name>` (cut to 40 characters) with a generated value, shown once; or
+      - uses an existing secret, for a sender that issues its own, such as PagerDuty or Sentry.
+
+      Either way the secret is open to no factory. Publish refuses an environment, a repository token or a model key that names a secret a webhook uses, so nobody can forge deliveries from inside a run.
+    - **Checking a signature** opens the secret without an audit entry per delivery. The secret's Uses list shows the webhook and its last delivery.
+    - **Changing the value:** a secret that a webhook uses keeps its previous value for 24 hours, so deliveries signed with either pass while the sender is updated.
+    - **Headers never stored:** `X-Hub-Signature-256`, `webhook-signature`, `X-PagerDuty-Signature`, `Sentry-Hook-Signature`, `X-Gitlab-Token` and a `token` sender's header.
+    - **The migration** that adds `secret_id`:
+      - makes the sealed `key_id`, `nonce` and `ciphertext` nullable;
+      - adds `WHERE key_id IS NOT NULL` to `goal_connection_key_ids()`, as migration 00086 does for connections. Otherwise an empty key id would stop goald from starting.
+    - **The conversion:**
+      - It turns each sealed endpoint secret into a secret, as ADR 0037 decision 19 step 5 planned, and moves the endpoint to the organization, open to its factory.
+      - It runs in goald, because unsealing needs the master key.
+      - The sealed columns go in the cleanup item (decision 23).
 
 ### Triggers
 
@@ -231,10 +291,13 @@ The owner chose option C of three on 2026-11-03: one door for every source, star
       - notes from other items, with their source;
       - for an item that hasn't started, a start banner with Start now and Change.
     - **New item** (`daily-work/new-item`, new): a Start control: Now, Later (date and time) or After items.
-    - **Webhooks** (`intake/webhooks`):
-      - each endpoint's address and secret by name;
-      - the events to send, and GitHub's ping;
-      - the delivery log: Accepted, with what it led to, Duplicate, Refused and Failed.
+    - **Webhooks** (`organization/webhooks`, with tablet and phone), **a webhook** (`organization/webhook`) and **New webhook** (`organization/webhook-new`), in the organization's sidebar next to Secrets:
+      - each webhook's sender, address and secret by name;
+      - the factories it's open to;
+      - the setup steps for its sender, with the events to send, and GitHub's ping;
+      - the delivery log: each delivery's receipt (Accepted, Duplicate, Refused), and what it led to in each factory (Created, Skipped, Failed).
+
+      A factory's Intake lists the webhooks open to it.
     - **Trigger** (`intake/trigger`):
       - any GitHub event, with the filters that event supports;
       - payload matches, `perHour`, and Try with a delivery;
@@ -251,7 +314,8 @@ The owner chose option C of three on 2026-11-03: one door for every source, star
 
 20. **Untrusted work and limits.**
     - **Untrusted items:** an item made from a webhook delivery is untrusted, and so are its parts and the items filed from its follow-ups.
-      - **A person merges its work:** an approved merge waits for a person, through the existing no-merge path. A definition editor can mark a trigger `create.trusted: true` for a sender whose text they trust, such as their own CI.
+      - **A person merges its work:** an approved merge waits for a person, through the existing no-merge path.
+      - **`create.trusted: true`:** a definition editor can mark a trigger trusted, for a sender whose text they trust, such as their own CI. It's refused for the `gitlab` and `token` senders, and on an organization GitHub webhook unless the trigger filters `authors`, since anyone can open an issue in a public repository.
       - **Its follow-ups wait:** they are never delivered or filed on their own. They go to a triage item of their own, filed paused with the reason "Its follow-ups come from work that read outside text. Check them, then resume." It comes to Needs you.
     - **Follow-ups:**
       - 10 a run;
@@ -272,20 +336,26 @@ The owner chose option C of three on 2026-11-03: one door for every source, star
       - `PUT /items/{item}/start` changes a start, and `DELETE` clears it (Start now).
       - `POST /items/{item}/follow-ups/{id}/file` files a follow-up, and `…/drop` drops it.
       - `GET …/intake?window=30d` answers `origins` (beside the old `sources`), the items that haven't started, the triage item and its waiting follow-ups, and the triggers. It reads day counts, not whole deliveries.
-      - Webhook endpoints take `secret` (a name), accept `kind: generic` as `standard`, and can be deleted.
-      - `POST /hooks/{endpoint id}` is new.
+      - Webhooks move to `/v1/orgs/{org}/webhooks…`, with `sender`, `secret` (a name), its openings and `PATCH` to open, close, limit or rename. They can be deleted. The factory routes stay for one release, showing only that factory's evaluations, and `kind: generic` is read as `standard`.
+      - `POST /hooks/{webhook id}` is new.
     - **CLI:**
       - `goal run --at --in --after`;
       - `goal start <ref> --at|--in|--now`;
       - `goal intake`, with what's coming;
-      - `goal webhooks create --kind github|standard --secret <name>`, keeping `--kind generic` as an alias;
+      - `goal webhooks create --sender github|gitlab|standard|pagerduty|sentry|token --secret <name>`, keeping `--kind generic` as an alias;
+      - `goal webhooks open <webhook> <factory> [--repos …]` and `goal webhooks close`;
       - `goal webhooks deliveries` and `goal webhooks delete`.
     - **Data:**
       - `work_items` gains `origin` (default `person`), `via`, `created_by`, `generation`, `untrusted`, `start_at` and `started_at`.
       - `follow_ups` is new, with row-level security on `org_id`.
-      - `webhook_deliveries` gains `delivery_id` (unique per endpoint), `event`, `state` (pending, done or failed), `attempts` and `duplicates`.
+      - `webhook_deliveries` gains `delivery_id` (unique per webhook), `event`, its receipt and `duplicates`.
+      - `delivery_evaluations` is new: one row per delivery and factory that names it, with state, attempts, next attempt, lease and outcome.
       - `webhook_delivery_ids` is the year-long ledger.
-      - `webhook_endpoints` gains `secret_id` and `enabled`; `kind` becomes `standard` or `github`.
+      - `webhook_endpoints` becomes organization-level:
+        - `factory_id` is nullable for one release and then dropped, and names are unique per organization;
+        - it gains `sender`, `secret_id`, `enabled` and the `token` sender's settings;
+        - `key_id`, `nonce` and `ciphertext` become nullable.
+      - `webhook_openings` is new: webhook, factory and an optional repository list.
       - `trigger_firings` gains `missed`, with its count.
 
 ### In the definition
@@ -307,7 +377,7 @@ The owner chose option C of three on 2026-11-03: one door for every source, star
       - leaves `created_by` empty for old items;
       - sets `started_at` from each item's first span.
     - **Old instances** keep running during a deploy: `origin` has a default, `source` stays, and `generic` stays accepted.
-    - **Endpoint secrets** are converted in goald (decision 15).
+    - **Existing endpoints, if any,** move to the organization, open to their factory, and their sealed secrets become secrets in goald (decision 15).
     - **The 1,629 follow-ups** already written stay as text in their outputs. The item page shows them with File, and nothing files them.
     - **After the assembly is deployed,** one more item does the contract step. It drops `source`, the `generic` alias, the old `sources` answer and the sealed endpoint columns, and rewrites `goal_connection_key_ids()`.
 
@@ -334,7 +404,7 @@ The owner chose option C of three on 2026-11-03: one door for every source, star
 - Agents learn one more field shape, and the delivery rule and engineer prompts change with it.
 - Intake counts every item, so its numbers stop disagreeing with the API contract.
 - Lead time stops counting the planned wait before an item leaves the first station.
-- A webhook needs a person to add it in GitHub or the sender. Goal lists the events to send and confirms GitHub's ping.
+- An organization admin adds each sender once: one GitHub organization webhook serves every factory it's opened to. Goal lists the events to send and confirms GitHub's ping.
 - Work started by a webhook is merged by a person unless its trigger is marked trusted.
 - Items held by `after` wait at the first station, which changes where ADR 0015's held items show on the board.
 - Gone: the model check, `board.intake`, Goal's own signature header, the second cron parser and the dead tallies. New: the receiver, `follow_ups`, the start, the origin, the close outcome and the delivery ledger.
@@ -342,14 +412,15 @@ The owner chose option C of three on 2026-11-03: one door for every source, star
 ## The build plan
 
 - **One assembly:** each row is one pull request, in merge order.
-- **The design branch:** `design/intake` holds this ADR, the exported screens and the screens index. It sits on `design/jonah` and is merged first, after ADR 0039's design branch.
+- **The design branch:** `design/intake` holds this ADR, [ADR 0041](0041-code-and-github-without-an-app.md), the exported screens of both and the screens index. It sits on `design/jonah` and is merged first, after ADR 0039's design branch.
 - **When rows start:**
   - Row 1 needs `design/jonah` on main (software#537, part 1).
-  - Rows 2–8 change `finish`, `work_items`, the tick and the store's item inserts, which ADR 0038's and ADR 0039's builds also change. So the assembly waits for software#525 and software#537.
+  - Rows 2–9 change `finish`, `work_items`, the tick and the store's item inserts, which ADR 0038's and ADR 0039's builds also change. So the assembly waits for software#525 and software#537.
 - **The API stays additive.** `task check` regenerates the clients in every row, so no backend row renames or removes a field the web still reads. Renames land in the cleanup item after the deploy.
 - **Shared files:**
   - Rows 2–5 all change `work_items`, `check`, `finish` and `ports.Transition`, so they run in order.
-  - Row 6 builds the one-transaction firing that row 8 reuses.
+  - Row 6 lands the organization's webhooks with their secret, before the receiver that checks it.
+  - Row 8 builds the one-transaction firing that row 9 reuses.
 - **UI rows** follow [MASTER.md](../design/MASTER.md) v3 and [MOTION.md](../design/MOTION.md). They match their screens at 1440, 1280, 1024, 768 and 390 pixels, in light and dark:
   - nothing past the viewport edge;
   - no clipped or spilling text;
@@ -358,20 +429,22 @@ The owner chose option C of three on 2026-11-03: one door for every source, star
 
 | # | Pull request | Lane | What it changes | Merges after |
 |---|---|---|---|---|
-| 1 | **Design docs.** Merge `design/intake`. | docs | This ADR, the ADR index, the status lines of ADRs 0012, 0015, 0026, 0028, 0032, 0037 and 0039, and `docs/design/screens/**` with its README | — |
+| 1 | **Design docs.** Merge `design/intake`. | docs | This ADR and ADR 0041, the ADR index, the status lines of ADRs 0012, 0015, 0026, 0028, 0032, 0033, 0037, 0038 and 0039, and `docs/design/screens/**` with its README | — |
 | 2 | **One door and origins.** Decisions 1 and 2. | backend | `domain.File` and the line's work types; the store helper used by `CreateItem`, `Assemble` and `AddPart`; `origin`, `via`, `created_by`, `generation` and `untrusted` with their backfill; the `created` event's actor and `item.filed`; the evidence line for ADR 0039 | 1 |
 | 3 | **Start times.** Decisions 3 and 4. | backend | `start_at` and `started_at`; the release query and the claim filter; `after` at filing; lead time from `started_at`; Start now and Change; `start` in the API; `goal run --at --in --after` and `goal start` | 2 |
 | 4 | **Follow-ups.** Decisions 5–10. | backend | `board.flow.outputs.followUps`; `follow_ups`, written in `finish`; the sweep that delivers `item_note`s and files scheduled follow-ups and the collecting triage item; the gateway, brief and evidence handling of `item_note`; the daily cap, generations and dedupe; File and Drop | 3 |
 | 5 | **Close.** Decision 11. | backend | `board.flow.outputs.close`, the cancel in the finishing transition, and the refusals for people's items, parts and `plan` with `close` | 4 |
-| 6 | **The receiver.** Decisions 12–14 and 16's one-transaction firing. | backend | `POST /hooks/{endpoint id}`; GitHub and Standard Webhooks signatures; `enabled`; the refusal and address limits; the delivery ledger; pending deliveries on every instance's loop, with attempts; the GitHub event table, filter checks, `filter.match`, `{{payload.…}}` and `perHour`; the ping; untrusted items with no-merge and `create.trusted` | 2 |
-| 7 | **Endpoint secrets.** Decision 15. | backend | The endpoint's secret by foreign key; New webhook creating or naming a secret; the previous value kept 24 hours; opening without an audit entry; `webhook-signature` never stored; the conversion in goald | 6 |
-| 8 | **Triggers trimmed.** Decisions 16–18. | backend | Missed gaps, pruning and their grants; quoted titles; the worker's note on untrusted data; brief files; disabled triggers as suggestions; the `field-ignored` warning for `only.modelAgrees` and `board.intake`; the model check's removal; Try for deliveries; one cron parser and one origin list | 7 |
-| 9 | **Intake and item API.** Decision 21. | backend | `GET …/intake` with the window, `origins`, what's coming and the triage item, from day counts; the item's `origin`, `start` and `follow_ups`; `openapi.yaml` and the generated clients | 5, 8 |
-| 10 | **Intake and item pages.** Decision 19. | frontend | Intake (Coming up, Where items came from, Follow-ups to triage, Triggers), the item's Follow-ups card, Came from, notes from other items and start banner, New item's Start, the board's Later group, Items' starts, the Floor card | 9 |
-| 11 | **Webhooks and trigger pages.** Decision 19. | frontend | Webhooks (the secret by name, the events, the ping, the delivery log), Trigger (events, filters, payload matches, `perHour`, Try with a delivery, no model check), the New trigger flow, suggestions on Intake and in onboarding, `goal run` on Ready | 7, 9 |
-| 12 | **Tablet and phone.** Decision 19. | frontend | The tablet and phone layouts of Intake, the item's follow-ups and New item's Start | 10, 11 |
-| 13 | **Docs.** | docs | The docs site's guides to submitting items and intake, the glossary (Origin, Start, Follow-up, Triage item, Delivery), `factory-definition.md`, `architecture.md` and the change maps | 12 |
+| 6 | **Organization webhooks.** Decisions 12 and 15. | backend | `webhook_endpoints` at the organization with `sender`, `secret_id` (with the nullable sealed columns and `goal_connection_key_ids()`'s filter), `enabled` and the `token` settings; `webhook_openings`; the routes, `PATCH`, `webhook:manage` at the organization, the reserved names and the 409s; the factory compatibility routes; who sees bodies; the CLI; the conversion in goald | 2 |
+| 7 | **The receiver.** Decision 12. | backend | `POST /hooks/{webhook id}`; the sender catalog in `internal/catalog/senders/` with `github`, `gitlab`, `standard`, `pagerduty`, `sentry` and `token`; the answers and limits; receipts, duplicates and the year-long ledger; the daily counts for deliveries no trigger names; GitHub's ping | 6 |
+| 8 | **Evaluation.** Decisions 13, 14 and 16's one-transaction firing. | backend | `delivery_evaluations`, created only for factories whose triggers name the delivery, claimed on every instance's loop with attempts; the `on` forms; event tables, filter checks, `filter.match`, `{{payload.…}}` and `perHour`; untrusted items with no-merge and the `create.trusted` rules | 7 |
+| 9 | **Triggers trimmed.** Decisions 16–18. | backend | Missed gaps, pruning and their grants; quoted titles; the worker's note on untrusted data; brief files; disabled triggers as suggestions; the `field-ignored` warning for `only.modelAgrees` and `board.intake`; the model check's removal; Try for deliveries; one cron parser and one origin list | 8 |
+| 10 | **Intake and item API.** Decision 21. | backend | `GET …/intake` with the window, `origins`, what's coming and the triage item, from day counts; the item's `origin`, `start` and `follow_ups`; `openapi.yaml` and the generated clients | 5, 9 |
+| 11 | **Intake and item pages.** Decision 19. | frontend | Intake (Coming up, Where items came from, Follow-ups to triage, Triggers, the webhooks open to the factory), the item's Follow-ups card, Came from, notes from other items and start banner, New item's Start, the board's Later group, Items' starts, the Floor card | 10 |
+| 12 | **Webhooks and trigger pages.** Decision 19. | frontend | The organization's Webhooks, a webhook (sender, address, secret by name, openings, steps, ping, the two-part delivery log) and New webhook; Trigger (the sender or webhook, events, filters, payload matches, `perHour`, Try with a delivery, no model check); the New trigger flow; suggestions on Intake and in onboarding; `goal run` on Ready | 6, 10 |
+| 13 | **Tablet and phone.** Decision 19. | frontend | The tablet and phone layouts of Intake, the item's follow-ups, New item's Start and the organization's Webhooks | 11, 12 |
+| 14 | **Docs.** | docs | The docs site's guides to submitting items and intake, the glossary (Origin, Start, Follow-up, Triage item, Delivery, Webhook opening), `factory-definition.md`, `architecture.md` and the change maps | 13 |
 
 **Not parts of the assembly:**
 - The cleanup of decision 23 is filed as its own item once the assembly is deployed.
 - The software factory's definition change of decision 22 is published by a person after the deploy.
+- ADR 0041's assembly follows this one.
