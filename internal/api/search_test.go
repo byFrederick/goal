@@ -137,29 +137,45 @@ func TestSearchOrg_FindsSecretsByName(t *testing.T) {
 		}
 	}
 
-	got := decode[gen.OrgSearch](t, h.as(t, viewerToken, http.MethodGet, searchFor("TOKEN"), ""), http.StatusOK)
-	if line := searchLine(got); !strings.HasSuffix(line, "secrets [token-x; api-token; docs-token]") {
-		t.Errorf("searching TOKEN: %s; want secrets [token-x; api-token; docs-token]", line)
+	// Each hit as name, scope (all, or the factories' ids) and expiry.
+	hit := func(sec gen.SecretHit) string {
+		scope, expiry := strings.Join(sec.Scope.Factories, ","), "never"
+		if sec.Scope.AllFactories {
+			scope = "all"
+		}
+
+		if sec.ExpiresAt != nil {
+			expiry = sec.ExpiresAt.UTC().Format(time.DateOnly)
+		}
+
+		return sec.Name + " [" + scope + "] " + expiry
 	}
 
-	if len(got.Secrets) == 3 {
-		if x := got.Secrets[0]; x.ExpiresAt == nil || !x.ExpiresAt.Equal(time.Date(2027, 1, 31, 0, 0, 0, 0, time.UTC)) {
-			t.Errorf("token-x expires_at = %v; want 2027-01-31", x.ExpiresAt)
-		}
+	got := decode[gen.OrgSearch](t, h.as(t, viewerToken, http.MethodGet, searchFor("TOKEN"), ""), http.StatusOK)
 
-		if a := got.Secrets[1]; a.Scope.AllFactories || !slices.Equal(a.Scope.Factories, []string{string(acmeID)}) || a.ExpiresAt != nil {
-			t.Errorf("api-token = %+v; want scoped to acme, no expiry", a)
-		}
+	want := []string{"token-x [] 2027-01-31", "api-token [" + string(acmeID) + "] never", "docs-token [all] never"}
+	if hits := mapHits(got.Secrets, hit); !slices.Equal(hits, want) {
+		t.Errorf("searching TOKEN finds secrets %q; want %q", hits, want)
+	}
 
-		if d := got.Secrets[2]; !d.Scope.AllFactories || d.Scope.Factories == nil {
-			t.Errorf("docs-token scope = %+v; want every factory, factories []", d.Scope)
-		}
+	if len(got.Secrets) == 3 && got.Secrets[2].Scope.Factories == nil {
+		t.Error("docs-token's scope factories = nil; want []")
 	}
 
 	got = decode[gen.OrgSearch](t, h.as(t, viewerToken, http.MethodGet, searchFor("token", "limit=1"), ""), http.StatusOK)
 	if len(got.Secrets) != 1 || got.Secrets[0].Name != "token-x" {
 		t.Errorf("limit=1 finds secrets %+v; want token-x", got.Secrets)
 	}
+}
+
+// mapHits is f of each hit.
+func mapHits[T any](hits []T, f func(T) string) []string {
+	out := make([]string, 0, len(hits))
+	for _, h := range hits {
+		out = append(out, f(h))
+	}
+
+	return out
 }
 
 // Secrets are found only with secret:read: a member's, not a token without it.

@@ -37,7 +37,7 @@ import {
 const iconProps = { size: 16, strokeWidth: 1.5, 'aria-hidden': true } as const;
 
 /** The answer before one has come: no hits, so only the pages and the actions show. */
-const noAnswer: OrgSearch = { items: [], agents: [], connections: [], factories: [] };
+const noAnswer: OrgSearch = { items: [], agents: [], connections: [], secrets: [], factories: [] };
 
 /** How many results each group holds (the API's default). */
 const limit = 5;
