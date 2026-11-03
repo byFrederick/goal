@@ -25,7 +25,8 @@ export const tokenSecret = 'github-token';
 
 /** The check, in words: what Goal could do with the token, or the host's reason it could not. */
 export function checkText(repo: string, result: RepositoryTestResult): { ok: boolean; text: string } {
-  if (!result.tested) return { ok: false, text: 'Goal couldn’t test the token: the host gave no answer in 10 seconds.' };
+  if (!result.tested)
+    return { ok: false, text: 'Goal couldn’t test the token: the host gave no answer in 10 seconds.' };
   if (!result.read.ok) return { ok: false, text: `Goal couldn’t clone ${repo}. ${result.read.reason}` };
   if (!result.push.ok) return { ok: false, text: `Goal cloned ${repo} but can’t push a branch. ${result.push.reason}` };
   return { ok: true, text: `Goal cloned ${repo} and can push a branch.` };
@@ -51,7 +52,10 @@ export function CodeStep({ org, search }: { org: OrgSummary; search: OnboardingS
   const key = `${url ?? ''}\n${token}`;
   const passed = answer?.ok === true && answer.key === key;
   const failed = answer?.ok === false && answer.key === key;
-  const urlError = touched && url === undefined ? 'Enter the repository’s https address, such as https://github.com/acme/app.' : undefined;
+  const urlError =
+    touched && url === undefined
+      ? 'Enter the repository’s https address, such as https://github.com/acme/app.'
+      : undefined;
 
   const check = useMutation({
     mutationFn: async (): Promise<RepositoryTestResult> => {
@@ -164,7 +168,9 @@ export function CodeStep({ org, search }: { org: OrgSummary; search: OnboardingS
             type="password"
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            placeholder={search.secret ? `Saved as ${search.secret}. Paste a new token to replace it.` : 'Paste the token'}
+            placeholder={
+              search.secret ? `Saved as ${search.secret}. Paste a new token to replace it.` : 'Paste the token'
+            }
             autoComplete="off"
             autoCapitalize="off"
             spellCheck={false}

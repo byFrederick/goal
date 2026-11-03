@@ -64,7 +64,6 @@ import {
   listConnectionRepositories,
   listConnections,
 } from './connections';
-import { testRepository } from './repositories';
 import {
   getCatalog,
   getDraft,
@@ -97,6 +96,7 @@ import {
 } from './knowledge';
 import { getNotificationPreferences } from './notifications';
 import { getOrgPolicy } from './policy';
+import { testRepository } from './repositories';
 import { type SearchQuery, searchOrg } from './search';
 import { getSecret, listSecretActivity, listSecrets } from './secrets';
 import { getOrgSpend } from './spend';

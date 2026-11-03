@@ -115,16 +115,30 @@ function seeds({
       agentStatsQuery(org.id, factory.id, 'frontend-engineer').queryKey,
       reasons ? agentStats : { ...agentStats, reasons: [] },
     ],
-    [factoryQuery(org.id, factory.id).queryKey, { ...factory, current: { id: 'v1', number: 1, published_at: '2026-10-01T00:00:00Z', published_by: { kind: 'user', id: 'u-1', name: 'Acme Owner' } } }],
+    [
+      factoryQuery(org.id, factory.id).queryKey,
+      {
+        ...factory,
+        current: {
+          id: 'v1',
+          number: 1,
+          published_at: '2026-10-01T00:00:00Z',
+          published_by: { kind: 'user', id: 'u-1', name: 'Acme Owner' },
+        },
+      },
+    ],
     [builderMetaQuery(org.id).queryKey, { capabilities: { tool_approvals: false } }],
-    [versionQuery(org.id, factory.id, 'current').queryKey, {
+    [
+      versionQuery(org.id, factory.id, 'current').queryKey,
+      {
         files: [
           { path: promptPath, sha256: 'sha-prompt' },
           { path: 'factory.yaml', sha256: 'sha-f' },
           { path: 'environments/default.yaml', sha256: 'sha-d' },
           { path: 'environments/deploy.yaml', sha256: 'sha-e' },
         ],
-      }],
+      },
+    ],
     [versionFileQuery(org.id, factory.id, 'current', promptPath, 'sha-prompt').queryKey, { text: promptText }],
     [versionFileQuery(org.id, factory.id, 'current', 'factory.yaml', 'sha-f').queryKey, { text: factoryYaml }],
   ];

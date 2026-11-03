@@ -10,5 +10,7 @@ export function testRepository(
   request: RepositoryTestRequest,
   signal?: AbortSignal,
 ): Promise<RepositoryTestResult> {
-  return unwrap(goal.POST(orgPath('/repositories/test'), { params: { path: { org } }, body: request, ...cancel(signal) }));
+  return unwrap(
+    goal.POST(orgPath('/repositories/test'), { params: { path: { org } }, body: request, ...cancel(signal) }),
+  );
 }

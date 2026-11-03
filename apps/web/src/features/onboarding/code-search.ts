@@ -27,7 +27,8 @@ export function repositoryUrl(value: string | undefined): string | undefined {
   if (!raw || raw.length > maxUrl) return undefined;
   try {
     const url = new URL(raw);
-    if (url.protocol !== 'https:' || url.hostname === '' || url.username !== '' || url.password !== '') return undefined;
+    if (url.protocol !== 'https:' || url.hostname === '' || url.username !== '' || url.password !== '')
+      return undefined;
     return raw;
   } catch {
     return undefined;

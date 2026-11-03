@@ -99,7 +99,10 @@ describe('Step 2, Connect your code', () => {
         scope: { all_factories: true, factories: [] },
       }),
     );
-    expect(testRepository).toHaveBeenCalledWith('org-1', { url: 'https://github.com/acme/app', secret: 'github-token' });
+    expect(testRepository).toHaveBeenCalledWith('org-1', {
+      url: 'https://github.com/acme/app',
+      secret: 'github-token',
+    });
     expect(router.state.location.pathname).toBe('/o/acme/get-started/code');
 
     fireEvent.click(next());
@@ -113,7 +116,9 @@ describe('Step 2, Connect your code', () => {
 
   it('replaces the value when the secret name is already taken', async () => {
     vi.mocked(createSecret).mockRejectedValue(
-      new ApiError({ title: 'Taken', status: 409, code: 'secret-name-taken' } as ConstructorParameters<typeof ApiError>[0]),
+      new ApiError({ title: 'Taken', status: 409, code: 'secret-name-taken' } as ConstructorParameters<
+        typeof ApiError
+      >[0]),
     );
     renderStep();
     await fill('https://github.com/acme/app', 'test-token');
@@ -163,7 +168,9 @@ describe('codeSearch', () => {
       url: 'https://github.com/acme/app',
       secret: 'github-token',
     });
-    expect(codeSearch({ url: 'http://github.com/acme/app', secret: 'Bad Name', connection: 'github', repos: ['a/b'] })).toEqual({
+    expect(
+      codeSearch({ url: 'http://github.com/acme/app', secret: 'Bad Name', connection: 'github', repos: ['a/b'] }),
+    ).toEqual({
       url: undefined,
       secret: undefined,
     });
