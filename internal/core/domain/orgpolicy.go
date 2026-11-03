@@ -18,15 +18,15 @@ const (
 	ToolAsk            ToolSetting = "ask"
 	ToolAllowed        ToolSetting = "allowed"
 	ToolReviewApproval ToolSetting = "review_approval" // only a review station with merge on approval merges
-	ToolAttachedOnly   ToolSetting = "attached_only"   // an agent gets only the credentials attached to it
+	ToolEnvironment    ToolSetting = "environment"     // an agent gets what its environment names (Use secrets)
 )
 
-// The values each tool default takes, as 00069's CHECK constraints list them.
+// The values each tool default takes, as 00069's CHECK constraints list them (00092 for Use secrets).
 var (
 	WriteOutsideBranchSettings = []ToolSetting{ToolOff, ToolAsk, ToolAllowed}
 	MergePullRequestSettings   = []ToolSetting{ToolOff, ToolReviewApproval}
 	ReadWebSettings            = []ToolSetting{ToolOff, ToolAsk, ToolAllowed}
-	UseCredentialsSettings     = []ToolSetting{ToolOff, ToolAttachedOnly}
+	UseCredentialsSettings     = []ToolSetting{ToolOff, ToolEnvironment}
 )
 
 // DefaultBoxTimeLimitMinutes is the default policy's box time limit: 3 hours.
@@ -66,11 +66,11 @@ const AuditTargetOrgPolicy = "org_policy"
 
 // DefaultOrgPolicy is the policy of an organization without one, over the platform's models:
 // every model allowed, the first the default, no denied commands, the tool defaults ask,
-// review_approval, allowed and attached_only, and a 3-hour box time limit.
+// review_approval, allowed and environment, and a 3-hour box time limit.
 func DefaultOrgPolicy(models []string) OrgPolicy {
 	p := OrgPolicy{
 		AllowedModels:      slices.Clone(models),
-		WriteOutsideBranch: ToolAsk, MergePullRequest: ToolReviewApproval, ReadWeb: ToolAllowed, UseCredentials: ToolAttachedOnly,
+		WriteOutsideBranch: ToolAsk, MergePullRequest: ToolReviewApproval, ReadWeb: ToolAllowed, UseCredentials: ToolEnvironment,
 		BoxTimeLimitMinutes: DefaultBoxTimeLimitMinutes,
 	}
 
@@ -115,7 +115,7 @@ func (p OrgPolicy) Validate() error {
 		checkToolSetting("write outside the item's branch", p.WriteOutsideBranch, WriteOutsideBranchSettings),
 		checkToolSetting("merge a pull request", p.MergePullRequest, MergePullRequestSettings),
 		checkToolSetting("read the web and docs", p.ReadWeb, ReadWebSettings),
-		checkToolSetting("use credentials", p.UseCredentials, UseCredentialsSettings))
+		checkToolSetting("use secrets", p.UseCredentials, UseCredentialsSettings))
 
 	if p.BoxTimeLimitMinutes <= 0 {
 		errs = append(errs, fmt.Errorf("the box time limit is a positive number of minutes, not %d: %w", p.BoxTimeLimitMinutes, ErrInvalid))

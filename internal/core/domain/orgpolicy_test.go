@@ -30,8 +30,9 @@ func TestOrgPolicy_Validate(t *testing.T) {
 		{"a duplicate model", func(p *OrgPolicy) { p.AllowedModels = append(p.AllowedModels, "claude-opus-5-5") }, false},
 		{"an unknown write value", func(p *OrgPolicy) { p.WriteOutsideBranch = ToolReviewApproval }, false},
 		{"an unknown merge value", func(p *OrgPolicy) { p.MergePullRequest = ToolAllowed }, false},
-		{"an unknown web value", func(p *OrgPolicy) { p.ReadWeb = ToolAttachedOnly }, false},
+		{"an unknown web value", func(p *OrgPolicy) { p.ReadWeb = ToolEnvironment }, false},
 		{"an unknown credentials value", func(p *OrgPolicy) { p.UseCredentials = ToolAsk }, false},
+		{"the old use secrets value attached_only", func(p *OrgPolicy) { p.UseCredentials = "attached_only" }, false},
 		{"an empty tool value", func(p *OrgPolicy) { p.ReadWeb = "" }, false},
 		{"an empty denied command", func(p *OrgPolicy) { p.DeniedCommands = []string{""} }, false},
 		{"a blank denied command", func(p *OrgPolicy) { p.DeniedCommands = []string{"Bash(rm -rf:*)", "  "} }, false},
@@ -72,8 +73,8 @@ func TestDefaultOrgPolicy(t *testing.T) {
 	}
 
 	if p.WriteOutsideBranch != ToolAsk || p.MergePullRequest != ToolReviewApproval || p.ReadWeb != ToolAllowed ||
-		p.UseCredentials != ToolAttachedOnly {
-		t.Errorf("tool defaults %q %q %q %q; want ask, review_approval, allowed, attached_only",
+		p.UseCredentials != ToolEnvironment {
+		t.Errorf("tool defaults %q %q %q %q; want ask, review_approval, allowed, environment",
 			p.WriteOutsideBranch, p.MergePullRequest, p.ReadWeb, p.UseCredentials)
 	}
 

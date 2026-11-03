@@ -44,7 +44,7 @@ function acme(overrides: Partial<OrgPolicyView['policy']> = {}): OrgPolicyView {
         write_outside_branch: 'ask',
         merge_pull_request: 'review_approval',
         read_web: 'allowed',
-        use_credentials: 'attached_only',
+        use_credentials: 'environment',
       },
       box_time_limit_minutes: 180,
       ...overrides,
