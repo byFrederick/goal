@@ -64,7 +64,7 @@ export function BuiltinsEditor({ agent, index }: { agent: ModelAgent; index: num
         Built-in tools
       </h4>
       <p className="m-0 mb-1.5 text-[13px] text-muted">
-        Tools from GitHub, browsers and other systems are set in Connections.
+        Tools from GitHub, browsers and other systems are set in the agent’s environment.
       </p>
       {agent.custom_tools ? (
         <CustomRules agent={agent} index={index} />

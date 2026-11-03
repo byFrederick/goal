@@ -6,7 +6,7 @@ import { factoriesQuery } from '../../../api/queries';
 import { useOrg } from '../../../shared/org';
 import { NewSecretSheet } from '../../secrets/new-secret-sheet';
 
-export function NewSecretSheetFor(initial?: { name?: string; value?: string }) {
+export function NewSecretSheetFor(initial?: { name?: string; value?: string; allFactories?: boolean }) {
   const org = useOrg();
   const factories = useQuery(factoriesQuery(org.id)).data ?? [];
   const [open, setOpen] = useState(false);

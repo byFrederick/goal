@@ -1,15 +1,13 @@
 // Basics › Runtime (spec 4 §4.4, §10, canvas Define-Basics and New-Basics): each run is a fresh
-// box from the platform's agent image. The model (agents.default_model), the model connection
-// (the organization's connections of a kind with model access), the box's size, the tools mise
-// installs and the repository cloned before the agent starts, with the connection git signs in
-// with. B's problems show at their field with their quick fixes, and the forms phase 4 removed
+// box from the platform's agent image. The model (agents.default_model), the model key (the secret in
+// runtime.modelKey), the box's size, the tools mise installs and the repository cloned before the agent
+// starts, with the secret git signs in with. B's problems show at their field with their quick fixes, and the forms phase 4 removed
 // (runtime.image, runner, auth, secrets, knowledgeBase) are listed with theirs.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { builderMetaQuery, connectionKindsQuery, connectionsQuery } from '../../../api/queries';
-import type { Connection, ConnectionKind } from '../../../api/types';
+import { builderMetaQuery } from '../../../api/queries';
 import type { BasicsSection, SandboxSize } from '../../../shared/definition/model';
-import { useOrg, useOrgHolds } from '../../../shared/org';
+import { useOrg } from '../../../shared/org';
 import { Field, NativeSelect } from '../../../ui/field';
 import { SegmentedControl } from '../../../ui/segmented-control';
 import { setBasics, setDefaultModel } from '../draft/ops';
@@ -17,6 +15,7 @@ import { useDraftSession, useSection, useViewOnly } from '../draft/use-draft';
 import { ProblemFixes } from '../frame/problem-fixes';
 import { EditedMark } from '../frame/section-shell';
 import { useProblems } from '../frame/use-editor';
+import { useModelKey } from './model-key';
 import { RepositoryField } from './repository-field';
 import { TokenField } from './token-field';
 
@@ -32,41 +31,18 @@ const sizes: { value: SandboxSize; label: string }[] = [
 /** The keys phase 4 removed from Basics, whose problems (field-removed) carry their fixes. */
 const removedKeys = ['runner', 'image', 'auth', 'secrets', 'knowledge_base'] as const;
 
-/**
- * The organization's connections with their kinds: what the runtime's selects offer. Until
- * `ready` (loading, or without connection:read) nothing may be called missing from them.
- */
-export function useOrgConnections(): {
-  connections: Connection[];
-  kindOf: (c: Connection) => ConnectionKind | undefined;
-  ready: boolean;
-} {
-  const org = useOrg();
-  const read = useOrgHolds('connection:read');
-  const connections = useQuery({ ...connectionsQuery(org.id), enabled: read });
-  const kinds = useQuery({ ...connectionKindsQuery(org.id), enabled: read });
-  return {
-    connections: connections.data ?? [],
-    kindOf: (c) => kinds.data?.find((k) => k.name === c.kind),
-    ready: connections.isSuccess && kinds.isSuccess,
-  };
-}
-
 export function RuntimeFields({ basics }: { basics: BasicsSection }) {
   const org = useOrg();
   const session = useDraftSession();
   const viewOnly = useViewOnly();
   const agents = useSection('agents');
   const models = useQuery(builderMetaQuery(session.org)).data?.models ?? [];
-  const { connections, kindOf } = useOrgConnections();
+  const modelKey = useModelKey();
   const removed = removedKeys.some((k) => basics[k] !== undefined);
   const toolProblems = useProblems('/basics/tools');
 
   const fallback = models.find((m) => m.default);
   const model = agents.default_model ?? '';
-  const modelConnections = connections.filter((c) => kindOf(c)?.model);
-  const chosen = basics.model_connection ?? '';
-  const known = chosen === '' || modelConnections.some((c) => c.name === chosen);
 
   return (
     <div className="col-span-full flex min-w-0 flex-col gap-4 border-t border-line pt-5">
@@ -104,33 +80,18 @@ export function RuntimeFields({ basics }: { basics: BasicsSection }) {
           </NativeSelect>
         </Field>
         <div className="flex min-w-0 flex-col gap-1.5">
-          <Field
-            label="Model connection"
-            aside={<EditedMark section="basics" pointer="/basics/model_connection" label="the model connection" />}
-            help={
-              <>
-                Connections of a kind with model access.{' '}
-                <Link to="/o/$org/access" params={{ org: org.slug }} className="text-ink underline underline-offset-2">
-                  Connections
-                </Link>
-              </>
-            }
-          >
-            <NativeSelect
-              value={chosen}
-              onChange={(e) =>
-                session.edit(setBasics(basics, 'model_connection', e.target.value === '' ? undefined : e.target.value))
-              }
+          <span className="text-sm font-medium">Model key</span>
+          <span className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="font-mono text-body">{modelKey.secret ?? 'None chosen'}</span>
+            <Link
+              to="/o/$org/secrets"
+              params={{ org: org.slug }}
+              className="font-control text-secondary max-md:inline-flex max-md:min-h-11 max-md:items-center"
             >
-              <option value="">None chosen</option>
-              {known ? null : <option value={chosen}>{chosen}</option>}
-              {modelConnections.map((c) => (
-                <option key={c.name} value={c.name}>
-                  {c.name}, {kindOf(c)?.title ?? c.kind}
-                </option>
-              ))}
-            </NativeSelect>
-          </Field>
+              Change in Secrets
+            </Link>
+          </span>
+          <p className="m-0 text-meta text-muted">The secret that gives every run its model.</p>
           <ProblemFixes pointer="/basics/model_connection" />
         </div>
         <div className="flex min-w-0 flex-col gap-1.5">
@@ -179,7 +140,7 @@ export function RuntimeFields({ basics }: { basics: BasicsSection }) {
           />
           {toolProblems.length > 0 ? <ProblemFixes pointer="/basics/tools" /> : null}
         </div>
-        <RepositoryField basics={basics} connections={connections} kindOf={kindOf} />
+        <RepositoryField basics={basics} />
       </div>
     </div>
   );

@@ -96,13 +96,13 @@ function TriggerRow({ trigger, arrived }: { trigger: IntakeTrigger; arrived: boo
             </a>
             {trigger.problem?.kind === 'missing_connection' ? (
               <span className="text-meta text-muted">
-                Needs the {connectionName(trigger)} connection.{' '}
+                {needsText(trigger)}{' '}
                 <Link
                   to="/o/$org/f/$factory/intake/webhooks"
                   params={{ org: params.org, factory: params.factory }}
                   className="font-medium text-ink underline-offset-2 hover:underline"
                 >
-                  Connect
+                  Set up
                 </Link>
               </span>
             ) : trigger.problem ? (
@@ -139,11 +139,11 @@ function TriggerRow({ trigger, arrived }: { trigger: IntakeTrigger; arrived: boo
   );
 }
 
-/** The connection a trigger waits for: its source's name, or its webhook endpoint's name. */
-function connectionName(trigger: IntakeTrigger): string {
-  if (trigger.source === 'github') return 'GitHub';
-  if (trigger.source === 'webhook') return trigger.on.replace(/^webhook\./, '').split('.')[0] ?? 'webhook';
-  return sourceIcon[trigger.source].label;
+/** What a trigger waits for: its webhook endpoint, or access to its source. */
+function needsText(trigger: IntakeTrigger): string {
+  if (trigger.source === 'webhook')
+    return `Needs a ${trigger.on.replace(/^webhook\./, '').split('.')[0] ?? 'webhook'} webhook.`;
+  return `Needs ${trigger.source === 'github' ? 'GitHub' : sourceIcon[trigger.source].label} access.`;
 }
 
 /** The seven days' items as bars, the last (today) in cobalt; the number beside them is the total. */

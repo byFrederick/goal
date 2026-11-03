@@ -21,6 +21,8 @@ import { NotAvailable } from '../../ui/not-available';
 import { NumberRoll } from '../../ui/number-roll';
 import { AddAgentDialog } from '../factory-editor/agents/agent-dialogs';
 import { DraftSessionProvider, useDraftSession } from '../factory-editor/draft/use-draft';
+import { defaultEnvironment } from '../factory-editor/environments/env-file';
+import { useAgentEnvironments, useEnvironmentNames } from '../factory-editor/environments/use-environments';
 import {
   agentNamesOf,
   agentsOf,
@@ -146,6 +148,7 @@ function ViewAsFiles() {
 function FactoryDefaults({ model }: { model: Model }) {
   const params = useFactoryParams();
   const review = model.review.budget;
+  const { names: environments } = useEnvironmentNames();
   const defaults = [
     { label: 'Model', value: model.agents.default_model ?? none },
     { label: 'Box size', value: sizeLabel(model.basics.size) },
@@ -154,10 +157,7 @@ function FactoryDefaults({ model }: { model: Model }) {
       label: 'Turns per run',
       value: review?.max_turns_per_task === undefined ? none : String(review.max_turns_per_task),
     },
-    {
-      label: 'Connections',
-      value: model.connections.length > 0 ? model.connections.map((connection) => connection.name).join(', ') : none,
-    },
+    { label: 'Environments', value: environments.length > 0 ? environments.join(', ') : none },
   ];
   return (
     <section
@@ -423,8 +423,8 @@ function AgentCard({
   const own = agent.model !== undefined && agent.model !== '';
   const model = stats?.model ?? agent.model ?? defaultModel;
   const sentBack = stats?.sent_back.ratio;
-  const connectionCount = agent.connections?.length ?? 0;
-  const connectionsLabel = `${connectionCount} ${connectionCount === 1 ? 'connection' : 'connections'}`;
+  const { byAgent } = useAgentEnvironments();
+  const box = byAgent[agent.name] ?? defaultEnvironment;
   const rework = sentBack !== null && sentBack !== undefined && reworkRate !== undefined && sentBack > reworkRate;
   return (
     <Link
@@ -460,9 +460,8 @@ function AgentCard({
         <span>
           <b className="font-control text-ink">{agent.skills?.length ?? 0}</b> skills
         </span>
-        <span className="min-w-0 truncate" title={connectionsLabel}>
-          <b className="font-control text-ink">{connectionCount}</b>{' '}
-          {connectionCount === 1 ? 'connection' : 'connections'}
+        <span className="min-w-0 truncate" title={`Environment ${box}`}>
+          Box <b className="font-control text-ink">{box}</b>
         </span>
       </span>
     </Link>

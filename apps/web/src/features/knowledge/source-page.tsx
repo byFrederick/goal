@@ -3,12 +3,12 @@
 // one's indexed text over the page (?document=); and beside them its settings (title, schedule,
 // what a synced source reads), the factories that may search it and Delete, which needs the name
 // typed and is refused while a factory's current version lists it. Members read it all.
-import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { type FormEvent, useId, useState } from 'react';
 import { toast } from 'sonner';
 import { deleteKnowledgeSource, updateKnowledgeSource } from '../../api/knowledge';
-import { connectionKindsQuery, connectionsQuery, keys, knowledgeSourceQuery } from '../../api/queries';
+import { keys, knowledgeSourceQuery } from '../../api/queries';
 import type { KnowledgeSource } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
 import { namesText } from '../../shared/connections';
@@ -26,6 +26,7 @@ import { ReadOnly } from '../../ui/read-only';
 import { ConfigFields, configErrors, readerOf, trimmed } from './config-fields';
 import { DocumentDialog, DocumentList } from './documents';
 import { StatusText, SyncNowButton, useSyncSource } from './parts';
+import { SecretField } from './secret-field';
 import { DropZone, UploadRows, useUploader } from './upload';
 import { everyLabel, refusalText, sourceStatus, syncChoices, syncTimes } from './words';
 
@@ -130,7 +131,7 @@ function createdText(s: KnowledgeSource): string {
     case 'synced':
       return `${s.title} is added. Its first sync starts now; this page updates when it ends.`;
     default:
-      return `${s.title} is added. Factories that list it get ${s.connection}’s tools.`;
+      return `${s.title} is added. Factories that list it get the tools of ${s.connection}.`;
   }
 }
 
@@ -162,17 +163,14 @@ function SettingsCard({ source: s, manage }: { source: KnowledgeSource; manage: 
   const org = useOrg();
   const client = useQueryClient();
   const id = useId();
-  // The reader is the connection kind's sync; without connection:read, what the config's keys say.
-  const read = useOrgHolds('connection:read');
-  const connections = useQuery({ ...connectionsQuery(org.id), enabled: read }).data ?? [];
-  const kinds = useQuery({ ...connectionKindsQuery(org.id), enabled: read }).data ?? [];
-  const kind = kinds.find((k) => k.name === connections.find((c) => c.name === s.connection)?.kind);
-  const reader = s.kind === 'synced' ? readerOf(kind?.sync, s.config) : undefined;
-  const edits = useEdits({ title: s.title, every: s.sync_every_seconds, config: s.config });
-  const { title, every, config } = edits.value;
+  // The reader is the one the config names, else what its keys say.
+  const reader = s.kind === 'synced' ? readerOf(undefined, s.config) : undefined;
+  const edits = useEdits({ title: s.title, every: s.sync_every_seconds, config: s.config, secret: s.secret ?? '' });
+  const { title, every, config, secret } = edits.value;
   const [submitted, setSubmitted] = useState(false);
   const changedConfig = JSON.stringify(trimmed(config)) !== JSON.stringify(trimmed(s.config));
-  const dirty = title.trim() !== s.title || every !== s.sync_every_seconds || changedConfig;
+  const changedSecret = s.kind === 'synced' && secret !== '' && secret !== (s.secret ?? '');
+  const dirty = title.trim() !== s.title || every !== s.sync_every_seconds || changedConfig || changedSecret;
   const titleError = title.trim() === '' ? 'A title is required.' : undefined;
   const errors = configErrors(reader, config);
 
@@ -182,6 +180,7 @@ function SettingsCard({ source: s, manage }: { source: KnowledgeSource; manage: 
         ...(title.trim() !== s.title ? { title: title.trim() } : {}),
         ...(every !== s.sync_every_seconds ? { sync_every_seconds: every } : {}),
         ...(changedConfig ? { config: trimmed(config) } : {}),
+        ...(changedSecret ? { secret } : {}),
       }),
     onSuccess: async (updated) => {
       client.setQueryData(keys.knowledgeSource(org.id, updated.name), updated);
@@ -221,12 +220,18 @@ function SettingsCard({ source: s, manage }: { source: KnowledgeSource; manage: 
       </Field>
       {s.kind === 'synced' ? (
         <>
-          <Field label="Connection" help="It never changes: add another source to read another connection.">
-            <Input value={s.connection ?? ''} readOnly translate="no" className="font-mono md:text-body" />
-          </Field>
+          <SecretField
+            value={secret}
+            onChange={(name) => edits.set('secret', name)}
+            help={
+              s.secret
+                ? 'The next sync reads with the new secret. Open to all factories.'
+                : `Reads with ${s.connection ?? 'an earlier setup'} until you pick a secret. Open to all factories.`
+            }
+          />
           <ConfigFields
             reader={reader}
-            connection={s.connection ?? ''}
+            secret={secret}
             config={config}
             errors={submitted ? errors : {}}
             onChange={(c) => edits.set('config', c)}
@@ -270,7 +275,7 @@ function UsedByCard({ source: s }: { source: KnowledgeSource }) {
       {s.used_by.factories.length === 0 ? (
         <p className="m-0 text-body leading-normal text-muted">
           No factory’s current version lists it yet. A factory’s Definition says which sources its agents may search,
-          under Connections and knowledge.
+          under Environments and knowledge.
         </p>
       ) : (
         <ul className="m-0 flex list-none flex-col p-0">
@@ -278,7 +283,7 @@ function UsedByCard({ source: s }: { source: KnowledgeSource }) {
             <li key={f.id} className="border-t border-line py-2.5 text-body first:border-t-0 first:pt-0">
               <Link
                 to="/o/$org/f/$factory/definition/$section"
-                params={{ org: org.slug, factory: f.name, section: 'connections' }}
+                params={{ org: org.slug, factory: f.name, section: 'basics' }}
                 className="text-ink underline underline-offset-3 hover:text-link"
                 translate="no"
               >
@@ -289,17 +294,16 @@ function UsedByCard({ source: s }: { source: KnowledgeSource }) {
           ))}
         </ul>
       )}
-      {s.connection ? (
+      {s.secret ? (
         <p className="m-0 text-body text-muted">
-          Reads the connection{' '}
+          Reads with the secret{' '}
           <Link
-            to="/o/$org/access"
-            params={{ org: org.slug }}
-            search={{ q: s.connection }}
+            to="/o/$org/secrets/$secret"
+            params={{ org: org.slug, secret: s.secret }}
             className="font-mono text-ink underline underline-offset-3 hover:text-link"
             translate="no"
           >
-            {s.connection}
+            {s.secret}
           </Link>
           .
         </p>

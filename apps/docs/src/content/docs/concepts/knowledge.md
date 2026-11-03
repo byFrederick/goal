@@ -5,7 +5,7 @@ sidebar:
   order: 23
 ---
 
-The knowledge base is one per organization. It holds the documents that agents may search, read and rate through the gateway. Its documents come from sources: files people upload, a repository or a space that Goal syncs with a secret, or a connection whose own tools search the outside system directly.
+The knowledge base is one per organization. It holds the documents that agents may search, read and rate through the gateway. Its documents come from sources: files people upload, a repository or a space that Goal syncs with a secret, or a server whose own tools search the outside system directly.
 
 ## Sources
 
@@ -13,13 +13,13 @@ The knowledge base is one per organization. It holds the documents that agents m
 | --- | --- |
 | `upload` | Files people upload: text, Markdown, HTML, JSON or YAML. The originals are kept in the bucket under the organization's knowledge prefix. |
 | `synced` | A repository or a Confluence space, read with a secret. Its config names the reader. `gitdocs` reads Markdown from a repository on GitHub or GitLab, with include and exclude globs (`**/*.md` by default). The `confluence` reader reads pages of one or more spaces of a Confluence Cloud site. Each sync fetches only the files that changed. |
-| `live` | A connection whose own tools search the outside system. Nothing is indexed. |
+| `live` | A server whose own tools search the outside system. Nothing is indexed. |
 
 A synced source keeps its text, its chunks and a link back to the original. The originals stay where they are.
 
 ### A synced source's secret and config
 
-A synced source names a secret (`goal secret`, [Connections](../connections/)) and a config. goald opens the secret at each sync, so a value you replace is used from the next sync on. The secret must be open to all factories, because a source belongs to the organization, not to one factory. Renaming the secret keeps the source on it. You can't delete a secret while a source reads with it: the error names the source.
+A synced source names a secret (`goal secret`, [Access and secrets](../access-and-secrets/)) and a config. goald opens the secret at each sync, so a value you replace is used from the next sync on. The secret must be open to all factories, because a source belongs to the organization, not to one factory. Renaming the secret keeps the source on it. You can't delete a secret while a source reads with it: the error names the source.
 
 | Reader | Config | The secret holds |
 | --- | --- | --- |

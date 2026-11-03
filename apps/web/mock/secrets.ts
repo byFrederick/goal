@@ -1,5 +1,5 @@
 // The organizations' secrets for the mock API (ADR 0037): GET and POST …/secrets, POST
-// …/secrets/import, GET, PATCH and DELETE …/secrets/{secret}, PUT …/secrets/{secret}/value, and the
+// …/secrets/import, POST …/repositories/test (a token's read and push check), GET, PATCH and DELETE …/secrets/{secret}, PUT …/secrets/{secret}/value, and the
 // audit entries about a secret (GET …/audit?target_kind=secret), refusing as goald does
 // (secret-invalid, secret-not-found, secret-name-taken, secret-in-use naming the uses, a fresh sign-in
 // for every change). A value is never kept: a create, a replace and an import are acknowledged and
@@ -296,6 +296,33 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
   return {
     reset,
     async handle(org, rest, method, url, req, res, body) {
+      if (rest === '/repositories/test' && method === 'POST') {
+        // The token's read and push check (ADR 0037): a repository named *-readonly refuses the push, one named *-missing the read.
+        const input = await body();
+        const address = typeof input.url === 'string' ? input.url : '';
+        const found = typeof input.secret === 'string' ? named(org.id, input.secret) : undefined;
+        if (!found) {
+          refuse(res, 404, `secret "${String(input.secret)}" not found`, 'secret-not-found');
+          return true;
+        }
+        if (!/^https:\/\/(github|gitlab)\.com\/[^/]+\/[^/]+/.test(address)) {
+          refuse(res, 400, `"${address}" names no repository on github.com or gitlab.com`, 'repository-url-invalid');
+          return true;
+        }
+        const noRead = /-missing(\.git)?$/.test(address);
+        const noPush = /-readonly(\.git)?$/.test(address);
+        send(res, 200, {
+          tested: true,
+          read: noRead
+            ? { ok: false, reason: 'Repository not found, or the token cannot see it.' }
+            : { ok: true, reason: 'Cloned' },
+          push:
+            noRead || noPush
+              ? { ok: false, reason: 'The token has no write access to this repository.' }
+              : { ok: true, reason: 'Can push' },
+        });
+        return true;
+      }
       if (rest === '/audit' && method === 'GET' && url.searchParams.get('target_kind') === 'secret') {
         const id = url.searchParams.get('target_id');
         const entries = list(org.id).find((s) => s.secret.id === id)?.activity ?? [];

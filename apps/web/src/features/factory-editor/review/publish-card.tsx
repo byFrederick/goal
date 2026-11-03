@@ -185,7 +185,7 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
           stats={[
             { label: 'Stations', value: counts?.stations ?? null },
             { label: 'Agents', value: counts?.agents ?? null },
-            { label: 'Connections', value: counts?.connections ?? null },
+            { label: 'Tools', value: counts?.connections ?? null },
             { label: 'Skills', value: counts?.skills ?? null },
           ]}
         />

@@ -96,6 +96,7 @@ import {
 } from './knowledge';
 import { getNotificationPreferences } from './notifications';
 import { getOrgPolicy } from './policy';
+import { testRepository } from './repositories';
 import { type SearchQuery, searchOrg } from './search';
 import { getSecret, listSecretActivity, listSecrets } from './secrets';
 import { getOrgSpend } from './spend';
@@ -411,6 +412,15 @@ export const accessQuery = (org: string, by: AccessView) =>
     queryKey: keys.access(org, by),
     queryFn: ({ signal }) => getAccess(org, by, signal),
     staleTime: 30_000,
+  });
+
+/** The read and push check of a repository's token (ADR 0037): a test that costs a request, so it is kept for a minute. */
+export const repositoryTestQuery = (org: string, url: string, secret: string) =>
+  queryOptions({
+    queryKey: ['org', org, 'repository-test', url, secret] as const,
+    queryFn: ({ signal }) => testRepository(org, { url, secret }, signal),
+    staleTime: 60_000,
+    retry: false,
   });
 
 /** The organization's secrets, by name, never a value (secret:read: every member). */

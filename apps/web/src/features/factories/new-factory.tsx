@@ -16,7 +16,7 @@ type From = 'blank' | 'template' | 'clone' | 'yaml';
 const starts: readonly { id: From; label: string; sub: string; icon: LucideIcon }[] = [
   { id: 'blank', label: 'Blank', sub: 'Build the line yourself', icon: Plus },
   { id: 'template', label: 'From a template', sub: 'Templates are stored as data', icon: LayoutTemplate },
-  { id: 'clone', label: 'Clone a factory', sub: 'Without its items or credentials', icon: Copy },
+  { id: 'clone', label: 'Clone a factory', sub: 'Without its items or secrets', icon: Copy },
   { id: 'yaml', label: 'Import YAML', sub: 'Checked against the schema first', icon: FileText },
 ];
 
@@ -39,7 +39,7 @@ export function NewFactoryCard({ className }: { className?: string }) {
   return (
     <SectionCard
       title={newFactoryScreen.label}
-      description="Build the line, agents and connections in the browser; nothing goes in code or environment variables."
+      description="Build the line, agents and environments in the browser; nothing goes in code or environment variables."
       className={className}
     >
       <ul className="@container m-0 -mt-1 -mb-2 list-none p-0">

@@ -129,8 +129,8 @@ describe('the spend screen, ready', () => {
     const section = (await screen.findByRole('heading', { name: 'Who pays for models' })).closest(
       'section',
     ) as HTMLElement;
-    expect(within(section).getByText('Connected')).toBeTruthy();
-    expect(within(section).getByText('Connection claude, used by all 3 factories')).toBeTruthy();
+    expect(within(section).getByText('Works')).toBeTruthy();
+    expect(within(section).getByText('Secret claude, used by all 3 factories')).toBeTruthy();
     expect(within(section).getByRole('link', { name: 'Add a key' }).getAttribute('href')).toBe(
       '/o/acme/secrets?new=true',
     );

@@ -7,6 +7,7 @@ import { useEffect, useMemo } from 'react';
 import { parse } from 'yaml';
 import { draftFileQuery, draftFilesQuery, factoryQuery, versionFileQuery, versionQuery } from '../../../api/queries';
 import { useDraft, useDraftSession, useViewOnly } from '../draft/use-draft';
+import { agentEnvironments, setAgentEnvironment } from './agent-environment';
 import { defaultEnvironment, envName, envPath, readEnv } from './env-file';
 
 /** The text of one file of the definition and whether it has loaded: adopted into the session, which keeps what is typed. */
@@ -102,4 +103,19 @@ export function useEnvironmentAgents(): Record<string, string[]> | undefined {
     }
     return out;
   }, [text]);
+}
+
+/** The environment each agent gets, by agent name, from factory.yaml; and `change`, which sets one agent's. */
+export function useAgentEnvironments() {
+  const session = useDraftSession();
+  const viewOnly = useViewOnly();
+  const { text, ready } = useFileText('factory.yaml');
+  const byAgent = useMemo(() => agentEnvironments(text), [text]);
+  const change = (agent: string, environment: string) => {
+    if (viewOnly) return;
+    const current = session.getSnapshot().files.get('factory.yaml')?.text ?? text ?? '';
+    const next = setAgentEnvironment(current, agent, environment);
+    if (next !== current) session.editFile('factory.yaml', next);
+  };
+  return { byAgent, ready, change };
 }
