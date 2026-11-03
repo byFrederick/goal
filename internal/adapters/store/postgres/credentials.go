@@ -111,7 +111,7 @@ func (c *Credentials) UsedBy(ctx context.Context, name string) ([]string, error)
 
 // Resolve implements ports.Credentials.
 func (c *Credentials) Resolve(ctx context.Context, names []string, use domain.CredentialUse) ([]domain.ResolvedCredential, error) {
-	opened, err := c.t.resolve(ctx, names, domain.SecretUse{Factory: use.Factory, Agent: use.Agent, Run: use.Run})
+	opened, err := c.t.resolve(ctx, names, domain.SecretUse(use))
 	if err != nil {
 		return nil, err
 	}

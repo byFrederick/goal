@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"strings"
 
@@ -63,7 +64,7 @@ func (s *Secrets) Resolve(ctx context.Context, names []string, use domain.Secret
 }
 
 // secretsNameKey keeps a secret's name unique in its organization.
-const secretsNameKey = "secrets_org_id_name_key"
+const secretsNameKey = "secrets_org_id_name_key" //nolint:gosec // a constraint name, not a credential
 
 // tableKind is what a secretTable's rows are called and audited as: secrets, or the credentials
 // the credentials API still serves from the same table until the secrets API replaces it.
@@ -164,9 +165,7 @@ func (t secretTable) create(ctx context.Context, n domain.NewSecret, by domain.A
 		}
 
 		entry := map[string]any{auditName: n.Name}
-		for k, v := range data {
-			entry[k] = v
-		}
+		maps.Copy(entry, data)
 
 		return t.audit(ctx, q, by, t.kind.created, id, entry)
 	})

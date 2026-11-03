@@ -215,6 +215,14 @@ func testCreate(f *fixture) {
 	f.expect(got.CreatedBy == admin && got.UpdatedBy == admin && !got.CreatedAt.IsZero(), "Create's actors = %+v", got)
 	f.expect(!got.Scope.All && len(got.Scope.Factories) == 1 && got.Scope.Factories[0] == factoryA, "Create's scope = %+v", got.Scope)
 
+	f.readBack(acme, got)
+}
+
+// readBack checks that Get, List, the audit log and Resolve agree with got, the secret sentry just
+// created with value marker.
+func (f *fixture) readBack(acme domain.OrgID, got domain.Secret) {
+	f.t.Helper()
+
 	one, err := f.s.Get(f.in(acme), sentry)
 	f.expect(err == nil && one.ID == got.ID && one.Source == domain.SecretSourceValue && one.CreatedBy.ID == admin.ID,
 		"Get = %+v, %v", one, err)

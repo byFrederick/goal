@@ -218,31 +218,3 @@ func TestRunEnv_ScrubsCredentialValues(t *testing.T) {
 		}
 	}
 }
-
-// expectRefused fails the test unless item id is blocked before its agent ran, with a reason that
-// mentions each of want and holds none of secrets.
-func (h *harness) expectRefused(t *testing.T, id domain.ItemID, want []string, secrets ...string) {
-	t.Helper()
-
-	blocked := h.eventsOf(id, domain.EventBlocked)
-	if len(blocked) == 0 {
-		t.Fatalf("item not blocked (events %v)", h.kinds(id))
-	}
-
-	reason, _ := blocked[0].Data["reason"].(string)
-	for _, w := range want {
-		if !strings.Contains(reason, w) {
-			t.Errorf("blocked reason %q does not mention %q", reason, w)
-		}
-	}
-
-	for _, secret := range secrets {
-		if strings.Contains(reason, secret) {
-			t.Errorf("blocked reason %q holds a secret value", reason)
-		}
-	}
-
-	if n := len(h.worker.Runs()); n != 0 {
-		t.Errorf("%d agent runs, want none", n)
-	}
-}

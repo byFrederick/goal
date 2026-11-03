@@ -3,6 +3,7 @@
 package postgres
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -48,14 +49,46 @@ func TestMigrate_CredentialsBecomeSecrets(t *testing.T) {
 	t.Parallel()
 
 	db := newTestDB(t, OwnerRole)
-	owner := openPool(t, db.owner)
-	migrateTo(t, owner, 84)
+	migrateTo(t, openPool(t, db.owner), 84)
 
 	store := New(openPool(t, db.app))
 	org := newOrgID(t, store)
 	key := testKey(t, "k1")
 
 	const value = "sk-migrated-credential-2c4f"
+
+	id := seedOldCredential(t, db, org, key, value)
+
+	migrate(t, db.owner)
+
+	ctx := domain.WithOrg(t.Context(), org)
+
+	got, err := NewSecrets(store, key).Resolve(ctx, []string{seededCredential}, domain.SecretUse(credentialUse))
+	if err != nil || len(got) != 1 || got[0].Value != value {
+		t.Fatalf("Resolve of the migrated secret: %v; want its value", err)
+	}
+
+	s := got[0].Secret
+	if s.ID != domain.SecretID(id) || s.Source != domain.SecretSourceValue || s.Description != "error reports" ||
+		!slices.Equal(s.Scope.Factories, []domain.FactoryID{seededFactory}) {
+		t.Errorf("migrated secret = %+v; want the credential's id, description and scope, of source value", s)
+	}
+
+	cred, err := NewCredentials(store, key).Get(ctx, seededCredential)
+	if err != nil || cred.Type != domain.CredentialAPIKey || len(cred.Agents) != 0 {
+		t.Errorf("the credentials API reads %+v, %v; want an api_key with no agents", cred, err)
+	}
+
+	if ids, err := ConnectionKeyIDs(t.Context(), store); err != nil || !slices.Equal(ids, []string{"k1"}) {
+		t.Errorf("ConnectionKeyIDs = %v, %v; want the migrated secret's [k1]", ids, err)
+	}
+}
+
+// seedOldCredential inserts credential seededCredential of org into 00065's credentials, an
+// oauth_token for seededFactory's backend agent with value sealed under domain.CredentialAAD, and
+// returns its id.
+func seedOldCredential(t *testing.T, db testDB, org domain.OrgID, key ports.MasterKey, value string) domain.CredentialID {
+	t.Helper()
 
 	id := domain.CredentialID(uuid.Must(uuid.NewV7()).String())
 
@@ -66,34 +99,11 @@ func TestMigrate_CredentialsBecomeSecrets(t *testing.T) {
 
 	_, err = openPool(t, db.admin).Exec(t.Context(), `INSERT INTO credentials
 		(id, org_id, name, type, description, factory_ids, agents, key_id, nonce, ciphertext, created_by, updated_by)
-		VALUES ($1, $2, 'sentry-token', 'oauth_token', 'error reports', ARRAY[$3::uuid], $4, $5, $6, $7, 'user:local', 'user:local')`,
-		string(id), string(org), string(seededFactory), `{"`+string(seededFactory)+`": ["backend"]}`, keyID, nonce, ct)
+		VALUES ($1, $2, $3, 'oauth_token', 'error reports', ARRAY[$4::uuid], $5, $6, $7, $8, 'user:local', 'user:local')`,
+		string(id), string(org), seededCredential, string(seededFactory), `{"`+string(seededFactory)+`": ["backend"]}`, keyID, nonce, ct)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	migrate(t, db.owner)
-
-	ctx := domain.WithOrg(t.Context(), org)
-	use := domain.SecretUse(credentialUse)
-
-	got, err := NewSecrets(store, key).Resolve(ctx, []string{"sentry-token"}, use)
-	if err != nil || len(got) != 1 || got[0].Value != value {
-		t.Fatalf("Resolve of the migrated secret: %v; want its value", err)
-	}
-
-	s := got[0].Secret
-	if s.ID != domain.SecretID(id) || s.Source != domain.SecretSourceValue || s.Description != "error reports" ||
-		len(s.Scope.Factories) != 1 || s.Scope.Factories[0] != seededFactory {
-		t.Errorf("migrated secret = %+v; want the credential's id, description and scope, of source value", s)
-	}
-
-	cred, err := NewCredentials(store, key).Get(ctx, "sentry-token")
-	if err != nil || cred.Type != domain.CredentialAPIKey || len(cred.Agents) != 0 {
-		t.Errorf("the credentials API reads %+v, %v; want an api_key with no agents", cred, err)
-	}
-
-	if ids, err := ConnectionKeyIDs(t.Context(), store); err != nil || len(ids) != 1 || ids[0] != "k1" {
-		t.Errorf("ConnectionKeyIDs = %v, %v; want the migrated secret's [k1]", ids, err)
-	}
+	return id
 }

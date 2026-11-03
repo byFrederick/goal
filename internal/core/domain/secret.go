@@ -298,8 +298,6 @@ func SecretAAD(org OrgID, id SecretID, keyID string) []byte {
 }
 
 // Audit actions of secrets; no entry holds a value.
-//
-//nolint:gosec // audit action names, not secrets
 const (
 	AuditSecretCreated       = "secret.created"
 	AuditSecretUpdated       = "secret.updated"

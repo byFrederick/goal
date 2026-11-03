@@ -174,6 +174,7 @@ func TestConnectionKeyIDs_IncludesCredentials(t *testing.T) {
 	d := newConnectionsDB(t)
 	org := newOrgID(t, d.store)
 	seedConnections(t, NewConnections(d.store, testKey(t, "k1")), org, "s3cret")
+
 	_, err := NewSecrets(d.store, testKey(t, "k9")).Create(domain.WithOrg(t.Context(), org),
 		domain.NewSecret{Name: seededCredential, Value: "sk-only-k9"}, domain.LocalUser)
 	if err != nil {
@@ -211,10 +212,7 @@ func TestRekey_ResealsCredentials(t *testing.T) {
 		t.Errorf("Resolve under k2 after Rekey: %v", err)
 	}
 
-	opened, err := NewSecrets(d.store, testKey(t, "k2")).Resolve(domain.WithOrg(t.Context(), org), []string{seededCredential}, domain.SecretUse(credentialUse))
-	if err != nil || len(opened) != 1 || opened[0].Value != "sk-rekeyed-3b7c" {
-		t.Errorf("the secrets store's Resolve under k2 after Rekey: %v", err)
-	}
+	expectOpens(t, NewSecrets(d.store, testKey(t, "k2")), org, "sk-rekeyed-3b7c")
 
 	if n, err := Rekey(t.Context(), d.owner, testKey(t, "k2", "k1")); err != nil || n != 0 {
 		t.Errorf("Rekey again = %d, %v; want nothing left", n, err)
@@ -222,6 +220,16 @@ func TestRekey_ResealsCredentials(t *testing.T) {
 
 	if ids, err := ConnectionKeyIDs(t.Context(), d.store); err != nil || !slices.Equal(ids, []string{"k2"}) {
 		t.Errorf("ConnectionKeyIDs = %v, %v; want [k2]", ids, err)
+	}
+}
+
+// expectOpens fails unless secrets opens seededCredential of org as value.
+func expectOpens(t *testing.T, secrets *Secrets, org domain.OrgID, value string) {
+	t.Helper()
+
+	got, err := secrets.Resolve(domain.WithOrg(t.Context(), org), []string{seededCredential}, domain.SecretUse(credentialUse))
+	if err != nil || len(got) != 1 || got[0].Value != value {
+		t.Errorf("the secrets store's Resolve of %s: %v; want its value", seededCredential, err)
 	}
 }
 

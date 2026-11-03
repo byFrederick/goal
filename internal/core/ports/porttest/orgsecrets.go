@@ -3,7 +3,6 @@ package porttest
 import (
 	"context"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -78,10 +77,12 @@ func (s *OrgSecrets) List(ctx context.Context) ([]domain.Secret, error) {
 	s.d.mu.Lock()
 	defer s.d.mu.Unlock()
 
-	out := []domain.Secret{}
-	for _, name := range slices.Sorted(maps.Keys(s.d.rows[org])) {
-		out = append(out, cloneSecret(s.d.rows[org][name].secret))
+	out := make([]domain.Secret, 0, len(s.d.rows[org]))
+	for _, r := range s.d.rows[org] {
+		out = append(out, cloneSecret(r.secret))
 	}
+
+	slices.SortFunc(out, func(a, b domain.Secret) int { return strings.Compare(a.Name, b.Name) })
 
 	return out, nil
 }

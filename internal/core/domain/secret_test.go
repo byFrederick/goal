@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
 
 // secretMarker is a value no test output, error or String may ever contain.
-const secretMarker = "sk-secret-marker-value" //nolint:gosec // a made-up value
+const secretMarker = "sk-secret-marker-value"
 
 func TestCheckSecret(t *testing.T) {
 	t.Parallel()
@@ -24,17 +25,17 @@ func TestCheckSecret(t *testing.T) {
 		edit func(s *Secret)
 		ok   bool
 	}{
-		{"valid", func(*Secret) {}, true},
+		{"a valid secret", func(*Secret) {}, true},
 		{"all factories", func(s *Secret) { s.Scope = SecretScope{All: true} }, true},
 		{"no factories", func(s *Secret) { s.Scope = SecretScope{} }, true},
-		{"the shortest name", func(s *Secret) { s.Name = "abc" }, true},
+		{"the shortest name", func(s *Secret) { s.Name = "ab1" }, true},
 		{"the longest name", func(s *Secret) { s.Name = "a" + strings.Repeat("b", 39) }, true},
 		{"a name a credential could not have", func(s *Secret) { s.Name = "goal-token" }, true},
 		{"a description of 500 characters", func(s *Secret) { s.Description = strings.Repeat("é", MaxSecretDescription) }, true},
 		{"expiry with a reminder of 1 day", func(s *Secret) { s.ExpiresAt, s.RemindDays = &expires, 1 }, true},
 		{"expiry with a reminder of 90 days", func(s *Secret) { s.ExpiresAt, s.RemindDays = &expires, 90 }, true},
 		{"expiry without a reminder", func(s *Secret) { s.ExpiresAt = &expires }, true},
-		{"bad name", func(s *Secret) { s.Name = "Sentry_Token" }, false},
+		{"name with capitals", func(s *Secret) { s.Name = "Sentry_Token" }, false},
 		{"short name", func(s *Secret) { s.Name = "ab" }, false},
 		{"long name", func(s *Secret) { s.Name = "a" + strings.Repeat("b", 40) }, false},
 		{"name ending with a dash", func(s *Secret) { s.Name = "sentry-" }, false},
@@ -82,21 +83,19 @@ func TestCheckNewSecret(t *testing.T) {
 		t.Errorf("Secret = %+v; want the name and the source value", got)
 	}
 
-	for name, edit := range map[string]func(n *NewSecret){
-		"no value":   func(n *NewSecret) { n.Value = "" },
-		"long value": func(n *NewSecret) { n.Value = strings.Repeat("v", MaxSecretValue+1) },
-		"bad name":   func(n *NewSecret) { n.Name = "No" },
-	} {
-		bad := n
-		edit(&bad)
+	refused := []NewSecret{
+		{Name: testCredName},
+		{Name: testCredName, Value: strings.Repeat("v", MaxSecretValue+1)},
+		{Name: "No", Value: secretMarker},
+	}
 
+	for i, bad := range refused {
 		err := bad.Check()
-		if !errors.Is(err, ErrInvalid) {
-			t.Errorf("%s: Check = %v, want ErrInvalid", name, err)
-		}
-
-		if err != nil && strings.Contains(err.Error(), secretMarker) {
-			t.Errorf("%s: the error shows the value: %v", name, err)
+		switch {
+		case !errors.Is(err, ErrInvalid):
+			t.Errorf("refused[%d]: Check = %v, want ErrInvalid", i, err)
+		case strings.Contains(err.Error(), secretMarker):
+			t.Errorf("refused[%d]: the error shows the value: %v", i, err)
 		}
 	}
 }
@@ -106,7 +105,7 @@ func TestSecretPatch_Apply(t *testing.T) {
 
 	expires := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
 	factory := FactoryID("00000000-0000-7000-8000-0000000000f1")
-	s := Secret{Name: "old-name", Source: SecretSourceValue, Description: "d", Scope: SecretScope{Factories: []FactoryID{factory}}}
+	s := Secret{Name: "sentry-old", Source: SecretSourceValue, Description: "d", Scope: SecretScope{Factories: []FactoryID{factory}}}
 
 	if !(SecretPatch{}).Empty() {
 		t.Error("the zero patch is not empty")
@@ -115,28 +114,29 @@ func TestSecretPatch_Apply(t *testing.T) {
 	name, desc := "new-name", "new"
 	p := SecretPatch{Name: &name, Description: &desc, Scope: &SecretScope{All: true}, Expiry: &SecretExpiry{At: &expires, RemindDays: 3}}
 
-	got := p.Apply(s)
-	if got.Name != name || got.Description != desc || !got.Scope.All || len(got.Scope.Factories) != 0 ||
-		got.ExpiresAt == nil || !got.ExpiresAt.Equal(expires) || got.RemindDays != 3 || got.Source != SecretSourceValue {
-		t.Fatalf("Apply = %+v", got)
+	want := Secret{Name: name, Source: SecretSourceValue, Description: desc, Scope: SecretScope{All: true}, ExpiresAt: &expires, RemindDays: 3}
+
+	if got := p.Apply(s); !reflect.DeepEqual(got, want) {
+		t.Fatalf("Apply = %+v, want %+v", got, want)
 	}
 
-	if s.Name != "old-name" || s.Scope.All {
+	if s.Name != "sentry-old" || s.Scope.All {
 		t.Error("Apply changed its argument")
 	}
 
-	if (SecretPatch{Name: &name}).ChangesMetadata() != true || (SecretPatch{Replace: &desc}).ChangesMetadata() {
-		t.Error("ChangesMetadata is every change but the value")
-	}
-
-	cleared := SecretPatch{Expiry: &SecretExpiry{}}.Apply(got)
+	cleared := SecretPatch{Expiry: &SecretExpiry{}}.Apply(want)
 	if cleared.ExpiresAt != nil || cleared.RemindDays != 0 {
 		t.Errorf("an empty Expiry does not clear the expiry: %+v", cleared)
 	}
+}
+
+// Replacing the value is a change, the only write of a value, and an empty one is refused.
+func TestSecretPatch_Value(t *testing.T) {
+	t.Parallel()
 
 	replace := secretMarker
-	if (SecretPatch{Replace: &replace}).Empty() {
-		t.Error("a patch with Replace is empty")
+	if (SecretPatch{Replace: &replace}).Empty() || (SecretPatch{Replace: &replace}).ChangesMetadata() {
+		t.Error("a patch with Replace is empty, or changes metadata")
 	}
 
 	empty := ""
