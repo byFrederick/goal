@@ -19,6 +19,7 @@ const AgentsSection = lazyRetrying(() => import('./agents/agents-section').then(
 const EnvironmentsSection = lazyRetrying(() =>
   import('./environments/environments-section').then((m) => m.EnvironmentsSection),
 );
+const KnowledgeSection = lazyRetrying(() => import('./knowledge/knowledge-section').then((m) => m.KnowledgeSection));
 const ReviewSection = lazyRetrying(() => import('./review/review-section').then((m) => m.ReviewSection));
 const VersionsSection = lazyRetrying(() => import('./versions/versions-section').then((m) => m.VersionsSection));
 
@@ -27,6 +28,7 @@ export const sectionViews: Record<EditorSection, ComponentType<SectionViewProps>
   line: LineSection,
   agents: AgentsSection,
   environments: EnvironmentsSection,
+  knowledge: KnowledgeSection,
   review: ReviewSection,
   versions: VersionsSection,
 };

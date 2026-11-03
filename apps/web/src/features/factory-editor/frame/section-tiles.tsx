@@ -43,7 +43,10 @@ export function SectionTiles({
 }: TilesProps) {
   const model = useModel();
   const envs = useEnvironmentNames();
-  const shown = viewOnly ? sections.filter((s) => s !== 'review') : sections;
+  const shown: readonly (Section | 'knowledge')[] = (
+    viewOnly ? sections.filter((s) => s !== 'review') : sections
+  ).flatMap((s) => (s === 'review' ? (['knowledge', s] as const) : [s]));
+  const knowledgeText = knowledgeTileText(model.basics.knowledge_sources?.length ?? 0);
   return (
     <nav
       aria-label={yaml ? 'Definition sections, jump to a block in factory.yaml' : 'Definition sections'}
@@ -55,6 +58,13 @@ export function SectionTiles({
         )}
       >
         {shown.map((s) => {
+          if (s === 'knowledge') {
+            return (
+              <li key={s} className="min-w-[176px] shrink-0 @[880px]:min-w-0">
+                <Tile section={s} current={current === s} problem={false} text={knowledgeText} />
+              </li>
+            );
+          }
           const summary = summaries.find((x) => x.section === s);
           const tile: { state: string; text: string; badge?: string } = parseError
             ? parseErrorTile(s, parseError)
@@ -90,6 +100,11 @@ export function SectionTiles({
   );
 }
 
+/** What the Knowledge tile says: how many sources the factory lists. */
+function knowledgeTileText(count: number): string {
+  return count === 0 ? 'No sources' : count === 1 ? '1 source' : `${count} sources`;
+}
+
 function Tile({
   section,
   current,
@@ -99,7 +114,7 @@ function Tile({
   state,
   line,
 }: {
-  section: Section;
+  section: Section | 'knowledge';
   current: boolean;
   problem: boolean;
   /** What needs attention, beside the label ("2 changes"). */

@@ -3,7 +3,7 @@
 // only, never content (D §11).
 
 /** The five sections with tiles, then Versions (reached from the header). */
-export const editorSections = ['basics', 'line', 'agents', 'environments', 'review', 'versions'] as const;
+export const editorSections = ['basics', 'line', 'agents', 'environments', 'knowledge', 'review', 'versions'] as const;
 
 export type EditorSection = (typeof editorSections)[number];
 
@@ -39,6 +39,10 @@ export const sectionInfo: Record<EditorSection | 'connections', SectionInfo> = {
       'Who works on the line. Each agent gets a role, a model, a prompt, skills and the built-in tools it may use.',
   },
   environments: environmentsInfo,
+  knowledge: {
+    label: 'Knowledge',
+    description: 'The folders agents read, and the facts every run starts with.',
+  },
   connections: environmentsInfo,
   review: { label: 'Review and publish', description: 'Checks, the changes from the running version, and publish.' },
   versions: { label: 'Versions', description: 'Every published version, the one that runs, compare and restore.' },
