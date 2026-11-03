@@ -336,3 +336,30 @@ func TestTaskToken_DraftRequest(t *testing.T) {
 		t.Errorf("verifying a production token that names a draft request: err = %v, want ErrBadTaskToken", err)
 	}
 }
+
+func TestTaskToken_CarriesTheKnowledgePins(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	key := []byte("gateway-key")
+	pins := []KnowledgePin{{Source: srcHandbook, Snapshot: "s1"}, {Source: srcRunbooks, Snapshot: "s2"}}
+	claims := TaskClaims{
+		OrgID: "o1", FactoryID: "f1", VersionID: "v1", ItemID: "i1", Station: stationBuild, Agent: testAgent, RunID: "r1",
+		Knowledge: pins, ExpiresAt: now.Add(time.Hour).Unix(),
+	}
+
+	token, err := SignTaskToken(key, claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body, _, _ := strings.Cut(token, ".")
+	if payload, _ := base64.RawURLEncoding.DecodeString(body); !strings.Contains(string(payload), `"kn":[{"n":"handbook","s":"s1"}`) {
+		t.Errorf("payload %s; want the pins under kn", payload)
+	}
+
+	got, err := VerifyTaskToken(key, token, now)
+	if err != nil || !reflect.DeepEqual(got.Knowledge, pins) {
+		t.Errorf("VerifyTaskToken = %+v, %v; want pins %v", got.Knowledge, err, pins)
+	}
+}

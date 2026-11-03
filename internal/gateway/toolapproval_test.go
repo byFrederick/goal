@@ -179,7 +179,7 @@ func TestToolApproval_RefusesABadToken(t *testing.T) {
 		status      int
 		body        string
 	}{
-		{name: "no token", status: http.StatusUnauthorized, body: bodyUnauthorized},
+		{name: noToken, status: http.StatusUnauthorized, body: bodyUnauthorized},
 		{name: "not a token", token: "not-a-token", status: http.StatusUnauthorized, body: bodyUnauthorized},
 		{name: "an expired token", token: h.token(t, expired), status: http.StatusUnauthorized, body: bodyUnauthorized},
 		{name: "a token for the API", token: h.tokenFor(t, c, "goal-api"), status: http.StatusUnauthorized, body: bodyUnauthorized},

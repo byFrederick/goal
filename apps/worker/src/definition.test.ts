@@ -264,6 +264,23 @@ describe('runDefinition', () => {
     expect(output?.rejected).toEqual(['evals/review.yaml']);
   });
 
+  it("appends the bundle's Knowledge section, which names no file of this box, after the fixed prompt", async () => {
+    await draft(start);
+    const { fake, calls } = scripted([success]);
+    const { deps: d } = deps(fake);
+    const section = "## Knowledge\n\nThe factory's runs read these knowledge sources as files under `/knowledge`.";
+
+    await runDefinition({ ...spec, knowledge: { section, snapshots: [] } }, d);
+
+    const options = calls[0]?.options;
+    expect(options?.systemPrompt).toEqual({
+      type: 'preset',
+      preset: 'claude_code',
+      append: `${definitionSystemPrompt}\n\n${section}`,
+    });
+    expect(options?.additionalDirectories).toBeUndefined();
+  });
+
   it('gives the query the fixed prompt, the file tools only and no MCP server', async () => {
     await draft(start);
     const { fake, calls } = scripted([success]);

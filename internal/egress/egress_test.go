@@ -318,14 +318,20 @@ func TestProxy_ServesTheGatewayAtItsPathsOnly(t *testing.T) {
 	}
 
 	for _, req := range []struct{ method, path string }{
-		{http.MethodPost, "/mcp"}, {http.MethodGet, "/run?part=bundle"}, {http.MethodPost, "/run/tool-approval"},
+		{http.MethodPost, "/mcp"},
+		{http.MethodGet, "/run?part=bundle"},
+		{http.MethodPost, "/run/tool-approval"},
+		{http.MethodGet, "/run/knowledge/handbook"},
 	} {
 		if status := call(req.method, req.path); status != http.StatusOK {
 			t.Errorf("%s %s = %d, want 200", req.method, req.path, status)
 		}
 	}
 
-	for _, path := range []string{"/v1/me", "/api/auth/email-otp/send-verification-otp", "/mcp/", "/run/x", "/run/tool-approval/", "/run/tool-approval/x", "/run/%74ool-approval", "/%6Dcp", "/%72un", "/"} {
+	for _, path := range []string{
+		"/v1/me", "/api/auth/email-otp/send-verification-otp", "/mcp/", "/run/x", "/run/tool-approval/", "/run/tool-approval/x", "/run/%74ool-approval", "/%6Dcp", "/%72un", "/",
+		"/run/knowledge", "/run/knowledge/", "/run/knowledge/a/b", "/run/knowledge/%2e%2e", "/run/knowledge/../mcp",
+	} {
 		if status := call(http.MethodPost, path); status != http.StatusNotFound {
 			t.Errorf("POST %s = %d, want 404", path, status)
 		}
@@ -337,6 +343,7 @@ func TestProxy_ServesTheGatewayAtItsPathsOnly(t *testing.T) {
 	slices.Sort(got)
 
 	if want := []string{
+		"GET " + host + "/run/knowledge/handbook auth=Bearer task-token",
 		"GET " + host + "/run?part=bundle auth=Bearer task-token", "POST " + host + "/mcp auth=Bearer task-token",
 		"POST " + host + "/run/tool-approval auth=Bearer task-token",
 	}; !slices.Equal(got, want) {

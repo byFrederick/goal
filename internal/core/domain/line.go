@@ -66,8 +66,11 @@ type Line struct {
 	// an agent's runs get the ones its AgentSpec.Connections names, besides the runtime's model
 	// and repository connections, and merges use those whose kind has a code host.
 	Connections []string
-	// KnowledgeSources are the organization's knowledge sources the factory's agents may search.
-	KnowledgeSources []string
+	// Knowledge are the organization's knowledge sources the factory's runs read (knowledge.sources,
+	// ADR 0038 decision 5), in the order the definition lists them, and Memory its factory memory
+	// (memory.yaml, decision 6).
+	Knowledge []KnowledgeEntry
+	Memory    []MemoryFact
 	// Rules are the factory rules the version declares (spec.rules, ADR 0014), in declaration
 	// order; a violation an output reports counts only when it names one of them.
 	Rules []Rule
@@ -416,6 +419,10 @@ func (s Station) Arrival() ItemState {
 
 // CanRework reports whether an item already reworked reworkCount times may go back again.
 func (g Gate) CanRework(reworkCount int) bool { return reworkCount < g.MaxRework }
+
+// ReadsFiles reports whether the agent may read files: its builtins.read is not off, so Read is
+// not among its deny rules. An agent that may not gets no knowledge (ADR 0038 decision 7).
+func (a AgentSpec) ReadsFiles() bool { return !slices.Contains(a.ToolsDeny, "Read") }
 
 // Limits are the caps of one task of this agent: its own, else the runtime's.
 func (a AgentSpec) Limits(rt Runtime) (maxTurns int, perItemUSD float64) {

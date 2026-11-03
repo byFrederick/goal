@@ -254,3 +254,40 @@ func CheckReadWhen(s string) error {
 
 	return nil
 }
+
+// KnowledgeEntry is one source of a factory's knowledge.sources (ADR 0038 decision 5): the source's
+// name, the runs it applies to (a zero AppliesTo is every run, matched as rules are) and the line
+// that replaces its read-when line in the factory's prompt ("" keeps the snapshot's).
+type KnowledgeEntry struct {
+	Name      string
+	AppliesTo RuleScope
+	ReadWhen  string
+}
+
+// MemoryFact is one fact of a factory's memory.yaml (decision 6): its text and the items it came
+// from (<factory>#<number>).
+type MemoryFact struct {
+	Text string
+	From []string
+}
+
+// KnowledgePin is one knowledge snapshot a claim's runs read (decision 7): its source's name and
+// the snapshot's id, decided once at the claim's start.
+type KnowledgePin struct {
+	Source   string              `json:"n"`
+	Snapshot KnowledgeSnapshotID `json:"s"`
+}
+
+// ApplyingKnowledge are the entries that apply to run, in the definition's order: those whose
+// AppliesTo matches it as a rule's scope does (EffectiveRules).
+func ApplyingKnowledge(entries []KnowledgeEntry, run RuleTarget) []KnowledgeEntry {
+	var out []KnowledgeEntry
+
+	for _, k := range entries {
+		if k.AppliesTo.matches(run) {
+			out = append(out, k)
+		}
+	}
+
+	return out
+}

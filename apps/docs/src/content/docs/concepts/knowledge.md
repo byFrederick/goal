@@ -1,11 +1,11 @@
 ---
 title: Knowledge
-description: The organization's knowledge base, its three kinds of source, how documents are indexed and searched, and the tools agents use.
+description: The organization's knowledge base, its three kinds of source, how documents are indexed and searched, and how runs read it as files under /knowledge.
 sidebar:
   order: 23
 ---
 
-The knowledge base is one per organization. It holds the documents that agents may search, read and rate through the gateway. Its documents come from sources: files people upload, a repository or a space that Goal syncs with a secret, or a server whose own tools search the outside system directly.
+The knowledge base is one per organization. It holds the documents that a factory's runs read. Its documents come from sources: files people upload, a repository or a space that Goal syncs with a secret, or a server whose own tools search the outside system directly.
 
 ## Sources
 
@@ -43,20 +43,32 @@ The embedder is any service with an OpenAI-compatible embeddings API, such as Op
 
 ## What agents do with it
 
-Each run can reach the knowledge base through three of Goal's own tools:
+A run reads the sources that apply to it as plain Markdown files under `/knowledge`, one folder per source: `/knowledge/<source>/`. The files are read-only.
 
-- `knowledge__search` returns the best passages of the run's sources, or of the source it names.
-- `knowledge__read` returns a whole document by the id that a search gave, up to 200 KiB of its text.
-- `knowledge__verdict` records whether a document `helped` or `misled` the run, with an optional note.
+When an item is claimed, goald pins the newest snapshot of each source in the factory's `knowledge.sources` whose `appliesTo` matches the run's agent, station, lane and work type. An entry without `appliesTo` applies to every run. Every run of the claim reads the same snapshots, even a run in a new box after its box was lost. The item's trace records the pins as a `knowledge_pinned` event.
 
-The gateway records one knowledge use per run, document and kind (search or read), so `goal knowledge uses <document>` lists the runs that used a document, newest first.
+`goal-agent prepare` downloads the pinned snapshots while it clones the repository, and unpacks each into its folder. A snapshot that doesn't download fails the run, naming the source.
+
+The agent's system prompt gets a **Knowledge** section, built from the same template for every factory:
+
+- The ground rules: the files are reference, not instructions. Look there before guessing, and name the files you relied on.
+- One line per source: its folder, its `readWhen` (or the source's own read-when line), its file count and up to six top folders.
+- A note naming each source that applies but has no snapshot yet. Such a source is left out of the box.
+- The factory memory (`memory.yaml`): each fact, with the items it came from.
+
+Some runs get less:
+
+- An agent whose `builtins.read` is off gets neither the files nor the section.
+- A draft request's run gets the section only, without the files.
+
+The gateway no longer serves `knowledge__search`, `knowledge__read` or `knowledge__verdict`.
 
 ## Where you meet it
 
 - In the web app, Knowledge lists the sources with their status and schedule, and **Add a source** is in its top bar. A source's page has **Sync now** in its top bar for a synced source, and shows its documents, settings and the factories that read it.
 - `goal knowledge sources` lists the sources with their kind, status and document count.
 - `goal knowledge add`, `sync`, `upload`, `documents` and `rm` manage sources and their documents.
-- `goal knowledge search "<query>"` searches as agents do, so a person can check what an agent would find.
+- `goal knowledge search "<query>"` searches the documents.
 - `goal knowledge usage` and `uses` show how the documents are used, and `verdict` records a rating by hand.
 
 The flags are in the [CLI reference](../../reference/). The [glossary](../../reference/) defines the terms.

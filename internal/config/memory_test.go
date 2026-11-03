@@ -75,6 +75,11 @@ func memoryLoads(t *testing.T) {
 		t.Errorf("memory = %+v\nwant %+v", got, want)
 	}
 
+	wantLine := []domain.MemoryFact{{Text: want[0].Text, From: want[0].From}, {Text: want[1].Text}}
+	if got := f.Line().Memory; !reflect.DeepEqual(got, wantLine) {
+		t.Errorf("line's memory = %+v\nwant %+v", got, wantLine)
+	}
+
 	if _, err := Load(checkTree(baseFactory, map[string]string{MemoryFile: memoryEntry(10)})); err != nil {
 		t.Errorf("Load: %v", err)
 	}

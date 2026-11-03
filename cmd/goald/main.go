@@ -212,7 +212,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// bundle; the engine's RunDefinition signs its token.
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Events: store, Clock: clock, Logger: log,
-		Knowledge: kb.searcher, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore,
+		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore,
 	}, gateway.Config{Key: []byte(key)})
 	if err != nil {
 		return err
@@ -228,7 +228,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
 		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Clock: clock,
-		Minters: minters(s), Policies: policies, Intake: intake, Audit: store, NotificationOutbox: store, Logger: log,
+		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Audit: store, NotificationOutbox: store, Logger: log,
 	}, engine.Config{
 		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxes.gateway, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns,
 	})
@@ -570,7 +570,7 @@ func routes(separate bool, apiHandler, gw, spa, site http.Handler) (primary, gat
 	mux.Handle(api.DocsPath, site)
 	mux.Handle(api.DocsPath+"/", site)
 
-	gatewayPaths := []string{api.GatewayPath, api.RunPath, api.ToolApprovalPath}
+	gatewayPaths := []string{api.GatewayPath, api.RunPath, api.ToolApprovalPath, api.KnowledgePath}
 
 	if !separate {
 		for _, p := range gatewayPaths {
@@ -590,13 +590,14 @@ func routes(separate bool, apiHandler, gw, spa, site http.Handler) (primary, gat
 	return mux, only
 }
 
-// gatewayHandler serves the gateway's paths: the MCP endpoint, the run bundle and the run's
-// tool approvals.
+// gatewayHandler serves the gateway's paths: the MCP endpoint, the run bundle, the run's tool
+// approvals and its knowledge snapshots.
 func gatewayHandler(gw *gateway.Gateway) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle(api.GatewayPath, gw)
 	mux.HandleFunc(api.RunPath, gw.ServeRun)
 	mux.HandleFunc(api.ToolApprovalPath, gw.ServeToolApproval)
+	mux.HandleFunc(api.KnowledgePath, gw.ServeKnowledge)
 
 	return mux
 }

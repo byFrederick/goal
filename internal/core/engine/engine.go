@@ -84,6 +84,12 @@ type Orgs interface {
 	ActiveOrgs(ctx context.Context) ([]domain.OrgID, error)
 }
 
+// KnowledgeSnapshots reads a knowledge source's snapshots of the organization in ctx, newest first;
+// ports.Knowledge satisfies it.
+type KnowledgeSnapshots interface {
+	Snapshots(ctx context.Context, source string) ([]domain.KnowledgeSnapshot, error)
+}
+
 // Deps are the ports the engine works through.
 type Deps struct {
 	Store     ports.Store
@@ -110,6 +116,9 @@ type Deps struct {
 	// version (ADR 0024): the default and allowed models, the denied commands and the box time
 	// limit. Nil applies no policy.
 	Policies ports.OrgPolicies
+	// Knowledge gives each claim the snapshots of the knowledge sources that apply to its runs
+	// (ADR 0038 decision 7); nil pins none.
+	Knowledge KnowledgeSnapshots
 	// Intake records trigger firings and holds the schedule lock (intake.go, schedules.go); nil
 	// leaves Intake and FireSchedules failing with errNoIntake.
 	Intake ports.Intake
@@ -216,6 +225,7 @@ type Engine struct {
 	codehosts   map[string]ports.CodeHost
 	minters     map[string]ports.Minter
 	policies    ports.OrgPolicies
+	knowledge   KnowledgeSnapshots // nil without Deps.Knowledge
 	intake      ports.Intake
 	modelCheck  ports.ModelCheck
 	audit       ports.Audit
@@ -284,7 +294,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 
 	return &Engine{
 		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, connections: d.Connections,
-		credentials: d.Credentials, orgSecrets: d.OrgSecrets, codehosts: d.CodeHosts, minters: d.Minters, policies: d.Policies, intake: d.Intake, modelCheck: d.ModelCheck, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
+		credentials: d.Credentials, orgSecrets: d.OrgSecrets, codehosts: d.CodeHosts, minters: d.Minters, policies: d.Policies, knowledge: d.Knowledge, intake: d.Intake, modelCheck: d.ModelCheck, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
 		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{}, warned: map[domain.FactoryID]bool{},
 	}, nil
 }

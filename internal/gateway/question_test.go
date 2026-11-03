@@ -123,7 +123,7 @@ func TestGateway_QuestionAskReachesEngine(t *testing.T) {
 	h := newHarness(t, Config{})
 	cs := h.connect(t, "")
 
-	text, isErr := knowledgeCall(t, cs, questionTool, map[string]any{
+	text, isErr := toolCall(t, cs, questionTool, map[string]any{
 		argQuestion: " Which colour should the button be? ", argChoices: []string{"Blue", "Green"},
 	})
 	if isErr || !strings.Contains(text, "sent") || !strings.Contains(text, "Stop now") {
@@ -136,7 +136,7 @@ func TestGateway_QuestionAskReachesEngine(t *testing.T) {
 	}
 
 	// Choices are optional.
-	if _, isErr := knowledgeCall(t, cs, questionTool, map[string]any{argQuestion: shipIt}); isErr {
+	if _, isErr := toolCall(t, cs, questionTool, map[string]any{argQuestion: shipIt}); isErr {
 		t.Error("a question without choices is a tool error; want it sent")
 	}
 }
@@ -162,7 +162,7 @@ func TestGateway_QuestionAskRefusesBadInput(t *testing.T) {
 		"empty choice":     {argQuestion: shipIt, argChoices: []string{" "}},
 		"choices a string": {argQuestion: shipIt, argChoices: "yes"},
 	} {
-		if text, isErr := knowledgeCall(t, cs, questionTool, args); !isErr || text == "" {
+		if text, isErr := toolCall(t, cs, questionTool, args); !isErr || text == "" {
 			t.Errorf("%s: result = %q (error %v); want a tool error with the reason", name, text, isErr)
 		}
 	}
@@ -190,13 +190,13 @@ func TestGateway_QuestionAskAlreadyOpen(t *testing.T) {
 
 	h.questions.answer(fmt.Errorf("ask: %w", &QuestionRefusedError{Reason: open}))
 
-	if text, isErr := knowledgeCall(t, cs, questionTool, map[string]any{argQuestion: shipIt}); !isErr || text != open {
+	if text, isErr := toolCall(t, cs, questionTool, map[string]any{argQuestion: shipIt}); !isErr || text != open {
 		t.Errorf("result = %q (error %v); want the tool error %q", text, isErr, open)
 	}
 
 	h.questions.answer(errors.New("store: connection reset by peer"))
 
-	if text, isErr := knowledgeCall(t, cs, questionTool, map[string]any{argQuestion: shipIt}); !isErr || !strings.Contains(text, "try again") || strings.Contains(text, "peer") {
+	if text, isErr := toolCall(t, cs, questionTool, map[string]any{argQuestion: shipIt}); !isErr || !strings.Contains(text, "try again") || strings.Contains(text, "peer") {
 		t.Errorf("result = %q (error %v); want a generic try-again tool error", text, isErr)
 	}
 
@@ -217,7 +217,7 @@ func TestGateway_QuestionAskAuditHasNoArguments(t *testing.T) {
 	h := newHarness(t, Config{})
 	cs := h.connect(t, "")
 
-	if _, isErr := knowledgeCall(t, cs, questionTool, map[string]any{argQuestion: "Which secret colour?", argChoices: []string{"Mauve"}}); isErr {
+	if _, isErr := toolCall(t, cs, questionTool, map[string]any{argQuestion: "Which secret colour?", argChoices: []string{"Mauve"}}); isErr {
 		t.Fatal("the question was refused; want it sent")
 	}
 
@@ -235,4 +235,24 @@ func TestGateway_QuestionAskAuditHasNoArguments(t *testing.T) {
 	if s := fmt.Sprint(e.Data); strings.Contains(s, "secret colour") || strings.Contains(s, "Mauve") {
 		t.Errorf("audit data = %s; want neither the question nor its choices", s)
 	}
+}
+
+// toolCall calls tool with args and returns its text and whether it is a tool error.
+func toolCall(t *testing.T, cs *mcp.ClientSession, tool string, args map[string]any) (string, bool) {
+	t.Helper()
+
+	res, err := cs.CallTool(t.Context(), &mcp.CallToolParams{Name: tool, Arguments: args})
+	if err != nil {
+		t.Fatalf("%s: %v", tool, err)
+	}
+
+	var b strings.Builder
+
+	for _, c := range res.Content {
+		if text, ok := c.(*mcp.TextContent); ok {
+			b.WriteString(text.Text)
+		}
+	}
+
+	return b.String(), res.IsError
 }

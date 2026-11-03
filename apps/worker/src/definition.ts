@@ -80,7 +80,12 @@ export function definitionQuery(
 ): { prompt: string; options: Options } {
   const options: Options = {
     cwd: dirs.workspace,
-    systemPrompt: { type: 'preset', preset: 'claude_code', append: definitionSystemPrompt },
+    // The Knowledge section tells the agent what the factory's runs read; this box holds none of it.
+    systemPrompt: {
+      type: 'preset',
+      preset: 'claude_code',
+      append: [definitionSystemPrompt, spec.knowledge?.section].filter(Boolean).join('\n\n'),
+    },
     tools: definitionTools,
     // Nothing is pre-approved: every call nothing else allows reaches the path check.
     permissionMode: 'default',

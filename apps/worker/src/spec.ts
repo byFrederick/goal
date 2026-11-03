@@ -11,6 +11,8 @@ export const paths = {
   factorySchema: '/goal/definition/factory.schema.json',
   agent: '/goal/agent',
   workspace: '/workspace',
+  /** The run's knowledge: each pinned snapshot unpacked, read-only, into /knowledge/<source>/ (ADR 0038). */
+  knowledge: '/knowledge',
   /** Claude Code's config dir for this run, in the sandbox's throwaway home; never the host's. */
   claudeConfig: '/home/node/.claude',
 } as const;
@@ -57,6 +59,23 @@ export const Rule = z.object({
   content: z.string(),
 });
 export type Rule = z.infer<typeof Rule>;
+
+/**
+ * The run's knowledge (ADR 0038 decisions 7 and 8): its prompt's Knowledge section, and each pinned
+ * snapshot prepare downloads (a URL resolved against the gateway's, which the task token authorizes)
+ * and unpacks into /knowledge/<source>/. A draft request's has the section and no snapshot.
+ */
+export const Knowledge = z.object({
+  section: z.string(),
+  snapshots: z.array(
+    z.object({
+      /** A source's name, a slug: its folder under /knowledge, so it never holds a separator. */
+      source: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+      url: z.string().min(1),
+    }),
+  ),
+});
+export type Knowledge = z.infer<typeof Knowledge>;
 
 /** A draft request (ADR 0021): what a person asked to change in the factory's draft, and the agent it is about. */
 export const DraftRequest = z.object({
@@ -163,8 +182,8 @@ const taskFields = z.object({
   max_usd: z.number().positive().optional(),
   /** The agent's organization connections its token grants; absent from a goald before connections. */
   connections: z.array(Connection).default([]),
-  /** The knowledge sources the gateway's knowledge tools search for this run. */
-  knowledge_sources: z.array(z.string()).optional(),
+  /** The run's Knowledge section and snapshots; absent when it has none, or from a goald before them. */
+  knowledge: Knowledge.optional(),
   /** The factory rules that apply to the run; absent from a goald before factory rules. */
   rules: z.array(Rule).optional(),
   /**

@@ -10,6 +10,12 @@ import (
 	"github.com/byFrederick/goal/internal/knowledge"
 )
 
+// The world's sources.
+const (
+	srcHandbook = "handbook"
+	srcRunbooks = "runbooks"
+)
+
 // Check refuses what Upload would, before anything is stored, so a request of several files can
 // be refused whole.
 func TestUploads_CheckRefusesWhatUploadWould(t *testing.T) {

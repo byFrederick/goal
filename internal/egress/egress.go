@@ -38,12 +38,27 @@ var ErrNotPublic = errors.New("destination is not a public address")
 const DialTimeout = 10 * time.Second
 
 // gatewayPaths are goald's paths a box reaches through the proxy, exactly: the MCP gateway, the
-// run's bundle and its tool approvals. Any other path, an encoded one included, is 404.
+// run's bundle and its tool approvals, and under KnowledgePrefix its knowledge snapshots. Any
+// other path, an encoded one included, is 404.
 var gatewayPaths = []string{"/mcp", "/run", "/run/tool-approval"}
 
 // GatewayPaths are the paths the proxy forwards to goald's gateway (goald's api.GatewayPath,
 // api.RunPath and api.ToolApprovalPath, which cmd/goald's test holds it to).
 func GatewayPaths() []string { return slices.Clone(gatewayPaths) }
+
+// KnowledgePrefix is the gateway's folder of a run's knowledge snapshots: the proxy forwards
+// KnowledgePrefix<source>, one more path segment and nothing deeper (goald's api.KnowledgePath,
+// which cmd/goald's test holds it to).
+const KnowledgePrefix = "/run/knowledge/"
+
+// gatewayPath reports whether path is one the proxy forwards to the gateway.
+func gatewayPath(path string) bool {
+	if source, ok := strings.CutPrefix(path, KnowledgePrefix); ok {
+		return source != "" && !strings.Contains(source, "/") && source != "." && source != ".."
+	}
+
+	return slices.Contains(gatewayPaths, path)
+}
 
 // Config is the proxy's setup.
 type Config struct {
@@ -115,7 +130,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.tunnel(w, r)
 	case r.URL.IsAbs():
 		p.forwardHTTP(w, r)
-	case p.gateway != nil && r.URL.RawPath == "" && slices.Contains(gatewayPaths, r.URL.Path):
+	case p.gateway != nil && r.URL.RawPath == "" && gatewayPath(r.URL.Path):
 		p.gateway.ServeHTTP(w, r)
 	default:
 		http.NotFound(w, r)

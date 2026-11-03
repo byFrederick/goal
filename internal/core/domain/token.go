@@ -64,6 +64,10 @@ type TaskClaims struct {
 	// tools (WebFetch, WebSearch) when its Read the web and docs default is off or ask, which the
 	// gateway adds to the agent's deny rules whatever the version says.
 	DeniedCommands []string `json:"d,omitempty"`
+	// Knowledge are the knowledge snapshots the engine pinned at the claim's start (ADR 0038
+	// decision 7): the gateway serves the run these snapshots' zips and its prompt's Knowledge
+	// section, and no other snapshot.
+	Knowledge []KnowledgePin `json:"kn,omitempty"`
 	// Branch is the run's branch and Base the branch it is cut from and its pull request goes
 	// into, as the engine decided them at run start (RunBase). An empty Base is the default
 	// branch; tokens issued before them name neither, and the gateway then takes the item's
