@@ -82,6 +82,8 @@ type defGoald struct {
 	sync func(t *testing.T)
 	// tools answers the environment tests' tools/list.
 	tools *porttest.ToolLister
+	// codehost answers the repository tests.
+	codehost *porttest.CodeHost
 
 	mu sync.Mutex
 	// beforeTree runs once before the next PUT …/draft/tree is served.
@@ -147,13 +149,17 @@ func newDefGoald(t *testing.T) *defGoald {
 	envTests, tools := porttest.NewEnvironmentTests(), porttest.NewToolLister()
 	envTests.AddFactory(o.ID, factoryID)
 
+	kb.ReadSecrets(secrets)
+
+	codehost := porttest.NewCodeHost()
+
 	handler, err := api.New(api.Deps{
 		Engine: e, Items: store, Factories: cache, Definitions: authors, Versions: defs, Orgs: tenancy, Audit: tenancy,
 		Access: keys, OrgRetention: time.Hour, Authorizer: api.AllowAll{}, Auth: api.AuthConfig{Mode: api.AuthNone},
 		Platform: porttest.NewPlatform(porttest.NewIdentity(clock.Now)), Feed: api.NewFeed(porttest.NewItemNotices(), defNotices, nil),
 		Builder: builder.New(objects, clock, builder.Config{}), Connections: conns, ParseKind: connkind.Parse,
 		Credentials: creds, OrgSecrets: secrets, EnvironmentTests: envTests, ToolLister: tools, Intake: porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store), DraftRequests: porttest.NewDraftRequests(tenancy, clock.Now),
-		ConnectionTransport: transport, Knowledge: kb, KnowledgeUploads: uploads, KnowledgeSearch: knowledge.NewSearcher(kb, nil, nil),
+		ConnectionTransport: transport, CodeHosts: map[string]ports.CodeHost{"github": codehost}, Knowledge: kb, KnowledgeUploads: uploads, KnowledgeSearch: knowledge.NewSearcher(kb, nil, nil),
 		UploadMaxBytes: domain.DefaultMaxUpload, Clock: clock, NotificationPreferences: porttest.NewNotificationPreferences(),
 		OrgPolicies: porttest.NewOrgPolicies(nil, tenancy, clock.Now), BoxSizes: []domain.BoxSize{{Size: domain.SandboxMedium, VCPUs: 2, MemoryBytes: 4 << 30}},
 	})
@@ -161,7 +167,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		t.Fatal(err)
 	}
 
-	g := &defGoald{authors: authors, cache: cache, orgID: o.ID, keys: keys, conns: conns, secrets: secrets, kb: kb, tools: tools}
+	g := &defGoald{authors: authors, cache: cache, orgID: o.ID, keys: keys, conns: conns, secrets: secrets, kb: kb, tools: tools, codehost: codehost}
 	g.sync = func(t *testing.T) {
 		t.Helper()
 
