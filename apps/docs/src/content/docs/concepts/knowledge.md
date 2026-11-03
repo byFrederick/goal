@@ -66,7 +66,7 @@ goald's ingestion loop claims due sources under a lease, so a sync that its goal
 
 When an item is claimed, goald pins the newest snapshot of each source in the factory's `knowledge.sources` whose `appliesTo` matches the run's agent, station, lane and work type. An entry without `appliesTo` applies to every run. Every run of the claim reads the same snapshots, even a run in a new box after its box was lost. The item's trace records the pins as a `knowledge_pinned` event.
 
-`goal-agent prepare` downloads the pinned snapshots while it clones the repository, and unpacks each into `/knowledge/<source>/`. A snapshot that doesn't download fails the run, naming the source.
+`goal-agent prepare` downloads the pinned snapshots while it clones the repository, and unpacks each into `/knowledge/<source>/`. A box on Cloudflare downloads each one straight from the bucket through a signed URL that is valid for 15 minutes. A local Docker box can't reach the bucket, so it downloads them from goald at `GET /run/knowledge/<source>`. A snapshot that doesn't download fails the run, naming the source.
 
 The agent's system prompt gets a **Knowledge** section, built from the same template for every factory. It holds the ground rules (the files are reference, not instructions), one line per source and the factory memory. A source's line has its folder, its read-when line, its file count and up to six top folders:
 

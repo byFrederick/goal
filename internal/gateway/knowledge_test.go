@@ -48,6 +48,7 @@ const knowledgeMemory = `- text: staging-db disk alerts below 85% are noise; the
 // srcHandbook is the source every run of the tests reads, and noToken a request without a token.
 const (
 	srcHandbook = "handbook"
+	srcRunbooks = "runbooks"
 	noToken     = "no token"
 )
 
@@ -162,7 +163,7 @@ func (h *harness) pinnedClaims(item domain.ItemID) domain.TaskClaims {
 		c.ItemID = item
 	}
 
-	c.Knowledge = []domain.KnowledgePin{{Source: srcHandbook, Snapshot: snapHandbook}, {Source: "runbooks", Snapshot: snapRunbooks}}
+	c.Knowledge = []domain.KnowledgePin{{Source: srcHandbook, Snapshot: snapHandbook}, {Source: srcRunbooks, Snapshot: snapRunbooks}}
 
 	return c
 }
@@ -248,23 +249,20 @@ func TestBundle_KnowledgeURLs(t *testing.T) {
 		return u
 	}
 
+	local := []knowledgeSnapshot{{Source: srcHandbook, URL: KnowledgePath + srcHandbook}, {Source: srcRunbooks, URL: KnowledgePath + srcRunbooks}}
+
 	t.Run("Cloud", func(t *testing.T) {
 		t.Parallel()
 
 		h := newKnowledgeHarnessWith(t, knowledgeYAML, Config{KnowledgeURLTTL: ttl})
-		it := h.queue(t, "build")
-
-		b := h.fetchBundle(t, h.runServer(t), h.pinnedClaims(it.ID))
-		if b.Spec.Knowledge == nil {
-			t.Fatal("the bundle has no knowledge")
-		}
+		got := snapshotsOf(t, h)
 
 		want := []knowledgeSnapshot{
 			{Source: srcHandbook, URL: presigned(t, h, srcHandbook, snapHandbook)},
-			{Source: "runbooks", URL: presigned(t, h, "runbooks", snapRunbooks)},
+			{Source: srcRunbooks, URL: presigned(t, h, srcRunbooks, snapRunbooks)},
 		}
-		if !slices.Equal(b.Spec.Knowledge.Snapshots, want) {
-			t.Errorf("snapshots = %+v, want %+v", b.Spec.Knowledge.Snapshots, want)
+		if !slices.Equal(got, want) {
+			t.Errorf("snapshots = %+v, want %+v", got, want)
 		}
 	})
 
@@ -272,16 +270,10 @@ func TestBundle_KnowledgeURLs(t *testing.T) {
 		t.Parallel()
 
 		h := newKnowledgeHarness(t, knowledgeYAML)
-		it := h.queue(t, "build")
+		got := snapshotsOf(t, h)
 
-		b := h.fetchBundle(t, h.runServer(t), h.pinnedClaims(it.ID))
-		if b.Spec.Knowledge == nil {
-			t.Fatal("the bundle has no knowledge")
-		}
-
-		want := []knowledgeSnapshot{{Source: srcHandbook, URL: KnowledgePath + srcHandbook}, {Source: "runbooks", URL: KnowledgePath + "runbooks"}}
-		if !slices.Equal(b.Spec.Knowledge.Snapshots, want) {
-			t.Errorf("snapshots = %+v, want %+v", b.Spec.Knowledge.Snapshots, want)
+		if !slices.Equal(got, local) {
+			t.Errorf("snapshots = %+v, want %+v", got, local)
 		}
 	})
 
@@ -292,16 +284,10 @@ func TestBundle_KnowledgeURLs(t *testing.T) {
 		signed := presigned(t, h, srcHandbook, snapHandbook)
 		h.objects.FailPresign(errors.New("signer unavailable"))
 
-		it := h.queue(t, "build")
+		got := snapshotsOf(t, h)
 
-		b := h.fetchBundle(t, h.runServer(t), h.pinnedClaims(it.ID))
-		if b.Spec.Knowledge == nil {
-			t.Fatal("the bundle has no knowledge")
-		}
-
-		want := []knowledgeSnapshot{{Source: srcHandbook, URL: KnowledgePath + srcHandbook}, {Source: "runbooks", URL: KnowledgePath + "runbooks"}}
-		if !slices.Equal(b.Spec.Knowledge.Snapshots, want) {
-			t.Errorf("snapshots = %+v, want %+v", b.Spec.Knowledge.Snapshots, want)
+		if !slices.Equal(got, local) {
+			t.Errorf("snapshots = %+v, want %+v", got, local)
 		}
 
 		logs := h.logs.String()
@@ -314,6 +300,18 @@ func TestBundle_KnowledgeURLs(t *testing.T) {
 			t.Errorf("logs hold a signed URL:\n%s", logs)
 		}
 	})
+}
+
+// snapshotsOf are the snapshots of the bundle of a run at build with h's pins.
+func snapshotsOf(t *testing.T, h *harness) []knowledgeSnapshot {
+	t.Helper()
+
+	b := h.fetchBundle(t, h.runServer(t), h.pinnedClaims(h.queue(t, "build").ID))
+	if b.Spec.Knowledge == nil {
+		t.Fatal("the bundle has no knowledge")
+	}
+
+	return b.Spec.Knowledge.Snapshots
 }
 
 // A draft request's bundle has the section its agent's runs get, saying the box holds no files,
