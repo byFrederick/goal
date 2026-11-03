@@ -189,7 +189,8 @@ type harness struct {
 	creds *porttest.Credentials
 	// secrets keeps the organizations' secrets, sealed under key k1, referred to by conns.
 	secrets *porttest.OrgSecrets
-	// notifySettings name the Slack secret; slack checks its token.
+	// notifySettings keeps the organizations' notification settings, naming secrets' secrets;
+	// slack checks a Slack bot token.
 	notifySettings *porttest.NotificationSettings
 	slack          *porttest.DirectMessenger
 	// intake keeps the factories' webhook endpoints, sealed under key k1, their deliveries and
@@ -661,8 +662,8 @@ func engineConnections(t *testing.T, audit ports.Audit) *porttest.Connections {
 	return c
 }
 
-// connections makes h's connections, with goald's platform kinds, and the knowledge base whose
-// sources read them, and returns the transport their tests dial through.
+// connections makes h's connections, with goald's platform kinds, the secrets, the notification
+// settings naming them, and the knowledge base whose sources read them, and returns the transport their tests dial through.
 func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 	t.Helper()
 

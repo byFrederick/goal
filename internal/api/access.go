@@ -16,7 +16,8 @@ import (
 
 // The Access read model (ADR 0037 decision 16): what the organization's agents reach, computed
 // on each request from every visible, unarchived factory's current published version, the
-// environment tests and the secrets. Nothing is stored for it.
+// environment tests and the secrets, with the organization-wide secret of its Slack
+// notifications (decision 14). Nothing is stored for it.
 
 // accessStatuses are the statuses from the worst; a row has the worst of its uses'.
 var accessStatuses = []gen.AccessStatus{
@@ -30,7 +31,11 @@ var needsAttention = []gen.AccessStatus{gen.AccessStatusMissing, gen.AccessStatu
 // The titles of the by=reach groups, by kind.
 var reachTitles = map[gen.AccessRowKind]string{
 	gen.AccessRowKindMcp: "MCP servers", gen.AccessRowKindEnv: "Variables", gen.AccessRowKindFile: "Files",
+	gen.AccessRowKindSlack: "Notifications",
 }
+
+// slackRowName is the name of the organization-wide row of the Slack notifications' secret.
+const slackRowName = "Slack notifications"
 
 // accessUse is one thing an environment of a factory gives its agents.
 type accessUse struct {
@@ -74,7 +79,17 @@ func (s *server) GetAccess(ctx context.Context, req gen.GetAccessRequestObject) 
 	}
 
 	now := s.clock.Now()
-	all := accessRows(uses, secrets, now)
+
+	// The organization-wide rows belong to no factory, so one factory's Access has none.
+	var org []gen.AccessRow
+
+	if only == "" {
+		if org, err = s.orgAccessRows(ctx, secrets, now); err != nil {
+			return nil, err
+		}
+	}
+
+	all := append(accessRows(uses, secrets, now), org...)
 	out := gen.GetAccess200JSONResponse{By: by, Reached: len(all), Groups: []gen.AccessGroup{}}
 
 	for _, r := range all {
@@ -83,13 +98,38 @@ func (s *server) GetAccess(ctx context.Context, req gen.GetAccessRequestObject) 
 		}
 	}
 
-	out.Groups = accessGroups(by, uses, all, secrets, now)
+	out.Groups = accessGroups(by, uses, all, org, secrets, now)
 
 	return out, nil
 }
 
-// accessGroups are the rows of uses grouped by kind (all, by reach), by factory or by secret.
-func accessGroups(by gen.AccessBy, uses []accessUse, all []gen.AccessRow, secrets map[string]domain.Secret, now time.Time) []gen.AccessGroup {
+// orgAccessRows are the organization-wide rows, which have no factory uses: the secret of the
+// organization's Slack notifications when the setting names one, its status from that secret
+// alone.
+func (s *server) orgAccessRows(ctx context.Context, secrets map[string]domain.Secret, now time.Time) ([]gen.AccessRow, error) {
+	if s.notifySettings == nil {
+		return nil, nil
+	}
+
+	set, err := s.notifySettings.NotificationSettings(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("access: read the notification settings: %w", err)
+	}
+
+	if set.SlackSecret == "" {
+		return nil, nil
+	}
+
+	use := accessUse{kind: gen.AccessRowKindSlack, name: slackRowName, secrets: []string{set.SlackSecret}}
+	r := gen.AccessRow{Kind: use.kind, Name: use.name, Uses: []gen.AccessUse{}, Secrets: use.secrets, Status: useStatus(use, secrets, now)}
+	secretDates(&r, use.secrets, secrets)
+
+	return []gen.AccessRow{r}, nil
+}
+
+// accessGroups are the rows of uses, with the organization-wide rows org, grouped by kind (all,
+// by reach), by factory (without org) or by secret.
+func accessGroups(by gen.AccessBy, uses []accessUse, all, org []gen.AccessRow, secrets map[string]domain.Secret, now time.Time) []gen.AccessGroup {
 	groups := []gen.AccessGroup{}
 
 	switch by {
@@ -111,9 +151,14 @@ func accessGroups(by gen.AccessBy, uses []accessUse, all []gen.AccessRow, secret
 			names = append(names, u.secrets...)
 		}
 
+		for _, r := range org {
+			names = append(names, r.Secrets...)
+		}
+
 		for _, name := range slices.Compact(slices.Sorted(slices.Values(names))) {
 			of := filter(uses, func(u accessUse) bool { return slices.Contains(u.secrets, name) })
-			groups = append(groups, gen.AccessGroup{Key: name, Title: name, Rows: accessRows(of, secrets, now)})
+			rows := append(accessRows(of, secrets, now), filter(org, func(r gen.AccessRow) bool { return slices.Contains(r.Secrets, name) })...)
+			groups = append(groups, gen.AccessGroup{Key: name, Title: name, Rows: rows})
 		}
 	case gen.AccessByReach:
 		for _, kind := range accessKinds {
@@ -278,8 +323,12 @@ func addUse(r *gen.AccessRow, u accessUse, status gen.AccessStatus, secrets map[
 	r.Uses = append(r.Uses, out)
 	r.Status = worse(r.Status, status)
 	r.Secrets = slices.Compact(slices.Sorted(slices.Values(append(r.Secrets, u.secrets...))))
+	secretDates(r, u.secrets, secrets)
+}
 
-	for _, name := range u.secrets {
+// secretDates sets row r's latest use and soonest expiry from the secrets names.
+func secretDates(r *gen.AccessRow, names []string, secrets map[string]domain.Secret) {
+	for _, name := range names {
 		sec, ok := secrets[name]
 		if !ok {
 			continue
@@ -296,7 +345,7 @@ func addUse(r *gen.AccessRow, u accessUse, status gen.AccessStatus, secrets map[
 }
 
 // accessKinds are the row kinds in the order rows list them.
-var accessKinds = []gen.AccessRowKind{gen.AccessRowKindMcp, gen.AccessRowKindEnv, gen.AccessRowKindFile}
+var accessKinds = []gen.AccessRowKind{gen.AccessRowKindMcp, gen.AccessRowKindEnv, gen.AccessRowKindFile, gen.AccessRowKindSlack}
 
 // useStatus is the status of one use: a secret it references is missing, its last test failed, a
 // secret expired or is within its reminder days of its expiry, a remote server is untested or

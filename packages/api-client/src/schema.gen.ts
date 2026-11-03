@@ -8194,16 +8194,17 @@ export interface components {
             need_attention: number;
             groups: components["schemas"]["AccessGroup"][];
         };
-        /** @description One group: a kind (mcp, env, file), a factory's id or a secret's name, by by */
+        /** @description One group: a kind (mcp, env, file, slack), a factory's id or a secret's name, by by. The organization-wide slack row has no factory, so no factory group holds it */
         AccessGroup: {
             key: string;
             title: string;
             rows: components["schemas"]["AccessRow"][];
         };
+        /** @description What agents reach under one kind and name. A factory row (mcp, env, file) lists the environments that use it; the organization-wide slack row, "Slack notifications", holds the secret of the organization's Slack notifications and has no factory uses, so its uses are empty and its status comes from that secret alone. */
         AccessRow: {
             /** @enum {string} */
-            kind: "mcp" | "env" | "file";
-            /** @description The MCP server */
+            kind: "mcp" | "env" | "file" | "slack";
+            /** @description The MCP server, the variable, the file path, or Slack notifications */
             name: string;
             uses: components["schemas"]["AccessUse"][];
             /** @description The secrets it references */

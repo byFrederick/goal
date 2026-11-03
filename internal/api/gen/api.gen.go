@@ -47,9 +47,10 @@ func (e AccessBy) Valid() bool {
 
 // Defines values for AccessRowKind.
 const (
-	AccessRowKindEnv  AccessRowKind = "env"
-	AccessRowKindFile AccessRowKind = "file"
-	AccessRowKindMcp  AccessRowKind = "mcp"
+	AccessRowKindEnv   AccessRowKind = "env"
+	AccessRowKindFile  AccessRowKind = "file"
+	AccessRowKindMcp   AccessRowKind = "mcp"
+	AccessRowKindSlack AccessRowKind = "slack"
 )
 
 // Valid indicates whether the value is a known member of the AccessRowKind enum.
@@ -60,6 +61,8 @@ func (e AccessRowKind) Valid() bool {
 	case AccessRowKindFile:
 		return true
 	case AccessRowKindMcp:
+		return true
+	case AccessRowKindSlack:
 		return true
 	default:
 		return false
@@ -2214,14 +2217,14 @@ type AccessFactory struct {
 	Name string `json:"name"`
 }
 
-// AccessGroup One group: a kind (mcp, env, file), a factory's id or a secret's name, by by
+// AccessGroup One group: a kind (mcp, env, file, slack), a factory's id or a secret's name, by by. The organization-wide slack row has no factory, so no factory group holds it
 type AccessGroup struct {
 	Key   string      `json:"key"`
 	Rows  []AccessRow `json:"rows"`
 	Title string      `json:"title"`
 }
 
-// AccessRow defines model for AccessRow.
+// AccessRow What agents reach under one kind and name. A factory row (mcp, env, file) lists the environments that use it; the organization-wide slack row, "Slack notifications", holds the secret of the organization's Slack notifications and has no factory uses, so its uses are empty and its status comes from that secret alone.
 type AccessRow struct {
 	// ExpiresAt The soonest expiry of its secrets
 	ExpiresAt *time.Time    `json:"expires_at,omitempty"`
@@ -2230,7 +2233,7 @@ type AccessRow struct {
 	// LastUsedAt When a run last opened one of its secrets
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 
-	// Name The MCP server
+	// Name The MCP server, the variable, the file path, or Slack notifications
 	Name string `json:"name"`
 
 	// Secrets The secrets it references

@@ -227,8 +227,10 @@ type Deps struct {
 	// NotificationPreferences keeps each signed-in person's own notification preferences
 	// (ADR 0023, decision 1), served on /v1/me/notifications.
 	NotificationPreferences ports.NotificationPreferences
-	// NotificationSettings are the organization's notification settings (ADR 0037), served on
-	// /v1/orgs/{org}/settings/notifications; SlackMessenger checks a Slack bot token there.
+	// NotificationSettings are the organization's notification settings (ADR 0037 decision 14):
+	// Access shows the secret of its Slack notifications as an organization-wide row. Nil shows
+	// none. They are served on /v1/orgs/{org}/settings/notifications, and SlackMessenger checks a
+	// Slack bot token there.
 	NotificationSettings ports.NotificationSettings
 	SlackMessenger       ports.DirectMessenger
 	// ExportMaxRows caps a CSV export (ADR 0020, decision 3); 0 is 100000.
@@ -447,6 +449,8 @@ type server struct {
 	credentials ports.Credentials
 	// secrets serve the secret routes.
 	secrets ports.OrgSecrets
+	// notifySettings name the secret of the organization's Slack notifications, for Access.
+	notifySettings ports.NotificationSettings
 	// catalog serves /v1/catalog; envTests and tools the environment tests and the Access read
 	// model.
 	catalog  []domain.ToolTemplate
@@ -471,9 +475,8 @@ type server struct {
 	egress   []netip.Prefix
 	// notifications keeps each person's notification preferences (notifications.go).
 	notifications ports.NotificationPreferences
-	// notifySettings and slack serve the notification settings routes (notificationsettings.go).
-	notifySettings ports.NotificationSettings
-	slack          ports.DirectMessenger
+	// slack checks a Slack bot token on the notification settings routes (notificationsettings.go).
+	slack ports.DirectMessenger
 	// judges serve the judges routes; nil when this goald does not.
 	judges *JudgeDeps
 	// evals serve the evals routes; nil when this goald does not run evals.
