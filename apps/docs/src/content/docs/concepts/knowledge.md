@@ -78,7 +78,7 @@ An entry in the definition may replace the line with its own `readWhen`. A sourc
 
 ## Reads
 
-Goal counts how often runs read each file and search each folder under `/knowledge`, by day, source, path and factory. The Knowledge page shows each source's reads of the last 7 days and the most read files. A source's page shows the reads of each of its files. `goal knowledge reads` prints the same counts.
+Goal counts how often runs read each file and search each folder under `/knowledge`, by day, source, path and factory. The Knowledge page shows each source's reads of the last 7 days and the most read files. A source's page shows the reads of each of its files. `goal knowledge reads` prints the same counts. Each run's trace also records the files it read and the folders it searched as one `knowledge_read` event, listing at most 200 paths.
 
 ## In the web app
 
