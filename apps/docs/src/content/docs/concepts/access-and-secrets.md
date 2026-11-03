@@ -16,7 +16,7 @@ A secret is an organization's named value. It has:
 - an optional description, an optional expiry and a reminder of 1 to 90 days before it;
 - a scope: all factories, including ones created later, or a list of factories.
 
-The Secrets page lists them with where each is used, when it was last used and what expires soon. **New secret** opens a side sheet, and **Import** reads a `.env` or YAML file and checks it before anything is saved. A secret's page shows its scope, its expiry and its uses, and has Replace value and Delete. Delete is disabled, with the reason, while something uses the secret: a factory's current published version that refers to it as its repository token, its model key, a trigger's model-agrees key or from an environment file, a knowledge source that reads with it, or a connection that refers to it. An archived factory doesn't count. Changing a secret needs an owner or admin who has signed in within the last 10 minutes. Everyone in the organization can read the list, never a value.
+The Secrets page lists them with where each is used, when it was last used and what expires soon. **New secret** opens a side sheet, and **Import** reads a `.env` or YAML file and checks it before anything is saved. A secret's page shows its scope, its expiry and its uses, and has Replace value and Delete. Replace value applies to runs that start afterwards, and then tests again each remote MCP server whose headers use the secret, in every factory's current published version and open draft, so the Environments section shows the new results. A server that fails its test keeps that failure as its result and doesn't stop the replace. Delete is disabled, with the reason, while something uses the secret: a factory's current published version that refers to it as its repository token, its model key, a trigger's model-agrees key or from an environment file, a knowledge source that reads with it, or a connection that refers to it. An archived factory doesn't count. Changing a secret needs an owner or admin who has signed in within the last 10 minutes. Everyone in the organization can read the list, never a value.
 
 Values come in only by pasting them, through standard input or from an import file, never on the command line, and no command prints one.
 
@@ -63,7 +63,7 @@ goald reads and merges pull requests with the same token: a person's merge, a ga
 
 ## What a run receives
 
-1. The run starts the agent's environment from the version the run is pinned to. A secret you replace applies to runs that start afterwards.
+1. The run starts the agent's environment from the version the run is pinned to. A secret you replace applies to runs that start afterwards, and the tests of the MCP servers that use it run again.
 2. goald checks that every referenced secret is open to the factory, then opens each one.
 3. It puts each `env` value, each file's content and each MCP secret in the box's environment, and renders the MCP configuration. A header that names a secret reaches Claude Code as a variable the box expands, so the run's bundle never holds a value.
 4. Every opened value goes on the run's scrub list, and one `secret.used` audit entry is written per secret per run, without a value.
