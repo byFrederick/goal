@@ -110,11 +110,7 @@ export function RuntimeFields({ basics }: { basics: BasicsSection }) {
             help={
               <>
                 Connections of a kind with model access.{' '}
-                <Link
-                  to="/o/$org/connections"
-                  params={{ org: org.slug }}
-                  className="text-ink underline underline-offset-2"
-                >
+                <Link to="/o/$org/access" params={{ org: org.slug }} className="text-ink underline underline-offset-2">
                   Connections
                 </Link>
               </>

@@ -13,11 +13,9 @@ import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Drawer, DrawerContent } from '../../ui/drawer';
 import { Field, Input } from '../../ui/field';
-import { WriteOnly } from '../connections/parts';
-import { SecretInput } from '../connections/secret-input';
-import { refusalText } from '../connections/words';
-import { ExpiryFields, expiresAt, ScopeField, type ScopeState, scopeBody } from './parts';
-import { nameProblem } from './words';
+import { ExpiryFields, expiresAt, ScopeField, type ScopeState, scopeBody, WriteOnly } from './parts';
+import { SecretInput } from './secret-input';
+import { nameProblem, refusalText } from './words';
 
 export function NewSecretSheet({
   org,

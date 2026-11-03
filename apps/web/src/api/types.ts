@@ -224,6 +224,13 @@ type Schemas = components['schemas'];
 // The secret shapes (ADR 0037), read from the generated schema. A value is in NewSecret, SecretValue and
 // SecretImport only, which go out; no answer carries one.
 export type Secret = Schemas['Secret'];
+// The Access read model (ADR 0037 decision 14): what every factory's agents reach.
+export type Access = Schemas['Access'];
+export type AccessGroup = Schemas['AccessGroup'];
+export type AccessRow = Schemas['AccessRow'];
+export type AccessUse = Schemas['AccessUse'];
+export type AccessStatus = Schemas['AccessStatus'];
+export type AccessView = Access['by'];
 export type SecretUse = Schemas['SecretUse'];
 export type SecretScope = Schemas['SecretScope'];
 export type NewSecret = Schemas['NewSecret'];

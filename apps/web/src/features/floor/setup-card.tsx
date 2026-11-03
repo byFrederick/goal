@@ -195,18 +195,9 @@ function SetupAction({ id, factory }: { id: SetupRowId; factory: Factory }) {
     case 'invite':
       return <ActionLink to="/o/$org/members" params={{ org: orgSlug }} label="Invite" />;
     case 'slack':
-      return (
-        <ActionLink to="/o/$org/connections/new" params={{ org: orgSlug }} search={{ kind: 'slack' }} label="Connect" />
-      );
+      return <ActionLink to="/o/$org/secrets" params={{ org: orgSlug }} search={{ new: true }} label="Connect" />;
     case 'github':
-      return (
-        <ActionLink
-          to="/o/$org/connections/new"
-          params={{ org: orgSlug }}
-          search={{ kind: 'github' }}
-          label="Connect"
-        />
-      );
+      return <ActionLink to="/o/$org/secrets" params={{ org: orgSlug }} search={{ new: true }} label="Connect" />;
     case 'knowledge':
       return <ActionLink to="/o/$org/knowledge/new" params={{ org: orgSlug }} label="Add" />;
     case 'line':
@@ -238,7 +229,7 @@ function SetupAction({ id, factory }: { id: SetupRowId; factory: Factory }) {
 function ActionLink(props: {
   to: string;
   params: Record<string, string>;
-  search?: Record<string, string>;
+  search?: Record<string, string | boolean>;
   label: string;
 }) {
   return (

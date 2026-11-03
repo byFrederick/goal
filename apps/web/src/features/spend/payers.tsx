@@ -40,10 +40,10 @@ export function Payers({ budgets, org, total }: { budgets: readonly SpendBudget[
           </Icon>
           <span className="flex min-w-0 flex-1 flex-col leading-snug">
             <b className="font-semibold text-ink">Anthropic API key</b>
-            <span className="text-secondary text-muted">Pay per token instead, from Credentials</span>
+            <span className="text-secondary text-muted">Pay per token instead, from Secrets</span>
           </span>
           <Button asChild size="sm" variant="secondary">
-            <Link to="/o/$org/connections/new" params={{ org }}>
+            <Link to="/o/$org/secrets" params={{ org }} search={{ new: true }}>
               Add a key
             </Link>
           </Button>

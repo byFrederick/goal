@@ -159,11 +159,7 @@ test.describe('every phone control has a 44 px hit area at 390 px', () => {
     ['Items Board', '/o/acme/f/goal/items', (p) => p.getByRole('link', { name: 'Board', exact: true }).first()],
     ['Items List', '/o/acme/f/goal/items', (p) => p.getByRole('button', { name: 'List', exact: true })],
     ['Runs filter', '/o/acme/runs', (p) => p.getByRole('button', { name: /^Failed/ }).first()],
-    [
-      'Connections row title',
-      '/o/acme/connections',
-      (p) => p.locator('a[href^="/o/acme/connections/"]:not([href$="/new"]):visible').first(),
-    ],
+    ['Access row title', '/o/acme/access', (p) => p.locator('a[href*="/definition/basics"]:visible').first()],
     ['Knowledge document title', '/o/acme/knowledge/goal-docs', (p) => p.locator('a[href*="document="]').first()],
     [
       'Knowledge document open at source',

@@ -7,8 +7,8 @@ import { deleteSecret, replaceSecretValue } from '../../api/secrets';
 import type { Secret } from '../../api/types';
 import { Callout } from '../../ui/callout';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
-import { SecretReplaceDialog } from '../connections/replace-secret-dialog';
-import { refusalText } from '../connections/words';
+import { SecretReplaceDialog } from './replace-secret-dialog';
+import { refusalText } from './words';
 
 /** Replace the value of `secret`, or nothing while `secret` is null. */
 export function ReplaceValueDialog({
