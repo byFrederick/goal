@@ -1,7 +1,7 @@
 // Credentials (ADR 0017, canvas "Credentials"): the organization's keys and tokens, by name, with
 // their type, the factories whose runs may open each, what uses it, when it was last used and when
 // it expires. Nobody reads a value back. Filters (the type tab, the search text) live in the URL.
-// Owners and admins (credential:manage) get New credential, Replace value and Delete; members read.
+// Owners and admins (secret:manage) get New credential, Replace value and Delete; members read.
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronDown, KeyRound, Lock, Plus, Search } from 'lucide-react';
@@ -38,7 +38,7 @@ export function CredentialsPage() {
   const org = useOrg();
   const search = credentialsSearch(useSearch({ strict: false }));
   const navigate = useNavigate({ from: '/o/$org/credentials/' });
-  const manage = useOrgHolds('credential:manage');
+  const manage = useOrgHolds('secret:manage');
   const list = useQuery(credentialsQuery(org.id));
   const factories = useQuery(factoriesQuery(org.id)).data ?? [];
   const [replacing, setReplacing] = useState<Credential | null>(null);

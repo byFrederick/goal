@@ -502,7 +502,7 @@ describe('the sidebar', () => {
 describe('the collapsed rail', () => {
   it('lists its entries in order with accessible names', async () => {
     renderSidebar({
-      can: ['connection:read', 'credential:read', 'knowledge:read', 'factory:create'],
+      can: ['connection:read', 'secret:read', 'knowledge:read', 'factory:create'],
       list: [factory('goal', { can: ['item:create'] }), factory('sre'), factory('support')],
     });
     await collapse();
@@ -541,13 +541,13 @@ describe('the collapsed rail', () => {
   });
 
   it('links Credentials to its page for those who may read credentials', async () => {
-    renderSidebar({ can: ['credential:read'] });
+    renderSidebar({ can: ['secret:read'] });
     const link = within(await nav()).getByRole('link', { name: /^Credentials/ });
 
     expect(link.getAttribute('href')).toBe('/o/acme/credentials');
   });
 
-  it('does not list Credentials without credential:read', async () => {
+  it('does not list Credentials without secret:read', async () => {
     renderSidebar({ can: ['connection:read'] });
 
     expect(within(await nav()).queryByRole('link', { name: /^Credentials/ })).toBeNull();

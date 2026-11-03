@@ -51,7 +51,7 @@ afterEach(() => {
 });
 
 /** Renders the New credential page at /o/acme/credentials/new, with `?panel=import` when `panel` is set. */
-function renderNew({ panel, can = ['credential:manage'] }: { panel?: 'import'; can?: string[] } = {}) {
+function renderNew({ panel, can = ['secret:manage'] }: { panel?: 'import'; can?: string[] } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   const grants = { ...org, can, archived_at: null } as unknown as Org;
   const seed: (readonly [QueryKey, unknown])[] = [
