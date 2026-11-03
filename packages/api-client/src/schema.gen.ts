@@ -978,6 +978,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/draft/knowledge-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The Knowledge prompt section one agent gets from the draft
+         * @description "What agents see" in the editor: the section goald builds for a run of agent, from the same code as a run's. It lists the draft's sources that apply to the agent (with station and lane and work_type, as a run's appliesTo is matched), each with its entry's readWhen or its snapshot's, its file count and top folders, names those with no snapshot as not synced yet, and gives memory.yaml's facts. It reads each source's current snapshot, while a run reads the snapshot its claim pinned, so a run started earlier may see another. 404 agent-not-found for an agent the draft does not declare, 409 yaml-invalid while factory.yaml does not parse or satisfy the schema, 404 no-draft.
+         */
+        get: operations["getDraftKnowledgePreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/draft/model/{section}": {
         parameters: {
             query?: never;
@@ -7380,6 +7405,24 @@ export interface components {
         DraftRequestList: {
             requests: components["schemas"]["DraftRequest"][];
         };
+        /** @description One knowledge.sources entry written as a mapping (ADR 0038 decision 5) */
+        KnowledgeSourceEntry: {
+            /** @description The knowledge source's name */
+            name: string;
+            /** @description The runs that read the source, matched as a rule's scope; every run when absent */
+            appliesTo?: {
+                agents?: string[];
+                stations?: string[];
+                lanes?: string[];
+                workTypes?: string[];
+            };
+            /** @description When to read it, in this factory's words; the snapshot's own line when absent */
+            readWhen?: string;
+        };
+        KnowledgePreview: {
+            /** @description The Knowledge prompt section the agent's runs get from the draft, as Markdown; "" when there is nothing to say or the agent may not read files */
+            section: string;
+        };
         DraftModel: {
             /** Format: int64 */
             revision: number;
@@ -7663,8 +7706,8 @@ export interface components {
                 repository?: {
                     [key: string]: unknown;
                 } | null;
-                /** @description knowledge.sources, the organization's knowledge sources the factory may search */
-                knowledge_sources?: string[];
+                /** @description knowledge.sources, the organization's knowledge sources the factory's runs read, in the definition's order: a name, or an entry with its own appliesTo and readWhen, each kept as factory.yaml writes it */
+                knowledge_sources?: (string | components["schemas"]["KnowledgeSourceEntry"])[];
                 /** @description Removed in phase 4 (field-removed); present while factory.yaml has it, so its quick fix can remove it */
                 runner?: string;
                 /** @description Removed in phase 4 (field-removed) */
@@ -10314,6 +10357,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DraftModel"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getDraftKnowledgePreview: {
+        parameters: {
+            query: {
+                /** @description The agent's name, as the draft declares it */
+                agent: string;
+                /** @description The station of the run, for sources whose appliesTo names stations */
+                station?: string;
+                /** @description The lane of the run, for sources whose appliesTo names lanes */
+                lane?: string;
+                /** @description The work type of the run, for sources whose appliesTo names work types */
+                work_type?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The agent's Knowledge section */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgePreview"];
                 };
             };
             default: components["responses"]["Problem"];

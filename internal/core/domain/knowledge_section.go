@@ -58,6 +58,41 @@ func TopFolders(paths []string) []string {
 	return folders[:min(len(folders), MaxIndexFolders)]
 }
 
+// KnowledgeSnapshotOf finds the snapshot a run reads of source, with its top folders
+// (TopFolders); ok is false when there is none, so the source is not synced yet.
+type KnowledgeSnapshotOf func(source string) (snap KnowledgeSnapshot, folders []string, ok bool, err error)
+
+// IndexKnowledge is the index of agent's run on line (decision 8), the one builder of every
+// Knowledge section, a run's and the editor's preview: the line's sources that apply to run
+// (ApplyingKnowledge), each with the snapshot of finds and its entry's readWhen or else the snapshot's, those without
+// a snapshot as not synced yet, and the line's memory. It is empty for an agent that may not read
+// files, and of is called only for the sources that apply.
+func IndexKnowledge(line Line, agent AgentSpec, run RuleTarget, files bool, of KnowledgeSnapshotOf) (KnowledgeIndex, error) {
+	if !agent.ReadsFiles() {
+		return KnowledgeIndex{}, nil
+	}
+
+	idx := KnowledgeIndex{Files: files, Memory: line.Memory}
+
+	for _, e := range ApplyingKnowledge(line.Knowledge, run) {
+		snap, folders, ok, err := of(e.Name)
+		if err != nil {
+			return KnowledgeIndex{}, err
+		}
+
+		if !ok {
+			idx.Unsynced = append(idx.Unsynced, e.Name)
+			continue
+		}
+
+		idx.Sources = append(idx.Sources, IndexedSource{
+			Name: e.Name, ReadWhen: cmp.Or(e.ReadWhen, snap.ReadWhen), Files: snap.Files, Folders: folders,
+		})
+	}
+
+	return idx, nil
+}
+
 // Section is the run's Knowledge section, from one template for every factory: the ground rules,
 // one line per pinned source, a note naming the sources not synced yet and the factory memory's
 // facts with their items. It is "" when there is nothing to say.

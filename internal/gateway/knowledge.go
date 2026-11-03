@@ -3,7 +3,6 @@ package gateway
 import (
 	"archive/zip"
 	"bytes"
-	"cmp"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -55,30 +54,23 @@ type knowledgeSnapshot struct {
 func (g *Gateway) knowledgeOf(
 	ctx context.Context, c domain.TaskClaims, line domain.Line, agent domain.AgentSpec, run domain.RuleTarget, files bool,
 ) (*bundleKnowledge, error) {
-	if !agent.ReadsFiles() {
-		return nil, nil
+	idx, err := domain.IndexKnowledge(line, agent, run, files, func(source string) (domain.KnowledgeSnapshot, []string, bool, error) {
+		snap, ok, err := g.pinned(ctx, c, source)
+		if err != nil || !ok {
+			return domain.KnowledgeSnapshot{}, nil, false, err
+		}
+
+		return snap, g.topFolders(ctx, c, snap), true, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	idx := domain.KnowledgeIndex{Files: files, Memory: line.Memory}
 	k := &bundleKnowledge{Snapshots: []knowledgeSnapshot{}}
 
-	for _, e := range domain.ApplyingKnowledge(line.Knowledge, run) {
-		snap, ok, err := g.pinned(ctx, c, e.Name)
-		if err != nil {
-			return nil, err
-		}
-
-		if !ok {
-			idx.Unsynced = append(idx.Unsynced, e.Name)
-			continue
-		}
-
-		idx.Sources = append(idx.Sources, domain.IndexedSource{
-			Name: e.Name, ReadWhen: cmp.Or(e.ReadWhen, snap.ReadWhen), Files: snap.Files, Folders: g.topFolders(ctx, c, snap),
-		})
-
-		if files {
-			k.Snapshots = append(k.Snapshots, knowledgeSnapshot{Source: e.Name, URL: KnowledgePath + e.Name})
+	if files {
+		for _, s := range idx.Sources {
+			k.Snapshots = append(k.Snapshots, knowledgeSnapshot{Source: s.Name, URL: KnowledgePath + s.Name})
 		}
 	}
 

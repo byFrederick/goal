@@ -41,6 +41,8 @@ type Definitions interface {
 	OpenDraft(ctx context.Context, f domain.FactoryID, r authoring.OpenDraftRequest) (authoring.DraftView, bool, error)
 	DiscardDraft(ctx context.Context, f domain.FactoryID, revision int64) error
 	DraftModel(ctx context.Context, f domain.FactoryID) (authoring.DraftModel, error)
+	// DraftLine is the draft's line, its knowledge and memory with it, for the Knowledge preview.
+	DraftLine(ctx context.Context, f domain.FactoryID) (domain.Line, error)
 	SaveSection(ctx context.Context, f domain.FactoryID, save authoring.SectionSave) (authoring.SaveResult, error)
 	RevertSection(ctx context.Context, f domain.FactoryID, section authoring.Section, ifMatch string, pointers []string) (authoring.SaveResult, error)
 	DraftFiles(ctx context.Context, f domain.FactoryID) ([]authoring.FileInfo, error)
