@@ -4666,8 +4666,11 @@ export interface components {
              * @enum {string}
              */
             read_web: "off" | "ask" | "allowed";
-            /** @enum {string} */
-            use_credentials: "off" | "attached_only";
+            /**
+             * @description Use secrets. environment gives an agent what its environment names; off gives it no env, files or MCP servers from its environment
+             * @enum {string}
+             */
+            use_credentials: "off" | "environment";
         };
         OrgPolicyView: {
             policy: components["schemas"]["OrgPolicyInput"];

@@ -5,7 +5,7 @@ models (* the default):
     claude-haiku-5-5     Claude Haiku 5.5     allowed      not used yet
 denied commands:
   Bash(terraform apply:*)
-tools: write outside the item's branch off, merge pull requests review_approval, read the web ask, use credentials attached_only
+tools: write outside the item's branch off, merge pull requests review_approval, read the web ask, use secrets environment
 box time limit: 180 minutes
 box sizes:
   small   1 vCPU, 2 GiB  not used yet

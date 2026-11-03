@@ -5887,7 +5887,8 @@ components:
           description: Search, fetch and documentation tools
         use_credentials:
           type: string
-          enum: ["off", attached_only]
+          enum: ["off", environment]
+          description: Use secrets. environment gives an agent what its environment names; off gives it no env, files or MCP servers from its environment
     OrgPolicyView:
       type: object
       required: [policy, revision, models, box_sizes, egress_addresses]

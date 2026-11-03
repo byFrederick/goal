@@ -25,7 +25,7 @@ const (
 // policyBody is a valid policy: both of the install's models, haiku the default.
 const policyBody = `{"allowed_models":["claude-opus-5-5","claude-haiku-5-5"],"default_model":"claude-haiku-5-5",
 "denied_commands":["Bash(terraform apply:*)"],
-"tools":{"write_outside_branch":"off","merge_pull_request":"review_approval","read_web":"ask","use_credentials":"attached_only"},
+"tools":{"write_outside_branch":"off","merge_pull_request":"review_approval","read_web":"ask","use_credentials":"environment"},
 "box_time_limit_minutes":90}`
 
 // An organization that saved nothing reads the default policy of the install's models at
@@ -47,7 +47,7 @@ func TestGetOrgPolicy_DefaultAtRevisionZero(t *testing.T) {
 		t.Errorf("policy = %+v; want every model, opus the default, nothing denied, 180 minutes", p)
 	}
 
-	want := gen.ToolPolicy{WriteOutsideBranch: "ask", MergePullRequest: "review_approval", ReadWeb: "allowed", UseCredentials: "attached_only"}
+	want := gen.ToolPolicy{WriteOutsideBranch: "ask", MergePullRequest: "review_approval", ReadWeb: "allowed", UseCredentials: "environment"}
 	if p.Tools != want {
 		t.Errorf("tools = %+v; want %+v", p.Tools, want)
 	}
@@ -173,6 +173,23 @@ func TestPutOrgPolicy_ModelNotInstalledIsInvalid(t *testing.T) {
 	p := refused(t, "a model not installed", h.request(t, http.MethodPut, policyPath, body, quoted("0")), http.StatusUnprocessableEntity, codePolicyInvalid)
 	if p.Detail == nil || !strings.Contains(*p.Detail, "claude-fable-5-1") {
 		t.Errorf("detail %v; want it to name the model", p.Detail)
+	}
+
+	unchanged(t, h)
+}
+
+// Use secrets' old value attached_only (ADR 0037 decision 12 renamed it environment) is 422, and
+// the problem names the values it takes.
+func TestPutOrgPolicy_OldUseCredentialsValueIsInvalid(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	body := `{"allowed_models":["claude-opus-5-5"],"default_model":"claude-opus-5-5","denied_commands":[],
+"tools":{"write_outside_branch":"ask","merge_pull_request":"off","read_web":"off","use_credentials":"attached_only"},"box_time_limit_minutes":10}`
+
+	p := refused(t, "use_credentials attached_only", h.request(t, http.MethodPut, policyPath, body, quoted("0")), http.StatusUnprocessableEntity, codePolicyInvalid)
+	if d := valueOf(p.Detail); !strings.Contains(d, "use secrets") || !strings.Contains(d, "[off environment]") {
+		t.Errorf("detail %q; want it to name use secrets and its values off and environment", d)
 	}
 
 	unchanged(t, h)
