@@ -520,10 +520,15 @@ func (s *server) ListConnectionRepositories(ctx context.Context, req gen.ListCon
 
 	rc := resolved[0]
 
+	login, err := rc.CodeHostLogin()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", errCodeHost, scrub(err.Error(), rc))
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, repositoriesTimeout)
 	defer cancel()
 
-	list, err := ch.Repositories(ctx, rc, deref(req.Params.Owner))
+	list, err := ch.Repositories(ctx, login, deref(req.Params.Owner))
 
 	switch {
 	case errors.Is(err, errors.ErrUnsupported):
