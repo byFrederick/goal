@@ -179,6 +179,8 @@ type harness struct {
 	publicOnly atomic.Bool
 	// creds keeps the organizations' credentials, sealed under key k1, referred to by conns.
 	creds *porttest.Credentials
+	// secrets keeps the organizations' secrets, sealed under key k1, referred to by conns.
+	secrets *porttest.OrgSecrets
 	// intake keeps the factories' webhook endpoints, sealed under key k1, their deliveries and
 	// trigger firings, over store.
 	intake *porttest.Intake
@@ -490,7 +492,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
 		Access: h.keys, OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: h.platform, Feed: feed,
-		Builder: h.builder, Connections: h.conns, Credentials: h.creds, Intake: h.intake, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
+		Builder: h.builder, Connections: h.conns, Credentials: h.creds, OrgSecrets: h.secrets, Intake: h.intake, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
 		// GitLab's code host lists no repositories, as the gitlab adapter.
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()},
 		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,
@@ -630,6 +632,7 @@ func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 
 	h.conns = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), audit)
 	h.creds = porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
+	h.secrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
 	h.kb, h.kbObjects = porttest.NewKnowledge(h.conns, audit), porttest.NewObjectStore()
 	h.uploads = knowledge.NewUploads(h.kb, h.kbObjects, testUploadMax)
 
