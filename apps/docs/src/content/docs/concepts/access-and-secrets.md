@@ -74,6 +74,8 @@ goald reads and merges pull requests with the same token: a person's merge, a ga
 7. The agent gets the environment's MCP servers. The prompt has a **Your box** section that lists the box's command-line tools, the names of its variables, its file paths and its MCP servers, never a value. It takes the place of the Connections section that runs on connections get.
 8. Each call to an MCP server's tool follows the environment's mode for it: `allow` runs, `ask` waits for a person, and `off` is refused. The worker checks the agent's other tool calls against its rules (see [skills and rules](../skills-and-rules/)).
 
+The organization policy also stores an MCP tool mode cap, `mcp_tool_modes` in `PUT /v1/orgs/{org}/policy`: a tool name or glob (`*`, `?`) mapped to `allow`, `ask` or `off`, such as `{"*": "ask"}` for "every MCP tool at least asks". Where the environment's mode and the cap disagree, the stricter one is meant to win. Runs do not apply the cap yet. A save that leaves the field out keeps the stored cap, and a mode or pattern that is not valid is refused with a 400.
+
 An agent holds the secrets of its environment for the whole run, and it has network access from the box. A prompt-injected agent can misuse what its tokens reach. The control for that is a narrow token, with only the repositories and permissions the agent needs. The organization policy's **Use secrets** can switch an agent's environment off: it then gets no `env`, `files` or MCP servers, while the repository and model keys still reach the run. ADR 0008 and ADR 0037 (`docs/adr/` in the repository) record these decisions and their accepted risks.
 
 ## Access

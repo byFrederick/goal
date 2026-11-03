@@ -3,6 +3,8 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"maps"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -47,6 +49,10 @@ type OrgPolicy struct {
 	MergePullRequest   ToolSetting
 	ReadWeb            ToolSetting // search, fetch and documentation tools
 	UseCredentials     ToolSetting
+	// MCPToolModes is the organization's cap on MCP tool modes (ADR 0037 decision 12): a tool name
+	// or glob (*, ?) to allow, ask or off, the form domain.ServerToolModes takes as its limit. The
+	// stricter of a tool's mode and the cap's wins. Empty means no cap.
+	MCPToolModes map[string]ConnectionToolMode
 	// BoxTimeLimitMinutes is how long a box may run before the engine stops it.
 	BoxTimeLimitMinutes int
 	// Revision counts the saves: 0 for the default policy, then one more for each Put. A Put
@@ -66,11 +72,12 @@ const AuditTargetOrgPolicy = "org_policy"
 
 // DefaultOrgPolicy is the policy of an organization without one, over the platform's models:
 // every model allowed, the first the default, no denied commands, the tool defaults ask,
-// review_approval, allowed and attached_only, and a 3-hour box time limit.
+// review_approval, allowed and attached_only, no MCP tool mode cap and a 3-hour box time limit.
 func DefaultOrgPolicy(models []string) OrgPolicy {
 	p := OrgPolicy{
 		AllowedModels:      slices.Clone(models),
 		WriteOutsideBranch: ToolAsk, MergePullRequest: ToolReviewApproval, ReadWeb: ToolAllowed, UseCredentials: ToolAttachedOnly,
+		MCPToolModes:        map[string]ConnectionToolMode{},
 		BoxTimeLimitMinutes: DefaultBoxTimeLimitMinutes,
 	}
 
@@ -82,8 +89,8 @@ func DefaultOrgPolicy(models []string) OrgPolicy {
 }
 
 // Validate enforces the policy's rules: at least one allowed model, none blank or repeated, a
-// default among them, each tool default one of its values, no blank denied command and a positive
-// time limit. The error wraps ErrInvalid and lists every broken rule. Whether the platform offers
+// default among them, each tool default one of its values, no blank denied command, each MCP cap
+// pattern a tool name or glob with a mode of allow, ask or off, and a positive time limit. The error wraps ErrInvalid and lists every broken rule. Whether the platform offers
 // each model is not checked here.
 func (p OrgPolicy) Validate() error {
 	var errs []error
@@ -117,12 +124,36 @@ func (p OrgPolicy) Validate() error {
 		checkToolSetting("read the web and docs", p.ReadWeb, ReadWebSettings),
 		checkToolSetting("use credentials", p.UseCredentials, UseCredentialsSettings))
 
+	errs = append(errs, CheckMCPToolCap(p.MCPToolModes))
+
 	if p.BoxTimeLimitMinutes <= 0 {
 		errs = append(errs, fmt.Errorf("the box time limit is a positive number of minutes, not %d: %w", p.BoxTimeLimitMinutes, ErrInvalid))
 	}
 
 	return errors.Join(errs...)
 }
+
+// CheckMCPToolCap enforces an MCP tool mode cap: each pattern 1 to MaxToolName letters, digits,
+// underscores, dots, dashes, * or ?, each mode allow, ask or off. The error wraps ErrInvalid.
+func CheckMCPToolCap(modes map[string]ConnectionToolMode) error {
+	var errs []error
+
+	for _, pattern := range slices.Sorted(maps.Keys(modes)) {
+		if !mcpToolPattern.MatchString(pattern) {
+			errs = append(errs, fmt.Errorf("MCP tool pattern %q must be 1 to %d letters, digits, underscores, dots, dashes, * or ?: %w",
+				pattern, MaxToolName, ErrInvalid))
+		}
+
+		if _, err := ParseConnectionToolMode(string(modes[pattern])); err != nil {
+			errs = append(errs, fmt.Errorf("MCP tool pattern %q: %w", pattern, err))
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+// mcpToolPattern is an MCP cap's pattern: a tool name (CheckToolName) that may hold the globs * and ?.
+var mcpToolPattern = regexp.MustCompile(`^[A-Za-z0-9_.*?-]{1,128}$`)
 
 func checkToolSetting(name string, v ToolSetting, valid []ToolSetting) error {
 	if slices.Contains(valid, v) {

@@ -308,7 +308,7 @@ export interface paths {
         get: operations["getOrgPolicy"];
         /**
          * Replace the organization's policy
-         * @description If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+         * @description If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
          */
         put: operations["putOrgPolicy"];
         post?: never;
@@ -4649,6 +4649,10 @@ export interface components {
             /** @description Claude Code Bash permission patterns no agent may run, such as Bash(terraform apply:*) */
             denied_commands: string[];
             tools: components["schemas"]["ToolPolicy"];
+            /** @description The organization's cap on MCP tool modes (ADR 0037 decision 12): a tool name or glob (* and ?), 1 to 128 letters, digits, underscores, dots, dashes, * or ?, mapped to allow, ask or off. Where a tool's mode and the cap disagree, the stricter wins (off, then ask, then allow). Empty means no cap. A save that omits it keeps the stored cap; a mode or pattern that is not valid is 400. */
+            mcp_tool_modes?: {
+                [key: string]: components["schemas"]["ConnectionToolMode"];
+            };
             /** @description How long a box may run before it is stopped */
             box_time_limit_minutes: number;
         };
