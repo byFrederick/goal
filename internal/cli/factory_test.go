@@ -176,6 +176,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		// The knowledge fake dates sources by the time of day, so the loop's clock is too.
 		in := knowledge.NewIngestor(knowledge.IngestorConfig{
 			Knowledge: kb, Connections: conns, Uploads: uploads, Clock: porttest.NewClock(time.Now().Add(time.Second)),
+			Objects: kbObjects, TempDir: t.TempDir(),
 		})
 		if _, err := in.SyncDue(t.Context()); err != nil {
 			t.Fatal(err)

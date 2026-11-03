@@ -870,7 +870,13 @@ func factoryPublish(ctx context.Context, out *printer, getenv func(string) strin
 		return err
 	}
 
-	f, err := getFactory(ctx, c, pos[0])
+	return publishOpenDraft(ctx, out, c, pos[0], *message, moves)
+}
+
+// publishOpenDraft validates the factory ref's open draft, prints its problems and publishes it
+// when it has no errors.
+func publishOpenDraft(ctx context.Context, out *printer, c orgClient, ref, message string, moves map[string]string) error {
+	f, err := getFactory(ctx, c, ref)
 	if err != nil {
 		return err
 	}
@@ -900,7 +906,7 @@ func factoryPublish(ctx context.Context, out *printer, getenv func(string) strin
 		return fmt.Errorf("%s is not published: the draft (revision %d) has errors to fix first", f.Name, val.Revision)
 	}
 
-	v, err := publish(ctx, out, c, "", f, val.Revision, *message, moves)
+	v, err := publish(ctx, out, c, "", f, val.Revision, message, moves)
 	if err != nil {
 		return err
 	}
