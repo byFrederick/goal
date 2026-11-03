@@ -11,6 +11,7 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/environmentcheck"
 )
 
 // The Access read model (ADR 0037 decision 16): what the organization's agents reach, computed
@@ -191,7 +192,7 @@ func environmentUses(base accessUse, e config.Environment, tests map[[3]string]d
 
 	for _, name := range slices.Sorted(maps.Keys(e.Spec.MCP)) {
 		m := e.Spec.MCP[name]
-		u := add(gen.AccessRowKindMcp, name, referenced(mergeMaps(m.Headers, m.Env)))
+		u := add(gen.AccessRowKindMcp, name, environmentcheck.Referenced(mergeMaps(m.Headers, m.Env)))
 
 		if m.URL != "" {
 			u.remote = true
@@ -204,13 +205,13 @@ func environmentUses(base accessUse, e config.Environment, tests map[[3]string]d
 	}
 
 	for _, name := range slices.Sorted(maps.Keys(e.Spec.Env)) {
-		if refs := referenced(map[string]string{name: e.Spec.Env[name]}); len(refs) > 0 {
+		if refs := environmentcheck.Referenced(map[string]string{name: e.Spec.Env[name]}); len(refs) > 0 {
 			out = append(out, add(gen.AccessRowKindEnv, name, refs))
 		}
 	}
 
 	for _, p := range slices.Sorted(maps.Keys(e.Spec.Files)) {
-		if refs := referenced(map[string]string{p: e.Spec.Files[p]}); len(refs) > 0 {
+		if refs := environmentcheck.Referenced(map[string]string{p: e.Spec.Files[p]}); len(refs) > 0 {
 			out = append(out, add(gen.AccessRowKindFile, p, refs))
 		}
 	}

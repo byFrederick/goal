@@ -165,6 +165,15 @@ linters:
               desc: the conversion runs at goald's start; the HTTP API never calls it
             - pkg: github.com/jackc/pgx
               desc: database access belongs in internal/adapters/store/postgres
+        environmentcheck:
+          files: ["**/internal/environmentcheck/**", "!$test"]
+          deny:
+            - pkg: github.com/byFrederick/goal/internal/adapters
+              desc: the MCP server test calls servers through ports.ToolLister
+            - pkg: github.com/byFrederick/goal/internal/core/engine
+              desc: the MCP server test serves the API and the conversion, not runs
+            - pkg: github.com/byFrederick/goal/internal/api
+              desc: the HTTP API and the conversion both import the test, never the reverse
         retention:
           files: ["**/internal/retention/**"]
           deny:
