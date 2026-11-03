@@ -79,14 +79,15 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 
 // Names the suite uses.
 const (
-	syncKind  = "kb-docs"
-	liveKind  = "kb-chat"
-	docsConn  = "docs"
-	chatConn  = "chat"
-	// docsSecret is the secret synced sources read with.
-	docsSecret = "docs-token"
-	model     = "acme-embed-1"
-	otherName = "acme-embed-2"
+	syncKind = "kb-docs"
+	liveKind = "kb-chat"
+	docsConn = "docs"
+	chatConn = "chat"
+	// docsSecret is the secret synced sources read with, and readerGitDocs their reader.
+	docsSecret    = "docs-token"
+	readerGitDocs = "gitdocs"
+	model         = "acme-embed-1"
+	otherName     = "acme-embed-2"
 )
 
 var admin = domain.Actor{Kind: domain.ActorUser, ID: "00000000-0000-7000-8000-000000000001", Name: "Ada"}
@@ -410,7 +411,7 @@ func testSecretSources(f *fixture) {
 
 	onSecret := domain.NewKnowledgeSource{
 		Name: runbooks, Title: "Runbooks", Kind: domain.SourceSynced, Secret: docsSecret,
-		Config: map[string]string{domain.SourceReaderKey: "gitdocs", "repository": "https://github.com/acme/docs"},
+		Config: map[string]string{domain.SourceReaderKey: readerGitDocs, "repository": "https://github.com/acme/docs"},
 	}
 
 	for _, bad := range []struct {
@@ -419,8 +420,10 @@ func testSecretSources(f *fixture) {
 		want error
 	}{
 		{"a secret source without a reader", domain.NewKnowledgeSource{Name: "no-reader", Title: "t", Kind: domain.SourceSynced, Secret: docsSecret}, domain.ErrInvalid},
-		{"an unknown secret", domain.NewKnowledgeSource{Name: "no-secret", Title: "t", Kind: domain.SourceSynced, Secret: "gone",
-			Config: onSecret.Config}, ports.ErrNotFound},
+		{"an unknown secret", domain.NewKnowledgeSource{
+			Name: "no-secret", Title: "t", Kind: domain.SourceSynced, Secret: "gone",
+			Config: onSecret.Config,
+		}, ports.ErrNotFound},
 		{"an upload source with a secret", domain.NewKnowledgeSource{Name: "up", Title: "t", Kind: domain.SourceUpload, Secret: docsSecret}, domain.ErrInvalid},
 	} {
 		_, err := f.Knowledge.CreateSource(ctx, bad.n, admin)
@@ -428,7 +431,7 @@ func testSecretSources(f *fixture) {
 	}
 
 	src := f.source(f.org, onSecret)
-	if src.Secret != docsSecret || src.Connection != "" || src.Config[domain.SourceReaderKey] != "gitdocs" {
+	if src.Secret != docsSecret || src.Connection != "" || src.Config[domain.SourceReaderKey] != readerGitDocs {
 		f.t.Errorf("source = %+v; want it on secret %s with its reader", src, docsSecret)
 	}
 
@@ -448,7 +451,7 @@ func testSecretSources(f *fixture) {
 	f.synced(f.org, handbook)
 
 	moved, err := f.Knowledge.UpdateSource(ctx, handbook, domain.KnowledgeSourcePatch{
-		Secret: &renamed, Config: map[string]string{domain.SourceReaderKey: "gitdocs"},
+		Secret: &renamed, Config: map[string]string{domain.SourceReaderKey: readerGitDocs},
 	}, admin)
 	if err != nil || moved.Secret != renamed || moved.Connection != docsConn {
 		f.t.Errorf("move over = %+v, %v; want the secret and the connection it keeps", moved, err)

@@ -763,7 +763,7 @@ func TestReader_ReadsWithASecret(t *testing.T) {
 			r := gitdocs.New(gitdocs.Config{Transport: h.transport(true)})
 
 			spec := domain.SyncSpec{
-				Source: domain.KnowledgeSource{Name: "docs", Kind: domain.SourceSynced, Secret: "docs-token", Config: map[string]string{
+				Source: domain.KnowledgeSource{Name: "runbooks", Kind: domain.SourceSynced, Secret: "docs-token", Config: map[string]string{
 					domain.SourceReaderKey: "gitdocs", "code_host": kind, cfgRepository: h.repository(),
 				}},
 				Secret: &domain.ResolvedSecret{Secret: domain.Secret{Name: "docs-token"}, Value: token},

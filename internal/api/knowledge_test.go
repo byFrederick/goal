@@ -146,7 +146,13 @@ func TestKnowledge_SourcesCreateChangeAndSync(t *testing.T) {
 
 	refused(t, "get after delete", h.request(t, http.MethodGet, handbookPath, "", nil), http.StatusNotFound, "knowledge-source-not-found")
 
-	// A synced source reads with a secret: created, read and patched with secret.
+	h.syncedOnASecret(t)
+}
+
+// syncedOnASecret creates, reads and patches a synced source that reads with a secret.
+func (h *harness) syncedOnASecret(t *testing.T) {
+	t.Helper()
+
 	h.createRepoSecret(t)
 	decode[gen.Secret](t, h.request(t, http.MethodPost, secretsPath, `{"name":"docs-token","value":"test-token","scope":{"all_factories":true}}`, nil),
 		http.StatusCreated)

@@ -502,6 +502,9 @@ func (w *world) oneRun(t *testing.T, line domain.Line) map[string]string {
 
 var _ io.Writer = (*logBuffer)(nil)
 
+// connWiki is a confluence connection, and the source that reads it.
+const connWiki = "wiki"
+
 // docsPairKind syncs with gitdocs and has two secret fields, neither of them the token.
 const docsPairKind = `apiVersion: goal/v1
 kind: ConnectionKind
@@ -520,37 +523,7 @@ func TestRun_PointsKnowledgeSourcesAtSecrets(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld(t)
-	ctx := w.ctx(t)
-
-	k, err := connkind.Parse([]byte(docsPairKind))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := w.conns.PutKind(ctx, k, domain.LocalUser); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, n := range []domain.NewConnection{
-		{Name: "wiki", Kind: "confluence", Fields: map[string]string{"site": "acme.atlassian.net", "email": "ada@example.com"},
-			Secrets: map[string]string{fieldToken: "confluence-token-for-tests"}},
-		{Name: "pair", Kind: "docs-pair", Secrets: map[string]string{"key_id": "pair-id-for-tests", "key_secret": "pair-secret-for-tests"}},
-	} {
-		if _, err := w.conns.Create(ctx, n, domain.LocalUser); err != nil {
-			t.Fatalf("connection %s: %v", n.Name, err)
-		}
-	}
-
-	for _, n := range []domain.NewKnowledgeSource{
-		{Name: "docs", Title: "Docs", Kind: domain.SourceSynced, Connection: connGitHub, Config: map[string]string{"repository": "https://github.com/acme/docs"}},
-		{Name: "wiki", Title: "Wiki", Kind: domain.SourceSynced, Connection: "wiki", Config: map[string]string{"spaces": "ENG"}},
-		{Name: "paired", Title: "Paired", Kind: domain.SourceSynced, Connection: "pair"},
-		{Name: "notes", Title: "Notes", Kind: domain.SourceUpload},
-	} {
-		if _, err := w.kb.CreateSource(ctx, n, person); err != nil {
-			t.Fatalf("source %s: %v", n.Name, err)
-		}
-	}
+	w.addSources(t)
 
 	if err := w.mover.Run(t.Context()); err != nil {
 		t.Fatal(err)
@@ -561,7 +534,7 @@ func TestRun_PointsKnowledgeSourcesAtSecrets(t *testing.T) {
 		config map[string]string
 	}{
 		"docs":   {connGitHub, map[string]string{"repository": "https://github.com/acme/docs", domain.SourceReaderKey: "gitdocs", "code_host": "github"}},
-		"wiki":   {"wiki", map[string]string{"spaces": "ENG", domain.SourceReaderKey: "confluence", "site": "acme.atlassian.net", "email": "ada@example.com"}},
+		connWiki: {connWiki, map[string]string{"spaces": "ENG", domain.SourceReaderKey: "confluence", "site": "acme.atlassian.net", "email": "ada@example.com"}},
 		"paired": {"", nil},
 		"notes":  {"", map[string]string{}},
 	}
@@ -569,11 +542,7 @@ func TestRun_PointsKnowledgeSourcesAtSecrets(t *testing.T) {
 	got := map[string]domain.KnowledgeSource{}
 
 	for name, wt := range want {
-		src, err := w.kb.Source(ctx, name)
-		if err != nil {
-			t.Fatal(err)
-		}
-
+		src := w.source(t, name)
 		got[name] = src
 
 		if src.Secret != wt.secret || (wt.config != nil && !maps.Equal(src.Config, wt.config)) {
@@ -586,10 +555,29 @@ func TestRun_PointsKnowledgeSourcesAtSecrets(t *testing.T) {
 	}
 
 	for name, before := range got {
-		if after, err := w.kb.Source(ctx, name); err != nil || !after.UpdatedAt.Equal(before.UpdatedAt) {
-			t.Errorf("source %s changed on the second run: %v", name, err)
+		if after := w.source(t, name); !after.UpdatedAt.Equal(before.UpdatedAt) {
+			t.Errorf("source %s changed on the second run", name)
 		}
 	}
+
+	w.unmappedLogged(t)
+}
+
+// source is the knowledge source name.
+func (w *world) source(t *testing.T, name string) domain.KnowledgeSource {
+	t.Helper()
+
+	src, err := w.kb.Source(w.ctx(t), name)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return src
+}
+
+// unmappedLogged checks that two runs logged paired once each, and no value.
+func (w *world) unmappedLogged(t *testing.T) {
+	t.Helper()
 
 	logs := w.logs.String()
 	if n := strings.Count(logs, `"msg":"knowledge source not moved over"`); n != 2 || !strings.Contains(logs, `"source":"paired"`) {
@@ -599,6 +587,46 @@ func TestRun_PointsKnowledgeSourcesAtSecrets(t *testing.T) {
 	for _, v := range []string{githubValue, "confluence-token-for-tests", "pair-id-for-tests", "pair-secret-for-tests"} {
 		if strings.Contains(logs, v) {
 			t.Errorf("the logs hold a value")
+		}
+	}
+}
+
+// addSources gives w a confluence connection (wiki), one of a kind with two secret fields and no
+// token (pair), and four sources: docs on github, wiki on wiki, paired on pair and an upload.
+func (w *world) addSources(t *testing.T) {
+	t.Helper()
+
+	ctx := w.ctx(t)
+
+	k, err := connkind.Parse([]byte(docsPairKind))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.conns.PutKind(ctx, k, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, n := range []domain.NewConnection{
+		{
+			Name: connWiki, Kind: "confluence", Fields: map[string]string{"site": "acme.atlassian.net", "email": "ada@example.com"},
+			Secrets: map[string]string{fieldToken: "confluence-token-for-tests"},
+		},
+		{Name: "pair", Kind: "docs-pair", Secrets: map[string]string{"key_id": "pair-id-for-tests", "key_secret": "pair-secret-for-tests"}},
+	} {
+		if _, err := w.conns.Create(ctx, n, domain.LocalUser); err != nil {
+			t.Fatalf("connection %s: %v", n.Name, err)
+		}
+	}
+
+	for _, n := range []domain.NewKnowledgeSource{
+		{Name: "docs", Title: "Docs", Kind: domain.SourceSynced, Connection: connGitHub, Config: map[string]string{"repository": "https://github.com/acme/docs"}},
+		{Name: connWiki, Title: "Wiki", Kind: domain.SourceSynced, Connection: connWiki, Config: map[string]string{"spaces": "ENG"}},
+		{Name: "paired", Title: "Paired", Kind: domain.SourceSynced, Connection: "pair"},
+		{Name: "notes", Title: "Notes", Kind: domain.SourceUpload},
+	} {
+		if _, err := w.kb.CreateSource(ctx, n, person); err != nil {
+			t.Fatalf("source %s: %v", n.Name, err)
 		}
 	}
 }

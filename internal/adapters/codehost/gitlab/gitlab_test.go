@@ -504,67 +504,96 @@ func TestClient_RepositoriesUnsupported(t *testing.T) {
 	}
 }
 
-func TestRepositoryAccess(t *testing.T) {
-	t.Parallel()
+// accessCase is one RepositoryAccess call and what it must answer: the checks and a word of the
+// failed check's reason.
+type accessCase struct {
+	name, repo, token string
+	read, push        bool
+	reason            string
+}
 
-	// The fake GitLab answers GET /projects/acme%2F<project>: app with Developer access (30) through
-	// its group, docs with Reporter (20), any other one is not found.
+// check calls RepositoryAccess on c and checks the answer against tc.
+func (tc accessCase) check(t *testing.T, c *Client) {
+	t.Helper()
+
+	got, err := c.RepositoryAccess(t.Context(), tc.repo, tc.token)
+	if err != nil {
+		t.Fatalf("%s: err = %v", tc.name, err)
+	}
+
+	if got.Read.OK != tc.read || got.Push.OK != tc.push || got.Read.Reason == "" || got.Push.Reason == "" {
+		t.Errorf("%s: access = %+v; want read %v, push %v, each with a reason", tc.name, got, tc.read, tc.push)
+	}
+
+	failed := got.Push.Reason
+	if !tc.read {
+		failed = got.Read.Reason
+	}
+
+	if tc.reason != "" && !strings.Contains(failed, tc.reason) {
+		t.Errorf("%s: reason %q; want it to say %q", tc.name, failed, tc.reason)
+	}
+}
+
+// accessGitLab is a stand-in GitLab answering GET /projects/:id for the token: acme/platform/app
+// with Developer access (30) through its group, acme/docs with Reporter (20), any other project
+// 404 and another token 401.
+func accessGitLab(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	level := func(project, group any) map[string]any {
+		return map[string]any{"permissions": map[string]any{"project_access": project, "group_access": group}}
+	}
+
+	projects := map[string]any{
+		"/projects/acme%2Fplatform%2Fapp": level(nil, map[string]int{"access_level": 30}),
+		"/projects/acme%2Fdocs":           level(map[string]int{"access_level": 20}, nil),
+	}
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		if r.Method != http.MethodGet || r.Header.Get("PRIVATE-TOKEN") != token {
+		p, ok := projects[r.URL.EscapedPath()]
+
+		switch {
+		case r.Method != http.MethodGet || r.Header.Get("PRIVATE-TOKEN") != token:
 			w.WriteHeader(http.StatusUnauthorized)
 			_ = json.NewEncoder(w).Encode(map[string]any{keyMessage: "401 Unauthorized"})
-
-			return
-		}
-
-		level := func(project, group any) map[string]any {
-			return map[string]any{"permissions": map[string]any{"project_access": project, "group_access": group}}
-		}
-
-		switch r.URL.EscapedPath() {
-		case "/projects/acme%2Fplatform%2Fapp":
-			_ = json.NewEncoder(w).Encode(level(nil, map[string]int{"access_level": 30}))
-		case "/projects/acme%2Fdocs":
-			_ = json.NewEncoder(w).Encode(level(map[string]int{"access_level": 20}, nil))
-		default:
+		case !ok:
 			w.WriteHeader(http.StatusNotFound)
 			_ = json.NewEncoder(w).Encode(map[string]any{keyMessage: "404 Project Not Found"})
+		default:
+			_ = json.NewEncoder(w).Encode(p)
 		}
 	}))
 	t.Cleanup(srv.Close)
 
-	c := New(Config{APIURL: srv.URL})
+	return srv
+}
 
-	for _, tc := range []struct {
-		name, repo, token string
-		read, push        bool
-		reason            string
-	}{
+// A token GitLab shows the project to reads it, and pushes with Developer access or more; an
+// unknown project and a bad token fail the read with GitLab's message.
+func TestRepositoryAccess(t *testing.T) {
+	t.Parallel()
+
+	c := New(Config{APIURL: accessGitLab(t).URL})
+
+	for _, tc := range []accessCase{
 		{name: "developer", repo: "https://gitlab.com/acme/platform/app.git", token: token, read: true, push: true},
 		{name: "reporter", repo: "https://gitlab.com/acme/docs", token: token, read: true, reason: "Reporter"},
 		{name: "unknown project", repo: "https://gitlab.com/acme/gone", token: token, reason: "404 Project Not Found"},
 		{name: "bad token", repo: "https://gitlab.com/acme/docs", token: "glpat-wrong", reason: "401 Unauthorized"},
 	} {
-		got, err := c.RepositoryAccess(t.Context(), tc.repo, tc.token)
-		if err != nil {
-			t.Fatalf("%s: err = %v", tc.name, err)
-		}
-
-		if got.Read.OK != tc.read || got.Push.OK != tc.push || got.Read.Reason == "" || got.Push.Reason == "" {
-			t.Errorf("%s: access = %+v; want read %v, push %v, each with a reason", tc.name, got, tc.read, tc.push)
-		}
-
-		failed := got.Push.Reason
-		if !tc.read {
-			failed = got.Read.Reason
-		}
-
-		if tc.reason != "" && !strings.Contains(failed, tc.reason) {
-			t.Errorf("%s: reason %q; want it to say %q", tc.name, failed, tc.reason)
-		}
+		tc.check(t, c)
 	}
+}
+
+// A URL that is no project's is refused before anything is sent, and a token GitLab echoes is in
+// no reason.
+func TestRepositoryAccess_Refusals(t *testing.T) {
+	t.Parallel()
+
+	c := New(Config{APIURL: accessGitLab(t).URL})
 
 	for _, bad := range []string{"http://gitlab.com/acme/app", "https://gitlab.com/acme", "https://u:p@gitlab.com/acme/app"} {
 		if _, err := c.RepositoryAccess(t.Context(), bad, token); !errors.Is(err, domain.ErrInvalid) {

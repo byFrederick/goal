@@ -109,14 +109,20 @@ func (m *Mover) Org(ctx context.Context) (Tally, error) {
 		return t, err
 	}
 
+	return t, m.factories(ctx, conns, &t)
+}
+
+// factories converts each factory with no conversion recorded whose current version is on
+// connections, counting them in t.
+func (m *Mover) factories(ctx context.Context, conns []domain.ResolvedConnection, t *Tally) error {
 	done, err := m.d.Conversions.List(ctx)
 	if err != nil {
-		return t, fmt.Errorf("list conversions: %w", err)
+		return fmt.Errorf("list conversions: %w", err)
 	}
 
 	recs, err := m.d.Definitions.FactoryRecords(ctx)
 	if err != nil {
-		return t, fmt.Errorf("list factories: %w", err)
+		return fmt.Errorf("list factories: %w", err)
 	}
 
 	for _, rec := range recs {
@@ -126,7 +132,7 @@ func (m *Mover) Org(ctx context.Context) (Tally, error) {
 
 		c, err := m.factory(ctx, rec, conns)
 		if err != nil {
-			return t, fmt.Errorf("factory %s: %w", rec.ID, err)
+			return fmt.Errorf("factory %s: %w", rec.ID, err)
 		}
 
 		if c == nil {
@@ -134,7 +140,7 @@ func (m *Mover) Org(ctx context.Context) (Tally, error) {
 		}
 
 		if _, err := m.d.Conversions.Record(ctx, *c); err != nil {
-			return t, err
+			return err
 		}
 
 		if c.Refused() {
@@ -144,7 +150,7 @@ func (m *Mover) Org(ctx context.Context) (Tally, error) {
 		}
 	}
 
-	return t, nil
+	return nil
 }
 
 // opened are the organization's connections with their values. A failure names the connection,

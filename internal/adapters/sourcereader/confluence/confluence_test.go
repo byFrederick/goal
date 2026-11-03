@@ -37,6 +37,7 @@ const (
 	statusCurrent = "current"
 	nameWiki      = "wiki"
 	fieldSite     = "site"
+	fieldEmail    = "email"
 )
 
 var admin = domain.Actor{Kind: domain.ActorUser, ID: "00000000-0000-7000-8000-000000000001", Name: "Ada"}
@@ -269,7 +270,7 @@ func (s *site) spec(t *testing.T, spaces string) domain.SyncSpec {
 		Source: domain.KnowledgeSource{Name: nameWiki, Kind: domain.SourceSynced, Connection: nameWiki, Config: map[string]string{cfgSpaces: spaces}},
 		Connection: &domain.ResolvedConnection{
 			Connection: domain.Connection{Name: nameWiki, Kind: kindConfluence}, Kind: kinds[i],
-			Values: map[string]string{fieldSite: s.host(), "email": email, "token": token},
+			Values: map[string]string{fieldSite: s.host(), fieldEmail: email, "token": token},
 		},
 	}
 }
@@ -635,7 +636,7 @@ func TestReader_ReadsWithASecret(t *testing.T) {
 	s := newSite(t, pages...)
 	spec := domain.SyncSpec{
 		Source: domain.KnowledgeSource{Name: nameWiki, Kind: domain.SourceSynced, Secret: "wiki-token", Config: map[string]string{
-			domain.SourceReaderKey: "confluence", fieldSite: s.host(), "email": email, cfgSpaces: spaceENG,
+			domain.SourceReaderKey: "confluence", fieldSite: s.host(), fieldEmail: email, cfgSpaces: spaceENG,
 		}},
 		Secret: &domain.ResolvedSecret{Secret: domain.Secret{Name: "wiki-token"}, Value: token},
 	}
@@ -644,7 +645,7 @@ func TestReader_ReadsWithASecret(t *testing.T) {
 		t.Errorf("listed %v; want ENG's current pages", slices.Sorted(maps.Keys(got)))
 	}
 
-	delete(spec.Source.Config, "email")
+	delete(spec.Source.Config, fieldEmail)
 
 	if err := listErr(t, s.reader(), spec); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("no email: err = %v; want domain.ErrInvalid", err)

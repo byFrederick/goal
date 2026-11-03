@@ -415,22 +415,17 @@ const pushLevel = 30
 // levels is Developer (30) or more. A refusal (401, 403, 404) is a failed read with GitLab's
 // message; a 5xx or no answer is an error.
 func (cl *Client) RepositoryAccess(ctx context.Context, repoURL, token string) (ports.RepositoryAccess, error) {
-	u, err := url.Parse(repoURL)
+	host, project, err := projectOf(repoURL)
 	if err != nil {
-		return ports.RepositoryAccess{}, fmt.Errorf("repository %q: %w", repoURL, domain.ErrInvalid)
-	}
-
-	m := projectPath.FindStringSubmatch(u.Path)
-	if u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || m == nil {
-		return ports.RepositoryAccess{}, fmt.Errorf("%q is not a repository URL such as https://gitlab.com/acme/app: %w", repoURL, domain.ErrInvalid)
+		return ports.RepositoryAccess{}, err
 	}
 
 	api := cl.api
 	if api == "" {
-		api = "https://" + strings.ToLower(u.Host) + "/api/v4"
+		api = "https://" + host + "/api/v4"
 	}
 
-	mr := mergeRequest{api: api, token: token, project: url.PathEscape(m[1])}
+	mr := mergeRequest{api: api, token: token, project: url.PathEscape(project)}
 
 	type access struct {
 		Level int `json:"access_level"`
@@ -447,13 +442,13 @@ func (cl *Client) RepositoryAccess(ctx context.Context, repoURL, token string) (
 
 	switch {
 	case err != nil:
-		return ports.RepositoryAccess{}, fmt.Errorf("repository access of %s: %w", m[1], err)
+		return ports.RepositoryAccess{}, fmt.Errorf("repository access of %s: %w", project, err)
 	case status >= http.StatusInternalServerError:
-		return ports.RepositoryAccess{}, fmt.Errorf("repository access of %s: GitLab answered %d %s", m[1], status, msg)
+		return ports.RepositoryAccess{}, fmt.Errorf("repository access of %s: GitLab answered %d %s", project, status, msg)
 	case status != http.StatusOK:
 		return ports.RepositoryAccess{
 			Read: ports.AccessCheck{Reason: strings.TrimSpace(fmt.Sprintf("GitLab answered %d: %s", status, msg))},
-			Push: ports.AccessCheck{Reason: "not checked: the token cannot read " + m[1]},
+			Push: ports.AccessCheck{Reason: "not checked: the token cannot read " + project},
 		}, nil
 	}
 
@@ -465,25 +460,41 @@ func (cl *Client) RepositoryAccess(ctx context.Context, repoURL, token string) (
 		}
 	}
 
-	out := ports.RepositoryAccess{Read: ports.AccessCheck{OK: true, Reason: "GitLab shows " + m[1] + " to the token"}}
-
-	switch role, ok := accessLevels[level]; {
-	case level >= pushLevel:
-		out.Push = ports.AccessCheck{OK: true, Reason: fmt.Sprintf("the token has %s access (%d) to %s", roleName(role, ok), level, m[1])}
-	case level == 0:
-		out.Push.Reason = "the token is no member of " + m[1] + ", so it cannot push"
-	default:
-		out.Push.Reason = fmt.Sprintf("the token has %s access (%d) to %s; pushing needs Developer (30)", roleName(role, ok), level, m[1])
-	}
-
-	return out, nil
+	return ports.RepositoryAccess{
+		Read: ports.AccessCheck{OK: true, Reason: "GitLab shows " + project + " to the token"},
+		Push: pushCheck(level, project),
+	}, nil
 }
 
-// roleName is a level's role name, or "custom" for a level GitLab names otherwise.
-func roleName(role string, ok bool) string {
-	if ok {
-		return role
+// projectOf checks that repoURL is a project's https URL and returns its host, in lower case, and
+// its path.
+func projectOf(repoURL string) (host, project string, err error) {
+	u, err := url.Parse(repoURL)
+	if err != nil {
+		return "", "", fmt.Errorf("repository %q: %w", repoURL, domain.ErrInvalid)
 	}
 
-	return "custom"
+	m := projectPath.FindStringSubmatch(u.Path)
+	if u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || m == nil {
+		return "", "", fmt.Errorf("%q is not a repository URL such as https://gitlab.com/acme/app: %w", repoURL, domain.ErrInvalid)
+	}
+
+	return strings.ToLower(u.Host), m[1], nil
+}
+
+// pushCheck is whether access level can push to project: Developer (30) or more.
+func pushCheck(level int, project string) ports.AccessCheck {
+	role, ok := accessLevels[level]
+	if !ok {
+		role = "custom"
+	}
+
+	switch {
+	case level >= pushLevel:
+		return ports.AccessCheck{OK: true, Reason: fmt.Sprintf("the token has %s access (%d) to %s", role, level, project)}
+	case level == 0:
+		return ports.AccessCheck{Reason: "the token is no member of " + project + ", so it cannot push"}
+	default:
+		return ports.AccessCheck{Reason: fmt.Sprintf("the token has %s access (%d) to %s; pushing needs Developer (30)", role, level, project)}
+	}
 }

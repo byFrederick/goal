@@ -10,8 +10,9 @@ import (
 
 // The repository the CLI's repository tests name, and the token its secret holds.
 const (
-	cliRepo      = "https://github.com/acme/app"
-	cliRepoToken = "ghp_cli-repo-token-5b7a" //nolint:gosec // a made-up token for the fake code host
+	cliRepo       = "https://github.com/acme/app"
+	cliRepoToken  = "ghp_cli-repo-token-5b7a" //nolint:gosec // a made-up token for the fake code host
+	cmdRepository = "repository"
 )
 
 // goal repository test prints the read and push checks with the host's reasons, exits 1 when one
@@ -30,7 +31,7 @@ func TestRepositoryTestCommand(t *testing.T) {
 		Push: ports.AccessCheck{Reason: "GitHub grants the token no push to acme/app"},
 	})
 
-	out, err := g.goal(t, "repository", "test", cliRepo, "--secret", "repo-token")
+	out, err := g.goal(t, cmdRepository, "test", cliRepo, "--secret", "repo-token")
 	if !errors.Is(err, errRepositoryTestFailed) {
 		t.Fatalf("repository test = %v; want errRepositoryTestFailed\n%s", err, out)
 	}
@@ -42,14 +43,14 @@ func TestRepositoryTestCommand(t *testing.T) {
 		Push: ports.AccessCheck{OK: true, Reason: "GitHub grants the token push to acme/app"},
 	})
 
-	expectOutput(t, "read and push", g.mustGoal(t, "repository", "test", cliRepo, "--secret", "repo-token"),
+	expectOutput(t, "read and push", g.mustGoal(t, cmdRepository, "test", cliRepo, "--secret", "repo-token"),
 		[]string{"✓ read", "✓ push"}, cliRepoToken)
 
-	if _, err := g.goal(t, "repository", "test", cliRepo, "--secret", "gone"); err == nil || !strings.Contains(err.Error(), "gone") {
+	if _, err := g.goal(t, cmdRepository, "test", cliRepo, "--secret", "gone"); err == nil || !strings.Contains(err.Error(), "gone") {
 		t.Errorf("an unknown secret = %v; want goald's refusal naming it", err)
 	}
 
-	for _, args := range [][]string{{"repository"}, {"repository", "test"}, {"repository", "test", cliRepo}, {"repository", "check", cliRepo}} {
+	for _, args := range [][]string{{cmdRepository}, {cmdRepository, "test"}, {cmdRepository, "test", cliRepo}, {cmdRepository, "check", cliRepo}} {
 		if _, err := g.goal(t, args...); !errors.Is(err, errUsage) {
 			t.Errorf("goal %v = %v; want a usage error", args, err)
 		}
