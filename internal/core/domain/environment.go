@@ -153,6 +153,11 @@ const (
 	EnvAnthropicAPIKey  = "ANTHROPIC_API_KEY"       //nolint:gosec // a variable's name, not a credential
 )
 
+// RepositoryTokenEnv is the variable goal-agent prepare gets runtime.repository.token's value in
+// (ADR 0037 decision 7). It is reserved (ReservedRunEnv), so no environment file sets it, and the
+// agent's own env never has it.
+const RepositoryTokenEnv = "GOAL_REPOSITORY_TOKEN"
+
 // ModelKeyEnv is the variable a model key's value goes in: CLAUDE_CODE_OAUTH_TOKEN for a Claude
 // Code OAuth token (sk-ant-oat…), ANTHROPIC_API_KEY for any other key.
 func ModelKeyEnv(value string) string {

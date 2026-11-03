@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"net/url"
 	"path"
 	"slices"
 
+	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
@@ -143,11 +145,15 @@ type bundleRepository struct {
 }
 
 // gitCredential is a login git uses for https://<Host>: Username and the value of the variable
-// PasswordEnv, read when git asks, so the password is never written to disk.
+// PasswordEnv. Without Store prepare's helper reads the variable when git asks, so the password is
+// never written to disk. With Store, the repository token's login (ADR 0037 decision 7), prepare
+// saves it in git's credential store under the box's home, so the agent's own push signs in
+// without the variable in its env.
 type gitCredential struct {
 	Host        string `json:"host"`
 	Username    string `json:"username"`
 	PasswordEnv string `json:"password_env"`
+	Store       bool   `json:"store,omitempty"`
 }
 
 // ServeRun serves GET /run: the bundle of the run whose task token the request carries, from
@@ -588,8 +594,9 @@ func withoutPlan(schema []byte) ([]byte, error) {
 	return json.Marshal(s)
 }
 
-// addRepository puts the repository in b with the git login of its connection, which clones it;
-// a public repository needs none.
+// addRepository puts the repository in b with the git login that clones it: the repository
+// token's on a version on secrets (repositoryLogin), otherwise its connection's; a public
+// repository needs none.
 func (g *Gateway) addRepository(
 	ctx context.Context, repo domain.Repository, branch, base string, fresh domain.FreshBase, b *runBundle,
 ) error {
@@ -598,6 +605,17 @@ func (g *Gateway) addRepository(
 	}
 
 	b.Repository = &bundleRepository{URL: repo.URL, Branch: branch, Base: base, FreshBase: fresh}
+
+	if repo.Token != "" {
+		c, err := repositoryLogin(repo)
+		if err != nil {
+			return err
+		}
+
+		b.addGit(c)
+
+		return nil
+	}
 
 	if repo.Connection == "" {
 		return nil
@@ -691,6 +709,28 @@ func (g *Gateway) outline(ctx context.Context, name string) (domain.Connection, 
 	}
 
 	return conn, k.Outline(conn), k, nil
+}
+
+// forgeUsers are the user names a forge takes with a token as the password.
+var forgeUsers = map[string]string{"github": "x-access-token", "gitlab": "oauth2"}
+
+// repositoryLogin is the stored git login of repo's token for the host of its URL: the engine
+// gives prepare the token as domain.RepositoryTokenEnv, and the forge (repo.Forge, or the one the
+// host names) says the user name.
+func repositoryLogin(repo domain.Repository) (gitCredential, error) {
+	u, err := url.Parse(repo.URL)
+	if err != nil || u.Host == "" {
+		return gitCredential{}, fmt.Errorf("runtime.repository.url %q has no host", repo.URL)
+	}
+
+	forge := cmp.Or(repo.Forge, config.KnownForge(u.Hostname()))
+
+	user, ok := forgeUsers[forge]
+	if !ok {
+		return gitCredential{}, fmt.Errorf("runtime.repository: host %s names no forge; set runtime.repository.forge", u.Host)
+	}
+
+	return gitCredential{Host: u.Host, Username: user, PasswordEnv: domain.RepositoryTokenEnv, Store: true}, nil
 }
 
 func gitCredentialOf(g domain.KindGit) gitCredential {

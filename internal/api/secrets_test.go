@@ -257,6 +257,83 @@ func TestAPI_SecretDeleteRefusedWhileASourceUsesIt(t *testing.T) {
 	}
 }
 
+// acmeWithRepoToken is acme cloning with the repository token.
+var acmeWithRepoToken = strings.Replace(acme, `runtime: { modelKey: "{{claude-key}}" }`,
+	`runtime: { modelKey: "{{claude-key}}", repository: { url: "https://github.com/acme/app.git", token: "{{`+repoSecret+`}}" } }`, 1)
+
+// acmeName is acme's metadata.name, the name of its definition use of a secret.
+const acmeName = "acme"
+
+// acmeDefinitionUse is the use acme's current version makes of a secret it refers to.
+var acmeDefinitionUse = []gen.SecretUse{{Kind: gen.SecretUseDefinition, Name: acmeName}}
+
+// publishRepoToken publishes acmeWithRepoToken and refreshes the definitions cache.
+func (h *harness) publishRepoToken(t *testing.T) {
+	t.Helper()
+
+	h.openDraft(t)
+	h.saveYAML(t, acmeWithRepoToken)
+	h.publish(t, "Clone with the repository token")
+	h.refreshVersions(t)
+}
+
+// refreshVersions refreshes the definitions cache, as it does on a change.
+func (h *harness) refreshVersions(t *testing.T) {
+	t.Helper()
+
+	if _, err := h.versions.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A secret that a factory's current version names, as its repository token or from its
+// environment file, lists that factory once as a definition use.
+func TestAPI_SecretUsesListDefinitions(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createRepoSecret(t)
+	h.publishRepoToken(t)
+
+	want := acmeDefinitionUse
+	if got := decode[gen.Secret](t, h.request(t, http.MethodGet, secretsPath+"/"+repoSecret, "", nil), http.StatusOK); !slices.Equal(got.Uses, want) {
+		t.Errorf("repository token uses = %+v; want %+v", got.Uses, want)
+	}
+
+	h.publishAccess(t) // acme-token three times in the environment file
+
+	if got := decode[gen.Secret](t, h.request(t, http.MethodGet, secretPath, "", nil), http.StatusOK); !slices.Equal(got.Uses, want) {
+		t.Errorf("environment uses = %+v; want %+v", got.Uses, want)
+	}
+}
+
+// Delete refuses a secret while a published definition names it, and deletes it once the
+// current version no longer does.
+func TestAPI_SecretDeleteRefusedWhileADefinitionUsesIt(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createRepoSecret(t)
+	h.publishRepoToken(t)
+
+	path := secretsPath + "/" + repoSecret
+	want := acmeDefinitionUse
+
+	p := refused(t, "delete in use", h.request(t, http.MethodDelete, path, "", nil), http.StatusConflict, "secret-in-use")
+	if p.Uses == nil || !slices.Equal(*p.Uses, want) || !strings.Contains(valueOf(p.Detail), "definition acme") {
+		t.Errorf("problem = %+v, detail %q; want it to name the definition", p.Uses, valueOf(p.Detail))
+	}
+
+	h.openDraft(t)
+	h.saveYAML(t, acme)
+	h.publish(t, "Drop the repository token")
+	h.refreshVersions(t)
+
+	if r := h.request(t, http.MethodDelete, path, "", nil); r.status != http.StatusNoContent {
+		t.Errorf("delete the secret no definition uses = %d %s; want 204", r.status, r.body)
+	}
+}
+
 // An import's dry run answers each name as new or existing, with what uses the existing one, and
 // stores nothing; a real run creates the new names open to no factory, and skips or replaces the
 // existing ones.

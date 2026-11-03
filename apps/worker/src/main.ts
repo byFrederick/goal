@@ -103,7 +103,7 @@ async function runPrepare(): Promise<number> {
         output,
         env: process.env,
         now,
-        dirs: { goal: paths.goal, workspace: paths.workspace, claude: paths.claudeConfig },
+        dirs: { goal: paths.goal, workspace: paths.workspace, claude: paths.claudeConfig, home: paths.home },
       }),
     );
     return 0;

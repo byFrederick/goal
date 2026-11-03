@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/byFrederick/goal/internal/api/gen"
+	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
@@ -18,9 +20,11 @@ import (
 // problem, log line or audit entry does. The store audits every change in its transaction, so
 // these handlers write no audit of their own.
 //
-// What uses a secret is, for now, the knowledge sources that read with it and the connections that
-// refer to it as {{name}}, read through ports.Credentials.UsedBy (the same table). The parts that
-// let definitions, webhooks and the Slack setting refer to secrets add their uses to secretUses.
+// What uses a secret is the factories whose current published version refers to it as {{name}}
+// (decision 3: its repository token, model key, a trigger's model-agrees key or an environment
+// file), the knowledge sources that read with it and the connections that refer to it, read
+// through ports.Credentials.UsedBy (the same table). The parts that let webhooks and the Slack
+// setting refer to secrets add their uses to secretUses.
 
 // Errors of the secret routes, answered with their codes by secretProblem.
 var (
@@ -368,10 +372,16 @@ func (s *server) importSecret(ctx context.Context, e domain.CredentialImportEntr
 	}
 }
 
-// secretUses is what uses secret name, by kind then name: today the connections that refer to it
-// as {{name}} and the knowledge sources that read with it.
+// secretUses is what uses secret name, by kind then name: the connections that refer to it as
+// {{name}}, the factories whose current published version does (archived ones left out, as for a
+// connection's users) and the knowledge sources that read with it. It opens no secret.
 func (s *server) secretUses(ctx context.Context, name string) ([]gen.SecretUse, error) {
 	conns, err := s.credentials.UsedBy(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("the uses of secret %q: %w", name, err)
+	}
+
+	users, err := s.usersBy(ctx, secretRefNames)
 	if err != nil {
 		return nil, fmt.Errorf("the uses of secret %q: %w", name, err)
 	}
@@ -387,6 +397,17 @@ func (s *server) secretUses(ctx context.Context, name string) ([]gen.SecretUse, 
 		uses = append(uses, gen.SecretUse{Kind: gen.SecretUseConnection, Name: c})
 	}
 
+	defs := make([]string, 0, len(users[name]))
+	for _, f := range users[name] {
+		defs = append(defs, f.name)
+	}
+
+	slices.Sort(defs)
+
+	for _, d := range defs {
+		uses = append(uses, gen.SecretUse{Kind: gen.SecretUseDefinition, Name: d})
+	}
+
 	// Sources come by name.
 	for _, src := range sources {
 		if src.Secret == name {
@@ -395,6 +416,19 @@ func (s *server) secretUses(ctx context.Context, name string) ([]gen.SecretUse, 
 	}
 
 	return uses, nil
+}
+
+// secretRefNames are the secrets f's {{name}} references name, each once.
+func secretRefNames(f *config.Factory) []string {
+	var out []string
+
+	for _, r := range f.SecretRefs() {
+		if !slices.Contains(out, r.Name) {
+			out = append(out, r.Name)
+		}
+	}
+
+	return out
 }
 
 // secretOut is a secret as the contract has it, never its value.
