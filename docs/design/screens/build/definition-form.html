@@ -198,6 +198,18 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 .chk li:first-child{border-top:0}
 .chk svg{flex:none;margin-top:2px}
 .dlg .act .btn.red{margin-right:auto}
+@media (max-width:1360px){
+.lr.hd{display:none}
+.lr{grid-template-columns:36px minmax(0,1fr) auto;row-gap:8px}
+.lr>:nth-child(1){grid-row:1/span 4;align-self:start}
+.lr>:nth-child(2){grid-column:2;grid-row:1}
+.lr>:nth-child(6){grid-column:3;grid-row:1;align-self:start}
+.lr>:nth-child(3){grid-column:2/4;grid-row:2;justify-self:start;max-width:100%}
+.lr>:nth-child(4){grid-column:2/4;grid-row:3}
+.lr>:nth-child(5){grid-column:2/4;grid-row:4}
+.lr>:nth-child(4)::before{content:"WIP limit: ";color:var(--ink3)}
+.lr>:nth-child(5)::before{content:"Who works here: ";color:var(--ink3)}
+}
 </style>
 </helmet>
 <div class="g app ">
