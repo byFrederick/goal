@@ -312,6 +312,15 @@ func (t secretTable) delete(ctx context.Context, name string, by domain.Actor) e
 			return fmt.Errorf("%s %q is used by knowledge sources %s: %w", t.kind.noun, name, strings.Join(sources, ", "), ports.ErrConflict)
 		}
 
+		notifies, err := q.SecretNotifiesSlack(ctx, name)
+		if err != nil {
+			return err
+		}
+
+		if notifies {
+			return fmt.Errorf("%s %q is used by the Slack notification setting: %w", t.kind.noun, name, ports.ErrConflict)
+		}
+
 		id, err := q.DeleteSecret(ctx, name)
 		if err != nil {
 			return err

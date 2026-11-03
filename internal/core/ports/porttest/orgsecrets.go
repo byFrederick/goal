@@ -21,7 +21,8 @@ var _ ports.OrgSecrets = (*OrgSecrets)(nil)
 // Resolve, the factory scope enforced there, and an audit entry through audit for every change and
 // use. Views made with WithKey share the data, as goalds with different keys share one database.
 // The connections given to NewOrgSecrets are the ones that refer to secrets as {{name}}: Delete
-// refuses while one does.
+// refuses while one does, and while a knowledge source (Knowledge.ReadSecrets) or the Slack
+// notification setting (NewNotificationSettings) uses the secret.
 type OrgSecrets struct {
 	d     *secretData
 	key   ports.MasterKey
@@ -36,6 +37,11 @@ type secretData struct {
 	// them a secret's new name: Knowledge.ReadSecrets sets them. Both are called under mu.
 	readBy  func(org domain.OrgID, name string) []string
 	renamed func(org domain.OrgID, from, to string)
+	// notifies reports whether org's Slack notification setting uses secret name, and
+	// notifyRenamed tells it a secret's new name: NewNotificationSettings sets them. Both are
+	// called under mu.
+	notifies      func(org domain.OrgID, name string) bool
+	notifyRenamed func(org domain.OrgID, from, to string)
 }
 
 type secretRow struct {
@@ -206,8 +212,8 @@ func (s *OrgSecrets) Patch(ctx context.Context, name string, p domain.SecretPatc
 	delete(s.d.rows[org], name)
 	s.d.rows[org][next.Name] = r
 
-	if next.Name != name && s.d.renamed != nil {
-		s.d.renamed(org, name, next.Name)
+	if next.Name != name {
+		s.d.renamedLocked(org, name, next.Name)
 	}
 
 	return cloneSecret(r.secret), nil
@@ -238,6 +244,10 @@ func (s *OrgSecrets) Delete(ctx context.Context, name string, by domain.Actor) e
 		if sources := s.d.readBy(org, name); len(sources) > 0 {
 			return fmt.Errorf("secret %q is used by knowledge sources %s: %w", name, strings.Join(sources, ", "), ports.ErrConflict)
 		}
+	}
+
+	if s.d.notifies != nil && s.d.notifies(org, name) {
+		return fmt.Errorf("secret %q is used by the Slack notification setting: %w", name, ports.ErrConflict)
 	}
 
 	if err := s.appendAudit(ctx, by, domain.AuditSecretDeleted, r.secret, map[string]any{auditName: name}); err != nil {
@@ -302,6 +312,16 @@ func (s *OrgSecrets) Resolve(ctx context.Context, names []string, use domain.Sec
 	}
 
 	return out, nil
+}
+
+// renamedLocked tells the knowledge sources and the notification setting that org's secret from
+// is now to.
+func (d *secretData) renamedLocked(org domain.OrgID, from, to string) {
+	for _, fn := range []func(domain.OrgID, string, string){d.renamed, d.notifyRenamed} {
+		if fn != nil {
+			fn(org, from, to)
+		}
+	}
 }
 
 // rowLocked is org's secret name; ErrNotFound when there is none.

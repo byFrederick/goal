@@ -222,7 +222,7 @@ WITH recipients AS (
     AND 'user:' || (m ->> 'user_id') <> $9::text
 ),
 slack AS (
-  SELECT EXISTS (SELECT 1 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id WHERE k.name = 'slack') AS connected
+  SELECT EXISTS (SELECT 1 FROM org_notification_settings WHERE slack_secret_id IS NOT NULL) AS enabled
 )
 INSERT INTO notification_outbox (event_id, event, user_id, channel, payload, next_attempt_at, created_at)
 SELECT $1::text, $2::text, r.user_id, ch.channel, $3::jsonb,
@@ -232,7 +232,7 @@ CROSS JOIN slack
 LEFT JOIN notification_preferences p ON p.user_id = r.user_id AND p.event = $2::text
 CROSS JOIN LATERAL (VALUES
   ('email', coalesce(p.email, $5::boolean)),
-  ('slack', coalesce(p.slack, $6::boolean) AND slack.connected)
+  ('slack', coalesce(p.slack, $6::boolean) AND slack.enabled)
 ) AS ch (channel, enabled)
 WHERE ch.enabled
 ON CONFLICT (event_id, user_id, channel) DO NOTHING
@@ -257,7 +257,8 @@ type QueueNotificationsParams struct {
 // holding one of factory_roles on factory (members come from goal_members, since goal_app cannot
 // read schema auth), never the actor (an Actor ref; ” excludes nobody). A person without a saved
 // preference for the event has the defaults, which Go passes (domain.DefaultNotificationPreferences).
-// Slack is on only while the organization has a connection of a kind named slack (decision 5).
+// Slack is on only while the organization's notification setting names a secret (00092; ADR 0037,
+// decision 14).
 func (q *Queries) QueueNotifications(ctx context.Context, arg QueueNotificationsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, queueNotifications,
 		arg.EventID,
