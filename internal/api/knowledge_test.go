@@ -75,7 +75,7 @@ func (h *harness) uploadTo(t *testing.T, path string, files ...[2]string) respon
 		t.Fatal(err)
 	}
 
-	return h.request(t, http.MethodPost, path, buf.String(), http.Header{"Content-Type": {mw.FormDataContentType()}})
+	return h.request(t, http.MethodPost, path, buf.String(), http.Header{contentType: {mw.FormDataContentType()}})
 }
 
 // syncAll runs one ingestion pass over the organizations' due sources, as goald's loop does,

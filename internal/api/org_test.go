@@ -415,7 +415,7 @@ var probes = map[string]probe{
 	"listKnowledgeDocuments": {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/sources/notes/documents", org: testOrg},
 	"uploadKnowledgeDocuments": {
 		method: http.MethodPost, path: "/v1/orgs/acme/knowledge/sources/notes/documents", org: testOrg,
-		header: http.Header{"Content-Type": {"multipart/form-data; boundary=x"}},
+		header: http.Header{contentType: {"multipart/form-data; boundary=x"}},
 		body:   "--x\r\nContent-Disposition: form-data; name=\"files\"; filename=\"a.md\"\r\n\r\n# A\r\n--x--\r\n",
 	},
 	"getKnowledgeDocument":        {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/documents/" + noDocument, org: testOrg},
