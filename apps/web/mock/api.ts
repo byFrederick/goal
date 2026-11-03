@@ -92,6 +92,7 @@ import { orgRunsOf, runsCsvOf } from './runs.ts';
 import { type SearchSource, search } from './search.ts';
 import { createSecrets } from './secrets.ts';
 import { createSpend } from './spend.ts';
+import { createStandingRules } from './standing-rules.ts';
 import { starterItem } from './starter.ts';
 import { teardownOf } from './teardown.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
@@ -316,6 +317,14 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   const access = createAccess({ clock, acme: acmeOrg });
 
   const secrets = createSecrets({
+    clock,
+    actor: (req) => auth.actor(req),
+    stale: (req, res) => stale(req, res),
+    factories: (org) => state.factories.filter((f) => f.org_id === org),
+    acme: acmeOrg,
+  });
+
+  const standingRules = createStandingRules({
     clock,
     actor: (req) => auth.actor(req),
     stale: (req, res) => stale(req, res),
@@ -1661,6 +1670,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       apiKeys.reset(clock());
       connections.reset(clock());
       secrets.reset(clock());
+      standingRules.reset();
       knowledge.reset(clock());
       evals.reset();
       bakeOffs.reset();
@@ -1780,6 +1790,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (access.handle(org, rest, method, url, res)) return;
     if (await secrets.handle(org, rest, method, url, req, res, () => readBody(req))) return;
+    if (standingRules.handle(org, rest, method, url, req, res)) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);
     // Bake-offs sit under /evals, and the evals handler answers every sub-path it does not know,

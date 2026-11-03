@@ -69,6 +69,20 @@ for (const scheme of schemes) {
         });
       }
 
+      test('a standing rule under its tool fits the viewport, with a 44 px Revoke on a phone', async ({ page }) => {
+        await page.goto('/o/acme/f/goal/definition/environments');
+        await page
+          .getByRole('button', { name: /linear/ })
+          .first()
+          .click();
+        const revoke = page.getByRole('button', { name: 'Revoke create_comment for architect' });
+        await expect(revoke).toBeVisible();
+        await expect(page.getByText('Always allowed for architect, by Freddy Cruz on Oct 30')).toBeVisible();
+        await expectNoHorizontalScroll(page);
+        await expectNoClippedElements(page);
+        if (width < 768) expect((await revoke.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(43.5);
+      });
+
       test('Environments has no accessibility violations', async ({ page }) => {
         await page.goto('/o/acme/f/goal/definition/environments');
         await expect(page.getByRole('heading', { name: 'The box' })).toBeVisible();
