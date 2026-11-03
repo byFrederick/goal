@@ -247,6 +247,14 @@ func TestSlack_UnreachableIsTemporary(t *testing.T) {
 	}
 }
 
+// The codes of a failed check.
+//
+//nolint:gosec // error codes, not credentials
+const (
+	codeTokenInvalid     = "slack-token-invalid"
+	codeTokenUnavailable = "slack-token-unavailable"
+)
+
 // A check asks auth.test with the bearer token and answers the token's workspace.
 func TestSlack_CheckAnswersTheWorkspace(t *testing.T) {
 	t.Parallel()
@@ -284,14 +292,14 @@ func TestSlack_CheckRefusals(t *testing.T) {
 		code      string
 		permanent bool
 	}{
-		{"invalid auth", http.StatusOK, `{"ok":false,"error":"invalid_auth","detail":` + echo + `}`, "slack-token-invalid", true},
-		{"not authed", http.StatusOK, `{"ok":false,"error":"not_authed"}`, "slack-token-invalid", true},
-		{"account inactive", http.StatusOK, `{"ok":false,"error":"account_inactive"}`, "slack-token-invalid", true},
-		{"token revoked", http.StatusOK, `{"ok":false,"error":"token_revoked"}`, "slack-token-invalid", true},
-		{"rate limited", http.StatusTooManyRequests, echo, "slack-token-unavailable", false},
-		{"server error", http.StatusBadGateway, echo, "slack-token-unavailable", false},
-		{"slack's own failure", http.StatusOK, `{"ok":false,"error":"internal_error"}`, "slack-token-unavailable", false},
-		{"not json", http.StatusOK, echo, "slack-token-unavailable", false},
+		{"invalid auth", http.StatusOK, `{"ok":false,"error":"invalid_auth","detail":` + echo + `}`, codeTokenInvalid, true},
+		{"not authed", http.StatusOK, `{"ok":false,"error":"not_authed"}`, codeTokenInvalid, true},
+		{"account inactive", http.StatusOK, `{"ok":false,"error":"account_inactive"}`, codeTokenInvalid, true},
+		{"token revoked", http.StatusOK, `{"ok":false,"error":"token_revoked"}`, codeTokenInvalid, true},
+		{"rate limited", http.StatusTooManyRequests, echo, codeTokenUnavailable, false},
+		{"server error", http.StatusBadGateway, echo, codeTokenUnavailable, false},
+		{"slack's own failure", http.StatusOK, `{"ok":false,"error":"internal_error"}`, codeTokenUnavailable, false},
+		{"not json", http.StatusOK, echo, codeTokenUnavailable, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -325,7 +333,7 @@ func TestSlack_CheckUnreachable(t *testing.T) {
 	srv.Close()
 
 	_, err := slack.New(slack.Config{BaseURL: srv.URL + "/api"}).Check(t.Context(), token)
-	if de, ok := errors.AsType[*ports.DMError](err); !ok || de.Code != "slack-token-unavailable" || errors.Is(err, ports.ErrDMPermanent) {
+	if de, ok := errors.AsType[*ports.DMError](err); !ok || de.Code != codeTokenUnavailable || errors.Is(err, ports.ErrDMPermanent) {
 		t.Fatalf("err = %v; want a temporary slack-token-unavailable", err)
 	}
 

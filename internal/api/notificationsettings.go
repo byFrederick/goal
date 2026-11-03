@@ -18,11 +18,14 @@ import (
 // secret without a factory, so it must be open to all factories. The token never leaves goald: a
 // test answers a fixed code, and the store audits a change with the secret's name only.
 
-// slackNotSet is a test's error when no secret is given and none is saved.
-const slackNotSet = "slack-not-set"
-
-// slackTokenUnavailable is a test's error when Slack could not say whether the token works.
-const slackTokenUnavailable = "slack-token-unavailable"
+// A test's error codes when no secret is given and none is saved, and when Slack could not say
+// whether the token works.
+//
+//nolint:gosec // error codes, not credentials
+const (
+	slackNotSet           = "slack-not-set"
+	slackTokenUnavailable = "slack-token-unavailable"
+)
 
 func (s *server) GetNotificationSettings(ctx context.Context, _ gen.GetNotificationSettingsRequestObject) (gen.GetNotificationSettingsResponseObject, error) {
 	ns, err := s.notifySettings.NotificationSettings(ctx)

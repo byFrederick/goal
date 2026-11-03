@@ -2028,6 +2028,32 @@ getNotificationPreferences pat-demoted      install: 403 forbidden
 getNotificationPreferences pat-removed      install: 401 unauthenticated
 getNotificationPreferences pat-platform     install: 403 forbidden
 getNotificationPreferences pat-deleted-org  install: 401 unauthenticated
+getNotificationSettings anonymous        401 unauthenticated      401 unauthenticated
+getNotificationSettings owner            200                      404 org-not-found
+getNotificationSettings admin            200                      404 org-not-found
+getNotificationSettings viewer           200                      404 org-not-found
+getNotificationSettings approver         200                      404 org-not-found
+getNotificationSettings editor           200                      404 org-not-found
+getNotificationSettings member-no-roles  200                      404 org-not-found
+getNotificationSettings other-org-owner  404 org-not-found        200
+getNotificationSettings platform-admin   404 org-not-found        404 org-not-found
+getNotificationSettings stale-owner      200                      404 org-not-found
+getNotificationSettings key-scoped       200                      404 org-not-found
+getNotificationSettings key-restricted   200                      404 org-not-found
+getNotificationSettings key-other-org    404 org-not-found        200
+getNotificationSettings key-expired      401 unauthenticated      401 unauthenticated
+getNotificationSettings key-revoked      401 unauthenticated      401 unauthenticated
+getNotificationSettings bearer-owner     200                      404 org-not-found
+getNotificationSettings pat-approver     403 forbidden            404 org-not-found
+getNotificationSettings pat-owner        200                      404 org-not-found
+getNotificationSettings pat-viewer       200                      404 org-not-found
+getNotificationSettings pat-other-org    404 org-not-found        200
+getNotificationSettings pat-expired      401 unauthenticated      401 unauthenticated
+getNotificationSettings pat-revoked      401 unauthenticated      401 unauthenticated
+getNotificationSettings pat-demoted      200                      404 org-not-found
+getNotificationSettings pat-removed      401 unauthenticated      401 unauthenticated
+getNotificationSettings pat-platform     200                      404 org-not-found
+getNotificationSettings pat-deleted-org  401 unauthenticated      401 unauthenticated
 getOrg               anonymous        401 unauthenticated      401 unauthenticated
 getOrg               owner            200                      404 org-not-found
 getOrg               admin            200                      404 org-not-found
@@ -4550,6 +4576,32 @@ setItemLane          pat-demoted      404 item-not-found       404 org-not-found
 setItemLane          pat-removed      401 unauthenticated      401 unauthenticated
 setItemLane          pat-platform     200                      404 org-not-found
 setItemLane          pat-deleted-org  401 unauthenticated      401 unauthenticated
+setNotificationSettings anonymous        401 unauthenticated      401 unauthenticated
+setNotificationSettings owner            200                      404 org-not-found
+setNotificationSettings admin            200                      404 org-not-found
+setNotificationSettings viewer           403 forbidden            404 org-not-found
+setNotificationSettings approver         403 forbidden            404 org-not-found
+setNotificationSettings editor           403 forbidden            404 org-not-found
+setNotificationSettings member-no-roles  403 forbidden            404 org-not-found
+setNotificationSettings other-org-owner  404 org-not-found        200
+setNotificationSettings platform-admin   404 org-not-found        404 org-not-found
+setNotificationSettings stale-owner      200                      404 org-not-found
+setNotificationSettings key-scoped       403 forbidden            404 org-not-found
+setNotificationSettings key-restricted   403 forbidden            404 org-not-found
+setNotificationSettings key-other-org    404 org-not-found        403 forbidden
+setNotificationSettings key-expired      401 unauthenticated      401 unauthenticated
+setNotificationSettings key-revoked      401 unauthenticated      401 unauthenticated
+setNotificationSettings bearer-owner     200                      404 org-not-found
+setNotificationSettings pat-approver     403 forbidden            404 org-not-found
+setNotificationSettings pat-owner        403 forbidden            404 org-not-found
+setNotificationSettings pat-viewer       403 forbidden            404 org-not-found
+setNotificationSettings pat-other-org    404 org-not-found        403 forbidden
+setNotificationSettings pat-expired      401 unauthenticated      401 unauthenticated
+setNotificationSettings pat-revoked      401 unauthenticated      401 unauthenticated
+setNotificationSettings pat-demoted      403 forbidden            404 org-not-found
+setNotificationSettings pat-removed      401 unauthenticated      401 unauthenticated
+setNotificationSettings pat-platform     403 forbidden            404 org-not-found
+setNotificationSettings pat-deleted-org  401 unauthenticated      401 unauthenticated
 setSignupDomain      anonymous        401 unauthenticated      401 unauthenticated
 setSignupDomain      owner            200                      404 org-not-found
 setSignupDomain      admin            403 forbidden            404 org-not-found
@@ -4784,6 +4836,32 @@ testEnvironment      pat-demoted      404 factory-not-found    404 org-not-found
 testEnvironment      pat-removed      401 unauthenticated      401 unauthenticated
 testEnvironment      pat-platform     200                      404 org-not-found
 testEnvironment      pat-deleted-org  401 unauthenticated      401 unauthenticated
+testNotificationSettings anonymous        401 unauthenticated      401 unauthenticated
+testNotificationSettings owner            200                      404 org-not-found
+testNotificationSettings admin            200                      404 org-not-found
+testNotificationSettings viewer           403 forbidden            404 org-not-found
+testNotificationSettings approver         403 forbidden            404 org-not-found
+testNotificationSettings editor           403 forbidden            404 org-not-found
+testNotificationSettings member-no-roles  403 forbidden            404 org-not-found
+testNotificationSettings other-org-owner  404 org-not-found        200
+testNotificationSettings platform-admin   404 org-not-found        404 org-not-found
+testNotificationSettings stale-owner      200                      404 org-not-found
+testNotificationSettings key-scoped       403 forbidden            404 org-not-found
+testNotificationSettings key-restricted   403 forbidden            404 org-not-found
+testNotificationSettings key-other-org    404 org-not-found        403 forbidden
+testNotificationSettings key-expired      401 unauthenticated      401 unauthenticated
+testNotificationSettings key-revoked      401 unauthenticated      401 unauthenticated
+testNotificationSettings bearer-owner     200                      404 org-not-found
+testNotificationSettings pat-approver     403 forbidden            404 org-not-found
+testNotificationSettings pat-owner        403 forbidden            404 org-not-found
+testNotificationSettings pat-viewer       403 forbidden            404 org-not-found
+testNotificationSettings pat-other-org    404 org-not-found        403 forbidden
+testNotificationSettings pat-expired      401 unauthenticated      401 unauthenticated
+testNotificationSettings pat-revoked      401 unauthenticated      401 unauthenticated
+testNotificationSettings pat-demoted      403 forbidden            404 org-not-found
+testNotificationSettings pat-removed      401 unauthenticated      401 unauthenticated
+testNotificationSettings pat-platform     403 forbidden            404 org-not-found
+testNotificationSettings pat-deleted-org  401 unauthenticated      401 unauthenticated
 testRepository       anonymous        401 unauthenticated      401 unauthenticated
 testRepository       owner            200                      404 org-not-found
 testRepository       admin            200                      404 org-not-found

@@ -105,7 +105,7 @@ func TestAPI_NotificationSettingsTestOK(t *testing.T) {
 	h.createSlackSecret(t)
 
 	got := decode[gen.NotificationTestResult](t, h.request(t, http.MethodPost, notifyTestPath, `{"slack_secret":"`+slackSecret+`"}`, nil), http.StatusOK)
-	if !got.Ok || valueOf(got.Workspace) != "acme" || got.Error != nil {
+	if !got.Ok || valueOf(got.Workspace) != acmeSlug || got.Error != nil {
 		t.Errorf("test = %+v; want ok in workspace acme", got)
 	}
 
@@ -150,7 +150,9 @@ func TestAPI_NotificationSettingsTestNotOK(t *testing.T) {
 	}
 
 	for _, code := range []string{"slack-token-invalid", "slack-token-unavailable"} {
-		h.slack.CheckWith = func(string) (string, error) { return "", &ports.DMError{Code: code, Permanent: code == "slack-token-invalid"} }
+		h.slack.CheckWith = func(string) (string, error) {
+			return "", &ports.DMError{Code: code, Permanent: code == "slack-token-invalid"}
+		}
 
 		r := h.request(t, http.MethodPost, notifyTestPath, `{"slack_secret":"`+slackSecret+`"}`, nil)
 		if got := decode[gen.NotificationTestResult](t, r, http.StatusOK); got.Ok || valueOf(got.Error) != code || got.Workspace != nil {

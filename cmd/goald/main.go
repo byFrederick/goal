@@ -265,10 +265,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
-		NotificationPreferences: postgres.NewNotificationPreferences(store), NotificationSettings: postgres.NewNotificationSettings(store),
-		// The token test asks Slack, a public address, as the notification sender does.
-		SlackMessenger: slack.New(slack.Config{Transport: connectionTransport(false)}),
-		Jonah:          jonahDeps(store, authors, clock, log), Clock: clock, Logger: log,
+		NotificationPreferences: postgres.NewNotificationPreferences(store), NotificationSettings: postgres.NewNotificationSettings(store), SlackMessenger: slack.New(slack.Config{Transport: connectionTransport(false)}),
+		Jonah: jonahDeps(store, authors, clock, log), Clock: clock, Logger: log,
 	})
 	if err = errors.Join(err, siteErr); err != nil {
 		return err
