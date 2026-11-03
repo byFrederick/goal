@@ -179,7 +179,10 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 
 	definitionStore := postgres.NewDefinitions(pool, objects, log)
-	kb := openKnowledge(s, store, connections, orgSecrets, objects, clock, log)
+	// The engine's behaviour; the knowledge base keeps a replaced snapshot as long as one of its
+	// claims can last (ADR 0038 decision 3). The gateway URL comes with the sandboxes below.
+	engineCfg := engine.Config{TickEvery: s.TickEvery, Image: s.AgentImage, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns}
+	kb := openKnowledge(s, store, connections, orgSecrets, objects, clock, engineCfg.LongestClaim(), log)
 
 	// The organization policy (ADR 0024) is a ceiling over every definition: publishing checks a
 	// version's models against it, and the engine applies it at each run's start.
@@ -222,6 +225,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
+	engineCfg.GatewayURL = boxes.gateway
+
 	// The engine runs each claim in a sandbox with the run's connections, merges with the
 	// factory's code host connections and, at its start and every ReapEvery, deletes the
 	// sandboxes of runs that are over, whichever goald on this Docker host or this Worker
@@ -230,9 +235,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
 		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Clock: clock,
 		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Audit: store, NotificationOutbox: store, Logger: log,
-	}, engine.Config{
-		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxes.gateway, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns,
-	})
+	}, engineCfg)
 	if err != nil {
 		return err
 	}
@@ -368,7 +371,7 @@ type knowledgeBase struct {
 // connection, through the public-only transport: gitdocs (GitHub and GitLab repositories) or
 // confluence (the spaces of a Confluence Cloud site).
 func openKnowledge(s settings, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets, objects ports.ObjectStore,
-	clock ports.Clock, log *slog.Logger,
+	clock ports.Clock, keep time.Duration, log *slog.Logger,
 ) knowledgeBase {
 	kb := postgres.NewKnowledge(store)
 
@@ -399,7 +402,7 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 		kb: kb, uploads: uploads,
 		ingestor: knowledge.NewIngestor(knowledge.IngestorConfig{
 			Knowledge: kb, Connections: connections, Secrets: secrets, Uploads: uploads,
-			Readers: readers, Objects: objects, Converter: converter, Clock: clock, Log: log, Workers: s.KBWorkers,
+			Readers: readers, Objects: objects, Converter: converter, Clock: clock, Log: log, Workers: s.KBWorkers, Keep: keep,
 		}),
 	}
 }

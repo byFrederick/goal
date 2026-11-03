@@ -184,6 +184,16 @@ type Config struct {
 	MaxRuns int
 }
 
+// LongestClaim is the longest one claim can last with c's timeouts, their defaults for those
+// unset: both attempts of its run (a retry reuses the claim and its knowledge pins) and the lease
+// that outlives the last heartbeat. A knowledge snapshot replaced that long ago is pinned by no
+// claim that has not ended (ADR 0038 decision 3).
+func (c Config) LongestClaim() time.Duration {
+	c = withDefaults(c)
+
+	return maxAttempts*c.TaskTimeout + c.LeaseTTL
+}
+
 // keyReason is the event data key that explains a block, rejection or escalation.
 const keyReason = "reason"
 
