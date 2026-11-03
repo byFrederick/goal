@@ -1,10 +1,10 @@
 # ADR 0025 — Judges and evals as the screens show them
 
-Status: accepted · 2026-10-27 · Amended by [ADR 0038](0038-knowledge-is-files.md) (a version whose only change is `memory.yaml` publishes without the eval gate) · Amends [ADR 0002](0002-jonah-evals.md) ([phase 5 amendment](0002-jonah-evals.md#amendment--phase-5-the-minimal-loop), decisions 3, 4 and 5) · Builds on [ADR 0016](0016-ui-revamp.md) (the screens are the contract) and [ADR 0005](0005-factory-definitions-in-object-storage.md) (definitions are files in the bucket, published as versions)
+Status: superseded by [ADR 0039](0039-jonah-learns-from-the-line.md) (judges go; eval cases become past items kept as tests, which warn and never block) · accepted 2026-10-27 · Amended by [ADR 0038](0038-knowledge-is-files.md) (a version whose only change is `memory.yaml` publishes without the eval gate) · Amends [ADR 0002](0002-jonah-evals.md) ([phase 5 amendment](0002-jonah-evals.md#amendment--phase-5-the-minimal-loop), decisions 3, 4 and 5) · Builds on [ADR 0016](0016-ui-revamp.md) (the screens are the contract) and [ADR 0005](0005-factory-definitions-in-object-storage.md) (definitions are files in the bucket, published as versions)
 
 ## Context
 
-The Jonah screens are binding by ADR 0016: [`judges`](../design/screens/jonah/judges.html), [`judge`](../design/screens/jonah/judge.html) and [`evals`](../design/screens/jonah/evals.html) (each with its `.jpg`). They show two things.
+The Jonah screens are binding by ADR 0016: [`judges`](https://github.com/byFrederick/goal/blob/7b468c06/docs/design/screens/jonah/judges.html), [`judge`](https://github.com/byFrederick/goal/blob/7b468c06/docs/design/screens/jonah/judge.html) and [`evals`](https://github.com/byFrederick/goal/blob/7b468c06/docs/design/screens/jonah/evals.html) (each with its `.jpg`). They show two things.
 
 - **Judges** are named and editable. Each has a title, a "What it checks" sentence, the agents it scores, a Markdown rubric, scored outcomes, a pass mark, a sample share ("0% pauses it"), a model and an on switch. It scores a share of the runs of its agents, and a score under the pass mark goes to Jonah. The page says judges live under `evals/judges/` and that editing one publishes a new version.
 - **Evals** are cases under `evals/cases/`. Each names an agent and what checks it: a contract, a judge or a reference patch. Cases run on one definition version ("Cases passing every try, v21"), "on every publish", and "a failing case blocks the publish".
