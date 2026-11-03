@@ -71,8 +71,8 @@ type defGoald struct {
 	keys *porttest.Identity
 	// conns holds the organization's connections, with goald's platform kinds.
 	conns *porttest.Connections
-	// creds holds the organization's credentials, which its connections may refer to.
-	creds *porttest.Credentials
+	// secrets holds the organization's secrets, which its connections may refer to.
+	secrets *porttest.OrgSecrets
 	// kb is the organization's knowledge base; sync indexes what is due in it, as goald's loop.
 	kb   *porttest.Knowledge
 	sync func(t *testing.T)
@@ -130,6 +130,7 @@ func newDefGoald(t *testing.T) *defGoald {
 
 	kb := porttest.NewKnowledge(conns, tenancy)
 	creds := porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, conns)
+	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, conns)
 	uploads := knowledge.NewUploads(kb, porttest.NewObjectStore(), 0)
 
 	// Its own transport: parallel tests closing their httptest servers call CloseIdleConnections on
@@ -142,7 +143,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		Access: keys, OrgRetention: time.Hour, Authorizer: api.AllowAll{}, Auth: api.AuthConfig{Mode: api.AuthNone},
 		Platform: porttest.NewPlatform(porttest.NewIdentity(clock.Now)), Feed: api.NewFeed(porttest.NewItemNotices(), defNotices, nil),
 		Builder: builder.New(objects, clock, builder.Config{}), Connections: conns, ParseKind: connkind.Parse,
-		Credentials: creds, Intake: porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store), DraftRequests: porttest.NewDraftRequests(tenancy, clock.Now),
+		Credentials: creds, OrgSecrets: secrets, Intake: porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store), DraftRequests: porttest.NewDraftRequests(tenancy, clock.Now),
 		ConnectionTransport: transport, Knowledge: kb, KnowledgeUploads: uploads, KnowledgeSearch: knowledge.NewSearcher(kb, nil, nil),
 		UploadMaxBytes: domain.DefaultMaxUpload, Clock: clock, NotificationPreferences: porttest.NewNotificationPreferences(),
 		OrgPolicies: porttest.NewOrgPolicies(nil, tenancy, clock.Now), BoxSizes: []domain.BoxSize{{Size: domain.SandboxMedium, VCPUs: 2, MemoryBytes: 4 << 30}},
@@ -151,7 +152,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		t.Fatal(err)
 	}
 
-	g := &defGoald{authors: authors, cache: cache, orgID: o.ID, keys: keys, conns: conns, creds: creds, kb: kb}
+	g := &defGoald{authors: authors, cache: cache, orgID: o.ID, keys: keys, conns: conns, secrets: secrets, kb: kb}
 	g.sync = func(t *testing.T) {
 		t.Helper()
 
