@@ -697,6 +697,12 @@ func (g *Gateway) addEnvironment(ctx context.Context, c domain.TaskClaims, line 
 		return fmt.Errorf("agent %s gets environment %s, which version %d has no environments/%s.yaml for", agent.Name, name, line.Number, name)
 	}
 
+	// Use secrets off (c.NoEnvironment, ADR 0037 decision 12) gives the agent no variables, files
+	// or MCP servers; the environment's name, setup and tools stay.
+	if c.NoEnvironment {
+		env.Env, env.Files, env.MCP = nil, nil, nil
+	}
+
 	e := &bundleEnvironment{
 		Name: env.Name, MCPServers: []bundleMCPServer{}, Setup: append([]string{}, env.Setup...), Files: []bundleFile{},
 		Env: append([]string{}, slices.Sorted(maps.Keys(env.Env))...), CLIs: []string{},

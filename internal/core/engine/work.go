@@ -54,12 +54,14 @@ type claimed struct {
 	// What the organization policy decided at run start (ADR 0024), the same for each of the
 	// claim's runs: the model, the commands and tools added to the agent's deny rules, how long
 	// one run may take, how long the box may live (0: no policy limit) and whether an approving
-	// gate whose action is merge leaves the merge to a person (noMerge).
+	// gate whose action is merge leaves the merge to a person (noMerge), and whether Use secrets
+	// is off, giving the agent no env, files or MCP servers (noEnv).
 	model    string
 	deny     []string
 	timeout  time.Duration
 	boxLimit time.Duration
 	noMerge  bool
+	noEnv    bool
 	// branch and base are the runs' branch and the branch it is cut from and its pull request
 	// goes into, decided at the claim's start (integrate); both empty for the item's branch on the
 	// default branch, as for every item that is not a part on an integration branch.
@@ -303,7 +305,8 @@ func (e *Engine) applyPolicy(ctx context.Context, c *claimed) (string, error) {
 
 	c.noMerge = p.MergePullRequest == domain.ToolOff
 
-	if p.UseCredentials == domain.ToolOff {
+	c.noEnv = p.UseCredentials == domain.ToolOff
+	if c.noEnv {
 		c.agent.Connections, c.env.Env, c.env.Files, c.env.MCP = nil, nil, nil, nil
 	}
 
@@ -460,7 +463,7 @@ func (c claimed) request(brief string) domain.RunRequest {
 		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, Version: c.line.VersionID, Kind: domain.RunKindStation,
 		Station: c.station.ID, Item: c.item.ID, Agent: c.agent.Name, Model: c.model, Brief: brief,
 		Repository: rt.Repository, Branch: c.branch, Base: c.base, ModelConnection: rt.ModelConnection,
-		Connections: c.agent.Connections, DeniedCommands: c.deny, Size: rt.Size, Timeout: c.timeout, BoxLimit: c.boxLimit, Lease: &c.lease,
+		Connections: c.agent.Connections, DeniedCommands: c.deny, NoEnvironment: c.noEnv, Size: rt.Size, Timeout: c.timeout, BoxLimit: c.boxLimit, Lease: &c.lease,
 	}
 
 	if c.line.OnSecrets() {
