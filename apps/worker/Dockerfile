@@ -58,7 +58,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log \
       /var/cache/debconf/*-old /var/cache/ldconfig/aux-cache \
  && useradd --uid 1000 --user-group --create-home --home-dir /home/node --shell /bin/bash node \
- && install -d -o 1000 -g 1000 /opt/mise /workspace /goal \
+ && install -d -o 1000 -g 1000 /opt/mise /workspace /goal /knowledge \
  && printf '%s\n' '[user]' '	name = Goal agent' '	email = goal-agent@example.com' '[init]' '	defaultBranch = main' \
       > /etc/gitconfig \
  && mkdir -p /etc/mise \

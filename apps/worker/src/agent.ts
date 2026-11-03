@@ -66,6 +66,8 @@ export function agentQuery(
   if (spec.max_turns) options.maxTurns = spec.max_turns;
   if (spec.max_usd) options.maxBudgetUsd = spec.max_usd;
   if (files.outputSchema) options.outputFormat = { type: 'json_schema', schema: files.outputSchema };
+  // The snapshots prepare unpacked, read-only, outside the workspace (ADR 0038).
+  if ((spec.knowledge?.snapshots.length ?? 0) > 0) options.additionalDirectories = [paths.knowledge];
 
   return { prompt: taskPrompt(spec, env.GOAL_FEEDBACK), options };
 }
@@ -394,24 +396,17 @@ export function agentEnv(env: NodeJS.ProcessEnv): Record<string, string | undefi
 
 /**
  * What goes after Claude Code's system prompt: the factory's purpose, when it has one, the agent's
- * prompt, then the agent's connections, the factory rules the run has and the knowledge sources the
- * gateway's knowledge tools search, when it serves them.
+ * prompt, then the agent's connections, the factory rules the run has and the run's Knowledge
+ * section as goald built it (ADR 0038 decision 8), when it has one.
  */
 export function systemAppend(
-  spec: Pick<TaskSpec, 'purpose' | 'connections' | 'gateway_url' | 'knowledge_sources' | 'rules'>,
+  spec: Pick<TaskSpec, 'purpose' | 'connections' | 'knowledge' | 'rules'>,
   files: Pick<AgentFiles, 'prompt'>,
 ): string {
   const parts = spec.purpose ? [`## This factory\n${spec.purpose}`, files.prompt] : [files.prompt];
   if (spec.connections.length > 0) parts.push(connectionsSection(spec.connections));
   if (spec.rules && spec.rules.length > 0) parts.push(factoryRulesSection(spec.rules));
-  const sources = spec.knowledge_sources ?? [];
-  if (spec.gateway_url && sources.length > 0) {
-    const tool = (name: string) => `mcp__${gatewayServer}__knowledge__${name}`;
-    parts.push(
-      `## Knowledge\nThe organization's knowledge sources ${sources.join(', ')} are searchable with ${tool('search')}; ` +
-        `${tool('read')} returns a whole document by the id a search gave.`,
-    );
-  }
+  if (spec.knowledge?.section) parts.push(spec.knowledge.section);
   return parts.join('\n\n');
 }
 
