@@ -805,3 +805,115 @@ func (w *world) checkNoValue(t *testing.T, c ports.FactoryConversion) {
 		t.Error("a secret's value reached a problem or the logs")
 	}
 }
+
+// approvedOn is the item the seeded standing rules were approved on; ruleAgent is the production
+// factory's agent role they let.
+const (
+	approvedOn = domain.ItemID("0b6f1c9e-0000-7000-8000-0000000000bb")
+	ruleAgent  = "engineer"
+)
+
+// A converted factory gets a copy of each active connection's rule on every environment whose
+// file has a server named after the connection, made by Goal with the rule's item; the rules
+// stay, a revoked rule, a connection with no server and a refused factory get no copy, and a
+// second run copies nothing.
+func TestRun_ReKeysStandingRulesOnce(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	w.publishOld(t, factoryUUID, "acme-software", files(productionFactory))
+	w.publishOld(t, refusedUUID, "acme-cloud",
+		files(strings.NewReplacer(factoryUUID, refusedUUID, "acme-software", "acme-cloud", "[github, cloudflare, context7]", "[github, aws-prod]").Replace(productionFactory)))
+
+	ctx := w.ctx(t)
+	for _, n := range []domain.NewStandingRule{
+		{Connection: connContext7, Tool: "resolve-library-id", Agent: ruleAgent, Item: approvedOn},
+		{Connection: connGitHub, Tool: "create_pull_request", Agent: "reviewer", Item: approvedOn},
+		{Connection: connCloudflare, Tool: "list_zones", Agent: ruleAgent, Item: approvedOn}, // no server
+		{Connection: connGitHub, Tool: "merge_pull_request", Agent: ruleAgent, Item: approvedOn},
+	} {
+		if _, err := w.conns.CreateStandingRule(ctx, n, person); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	w.revokeRule(t, "merge_pull_request")
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{
+		"default context7 resolve-library-id engineer",
+		"default github create_pull_request reviewer",
+		"reviewer github create_pull_request reviewer",
+	}
+	if got := w.serverRules(t); !slices.Equal(got, want) {
+		t.Errorf("server rules after the conversion = %v; want %v", got, want)
+	}
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := w.serverRules(t); !slices.Equal(got, want) {
+		t.Errorf("server rules after a second run = %v; want %v unchanged", got, want)
+	}
+
+	all, err := w.conns.StandingRules(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if byConn := slices.DeleteFunc(all, func(r domain.StandingRule) bool { return r.ConnectionID == "" }); len(byConn) != 3 {
+		t.Errorf("active connection rules after the conversion = %+v; want the three kept", byConn)
+	}
+}
+
+// revokeRule revokes the active connection rule for tool.
+func (w *world) revokeRule(t *testing.T, tool string) {
+	t.Helper()
+
+	rules, err := w.conns.StandingRules(w.ctx(t), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	i := slices.IndexFunc(rules, func(r domain.StandingRule) bool { return r.Tool == tool })
+	if i < 0 {
+		t.Fatalf("no rule for %s", tool)
+	}
+
+	if _, err := w.conns.RevokeStandingRule(w.ctx(t), rules[i].ID, person); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// serverRules are the active rules keyed by server, as "<environment> <server> <tool> <agent>",
+// sorted, failing the test unless each is the production factory's, made by Goal on approvedOn.
+func (w *world) serverRules(t *testing.T) []string {
+	t.Helper()
+
+	rules, err := w.conns.StandingRules(w.ctx(t), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out []string
+
+	for _, r := range rules {
+		if r.ConnectionID != "" {
+			continue
+		}
+
+		if r.Factory != factoryUUID || r.CreatedBy.Ref() != moveover.Actor.Ref() || r.ItemID != approvedOn {
+			t.Errorf("server rule %+v; want the production factory's, by Goal, on %s", r, approvedOn)
+		}
+
+		out = append(out, strings.Join([]string{r.Environment, r.Server, r.Tool, r.Agent}, " "))
+	}
+
+	slices.Sort(out)
+
+	return out
+}

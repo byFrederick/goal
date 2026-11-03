@@ -194,7 +194,66 @@ func TestEffectiveToolModes(t *testing.T) {
 		t.Errorf("EffectiveToolModes = %+v; want %+v", got, want)
 	}
 
+	server := []StandingRule{{Factory: "f-1", Environment: DefaultEnvironment, Server: "acme-git", Tool: toolCreateComment, Agent: roleArchitect}}
+	if lifted := EffectiveToolModes(modes, server, "", roleArchitect); lifted.Modes[toolCreateComment] != ToolModeAsk {
+		t.Errorf("EffectiveToolModes with a server's rule = %+v; want %s still asking", lifted, toolCreateComment)
+	}
+
 	if none := EffectiveToolModes(nil, nil, conn, roleArchitect); len(none.Modes) != 0 || len(none.AlwaysAllowOffered) != 0 {
 		t.Errorf("EffectiveToolModes without modes = %+v; want every tool allowed", none)
+	}
+}
+
+func TestEffectiveServerToolModes(t *testing.T) {
+	t.Parallel()
+
+	const (
+		toolDeleteRepo, toolFork, toolMergePR, toolPush = "delete_repo", "fork", "merge_pr", "push"
+
+		factory, otherFactory FactoryID = "f-1", "f-2"
+		server                          = "acme-git"
+		env                             = DefaultEnvironment
+	)
+
+	revokedAt, revoker := qt0, LocalUser
+	modes := map[string]ConnectionToolMode{
+		"read_issue": ToolModeAllow, toolCreateComment: ToolModeAsk, toolCloseIssue: ToolModeAsk, toolDeleteRepo: ToolModeOff,
+		toolEditIssue: ToolModeAsk, toolLabelIssue: ToolModeAsk, toolMergePR: ToolModeAsk, toolPush: ToolModeAsk, toolFork: ToolModeAsk,
+	}
+	key := func(tool, agent string) StandingRule {
+		return StandingRule{Factory: factory, Environment: env, Server: server, Tool: tool, Agent: agent}
+	}
+	other := func(change func(*StandingRule)) StandingRule {
+		r := key(toolLabelIssue, roleArchitect)
+		change(&r)
+
+		return r
+	}
+	rules := []StandingRule{
+		key(toolCreateComment, roleArchitect), // active: allow
+		{Factory: factory, Environment: env, Server: server, Tool: toolCloseIssue, Agent: roleArchitect, RevokedAt: &revokedAt, RevokedBy: &revoker},
+		key(toolEditIssue, "reviewer"),                                                     // another role
+		other(func(r *StandingRule) { r.Server = "acme-docs" }),                            // another server
+		key(toolDeleteRepo, roleArchitect),                                                 // never lifts off
+		{ConnectionID: "c-1", Connection: server, Tool: toolMergePR, Agent: roleArchitect}, // a connection's rule
+		other(func(r *StandingRule) { r.Tool, r.Environment = toolPush, testAgent }),       // another environment
+		other(func(r *StandingRule) { r.Tool, r.Factory = toolFork, otherFactory }),        // another factory
+	}
+
+	got := EffectiveServerToolModes(modes, rules, factory, env, server, roleArchitect)
+	want := RunToolModes{
+		Modes: map[string]ConnectionToolMode{
+			toolCloseIssue: ToolModeAsk, toolDeleteRepo: ToolModeOff, toolEditIssue: ToolModeAsk, toolFork: ToolModeAsk,
+			toolLabelIssue: ToolModeAsk, toolMergePR: ToolModeAsk, toolPush: ToolModeAsk,
+		},
+		AlwaysAllowOffered: []string{toolCloseIssue, toolEditIssue, toolFork, toolLabelIssue, toolMergePR, toolPush},
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("EffectiveServerToolModes = %+v; want %+v", got, want)
+	}
+
+	if none := EffectiveServerToolModes(nil, nil, factory, env, server, roleArchitect); len(none.Modes) != 0 || len(none.AlwaysAllowOffered) != 0 {
+		t.Errorf("EffectiveServerToolModes without modes = %+v; want every tool allowed", none)
 	}
 }

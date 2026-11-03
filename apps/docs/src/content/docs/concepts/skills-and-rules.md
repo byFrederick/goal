@@ -41,7 +41,14 @@ The built-in tools do not ask first. `builtins` set to `ask` is served as `off` 
 
 ## Standing rules
 
-A standing rule lets one agent role call one tool of one MCP server without asking. It is created only by Always allow on a tool approval, and it covers the role, the server and the tool name. It lasts until someone revokes it.
+A standing rule lets one agent role call one tool of one MCP server without asking. It is created only by Always allow on a tool approval, and it lasts until someone revokes it. What it covers depends on where the factory keeps its keys:
+
+- In a factory on secrets, the rule covers the role, the tool name, and the server in the environment file the agent runs with (`mcp.<server>` in `environments/<name>.yaml`), in that factory only. The same server in another environment or another factory still asks.
+- In a factory still on connections, the rule covers the role, the tool name and the connection, in every factory of the organization. Deleting the connection revokes it.
+
+A standing rule only turns `ask` into allowed for its role. A tool set to `off` stays off.
+
+When Goal moves a factory over to secrets, it copies each active connection rule onto every environment of that factory whose file has a server named after the connection, so nobody approves the same tool again. The connection rules stay as they were.
 
 Approving with Always allow needs the permission to decide on the item and the permission to manage secrets and access. A standing rule never turns a call that the factory's definition marks `approval: required` into an automatic one.
 
