@@ -39,7 +39,8 @@ const TaskKindJonah TaskKind = "jonah"
 
 // TaskClaims scope one agent task's access to the MCP gateway: which organization, factory,
 // definition version, item, station, agent and run it acts for, which connections it may use,
-// what the organization policy decided at run start (the model and the denied commands) and
+// what the organization policy decided at run start (the model, the denied commands and whether
+// the agent gets no environment) and
 // until when.
 type TaskClaims struct {
 	// Audience is always TaskAudience: SignTaskToken sets it and VerifyTaskToken requires it.
@@ -68,6 +69,10 @@ type TaskClaims struct {
 	// decision 7): the gateway serves the run these snapshots' zips and its prompt's Knowledge
 	// section, and no other snapshot.
 	Knowledge []KnowledgePin `json:"kn,omitempty"`
+	// NoEnvironment says the organization policy's Use secrets was off at run start (ADR 0037
+	// decision 12): the gateway's bundle then gives the agent's environment no variables, files
+	// or MCP servers. Tokens issued before it leave it false.
+	NoEnvironment bool `json:"ne,omitempty"`
 	// Branch is the run's branch and Base the branch it is cut from and its pull request goes
 	// into, as the engine decided them at run start (RunBase). An empty Base is the default
 	// branch; tokens issued before them name neither, and the gateway then takes the item's

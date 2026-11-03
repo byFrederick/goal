@@ -1462,6 +1462,13 @@ const envCI = "ci-box"
 func environmentBundle(t *testing.T, env string, rules ...domain.NewServerStandingRule) (runBundle, []byte) {
 	t.Helper()
 
+	return environmentBundleOf(t, env, func(*domain.TaskClaims) {}, rules...)
+}
+
+// environmentBundleOf is environmentBundle with the token's claims changed by claim.
+func environmentBundleOf(t *testing.T, env string, claim func(*domain.TaskClaims), rules ...domain.NewServerStandingRule) (runBundle, []byte) {
+	t.Helper()
+
 	yaml := strings.Replace(secretsBundleYAML("https://github.com/acme/api.git", ""),
 		"{ name: engineer, prompt: ./agents/engineer.md }", "{ name: engineer, prompt: ./agents/engineer.md, environment: ci-box }", 1)
 	files := maps.Clone(secretsBundleFiles)
@@ -1480,6 +1487,7 @@ func environmentBundle(t *testing.T, env string, rules ...domain.NewServerStandi
 
 	c := h.claims()
 	c.ItemID, c.Connections = it.ID, []string{connTracker, connDocs}
+	claim(&c)
 
 	status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
 	if status != http.StatusOK {
@@ -1593,5 +1601,43 @@ func TestBundle_EnvironmentToolsSetupAndFiles(t *testing.T) {
 
 	if strings.Contains(string(body), "acme-sentry-org") {
 		t.Errorf("the bundle holds an env value:\n%s", body)
+	}
+}
+
+// ADR 0037 decision 12: with Use secrets off the token says NoEnvironment, and the bundle keeps
+// the environment's name, setup and tools but gives no variable, file or MCP server, with a secret
+// or without.
+func TestBundle_EnvironmentNoEnvironmentDropsEnvFilesAndMCP(t *testing.T) {
+	t.Parallel()
+
+	got, body := environmentBundleOf(t, `  tools: [node@22, gh]
+  setup: [pnpm install --frozen-lockfile]
+  env: {SENTRY_ORG: acme-sentry-org, GH_TOKEN: "{{github-token}}"}
+  files:
+    ~/.npmrc: "{{npmrc}}"
+  mcp:
+    linear:
+      url: https://mcp.linear.example.com/mcp
+      headers: {Authorization: "Bearer {{linear-key}}"}
+    playwright:
+      command: [npx, "@playwright/mcp@0.0.41"]
+`, func(c *domain.TaskClaims) { c.NoEnvironment = true })
+
+	if want := []string{"node@22", "gh"}; !slices.Equal(got.Tools, want) {
+		t.Errorf("tools %v; want %v", got.Tools, want)
+	}
+
+	want := bundleEnvironment{
+		Name: envCI, MCPServers: []bundleMCPServer{}, Setup: []string{"pnpm install --frozen-lockfile"},
+		Files: []bundleFile{}, Env: []string{}, CLIs: []string{"node", "gh"},
+	}
+	if !reflect.DeepEqual(*got.Spec.Environment, want) {
+		t.Errorf("environment %+v; want %+v", *got.Spec.Environment, want)
+	}
+
+	for _, name := range []string{"GOAL_FILE_", "GOAL_SECRET_", "SENTRY_ORG", "GH_TOKEN", "mcp.linear.example.com", "@playwright/mcp"} {
+		if strings.Contains(string(body), name) {
+			t.Errorf("the bundle holds %q:\n%s", name, body)
+		}
 	}
 }

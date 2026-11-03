@@ -72,7 +72,8 @@ func (s *server) PutOrgPolicy(ctx context.Context, req gen.PutOrgPolicyRequestOb
 		return nil, fmt.Errorf("%w: If-Match %q is not a policy revision", errInvalid, tag)
 	}
 
-	p := policyIn(*req.Body)
+	// Normalized saves the deprecated use_credentials attached_only as environment.
+	p := policyIn(*req.Body).Normalized()
 	if err := s.checkPolicy(ctx, p); err != nil {
 		return nil, err
 	}

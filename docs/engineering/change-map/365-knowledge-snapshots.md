@@ -1,6 +1,6 @@
 ## When you change
 
-Knowledge as files: the `knowledge_snapshots`, `knowledge_files` and `knowledge_reads` tables and the `read_when` and `current_snapshot_id` columns of `knowledge_sources` (`db/migrations/00092_knowledge_snapshots.sql` and the migrations after it), their queries (the snapshot, file and read queries at the end of `db/queries/knowledge.sql`) or the adapter (`internal/adapters/store/postgres/knowledge_files.go`)
+Knowledge as files: the `knowledge_snapshots`, `knowledge_files` and `knowledge_reads` tables and the `read_when` and `current_snapshot_id` columns of `knowledge_sources` (`db/migrations/00093_knowledge_snapshots.sql` and the migrations after it), their queries (the snapshot, file and read queries at the end of `db/queries/knowledge.sql`) or the adapter (`internal/adapters/store/postgres/knowledge_files.go`)
 
 ## Also change
 

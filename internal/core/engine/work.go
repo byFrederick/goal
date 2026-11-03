@@ -54,7 +54,8 @@ type claimed struct {
 	// What the organization policy decided at run start (ADR 0024), the same for each of the
 	// claim's runs: the model, the commands and tools added to the agent's deny rules, how long
 	// one run may take, how long the box may live (0: no policy limit) and whether an approving
-	// gate whose action is merge leaves the merge to a person (noMerge).
+	// gate whose action is merge leaves the merge to a person (noMerge), and whether Use secrets
+	// is off, giving the agent no env, files or MCP servers (noEnv).
 	model    string
 	deny     []string
 	timeout  time.Duration
@@ -63,6 +64,7 @@ type claimed struct {
 	// knowledge are the snapshots the claim's runs read, decided with the policy (pinKnowledge),
 	// so a lost box prepared again reads the same ones.
 	knowledge []domain.KnowledgePin
+	noEnv     bool
 	// branch and base are the runs' branch and the branch it is cut from and its pull request
 	// goes into, decided at the claim's start (integrate); both empty for the item's branch on the
 	// default branch, as for every item that is not a part on an integration branch.
@@ -275,10 +277,11 @@ func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) boo
 //     (webTools); ask is served as off, as for builtins, since no tool approval is enforced.
 //   - Merge a pull request, off: an approving gate whose action is merge does not merge, and the
 //     item waits there for a person's merge (noMerge); review_approval is the version's say.
-//   - Use credentials, off: the agent's connections list is emptied, so neither its env nor its
-//     task token gets any of them; the runtime's model and repository connections still reach
-//     the run, which cannot start without them. attached_only is the agent's list. On secrets
-//     the agent's environment env is emptied, and the model key still reaches the run.
+//   - Use secrets (use_credentials), off: the agent's connections list is emptied, so neither its
+//     env nor its task token gets any of them; the runtime's model and repository connections
+//     still reach the run, which cannot start without them. On secrets the agent's environment
+//     env, files and MCP servers are emptied, and the model key still reaches the run.
+//     environment, and its deprecated alias attached_only, give the agent what it names.
 //   - Write outside the item's branch is not applied: comments, issues, tickets and messages go
 //     through connections' CLIs and MCP servers, and no engine or gateway step can ask a person
 //     for one, refuse it or allow it.
@@ -311,7 +314,8 @@ func (e *Engine) applyPolicy(ctx context.Context, c *claimed) (string, error) {
 
 	c.noMerge = p.MergePullRequest == domain.ToolOff
 
-	if p.UseCredentials == domain.ToolOff {
+	c.noEnv = p.UseCredentials == domain.ToolOff
+	if c.noEnv {
 		c.agent.Connections, c.env.Env, c.env.Files, c.env.MCP = nil, nil, nil, nil
 	}
 
@@ -495,7 +499,7 @@ func (c claimed) request(brief string) domain.RunRequest {
 		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, Version: c.line.VersionID, Kind: domain.RunKindStation,
 		Station: c.station.ID, Item: c.item.ID, Agent: c.agent.Name, Model: c.model, Brief: brief,
 		Repository: rt.Repository, Branch: c.branch, Base: c.base, ModelConnection: rt.ModelConnection,
-		Connections: c.agent.Connections, DeniedCommands: c.deny, Knowledge: c.knowledge, Size: rt.Size, Timeout: c.timeout, BoxLimit: c.boxLimit, Lease: &c.lease,
+		Connections: c.agent.Connections, DeniedCommands: c.deny, Knowledge: c.knowledge, NoEnvironment: c.noEnv, Size: rt.Size, Timeout: c.timeout, BoxLimit: c.boxLimit, Lease: &c.lease,
 	}
 
 	if c.line.OnSecrets() {
