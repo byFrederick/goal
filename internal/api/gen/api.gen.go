@@ -5180,6 +5180,21 @@ type KnowledgeSearchResult struct {
 	Hits []KnowledgeHit `json:"hits"`
 }
 
+// KnowledgeSnapshotSummary A source's newest snapshot
+type KnowledgeSnapshotSummary struct {
+	// Bytes Its files' Markdown together
+	Bytes int64 `json:"bytes"`
+
+	// Failed How many files failed to fetch or convert
+	Failed int `json:"failed"`
+
+	// Files How many files it holds
+	Files int `json:"files"`
+
+	// SyncedAt When it was written
+	SyncedAt time.Time `json:"synced_at"`
+}
+
 // KnowledgeSource One source of the organization's knowledge base (spec 4 §4.8)
 type KnowledgeSource struct {
 	// Config What its reader reads (a repository, a branch and path globs; a Confluence space). A synced source on a secret also names its reader (reader: gitdocs or confluence) and, for confluence, the site and the account's email.
@@ -5192,7 +5207,7 @@ type KnowledgeSource struct {
 	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
 	CreatedBy Actor `json:"created_by"`
 
-	// Documents How many documents it has
+	// Documents Deprecated: use latest_snapshot.files. How many files its latest snapshot holds; 0 without one
 	Documents int `json:"documents"`
 
 	// EmbedModel The model its chunks are embedded with; absent when they have no embeddings
@@ -5203,6 +5218,9 @@ type KnowledgeSource struct {
 	Kind         KnowledgeSourceKind `json:"kind"`
 	LastError    *string             `json:"last_error,omitempty"`
 	LastSyncedAt *time.Time          `json:"last_synced_at"`
+
+	// LatestSnapshot Its newest snapshot; null before the first sync
+	LatestSnapshot *KnowledgeSnapshotSummary `json:"latest_snapshot"`
 
 	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
 	Name KnowledgeSourceName `json:"name"`
@@ -5256,10 +5274,25 @@ type KnowledgeSourcePatch struct {
 	Title            *string     `json:"title,omitempty"`
 }
 
+// KnowledgeSourceReader defines model for KnowledgeSourceReader.
+type KnowledgeSourceReader struct {
+	Agents []string `json:"agents"`
+
+	// Id The factory's metadata.id
+	Id        string   `json:"id"`
+	Lanes     []string `json:"lanes"`
+	Name      string   `json:"name"`
+	Stations  []string `json:"stations"`
+	WorkTypes []string `json:"work_types"`
+}
+
 // KnowledgeSourceUsers What uses a source, so it cannot be deleted meanwhile
 type KnowledgeSourceUsers struct {
 	// Factories The factories whose current version may search it (those the caller sees)
 	Factories []ConnectionFactory `json:"factories"`
+
+	// Readers The same factories with who reads it in each; every list empty means every run
+	Readers []KnowledgeSourceReader `json:"readers"`
 }
 
 // KnowledgeUploadList defines model for KnowledgeUploadList.

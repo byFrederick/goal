@@ -368,3 +368,36 @@ func TestAPI_StreamSendsKnowledgeEvents(t *testing.T) {
 		t.Fatalf("event %q; want the knowledge event", got)
 	}
 }
+
+// A source with no snapshot answers a null latest_snapshot and no documents; after a sync both the
+// list and the get answer its newest snapshot, and documents is that snapshot's file count.
+func TestKnowledge_SourceLatestSnapshot(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	created := h.createHandbook(t)
+	if created.LatestSnapshot != nil || created.Documents != 0 {
+		t.Errorf("new source = %+v, %d documents; want no snapshot", created.LatestSnapshot, created.Documents)
+	}
+
+	if r := h.upload(t, srcHandbook, [2]string{leaveFile, leaveMD}); r.status != http.StatusAccepted {
+		t.Fatalf("upload = %d %s; want 202", r.status, r.body)
+	}
+
+	h.syncAll(t)
+
+	got := decode[gen.KnowledgeSource](t, h.request(t, http.MethodGet, handbookPath, "", nil), http.StatusOK)
+	list := decode[gen.KnowledgeSourceList](t, h.request(t, http.MethodGet, sourcesPath, "", nil), http.StatusOK)
+
+	if len(list.Sources) != 1 {
+		t.Fatalf("list = %+v; want handbook", list.Sources)
+	}
+
+	for name, s := range map[string]gen.KnowledgeSource{"get": got, "list": list.Sources[0]} {
+		snap := s.LatestSnapshot
+		if snap == nil || snap.Files != 1 || snap.Failed != 0 || snap.Bytes <= 0 || snap.SyncedAt.IsZero() || s.Documents != 1 {
+			t.Errorf("%s: latest_snapshot = %+v, documents %d; want 1 file, 0 failed, some bytes, a time", name, snap, s.Documents)
+		}
+	}
+}

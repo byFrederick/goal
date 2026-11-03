@@ -155,7 +155,12 @@ func (s *server) ListKnowledgeSources(ctx context.Context, req gen.ListKnowledge
 
 	for _, src := range sources {
 		if ref == "" || slices.Contains(named, src.Name) {
-			out.Sources = append(out.Sources, s.sourceOut(ctx, src, users[src.Name]))
+			o, err := s.sourceOut(ctx, src, users[src.Name])
+			if err != nil {
+				return nil, err
+			}
+
+			out.Sources = append(out.Sources, o)
 		}
 	}
 
@@ -195,7 +200,12 @@ func (s *server) CreateKnowledgeSource(ctx context.Context, req gen.CreateKnowle
 		return nil, sourceError(err, b.Name)
 	}
 
-	return gen.CreateKnowledgeSource201JSONResponse(s.sourceOut(ctx, src, nil)), nil
+	o, err := s.sourceOut(ctx, src, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.CreateKnowledgeSource201JSONResponse(o), nil
 }
 
 func (s *server) GetKnowledgeSource(ctx context.Context, req gen.GetKnowledgeSourceRequestObject) (gen.GetKnowledgeSourceResponseObject, error) {
@@ -209,7 +219,12 @@ func (s *server) GetKnowledgeSource(ctx context.Context, req gen.GetKnowledgeSou
 		return nil, err
 	}
 
-	return gen.GetKnowledgeSource200JSONResponse(s.sourceOut(ctx, src, users[src.Name])), nil
+	o, err := s.sourceOut(ctx, src, users[src.Name])
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.GetKnowledgeSource200JSONResponse(o), nil
 }
 
 func (s *server) UpdateKnowledgeSource(ctx context.Context, req gen.UpdateKnowledgeSourceRequestObject) (gen.UpdateKnowledgeSourceResponseObject, error) {
@@ -247,7 +262,12 @@ func (s *server) UpdateKnowledgeSource(ctx context.Context, req gen.UpdateKnowle
 		return nil, err
 	}
 
-	return gen.UpdateKnowledgeSource200JSONResponse(s.sourceOut(ctx, src, users[src.Name])), nil
+	o, err := s.sourceOut(ctx, src, users[src.Name])
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.UpdateKnowledgeSource200JSONResponse(o), nil
 }
 
 // DeleteKnowledgeSource deletes a source no current version may search, with its documents and
@@ -547,7 +567,27 @@ func searchable(f *config.Factory) []string {
 // sourceUsers are the factories goald runs for the organization, by the knowledge sources their
 // current versions may search; archived factories search none.
 func (s *server) sourceUsers(ctx context.Context) (map[string][]factoryUse, error) {
-	return s.usersBy(ctx, searchable)
+	users, err := s.usersBy(ctx, searchable)
+	if err != nil {
+		return nil, err
+	}
+
+	// Each factory's entry for the source says who reads it (ADR 0038 decision 5).
+	for _, f := range s.factories.Factories(ctx) {
+		if f.Spec.Knowledge == nil {
+			continue
+		}
+
+		for _, e := range f.Spec.Knowledge.Sources {
+			for i, u := range users[e.Name] {
+				if u.id == domain.FactoryID(f.Metadata.ID) {
+					users[e.Name][i].scope = e.AppliesTo
+				}
+			}
+		}
+	}
+
+	return users, nil
 }
 
 // sourceNames are the organization's source names by id.
@@ -598,24 +638,41 @@ func (s *server) sourceSecret(ctx context.Context, name *string) error {
 }
 
 // sourceOut is a source as the contract has it, with the factories the caller sees among by.
-func (s *server) sourceOut(ctx context.Context, src domain.KnowledgeSource, by []factoryUse) gen.KnowledgeSource {
+func (s *server) sourceOut(ctx context.Context, src domain.KnowledgeSource, by []factoryUse) (gen.KnowledgeSource, error) {
+	snaps, err := s.knowledge.Snapshots(ctx, src.Name)
+	if err != nil {
+		return gen.KnowledgeSource{}, err
+	}
+
 	out := gen.KnowledgeSource{
 		Id: string(src.ID), Name: src.Name, Title: src.Title, Kind: gen.KnowledgeSourceKind(src.Kind), Connection: optional(src.Connection),
 		Secret: optional(src.Secret), Config: map[string]string{}, ReadWhen: src.ReadWhen, SyncEverySeconds: int(src.SyncEvery / time.Second), Status: gen.KnowledgeSourceStatus(src.Status),
 		LastError: optional(src.LastError), LastSyncedAt: src.LastSyncedAt, NextSyncAt: src.NextSyncAt, Documents: src.Documents,
-		EmbedModel: optional(src.EmbedModel), UsedBy: gen.KnowledgeSourceUsers{Factories: []gen.ConnectionFactory{}},
+		EmbedModel: optional(src.EmbedModel), UsedBy: gen.KnowledgeSourceUsers{Factories: []gen.ConnectionFactory{}, Readers: []gen.KnowledgeSourceReader{}},
 		CreatedBy: s.actorOut(src.CreatedBy), CreatedAt: src.CreatedAt, UpdatedAt: src.UpdatedAt,
 	}
 
 	maps.Copy(out.Config, src.Config)
 
+	if len(snaps) > 0 {
+		n := snaps[0]
+		out.LatestSnapshot = &gen.KnowledgeSnapshotSummary{Files: n.Files, Failed: n.Failed, Bytes: n.Bytes, SyncedAt: n.CreatedAt}
+		out.Documents = n.Files
+	} else {
+		out.Documents = 0
+	}
+
 	for _, f := range by {
 		if s.visible(ctx, f.id) {
 			out.UsedBy.Factories = append(out.UsedBy.Factories, gen.ConnectionFactory{Id: string(f.id), Name: f.name})
+			out.UsedBy.Readers = append(out.UsedBy.Readers, gen.KnowledgeSourceReader{
+				Id: string(f.id), Name: f.name, Agents: nonNil(f.scope.Agents), Stations: nonNil(f.scope.Stations),
+				Lanes: nonNil(f.scope.Lanes), WorkTypes: nonNil(f.scope.WorkTypes),
+			})
 		}
 	}
 
-	return out
+	return out, nil
 }
 
 // documentOut is a document of the source named source as the contract has it.

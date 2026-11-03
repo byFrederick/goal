@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -116,5 +117,60 @@ func TestKnowledgeProblem_Codes(t *testing.T) {
 		if p := problemOf(tt.err); p.Status != tt.status || deref(p.Code) != tt.code {
 			t.Errorf("%v = %d %q, want %d %q", tt.err, p.Status, deref(p.Code), tt.status, tt.code)
 		}
+	}
+}
+
+// A source's readers are the visible factories whose current version lists it, each with the
+// scope of its entry; a plain entry has empty lists, which means every run.
+func TestKnowledge_SourceReaders(t *testing.T) {
+	t.Parallel()
+
+	tenancy, ctx := builderOrg(t)
+	kb := porttest.NewKnowledge(porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy), tenancy)
+
+	f := &config.Factory{}
+	f.Metadata.ID, f.Metadata.Name = string(mxF), factoryBuilder
+	f.Spec.Knowledge = &config.Knowledge{Sources: []config.KnowledgeSource{
+		{Name: kbHandbook, AppliesTo: domain.RuleScope{Agents: []string{"reviewer"}, Lanes: []string{"fix"}}},
+		{Name: "archive"},
+	}}
+
+	s := &server{
+		factories: oneFactory{f}, defs: definitionsOf(ctx, t, f, false), knowledge: kb, uploads: knowledge.NewUploads(kb, porttest.NewObjectStore(), 0),
+		authz: AllowAll{}, clock: porttest.NewClock(mxNow),
+	}
+
+	for _, n := range []string{kbHandbook, "archive"} {
+		if _, err := kb.CreateSource(ctx, domain.NewKnowledgeSource{Name: n, Title: n, Kind: domain.SourceUpload}, domain.LocalUser); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	list, err := s.ListKnowledgeSources(ctx, gen.ListKnowledgeSourcesRequestObject{})
+
+	got, ok := list.(gen.ListKnowledgeSources200JSONResponse)
+	if err != nil || !ok || len(got.Sources) != 2 {
+		t.Fatalf("sources = %+v, %v; want two", list, err)
+	}
+
+	byName := map[string]gen.KnowledgeSource{}
+	for _, src := range got.Sources {
+		byName[src.Name] = src
+	}
+
+	scoped := byName[kbHandbook].UsedBy.Readers
+	if len(scoped) != 1 || scoped[0].Name != factoryBuilder || !slices.Equal(scoped[0].Agents, []string{"reviewer"}) ||
+		!slices.Equal(scoped[0].Lanes, []string{"fix"}) || scoped[0].Stations == nil || len(scoped[0].Stations) != 0 {
+		t.Errorf("handbook readers = %+v; want builder scoped to the reviewer agent and the fix lane", scoped)
+	}
+
+	plain := byName["archive"].UsedBy.Readers
+	if len(plain) != 1 || len(plain[0].Agents)+len(plain[0].Stations)+len(plain[0].Lanes)+len(plain[0].WorkTypes) != 0 {
+		t.Errorf("archive readers = %+v; want builder with an empty scope", plain)
+	}
+
+	one, err := s.GetKnowledgeSource(ctx, gen.GetKnowledgeSourceRequestObject{Source: kbHandbook})
+	if g, ok := one.(gen.GetKnowledgeSource200JSONResponse); err != nil || !ok || len(g.UsedBy.Readers) != 1 {
+		t.Errorf("get = %+v, %v; want the same reader", one, err)
 	}
 }
