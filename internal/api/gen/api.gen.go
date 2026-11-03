@@ -856,6 +856,7 @@ func (e ImportStartKind) Valid() bool {
 const (
 	InboxEntryKindAndon         InboxEntryKind = "andon"
 	InboxEntryKindBlocked       InboxEntryKind = "blocked"
+	InboxEntryKindConversion    InboxEntryKind = "conversion"
 	InboxEntryKindDecision      InboxEntryKind = "decision"
 	InboxEntryKindExpedite      InboxEntryKind = "expedite"
 	InboxEntryKindQuestion      InboxEntryKind = "question"
@@ -869,6 +870,8 @@ func (e InboxEntryKind) Valid() bool {
 	case InboxEntryKindAndon:
 		return true
 	case InboxEntryKindBlocked:
+		return true
+	case InboxEntryKindConversion:
 		return true
 	case InboxEntryKindDecision:
 		return true
@@ -4215,6 +4218,15 @@ type InboxBlocked struct {
 	Reason *string `json:"reason"`
 }
 
+// InboxConversion A factory Goal could not move from connections to secrets and environment files. It runs on its version, on connections, until a version on secrets is published.
+type InboxConversion struct {
+	// Problems What to fix, one entry each, such as "connection aws-prod uses the aws kind, which Goal no longer converts: remove it from the factory"
+	Problems []string `json:"problems"`
+
+	// Reason Every problem in one sentence each, for a row that shows one line
+	Reason string `json:"reason"`
+}
+
 // InboxEntry defines model for InboxEntry.
 type InboxEntry struct {
 	// Action merge for a decision at a merge station (POST /v1/orgs/{org}/items/{item}/merge), else null
@@ -4228,19 +4240,22 @@ type InboxEntry struct {
 
 	// Blocked Why a blocked item is blocked; null for other kinds
 	Blocked *InboxBlocked `json:"blocked"`
-	Factory struct {
+
+	// Conversion Why Goal could not convert the factory; absent or null for other kinds
+	Conversion *InboxConversion `json:"conversion,omitempty"`
+	Factory    struct {
 		Id    string  `json:"id"`
 		Name  string  `json:"name"`
 		Title *string `json:"title"`
 	} `json:"factory"`
 
-	// Id "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>
+	// Id "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>
 	Id string `json:"id"`
 
 	// Item The item it is about, or null for an entry that is about no item
 	Item *ItemCard `json:"item"`
 
-	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny
+	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes
 	Kind InboxEntryKind `json:"kind"`
 
 	// Question A question entry's open question; absent or null for other kinds
@@ -4249,7 +4264,7 @@ type InboxEntry struct {
 	// Rework The gate tally of a rework warning; null for other kinds
 	Rework *ReworkWarning `json:"rework"`
 
-	// Since Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning)
+	// Since Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion)
 	Since time.Time `json:"since"`
 
 	// Station The station where it waits
@@ -4259,7 +4274,7 @@ type InboxEntry struct {
 	ToolApproval *ToolApproval `json:"tool_approval,omitempty"`
 }
 
-// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny
+// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes
 type InboxEntryKind string
 
 // Intake defines model for Intake.

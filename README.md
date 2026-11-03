@@ -58,7 +58,7 @@ task test-integration      # adapters against PostgreSQL 18 and RustFS
 # .env: GOAL_GATEWAY_KEY (openssl rand -hex 32) and GOAL_MASTER_KEYS=k1:<openssl rand -base64 32> (keep a copy offline)
 task up                                            # the agent image (goal-agent, apps/worker/README.md) and the egress proxy's, PostgreSQL + RustFS, bucket, then goald in the foreground
 # in another terminal, once: the organization's connections a factory runs on (or the Connections page);
-# each reads its secret from stdin: paste it, then Ctrl-D (task connection:import-env upgrades an older .env)
+# each reads its secret from stdin: paste it, then Ctrl-D
 bin/goal connection create claude --kind claude-subscription --secret token=-   # the output of claude setup-token
 bin/goal connection create github --kind github --secret token=-                # a fine-grained token, these repos only
 task factory:push DIR=../goal-factories/goal -- --publish  # the definition goald runs: runtime.modelConnection: claude,
@@ -198,7 +198,7 @@ Bootstrap, deploys, master key escrow and rotation, and restores: [docs/engineer
 
 A factory signs in with its organization's connections, never with goald's environment: owners and admins create them on the Connections page or with `goal connection create` (secret values from stdin or a file, sealed under `GOAL_MASTER_KEYS`, never shown again), and the definition names them. `runtime.modelConnection` gives every run its model: a `claude-subscription` connection holds the output of `claude setup-token` (for one person's own use on their own subscription), an `anthropic` one an API key, a `bedrock` one AWS credentials minted per run. `runtime.repository.connection` clones the repository, and the factory's connections whose kind has a code host (`github`, `gitlab`) merge its pull requests. A run's box gets each connection's variables as it needs them and uses them directly, MCP servers included.
 
-Upgrading an install from before connections (spec 4 §14): goald ignores `GOAL_TASK_ENV`, `CLAUDE_CODE_OAUTH_TOKEN` and `GOAL_GITHUB_*` with a warning, and blocks the items of a version that still uses `env:` references, `runtime.image`, `runtime.auth` or inline connections, or names no model connection ("publish a version with connections"). With the old tokens still in `.env`, `task connection:import-env` creates `github` and `claude` from them once (names that exist are left as they are); then name them in each factory (`runtime.modelConnection: claude`, `runtime.repository.connection: github`, `connections: [github, …]`), apply the fixes `goal factory validate` or the builder shows, publish, `goal retry` the blocked items, and delete the old variables from `.env`.
+Upgrading an install from before connections (spec 4 §14): goald ignores `GOAL_TASK_ENV`, `CLAUDE_CODE_OAUTH_TOKEN` and `GOAL_GITHUB_*` with a warning, and blocks the items of a version that still uses `env:` references, `runtime.image`, `runtime.auth` or inline connections, or names no model connection ("publish a version with connections"). Create the secrets they held (`goal secret create`), name them in each factory (`runtime.modelConnection: claude`, `runtime.repository.connection: github`, `connections: [github, …]`), apply the fixes `goal factory validate` or the builder shows, publish, `goal retry` the blocked items, and delete the old variables from `.env`.
 
 ## License
 

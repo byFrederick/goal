@@ -167,6 +167,16 @@ type EvalRunArm struct {
 	PerCase        []byte
 }
 
+type FactoryConversion struct {
+	OrgID       uuid.UUID
+	FactoryID   uuid.UUID
+	FromVersion uuid.UUID
+	ToVersion   *uuid.UUID
+	Problems    []string
+	Names       []byte
+	At          time.Time
+}
+
 type FactoryRecord struct {
 	ID                uuid.UUID
 	OrgID             uuid.UUID

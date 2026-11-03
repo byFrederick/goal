@@ -214,7 +214,9 @@ type harness struct {
 	// tools answers.
 	catalog  []domain.ToolTemplate
 	envTests *porttest.EnvironmentTests
-	tools    *porttest.ToolLister
+	// conversions are the factories' conversions to secrets, which the inbox lists when refused.
+	conversions *porttest.FactoryConversions
+	tools       *porttest.ToolLister
 }
 
 // acme's one prompt and its path.
@@ -512,6 +514,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.keys.AddOrg(domain.Org{ID: otherOrg, Slug: labsSlug, Name: "Example Labs"})
 	h.keys.AddFactory(testOrg, acmeID)
 	h.keys.AddFactory(testOrg, lineID)
+	h.conversions = conversionsOf(testOrg, acmeID, lineID)
 
 	h.platform = porttest.NewPlatform(h.keys)
 	h.notifications = porttest.NewNotificationPreferences()
@@ -528,7 +531,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		OrgPolicies: porttest.NewOrgPolicies([]string{modelOpus, modelHaiku}, tenancy, h.clock.Now), BoxSizes: testBoxSizes, EgressAddresses: testEgressAddresses,
 		NotificationPreferences: h.notifications,
 		DraftRequests:           h.drafts,
-		Catalog:                 h.catalog, EnvironmentTests: h.envTests, ToolLister: h.tools,
+		Catalog:                 h.catalog, EnvironmentTests: h.envTests, ToolLister: h.tools, Conversions: h.conversions,
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
@@ -935,4 +938,14 @@ func TestAPI_SubmitRecordsItsSource(t *testing.T) {
 			t.Errorf("submit with %s: source %q, want %q", c.name, it.Source, c.want)
 		}
 	}
+}
+
+// conversionsOf are factory conversions that know org's factories.
+func conversionsOf(org domain.OrgID, factories ...domain.FactoryID) *porttest.FactoryConversions {
+	c := porttest.NewFactoryConversions()
+	for _, f := range factories {
+		c.AddFactory(org, f)
+	}
+
+	return c
 }

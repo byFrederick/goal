@@ -14,7 +14,6 @@ clean
 cloudflare:check
 cloudflare:sandboxtest
 cloudflare:topology
-connection:import-env
 db:init
 db:production
 default

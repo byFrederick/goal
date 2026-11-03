@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -676,6 +678,22 @@ func knowledgeVerdict(ctx context.Context, out *printer, getenv func(string) str
 	}
 
 	out.printf("%s\n", line)
+
+	return nil
+}
+
+// valuesFlag collects repeated k=v flags.
+type valuesFlag map[string]string
+
+func (v valuesFlag) String() string { return strings.Join(slices.Sorted(maps.Keys(v)), ",") }
+
+func (v valuesFlag) Set(s string) error {
+	k, val, ok := strings.Cut(s, "=")
+	if !ok || strings.TrimSpace(k) == "" {
+		return fmt.Errorf("%q is not <field>=<value>", s)
+	}
+
+	v[strings.TrimSpace(k)] = val
 
 	return nil
 }

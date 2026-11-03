@@ -199,6 +199,9 @@ type Deps struct {
 	Catalog          []domain.ToolTemplate
 	EnvironmentTests ports.EnvironmentTests
 	ToolLister       ports.ToolLister
+	// Conversions are the factories' conversions to secrets (ADR 0037 decision 19): the inbox
+	// lists each refused one as a conversion entry. Nil lists none.
+	Conversions ports.FactoryConversions
 	// Intake keeps the factories' webhook endpoints, with their signing secrets, and the
 	// deliveries they received (ADR 0026).
 	Intake ports.Intake
@@ -307,7 +310,7 @@ func New(d Deps) (http.Handler, error) {
 	s := &server{
 		engine: d.Engine, items: d.Items, factories: d.Factories, defs: d.Definitions, versions: d.Versions, orgs: d.Orgs, audit: d.Audit,
 		retention: d.OrgRetention, authz: d.Authorizer, auth: d.Auth, identity: d.Identity, access: d.Access, platform: d.Platform, feed: d.Feed,
-		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, secrets: d.OrgSecrets, catalog: slices.Clone(d.Catalog), envTests: d.EnvironmentTests, tools: d.ToolLister, intake: d.Intake, draftRequests: d.DraftRequests, parseKind: d.ParseKind, codehosts: d.CodeHosts,
+		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, secrets: d.OrgSecrets, catalog: slices.Clone(d.Catalog), envTests: d.EnvironmentTests, tools: d.ToolLister, conversions: d.Conversions, intake: d.Intake, draftRequests: d.DraftRequests, parseKind: d.ParseKind, codehosts: d.CodeHosts,
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes,
 		policies: d.OrgPolicies, notifications: d.NotificationPreferences, boxSizes: slices.Clone(d.BoxSizes), egress: slices.Clone(d.EgressAddresses),
@@ -439,6 +442,8 @@ type server struct {
 	catalog  []domain.ToolTemplate
 	envTests ports.EnvironmentTests
 	tools    ports.ToolLister
+	// conversions are the refused conversions the inbox lists; nil lists none.
+	conversions ports.FactoryConversions
 	// intake serves the webhook routes and Intake's reads.
 	intake ports.Intake
 	// draftRequests serve the draft request routes.

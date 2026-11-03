@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -410,3 +411,41 @@ func importLine(o gen.SecretImportOutcome) string {
 
 	return "new    " + o.Name
 }
+
+// deleted is a delete's answer as an error: nil for 204, else goald's refusal.
+func deleted(status int, res *http.Response, p *gen.Problem) error {
+	if status != http.StatusNoContent {
+		return problem(res, p)
+	}
+
+	return nil
+}
+
+// deleteNamed runs goal connection delete <name> or goal connection kind delete <name>: what is
+// the thing deleted, del deletes it.
+func deleteNamed(ctx context.Context, out *printer, getenv func(string) string, args []string, what string,
+	del func(c orgClient, name string) error,
+) error {
+	fs := newFlags(what + " delete")
+	orgFlag := addOrgFlag(fs)
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 1 {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *orgFlag)
+	if err != nil {
+		return err
+	}
+
+	if err := del(c, pos[0]); err != nil {
+		return err
+	}
+
+	out.printf("✓ deleted %s %s\n", what, pos[0])
+
+	return nil
+}
+
+func trimNewline(s string) string { return strings.TrimSuffix(strings.TrimSuffix(s, "\n"), "\r") }
