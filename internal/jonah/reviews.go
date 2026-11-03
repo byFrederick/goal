@@ -282,11 +282,16 @@ func (r *Reviews) review(ctx context.Context, org domain.OrgID, rv domain.JonahR
 		return failed("%s", domain.ErrLearningBudgetExhausted.Error()), nil
 	}
 
-	run, err := r.d.Runner.RunTask(ctx, domain.RunRequest{
+	req := domain.RunRequest{
 		OrgID: org, FactoryID: rv.FactoryID, Version: rv.VersionID, Kind: domain.RunKindJonah, Agent: ReviewAgent, Model: l.Jonah.Model,
 		Bundle: domain.TaskKindJonah, WindowStart: rv.WindowStart, WindowEnd: rv.WindowEnd, Manual: rv.Trigger == domain.JonahManual,
 		ModelConnection: l.Runtime.ModelConnection, Size: domain.SandboxSmall, Timeout: r.c.Timeout,
-	})
+	}
+	if l.OnSecrets() { // the model key alone (ADR 0037 decision 7)
+		req.ModelConnection, req.ModelKey = "", l.Runtime.ModelKey
+	}
+
+	run, err := r.d.Runner.RunTask(ctx, req)
 	if err != nil {
 		if ctx.Err() != nil {
 			return domain.JonahReviewResult{}, fmt.Errorf("run: %w", err)
