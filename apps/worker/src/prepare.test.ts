@@ -35,7 +35,13 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'goal-prepare-'));
   home = join(root, 'home');
   await mkdir(home);
-  dirs = { goal: join(root, 'goal'), workspace: join(root, 'workspace'), claude: join(home, '.claude'), home, knowledge: join(root, 'knowledge') };
+  dirs = {
+    goal: join(root, 'goal'),
+    workspace: join(root, 'workspace'),
+    claude: join(home, '.claude'),
+    home,
+    knowledge: join(root, 'knowledge'),
+  };
 });
 
 afterEach(async () => {
