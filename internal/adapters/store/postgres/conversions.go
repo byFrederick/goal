@@ -18,8 +18,8 @@ var _ ports.FactoryConversions = (*FactoryConversions)(nil)
 const conversionLock = "SELECT pg_try_advisory_lock(hashtext('goal.moveover.' || current_schema()))"
 
 // FactoryConversions implements ports.FactoryConversions over 00088's factory_conversions (00090
-// lets a refusal be replaced), as
-// goal_app under row-level security: every statement sees the organization in ctx.
+// lets a refusal be replaced), as goal_app under row-level security: every statement sees the
+// organization in ctx.
 type FactoryConversions struct {
 	s *Store
 }
