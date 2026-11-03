@@ -130,7 +130,7 @@ func (s *Sandboxes) Create(ctx context.Context, sp ports.SandboxSpec) (ports.San
 
 	status, err := s.send(ctx, http.MethodPut, s.boxPath(sp.RunID), body)
 	if err != nil {
-		return nil, fmt.Errorf("create sandbox of run %s: %w", sp.RunID, err)
+		return nil, fmt.Errorf("create sandbox of run %s from image %s: %w", sp.RunID, sp.Image, err)
 	}
 
 	if status == http.StatusCreated {

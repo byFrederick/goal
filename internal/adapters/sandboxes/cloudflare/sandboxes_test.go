@@ -297,3 +297,30 @@ func TestBoxSizes_SizeMatchesTheWorkersInstanceTypes(t *testing.T) {
 		t.Errorf("BoxSizes() = %v, want %v", got, want)
 	}
 }
+
+// A box the Worker refuses to create, as it does an image it does not have, fails with an error
+// that names the image, so a run on an environment's own image says which one it could not run.
+func TestSandboxes_RefusedImageNamesIt(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, `{"error":"bad request"}`, http.StatusBadRequest)
+	}))
+	t.Cleanup(srv.Close)
+
+	s, err := New(Config{URL: srv.URL, Key: "key", Client: srv.Client()}, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const image = "ghcr.io/acme/box:1"
+
+	_, err = s.Create(t.Context(), ports.SandboxSpec{RunID: "run-1", Image: image, Deadline: time.Now().Add(time.Hour)})
+	if err == nil || !strings.Contains(err.Error(), image) {
+		t.Fatalf("Create = %v; want an error that names image %s", err, image)
+	}
+
+	if errors.Is(err, ports.ErrSandboxLost) {
+		t.Errorf("Create = %v; a refusal is not a lost box", err)
+	}
+}
