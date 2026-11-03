@@ -220,7 +220,7 @@ func printPolicy(out *printer, v gen.OrgPolicyView) {
 	}
 
 	t := p.Tools
-	out.printf("tools: write outside the item's branch %s, merge pull requests %s, read the web %s, use credentials %s\n",
+	out.printf("tools: write outside the item's branch %s, merge pull requests %s, read the web %s, use secrets %s\n",
 		t.WriteOutsideBranch, t.MergePullRequest, t.ReadWeb, t.UseCredentials)
 	out.printf("box time limit: %d minutes\n", p.BoxTimeLimitMinutes)
 	out.printf("box sizes:\n")
