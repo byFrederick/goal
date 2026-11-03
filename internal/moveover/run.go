@@ -1,6 +1,7 @@
 package moveover
 
 import (
+	"cmp"
 	"context"
 	"crypto/subtle"
 	"errors"
@@ -33,6 +34,9 @@ type Deps struct {
 	Orgs        Orgs
 	Connections ports.Connections
 	Secrets     ports.OrgSecrets
+	// Settings is the organization's notification setting, pointed at its oldest Slack
+	// connection's secret.
+	Settings    ports.NotificationSettings
 	Knowledge   ports.Knowledge
 	Definitions ports.DefinitionStore
 	Publisher   Publisher
@@ -61,6 +65,8 @@ type Tally struct {
 	Converted, Refused, Secrets int
 	// Sources are the knowledge sources pointed at a secret.
 	Sources int
+	// Slack is whether this run pointed the notification setting at a Slack connection's secret.
+	Slack bool
 }
 
 // Run converts every organization once, under the install's conversion lock, and logs one line
@@ -83,7 +89,8 @@ func (m *Mover) Run(ctx context.Context) error {
 			}
 
 			m.d.Logger.InfoContext(ctx, "moved over", slog.String("org", string(org)),
-				slog.Int("converted", t.Converted), slog.Int("refused", t.Refused), slog.Int("secrets", t.Secrets), slog.Int("sources", t.Sources))
+				slog.Int("converted", t.Converted), slog.Int("refused", t.Refused), slog.Int("secrets", t.Secrets), slog.Int("sources", t.Sources),
+				slog.Bool("slack", t.Slack))
 		}
 
 		return nil
@@ -99,8 +106,8 @@ func (m *Mover) Run(ctx context.Context) error {
 	return nil
 }
 
-// Org converts the organization in ctx: its connections' secrets first, then its synced
-// knowledge sources still on a connection, then each factory not converted yet whose current
+// Org converts the organization in ctx: its connections' secrets first, then its Slack
+// notification setting, then its synced knowledge sources still on a connection, then each factory not converted yet whose current
 // version is on connections.
 func (m *Mover) Org(ctx context.Context) (Tally, error) {
 	var t Tally
@@ -111,6 +118,10 @@ func (m *Mover) Org(ctx context.Context) (Tally, error) {
 	}
 
 	if conns, t.Secrets, err = m.secrets(ctx, conns); err != nil {
+		return t, err
+	}
+
+	if t.Slack, err = m.slack(ctx, conns); err != nil {
 		return t, err
 	}
 
@@ -300,6 +311,67 @@ func (m *Mover) holds(ctx context.Context, name, value string) (bool, error) {
 	}
 
 	return len(opened) == 1 && subtle.ConstantTimeCompare([]byte(opened[0].Value), []byte(value)) == 1, nil
+}
+
+// slackKind is the connection kind that held the organization's Slack bot token, and slackField
+// its token field.
+const (
+	slackKind  = "slack"
+	slackField = "token"
+)
+
+// slack points the organization's notification setting, when it is unset, at the secret its
+// oldest Slack connection's token became (SecretName), as the sender picked the oldest (ADR 0023
+// decision 5). It never overwrites a set one, so a second run changes nothing. A connection whose
+// secret does not exist is logged (slack setting not moved over) with the reason, never a value,
+// and the setting stays off. It reports whether it set the setting.
+func (m *Mover) slack(ctx context.Context, conns []domain.ResolvedConnection) (bool, error) {
+	slack := slices.DeleteFunc(slices.Clone(conns), func(rc domain.ResolvedConnection) bool { return rc.Connection.Kind != slackKind })
+	if len(slack) == 0 {
+		return false, nil
+	}
+
+	s, err := m.d.Settings.NotificationSettings(ctx)
+	if err != nil {
+		return false, fmt.Errorf("read notification settings: %w", err)
+	}
+
+	if s.SlackSecret != "" {
+		return false, nil
+	}
+
+	oldest := slices.MinFunc(slack, func(a, b domain.ResolvedConnection) int {
+		return cmp.Or(a.Connection.CreatedAt.Compare(b.Connection.CreatedAt), cmp.Compare(a.Connection.ID, b.Connection.ID))
+	})
+
+	name := SecretName(oldest.Connection, oldest.Kind, slackField)
+	notMoved := func(reason string) {
+		m.d.Logger.WarnContext(ctx, "slack setting not moved over", slog.String("connection", oldest.Connection.Name), slog.String("reason", reason))
+	}
+
+	_, err = m.d.Secrets.Get(ctx, name)
+
+	switch {
+	case errors.Is(err, ports.ErrNotFound):
+		notMoved("there is no secret " + name)
+
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("read secret %s: %w", name, err)
+	}
+
+	err = m.d.Settings.SetNotificationSettings(ctx, domain.NotificationSettings{SlackSecret: name}, Actor)
+
+	switch {
+	case errors.Is(err, ports.ErrNotFound):
+		notMoved("there is no secret " + name)
+
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("point the notification setting at secret %s: %w", name, err)
+	}
+
+	return true, nil
 }
 
 // sources points each synced knowledge source that reads a connection and no secret at the

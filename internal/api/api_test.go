@@ -189,6 +189,10 @@ type harness struct {
 	creds *porttest.Credentials
 	// secrets keeps the organizations' secrets, sealed under key k1, referred to by conns.
 	secrets *porttest.OrgSecrets
+	// notifySettings keeps the organizations' notification settings, naming secrets' secrets;
+	// slack checks a Slack bot token.
+	notifySettings *porttest.NotificationSettings
+	slack          *porttest.DirectMessenger
 	// intake keeps the factories' webhook endpoints, sealed under key k1, their deliveries and
 	// trigger firings, over store.
 	intake *porttest.Intake
@@ -529,9 +533,9 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()}, RepositoryTestTimeout: 50 * time.Millisecond,
 		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,
 		OrgPolicies: porttest.NewOrgPolicies([]string{modelOpus, modelHaiku}, tenancy, h.clock.Now), BoxSizes: testBoxSizes, EgressAddresses: testEgressAddresses,
-		NotificationPreferences: h.notifications,
-		DraftRequests:           h.drafts,
-		Catalog:                 h.catalog, EnvironmentTests: h.envTests, ToolLister: h.tools, Conversions: h.conversions,
+		NotificationPreferences: h.notifications, NotificationSettings: h.notifySettings, SlackMessenger: h.slack,
+		DraftRequests: h.drafts,
+		Catalog:       h.catalog, EnvironmentTests: h.envTests, ToolLister: h.tools, Conversions: h.conversions,
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
@@ -658,14 +662,15 @@ func engineConnections(t *testing.T, audit ports.Audit) *porttest.Connections {
 	return c
 }
 
-// connections makes h's connections, with goald's platform kinds, and the knowledge base whose
-// sources read them, and returns the transport their tests dial through.
+// connections makes h's connections, with goald's platform kinds, the secrets, the notification
+// settings naming them, and the knowledge base whose sources read them, and returns the transport their tests dial through.
 func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 	t.Helper()
 
 	h.conns = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), audit)
 	h.creds = porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
 	h.secrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
+	h.notifySettings, h.slack = porttest.NewNotificationSettings(h.secrets, audit), porttest.NewDirectMessenger()
 	kb := porttest.NewKnowledge(h.conns, audit)
 	kb.ReadSecrets(h.secrets)
 	h.kb, h.kbObjects = kb, porttest.NewObjectStore()

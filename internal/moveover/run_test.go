@@ -65,6 +65,7 @@ type world struct {
 	kb          *porttest.Knowledge
 	defs        *porttest.Definitions
 	conversions *porttest.FactoryConversions
+	settings    *porttest.NotificationSettings
 	hosts       *porttest.CodeHost
 	tools       *porttest.ToolLister
 	mover       *moveover.Mover
@@ -96,6 +97,7 @@ func newWorld(t *testing.T) *world {
 	w.org = o.ID
 	w.conns = porttest.NewConnections(w.key, w.tenancy)
 	w.secrets = porttest.NewOrgSecrets(w.key, w.tenancy, w.conns)
+	w.settings = porttest.NewNotificationSettings(w.secrets, w.tenancy)
 	w.kb = porttest.NewKnowledge(w.conns, w.tenancy)
 	w.kb.ReadSecrets(w.secrets)
 	w.defs = porttest.NewDefinitions(porttest.DefinitionsDeps{Objects: porttest.NewObjectStore(), Items: w.store, Audit: w.tenancy, Now: w.clock.Now})
@@ -153,7 +155,7 @@ func newWorld(t *testing.T) *world {
 	})
 
 	w.mover = moveover.New(moveover.Deps{
-		Orgs: w.tenancy, Connections: w.conns, Secrets: w.secrets, Knowledge: w.kb, Definitions: w.defs, Publisher: authors,
+		Orgs: w.tenancy, Connections: w.conns, Secrets: w.secrets, Settings: w.settings, Knowledge: w.kb, Definitions: w.defs, Publisher: authors,
 		Conversions: w.conversions, CodeHosts: map[string]ports.CodeHost{connGitHub: w.hosts}, Tools: w.tools,
 		Clock: w.clock, Logger: slog.New(slog.NewJSONHandler(w.logs, nil)),
 	})
@@ -918,6 +920,129 @@ func (w *world) serverRules(t *testing.T) []string {
 	slices.Sort(out)
 
 	return out
+}
+
+// addSlack gives w one Slack connection per name, each created after the one before, with token
+// as its token field ("{{credential}}" refers to a credential).
+func (w *world) addSlack(t *testing.T, token string, names ...string) {
+	t.Helper()
+
+	for _, name := range names {
+		if _, err := w.conns.Create(w.ctx(t), domain.NewConnection{Name: name, Kind: "slack", Secrets: map[string]string{fieldToken: token}}, domain.LocalUser); err != nil {
+			t.Fatalf("connection %s: %v", name, err)
+		}
+
+		w.clock.Advance(time.Minute)
+	}
+}
+
+// slackSecret is the secret the organization's notification setting names.
+func (w *world) slackSecret(t *testing.T) string {
+	t.Helper()
+
+	s, err := w.settings.NotificationSettings(w.ctx(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return s.SlackSecret
+}
+
+// An organization's oldest Slack connection is moved over to its notification setting: the
+// setting names the secret its token became. A second run changes nothing.
+func TestOrg_MovesOldestSlackConnectionOver(t *testing.T) {
+	t.Parallel()
+
+	const oldest = "slack-zeta"
+
+	for _, tc := range []struct {
+		name  string
+		conns []string
+	}{
+		{"one connection", []string{oldest}},
+		// The oldest sorts last by name.
+		{"two connections", []string{oldest, "slack-acme"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			w := newWorld(t)
+			w.addSlack(t, "xoxb-slack-token-for-tests", tc.conns...)
+
+			first, err := w.mover.Org(w.ctx(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got := w.slackSecret(t); got != oldest || !first.Slack {
+				t.Errorf("setting names %q, tally slack %v; want slack-zeta, true", got, first.Slack)
+			}
+
+			again, err := w.mover.Org(w.ctx(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got := w.slackSecret(t); got != oldest || again.Slack || again.Secrets != 0 {
+				t.Errorf("second run: setting %q, tally %+v; want slack-zeta and no change", got, again)
+			}
+		})
+	}
+}
+
+// A notification setting that is set already is never overwritten.
+func TestOrg_KeepsSetSlackSetting(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	ctx := w.ctx(t)
+
+	if _, err := w.secrets.Create(ctx, domain.NewSecret{Name: "slack-bot", Value: "xoxb-other-for-tests", Scope: domain.SecretScope{All: true}}, person); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.settings.SetNotificationSettings(ctx, domain.NotificationSettings{SlackSecret: "slack-bot"}, person); err != nil {
+		t.Fatal(err)
+	}
+
+	w.addSlack(t, "xoxb-slack-token-for-tests", "slack-acme")
+
+	tally, err := w.mover.Org(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := w.slackSecret(t); got != "slack-bot" || tally.Slack {
+		t.Errorf("setting names %q, tally slack %v; want slack-bot left alone", got, tally.Slack)
+	}
+}
+
+// A Slack connection whose secret does not exist is logged, by name and with no value, and the
+// organization goes on to its knowledge sources and factories.
+func TestOrg_SlackSecretMissingLogged(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	w.addSlack(t, "{{absent-credential}}", "slack-acme")
+	w.addSources(t)
+
+	tally, err := w.mover.Org(w.ctx(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := w.slackSecret(t); got != "" || tally.Slack {
+		t.Errorf("setting names %q, tally slack %v; want it left off", got, tally.Slack)
+	}
+
+	if src := w.source(t, "docs"); src.Secret != connGitHub || tally.Sources == 0 {
+		t.Errorf("knowledge source docs on secret %q, %d sources moved; want the sources step to run", src.Secret, tally.Sources)
+	}
+
+	logs := w.logs.String()
+	if !strings.Contains(logs, `"msg":"slack setting not moved over","connection":"slack-acme","reason":"there is no secret absent-credential"`) {
+		t.Errorf("no slack setting not moved over line naming slack-acme:\n%s", logs)
+	}
 }
 
 // otherValue is the value of a secret a person made, unrelated to any connection.

@@ -6,12 +6,17 @@ import (
 )
 
 // DirectMessenger sends one person a direct message in a chat workspace (ADR 0023, decision 5):
-// the Slack adapter, with the token of the organization's Slack connection.
+// the Slack adapter, with the bot token of the secret the organization's notification settings
+// name (ADR 0037).
 type DirectMessenger interface {
 	// Send delivers m with the workspace's bot token. An error that wraps ErrDMUserNotFound
 	// means the workspace has no person with m.To; one that wraps ErrDMPermanent will fail the
 	// same way again, such as a revoked token; any other error is temporary.
 	Send(ctx context.Context, token string, m DirectMessage) error
+	// Check asks the workspace whether token works, sending nothing, and answers the name of the
+	// workspace it belongs to. A failed check is a *DMError: slack-token-invalid, permanent, when
+	// the workspace refuses the token; slack-token-unavailable when it could not say.
+	Check(ctx context.Context, token string) (workspace string, err error)
 }
 
 // DirectMessage is one plain-text direct message to the person whose email is To.

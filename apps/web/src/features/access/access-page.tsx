@@ -52,22 +52,25 @@ function Status({ row, now }: { row: AccessRow; now: number }) {
   );
 }
 
-/** The secrets a row references, as chips with a key; "No key" for none. */
+/** The secrets a row references, as chips with a key, each linking to the secret's page; "No key" for none. */
 function Keys({ row }: { row: AccessRow }) {
+  const org = useOrg();
   if (row.secrets.length === 0) return <span className="text-secondary text-muted">No key</span>;
   return (
     <span className="inline-flex min-w-0 flex-wrap gap-1">
       {row.secrets.map((name) => (
-        <span
+        <Link
           key={name}
+          to="/o/$org/secrets/$secret"
+          params={{ org: org.slug, secret: name }}
           translate="no"
-          className="inline-flex h-5.5 max-w-full items-center gap-1 rounded-chip bg-run-tint px-2 font-mono text-meta text-run-ink"
+          className="press inline-flex h-5.5 max-w-full items-center gap-1 rounded-chip bg-run-tint px-2 font-mono text-meta text-run-ink no-underline"
         >
           <KeyRound size={12} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
           <span title={name} className="min-w-0 truncate">
             {name}
           </span>
-        </span>
+        </Link>
       ))}
     </span>
   );
@@ -250,26 +253,33 @@ function Matrix({ groups, now }: { groups: readonly AccessGroup[]; now: number }
                       <span className="text-meta text-muted">{rowKindLabels[row.kind]}</span>
                     </span>
                   </td>
-                  {columns.map((c) => {
-                    const use = row.uses.find((u) => placeLabel(u) === placeLabel(c));
-                    return (
-                      <td key={placeLabel(c)} className="text-center">
-                        {use ? (
-                          <EnvLink
-                            use={use}
-                            label={`${row.name} in ${placeLabel(use)}`}
-                            className="inline-flex size-6 items-center justify-center"
-                          >
-                            <span aria-hidden="true" className="size-2 rounded-full bg-ink" />
-                          </EnvLink>
-                        ) : (
-                          <span aria-hidden="true" className="text-muted">
-                            –
-                          </span>
-                        )}
-                      </td>
-                    );
-                  })}
+                  {row.kind === 'slack' ? (
+                    // The organization's own setting: no factory or environment uses it.
+                    <td colSpan={columns.length || 1} />
+                  ) : (
+                    <>
+                      {columns.map((c) => {
+                        const use = row.uses.find((u) => placeLabel(u) === placeLabel(c));
+                        return (
+                          <td key={placeLabel(c)} className="text-center">
+                            {use ? (
+                              <EnvLink
+                                use={use}
+                                label={`${row.name} in ${placeLabel(use)}`}
+                                className="inline-flex size-6 items-center justify-center"
+                              >
+                                <span aria-hidden="true" className="size-2 rounded-full bg-ink" />
+                              </EnvLink>
+                            ) : (
+                              <span aria-hidden="true" className="text-muted">
+                                –
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </>
+                  )}
                   <td>
                     <Keys row={row} />
                   </td>
@@ -317,18 +327,20 @@ function RowList({ groups, now }: { groups: readonly AccessGroup[]; now: number 
                     <span>{rowKindLabels[row.kind]}</span>
                     <Keys row={row} />
                   </span>
-                  <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
-                    {row.uses.map((u) => (
-                      <li key={placeLabel(u)}>
-                        <EnvLink
-                          use={u}
-                          className="press inline-flex h-6 items-center rounded-chip border border-line bg-panel px-2 text-meta text-ink-soft no-underline hover:border-rule max-md:h-11 max-md:px-3"
-                        >
-                          {placeLabel(u)}
-                        </EnvLink>
-                      </li>
-                    ))}
-                  </ul>
+                  {row.kind === 'slack' ? null : (
+                    <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
+                      {row.uses.map((u) => (
+                        <li key={placeLabel(u)}>
+                          <EnvLink
+                            use={u}
+                            className="press inline-flex h-6 items-center rounded-chip border border-line bg-panel px-2 text-meta text-ink-soft no-underline hover:border-rule max-md:h-11 max-md:px-3"
+                          >
+                            {placeLabel(u)}
+                          </EnvLink>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               );
             })}

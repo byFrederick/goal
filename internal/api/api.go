@@ -227,6 +227,12 @@ type Deps struct {
 	// NotificationPreferences keeps each signed-in person's own notification preferences
 	// (ADR 0023, decision 1), served on /v1/me/notifications.
 	NotificationPreferences ports.NotificationPreferences
+	// NotificationSettings are the organization's notification settings (ADR 0037 decision 14):
+	// Access shows the secret of its Slack notifications as an organization-wide row. Nil shows
+	// none. They are served on /v1/orgs/{org}/settings/notifications, and SlackMessenger checks a
+	// Slack bot token there.
+	NotificationSettings ports.NotificationSettings
+	SlackMessenger       ports.DirectMessenger
 	// ExportMaxRows caps a CSV export (ADR 0020, decision 3); 0 is 100000.
 	ExportMaxRows int
 	// Judges serve Jonah's judges routes (judges.go). Optional: while it is nil those routes
@@ -251,7 +257,7 @@ func (d Deps) complete() bool {
 		d.Audit == nil, d.Access == nil, d.Authorizer == nil, d.Platform == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil,
 		d.Connections == nil, d.Credentials == nil, d.OrgSecrets == nil, d.EnvironmentTests == nil, d.ToolLister == nil, d.Intake == nil, d.DraftRequests == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
 		d.Knowledge == nil, d.KnowledgeUploads == nil, d.KnowledgeSearch == nil, d.UploadMaxBytes <= 0,
-		d.OrgPolicies == nil, len(d.BoxSizes) == 0, d.NotificationPreferences == nil,
+		d.OrgPolicies == nil, len(d.BoxSizes) == 0, d.NotificationPreferences == nil, d.NotificationSettings == nil, d.SlackMessenger == nil,
 		d.Judges != nil && (d.Judges.Judges == nil || d.Judges.Scores == nil || d.Judges.Tries == nil),
 		d.Evals != nil && (d.Evals.Runs == nil || d.Evals.Loop == nil || d.Evals.Judges == nil),
 		d.Jonah != nil && (d.Jonah.Store == nil || d.Jonah.Decisions == nil),
@@ -296,7 +302,7 @@ var errInvalid = errors.New("invalid request")
 func New(d Deps) (http.Handler, error) {
 	if !d.complete() {
 		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock, " +
-			"Connections, Credentials, OrgSecrets, EnvironmentTests, ToolLister, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeSearch, OrgPolicies, BoxSizes, NotificationPreferences, " +
+			"Connections, Credentials, OrgSecrets, EnvironmentTests, ToolLister, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeSearch, OrgPolicies, BoxSizes, NotificationPreferences, NotificationSettings, SlackMessenger, " +
 			"a positive UploadMaxBytes and a positive OrgRetention are required, Judges, when set, needs Judges, Scores and Tries, " +
 			"Evals, when set, needs Runs, Loop and Judges, and Jonah, when set, needs Store and Decisions")
 	}
@@ -317,7 +323,7 @@ func New(d Deps) (http.Handler, error) {
 		repoTestTimeout:  cmp.Or(d.RepositoryTestTimeout, connectionTestTimeout),
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes,
-		policies: d.OrgPolicies, notifications: d.NotificationPreferences, boxSizes: slices.Clone(d.BoxSizes), egress: slices.Clone(d.EgressAddresses),
+		policies: d.OrgPolicies, notifications: d.NotificationPreferences, notifySettings: d.NotificationSettings, slack: d.SlackMessenger, boxSizes: slices.Clone(d.BoxSizes), egress: slices.Clone(d.EgressAddresses),
 		judges: d.Judges, evals: d.Evals, jonah: d.Jonah, clock: d.Clock, log: log, exportMax: cmp.Or(d.ExportMaxRows, defaultExportMaxRows),
 	}
 	s.inbox = append([]InboxSource{workInbox{s: s}}, d.InboxSources...)
@@ -443,6 +449,8 @@ type server struct {
 	credentials ports.Credentials
 	// secrets serve the secret routes.
 	secrets ports.OrgSecrets
+	// notifySettings name the secret of the organization's Slack notifications, for Access.
+	notifySettings ports.NotificationSettings
 	// catalog serves /v1/catalog; envTests and tools the environment tests and the Access read
 	// model.
 	catalog  []domain.ToolTemplate
@@ -467,6 +475,8 @@ type server struct {
 	egress   []netip.Prefix
 	// notifications keeps each person's notification preferences (notifications.go).
 	notifications ports.NotificationPreferences
+	// slack checks a Slack bot token on the notification settings routes (notificationsettings.go).
+	slack ports.DirectMessenger
 	// judges serve the judges routes; nil when this goald does not.
 	judges *JudgeDeps
 	// evals serve the evals routes; nil when this goald does not run evals.

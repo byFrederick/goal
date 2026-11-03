@@ -47,9 +47,10 @@ func (e AccessBy) Valid() bool {
 
 // Defines values for AccessRowKind.
 const (
-	AccessRowKindEnv  AccessRowKind = "env"
-	AccessRowKindFile AccessRowKind = "file"
-	AccessRowKindMcp  AccessRowKind = "mcp"
+	AccessRowKindEnv   AccessRowKind = "env"
+	AccessRowKindFile  AccessRowKind = "file"
+	AccessRowKindMcp   AccessRowKind = "mcp"
+	AccessRowKindSlack AccessRowKind = "slack"
 )
 
 // Valid indicates whether the value is a known member of the AccessRowKind enum.
@@ -60,6 +61,8 @@ func (e AccessRowKind) Valid() bool {
 	case AccessRowKindFile:
 		return true
 	case AccessRowKindMcp:
+		return true
+	case AccessRowKindSlack:
 		return true
 	default:
 		return false
@@ -2217,14 +2220,14 @@ type AccessFactory struct {
 	Name string `json:"name"`
 }
 
-// AccessGroup One group: a kind (mcp, env, file), a factory's id or a secret's name, by by
+// AccessGroup One group: a kind (mcp, env, file, slack), a factory's id or a secret's name, by by. The organization-wide slack row has no factory, so no factory group holds it
 type AccessGroup struct {
 	Key   string      `json:"key"`
 	Rows  []AccessRow `json:"rows"`
 	Title string      `json:"title"`
 }
 
-// AccessRow defines model for AccessRow.
+// AccessRow What agents reach under one kind and name. A factory row (mcp, env, file) lists the environments that use it; the organization-wide slack row, "Slack notifications", holds the secret of the organization's Slack notifications and has no factory uses, so its uses are empty and its status comes from that secret alone.
 type AccessRow struct {
 	// ExpiresAt The soonest expiry of its secrets
 	ExpiresAt *time.Time    `json:"expires_at,omitempty"`
@@ -2233,7 +2236,7 @@ type AccessRow struct {
 	// LastUsedAt When a run last opened one of its secrets
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 
-	// Name The MCP server
+	// Name The MCP server, the variable, the file path, or Slack notifications
 	Name string `json:"name"`
 
 	// Secrets The secrets it references
@@ -5698,6 +5701,30 @@ type NotificationPreferences struct {
 	TimeZone string `json:"time_zone"`
 }
 
+// NotificationSettings defines model for NotificationSettings.
+type NotificationSettings struct {
+	// SlackSecret The name of the secret holding the Slack bot token that sends the organization's Slack notifications, slack-bot by convention; null while Slack is off
+	SlackSecret *string `json:"slack_secret"`
+}
+
+// NotificationTestRequest defines model for NotificationTestRequest.
+type NotificationTestRequest struct {
+	// SlackSecret The secret to test; absent, the saved setting's
+	SlackSecret *SecretName `json:"slack_secret,omitempty"`
+}
+
+// NotificationTestResult defines model for NotificationTestResult.
+type NotificationTestResult struct {
+	// Error Why it failed, when not ok, as a fixed code: slack-not-set (no secret given and none saved), slack-token-invalid (Slack refused the token) or slack-token-unavailable (Slack could not be reached or asked to wait). Never the token or Slack's reply.
+	Error *string `json:"error,omitempty"`
+
+	// Ok Whether Slack accepted the token
+	Ok bool `json:"ok"`
+
+	// Workspace The Slack workspace the token belongs to, when ok
+	Workspace *string `json:"workspace,omitempty"`
+}
+
 // OpenDraftRequest defines model for OpenDraftRequest.
 type OpenDraftRequest struct {
 	// Base A published version (a number or current); current when absent
@@ -8460,6 +8487,12 @@ type ReplaceSecretValueJSONRequestBody = SecretValue
 // UpdateOrgSettingsJSONRequestBody defines body for UpdateOrgSettings for application/json ContentType.
 type UpdateOrgSettingsJSONRequestBody = OrgSettingsPatch
 
+// SetNotificationSettingsJSONRequestBody defines body for SetNotificationSettings for application/json ContentType.
+type SetNotificationSettingsJSONRequestBody = NotificationSettings
+
+// TestNotificationSettingsJSONRequestBody defines body for TestNotificationSettings for application/json ContentType.
+type TestNotificationSettingsJSONRequestBody = NotificationTestRequest
+
 // SetSignupDomainJSONRequestBody defines body for SetSignupDomain for application/json ContentType.
 type SetSignupDomainJSONRequestBody = SignupDomainInput
 
@@ -10700,6 +10733,49 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
 	UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetNotificationSettings The organization's notification settings
+	//
+	// The secret whose Slack bot token sends the organization's Slack notifications (ADR 0037), by name; null while Slack is off. Never the token itself.
+	//
+	// Corresponds with GET /v1/orgs/{org}/settings/notifications (the `GetNotificationSettings` operationId).
+	GetNotificationSettings(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetNotificationSettingsWithBody Choose the secret that sends the organization's Slack notifications
+	//
+	// Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/settings/notifications (the `SetNotificationSettings` operationId).
+	SetNotificationSettingsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetNotificationSettings Choose the secret that sends the organization's Slack notifications
+	//
+	// Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/settings/notifications (the `SetNotificationSettings` operationId).
+	SetNotificationSettings(ctx context.Context, org OrgRef, body SetNotificationSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestNotificationSettingsWithBody Test a Slack bot token without saving it
+	//
+	// Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/settings/notifications/test (the `TestNotificationSettings` operationId).
+	TestNotificationSettingsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestNotificationSettings Test a Slack bot token without saving it
+	//
+	// Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/settings/notifications/test (the `TestNotificationSettings` operationId).
+	TestNotificationSettings(ctx context.Context, org OrgRef, body TestNotificationSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ClearSignupDomain Stop sign-up by domain
 	//
@@ -15165,6 +15241,99 @@ func (c *Client) UpdateOrgSettingsWithBody(ctx context.Context, org OrgRef, cont
 // Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
 func (c *Client) UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateOrgSettingsRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetNotificationSettings The organization's notification settings
+//
+// The secret whose Slack bot token sends the organization's Slack notifications (ADR 0037), by name; null while Slack is off. Never the token itself.
+//
+// Corresponds with GET /v1/orgs/{org}/settings/notifications (the `GetNotificationSettings` operationId).
+func (c *Client) GetNotificationSettings(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetNotificationSettingsRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetNotificationSettingsWithBody Choose the secret that sends the organization's Slack notifications
+//
+// Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/settings/notifications (the `SetNotificationSettings` operationId).
+func (c *Client) SetNotificationSettingsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetNotificationSettingsRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetNotificationSettings Choose the secret that sends the organization's Slack notifications
+//
+// Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/settings/notifications (the `SetNotificationSettings` operationId).
+func (c *Client) SetNotificationSettings(ctx context.Context, org OrgRef, body SetNotificationSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetNotificationSettingsRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestNotificationSettingsWithBody Test a Slack bot token without saving it
+//
+// Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/settings/notifications/test (the `TestNotificationSettings` operationId).
+func (c *Client) TestNotificationSettingsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestNotificationSettingsRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestNotificationSettings Test a Slack bot token without saving it
+//
+// Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/settings/notifications/test (the `TestNotificationSettings` operationId).
+func (c *Client) TestNotificationSettings(ctx context.Context, org OrgRef, body TestNotificationSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestNotificationSettingsRequest(c.Server, org, body)
 	if err != nil {
 		return nil, err
 	}
@@ -25237,6 +25406,134 @@ func NewUpdateOrgSettingsRequestWithBody(server string, org OrgRef, contentType 
 	return req, nil
 }
 
+// NewGetNotificationSettingsRequest constructs an http.Request for the GetNotificationSettings method
+func NewGetNotificationSettingsRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/settings/notifications", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSetNotificationSettingsRequest calls the generic SetNotificationSettings builder with application/json body
+func NewSetNotificationSettingsRequest(server string, org OrgRef, body SetNotificationSettingsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSetNotificationSettingsRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewSetNotificationSettingsRequestWithBody constructs an http.Request for the SetNotificationSettings method, with any body, and a specified content type
+func NewSetNotificationSettingsRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/settings/notifications", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewTestNotificationSettingsRequest calls the generic TestNotificationSettings builder with application/json body
+func NewTestNotificationSettingsRequest(server string, org OrgRef, body TestNotificationSettingsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTestNotificationSettingsRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewTestNotificationSettingsRequestWithBody constructs an http.Request for the TestNotificationSettings method, with any body, and a specified content type
+func NewTestNotificationSettingsRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/settings/notifications/test", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewClearSignupDomainRequest constructs an http.Request for the ClearSignupDomain method
 func NewClearSignupDomainRequest(server string, org OrgRef) (*http.Request, error) {
 	var err error
@@ -28137,6 +28434,51 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
 	UpdateOrgSettingsWithResponse(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateOrgSettingsResponse, error)
+
+	// GetNotificationSettingsWithResponse The organization's notification settings
+	//
+	// The secret whose Slack bot token sends the organization's Slack notifications (ADR 0037), by name; null while Slack is off. Never the token itself.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/settings/notifications (the `GetNotificationSettings` operationId).
+	GetNotificationSettingsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetNotificationSettingsResponse, error)
+
+	// SetNotificationSettingsWithBodyWithResponse Choose the secret that sends the organization's Slack notifications
+	//
+	// Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/settings/notifications (the `SetNotificationSettings` operationId).
+	SetNotificationSettingsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetNotificationSettingsResponse, error)
+
+	// SetNotificationSettingsWithResponse Choose the secret that sends the organization's Slack notifications
+	//
+	// Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/settings/notifications (the `SetNotificationSettings` operationId).
+	SetNotificationSettingsWithResponse(ctx context.Context, org OrgRef, body SetNotificationSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*SetNotificationSettingsResponse, error)
+
+	// TestNotificationSettingsWithBodyWithResponse Test a Slack bot token without saving it
+	//
+	// Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/settings/notifications/test (the `TestNotificationSettings` operationId).
+	TestNotificationSettingsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestNotificationSettingsResponse, error)
+
+	// TestNotificationSettingsWithResponse Test a Slack bot token without saving it
+	//
+	// Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/settings/notifications/test (the `TestNotificationSettings` operationId).
+	TestNotificationSettingsWithResponse(ctx context.Context, org OrgRef, body TestNotificationSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*TestNotificationSettingsResponse, error)
 
 	// ClearSignupDomainWithResponse Stop sign-up by domain
 	//
@@ -37111,6 +37453,150 @@ func (r UpdateOrgSettingsResponse) ContentType() string {
 	return ""
 }
 
+type GetNotificationSettingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *NotificationSettings
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetNotificationSettingsResponse) GetJSON200() *NotificationSettings {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetNotificationSettingsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetNotificationSettingsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetNotificationSettingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetNotificationSettingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetNotificationSettingsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SetNotificationSettingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *NotificationSettings
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SetNotificationSettingsResponse) GetJSON200() *NotificationSettings {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SetNotificationSettingsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SetNotificationSettingsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SetNotificationSettingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SetNotificationSettingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SetNotificationSettingsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TestNotificationSettingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *NotificationTestResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TestNotificationSettingsResponse) GetJSON200() *NotificationTestResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TestNotificationSettingsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TestNotificationSettingsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TestNotificationSettingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TestNotificationSettingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TestNotificationSettingsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ClearSignupDomainResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -41392,6 +41878,81 @@ func (c *ClientWithResponses) UpdateOrgSettingsWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseUpdateOrgSettingsResponse(rsp)
+}
+
+// GetNotificationSettingsWithResponse The organization's notification settings
+//
+// The secret whose Slack bot token sends the organization's Slack notifications (ADR 0037), by name; null while Slack is off. Never the token itself.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/settings/notifications (the `GetNotificationSettings` operationId).
+func (c *ClientWithResponses) GetNotificationSettingsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetNotificationSettingsResponse, error) {
+	rsp, err := c.GetNotificationSettings(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetNotificationSettingsResponse(rsp)
+}
+
+// SetNotificationSettingsWithBodyWithResponse Choose the secret that sends the organization's Slack notifications
+//
+// Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/settings/notifications (the `SetNotificationSettings` operationId).
+func (c *ClientWithResponses) SetNotificationSettingsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetNotificationSettingsResponse, error) {
+	rsp, err := c.SetNotificationSettingsWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetNotificationSettingsResponse(rsp)
+}
+
+// SetNotificationSettingsWithResponse Choose the secret that sends the organization's Slack notifications
+//
+// Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/settings/notifications (the `SetNotificationSettings` operationId).
+func (c *ClientWithResponses) SetNotificationSettingsWithResponse(ctx context.Context, org OrgRef, body SetNotificationSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*SetNotificationSettingsResponse, error) {
+	rsp, err := c.SetNotificationSettings(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetNotificationSettingsResponse(rsp)
+}
+
+// TestNotificationSettingsWithBodyWithResponse Test a Slack bot token without saving it
+//
+// Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/settings/notifications/test (the `TestNotificationSettings` operationId).
+func (c *ClientWithResponses) TestNotificationSettingsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestNotificationSettingsResponse, error) {
+	rsp, err := c.TestNotificationSettingsWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestNotificationSettingsResponse(rsp)
+}
+
+// TestNotificationSettingsWithResponse Test a Slack bot token without saving it
+//
+// Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/settings/notifications/test (the `TestNotificationSettings` operationId).
+func (c *ClientWithResponses) TestNotificationSettingsWithResponse(ctx context.Context, org OrgRef, body TestNotificationSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*TestNotificationSettingsResponse, error) {
+	rsp, err := c.TestNotificationSettings(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestNotificationSettingsResponse(rsp)
 }
 
 // ClearSignupDomainWithResponse Stop sign-up by domain
@@ -47849,6 +48410,105 @@ func ParseUpdateOrgSettingsResponse(rsp *http.Response) (*UpdateOrgSettingsRespo
 	return response, nil
 }
 
+// ParseGetNotificationSettingsResponse parses an HTTP response from a GetNotificationSettingsWithResponse call
+func ParseGetNotificationSettingsResponse(rsp *http.Response) (*GetNotificationSettingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetNotificationSettingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest NotificationSettings
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSetNotificationSettingsResponse parses an HTTP response from a SetNotificationSettingsWithResponse call
+func ParseSetNotificationSettingsResponse(rsp *http.Response) (*SetNotificationSettingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SetNotificationSettingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest NotificationSettings
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTestNotificationSettingsResponse parses an HTTP response from a TestNotificationSettingsWithResponse call
+func ParseTestNotificationSettingsResponse(rsp *http.Response) (*TestNotificationSettingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TestNotificationSettingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest NotificationTestResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseClearSignupDomainResponse parses an HTTP response from a ClearSignupDomainWithResponse call
 func ParseClearSignupDomainResponse(rsp *http.Response) (*ClearSignupDomainResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -48879,6 +49539,15 @@ type ServerInterface interface {
 	// UpdateOrgSettings Change the organization's settings
 	// (PATCH /v1/orgs/{org}/settings)
 	UpdateOrgSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// GetNotificationSettings The organization's notification settings
+	// (GET /v1/orgs/{org}/settings/notifications)
+	GetNotificationSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// SetNotificationSettings Choose the secret that sends the organization's Slack notifications
+	// (PUT /v1/orgs/{org}/settings/notifications)
+	SetNotificationSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// TestNotificationSettings Test a Slack bot token without saving it
+	// (POST /v1/orgs/{org}/settings/notifications/test)
+	TestNotificationSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// ClearSignupDomain Stop sign-up by domain
 	// (DELETE /v1/orgs/{org}/settings/signup-domain)
 	ClearSignupDomain(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -56499,6 +57168,84 @@ func (siw *ServerInterfaceWrapper) UpdateOrgSettings(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// GetNotificationSettings operation middleware
+func (siw *ServerInterfaceWrapper) GetNotificationSettings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNotificationSettings(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetNotificationSettings operation middleware
+func (siw *ServerInterfaceWrapper) SetNotificationSettings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetNotificationSettings(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TestNotificationSettings operation middleware
+func (siw *ServerInterfaceWrapper) TestNotificationSettings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestNotificationSettings(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ClearSignupDomain operation middleware
 func (siw *ServerInterfaceWrapper) ClearSignupDomain(w http.ResponseWriter, r *http.Request) {
 
@@ -57109,6 +57856,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/settings", wrapper.UpdateOrgSettings)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/settings/signup-domain", wrapper.ClearSignupDomain)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/settings/signup-domain", wrapper.SetSignupDomain)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/settings/notifications", wrapper.GetNotificationSettings)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/settings/notifications", wrapper.SetNotificationSettings)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/settings/notifications/test", wrapper.TestNotificationSettings)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/policy", wrapper.GetOrgPolicy)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/policy", wrapper.PutOrgPolicy)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/audit", wrapper.ListAudit)
@@ -64964,6 +65714,125 @@ func (response UpdateOrgSettingsdefaultApplicationProblemPlusJSONResponse) Visit
 	return err
 }
 
+type GetNotificationSettingsRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type GetNotificationSettingsResponseObject interface {
+	VisitGetNotificationSettingsResponse(w http.ResponseWriter) error
+}
+
+type GetNotificationSettings200JSONResponse NotificationSettings
+
+func (response GetNotificationSettings200JSONResponse) VisitGetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationSettingsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetNotificationSettingsdefaultApplicationProblemPlusJSONResponse) VisitGetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetNotificationSettingsRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *SetNotificationSettingsJSONRequestBody
+}
+
+type SetNotificationSettingsResponseObject interface {
+	VisitSetNotificationSettingsResponse(w http.ResponseWriter) error
+}
+
+type SetNotificationSettings200JSONResponse NotificationSettings
+
+func (response SetNotificationSettings200JSONResponse) VisitSetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetNotificationSettingsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response SetNotificationSettingsdefaultApplicationProblemPlusJSONResponse) VisitSetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestNotificationSettingsRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *TestNotificationSettingsJSONRequestBody
+}
+
+type TestNotificationSettingsResponseObject interface {
+	VisitTestNotificationSettingsResponse(w http.ResponseWriter) error
+}
+
+type TestNotificationSettings200JSONResponse NotificationTestResult
+
+func (response TestNotificationSettings200JSONResponse) VisitTestNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestNotificationSettingsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response TestNotificationSettingsdefaultApplicationProblemPlusJSONResponse) VisitTestNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ClearSignupDomainRequestObject struct {
 	Org OrgRef `json:"org"`
 }
@@ -66142,6 +67011,15 @@ type StrictServerInterface interface {
 	// UpdateOrgSettings Change the organization's settings
 	// (PATCH /v1/orgs/{org}/settings)
 	UpdateOrgSettings(ctx context.Context, request UpdateOrgSettingsRequestObject) (UpdateOrgSettingsResponseObject, error)
+	// GetNotificationSettings The organization's notification settings
+	// (GET /v1/orgs/{org}/settings/notifications)
+	GetNotificationSettings(ctx context.Context, request GetNotificationSettingsRequestObject) (GetNotificationSettingsResponseObject, error)
+	// SetNotificationSettings Choose the secret that sends the organization's Slack notifications
+	// (PUT /v1/orgs/{org}/settings/notifications)
+	SetNotificationSettings(ctx context.Context, request SetNotificationSettingsRequestObject) (SetNotificationSettingsResponseObject, error)
+	// TestNotificationSettings Test a Slack bot token without saving it
+	// (POST /v1/orgs/{org}/settings/notifications/test)
+	TestNotificationSettings(ctx context.Context, request TestNotificationSettingsRequestObject) (TestNotificationSettingsResponseObject, error)
 	// ClearSignupDomain Stop sign-up by domain
 	// (DELETE /v1/orgs/{org}/settings/signup-domain)
 	ClearSignupDomain(ctx context.Context, request ClearSignupDomainRequestObject) (ClearSignupDomainResponseObject, error)
@@ -71624,6 +72502,101 @@ func (sh *strictHandler) UpdateOrgSettings(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateOrgSettingsResponseObject); ok {
 		if err := validResponse.VisitUpdateOrgSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNotificationSettings operation middleware
+func (sh *strictHandler) GetNotificationSettings(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request GetNotificationSettingsRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNotificationSettings(ctx, request.(GetNotificationSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNotificationSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNotificationSettingsResponseObject); ok {
+		if err := validResponse.VisitGetNotificationSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetNotificationSettings operation middleware
+func (sh *strictHandler) SetNotificationSettings(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request SetNotificationSettingsRequestObject
+
+	request.Org = org
+
+	var body SetNotificationSettingsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetNotificationSettings(ctx, request.(SetNotificationSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetNotificationSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetNotificationSettingsResponseObject); ok {
+		if err := validResponse.VisitSetNotificationSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestNotificationSettings operation middleware
+func (sh *strictHandler) TestNotificationSettings(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request TestNotificationSettingsRequestObject
+
+	request.Org = org
+
+	var body TestNotificationSettingsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestNotificationSettings(ctx, request.(TestNotificationSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestNotificationSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestNotificationSettingsResponseObject); ok {
+		if err := validResponse.VisitTestNotificationSettingsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

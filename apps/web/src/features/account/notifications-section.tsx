@@ -1,16 +1,18 @@
 // The table of the account page's Notifications section (docs/design/screens/account/account.html): which
 // events the person is told about, on which channel (ADR 0023). With sign-in the saved preferences come from
 // GET /v1/me/notifications, and every box PUTs them whole. The Slack column is live only when the
-// organization has a Slack connection; with none its boxes show the saved value and are NotAvailable. With
+// organization's notification setting names a Slack secret (ADR 0037); with none its boxes show the saved
+// value and are NotAvailable. With
 // sign-in off there is no person, so nothing is requested and every box is NotAvailable.
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { connectionsQuery, notificationsQuery } from '../../api/queries';
+import { notificationsQuery, orgNotificationsQuery } from '../../api/queries';
 import type { NotificationChannels, NotificationEvents, NotificationPreferences } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { NotAvailable } from '../../ui/not-available';
+import { Skeleton } from '../../ui/skeleton';
 import { type PreferencesChange, useSaveNotifications } from './notification-preferences';
 
 type Event = keyof NotificationEvents;
@@ -39,16 +41,23 @@ export function NotificationsTable({ org, signedIn }: { org: string; signedIn: b
 
 function LiveTable({ org }: { org: string }) {
   const prefs = useQuery(notificationsQuery);
-  const slack = useQuery(connectionsQuery(org, { kind: 'slack' }));
+  const setting = useQuery(orgNotificationsQuery(org));
   const save = useSaveNotifications();
 
-  if (prefs.isPending || slack.isPending) {
+  if (prefs.isPending || setting.isPending) {
     return (
-      <div aria-busy="true">
-        <span role="status" className="sr-only">
-          Loading
-        </span>
-      </div>
+      <Skeleton
+        ready={false}
+        placeholder={
+          <div className="flex flex-col gap-3">
+            {rules.map((rule) => (
+              <span key={rule.event} className="block h-6 rounded-control bg-hover" />
+            ))}
+          </div>
+        }
+      >
+        {null}
+      </Skeleton>
     );
   }
   if (prefs.isError) {
@@ -70,7 +79,7 @@ function LiveTable({ org }: { org: string }) {
     save.mutate(next, { onError: () => toast.error(saveFailed) });
   };
 
-  return <PreferencesTable prefs={prefs.data} slackConnected={(slack.data?.length ?? 0) > 0} onChange={change} />;
+  return <PreferencesTable prefs={prefs.data} slackSet={Boolean(setting.data?.slack_secret)} onChange={change} />;
 }
 
 /**
@@ -79,11 +88,11 @@ function LiveTable({ org }: { org: string }) {
  */
 function PreferencesTable({
   prefs,
-  slackConnected = false,
+  slackSet = false,
   onChange,
 }: {
   prefs?: NotificationPreferences;
-  slackConnected?: boolean;
+  slackSet?: boolean;
   onChange?: (event: Event, channel: Channel, on: boolean) => void;
 }) {
   const phone = usePhone();
@@ -91,7 +100,7 @@ function PreferencesTable({
   /** One box of the matrix: live, or the saved value and NotAvailable. `className` sizes the target. */
   const box = (event: Event, channel: Channel, eventLabel: string, channelLabel: string, className?: string) => {
     const boxLabel = `${eventLabel}, ${channelLabel}`;
-    const live = prefs !== undefined && (channel !== 'slack' || slackConnected);
+    const live = prefs !== undefined && (channel !== 'slack' || slackSet);
     const checked = prefs?.events[event][channel] ?? false;
     const extra = className ? { className, label: channelLabel } : {};
     if (live && onChange !== undefined) {

@@ -511,6 +511,75 @@ paths:
       responses:
         "204": { description: Cleared }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/settings/notifications:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: getNotificationSettings
+      x-goal-scope: org:read
+      tags: [orgs]
+      summary: The organization's notification settings
+      description: >-
+        The secret whose Slack bot token sends the organization's Slack notifications (ADR 0037),
+        by name; null while Slack is off. Never the token itself.
+      responses:
+        "200":
+          description: The settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationSettings" }
+        default: { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: setNotificationSettings
+      x-goal-scope: org:manage
+      tags: [orgs]
+      summary: Choose the secret that sends the organization's Slack notifications
+      description: >-
+        Sets slack_secret, or turns Slack off with null. Notifications open the secret without a
+        factory, so it must be open to all factories. Audited as org.notifications_updated with
+        the secret's name; saving what is already saved changes nothing. A name that is no secret
+        is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and
+        nothing is saved. While the setting names a secret, deleting that secret is 409
+        secret-in-use with a slack use.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NotificationSettings" }
+      responses:
+        "200":
+          description: The settings after the change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationSettings" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/settings/notifications/test:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    post:
+      operationId: testNotificationSettings
+      x-goal-scope: org:manage
+      tags: [orgs]
+      summary: Test a Slack bot token without saving it
+      description: >-
+        Opens the named secret inside goald without a factory (audited as secret.used), so it
+        must be open to all factories, and asks Slack (auth.test) whether its token works. Without
+        a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token
+        that fails is an answer, not an error: ok false with a fixed error code. No answer, error
+        or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret
+        limited to some factories; 503 secrets-unavailable while goald has no master key.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NotificationTestRequest" }
+      responses:
+        "200":
+          description: The result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationTestResult" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/policy:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -9935,6 +10004,35 @@ components:
         tested: { type: boolean, description: "false when the host gave no answer within 10 seconds: read and push then say couldn't test" }
         read: { $ref: "#/components/schemas/RepositoryCheck" }
         push: { $ref: "#/components/schemas/RepositoryCheck" }
+    NotificationSettings:
+      type: object
+      required: [slack_secret]
+      properties:
+        slack_secret:
+          type: string
+          nullable: true
+          pattern: "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
+          description: >-
+            The name of the secret holding the Slack bot token that sends the organization's Slack
+            notifications, slack-bot by convention; null while Slack is off
+    NotificationTestRequest:
+      type: object
+      properties:
+        slack_secret:
+          allOf: [{ $ref: "#/components/schemas/SecretName" }]
+          description: The secret to test; absent, the saved setting's
+    NotificationTestResult:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean, description: Whether Slack accepted the token }
+        workspace: { type: string, description: "The Slack workspace the token belongs to, when ok" }
+        error:
+          type: string
+          description: >-
+            Why it failed, when not ok, as a fixed code: slack-not-set (no secret given and none
+            saved), slack-token-invalid (Slack refused the token) or slack-token-unavailable
+            (Slack could not be reached or asked to wait). Never the token or Slack's reply.
     RepositoryCheck:
       type: object
       required: [ok, reason]
@@ -9982,7 +10080,7 @@ components:
           items: { $ref: "#/components/schemas/AccessGroup" }
     AccessGroup:
       type: object
-      description: "One group: a kind (mcp, env, file), a factory's id or a secret's name, by by"
+      description: "One group: a kind (mcp, env, file, slack), a factory's id or a secret's name, by by. The organization-wide slack row has no factory, so no factory group holds it"
       required: [key, title, rows]
       properties:
         key: { type: string }
@@ -9992,10 +10090,15 @@ components:
           items: { $ref: "#/components/schemas/AccessRow" }
     AccessRow:
       type: object
+      description: >-
+        What agents reach under one kind and name. A factory row (mcp, env, file) lists the
+        environments that use it; the organization-wide slack row, "Slack notifications", holds
+        the secret of the organization's Slack notifications and has no factory uses, so its uses
+        are empty and its status comes from that secret alone.
       required: [kind, name, uses, secrets, status]
       properties:
-        kind: { type: string, enum: [mcp, env, file] }
-        name: { type: string, description: The MCP server, the variable or the file path }
+        kind: { type: string, enum: [mcp, env, file, slack] }
+        name: { type: string, description: "The MCP server, the variable, the file path, or Slack notifications" }
         uses:
           type: array
           items: { $ref: "#/components/schemas/AccessUse" }

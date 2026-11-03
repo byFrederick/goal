@@ -9,6 +9,7 @@ import {
   itemsQuery,
   knowledgeSourcesQuery,
   membersQuery,
+  orgNotificationsQuery,
   versionModelQuery,
 } from '../../api/queries';
 import type {
@@ -92,6 +93,7 @@ function seeds({
   members = [member],
   invitations = [],
   connections = [github],
+  slackSecret = null,
   knowledge = [],
   model = published,
   triggers = intake,
@@ -100,6 +102,7 @@ function seeds({
   members?: Member[];
   invitations?: unknown[];
   connections?: Connection[];
+  slackSecret?: string | null;
   knowledge?: unknown[];
   model?: VersionModel;
   triggers?: Intake;
@@ -109,6 +112,7 @@ function seeds({
     [membersQuery(org.id).queryKey, members],
     [invitationsQuery(org.id).queryKey, invitations],
     [connectionsQuery(org.id).queryKey, connections],
+    [orgNotificationsQuery(org.id).queryKey, { slack_secret: slackSecret }],
     [knowledgeSourcesQuery(org.id).queryKey, knowledge],
     [versionModelQuery(org.id, factory.id, 'current').queryKey, model],
     [intakeQuery(org.id, factory.id).queryKey, triggers],
@@ -138,7 +142,7 @@ describe('SetupCard', () => {
     expect(screen.getByRole('img', { name: '5 of 9 done' })).toBeTruthy();
 
     expect(screen.getByRole('link', { name: 'Invite' }).getAttribute('href')).toBe('/o/acme/members');
-    expect(screen.getByRole('link', { name: 'Connect' }).getAttribute('href')).toBe('/o/acme/secrets?new=true');
+    expect(screen.getByRole('link', { name: 'Set up' }).getAttribute('href')).toBe('/o/acme/settings#notifications');
     expect(screen.getByRole('link', { name: 'Add' }).getAttribute('href')).toBe('/o/acme/knowledge/new');
   });
 
@@ -158,7 +162,7 @@ describe('SetupCard', () => {
     renderCard(
       seeds({
         invitations: [{ id: 'i-1' }],
-        connections: [github, { id: 'c-slack', name: 'slack', kind: 'slack' } as Connection],
+        slackSecret: 'slack-bot',
         knowledge: [{ id: 'k-1', name: 'handbook' }],
         finished: [doneItem],
       }),

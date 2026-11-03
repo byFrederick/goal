@@ -97,6 +97,8 @@ function renderPage({
   perms.held = new Set(held);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   if (!loading) client.setQueryData(keys.settings(org.id), settings);
+  client.setQueryData(keys.orgNotifications(org.id), { slack_secret: null });
+  client.setQueryData(keys.secrets(org.id), []);
   client.setQueryData(keys.authConfig, auth);
   client.setQueryData(keys.members(org.id), members);
   return render(
@@ -129,7 +131,7 @@ describe('Organization settings page', () => {
   it('shows the sections of the picture in order, with the table of contents', () => {
     renderPage();
     expect(screen.getByRole('heading', { level: 1, name: 'Organization settings' })).toBeTruthy();
-    for (const name of ['General', 'Slots', 'Sign-in', 'Data', 'Danger zone']) {
+    for (const name of ['General', 'Slots', 'Sign-in', 'Notifications', 'Data', 'Danger zone']) {
       expect(screen.getByRole('heading', { level: 2, name })).toBeTruthy();
     }
     const toc = screen.getByRole('navigation', { name: 'On this page' });
@@ -137,7 +139,7 @@ describe('Organization settings page', () => {
       within(toc)
         .getAllByRole('link')
         .map((a) => a.textContent),
-    ).toEqual(['General', 'Slots', 'Sign-in', 'Data', 'Danger zone']);
+    ).toEqual(['General', 'Slots', 'Sign-in', 'Notifications', 'Data', 'Danger zone']);
   });
 
   it('shows the name, the address and the factories, each with its own slot cap', () => {

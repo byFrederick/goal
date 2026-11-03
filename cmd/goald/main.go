@@ -265,8 +265,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
-		NotificationPreferences: postgres.NewNotificationPreferences(store),
-		Jonah:                   jonahDeps(store, authors, clock, log), Clock: clock, Logger: log,
+		NotificationPreferences: postgres.NewNotificationPreferences(store), NotificationSettings: postgres.NewNotificationSettings(store), SlackMessenger: slack.New(slack.Config{Transport: connectionTransport(false)}),
+		Jonah: jonahDeps(store, authors, clock, log), Clock: clock, Logger: log,
 	})
 	if err = errors.Join(err, siteErr); err != nil {
 		return err
@@ -274,7 +274,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	servers := httpServers(s, proxySecret, apiHandler, gatewayHandler(gw), web.Handler(web.Options{StrictTransport: s.strictTransport()}), site, log)
 
-	j, err := newJobs(s, store, connections, objects, platform, clock, kb.ingestor, defs, eng, intake, log)
+	j, err := newJobs(s, store, orgSecrets, objects, platform, clock, kb.ingestor, defs, eng, intake, log)
 	if err != nil {
 		return err
 	}
@@ -293,7 +293,7 @@ func moveOver(ctx context.Context, store *postgres.Store, connections *postgres.
 	clock ports.Clock, log *slog.Logger,
 ) {
 	err := moveover.New(moveover.Deps{
-		Orgs: store, Connections: connections, Secrets: secrets, Knowledge: postgres.NewKnowledge(store), Definitions: definitions,
+		Orgs: store, Connections: connections, Secrets: secrets, Settings: postgres.NewNotificationSettings(store), Knowledge: postgres.NewKnowledge(store), Definitions: definitions,
 		Publisher: authors, Conversions: postgres.NewFactoryConversions(store), CodeHosts: hosts, Tools: tools, Clock: clock, Logger: log,
 	}).Run(ctx)
 	if err != nil {
@@ -304,10 +304,10 @@ func moveOver(ctx context.Context, store *postgres.Store, connections *postgres.
 // newJobs builds goald's scheduled jobs: the purge, the identity watch, the knowledge base's
 // ingestion, the notification sender and digest, and the Jonah reviews, which the goald holding
 // the schedule lock sweeps.
-func newJobs(s settings, store *postgres.Store, connections *postgres.Connections, objects ports.ObjectStore, platform ports.Platform,
+func newJobs(s settings, store *postgres.Store, orgSecrets *postgres.Secrets, objects ports.ObjectStore, platform ports.Platform,
 	clock ports.Clock, ingestor *knowledge.Ingestor, defs *definitions.Cache, eng *engine.Engine, intake scheduleLock, log *slog.Logger,
 ) (jobs, error) {
-	sender, digest, err := notificationJobs(s, store, connections, clock, log)
+	sender, digest, err := notificationJobs(s, store, orgSecrets, clock, log)
 	if err != nil {
 		return jobs{}, err
 	}
@@ -322,14 +322,15 @@ func newJobs(s settings, store *postgres.Store, connections *postgres.Connection
 
 // notificationJobs are the job that sends the notification outbox's rows (ADR 0023, decisions 4
 // and 5) and the daily digest job (decision 6), over one mailer and one Slack sender: Slack
-// messages as direct messages with each organization's Slack connection, always, over a
-// transport that dials public addresses only; email through the SMTP server of GOAL_SMTP_URL,
+// messages as direct messages with the token of the secret each organization's notification
+// settings name (ADR 0037, Consequences), always, over a transport that dials public addresses only; email through the SMTP server of GOAL_SMTP_URL,
 // and without one no email goes out, email rows stay queued and no email digest is queued.
-func notificationJobs(s settings, store *postgres.Store, connections *postgres.Connections, clock ports.Clock, log *slog.Logger,
+func notificationJobs(s settings, store *postgres.Store, orgSecrets *postgres.Secrets, clock ports.Clock, log *slog.Logger,
 ) (*notify.Sender, *notify.DigestJob, error) {
 	d := notify.Deps{
 		Orgs: store, Outbox: store, Clock: clock, PublicURL: s.PublicURL, Log: log,
-		Slack: slack.New(slack.Config{Transport: connectionTransport(false)}), Connections: connections,
+		Slack:    slack.New(slack.Config{Transport: connectionTransport(false)}),
+		Settings: postgres.NewNotificationSettings(store), Secrets: orgSecrets,
 	}
 
 	if s.SMTP != nil {
@@ -343,7 +344,7 @@ func notificationJobs(s settings, store *postgres.Store, connections *postgres.C
 
 	digest := notify.NewDigestJob(notify.DigestDeps{
 		Orgs: store, Digests: postgres.NewDigests(store), Preferences: postgres.NewNotificationPreferences(store),
-		Mailer: d.Mailer, Slack: d.Slack, Connections: connections, Clock: clock, PublicURL: s.PublicURL, Log: log,
+		Mailer: d.Mailer, Slack: d.Slack, Settings: d.Settings, Secrets: d.Secrets, Clock: clock, PublicURL: s.PublicURL, Log: log,
 	})
 
 	return notify.New(d), digest, nil

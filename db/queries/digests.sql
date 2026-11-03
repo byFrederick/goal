@@ -6,14 +6,15 @@
 -- name: DigestRecipients :many
 -- The members of the transaction's organization with the digest on for email or Slack (their
 -- saved choice, else the defaults Go passes), with their time zone (UTC without a saved one) and
--- whether the organization has a connection of a kind named slack (decision 5).
+-- whether the organization's notification setting names a Slack secret (00094; ADR 0037,
+-- decision 14).
 WITH members AS (
   SELECT DISTINCT (m ->> 'user_id')::uuid AS user_id FROM jsonb_array_elements(goal_members()) AS m
 ),
 slack AS (
-  SELECT EXISTS (SELECT 1 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id WHERE k.name = 'slack') AS connected
+  SELECT EXISTS (SELECT 1 FROM org_notification_settings WHERE slack_secret_id IS NOT NULL) AS enabled
 )
-SELECT r.user_id, r.time_zone, r.email, r.slack, slack.connected AS slack_connected
+SELECT r.user_id, r.time_zone, r.email, r.slack, slack.enabled AS slack_enabled
 FROM (
   SELECT m.user_id, coalesce(ns.time_zone, 'UTC')::text AS time_zone,
          coalesce(p.email, sqlc.arg(default_email)::boolean)::boolean AS email,
