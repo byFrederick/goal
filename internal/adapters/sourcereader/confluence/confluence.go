@@ -225,6 +225,7 @@ func (t tree) ancestors(p page) (out []page, ok bool) {
 		}
 
 		seen[id] = true
+
 		out = append(out, parent)
 
 		if id == t.root {
@@ -391,7 +392,7 @@ type page struct {
 	Title    string      `json:"title"`
 	SpaceID  json.Number `json:"spaceId"`
 	ParentID json.Number `json:"parentId"`
-	Version struct {
+	Version  struct {
 		Number int `json:"number"`
 	} `json:"version"`
 	Body struct {

@@ -407,8 +407,17 @@ func TestReader_SyncsIncrementallyByVersion(t *testing.T) {
 	if d := got["12"]; d.Path != "ENG/runbook/deploy-12.md" || d.Version != "2@11" {
 		t.Fatalf("page 12 = %+v, want version 2@11 at ENG/runbook/deploy-12.md", d)
 	}
+}
 
-	// A root page the spaces do not have fails the sync and keeps every file.
+// TestReader_ARootPageNotInTheSpacesKeepsTheFiles: a root page the spaces do not have fails the
+// sync, naming it, and the source keeps every file.
+func TestReader_ARootPageNotInTheSpacesKeepsTheFiles(t *testing.T) {
+	t.Parallel()
+
+	s := newSite(t, pages...)
+	w := newWorld(t, s, spaceENG)
+	w.sync(s, []string{"11", "12", "13"}, []string{"11", "12", "13"})
+
 	cfg := maps.Clone(w.source().Config)
 	cfg[cfgRootPage] = "999"
 

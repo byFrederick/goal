@@ -309,10 +309,10 @@ func TestSnapshot_UploadsWriteTheirFiles(t *testing.T) {
 	w.want("page.md", files["page.md"].text, strings.Contains(files["page.md"].text, "# Expenses"), strings.Contains(files["page.md"].text, "Receipts within 30 days."))
 }
 
-// A Confluence source is read by its kind's reader with its secret opened at sync time, and
-// syncs into a snapshot.
-func TestSnapshot_AConfluenceSourceReadsWithItsSecret(t *testing.T) {
-	t.Parallel()
+// confluenceWorld is a world with only a Confluence source, "wiki", read by docs with the secret
+// wiki-token.
+func confluenceWorld(t *testing.T) *world {
+	t.Helper()
 
 	w := repoWorld(t)
 	ctx := w.ctx()
@@ -330,6 +330,16 @@ func TestSnapshot_AConfluenceSourceReadsWithItsSecret(t *testing.T) {
 	}, admin); err != nil {
 		t.Fatal(err)
 	}
+
+	return w
+}
+
+// A Confluence source is read by its kind's reader with its secret opened at sync time, and
+// syncs into a snapshot.
+func TestSnapshot_AConfluenceSourceReadsWithItsSecret(t *testing.T) {
+	t.Parallel()
+
+	w := confluenceWorld(t)
 
 	w.docs.set(map[string]string{deployMD: shipOnTuesdays})
 	w.syncDue(w.ingestor(nil))
@@ -347,22 +357,7 @@ func TestSnapshot_AConfluenceSourceReadsWithItsSecret(t *testing.T) {
 func TestSnapshot_ConfluencePagesLandAtTheirTreePaths(t *testing.T) {
 	t.Parallel()
 
-	w := repoWorld(t)
-	ctx := w.ctx()
-
-	if _, err := w.secrets.Create(ctx, domain.NewSecret{Name: "wiki-token", Value: "test-token", Scope: domain.SecretScope{All: true}}, admin); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := w.kb.DeleteSource(ctx, repoSource, admin, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := w.kb.CreateSource(ctx, domain.NewKnowledgeSource{
-		Name: "wiki", Title: "Wiki", Kind: domain.SourceConfluence, Secret: "wiki-token", Config: map[string]string{"site": "acme.example.com"},
-	}, admin); err != nil {
-		t.Fatal(err)
-	}
+	w := confluenceWorld(t)
 
 	w.docs.set(map[string]string{"11": "# Runbooks", "12": "# Deploy", "13": "# Paging", "15": "# Odd", "16": "# Deep"})
 	w.docs.titles = map[string]string{"11": "Runbooks", "12": "Deploy", "13": "Paging: On-call", "15": "Odd", "16": "Deep"}
