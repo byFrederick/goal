@@ -16,12 +16,16 @@ import (
 var errNoOrgSecrets = errors.New("this goald has no secrets store")
 
 // secretEnv resolves a run of a version on secrets (ADR 0037 decisions 7 and 10): the {{secret}}
-// references of modelKey and of env's values are opened once, through OrgSecrets.Resolve, which
-// checks each scope against use's factory, audits each as secret.used and sets its last use. The
-// agent gets env's variables with the values filled in, whole or part of a value, and the model
-// key's value as domain.ModelKeyEnv names it; every value opened joins the run's secrets, so it
-// is scrubbed. A failure names the secret and the environment, never a value. env is zero for a
-// run that gets the model key alone (a Jonah run, a definition run, Use credentials off).
+// references of modelKey and of the environment's env, files, MCP headers and stdio servers' env
+// are opened together, once, through OrgSecrets.Resolve, which checks each scope against use's
+// factory, audits each as secret.used and sets its last use. The agent gets env's variables with
+// the values filled in, whole or part of a value, each file's content in its GOAL_FILE_<n>
+// variable (domain.FileEnv), each secret an MCP server names in its GOAL_SECRET_<NAME> variable
+// (domain.SecretEnv), and the model key's value as domain.ModelKeyEnv names it. The MCP servers
+// are kept rendered (domain.MCPServer.Rendered), naming those variables and never a value. Every
+// value opened joins the run's secrets, so it is scrubbed. A failure names the secret and the
+// environment, never a value. env is zero for a run that gets the model key alone (a Jonah run, a
+// definition run), and has no env, files or MCP servers with Use credentials off.
 //
 // repo's token, when it has a URL and one, is opened in the same call and goes to prepare alone,
 // as domain.RepositoryTokenEnv: it signs git in for the clone, the base branch's push and, from
@@ -31,26 +35,15 @@ func (e *Engine) secretEnv(
 	ctx context.Context, use domain.SecretUse, modelKey string, env domain.Environment, repo domain.Repository,
 ) (runEnv, error) {
 	vars := slices.Sorted(maps.Keys(env.Env))
-	names := domain.SecretNames(modelKey)
+	files := domain.FileEnv(env.Files)
 
-	var tokenNames []string
+	var token string
 	if repo.URL != "" {
-		tokenNames = domain.SecretNames(repo.Token)
+		token = repo.Token
 	}
 
-	for _, n := range tokenNames {
-		if !slices.Contains(names, n) {
-			names = append(names, n)
-		}
-	}
-
-	for _, v := range vars {
-		for _, n := range domain.SecretNames(env.Env[v]) {
-			if !slices.Contains(names, n) {
-				names = append(names, n)
-			}
-		}
-	}
+	tokenNames := domain.SecretNames(token)
+	names, mcpSecrets := secretNames(modelKey, token, env)
 
 	values, err := e.openSecrets(ctx, names, use, env.Name, runSecretsWhere(len(tokenNames) > 0, env.Name))
 	if err != nil {
@@ -76,6 +69,25 @@ func (e *Engine) secretEnv(
 		out.agent[v] = domain.FillSecrets(env.Env[v], values)
 	}
 
+	for p, v := range files {
+		out.agent[v] = domain.FillSecrets(env.Files[p], values)
+	}
+
+	for _, n := range mcpSecrets {
+		out.agent[domain.SecretEnv(n)] = values[n]
+	}
+
+	if len(files) > 0 {
+		out.files = files
+	}
+
+	if len(env.MCP) > 0 {
+		out.mcp = make(map[string]domain.MCPServer, len(env.MCP))
+		for name, s := range env.MCP {
+			out.mcp[name] = s.Rendered()
+		}
+	}
+
 	out.agent[keyEnv] = key
 
 	if len(tokenNames) > 0 {
@@ -84,6 +96,36 @@ func (e *Engine) secretEnv(
 	}
 
 	return out, nil
+}
+
+// secretNames are the secrets a run on modelKey, the repository's token and env opens, each once:
+// modelKey's, token's, then env's, files' and the MCP servers', each in sorted key order; mcp are
+// the MCP servers' alone.
+func secretNames(modelKey, token string, env domain.Environment) (names, mcp []string) {
+	add := func(to *[]string, ns []string) {
+		for _, n := range ns {
+			if !slices.Contains(*to, n) {
+				*to = append(*to, n)
+			}
+		}
+	}
+
+	add(&names, domain.SecretNames(modelKey))
+	add(&names, domain.SecretNames(token))
+
+	for _, m := range []map[string]string{env.Env, env.Files} {
+		for _, k := range slices.Sorted(maps.Keys(m)) {
+			add(&names, domain.SecretNames(m[k]))
+		}
+	}
+
+	for _, s := range slices.Sorted(maps.Keys(env.MCP)) {
+		add(&mcp, env.MCP[s].SecretNames())
+	}
+
+	add(&names, mcp)
+
+	return names, mcp
 }
 
 // runSecretsWhere names the keys a run's secrets were named in, for openSecrets's error: the

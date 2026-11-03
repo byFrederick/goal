@@ -1,7 +1,6 @@
 package api
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -11,14 +10,13 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/environmentcheck"
 )
 
 // Environment tests (ADR 0037 decision 9): POST .../environments/{env}/test calls each remote MCP
@@ -37,9 +35,6 @@ var (
 
 // environmentName is the form of an environment's and an MCP server's name.
 var environmentName = regexp.MustCompile(`^[a-z][a-z0-9-]{1,38}[a-z0-9]$`)
-
-// secretRef is one {{secret}} reference in a value; its group is the name.
-var secretRef = regexp.MustCompile(`\{\{\s*([^{}]*?)\s*\}\}`)
 
 // environmentTestProblem answers the environment test rules with their codes.
 func environmentTestProblem(err error) (gen.Problem, bool) {
@@ -184,26 +179,12 @@ func (t envTest) server(ctx context.Context, name, url string, headers, slots ma
 	at := t.s.clock.Now().UTC()
 	r := domain.EnvironmentTest{Factory: t.factory, Environment: t.environment, Server: name, At: at}
 
-	values := slots
-	if values == nil {
-		var err error
-		if values, err = t.open(ctx, referenced(headers)); err != nil {
-			if !errors.Is(err, ports.ErrNotFound) && !errors.Is(err, ports.ErrSecretNotAllowed) {
-				return gen.ServerTest{}, secretError(err)
-			}
-
-			r.Error = cut(err.Error())
-		}
+	res, err := environmentcheck.Server(ctx, t.s.tools, t.open, url, headers, slots)
+	if err != nil {
+		return gen.ServerTest{}, secretError(err)
 	}
 
-	if r.Error == "" {
-		tools, err := t.s.tools.ListTools(ctx, ports.MCPEndpoint{URL: url, Headers: render(headers, values)})
-		if err != nil {
-			r.Error = scrubValues(err.Error(), values)
-		}
-
-		r.OK, r.Tools = err == nil, tools
-	}
+	r.OK, r.Tools, r.Error = res.OK, res.Tools, res.Error
 
 	if err := t.s.envTests.Record(ctx, r); err != nil {
 		return gen.ServerTest{}, err
@@ -259,7 +240,7 @@ func (t envTest) template(ctx context.Context, tpl gen.EnvironmentTestTemplate, 
 		}
 
 		if err != nil {
-			r.Error = new(cut(scrubValues(err.Error(), slots)))
+			r.Error = new(environmentcheck.Cut(environmentcheck.Scrub(err.Error(), slots)))
 		}
 
 		out.Template = &r
@@ -306,7 +287,7 @@ func (t envTest) templateServer(ctx context.Context, name string, m domain.Templ
 	case m.URL == "":
 		return gen.ServerTest{Server: name, Tools: []string{}}, nil
 	case openErr != nil:
-		return gen.ServerTest{Server: name, Tested: true, Tools: []string{}, Error: new(cut(openErr.Error())), At: new(t.s.clock.Now().UTC())}, nil
+		return gen.ServerTest{Server: name, Tested: true, Tools: []string{}, Error: new(environmentcheck.Cut(openErr.Error())), At: new(t.s.clock.Now().UTC())}, nil
 	default:
 		return t.server(ctx, name, m.URL, m.Headers, slots)
 	}
@@ -315,21 +296,7 @@ func (t envTest) templateServer(ctx context.Context, name string, m domain.Templ
 // open opens the named secrets for the factory, without a run (audited as secret.used): their
 // values by name. Its errors name a secret, never a value.
 func (t envTest) open(ctx context.Context, names []string) (map[string]string, error) {
-	out := map[string]string{}
-	if len(names) == 0 {
-		return out, nil
-	}
-
-	resolved, err := t.s.secrets.Resolve(ctx, slices.Compact(slices.Sorted(slices.Values(names))), domain.SecretUse{Factory: t.factory})
-	if err != nil {
-		return nil, err
-	}
-
-	for _, r := range resolved {
-		out[r.Secret.Name] = r.Value
-	}
-
-	return out, nil
+	return environmentcheck.Opens(t.s.secrets, domain.SecretUse{Factory: t.factory})(ctx, names)
 }
 
 // sendTemplateTest sends template c's test request with slots' values, and env's in place of its
@@ -370,55 +337,6 @@ func (s *server) sendTemplateTest(ctx context.Context, c domain.ToolTemplate, sl
 	}
 
 	return res.StatusCode, nil
-}
-
-// referenced are the secrets values refer to, sorted, each once.
-func referenced(values map[string]string) []string {
-	var out []string
-
-	for _, v := range values {
-		for _, m := range secretRef.FindAllStringSubmatch(v, -1) {
-			out = append(out, m[1])
-		}
-	}
-
-	slices.Sort(out)
-
-	return slices.Compact(out)
-}
-
-// render is values with each {{name}} replaced by opened[name].
-func render(values, opened map[string]string) map[string]string {
-	out := make(map[string]string, len(values))
-
-	for k, v := range values {
-		out[k] = secretRef.ReplaceAllStringFunc(v, func(ref string) string { return opened[secretRef.FindStringSubmatch(ref)[1]] })
-	}
-
-	return out
-}
-
-// scrubValues replaces each opened value in msg, the longest first, and cuts it to what a test
-// keeps: an error reaches the answer and the database, which never hold a value.
-func scrubValues(msg string, opened map[string]string) string {
-	values := slices.SortedFunc(maps.Values(opened), func(a, b string) int { return cmp.Compare(len(b), len(a)) })
-
-	for _, v := range values {
-		if v != "" {
-			msg = strings.ReplaceAll(msg, v, "[secret]")
-		}
-	}
-
-	return cut(msg)
-}
-
-// cut keeps the first domain.MaxEnvironmentTestError characters of msg.
-func cut(msg string) string {
-	if utf8.RuneCountInString(msg) <= domain.MaxEnvironmentTestError {
-		return msg
-	}
-
-	return string([]rune(msg)[:domain.MaxEnvironmentTestError-1]) + "…"
 }
 
 // serverTestOut is a kept test as the contract has it.
