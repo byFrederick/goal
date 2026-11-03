@@ -170,7 +170,7 @@ func (in *Ingestor) sync(ctx context.Context, c domain.SourceClaim) error {
 	}()
 
 	started := in.cfg.Clock.Now()
-	stats, err := in.pass(ctx, c, started)
+	stats, err := in.pass(ctx, c)
 
 	lost := context.Cause(ctx)
 	if lost == nil && errors.Is(err, ports.ErrLeaseLost) {
@@ -192,8 +192,7 @@ func (in *Ingestor) sync(ctx context.Context, c domain.SourceClaim) error {
 	}
 
 	in.cfg.Log.InfoContext(ctx, "knowledge sync", slog.String("source", src.Name), slog.String("source_id", string(src.ID)),
-		slog.Int("listed", stats.listed), slog.Int("fetched", stats.fetched), slog.Int("deleted", stats.deleted),
-		slog.Int("chunks", stats.chunks), slog.Int("files", stats.snapshot.files), slog.Int("files_fetched", stats.snapshot.fetched),
+		slog.Int("files", stats.snapshot.files), slog.Int("files_fetched", stats.snapshot.fetched),
 		slog.Int("files_failed", stats.snapshot.failed), slog.Bool("snapshot", stats.snapshot.written),
 		slog.Float64("seconds", r.At.Sub(started).Seconds()), slog.String("error", r.Error))
 
@@ -241,15 +240,14 @@ func (in *Ingestor) renew(ctx context.Context, cancel context.CancelCauseFunc, l
 }
 
 type syncStats struct {
-	listed, fetched, deleted, chunks int
-	snapshot                         snapshotStats
+	snapshot snapshotStats
 }
 
 // pass is one sync of src: for an upload or synced source every listed document whose version
 // changed indexed, the others marked seen,
 // and for a synced source the ones it no longer lists deleted; then for an upload, repository or
 // Confluence source its snapshot.
-func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim, started time.Time) (syncStats, error) {
+func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim) (syncStats, error) {
 	var stats syncStats
 
 	src := c.Source
@@ -257,12 +255,6 @@ func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim, started time
 	spec, reader, err := in.reader(ctx, src)
 	if err != nil {
 		return stats, err
-	}
-
-	if src.Kind == domain.SourceUpload || src.Kind == domain.SourceSynced {
-		if err := in.chunks(ctx, c, spec, reader, started, &stats); err != nil {
-			return stats, err
-		}
 	}
 
 	if !writesSnapshots(src.Kind) {
@@ -280,82 +272,6 @@ func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim, started time
 	stats.snapshot, err = in.snapshot(ctx, c, spec, reader)
 
 	return stats, err
-}
-
-// chunks indexes the documents of an upload or synced source that changed, marks the others
-// seen and, for a synced source, deletes those it no longer lists.
-func (in *Ingestor) chunks(ctx context.Context, c domain.SourceClaim, spec domain.SyncSpec, reader ports.SourceReader, started time.Time,
-	stats *syncStats,
-) error {
-	src := c.Source
-
-	versions, err := in.cfg.Knowledge.Versions(ctx, src.ID)
-	if err != nil {
-		return err
-	}
-
-	seen, err := in.list(ctx, spec, reader, versions, started, stats)
-	if err != nil {
-		return err
-	}
-
-	if err := in.cfg.Knowledge.MarkSeen(ctx, c.Lease, seen, started); err != nil {
-		return err
-	}
-
-	if src.Kind == domain.SourceSynced {
-		if stats.deleted, err = in.cfg.Knowledge.DeleteUnseen(ctx, c.Lease, started); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// list indexes the listed documents of spec's source that changed and returns the external ids of those that stay as
-// they are: unchanged, or indexed before and not fetched this time.
-func (in *Ingestor) list(ctx context.Context, spec domain.SyncSpec, reader ports.SourceReader, versions map[string]string,
-	started time.Time, stats *syncStats,
-) ([]string, error) {
-	var seen []string
-
-	for item, err := range reader.List(ctx, spec) {
-		if err != nil {
-			return nil, fmt.Errorf("list: %w", err)
-		}
-
-		stats.listed++
-
-		if len(item.ID) > domain.MaxExternalID {
-			in.cfg.Log.WarnContext(ctx, "knowledge document left out: its id is too long", slog.String("source", spec.Source.Name),
-				slog.Int("bytes", len(item.ID)))
-
-			continue
-		}
-
-		v, known := versions[item.ID]
-		if known && v == item.Version {
-			seen = append(seen, item.ID)
-
-			continue
-		}
-
-		n, kept, err := in.index(ctx, spec, reader, item, started, known)
-		if err != nil {
-			return nil, err
-		}
-
-		if kept {
-			seen = append(seen, item.ID)
-
-			continue
-		}
-
-		stats.fetched++
-		stats.chunks += n
-	}
-
-	return seen, nil
 }
 
 // reader is what reads src: the uploads; a repository's or Confluence source's kind's reader,
@@ -431,100 +347,5 @@ func (in *Ingestor) secretReader(ctx context.Context, spec domain.SyncSpec, name
 	return spec, reader, nil
 }
 
-// index fetches, extracts and chunks one document and stores it, and returns how many
-// chunks it has. A document that cannot be read is stored failed with the reason; one that cannot
-// be fetched (the source failing for now) keeps what was indexed of it when it was known (kept:
-// the next sync tries again), else is stored failed without a version, so the next sync tries
-// again too. An upload deleted meanwhile stays deleted. Only the database or ctx ending stops
-// the sync.
-func (in *Ingestor) index(ctx context.Context, spec domain.SyncSpec, reader ports.SourceReader, item domain.SourceItem, seen time.Time,
-	known bool,
-) (n int, kept bool, err error) {
-	d := domain.KnowledgeDocument{
-		Source: spec.Source.ID, ExternalID: item.ID, Version: item.Version, Title: item.Title, URL: item.URL, MIME: item.MIME,
-		SeenAt: seen, CreatedBy: domain.EngineActor,
-	}
-
-	pieces, err := in.read(ctx, spec, reader, &d)
-	if ctx.Err() != nil {
-		return 0, false, ctx.Err()
-	}
-
-	if known && errors.Is(err, errFetch) {
-		in.cfg.Log.WarnContext(ctx, "knowledge document kept as indexed", slog.String("source", spec.Source.Name),
-			slog.String("document", item.ID), slog.Any("error", err))
-
-		return 0, true, nil
-	}
-
-	switch {
-	case err != nil:
-		d.Status, d.Error = domain.DocumentFailed, err.Error()
-	case len(pieces) == 0:
-		d.Status = domain.DocumentSkipped
-	default:
-		d.Status = domain.DocumentIndexed
-	}
-
-	chunks := chunksOf(pieces)
-
-	if d.Status == domain.DocumentIndexed {
-		now := in.cfg.Clock.Now()
-		d.IndexedAt = &now
-	}
-
-	err = in.cfg.Knowledge.PutDocument(ctx, d, chunks)
-	if errors.Is(err, ports.ErrNotFound) && spec.Source.Kind == domain.SourceUpload {
-		return 0, false, nil // deleted meanwhile
-	}
-
-	if err != nil {
-		return 0, false, err
-	}
-
-	return len(chunks), false, nil
-}
-
 // errFetch marks a document its source could not hand over.
 var errFetch = errors.New("fetch")
-
-// read fetches d's content and cuts its text into pieces, filling in what the fetch tells.
-func (in *Ingestor) read(ctx context.Context, spec domain.SyncSpec, reader ports.SourceReader, d *domain.KnowledgeDocument) ([]Piece, error) {
-	doc, err := reader.Fetch(ctx, spec, d.ExternalID)
-	if err != nil {
-		d.Version = ""
-
-		return nil, fmt.Errorf("%w: %w", errFetch, err)
-	}
-
-	if doc.MIME != "" {
-		d.MIME = doc.MIME
-	}
-
-	if doc.Title != "" {
-		d.Title = doc.Title
-	}
-
-	if doc.URL != "" {
-		d.URL = doc.URL
-	}
-
-	d.Bytes = int64(len(doc.Body))
-
-	text, err := Extract(d.MIME, doc.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	return Chunk(text), nil
-}
-
-// chunksOf turns pieces into chunks, in order.
-func chunksOf(pieces []Piece) []domain.Chunk {
-	chunks := make([]domain.Chunk, len(pieces))
-	for i, p := range pieces {
-		chunks[i] = domain.Chunk{Ord: i, Heading: p.Heading, Text: p.Text}
-	}
-
-	return chunks
-}

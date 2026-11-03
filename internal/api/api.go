@@ -215,7 +215,6 @@ type Deps struct {
 	// searches it as the gateway's knowledge__search does.
 	Knowledge        ports.Knowledge
 	KnowledgeUploads KnowledgeUploads
-	KnowledgeSearch  KnowledgeSearch
 	UploadMaxBytes   int64
 	// KnowledgeObjects reads the snapshots' zips by range for one file's Markdown, and
 	// KnowledgeCheck lists a source's settings before they are saved (ADR 0038 decision 13).
@@ -254,7 +253,7 @@ func (d Deps) complete() bool {
 		d.Engine == nil, d.Items == nil, d.Factories == nil, d.Definitions == nil, d.Versions == nil, d.Orgs == nil,
 		d.Audit == nil, d.Access == nil, d.Authorizer == nil, d.Platform == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil,
 		d.Connections == nil, d.Credentials == nil, d.OrgSecrets == nil, d.EnvironmentTests == nil, d.ToolLister == nil, d.Intake == nil, d.DraftRequests == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
-		d.Knowledge == nil, d.KnowledgeUploads == nil, d.KnowledgeSearch == nil, d.UploadMaxBytes <= 0, d.KnowledgeObjects == nil, d.KnowledgeCheck == nil,
+		d.Knowledge == nil, d.KnowledgeUploads == nil, d.UploadMaxBytes <= 0, d.KnowledgeObjects == nil, d.KnowledgeCheck == nil,
 		d.OrgPolicies == nil, len(d.BoxSizes) == 0, d.NotificationPreferences == nil,
 		d.Judges != nil && (d.Judges.Judges == nil || d.Judges.Scores == nil || d.Judges.Tries == nil),
 		d.Evals != nil && (d.Evals.Runs == nil || d.Evals.Loop == nil || d.Evals.Judges == nil),
@@ -300,7 +299,7 @@ var errInvalid = errors.New("invalid request")
 func New(d Deps) (http.Handler, error) {
 	if !d.complete() {
 		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock, " +
-			"Connections, Credentials, OrgSecrets, EnvironmentTests, ToolLister, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeSearch, KnowledgeObjects, KnowledgeCheck, OrgPolicies, BoxSizes, NotificationPreferences, " +
+			"Connections, Credentials, OrgSecrets, EnvironmentTests, ToolLister, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeObjects, KnowledgeCheck, OrgPolicies, BoxSizes, NotificationPreferences, " +
 			"a positive UploadMaxBytes and a positive OrgRetention are required, Judges, when set, needs Judges, Scores and Tries, " +
 			"Evals, when set, needs Runs, Loop and Judges, and Jonah, when set, needs Store and Decisions")
 	}
@@ -320,7 +319,7 @@ func New(d Deps) (http.Handler, error) {
 		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, secrets: d.OrgSecrets, catalog: slices.Clone(d.Catalog), envTests: d.EnvironmentTests, tools: d.ToolLister, conversions: d.Conversions, intake: d.Intake, draftRequests: d.DraftRequests, parseKind: d.ParseKind, codehosts: d.CodeHosts,
 		repoTestTimeout:  cmp.Or(d.RepositoryTestTimeout, connectionTestTimeout),
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
-		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes, objects: d.KnowledgeObjects, check: d.KnowledgeCheck,
+		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, uploadMax: d.UploadMaxBytes, objects: d.KnowledgeObjects, check: d.KnowledgeCheck,
 		policies: d.OrgPolicies, notifications: d.NotificationPreferences, boxSizes: slices.Clone(d.BoxSizes), egress: slices.Clone(d.EgressAddresses),
 		judges: d.Judges, evals: d.Evals, jonah: d.Jonah, clock: d.Clock, log: log, exportMax: cmp.Or(d.ExportMaxRows, defaultExportMaxRows),
 	}
@@ -461,7 +460,6 @@ type server struct {
 	// knowledge, uploads and search serve the knowledge routes; uploadMax bounds an uploaded file.
 	knowledge ports.Knowledge
 	uploads   KnowledgeUploads
-	search    KnowledgeSearch
 	objects   KnowledgeObjects
 	check     KnowledgeCheck
 	uploadMax int64

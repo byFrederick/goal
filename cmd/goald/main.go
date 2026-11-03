@@ -263,7 +263,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
 		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), Conversions: postgres.NewFactoryConversions(store), ToolLister: toolLister,
 		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
-		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes, KnowledgeObjects: objects, KnowledgeCheck: kb.ingestor,
+		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, UploadMaxBytes: s.UploadMaxBytes, KnowledgeObjects: objects, KnowledgeCheck: kb.ingestor,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
 		NotificationPreferences: postgres.NewNotificationPreferences(store),
 		Jonah:                   jonahDeps(store, authors, clock, log), Clock: clock, Logger: log,
@@ -355,7 +355,6 @@ func notificationJobs(s settings, store *postgres.Store, connections *postgres.C
 type knowledgeBase struct {
 	kb       *postgres.Knowledge
 	uploads  *knowledge.Uploads
-	searcher *knowledge.Searcher
 	ingestor *knowledge.Ingestor
 }
 
@@ -396,7 +395,7 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 	uploads := knowledge.NewUploads(kb, objects, s.UploadMaxBytes)
 
 	return knowledgeBase{
-		kb: kb, uploads: uploads, searcher: knowledge.NewSearcher(kb),
+		kb: kb, uploads: uploads,
 		ingestor: knowledge.NewIngestor(knowledge.IngestorConfig{
 			Knowledge: kb, Connections: connections, Secrets: secrets, Uploads: uploads,
 			Readers: readers, Objects: objects, Converter: converter, Clock: clock, Log: log, Workers: s.KBWorkers,

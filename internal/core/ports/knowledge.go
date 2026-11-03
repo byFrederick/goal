@@ -9,9 +9,8 @@ import (
 )
 
 // Knowledge is an organization's knowledge base (spec 4 §4.8, §5.6) for the organization in ctx:
-// its sources, their snapshots, current files and read counts (ADR 0038), and until the cut-over
-// (ADR 0038 decision 16) their documents and the documents' chunks, searched by keywords and
-// nearest neighbours in one ranking. Every change people make is audited in its transaction. Syncs are
+// its sources, their snapshots, current files and read counts, and the files uploaded to upload
+// sources (ADR 0038). Every change people make is audited in its transaction. Syncs are
 // claimed with leases, so any goald may sync any source and one that dies leaves it to the
 // next once its lease ends.
 type Knowledge interface {
@@ -80,70 +79,21 @@ type Knowledge interface {
 	// day, path and factory. ErrNotFound for an unknown source.
 	FileReads(ctx context.Context, source string, since time.Time) ([]domain.KnowledgeFileReads, error)
 
-	// Versions are the versions of a source's documents by external id, those pending excluded:
-	// what a sync need not fetch again.
-	Versions(ctx context.Context, source domain.KnowledgeSourceID) (map[string]string, error)
-	// PutDocument creates or replaces the document of d.Source with d.ExternalID and replaces
-	// its chunks, in one transaction. A document's seen time never goes back. Of an upload source
-	// it only replaces one: an upload deleted meanwhile stays deleted (ErrNotFound).
-	PutDocument(ctx context.Context, d domain.KnowledgeDocument, chunks []domain.Chunk) error
-	// MarkSeen sets the seen time of the lease's source's documents with the given external ids
-	// to at, unless they were seen later. ErrLeaseLost, changing nothing, once another claim
-	// took the source.
-	MarkSeen(ctx context.Context, l domain.SourceLease, externalIDs []string, at time.Time) error
-	// DeleteUnseen deletes the lease's source's documents last seen before (a sync's start) and
-	// returns how many. ErrLeaseLost, deleting nothing, once another claim took the source.
-	DeleteUnseen(ctx context.Context, l domain.SourceLease, before time.Time) (int, error)
-
-	// AddUpload adds an uploaded document to the upload source named source, pending
-	// (knowledge_document.uploaded); the caller then stores its content and makes the source
-	// due. d.Blob is its content's hash, which is its external id and version too: uploading the
-	// same content again returns the document it is. It waits for a deletion dropping that
-	// content (DropBlobs). ErrNotFound for an unknown source, domain.ErrNotUploadSource for one of
+	// AddUpload adds an uploaded file to the upload source named source (knowledge_document.uploaded);
+	// the caller then stores its original and makes the source due. u.Blob is its content's hash.
+	// A file of the same name in the source is replaced, calling drop with the content it held when
+	// no other upload holds it, and uploading the same content under the same name again returns
+	// the file it is. It waits for a deletion dropping that content (DropBlobs). ErrNotFound for an unknown source, domain.ErrNotUploadSource for one of
 	// another kind.
-	AddUpload(ctx context.Context, source string, d domain.KnowledgeDocument, by domain.Actor) (domain.KnowledgeDocument, error)
-	// DeleteDocument deletes an uploaded document (knowledge_document.deleted) and calls drop,
-	// before the deletion commits, with its content hash when no document of the organization
-	// holds it any more (DropBlobs). ErrNotFound when there is none; domain.ErrNotUploadSource for
-	// a document of another kind.
-	DeleteDocument(ctx context.Context, id domain.KnowledgeDocumentID, by domain.Actor, drop DropBlobs) error
-	// Documents are one page of a source's documents in id order, after the id after ("" from
-	// the first). ErrNotFound for an unknown source.
-	Documents(ctx context.Context, source string, after domain.KnowledgeDocumentID, limit int) ([]domain.KnowledgeDocument, error)
-	// Document is a document with its indexed text, its chunks joined in order. ErrNotFound when
-	// there is none.
-	Document(ctx context.Context, id domain.KnowledgeDocumentID) (domain.KnowledgeDocument, string, error)
-
-	// Search ranks the chunks of q.Sources only, by reciprocal rank fusion of their keyword
-	// ranking and, with q.Embedding, their nearest neighbours among the chunks of q.Model
-	// (domain.FuseRanks); there is no unfiltered variant.
-	Search(ctx context.Context, q domain.KnowledgeQuery) ([]domain.KnowledgeHit, error)
-
-	// RecordUse records a run's use of a document (ADR 0027): one per run, document and kind, a
-	// second merging its chunk ids into the first and keeping the earlier time. Its rules are
-	// KnowledgeUse.Check's (domain.ErrInvalid); ErrNotFound when the source has no such document.
-	RecordUse(ctx context.Context, u domain.KnowledgeUse) error
-	// GiveVerdict records v and returns it as stored, with its document's source and its time:
-	// one per actor, document and run (none counting as its own), so a later one replaces the
-	// earlier one's verdict, note, item and time. It appends domain.AuditKnowledgeVerdictGiven
-	// (its kind and run, never its note) and notifies the stream event knowledge of its source,
-	// both with the verdict. Its rules are KnowledgeVerdict.Check's (domain.ErrInvalid);
-	// ErrNotFound for an unknown document.
-	GiveVerdict(ctx context.Context, v domain.KnowledgeVerdict) (domain.KnowledgeVerdict, error)
-	// SourceUsage is the use of the source name's documents over a window of the last days (1 to
-	// domain.MaxUsageDays, else domain.ErrInvalid): per document with a use or a verdict in the
-	// window, the distinct runs with a use and the verdicts given, at most
-	// domain.MaxUsageDocuments, by runs descending then id. ErrNotFound for an unknown source.
-	SourceUsage(ctx context.Context, source string, days int) ([]domain.DocumentUsage, error)
-	// DocumentUses are one page of the runs that used a document, newest first use first (ties
-	// by run id descending), after the run after ("" from the first). ErrNotFound for an unknown
-	// document.
-	DocumentUses(ctx context.Context, document domain.KnowledgeDocumentID, after domain.RunID, limit int) ([]domain.KnowledgeRunUse, error)
-	// RunUses are a run's uses, by time, document and kind; none for an unknown run.
-	RunUses(ctx context.Context, run domain.RunID) ([]domain.KnowledgeUse, error)
-	// RunVerdicts are the verdicts given for a run, by time, document and actor; none for an
-	// unknown run.
-	RunVerdicts(ctx context.Context, run domain.RunID) ([]domain.KnowledgeVerdict, error)
+	AddUpload(ctx context.Context, source string, u domain.KnowledgeUpload, by domain.Actor, drop DropBlobs) (domain.KnowledgeUpload, error)
+	// DeleteUpload deletes the file named name of an upload source (knowledge_document.deleted) and
+	// calls drop, before the deletion commits, with its content hash when no upload of the
+	// organization holds it any more (DropBlobs). ErrNotFound when there is none;
+	// domain.ErrNotUploadSource for a source of another kind.
+	DeleteUpload(ctx context.Context, source, name string, by domain.Actor, drop DropBlobs) error
+	// Uploads are the files of an upload source, by name. ErrNotFound for an unknown source,
+	// domain.ErrNotUploadSource for one of another kind.
+	Uploads(ctx context.Context, source string) ([]domain.KnowledgeUpload, error)
 }
 
 // DropBlobs deletes the objects of uploads' contents no document holds any more. A deletion calls

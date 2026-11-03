@@ -1,19 +1,16 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"maps"
-	"mime"
 	"mime/multipart"
 	"net/http"
 	"slices"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/config"
@@ -24,46 +21,32 @@ import (
 // The organization's knowledge base (spec 4 §4.8, ADR 0038 decision 13): members, keys and
 // personal tokens list and read its sources, files and reads (knowledge:read); owners, admins and
 // keys add, check, change, sync and delete sources, upload files and delete them
-// (knowledge:manage). The documents and search routes stay until the cut-over (decision 16).
+// (knowledge:manage).
 
 // KnowledgeUploads keeps the files uploaded to upload sources (*knowledge.Uploads): Check refuses
 // a file Upload would (ports.ErrTooLarge, domain.ErrUnsupportedDocument) before anything is
-// stored; Original is an upload's file as it came; the deletions also delete the files no other
-// document holds.
+// stored; the deletions also delete the originals no other upload holds.
 type KnowledgeUploads interface {
 	Check(name string, body []byte) error
-	Upload(ctx context.Context, source, name string, body []byte, by domain.Actor) (domain.KnowledgeDocument, error)
-	Original(ctx context.Context, id domain.KnowledgeDocumentID) (domain.KnowledgeDocument, []byte, error)
-	DeleteDocument(ctx context.Context, id domain.KnowledgeDocumentID, by domain.Actor) error
+	Upload(ctx context.Context, source, name string, body []byte, by domain.Actor) (domain.KnowledgeUpload, error)
+	DeleteUpload(ctx context.Context, source, name string, by domain.Actor) error
 	DeleteSource(ctx context.Context, name string, by domain.Actor) error
-}
-
-// KnowledgeSearch searches the named sources of the knowledge base (*knowledge.Searcher), as the
-// gateway's knowledge__search does.
-type KnowledgeSearch interface {
-	Search(ctx context.Context, text string, sources []string, limit int) ([]domain.KnowledgeHit, error)
 }
 
 // Limits of the knowledge routes.
 const (
 	// uploadSlack is what an upload request may carry over its largest file: multipart's headers
 	// and boundaries.
-	uploadSlack       = 1 << 20
-	defaultDocuments  = 100
-	maxDocuments      = 500
-	defaultSearchHits = 8
-	maxSearchHits     = 20
-	maxQueryRunes     = 1000
+	uploadSlack = 1 << 20
 )
 
 // Errors of the knowledge routes, answered with their codes by knowledgeProblem.
 var (
-	errSourceNotFound   = errors.New("knowledge source not found")
-	errDocumentNotFound = errors.New("knowledge document not found")
-	errSourceTaken      = errors.New("knowledge source name taken")
-	errSourceInUse      = errors.New("knowledge source in use")
-	errSourceLive       = errors.New("a live knowledge source never syncs")
-	errUploadTooLarge   = errors.New("upload too large")
+	errSourceNotFound = errors.New("knowledge source not found")
+	errSourceTaken    = errors.New("knowledge source name taken")
+	errSourceInUse    = errors.New("knowledge source in use")
+	errSourceLive     = errors.New("a live knowledge source never syncs")
+	errUploadTooLarge = errors.New("upload too large")
 	// errSourceInvalid is a source the rules refuse (400).
 	errSourceInvalid = errors.New("knowledge source invalid")
 )
@@ -76,7 +59,6 @@ func knowledgeProblem(err error) (gen.Problem, bool) {
 		code   string
 	}{
 		{errSourceNotFound, http.StatusNotFound, "knowledge-source-not-found"},
-		{errDocumentNotFound, http.StatusNotFound, "knowledge-document-not-found"},
 		{errFileNotFound, http.StatusNotFound, "knowledge-file-not-found"},
 		{errSourceTaken, http.StatusConflict, "knowledge-source-name-taken"},
 		{errSourceInUse, http.StatusConflict, "knowledge-source-in-use"},
@@ -119,15 +101,6 @@ func sourceError(err error, name string) error {
 	}
 }
 
-// documentError is err of a document's read or deletion as the API answers it.
-func documentError(err error, id string) error {
-	if errors.Is(err, ports.ErrNotFound) {
-		return fmt.Errorf("%w: %s: %w", errDocumentNotFound, id, err)
-	}
-
-	return err
-}
-
 func (s *server) ListKnowledgeSources(ctx context.Context, req gen.ListKnowledgeSourcesRequestObject) (gen.ListKnowledgeSourcesResponseObject, error) {
 	var named []string
 
@@ -138,7 +111,7 @@ func (s *server) ListKnowledgeSources(ctx context.Context, req gen.ListKnowledge
 			return nil, err
 		}
 
-		named = searchable(f)
+		named = listedSources(f)
 	}
 
 	sources, err := s.knowledge.Sources(ctx)
@@ -311,79 +284,6 @@ func (s *server) SyncKnowledgeSource(ctx context.Context, req gen.SyncKnowledgeS
 	return gen.SyncKnowledgeSource202Response{}, nil
 }
 
-func (s *server) ListKnowledgeDocuments(ctx context.Context, req gen.ListKnowledgeDocumentsRequestObject) (gen.ListKnowledgeDocumentsResponseObject, error) {
-	limit := defaultDocuments
-	if req.Params.Limit != nil {
-		limit = *req.Params.Limit
-	}
-
-	if limit < 1 || limit > maxDocuments {
-		return nil, fmt.Errorf("%w: limit must be in [1, %d]", errInvalid, maxDocuments)
-	}
-
-	// One more than the page says whether there is a next one.
-	docs, err := s.knowledge.Documents(ctx, req.Source, domain.KnowledgeDocumentID(deref(req.Params.After)), limit+1)
-	if err != nil {
-		return nil, sourceError(err, req.Source)
-	}
-
-	out := gen.ListKnowledgeDocuments200JSONResponse{Documents: []gen.KnowledgeDocument{}}
-
-	if len(docs) > limit {
-		docs = docs[:limit]
-		out.NextAfter = optional(string(docs[limit-1].ID))
-	}
-
-	for _, d := range docs {
-		out.Documents = append(out.Documents, documentOut(d, req.Source))
-	}
-
-	return out, nil
-}
-
-// UploadKnowledgeDocuments stores the request's files in an upload source once every one of them
-// passes: the source must be an upload source, and each file of a size and type the knowledge
-// base takes.
-func (s *server) UploadKnowledgeDocuments(ctx context.Context, req gen.UploadKnowledgeDocumentsRequestObject) (gen.UploadKnowledgeDocumentsResponseObject, error) {
-	by, ok := domain.ActorFrom(ctx)
-	if !ok {
-		return nil, errors.New("upload knowledge documents: the request has no actor")
-	}
-
-	files, err := s.uploadedFiles(req.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	src, err := s.knowledge.Source(ctx, req.Source)
-	if err != nil {
-		return nil, sourceError(err, req.Source)
-	}
-
-	if src.Kind != domain.SourceUpload {
-		return nil, fmt.Errorf("knowledge source %q is %s: %w", req.Source, src.Kind, domain.ErrNotUploadSource)
-	}
-
-	for _, f := range files {
-		if err := s.uploads.Check(f.name, f.body); err != nil {
-			return nil, uploadError(err)
-		}
-	}
-
-	out := gen.UploadKnowledgeDocuments202JSONResponse{Documents: make([]gen.KnowledgeDocument, 0, len(files))}
-
-	for _, f := range files {
-		d, err := s.uploads.Upload(ctx, req.Source, f.name, f.body, by)
-		if err != nil {
-			return nil, uploadError(sourceError(err, req.Source))
-		}
-
-		out.Documents = append(out.Documents, documentOut(d, req.Source))
-	}
-
-	return out, nil
-}
-
 // uploadedFile is one file of an upload request.
 type uploadedFile struct {
 	name string
@@ -454,120 +354,10 @@ func uploadError(err error) error {
 	return err
 }
 
-func (s *server) GetKnowledgeDocument(ctx context.Context, req gen.GetKnowledgeDocumentRequestObject) (gen.GetKnowledgeDocumentResponseObject, error) {
-	d, text, err := s.knowledge.Document(ctx, domain.KnowledgeDocumentID(req.Document))
-	if err != nil {
-		return nil, documentError(err, req.Document)
-	}
-
-	names, err := s.sourceNames(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return gen.GetKnowledgeDocument200JSONResponse{Document: documentOut(d, names[d.Source]), Text: text}, nil
-}
-
-// GetKnowledgeDocumentContent serves an uploaded original as an attachment that a browser
-// downloads and never renders or sniffs (threat row 11).
-func (s *server) GetKnowledgeDocumentContent(ctx context.Context, req gen.GetKnowledgeDocumentContentRequestObject) (gen.GetKnowledgeDocumentContentResponseObject, error) {
-	d, body, err := s.uploads.Original(ctx, domain.KnowledgeDocumentID(req.Document))
-	if err != nil {
-		return nil, documentError(err, req.Document)
-	}
-
-	return gen.GetKnowledgeDocumentContent200ApplicationoctetStreamResponse{
-		Body: bytes.NewReader(body), ContentLength: int64(len(body)),
-		Headers: gen.GetKnowledgeDocumentContent200ResponseHeaders{
-			ContentDisposition: mime.FormatMediaType("attachment", map[string]string{"filename": d.Title}), XContentTypeOptions: "nosniff",
-		},
-	}, nil
-}
-
-func (s *server) DeleteKnowledgeDocument(ctx context.Context, req gen.DeleteKnowledgeDocumentRequestObject) (gen.DeleteKnowledgeDocumentResponseObject, error) {
-	by, ok := domain.ActorFrom(ctx)
-	if !ok {
-		return nil, errors.New("delete knowledge document: the request has no actor")
-	}
-
-	if err := s.uploads.DeleteDocument(ctx, domain.KnowledgeDocumentID(req.Document), by); err != nil {
-		return nil, documentError(err, req.Document)
-	}
-
-	return gen.DeleteKnowledgeDocument204Response{}, nil
-}
-
-// SearchKnowledge ranks the chunks of the named sources, or of every source, for the query.
-func (s *server) SearchKnowledge(ctx context.Context, req gen.SearchKnowledgeRequestObject) (gen.SearchKnowledgeResponseObject, error) {
-	q := strings.TrimSpace(req.Params.Q)
-	if q == "" || utf8.RuneCountInString(q) > maxQueryRunes {
-		return nil, fmt.Errorf("%w: q is 1 to %d characters", errInvalid, maxQueryRunes)
-	}
-
-	limit := defaultSearchHits
-	if req.Params.Limit != nil {
-		limit = *req.Params.Limit
-	}
-
-	if limit < 1 || limit > maxSearchHits {
-		return nil, fmt.Errorf("%w: limit must be in [1, %d]", errInvalid, maxSearchHits)
-	}
-
-	sources, err := s.searchSources(ctx, deref(req.Params.Source))
-	if err != nil {
-		return nil, err
-	}
-
-	hits, err := s.search.Search(ctx, q, sources, limit)
-	if err != nil {
-		return nil, err
-	}
-
-	out := gen.SearchKnowledge200JSONResponse{Hits: make([]gen.KnowledgeHit, 0, len(hits))}
-	for _, h := range hits {
-		out.Hits = append(out.Hits, gen.KnowledgeHit{
-			Document: string(h.Document), Source: h.Source, Title: h.Title, Url: optional(h.URL), Heading: h.Heading, Snippet: h.Text, Score: h.Score,
-		})
-	}
-
-	return out, nil
-}
-
-// searchSources are the sources a search names, each one the organization has, or every source
-// when it names none.
-func (s *server) searchSources(ctx context.Context, named []string) ([]string, error) {
-	all, err := s.knowledge.Sources(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	names := make([]string, 0, len(all))
-	for _, src := range all {
-		names = append(names, src.Name)
-	}
-
-	for _, name := range named {
-		if !slices.Contains(names, name) {
-			return nil, fmt.Errorf("%w: %q", errSourceNotFound, name)
-		}
-	}
-
-	if len(named) > 0 {
-		return named, nil
-	}
-
-	return names, nil
-}
-
-// searchable are the knowledge sources a factory's agents may search.
-func searchable(f *config.Factory) []string {
-	return f.Spec.Knowledge.Names()
-}
-
 // sourceUsers are the factories goald runs for the organization, by the knowledge sources their
 // current versions may search; archived factories search none.
 func (s *server) sourceUsers(ctx context.Context) (map[string][]factoryUse, error) {
-	users, err := s.usersBy(ctx, searchable)
+	users, err := s.usersBy(ctx, listedSources)
 	if err != nil {
 		return nil, err
 	}
@@ -647,7 +437,7 @@ func (s *server) sourceOut(ctx context.Context, src domain.KnowledgeSource, by [
 	out := gen.KnowledgeSource{
 		Id: string(src.ID), Name: src.Name, Title: src.Title, Kind: gen.KnowledgeSourceKind(src.Kind), Connection: optional(src.Connection),
 		Secret: optional(src.Secret), Config: map[string]string{}, ReadWhen: src.ReadWhen, SyncEverySeconds: int(src.SyncEvery / time.Second), Status: gen.KnowledgeSourceStatus(src.Status),
-		LastError: optional(src.LastError), LastSyncedAt: src.LastSyncedAt, NextSyncAt: src.NextSyncAt, Documents: src.Documents,
+		LastError: optional(src.LastError), LastSyncedAt: src.LastSyncedAt, NextSyncAt: src.NextSyncAt,
 		UsedBy:    gen.KnowledgeSourceUsers{Factories: []gen.ConnectionFactory{}, Readers: []gen.KnowledgeSourceReader{}},
 		CreatedBy: s.actorOut(src.CreatedBy), CreatedAt: src.CreatedAt, UpdatedAt: src.UpdatedAt,
 	}
@@ -661,9 +451,6 @@ func (s *server) sourceOut(ctx context.Context, src domain.KnowledgeSource, by [
 	if len(snaps) > 0 {
 		n := snaps[0]
 		out.LatestSnapshot = &gen.KnowledgeSnapshotSummary{Files: n.Files, Failed: n.Failed, Bytes: n.Bytes, SyncedAt: n.CreatedAt}
-		out.Documents = n.Files
-	} else {
-		out.Documents = 0
 	}
 
 	for _, f := range by {
@@ -679,14 +466,6 @@ func (s *server) sourceOut(ctx context.Context, src domain.KnowledgeSource, by [
 	return out, nil
 }
 
-// documentOut is a document of the source named source as the contract has it.
-func documentOut(d domain.KnowledgeDocument, source string) gen.KnowledgeDocument {
-	return gen.KnowledgeDocument{
-		Id: string(d.ID), Source: source, Title: d.Title, Url: optional(d.URL), Mime: d.MIME, Bytes: d.Bytes,
-		Status: gen.KnowledgeDocumentStatus(d.Status), Error: optional(d.Error), IndexedAt: d.IndexedAt,
-	}
-}
-
 // seconds is a schedule in seconds as a duration; nil is 0, the default.
 func seconds(n *int) time.Duration {
 	if n == nil {
@@ -694,4 +473,9 @@ func seconds(n *int) time.Duration {
 	}
 
 	return time.Duration(*n) * time.Second
+}
+
+// listedSources are the knowledge sources a factory's agents read.
+func listedSources(f *config.Factory) []string {
+	return f.Spec.Knowledge.Names()
 }

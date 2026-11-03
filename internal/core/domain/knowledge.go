@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"path"
-	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -21,8 +20,8 @@ import (
 // KnowledgeSourceID is a knowledge source's id (a UUID).
 type KnowledgeSourceID string
 
-// KnowledgeDocumentID is a knowledge document's id (a UUID).
-type KnowledgeDocumentID string
+// KnowledgeUploadID is an uploaded file's id (a UUID).
+type KnowledgeUploadID string
 
 // KnowledgeSourceKind is how a source gets its documents.
 type KnowledgeSourceKind string
@@ -53,19 +52,6 @@ const (
 	SyncFailed  SyncStatus = "failed"
 )
 
-// DocumentStatus is where a document is in indexing: pending until the next sync of its source
-// indexes it, failed when it could not be (Error says why) and skipped when there is nothing to
-// index (no text).
-type DocumentStatus string
-
-// The states of a document.
-const (
-	DocumentPending DocumentStatus = "pending"
-	DocumentIndexed DocumentStatus = "indexed"
-	DocumentFailed  DocumentStatus = "failed"
-	DocumentSkipped DocumentStatus = "skipped"
-)
-
 // Limits and defaults of the knowledge base (00054's checks).
 const (
 	// DefaultSyncEvery and MinSyncEvery bound how often a source syncs.
@@ -75,17 +61,8 @@ const (
 	// size as JSON.
 	MaxSourceTitle  = 120
 	MaxSourceConfig = 8192
-	// MaxChunkText is a chunk's text in characters.
-	MaxChunkText = 8000
-	// MaxExternalID is a document's id at its source in bytes: an entry of its unique index
-	// must fit a btree page's third (00056).
-	MaxExternalID = 2000
 	// MaxKnowledgeError is a stored error message in characters.
 	MaxKnowledgeError = 500
-	// SearchCandidates is how many chunks each ranking of a search contributes before fusion.
-	SearchCandidates = 50
-	// RRFK is reciprocal rank fusion's constant: a chunk scores 1/(RRFK+rank) in each ranking.
-	RRFK = 60
 )
 
 var (
@@ -127,11 +104,9 @@ type KnowledgeSource struct {
 	// SyncFailures is how many syncs failed in a row; a successful one resets it, and three show
 	// the source in Needs you (ADR 0038 decision 3).
 	SyncFailures int
-	// Documents is how many documents it has.
-	Documents int
-	CreatedBy Actor
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CreatedBy    Actor
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // NewKnowledgeSource is a source to create. SyncEvery 0 is DefaultSyncEvery.
@@ -370,61 +345,24 @@ type SourceLease struct {
 	Token  string
 }
 
-// KnowledgeDocument is one document of a source.
-type KnowledgeDocument struct {
-	ID     KnowledgeDocumentID
+// KnowledgeUpload is one uploaded file of an upload source (ADR 0038 decision 2): its name, and its
+// original, which stays in the bucket at KnowledgeKey under its content hash.
+type KnowledgeUpload struct {
+	ID     KnowledgeUploadID
 	Source KnowledgeSourceID
-	// ExternalID is the document's id at its source: a path, a page id, an upload's SHA-256.
-	ExternalID string
-	// Version changes whenever the content does: a git blob id, a page version, an upload's
-	// SHA-256.
-	Version string
-	Title   string
-	// URL links back to the document at its source; "" for uploads.
-	URL   string
+	// Name is the file's path in the source, unique in it.
+	Name  string
 	MIME  string
 	Bytes int64
-	// Blob is an upload's content hash, its object at KnowledgeKey; "" otherwise.
-	Blob   BlobHash
-	Status DocumentStatus
-	Error  string
-	// SeenAt is when a sync last listed it.
-	SeenAt    time.Time
-	IndexedAt *time.Time
+	// Blob is the original's content hash, its object at KnowledgeKey and the file's version.
+	Blob      BlobHash
 	CreatedBy Actor
+	CreatedAt time.Time
 }
 
 // KnowledgeKey is the bucket key of an organization's uploaded document with content hash h:
 // orgs/<org-id>/knowledge/<sha256>.
 func KnowledgeKey(org OrgID, h BlobHash) string { return OrgPrefix(org) + "knowledge/" + string(h) }
-
-// Chunk is one indexed piece of a document's text, in document order. Heading is the path of the
-// headings it is under ("Install > Docker").
-type Chunk struct {
-	Ord     int
-	Heading string
-	Text    string
-}
-
-// KnowledgeQuery is a search: Text ranked by keywords; only chunks of the named Sources are
-// ranked. Limit is how many hits at most.
-type KnowledgeQuery struct {
-	Text    string
-	Sources []string
-	Limit   int
-}
-
-// KnowledgeHit is one chunk a search found, best first.
-type KnowledgeHit struct {
-	Chunk    int64
-	Document KnowledgeDocumentID
-	Source   string
-	Title    string
-	URL      string
-	Heading  string
-	Text     string
-	Score    float64
-}
 
 // SyncSpec is what a source reader reads: the source and, for a synced source, its secret
 // opened with its value, or the connection it still reads opened with its values.
@@ -447,208 +385,15 @@ type SourceDoc struct {
 	Body []byte
 }
 
-// Ranked is a chunk's score after FuseRanks.
-type Ranked struct {
-	Chunk int64
-	Score float64
-}
-
-// FuseRanks fuses rankings of chunks (each best first) by reciprocal rank: a chunk scores the
-// sum of 1/(RRFK+rank) over the rankings it is in, ranks from 1. The fused ranking is best
-// first, ties by chunk id. The postgres adapter's search computes the same in SQL.
-func FuseRanks(rankings ...[]int64) []Ranked {
-	scores := map[int64]float64{}
-
-	for _, r := range rankings {
-		for i, id := range r {
-			scores[id] += 1 / float64(RRFK+i+1)
-		}
-	}
-
-	out := make([]Ranked, 0, len(scores))
-	for id, s := range scores {
-		out = append(out, Ranked{Chunk: id, Score: s})
-	}
-
-	slices.SortFunc(out, func(a, b Ranked) int {
-		switch {
-		case a.Score > b.Score:
-			return -1
-		case a.Score < b.Score:
-			return 1
-		case a.Chunk < b.Chunk:
-			return -1
-		case a.Chunk > b.Chunk:
-			return 1
-		default:
-			return 0
-		}
-	})
-
-	return out
-}
-
-// Knowledge use and verdicts (ADR 0027): which documents each run used, and whether they helped
-// or misled the agents and people who judged them. Neither copies a document's text, a snippet
-// or a title (decision 6).
-
-// KnowledgeUseKind is how a run used a document.
-type KnowledgeUseKind string
-
-// The kinds of knowledge use: a search returned some of the document's chunks, or a read opened it.
-const (
-	KnowledgeSearched KnowledgeUseKind = "search"
-	KnowledgeRead     KnowledgeUseKind = "read"
-)
-
-// KnowledgeVerdictKind is what an actor says a document did.
-type KnowledgeVerdictKind string
-
-// The verdicts.
-const (
-	KnowledgeHelped KnowledgeVerdictKind = "helped"
-	KnowledgeMisled KnowledgeVerdictKind = "misled"
-)
-
-// Limits of knowledge use and verdicts (00072's checks).
-const (
-	// MaxVerdictNote is a verdict's note in characters.
-	MaxVerdictNote = 500
-	// MaxUseChunks is how many chunk ids one use keeps.
-	MaxUseChunks = 1000
-	// DefaultUsageDays and MaxUsageDays bound a source's usage window.
-	DefaultUsageDays = 7
-	MaxUsageDays     = 90
-	// MaxUsageDocuments is how many documents a source's usage lists, most used first.
-	MaxUsageDocuments = 500
-)
-
-// KnowledgeUse is one run's use of one document by one kind: one per run, document and kind.
-// Chunks are the chunk ids a search returned (none for a read), At the run's first use.
-type KnowledgeUse struct {
-	Factory  FactoryID
-	Item     ItemID
-	Run      RunID
-	Source   KnowledgeSourceID
-	Document KnowledgeDocumentID
-	Kind     KnowledgeUseKind
-	Chunks   []int64
-	At       time.Time
-}
-
-// Check enforces a use's rules: every id, a known kind and at most MaxUseChunks chunks. Errors
-// wrap ErrInvalid.
-func (u KnowledgeUse) Check() error {
-	var errs []error
-
-	if u.Factory == "" || u.Item == "" || u.Run == "" || u.Source == "" || u.Document == "" {
-		errs = append(errs, fmt.Errorf("a knowledge use names its factory, item, run, source and document: %w", ErrInvalid))
-	}
-
-	if u.Kind != KnowledgeSearched && u.Kind != KnowledgeRead {
-		errs = append(errs, fmt.Errorf("knowledge use kind %q is not search or read: %w", u.Kind, ErrInvalid))
-	}
-
-	if len(u.Chunks) > MaxUseChunks {
-		errs = append(errs, fmt.Errorf("a knowledge use keeps at most %d chunks: %w", MaxUseChunks, ErrInvalid))
-	}
-
-	return errors.Join(errs...)
-}
-
-// KnowledgeVerdict is By's verdict on a document, of a run and its item when Run is set. There is
-// one per actor, document and run (no run counting as its own); a later one replaces it. Source is
-// the document's, which the store fills; At zero is the store's now.
-type KnowledgeVerdict struct {
-	Document KnowledgeDocumentID
-	Source   KnowledgeSourceID
-	Run      RunID
-	Item     ItemID
-	Verdict  KnowledgeVerdictKind
-	Note     string
-	By       Actor
-	At       time.Time
-}
-
-// Check enforces a verdict's rules: a document, a known verdict, a note of at most
-// MaxVerdictNote characters, a person or an agent as its actor, and an item only with a run.
-// Errors wrap ErrInvalid.
-func (v KnowledgeVerdict) Check() error {
-	var errs []error
-
-	if v.Document == "" {
-		errs = append(errs, fmt.Errorf("a verdict names its document: %w", ErrInvalid))
-	}
-
-	if v.Verdict != KnowledgeHelped && v.Verdict != KnowledgeMisled {
-		errs = append(errs, fmt.Errorf("verdict %q is not helped or misled: %w", v.Verdict, ErrInvalid))
-	}
-
-	if utf8.RuneCountInString(v.Note) > MaxVerdictNote {
-		errs = append(errs, fmt.Errorf("a verdict's note has at most %d characters: %w", MaxVerdictNote, ErrInvalid))
-	}
-
-	if (v.By.Kind != ActorUser && v.By.Kind != ActorAgent) || v.By.ID == "" {
-		errs = append(errs, fmt.Errorf("a verdict is a person's or an agent's, not %q: %w", v.By.Ref(), ErrInvalid))
-	}
-
-	if v.Item != "" && v.Run == "" {
-		errs = append(errs, fmt.Errorf("a verdict names an item only with its run: %w", ErrInvalid))
-	}
-
-	return errors.Join(errs...)
-}
-
-// AuditEntry is v's audit entry, AuditKnowledgeVerdictGiven on its document: its kind and run,
-// never its note (decision 6).
-func (v KnowledgeVerdict) AuditEntry() AuditEntry {
-	return AuditEntry{
-		Actor: v.By, Action: AuditKnowledgeVerdictGiven, TargetKind: AuditTargetKnowledgeDocument, TargetID: string(v.Document),
-		Data: map[string]any{"verdict": string(v.Verdict), "run": string(v.Run)},
-	}
-}
-
-// CheckUsageDays refuses a usage window outside 1 to MaxUsageDays days (ErrInvalid).
-func CheckUsageDays(days int) error {
-	if days < 1 || days > MaxUsageDays {
-		return fmt.Errorf("a usage window is 1 to %d days, not %d: %w", MaxUsageDays, days, ErrInvalid)
-	}
-
-	return nil
-}
-
-// DocumentUsage is one document's use over a source's window: the distinct runs that used it and
-// the verdicts given on it, agents' and people's apart.
-type DocumentUsage struct {
-	Document     KnowledgeDocumentID
-	Title        string
-	Runs         int
-	AgentsHelped int
-	AgentsMisled int
-	PeopleHelped int
-	PeopleMisled int
-}
-
-// KnowledgeRunUse is one run that used a document: its item and factory, the kinds of its uses
-// in order, and its first use.
-type KnowledgeRunUse struct {
-	Run     RunID
-	Item    ItemID
-	Factory FactoryID
-	Kinds   []KnowledgeUseKind
-	At      time.Time
-}
-
 // Audit actions of the knowledge base (spec 4 §12).
 const (
-	AuditKnowledgeSourceCreated    = "knowledge_source.created"
-	AuditKnowledgeSourceUpdated    = "knowledge_source.updated"
-	AuditKnowledgeSourceDeleted    = "knowledge_source.deleted"
+	AuditKnowledgeSourceCreated = "knowledge_source.created"
+	AuditKnowledgeSourceUpdated = "knowledge_source.updated"
+	AuditKnowledgeSourceDeleted = "knowledge_source.deleted"
+	// The audit actions of uploads keep the names of the documents they replaced, so entries
+	// written before ADR 0038 stay readable.
 	AuditKnowledgeDocumentUploaded = "knowledge_document.uploaded"
 	AuditKnowledgeDocumentDeleted  = "knowledge_document.deleted"
-	// AuditKnowledgeVerdictGiven is a verdict on a document, with its kind and run but never its
-	// note (ADR 0027, decision 6).
-	AuditKnowledgeVerdictGiven = "knowledge_verdict.given"
 )
 
 // Audit target kinds of the knowledge base.
@@ -666,6 +411,17 @@ const (
 	MediaYAML     = "application/yaml"
 )
 
+// The types a conversion service turns into Markdown (ADR 0038 decision 2); a goald without one
+// leaves such a file out of the snapshot and lists it.
+const (
+	MediaPDF  = "application/pdf"
+	MediaDOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	MediaXLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	MediaPPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+	MediaODT  = "application/vnd.oasis.opendocument.text"
+	MediaODS  = "application/vnd.oasis.opendocument.spreadsheet"
+)
+
 // DefaultMaxUpload is the largest document the knowledge base takes, uploaded or fetched from a
 // source (GOAL_UPLOAD_MAX_BYTES).
 const DefaultMaxUpload = 25 << 20
@@ -674,6 +430,7 @@ const DefaultMaxUpload = 25 << 20
 var documentExtensions = map[string]string{
 	".txt": MediaText, ".text": MediaText, ".md": MediaMarkdown, ".markdown": MediaMarkdown,
 	".html": MediaHTML, ".htm": MediaHTML, ".json": MediaJSON, ".yaml": MediaYAML, ".yml": MediaYAML,
+	".pdf": MediaPDF, ".docx": MediaDOCX, ".xlsx": MediaXLSX, ".pptx": MediaPPTX, ".odt": MediaODT, ".ods": MediaODS,
 }
 
 // DocumentType is the indexed type of a file named name: by its extension, else by what its
@@ -691,7 +448,7 @@ func DocumentType(name string, body []byte) (string, error) {
 		return MediaText, nil
 	}
 
-	return "", fmt.Errorf("%q is not text, Markdown, HTML, JSON or YAML: %w", name, ErrUnsupportedDocument)
+	return "", fmt.Errorf("%q is not text, Markdown, HTML, JSON, YAML, PDF or an Office file: %w", name, ErrUnsupportedDocument)
 }
 
 func looksLikeHTML(body []byte) bool {

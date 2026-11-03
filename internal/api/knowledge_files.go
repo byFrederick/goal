@@ -18,6 +18,7 @@ import (
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // A source's files (ADR 0038 decisions 3 and 13): its current snapshot's files, one file's
@@ -244,13 +245,12 @@ func (s *server) DeleteKnowledgeUpload(ctx context.Context, req gen.DeleteKnowle
 		return nil, err
 	}
 
-	id, err := s.uploadAt(ctx, req.Source, req.Params.Path)
-	if err != nil {
-		return nil, err
-	}
+	if err := s.uploads.DeleteUpload(ctx, req.Source, req.Params.Path, by); err != nil {
+		if errors.Is(err, ports.ErrNotFound) {
+			return nil, fmt.Errorf("%w: knowledge source %q has no upload at %q", errFileNotFound, req.Source, req.Params.Path)
+		}
 
-	if err := s.uploads.DeleteDocument(ctx, id, by); err != nil {
-		return nil, documentError(err, string(id))
+		return nil, sourceError(err, req.Source)
 	}
 
 	if err := s.knowledge.SyncNow(ctx, req.Source); err != nil {
@@ -258,30 +258,6 @@ func (s *server) DeleteKnowledgeUpload(ctx context.Context, req gen.DeleteKnowle
 	}
 
 	return gen.DeleteKnowledgeUpload204Response{}, nil
-}
-
-// uploadAt is the id of the upload source's upload at path (its title); errFileNotFound for none.
-func (s *server) uploadAt(ctx context.Context, source, path string) (domain.KnowledgeDocumentID, error) {
-	var after domain.KnowledgeDocumentID
-
-	for {
-		docs, err := s.knowledge.Documents(ctx, source, after, maxDocuments)
-		if err != nil {
-			return "", sourceError(err, source)
-		}
-
-		for _, d := range docs {
-			if d.Title == path {
-				return d.ID, nil
-			}
-		}
-
-		if len(docs) < maxDocuments {
-			return "", fmt.Errorf("%w: knowledge source %q has no upload at %q", errFileNotFound, source, path)
-		}
-
-		after = docs[len(docs)-1].ID
-	}
 }
 
 // FindKnowledgeFiles finds the current files whose path or title starts with find, in every

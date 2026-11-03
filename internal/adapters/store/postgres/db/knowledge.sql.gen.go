@@ -88,24 +88,6 @@ func (q *Queries) ConvertKnowledgeSource(ctx context.Context, arg ConvertKnowled
 	return err
 }
 
-const deleteDocumentChunks = `-- name: DeleteDocumentChunks :exec
-DELETE FROM knowledge_chunks WHERE document_id = $1
-`
-
-func (q *Queries) DeleteDocumentChunks(ctx context.Context, documentID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteDocumentChunks, documentID)
-	return err
-}
-
-const deleteKnowledgeDocument = `-- name: DeleteKnowledgeDocument :exec
-DELETE FROM knowledge_documents WHERE id = $1
-`
-
-func (q *Queries) DeleteKnowledgeDocument(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteKnowledgeDocument, id)
-	return err
-}
-
 const deleteKnowledgeFiles = `-- name: DeleteKnowledgeFiles :exec
 DELETE FROM knowledge_files WHERE source_id = $1
 `
@@ -124,32 +106,13 @@ func (q *Queries) DeleteKnowledgeSource(ctx context.Context, id uuid.UUID) error
 	return err
 }
 
-const deleteUnseenDocuments = `-- name: DeleteUnseenDocuments :execrows
-DELETE FROM knowledge_documents WHERE source_id = $1 AND seen_at < $2
+const deleteKnowledgeUpload = `-- name: DeleteKnowledgeUpload :exec
+DELETE FROM knowledge_uploads WHERE id = $1
 `
 
-type DeleteUnseenDocumentsParams struct {
-	SourceID uuid.UUID
-	Before   time.Time
-}
-
-func (q *Queries) DeleteUnseenDocuments(ctx context.Context, arg DeleteUnseenDocumentsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteUnseenDocuments, arg.SourceID, arg.Before)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const documentText = `-- name: DocumentText :one
-SELECT coalesce(string_agg(text, E'\n\n' ORDER BY ord), '')::text AS text FROM knowledge_chunks WHERE document_id = $1
-`
-
-func (q *Queries) DocumentText(ctx context.Context, documentID uuid.UUID) (string, error) {
-	row := q.db.QueryRow(ctx, documentText, documentID)
-	var text string
-	err := row.Scan(&text)
-	return text, err
+func (q *Queries) DeleteKnowledgeUpload(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteKnowledgeUpload, id)
+	return err
 }
 
 const finishKnowledgeSync = `-- name: FinishKnowledgeSync :execrows
@@ -207,33 +170,6 @@ func (q *Queries) HoldKnowledgeLease(ctx context.Context, arg HoldKnowledgeLease
 	return column_1, err
 }
 
-const insertKnowledgeChunks = `-- name: InsertKnowledgeChunks :exec
-INSERT INTO knowledge_chunks (source_id, document_id, ord, heading, text)
-SELECT $1, $2, ($3::int[])[i], ($4::text[])[i],
-       ($5::text[])[i]
-FROM generate_series(1, cardinality($3::int[])) AS i
-`
-
-type InsertKnowledgeChunksParams struct {
-	SourceID   uuid.UUID
-	DocumentID uuid.UUID
-	Ords       []int32
-	Headings   []string
-	Texts      []string
-}
-
-// A document's chunks in one statement.
-func (q *Queries) InsertKnowledgeChunks(ctx context.Context, arg InsertKnowledgeChunksParams) error {
-	_, err := q.db.Exec(ctx, insertKnowledgeChunks,
-		arg.SourceID,
-		arg.DocumentID,
-		arg.Ords,
-		arg.Headings,
-		arg.Texts,
-	)
-	return err
-}
-
 const insertKnowledgeFiles = `-- name: InsertKnowledgeFiles :exec
 INSERT INTO knowledge_files (source_id, path, title, bytes, version)
 SELECT $1, ($2::text[])[i], ($3::text[])[i], ($4::bigint[])[i],
@@ -262,7 +198,6 @@ func (q *Queries) InsertKnowledgeFiles(ctx context.Context, arg InsertKnowledgeF
 }
 
 const insertKnowledgeSnapshot = `-- name: InsertKnowledgeSnapshot :one
-
 INSERT INTO knowledge_snapshots (id, source_id, files, failed, bytes, zip_bytes, changes, read_when, created_at)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9)
@@ -281,7 +216,6 @@ type InsertKnowledgeSnapshotParams struct {
 	CreatedAt time.Time
 }
 
-// Knowledge as files (00090): a source's snapshots, its current files and the daily read counts.
 // org_id comes from its default, goal_org(); zip_key is generated from the ids.
 func (q *Queries) InsertKnowledgeSnapshot(ctx context.Context, arg InsertKnowledgeSnapshotParams) (string, error) {
 	row := q.db.QueryRow(ctx, insertKnowledgeSnapshot,
@@ -338,53 +272,6 @@ func (q *Queries) InsertKnowledgeSource(ctx context.Context, arg InsertKnowledge
 	return err
 }
 
-const insertKnowledgeUpload = `-- name: InsertKnowledgeUpload :many
-INSERT INTO knowledge_documents (id, source_id, external_id, version, title, mime, bytes, blob_sha256, status, seen_at, created_by)
-VALUES ($1, $2, $3::text, $3::text, $4, $5,
-        $6, $3::text, 'pending', now(), $7)
-ON CONFLICT (source_id, external_id) DO NOTHING
-RETURNING id
-`
-
-type InsertKnowledgeUploadParams struct {
-	ID         uuid.UUID
-	SourceID   uuid.UUID
-	BlobSha256 string
-	Title      string
-	Mime       string
-	Bytes      int64
-	CreatedBy  string
-}
-
-// An upload, pending; nothing when the source has a document of that content already.
-func (q *Queries) InsertKnowledgeUpload(ctx context.Context, arg InsertKnowledgeUploadParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, insertKnowledgeUpload,
-		arg.ID,
-		arg.SourceID,
-		arg.BlobSha256,
-		arg.Title,
-		arg.Mime,
-		arg.Bytes,
-		arg.CreatedBy,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const knowledgeConnection = `-- name: KnowledgeConnection :one
 SELECT c.id, coalesce(k.spec->'spec'->>'sync', '')::text AS sync
 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
@@ -402,142 +289,6 @@ func (q *Queries) KnowledgeConnection(ctx context.Context, name string) (Knowled
 	var i KnowledgeConnectionRow
 	err := row.Scan(&i.ID, &i.Sync)
 	return i, err
-}
-
-const knowledgeDocumentUses = `-- name: KnowledgeDocumentUses :many
-SELECT u.run_id, u.item_id, u.factory_id, array_agg(u.kind ORDER BY u.kind)::text[] AS kinds, min(u.at)::timestamptz AS at
-FROM knowledge_uses u
-WHERE u.document_id = $1
-GROUP BY u.run_id, u.item_id, u.factory_id
-HAVING $2::uuid IS NULL
-    OR (min(u.at), u.run_id) < ((SELECT min(a.at) FROM knowledge_uses a
-                                 WHERE a.document_id = $1 AND a.run_id = $2::uuid),
-                                $2::uuid)
-ORDER BY min(u.at) DESC, u.run_id DESC
-LIMIT $3
-`
-
-type KnowledgeDocumentUsesParams struct {
-	DocumentID uuid.UUID
-	After      *uuid.UUID
-	MaxRows    int32
-}
-
-type KnowledgeDocumentUsesRow struct {
-	RunID     uuid.UUID
-	ItemID    uuid.UUID
-	FactoryID uuid.UUID
-	Kinds     []string
-	At        time.Time
-}
-
-// A page of the runs that used a document, by their first use newest first (ties by run id
-// descending), after the run after: those before its first use of the document.
-func (q *Queries) KnowledgeDocumentUses(ctx context.Context, arg KnowledgeDocumentUsesParams) ([]KnowledgeDocumentUsesRow, error) {
-	rows, err := q.db.Query(ctx, knowledgeDocumentUses, arg.DocumentID, arg.After, arg.MaxRows)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []KnowledgeDocumentUsesRow
-	for rows.Next() {
-		var i KnowledgeDocumentUsesRow
-		if err := rows.Scan(
-			&i.RunID,
-			&i.ItemID,
-			&i.FactoryID,
-			&i.Kinds,
-			&i.At,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const knowledgeDocuments = `-- name: KnowledgeDocuments :many
-SELECT d.id, d.source_id, d.external_id, d.version, d.title, d.url, d.mime, d.bytes, d.blob_sha256, d.status, d.error,
-       d.seen_at, d.indexed_at, d.created_by, s.kind AS source_kind
-FROM knowledge_documents d JOIN knowledge_sources s ON s.org_id = d.org_id AND s.id = d.source_id
-WHERE ($1::uuid IS NULL OR d.source_id = $1::uuid)
-  AND ($2::text IS NULL OR d.external_id = $2::text)
-  AND ($3::uuid IS NULL OR d.id = $3::uuid)
-  AND ($4::uuid IS NULL OR d.id > $4::uuid)
-ORDER BY d.id
-LIMIT $5
-`
-
-type KnowledgeDocumentsParams struct {
-	SourceID   *uuid.UUID
-	ExternalID *string
-	ID         *uuid.UUID
-	After      *uuid.UUID
-	MaxRows    int32
-}
-
-type KnowledgeDocumentsRow struct {
-	ID         uuid.UUID
-	SourceID   uuid.UUID
-	ExternalID string
-	Version    string
-	Title      string
-	Url        *string
-	Mime       string
-	Bytes      int64
-	BlobSha256 *string
-	Status     string
-	Error      *string
-	SeenAt     time.Time
-	IndexedAt  *time.Time
-	CreatedBy  string
-	SourceKind string
-}
-
-// A page of a source's documents in id order, or the document of an external id, or with an id.
-func (q *Queries) KnowledgeDocuments(ctx context.Context, arg KnowledgeDocumentsParams) ([]KnowledgeDocumentsRow, error) {
-	rows, err := q.db.Query(ctx, knowledgeDocuments,
-		arg.SourceID,
-		arg.ExternalID,
-		arg.ID,
-		arg.After,
-		arg.MaxRows,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []KnowledgeDocumentsRow
-	for rows.Next() {
-		var i KnowledgeDocumentsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.SourceID,
-			&i.ExternalID,
-			&i.Version,
-			&i.Title,
-			&i.Url,
-			&i.Mime,
-			&i.Bytes,
-			&i.BlobSha256,
-			&i.Status,
-			&i.Error,
-			&i.SeenAt,
-			&i.IndexedAt,
-			&i.CreatedBy,
-			&i.SourceKind,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const knowledgeFileReads = `-- name: KnowledgeFileReads :many
@@ -647,101 +398,6 @@ func (q *Queries) KnowledgeFiles(ctx context.Context, arg KnowledgeFilesParams) 
 	return items, nil
 }
 
-const knowledgeRunUses = `-- name: KnowledgeRunUses :many
-SELECT factory_id, item_id, run_id, source_id, document_id, kind, chunk_ids, at
-FROM knowledge_uses
-WHERE run_id = $1
-ORDER BY at, document_id, kind
-`
-
-type KnowledgeRunUsesRow struct {
-	FactoryID  uuid.UUID
-	ItemID     uuid.UUID
-	RunID      uuid.UUID
-	SourceID   uuid.UUID
-	DocumentID uuid.UUID
-	Kind       string
-	ChunkIds   []int64
-	At         time.Time
-}
-
-func (q *Queries) KnowledgeRunUses(ctx context.Context, runID uuid.UUID) ([]KnowledgeRunUsesRow, error) {
-	rows, err := q.db.Query(ctx, knowledgeRunUses, runID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []KnowledgeRunUsesRow
-	for rows.Next() {
-		var i KnowledgeRunUsesRow
-		if err := rows.Scan(
-			&i.FactoryID,
-			&i.ItemID,
-			&i.RunID,
-			&i.SourceID,
-			&i.DocumentID,
-			&i.Kind,
-			&i.ChunkIds,
-			&i.At,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const knowledgeRunVerdicts = `-- name: KnowledgeRunVerdicts :many
-SELECT source_id, document_id, run_id, item_id, verdict, note, actor, at
-FROM knowledge_verdicts
-WHERE run_id = $1
-ORDER BY at, document_id, actor
-`
-
-type KnowledgeRunVerdictsRow struct {
-	SourceID   uuid.UUID
-	DocumentID uuid.UUID
-	RunID      *uuid.UUID
-	ItemID     *uuid.UUID
-	Verdict    string
-	Note       string
-	Actor      string
-	At         time.Time
-}
-
-// The verdicts given for a run, by time, document and actor.
-func (q *Queries) KnowledgeRunVerdicts(ctx context.Context, runID *uuid.UUID) ([]KnowledgeRunVerdictsRow, error) {
-	rows, err := q.db.Query(ctx, knowledgeRunVerdicts, runID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []KnowledgeRunVerdictsRow
-	for rows.Next() {
-		var i KnowledgeRunVerdictsRow
-		if err := rows.Scan(
-			&i.SourceID,
-			&i.DocumentID,
-			&i.RunID,
-			&i.ItemID,
-			&i.Verdict,
-			&i.Note,
-			&i.Actor,
-			&i.At,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const knowledgeSecret = `-- name: KnowledgeSecret :one
 SELECT id FROM secrets WHERE name = $1
 `
@@ -817,84 +473,11 @@ func (q *Queries) KnowledgeSourceKind(ctx context.Context, id uuid.UUID) (string
 	return kind, err
 }
 
-const knowledgeSourceUsage = `-- name: KnowledgeSourceUsage :many
-WITH uses AS (
-  SELECT u.document_id, count(DISTINCT u.run_id) AS runs
-  FROM knowledge_uses u
-  WHERE u.source_id = $2 AND u.at >= now() - make_interval(days => $3::int)
-  GROUP BY u.document_id
-), verdicts AS (
-  SELECT v.document_id,
-         count(*) FILTER (WHERE v.actor LIKE 'agent:%' AND v.verdict = 'helped') AS agents_helped,
-         count(*) FILTER (WHERE v.actor LIKE 'agent:%' AND v.verdict = 'misled') AS agents_misled,
-         count(*) FILTER (WHERE v.actor LIKE 'user:%' AND v.verdict = 'helped') AS people_helped,
-         count(*) FILTER (WHERE v.actor LIKE 'user:%' AND v.verdict = 'misled') AS people_misled
-  FROM knowledge_verdicts v
-  WHERE v.source_id = $2 AND v.at >= now() - make_interval(days => $3::int)
-  GROUP BY v.document_id
-)
-SELECT d.id, d.title, coalesce(u.runs, 0)::bigint AS runs,
-       coalesce(v.agents_helped, 0)::bigint AS agents_helped, coalesce(v.agents_misled, 0)::bigint AS agents_misled,
-       coalesce(v.people_helped, 0)::bigint AS people_helped, coalesce(v.people_misled, 0)::bigint AS people_misled
-FROM uses u
-FULL JOIN verdicts v ON v.document_id = u.document_id
-JOIN knowledge_documents d ON d.id = coalesce(u.document_id, v.document_id)
-ORDER BY runs DESC, d.id
-LIMIT $1
-`
-
-type KnowledgeSourceUsageParams struct {
-	MaxRows  int32
-	SourceID uuid.UUID
-	Days     int32
-}
-
-type KnowledgeSourceUsageRow struct {
-	ID           uuid.UUID
-	Title        string
-	Runs         int64
-	AgentsHelped int64
-	AgentsMisled int64
-	PeopleHelped int64
-	PeopleMisled int64
-}
-
-// Per document of a source with a use or a verdict in the last days days: the distinct runs with a use
-// and the verdicts given, agents' and people's apart; the most used first, then by id.
-func (q *Queries) KnowledgeSourceUsage(ctx context.Context, arg KnowledgeSourceUsageParams) ([]KnowledgeSourceUsageRow, error) {
-	rows, err := q.db.Query(ctx, knowledgeSourceUsage, arg.MaxRows, arg.SourceID, arg.Days)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []KnowledgeSourceUsageRow
-	for rows.Next() {
-		var i KnowledgeSourceUsageRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Title,
-			&i.Runs,
-			&i.AgentsHelped,
-			&i.AgentsMisled,
-			&i.PeopleHelped,
-			&i.PeopleMisled,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const knowledgeSources = `-- name: KnowledgeSources :many
 
 SELECT s.id, s.name, s.title, s.kind, c.name AS connection, sc.name AS secret, s.config, s.read_when, s.current_snapshot_id,
        extract(epoch FROM s.sync_every)::bigint AS sync_every_seconds, s.next_sync_at, s.lease_until, s.status,
-       s.last_synced_at, s.last_error, s.sync_failures, s.created_by, s.created_at, s.updated_at,
-       (SELECT count(*) FROM knowledge_documents d WHERE d.org_id = s.org_id AND d.source_id = s.id) AS documents
+       s.last_synced_at, s.last_error, s.sync_failures, s.created_by, s.created_at, s.updated_at
 FROM knowledge_sources s
 LEFT JOIN connections c ON c.org_id = s.org_id AND c.id = s.connection_id
 LEFT JOIN secrets sc ON sc.org_id = s.org_id AND sc.id = s.secret_id
@@ -928,7 +511,6 @@ type KnowledgeSourcesRow struct {
 	CreatedBy         string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
-	Documents         int64
 }
 
 // The knowledge base (00054), under row-level security: every statement sees the transaction's
@@ -963,7 +545,6 @@ func (q *Queries) KnowledgeSources(ctx context.Context, arg KnowledgeSourcesPara
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.Documents,
 		); err != nil {
 			return nil, err
 		}
@@ -975,26 +556,66 @@ func (q *Queries) KnowledgeSources(ctx context.Context, arg KnowledgeSourcesPara
 	return items, nil
 }
 
-const knowledgeVersions = `-- name: KnowledgeVersions :many
-SELECT external_id, version FROM knowledge_documents
-WHERE source_id = $1 AND status <> 'pending'
+const knowledgeUploadNamed = `-- name: KnowledgeUploadNamed :one
+SELECT u.id, u.blob_sha256 FROM knowledge_uploads u WHERE u.source_id = $1 AND u.name = $2 FOR UPDATE
 `
 
-type KnowledgeVersionsRow struct {
-	ExternalID string
-	Version    string
+type KnowledgeUploadNamedParams struct {
+	SourceID uuid.UUID
+	Name     string
 }
 
-func (q *Queries) KnowledgeVersions(ctx context.Context, sourceID uuid.UUID) ([]KnowledgeVersionsRow, error) {
-	rows, err := q.db.Query(ctx, knowledgeVersions, sourceID)
+type KnowledgeUploadNamedRow struct {
+	ID         uuid.UUID
+	BlobSha256 string
+}
+
+// The file named name of a source, locked for its replacement or deletion.
+func (q *Queries) KnowledgeUploadNamed(ctx context.Context, arg KnowledgeUploadNamedParams) (KnowledgeUploadNamedRow, error) {
+	row := q.db.QueryRow(ctx, knowledgeUploadNamed, arg.SourceID, arg.Name)
+	var i KnowledgeUploadNamedRow
+	err := row.Scan(&i.ID, &i.BlobSha256)
+	return i, err
+}
+
+const knowledgeUploads = `-- name: KnowledgeUploads :many
+SELECT u.id, u.source_id, u.name, u.mime, u.bytes, u.blob_sha256, u.created_by, u.created_at
+FROM knowledge_uploads u
+WHERE u.source_id = $1
+ORDER BY u.name
+`
+
+type KnowledgeUploadsRow struct {
+	ID         uuid.UUID
+	SourceID   uuid.UUID
+	Name       string
+	Mime       string
+	Bytes      int64
+	BlobSha256 string
+	CreatedBy  string
+	CreatedAt  time.Time
+}
+
+// An upload source's files, by name.
+func (q *Queries) KnowledgeUploads(ctx context.Context, sourceID uuid.UUID) ([]KnowledgeUploadsRow, error) {
+	rows, err := q.db.Query(ctx, knowledgeUploads, sourceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []KnowledgeVersionsRow
+	var items []KnowledgeUploadsRow
 	for rows.Next() {
-		var i KnowledgeVersionsRow
-		if err := rows.Scan(&i.ExternalID, &i.Version); err != nil {
+		var i KnowledgeUploadsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SourceID,
+			&i.Name,
+			&i.Mime,
+			&i.Bytes,
+			&i.BlobSha256,
+			&i.CreatedBy,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1017,34 +638,6 @@ func (q *Queries) LockKnowledgeBlobs(ctx context.Context, blobs []string) error 
 	return err
 }
 
-const lockKnowledgeDocument = `-- name: LockKnowledgeDocument :one
-SELECT d.id, d.blob_sha256, d.title, s.kind AS source_kind, s.name AS source_name
-FROM knowledge_documents d JOIN knowledge_sources s ON s.org_id = d.org_id AND s.id = d.source_id
-WHERE d.id = $1
-FOR UPDATE OF d
-`
-
-type LockKnowledgeDocumentRow struct {
-	ID         uuid.UUID
-	BlobSha256 *string
-	Title      string
-	SourceKind string
-	SourceName string
-}
-
-func (q *Queries) LockKnowledgeDocument(ctx context.Context, id uuid.UUID) (LockKnowledgeDocumentRow, error) {
-	row := q.db.QueryRow(ctx, lockKnowledgeDocument, id)
-	var i LockKnowledgeDocumentRow
-	err := row.Scan(
-		&i.ID,
-		&i.BlobSha256,
-		&i.Title,
-		&i.SourceKind,
-		&i.SourceName,
-	)
-	return i, err
-}
-
 const lockKnowledgeSource = `-- name: LockKnowledgeSource :one
 SELECT id, kind FROM knowledge_sources WHERE name = $1 FOR UPDATE
 `
@@ -1059,22 +652,6 @@ func (q *Queries) LockKnowledgeSource(ctx context.Context, name string) (LockKno
 	var i LockKnowledgeSourceRow
 	err := row.Scan(&i.ID, &i.Kind)
 	return i, err
-}
-
-const markKnowledgeSeen = `-- name: MarkKnowledgeSeen :exec
-UPDATE knowledge_documents SET seen_at = greatest(seen_at, $1)
-WHERE source_id = $2 AND external_id = ANY ($3::text[])
-`
-
-type MarkKnowledgeSeenParams struct {
-	At          time.Time
-	SourceID    uuid.UUID
-	ExternalIds []string
-}
-
-func (q *Queries) MarkKnowledgeSeen(ctx context.Context, arg MarkKnowledgeSeenParams) error {
-	_, err := q.db.Exec(ctx, markKnowledgeSeen, arg.At, arg.SourceID, arg.ExternalIds)
-	return err
 }
 
 const notifyKnowledgeSync = `-- name: NotifyKnowledgeSync :exec
@@ -1115,80 +692,6 @@ func (q *Queries) RenewKnowledgeSource(ctx context.Context, arg RenewKnowledgeSo
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const searchKnowledge = `-- name: SearchKnowledge :many
-WITH src AS (
-  SELECT id, name FROM knowledge_sources WHERE name = ANY ($2::text[])
-),
-query AS (
-  SELECT nullif(replace(plainto_tsquery('simple', $3::text)::text, ' & ', ' | '), '')::tsquery AS q
-),
-words AS (
-  SELECT w.id, row_number() OVER (ORDER BY w.rank DESC, w.id) AS r FROM (
-    SELECT c.id, ts_rank(c.tsv, query.q, 1) AS rank
-    FROM knowledge_chunks c, query
-    WHERE c.tsv @@ query.q AND c.source_id IN (SELECT id FROM src)
-    ORDER BY rank DESC, c.id
-    LIMIT 50
-  ) w
-)
-SELECT c.id, c.document_id, src.name AS source, d.title, d.url, c.heading, c.text, (1.0 / (60 + words.r))::float8 AS score
-FROM words
-JOIN knowledge_chunks c ON c.id = words.id
-JOIN knowledge_documents d ON d.org_id = c.org_id AND d.source_id = c.source_id AND d.id = c.document_id
-JOIN src ON src.id = c.source_id
-ORDER BY words.r, c.id
-LIMIT $1
-`
-
-type SearchKnowledgeParams struct {
-	MaxHits int32
-	Sources []string
-	Query   string
-}
-
-type SearchKnowledgeRow struct {
-	ID         int64
-	DocumentID uuid.UUID
-	Source     string
-	Title      string
-	Url        *string
-	Heading    string
-	Text       string
-	Score      float64
-}
-
-// The best chunks of the named sources only by keywords: any of the query's words, ts_rank on
-// the simple tsvector divided by 1 + the log of the chunk's length, so long chunks full of
-// common words do not win; a chunk scores 1/(60 + its rank), as reciprocal rank fusion would.
-func (q *Queries) SearchKnowledge(ctx context.Context, arg SearchKnowledgeParams) ([]SearchKnowledgeRow, error) {
-	rows, err := q.db.Query(ctx, searchKnowledge, arg.MaxHits, arg.Sources, arg.Query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []SearchKnowledgeRow
-	for rows.Next() {
-		var i SearchKnowledgeRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.DocumentID,
-			&i.Source,
-			&i.Title,
-			&i.Url,
-			&i.Heading,
-			&i.Text,
-			&i.Score,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const secretKnowledgeSources = `-- name: SecretKnowledgeSources :many
@@ -1233,8 +736,8 @@ func (q *Queries) SetKnowledgeSnapshot(ctx context.Context, arg SetKnowledgeSnap
 }
 
 const sourceBlobs = `-- name: SourceBlobs :many
-SELECT DISTINCT blob_sha256::text AS blob FROM knowledge_documents
-WHERE source_id = $1 AND blob_sha256 IS NOT NULL
+SELECT DISTINCT blob_sha256::text AS blob FROM knowledge_uploads
+WHERE source_id = $1
 ORDER BY 1
 `
 
@@ -1274,11 +777,11 @@ func (q *Queries) SyncKnowledgeSourceNow(ctx context.Context, name string) (stri
 
 const unheldBlobs = `-- name: UnheldBlobs :many
 SELECT b::text AS blob FROM unnest($1::text[]) b
-WHERE NOT EXISTS (SELECT 1 FROM knowledge_documents d WHERE d.org_id = goal_org() AND d.blob_sha256 = b)
+WHERE NOT EXISTS (SELECT 1 FROM knowledge_uploads d WHERE d.org_id = goal_org() AND d.blob_sha256 = b)
 ORDER BY b
 `
 
-// Of the given content hashes, those no document of the organization holds.
+// Of the given content hashes, those no upload of the organization holds.
 func (q *Queries) UnheldBlobs(ctx context.Context, blobs []string) ([]string, error) {
 	rows, err := q.db.Query(ctx, unheldBlobs, blobs)
 	if err != nil {
@@ -1333,185 +836,51 @@ func (q *Queries) UpdateKnowledgeSource(ctx context.Context, arg UpdateKnowledge
 	return id, err
 }
 
-const updateKnowledgeUpload = `-- name: UpdateKnowledgeUpload :one
-UPDATE knowledge_documents
-SET version = $1, title = $2, mime = $3, bytes = $4,
-    status = $5, error = $6, seen_at = greatest(seen_at, $7),
-    indexed_at = $8
-WHERE source_id = $9 AND external_id = $10
+const upsertKnowledgeUpload = `-- name: UpsertKnowledgeUpload :many
+INSERT INTO knowledge_uploads AS u (id, source_id, name, mime, bytes, blob_sha256, created_by)
+VALUES ($1, $2, $3, $4, $5, $6::text, $7)
+ON CONFLICT (source_id, name) DO UPDATE
+SET mime = EXCLUDED.mime, bytes = EXCLUDED.bytes, blob_sha256 = EXCLUDED.blob_sha256
+WHERE u.blob_sha256 IS DISTINCT FROM EXCLUDED.blob_sha256
 RETURNING id
 `
 
-type UpdateKnowledgeUploadParams struct {
-	Version    string
-	Title      string
-	Mime       string
-	Bytes      int64
-	Status     string
-	Error      *string
-	SeenAt     time.Time
-	IndexedAt  *time.Time
-	SourceID   uuid.UUID
-	ExternalID string
-}
-
-// An upload's document as its sync read it; none when it was deleted meanwhile, which a waiting
-// update sees once the deletion commits.
-func (q *Queries) UpdateKnowledgeUpload(ctx context.Context, arg UpdateKnowledgeUploadParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, updateKnowledgeUpload,
-		arg.Version,
-		arg.Title,
-		arg.Mime,
-		arg.Bytes,
-		arg.Status,
-		arg.Error,
-		arg.SeenAt,
-		arg.IndexedAt,
-		arg.SourceID,
-		arg.ExternalID,
-	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const upsertKnowledgeDocument = `-- name: UpsertKnowledgeDocument :one
-INSERT INTO knowledge_documents AS d (id, source_id, external_id, version, title, url, mime, bytes, blob_sha256, status, error,
-                                      seen_at, indexed_at, created_by)
-VALUES ($1, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11, $12,
-        $13, $14)
-ON CONFLICT (source_id, external_id) DO UPDATE
-SET version = EXCLUDED.version, title = EXCLUDED.title, url = EXCLUDED.url, mime = EXCLUDED.mime, bytes = EXCLUDED.bytes,
-    blob_sha256 = coalesce(EXCLUDED.blob_sha256, d.blob_sha256), status = EXCLUDED.status, error = EXCLUDED.error,
-    seen_at = greatest(d.seen_at, EXCLUDED.seen_at), indexed_at = EXCLUDED.indexed_at
-RETURNING id
-`
-
-type UpsertKnowledgeDocumentParams struct {
+type UpsertKnowledgeUploadParams struct {
 	ID         uuid.UUID
 	SourceID   uuid.UUID
-	ExternalID string
-	Version    string
-	Title      string
-	Url        *string
+	Name       string
 	Mime       string
 	Bytes      int64
-	BlobSha256 *string
-	Status     string
-	Error      *string
-	SeenAt     time.Time
-	IndexedAt  *time.Time
+	BlobSha256 string
 	CreatedBy  string
 }
 
-// org_id comes from its default, goal_org(); an upload's hash stays when a sync rewrites it, and
-// its seen time never goes back (a sync that stalled past its lease writes an older one).
-func (q *Queries) UpsertKnowledgeDocument(ctx context.Context, arg UpsertKnowledgeDocumentParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, upsertKnowledgeDocument,
+// A file of an upload source, replacing the one of its name; nothing when it holds that content
+// already. org_id comes from its default, goal_org().
+func (q *Queries) UpsertKnowledgeUpload(ctx context.Context, arg UpsertKnowledgeUploadParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, upsertKnowledgeUpload,
 		arg.ID,
 		arg.SourceID,
-		arg.ExternalID,
-		arg.Version,
-		arg.Title,
-		arg.Url,
+		arg.Name,
 		arg.Mime,
 		arg.Bytes,
 		arg.BlobSha256,
-		arg.Status,
-		arg.Error,
-		arg.SeenAt,
-		arg.IndexedAt,
 		arg.CreatedBy,
 	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const upsertKnowledgeUse = `-- name: UpsertKnowledgeUse :execrows
-
-INSERT INTO knowledge_uses AS u (factory_id, item_id, run_id, source_id, document_id, kind, chunk_ids, at)
-VALUES ($1, $2, $3, $4, $5, $6,
-        ARRAY(SELECT DISTINCT c FROM unnest($7::bigint[]) c ORDER BY c), $8)
-ON CONFLICT (org_id, run_id, document_id, kind) DO UPDATE
-SET chunk_ids = ARRAY(SELECT DISTINCT c FROM unnest(u.chunk_ids || excluded.chunk_ids) c ORDER BY c),
-    at = least(u.at, excluded.at)
-WHERE u.source_id = excluded.source_id
-`
-
-type UpsertKnowledgeUseParams struct {
-	FactoryID  uuid.UUID
-	ItemID     uuid.UUID
-	RunID      uuid.UUID
-	SourceID   uuid.UUID
-	DocumentID uuid.UUID
-	Kind       string
-	ChunkIds   []int64
-	At         time.Time
-}
-
-// Knowledge use and verdicts (00072, ADR 0027).
-// One use per run, document and kind: a second merges its chunk ids into the first's, sorted
-// and distinct, and keeps the earlier time. A document of another source or organization fails
-// the document key, or changes no row when the use exists (ports.ErrNotFound); a merge past
-// 1,000 chunks fails its check.
-func (q *Queries) UpsertKnowledgeUse(ctx context.Context, arg UpsertKnowledgeUseParams) (int64, error) {
-	result, err := q.db.Exec(ctx, upsertKnowledgeUse,
-		arg.FactoryID,
-		arg.ItemID,
-		arg.RunID,
-		arg.SourceID,
-		arg.DocumentID,
-		arg.Kind,
-		arg.ChunkIds,
-		arg.At,
-	)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
-}
-
-const upsertKnowledgeVerdict = `-- name: UpsertKnowledgeVerdict :one
-INSERT INTO knowledge_verdicts AS v (source_id, document_id, run_id, item_id, verdict, note, actor, at)
-SELECT d.source_id, d.id, $1, $2, $3, $4, $5,
-       coalesce($6::timestamptz, now())
-FROM knowledge_documents d WHERE d.id = $7
-ON CONFLICT ON CONSTRAINT knowledge_verdicts_actor_key DO UPDATE
-SET verdict = excluded.verdict, note = excluded.note, item_id = excluded.item_id, at = excluded.at
-RETURNING v.source_id, v.at
-`
-
-type UpsertKnowledgeVerdictParams struct {
-	RunID      *uuid.UUID
-	ItemID     *uuid.UUID
-	Verdict    string
-	Note       string
-	Actor      string
-	At         *time.Time
-	DocumentID uuid.UUID
-}
-
-type UpsertKnowledgeVerdictRow struct {
-	SourceID uuid.UUID
-	At       time.Time
-}
-
-// One verdict per actor, document and run (a verdict without a run counting as its own:
-// NULLS NOT DISTINCT); a later one replaces its verdict, note, item and time. The source is
-// the document's; no row when the document is not the organization's (ports.ErrNotFound).
-func (q *Queries) UpsertKnowledgeVerdict(ctx context.Context, arg UpsertKnowledgeVerdictParams) (UpsertKnowledgeVerdictRow, error) {
-	row := q.db.QueryRow(ctx, upsertKnowledgeVerdict,
-		arg.RunID,
-		arg.ItemID,
-		arg.Verdict,
-		arg.Note,
-		arg.Actor,
-		arg.At,
-		arg.DocumentID,
-	)
-	var i UpsertKnowledgeVerdictRow
-	err := row.Scan(&i.SourceID, &i.At)
-	return i, err
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

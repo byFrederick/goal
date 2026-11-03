@@ -9,7 +9,6 @@ package knowledgetest
 import (
 	"context"
 	"errors"
-	"math"
 	"reflect"
 	"slices"
 	"strings"
@@ -52,16 +51,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Claim_ScheduleAndSyncNow", testClaimSchedule},
 		{"FinishSync_AnErrorThatIsNoUTF8", testFinishInvalidUTF8},
 		{"Finish_CountsFailuresInARow", testFinishFailures},
-		{"Documents_ReplacedSeenAndUnseenDeleted", testDocuments},
-		{"Uploads_PendingDueAndOrphans", testUploads},
-		{"Search_HybridRanking", testSearchRanking},
-		{"SearchOnlyListedSources", testSearchSources},
+		{"Uploads_ReplacedByNameDueAndOrphans", testUploads},
 		{"OtherOrg_SeesNothing", testIsolation},
-		{"Uses_UpsertIsIdempotent", testUsesUpsert},
-		{"Verdicts_LaterReplacesEarlier", testVerdictsReplace},
-		{"Usage_WindowCountsOnlyRunsInside", testUsageWindow},
-		{"Uses_OtherOrgSeesNothing", testUsesIsolation},
-		{"DocumentDelete_CascadesUsesAndVerdicts", testDeleteCascades},
 		{"Snapshots_NewReplacesCurrentFilesAndKeepsTheOld", testSnapshots},
 		{"Snapshots_RulesAndLostLeaseChangeNothing", testSnapshotRules},
 		{"Files_PageInPathOrderByPathOrTitlePrefix", testFilesPage},
@@ -195,60 +186,13 @@ func (f *fixture) refused(what string, err, want error) {
 	}
 }
 
-// put stores a document of source with one chunk per text.
-func (f *fixture) put(org domain.OrgID, source domain.KnowledgeSourceID, ext, version string, texts []string) {
-	f.t.Helper()
-
-	d := domain.KnowledgeDocument{
-		Source: source, ExternalID: ext, Version: version, Title: "Doc " + ext, URL: "https://git.example.com/acme/docs/" + ext,
-		MIME: "text/markdown", Bytes: 100, Status: domain.DocumentIndexed, SeenAt: time.Now().UTC(), CreatedBy: domain.EngineActor,
-	}
-
-	chunks := make([]domain.Chunk, 0, len(texts))
-
-	for i, text := range texts {
-		chunks = append(chunks, domain.Chunk{Ord: i, Heading: "Section " + ext, Text: text})
-	}
-
-	if err := f.Knowledge.PutDocument(f.in(org), d, chunks); err != nil {
-		f.t.Fatalf("PutDocument %s: %v", ext, err)
-	}
-}
-
-func (f *fixture) search(org domain.OrgID, q domain.KnowledgeQuery) []domain.KnowledgeHit {
-	f.t.Helper()
-
-	if q.Limit == 0 {
-		q.Limit = 10
-	}
-
-	got, err := f.Knowledge.Search(f.in(org), q)
-	if err != nil {
-		f.t.Fatalf("Search %q: %v", q.Text, err)
-	}
-
-	return got
-}
-
-// texts are the hits' chunk texts in order.
-func texts(hits []domain.KnowledgeHit) []string {
-	out := make([]string, 0, len(hits))
-	for _, h := range hits {
-		out = append(out, h.Text)
-	}
-
-	return out
-}
-
 // Names of the sources, texts and types the tests use.
 const (
 	handbook   = "handbook"
 	runbooks   = "runbooks"
 	chatSearch = "chat-search"
 	plainText  = "text/plain"
-	leaseWord  = "lease"
 	newName    = "syn"
-	docA       = "docs/a.md"
 )
 
 // want fails the test with what and got unless every condition holds.
@@ -284,7 +228,7 @@ func testSources(f *fixture) {
 
 	up := f.upload(handbook)
 	f.want("upload source", up, up.Kind == domain.SourceUpload, up.Status == domain.SyncIdle, up.SyncEvery == domain.DefaultSyncEvery,
-		up.NextSyncAt != nil && !up.NextSyncAt.Before(before), up.Connection == "", up.Documents == 0, up.CreatedBy.Ref() == admin.Ref())
+		up.NextSyncAt != nil && !up.NextSyncAt.Before(before), up.Connection == "", up.CreatedBy.Ref() == admin.Ref())
 
 	synced := f.source(f.org, domain.NewKnowledgeSource{
 		Name: runbooks, Title: "Runbooks", Kind: domain.SourceSynced, Connection: docsConn,
@@ -534,9 +478,7 @@ func testClaimLease(f *fixture) {
 // and a document's seen time never goes back, so the new holder's sync stands.
 func testClaimFenced(f *fixture) {
 	ctx := f.ctx()
-	src := f.synced(f.org, runbooks)
-	f.put(f.org, src.ID, docA, "v1", []string{"alpha"})
-	f.put(f.org, src.ID, "docs/b.md", "v1", []string{"beta"})
+	f.synced(f.org, runbooks)
 
 	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Millisecond)
 	lease := 10 * time.Minute
@@ -544,40 +486,19 @@ func testClaimFenced(f *fixture) {
 
 	t1 := t0.Add(lease + time.Minute)
 	fresh := f.claimed("after the first lease ended", t1, lease)
-	f.must(f.Knowledge.MarkSeen(ctx, fresh.Lease, []string{docA}, t1))
 
 	// The first holder wakes, its clock behind: within its own lease by that clock.
 	f.refused("the stale holder's RenewSource", f.Knowledge.RenewSource(ctx, stale.Lease, t0.Add(5*time.Minute), t0.Add(15*time.Minute)),
 		ports.ErrLeaseLost)
-	f.refused("the stale holder's MarkSeen", f.Knowledge.MarkSeen(ctx, stale.Lease, []string{docA}, t0), ports.ErrLeaseLost)
-
-	n, err := f.Knowledge.DeleteUnseen(ctx, stale.Lease, t1.Add(time.Hour))
-	f.refused("the stale holder's DeleteUnseen", err, ports.ErrLeaseLost)
-	f.want("documents the stale holder deleted", n, n == 0)
 	f.refused("the stale holder's FinishSync",
 		f.Knowledge.FinishSync(ctx, stale.Lease, domain.SyncResult{At: t0.Add(6 * time.Minute), Due: *stale.Source.NextSyncAt}), ports.ErrLeaseLost)
-
-	// Its document written in flight keeps the newer seen time; so does an earlier mark.
-	f.must(f.Knowledge.PutDocument(ctx, domain.KnowledgeDocument{
-		Source: src.ID, ExternalID: docA, Version: "v1", Title: "Doc docs/a.md", MIME: "text/markdown", Status: domain.DocumentIndexed,
-		SeenAt: t0, CreatedBy: domain.EngineActor,
-	}, []domain.Chunk{{Text: "alpha"}}))
-	f.must(f.Knowledge.MarkSeen(ctx, fresh.Lease, []string{docA}, t0))
-
-	a := f.docNamed(runbooks, docA)
-	f.want("a.md's seen time (the newer holder's)", a.SeenAt, a.SeenAt.Equal(t1))
 
 	got := f.get(f.org, runbooks)
 	f.want("the source (the newer holder's sync)", got, got.Status == domain.SyncSyncing, equalTime(got.LeaseUntil, t1.Add(lease)),
 		got.LastSyncedAt == nil)
 
 	f.must(f.Knowledge.RenewSource(ctx, fresh.Lease, t1.Add(time.Minute), t1.Add(lease+time.Minute)))
-
-	n, err = f.Knowledge.DeleteUnseen(ctx, fresh.Lease, t1)
-	f.must(err)
-	f.want("DeleteUnseen of the newer holder (b.md)", n, n == 1)
 	f.finish(fresh, t1.Add(2*time.Minute), "")
-	f.refused("MarkSeen after the sync ended", f.Knowledge.MarkSeen(ctx, fresh.Lease, []string{docA}, t1), ports.ErrLeaseLost)
 }
 
 // testClaimAcrossOrgs: one claim reaches every organization's sources, the one due first first,
@@ -672,189 +593,6 @@ func testFinishFailures(f *fixture) {
 	sync("", 0)
 }
 
-// docNamed is the document of source with external id ext.
-func (f *fixture) docNamed(source, ext string) domain.KnowledgeDocument {
-	f.t.Helper()
-
-	docs, err := f.Knowledge.Documents(f.ctx(), source, "", 100)
-	f.must(err)
-
-	for _, d := range docs {
-		if d.ExternalID == ext {
-			return d
-		}
-	}
-
-	f.t.Fatalf("%s has no document %s", source, ext)
-
-	return domain.KnowledgeDocument{}
-}
-
-// testDocuments: a document is replaced with its chunks; versions skip pending ones; documents a
-// sync did not see go.
-func testDocuments(f *fixture) {
-	ctx := f.ctx()
-	src := f.synced(f.org, runbooks)
-
-	f.put(f.org, src.ID, docA, "v1", []string{"alpha one", "alpha two"})
-	f.put(f.org, src.ID, "docs/b.md", "v1", []string{"beta"})
-
-	versions, err := f.Knowledge.Versions(ctx, src.ID)
-	f.must(err)
-	f.want("Versions", versions, reflect.DeepEqual(versions, map[string]string{docA: "v1", "docs/b.md": "v1"}))
-
-	a := f.docNamed(runbooks, docA)
-
-	_, text, err := f.Knowledge.Document(ctx, a.ID)
-	f.must(err)
-	f.want("Document text", text, text == "alpha one\n\nalpha two")
-
-	f.put(f.org, src.ID, docA, "v2", []string{"alpha again"})
-
-	got, text, err := f.Knowledge.Document(ctx, a.ID)
-	f.must(err)
-	f.want("the same document at v2 with its one chunk", got, got.ID == a.ID, got.Version == "v2", text == "alpha again")
-
-	hits := f.search(f.org, domain.KnowledgeQuery{Text: "two", Sources: []string{runbooks}})
-	f.want("a replaced chunk found", hits, len(hits) == 0)
-
-	page, err := f.Knowledge.Documents(ctx, runbooks, "", 1)
-	f.must(err)
-	f.want("the first page", page, len(page) == 1)
-
-	rest, err := f.Knowledge.Documents(ctx, runbooks, page[0].ID, 10)
-	f.must(err)
-	f.want("the next page", rest, len(rest) == 1, len(rest) == 1 && rest[0].ID != page[0].ID)
-
-	pass := time.Now().UTC().Add(time.Second).Truncate(time.Millisecond)
-	sync := f.claimed("runbooks", pass, time.Minute)
-	f.must(f.Knowledge.MarkSeen(ctx, sync.Lease, []string{docA}, pass))
-
-	n, err := f.Knowledge.DeleteUnseen(ctx, sync.Lease, pass)
-	f.must(err)
-	f.want("DeleteUnseen (b.md)", n, n == 1)
-
-	// An external id is bounded in bytes, as its unique index's entry is (review 4 SQL L4):
-	// 1,000 characters of three bytes each are too long.
-	long := domain.KnowledgeDocument{
-		Source: src.ID, ExternalID: "docs/" + strings.Repeat("日", 1000) + ".md", Version: "v1", Title: "x", MIME: plainText,
-		Status: domain.DocumentIndexed, SeenAt: time.Now(), CreatedBy: domain.EngineActor,
-	}
-	f.refused("PutDocument with an external id over MaxExternalID bytes", f.Knowledge.PutDocument(ctx, long, nil), domain.ErrInvalid)
-
-	long.ExternalID = "docs/" + strings.Repeat("日", 600) + ".md"
-	f.must(f.Knowledge.PutDocument(ctx, long, nil))
-	f.must(f.Knowledge.MarkSeen(ctx, sync.Lease, []string{long.ExternalID}, pass))
-
-	s := f.get(f.org, runbooks)
-	f.want("Documents", s.Documents, s.Documents == 2)
-
-	_, err = f.Knowledge.Documents(ctx, "nope", "", 10)
-	f.refused("Documents of an unknown source", err, ports.ErrNotFound)
-
-	_, _, err = f.Knowledge.Document(ctx, "01900000-0000-7000-8000-000000000000")
-	f.refused("Document unknown", err, ports.ErrNotFound)
-}
-
-// add uploads content h to source.
-func (f *fixture) add(source string, h domain.BlobHash) domain.KnowledgeDocument {
-	f.t.Helper()
-
-	d, err := f.Knowledge.AddUpload(f.ctx(), source, domain.KnowledgeDocument{Title: "notes.md", MIME: "text/markdown", Bytes: 3, Blob: h}, admin)
-	f.must(err)
-
-	return d
-}
-
-// testUploads: an upload is pending (Uploads makes its source due once its content is
-// stored); the same content is the same document; a deletion drops the content no document
-// holds any more, and a drop that fails undoes it.
-func testUploads(f *fixture) {
-	ctx := f.ctx()
-	f.upload(handbook)
-	f.upload("archive")
-	f.synced(f.org, runbooks)
-
-	// The new sources are due: sync them, so only an upload makes one due again.
-	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Millisecond)
-	for s := f.claim(t0, time.Minute); s != nil; s = f.claim(t0, time.Minute) {
-		f.finish(*s, t0, "")
-	}
-
-	h1, h2 := domain.HashBlob([]byte("one")), domain.HashBlob([]byte("two"))
-
-	d1 := f.add(handbook, h1)
-	f.want("AddUpload", d1, d1.Status == domain.DocumentPending, d1.ExternalID == string(h1), d1.Version == string(h1), d1.Blob == h1,
-		d1.Title == "notes.md")
-
-	again := f.add(handbook, h1)
-	f.want("the same content again (the same document)", again.ID, again.ID == d1.ID)
-	f.none("after an upload, before Sync now", t0.Add(2*time.Minute))
-
-	v, err := f.Knowledge.Versions(ctx, d1.Source)
-	f.must(err)
-	f.want("Versions with a pending upload (none)", v, len(v) == 0)
-
-	d2 := f.add(handbook, h2)
-	f.add("archive", h2)
-
-	var dropped []domain.BlobHash
-
-	drop := func(_ context.Context, unheld []domain.BlobHash) error {
-		dropped = append(dropped, unheld...)
-
-		return nil
-	}
-	failing := func(context.Context, []domain.BlobHash) error { return errors.New("the bucket is unreachable") }
-
-	err = f.Knowledge.DeleteDocument(ctx, d1.ID, admin, failing)
-	f.want("DeleteDocument whose drop fails", err, err != nil)
-	f.want("the document after a failed drop", f.docNamed(handbook, string(h1)).ID, f.docNamed(handbook, string(h1)).ID == d1.ID)
-
-	f.must(f.Knowledge.DeleteDocument(ctx, d1.ID, admin, drop))
-	f.want("DeleteDocument of the only holder", dropped, slices.Equal(dropped, []domain.BlobHash{h1}))
-
-	// A sync's write of the deleted upload does not bring it back (review 4 Go L11).
-	f.refused("PutDocument of a deleted upload", f.Knowledge.PutDocument(ctx, domain.KnowledgeDocument{
-		Source: d1.Source, ExternalID: string(h1), Version: string(h1), Title: "notes.md", MIME: plainText, Status: domain.DocumentIndexed,
-		SeenAt: time.Now(), CreatedBy: domain.EngineActor,
-	}, []domain.Chunk{{Text: "one"}}), ports.ErrNotFound)
-
-	docs, err := f.Knowledge.Documents(ctx, handbook, "", 10)
-	f.must(err)
-	f.want("handbook's documents after the deleted upload's write", docs, len(docs) == 1, len(docs) == 1 && docs[0].ID == d2.ID)
-
-	f.must(f.Knowledge.DeleteDocument(ctx, d2.ID, admin, drop))
-	f.want("DeleteDocument while archive holds it", dropped, len(dropped) == 1)
-
-	f.must(f.Knowledge.DeleteSource(ctx, "archive", admin, drop))
-	f.want("DeleteSource", dropped, slices.Equal(dropped, []domain.BlobHash{h1, h2}))
-
-	uploaded, deleted := f.audit(f.org, domain.AuditKnowledgeDocumentUploaded), f.audit(f.org, domain.AuditKnowledgeDocumentDeleted)
-	f.want("audit (the same content again is none)", []int{len(uploaded), len(deleted)}, len(uploaded) == 3, len(deleted) == 2)
-
-	f.uploadRefusals(h1)
-}
-
-// uploadRefusals: what an upload and a deletion refuse.
-func (f *fixture) uploadRefusals(h domain.BlobHash) {
-	ctx := f.ctx()
-
-	_, err := f.Knowledge.AddUpload(ctx, runbooks, domain.KnowledgeDocument{Title: "x", MIME: plainText, Blob: h}, admin)
-	f.refused("AddUpload to a synced source", err, domain.ErrNotUploadSource)
-
-	_, err = f.Knowledge.AddUpload(ctx, "nope", domain.KnowledgeDocument{Title: "x", MIME: plainText, Blob: h}, admin)
-	f.refused("AddUpload to an unknown source", err, ports.ErrNotFound)
-
-	_, err = f.Knowledge.AddUpload(ctx, handbook, domain.KnowledgeDocument{Title: "x", MIME: plainText, Blob: "nothex"}, admin)
-	f.refused("AddUpload without a content hash", err, domain.ErrInvalid)
-
-	f.put(f.org, f.get(f.org, runbooks).ID, docA, "v1", []string{"alpha"})
-
-	err = f.Knowledge.DeleteDocument(ctx, f.docNamed(runbooks, docA).ID, admin, nil)
-	f.refused("DeleteDocument of a synced document", err, domain.ErrNotUploadSource)
-}
-
 // Chunk texts of the ranking fixture.
 const (
 	exact   = "lease claims and their expiry"
@@ -862,74 +600,10 @@ const (
 	keyword = "lease renewal lease rotation lease audit"
 )
 
-// testSearchRanking: chunks ranked by keywords, each scored 1/(60 + its rank).
-func testSearchRanking(f *fixture) {
-	src := f.synced(f.org, runbooks)
-	f.put(f.org, src.ID, "docs/leases.md", "v1", []string{exact, near, keyword})
-
-	all := []string{runbooks}
-
-	// Keywords: keyword (lease three times), exact (once); near has none.
-	ranked := f.search(f.org, domain.KnowledgeQuery{Text: leaseWord, Sources: all})
-	if got, want := texts(ranked), []string{keyword, exact}; !slices.Equal(got, want) {
-		f.t.Fatalf("ranked = %q, want %q", got, want)
-	}
-
-	for i, want := range []float64{1.0 / 61, 1.0 / 62} {
-		f.want("hit's reciprocal rank score (k = 60)", ranked[i], math.Abs(ranked[i].Score-want) < 1e-9)
-	}
-
-	h := ranked[0]
-	f.want("hit", h, h.Source == runbooks, h.Title == "Doc docs/leases.md", h.URL == "https://git.example.com/acme/docs/docs/leases.md",
-		h.Heading == "Section docs/leases.md", h.Document != "", h.Chunk != 0)
-
-	for what, tc := range map[string]struct {
-		q    domain.KnowledgeQuery
-		want []string
-	}{
-		"limit 1":             {domain.KnowledgeQuery{Text: leaseWord, Limit: 1}, []string{keyword}},
-		"a word no chunk has": {domain.KnowledgeQuery{Text: "the"}, []string{}},
-		"no words":            {domain.KnowledgeQuery{Text: "  "}, []string{}},
-	} {
-		tc.q.Sources = all
-		got := texts(f.search(f.org, tc.q))
-		f.want(what, got, slices.Equal(got, tc.want))
-	}
-}
-
-// testSearchSources: a search ranks the chunks of the named sources only, however
-// relevant the others' are (spec 4 §11.2 row 8).
-func testSearchSources(f *fixture) {
-	listed := f.synced(f.org, runbooks)
-	unlisted := f.synced(f.org, "secrets")
-
-	f.put(f.org, listed.ID, "docs/far.md", "v1", []string{"rotation schedule"})
-	f.put(f.org, unlisted.ID, "docs/key.md", "v1", []string{"lease ledger lease log lease"})
-
-	q := domain.KnowledgeQuery{Text: "lease rotation", Sources: []string{runbooks}}
-
-	hits := f.search(f.org, q)
-	f.want("Search over runbooks (its one chunk only)", hits, len(hits) == 1, len(hits) == 1 && hits[0].Source == runbooks,
-		len(hits) == 1 && hits[0].Text == "rotation schedule")
-
-	for what, tc := range map[string]struct {
-		sources []string
-		n       int
-	}{
-		"no source": {nil, 0}, "an unknown source": {[]string{"unknown"}, 0}, "both": {[]string{runbooks, "secrets"}, 2},
-	} {
-		q.Sources = tc.sources
-		hits := f.search(f.org, q)
-		f.want("Search over "+what, hits, len(hits) == tc.n)
-	}
-}
-
 // testIsolation: another organization sees none of the sources, documents and chunks, by name,
 // id, claim or search, and writes none (spec 4 §11.2 row 1).
 func testIsolation(f *fixture) {
-	src := f.synced(f.org, runbooks)
-	f.put(f.org, src.ID, docA, "v1", []string{"lease expiry"})
-	doc := f.docNamed(runbooks, docA)
+	f.synced(f.org, runbooks)
 
 	other := f.NewOrg(f.t)
 	f.setUp(other)
@@ -942,45 +616,17 @@ func testIsolation(f *fixture) {
 	_, err = f.Knowledge.Source(in, runbooks)
 	f.refused("Source of another org", err, ports.ErrNotFound)
 
-	_, _, err = f.Knowledge.Document(in, doc.ID)
-	f.refused("Document of another org", err, ports.ErrNotFound)
-
-	err = f.Knowledge.DeleteDocument(in, doc.ID, admin, nil)
-	f.refused("DeleteDocument of another org", err, ports.ErrNotFound)
-
-	v, err := f.Knowledge.Versions(in, src.ID)
-	f.must(err)
-	f.want("Versions of another org's source", v, len(v) == 0)
-
-	err = f.Knowledge.PutDocument(in, domain.KnowledgeDocument{
-		Source: src.ID, ExternalID: "docs/x.md", Version: "v1", Title: "x", MIME: plainText, Status: domain.DocumentIndexed,
-		SeenAt: time.Now(), CreatedBy: domain.EngineActor,
-	}, nil)
-	f.want("PutDocument into another org's source", err, err != nil)
+	_, err = f.Knowledge.Uploads(in, runbooks)
+	f.refused("Uploads of another org", err, ports.ErrNotFound)
 
 	// A lease is its organization's: under another, it renews, marks, deletes and ends nothing.
 	t0 := time.Now().UTC().Add(time.Minute)
 	c := f.claimed("runbooks", t0, time.Minute)
 	f.want("the claim's organization", c.Org, c.Org == f.org)
 	f.refused("RenewSource in another org", f.Knowledge.RenewSource(in, c.Lease, t0, t0.Add(time.Minute)), ports.ErrLeaseLost)
-	f.refused("MarkSeen in another org", f.Knowledge.MarkSeen(in, c.Lease, []string{docA}, t0), ports.ErrLeaseLost)
-
-	_, err = f.Knowledge.DeleteUnseen(in, c.Lease, t0.Add(time.Hour))
-	f.refused("DeleteUnseen in another org", err, ports.ErrLeaseLost)
 	f.refused("FinishSync in another org", f.Knowledge.FinishSync(in, c.Lease, domain.SyncResult{At: t0, Due: *c.Source.NextSyncAt}),
 		ports.ErrLeaseLost)
 	f.finish(c, t0, "")
-
-	// The other org's own source of the same name: a search there never reaches the first org's
-	// chunk however relevant it is.
-	mine := f.synced(other, runbooks)
-	f.put(other, mine.ID, "docs/b.md", "v1", []string{"lease renewal"})
-
-	hits := texts(f.search(other, domain.KnowledgeQuery{Text: "lease expiry", Sources: []string{runbooks}}))
-	f.want("Search in another org (its own chunk only)", hits, slices.Equal(hits, []string{"lease renewal"}))
-
-	hits = texts(f.search(f.org, domain.KnowledgeQuery{Text: leaseWord, Sources: []string{runbooks}}))
-	f.want("Search in the first org (its own chunk only)", hits, slices.Equal(hits, []string{"lease expiry"}))
 }
 
 // testNoOrg: every method but ClaimSource needs an organization in ctx.
@@ -997,12 +643,9 @@ func testNoOrg(f *fixture) {
 			_, err := f.Knowledge.CreateSource(ctx, domain.NewKnowledgeSource{Name: "abc", Title: "x", Kind: domain.SourceUpload}, admin)
 			return err
 		},
-		"SyncNow":      func() error { return f.Knowledge.SyncNow(ctx, "abc") },
-		"RenewSource":  func() error { return f.Knowledge.RenewSource(ctx, lease, now, now) },
-		"FinishSync":   func() error { return f.Knowledge.FinishSync(ctx, lease, domain.SyncResult{At: now, Due: now}) },
-		"MarkSeen":     func() error { return f.Knowledge.MarkSeen(ctx, lease, []string{"x"}, now) },
-		"DeleteUnseen": func() error { _, err := f.Knowledge.DeleteUnseen(ctx, lease, now); return err },
-		"Versions":     func() error { _, err := f.Knowledge.Versions(ctx, id); return err },
+		"SyncNow":     func() error { return f.Knowledge.SyncNow(ctx, "abc") },
+		"RenewSource": func() error { return f.Knowledge.RenewSource(ctx, lease, now, now) },
+		"FinishSync":  func() error { return f.Knowledge.FinishSync(ctx, lease, domain.SyncResult{At: now, Due: now}) },
 		"PutSnapshot": func() error {
 			_, err := f.Knowledge.PutSnapshot(ctx, lease, domain.KnowledgeSnapshot{ID: snap1, Source: id, CreatedAt: now}, nil)
 			return err
@@ -1016,29 +659,12 @@ func testNoOrg(f *fixture) {
 			return f.Knowledge.AddReads(ctx, []domain.KnowledgeFileReads{{Source: id, Path: fileA, Factory: factoryA, Day: now, Reads: 1}})
 		},
 		"FileReads": func() error { _, err := f.Knowledge.FileReads(ctx, "abc", now); return err },
-		"Documents": func() error { _, err := f.Knowledge.Documents(ctx, "abc", "", 1); return err },
-		"Search": func() error {
-			_, err := f.Knowledge.Search(ctx, domain.KnowledgeQuery{Text: "x", Sources: []string{"abc"}, Limit: 1})
+		"AddUpload": func() error {
+			_, err := f.Knowledge.AddUpload(ctx, "abc", domain.KnowledgeUpload{Name: "x", Blob: domain.HashBlob([]byte("x"))}, admin, nil)
 			return err
 		},
-		"RecordUse": func() error {
-			return f.Knowledge.RecordUse(ctx, newRun().use(domain.KnowledgeDocument{ID: "01900000-0000-7000-8000-000000000001", Source: id},
-				domain.KnowledgeRead, nil, now))
-		},
-		"GiveVerdict": func() error {
-			_, err := f.Knowledge.GiveVerdict(ctx, domain.KnowledgeVerdict{
-				Document: "01900000-0000-7000-8000-000000000001", Verdict: domain.KnowledgeHelped, By: admin,
-			})
-
-			return err
-		},
-		"SourceUsage": func() error { _, err := f.Knowledge.SourceUsage(ctx, "abc", 7); return err },
-		"DocumentUses": func() error {
-			_, err := f.Knowledge.DocumentUses(ctx, "01900000-0000-7000-8000-000000000001", "", 1)
-			return err
-		},
-		"RunUses":     func() error { _, err := f.Knowledge.RunUses(ctx, newRun().run); return err },
-		"RunVerdicts": func() error { _, err := f.Knowledge.RunVerdicts(ctx, newRun().run); return err },
+		"DeleteUpload": func() error { return f.Knowledge.DeleteUpload(ctx, "abc", "x", admin, nil) },
+		"Uploads":      func() error { _, err := f.Knowledge.Uploads(ctx, "abc"); return err },
 	}
 
 	for name, call := range calls {
@@ -1111,4 +737,105 @@ func testConvertSource(f *fixture) {
 	// Only runbooks reads the connection now.
 	f.must(f.Knowledge.DeleteSource(ctx, runbooks, admin, nil))
 	f.must(f.Connections.Delete(ctx, docsConn, admin))
+}
+
+// uploadFile uploads content h as name to source.
+func (f *fixture) uploadFile(source, name string, h domain.BlobHash) domain.KnowledgeUpload {
+	f.t.Helper()
+
+	u, err := f.Knowledge.AddUpload(f.ctx(), source, domain.KnowledgeUpload{Name: name, MIME: "text/markdown", Bytes: 3, Blob: h}, admin, nil)
+	f.must(err)
+
+	return u
+}
+
+// uploadsOf are the names of source's uploads.
+func (f *fixture) uploadsOf(source string) []string {
+	f.t.Helper()
+
+	files, err := f.Knowledge.Uploads(f.ctx(), source)
+	f.must(err)
+
+	out := make([]string, 0, len(files))
+	for _, u := range files {
+		out = append(out, u.Name)
+	}
+
+	return out
+}
+
+// testUploads: an upload is a file by name; the same content under the same name is the same
+// file and another content replaces it; a deletion and a replacement drop the content no upload
+// holds any more, and a drop that fails undoes the change.
+func testUploads(f *fixture) {
+	ctx := f.ctx()
+	f.upload(handbook)
+	f.upload("archive")
+	f.synced(f.org, runbooks)
+
+	h1, h2, h3 := domain.HashBlob([]byte("one")), domain.HashBlob([]byte("two")), domain.HashBlob([]byte("three"))
+
+	u1 := f.uploadFile(handbook, "notes.md", h1)
+	f.want("AddUpload", u1, u1.Blob == h1, u1.Name == "notes.md", u1.Bytes == 3, u1.CreatedBy.Ref() == admin.Ref())
+
+	again := f.uploadFile(handbook, "notes.md", h1)
+	f.want("the same content again (the same file)", again.ID, again.ID == u1.ID)
+
+	f.uploadFile(handbook, "guide.md", h2)
+	f.uploadFile("archive", "guide.md", h2)
+	f.want("Uploads, by name", f.uploadsOf(handbook), slices.Equal(f.uploadsOf(handbook), []string{"guide.md", "notes.md"}))
+
+	var dropped []domain.BlobHash
+
+	drop := func(_ context.Context, unheld []domain.BlobHash) error {
+		dropped = append(dropped, unheld...)
+
+		return nil
+	}
+	failing := func(context.Context, []domain.BlobHash) error { return errors.New("the bucket is unreachable") }
+
+	err := f.Knowledge.DeleteUpload(ctx, handbook, "notes.md", admin, failing)
+	f.want("DeleteUpload whose drop fails", err, err != nil)
+	f.want("the file after a failed drop", f.uploadsOf(handbook), slices.Contains(f.uploadsOf(handbook), "notes.md"))
+
+	f.must(f.Knowledge.DeleteUpload(ctx, handbook, "notes.md", admin, drop))
+	f.want("DeleteUpload of the only holder", dropped, slices.Equal(dropped, []domain.BlobHash{h1}))
+
+	// Another content under a name replaces the file and drops the content it held.
+	replaced, err := f.Knowledge.AddUpload(ctx, handbook, domain.KnowledgeUpload{Name: "guide.md", MIME: "text/markdown", Bytes: 5, Blob: h3}, admin, drop)
+	f.must(err)
+	f.want("AddUpload over a name", replaced, replaced.Blob == h3, replaced.Bytes == 5, len(dropped) == 1)
+	f.want("the one file", f.uploadsOf(handbook), len(f.uploadsOf(handbook)) == 1)
+
+	f.must(f.Knowledge.DeleteUpload(ctx, "archive", "guide.md", admin, drop))
+	f.want("DeleteUpload of the content a replaced file held", dropped, slices.Equal(dropped, []domain.BlobHash{h1, h2}))
+
+	f.must(f.Knowledge.DeleteSource(ctx, handbook, admin, drop))
+	f.want("DeleteSource", dropped, slices.Equal(dropped, []domain.BlobHash{h1, h2, h3}))
+
+	uploaded, deleted := f.audit(f.org, domain.AuditKnowledgeDocumentUploaded), f.audit(f.org, domain.AuditKnowledgeDocumentDeleted)
+	f.want("audit (the same content again is none)", []int{len(uploaded), len(deleted)}, len(uploaded) == 4, len(deleted) == 2)
+
+	f.uploadRefusals(h1)
+}
+
+// uploadRefusals: what an upload and a deletion refuse.
+func (f *fixture) uploadRefusals(h domain.BlobHash) {
+	ctx := f.ctx()
+	f.upload(handbook)
+
+	_, err := f.Knowledge.AddUpload(ctx, runbooks, domain.KnowledgeUpload{Name: "x", MIME: plainText, Blob: h}, admin, nil)
+	f.refused("AddUpload to a synced source", err, domain.ErrNotUploadSource)
+
+	_, err = f.Knowledge.AddUpload(ctx, "nope", domain.KnowledgeUpload{Name: "x", MIME: plainText, Blob: h}, admin, nil)
+	f.refused("AddUpload to an unknown source", err, ports.ErrNotFound)
+
+	_, err = f.Knowledge.AddUpload(ctx, handbook, domain.KnowledgeUpload{Name: "x", MIME: plainText, Blob: "nothex"}, admin, nil)
+	f.refused("AddUpload without a content hash", err, domain.ErrInvalid)
+
+	f.refused("DeleteUpload of an unknown file", f.Knowledge.DeleteUpload(ctx, handbook, "nope.md", admin, nil), ports.ErrNotFound)
+	f.refused("DeleteUpload of a synced source", f.Knowledge.DeleteUpload(ctx, runbooks, "x", admin, nil), domain.ErrNotUploadSource)
+
+	_, err = f.Knowledge.Uploads(ctx, runbooks)
+	f.refused("Uploads of a synced source", err, domain.ErrNotUploadSource)
 }
