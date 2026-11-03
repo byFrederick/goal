@@ -193,7 +193,7 @@ func (in *Ingestor) sync(ctx context.Context, c domain.SourceClaim) error {
 
 	in.cfg.Log.InfoContext(ctx, "knowledge sync", slog.String("source", src.Name), slog.String("source_id", string(src.ID)),
 		slog.Int("files", stats.snapshot.files), slog.Int("files_fetched", stats.snapshot.fetched),
-		slog.Int("files_failed", stats.snapshot.failed), slog.Bool("snapshot", stats.snapshot.written),
+		slog.Int("files_archived", stats.snapshot.archived), slog.Int("files_failed", stats.snapshot.failed), slog.Bool("snapshot", stats.snapshot.written),
 		slog.Float64("seconds", r.At.Sub(started).Seconds()), slog.String("error", r.Error))
 
 	err = in.cfg.Knowledge.FinishSync(context.WithoutCancel(ctx), c.Lease, r)

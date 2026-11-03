@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/knowledge"
 )
 
 const repoSource = "repo"
@@ -339,4 +340,92 @@ func TestSnapshot_AConfluenceSourceReadsWithItsSecret(t *testing.T) {
 
 	files := w.zipOf(w.snapshots("wiki")[0])
 	w.want("its files", files, len(files) == 1)
+}
+
+// manyDocs is n Markdown files, docs/page-<i>.md.
+func manyDocs(n int) map[string]string {
+	out := make(map[string]string, n)
+	for i := range n {
+		out["docs/page-"+strconv.Itoa(i)+".md"] = "# Page " + strconv.Itoa(i) + "\n\nSome text."
+	}
+
+	return out
+}
+
+// A sync that changes at least knowledge.ArchiveFrom files reads them from one archive and
+// fetches none of them; the per-file rules still hold, so a key-like file stays out. A later
+// sync that changes one file fetches it by itself.
+func TestSnapshot_ManyChangesReadTheArchive(t *testing.T) {
+	t.Parallel()
+
+	w := repoWorld(t)
+	docs := manyDocs(knowledge.ArchiveFrom - 1)
+	leaky := "docs/leaky.md"
+	docs[leaky] = "export GH_TOKEN=ghp_" + strings.Repeat("0", 36) + "\n"
+	r := &archiving{reader: w.docs}
+	w.docs.set(docs)
+
+	in := w.ingestorReading(w.kb, r)
+	w.syncDue(in)
+
+	snap := w.snapshots(repoSource)[0]
+	w.want("the first snapshot", snap, snap.Files == knowledge.ArchiveFrom-1, snap.Failed == 1, snap.Changes.Failed[0].Key)
+	w.want("the reads", r.count(), r.count() == 1)
+	fetched := w.docs.fetches()
+	w.want("the fetches", fetched, len(fetched) == 0)
+
+	page := w.zipOf(snap)["docs/page-0.md"]
+	w.want("page-0.md", page, strings.HasPrefix(page.text, "---\nsource: https://git.example.com/docs/page-0.md\n"))
+
+	docs["docs/page-0.md"] = "# Page 0\n\nNew text."
+	w.docs.set(docs)
+	w.clock.Advance(time.Hour + time.Minute)
+	w.syncDue(in)
+
+	w.want("the reads", r.count(), r.count() == 1)
+	// The key-like file has no last good version, so it is read again.
+	fetched = w.docs.fetches()
+	w.want("the fetches", fetched, slices.Equal(fetched, []string{leaky, "docs/page-0.md"}))
+}
+
+// Fewer changed files than knowledge.ArchiveFrom are fetched one by one, archive or not.
+func TestSnapshot_FewChangesFetchFileByFile(t *testing.T) {
+	t.Parallel()
+
+	w := repoWorld(t)
+	r := &archiving{reader: w.docs}
+	w.docs.set(manyDocs(knowledge.ArchiveFrom - 1))
+
+	w.syncDue(w.ingestorReading(w.kb, r))
+
+	snap := w.snapshots(repoSource)[0]
+	w.want("the snapshot", snap, snap.Files == knowledge.ArchiveFrom-1)
+	w.want("the reads", r.count(), r.count() == 0)
+	fetched := w.docs.fetches()
+	w.want("the fetches", fetched, len(fetched) == knowledge.ArchiveFrom-1)
+}
+
+// An archive that fails as a whole after some files, or skips a file, leaves the rest to be
+// fetched one by one, and the sync succeeds with every file.
+func TestSnapshot_AFailedArchiveFallsBackToFiles(t *testing.T) {
+	t.Parallel()
+
+	w := repoWorld(t)
+	docs := manyDocs(knowledge.ArchiveFrom)
+	r := &archiving{reader: w.docs, skip: map[string]bool{"docs/page-0.md": true}, breakAfter: 3}
+	w.docs.set(docs)
+
+	w.syncDue(w.ingestorReading(w.kb, r))
+
+	src := w.source(repoSource)
+	w.want("the source", src, src.Status == domain.SyncIdle, src.LastError == "")
+
+	snap := w.snapshots(repoSource)[0]
+	w.want("the snapshot", snap, snap.Files == knowledge.ArchiveFrom, snap.Failed == 0)
+	w.want("the reads", r.count(), r.count() == 1)
+
+	fetched := w.docs.fetches()
+	// page-0 was skipped; page-1, -10 and -11 came from the archive before it broke.
+	w.want("the fetches", fetched, len(fetched) == knowledge.ArchiveFrom-3, slices.Contains(fetched, "docs/page-0.md"),
+		!slices.Contains(fetched, "docs/page-1.md"), !slices.Contains(fetched, "docs/page-11.md"))
 }
