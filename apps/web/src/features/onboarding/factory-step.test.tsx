@@ -157,7 +157,7 @@ afterEach(() => {
 });
 
 /** Step 3 at /o/acme/get-started/factory with the URL's `search`; the other steps are stubs the links reach. */
-function renderStep(url = '/o/acme/get-started/factory?connection=github&owner=acme&repos=acme%2Fgoal') {
+function renderStep(url = '/o/acme/get-started/factory?url=https%3A%2F%2Fgithub.com%2Facme%2Fgoal&secret=github-token') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const root = createRootRoute({ component: Outlet });
   const step = createRoute({
@@ -236,17 +236,17 @@ describe('step 3, pick a template', () => {
       start: { kind: 'template', template: 'incident-response' },
     });
     await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/line'), { timeout: 4000 });
-    expect(router.state.location.search).toMatchObject({ connection: 'github', owner: 'acme', factory: factoryId });
+    expect(router.state.location.search).toMatchObject({ url: 'https://github.com/acme/goal', secret: 'github-token', factory: factoryId });
   });
 
-  it('saves the chosen repository and the purpose into the new draft before step 4', async () => {
+  it('saves the repository with its token secret and the purpose into the new draft before step 4', async () => {
     const router = renderStep();
     await screen.findByRole('radio', { name: /Incident response/ });
     fireEvent.change(screen.getByRole('textbox', { name: 'What it does' }), { target: { value: 'Ships the app.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Use Incident response' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/line'), { timeout: 4000 });
     const basics = api.saves.filter((s) => s.section === 'basics').at(-1)?.value as Record<string, unknown>;
-    expect(basics.repository).toEqual({ url: 'https://github.com/acme/goal', connection: 'github' });
+    expect(basics.repository).toEqual({ url: 'https://github.com/acme/goal', token: '{{github-token}}' });
     expect(basics.purpose).toBe('Ships the app.');
     expect(api.created).toHaveLength(1);
   });
