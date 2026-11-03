@@ -120,7 +120,7 @@ type KnowledgeSource struct {
 	// CurrentSnapshot is the snapshot runs read; "" before its first.
 	CurrentSnapshot KnowledgeSnapshotID
 	SyncEvery       time.Duration
-	NextSyncAt *time.Time
+	NextSyncAt      *time.Time
 	// LeaseUntil is when the lease of the goald syncing it ends.
 	LeaseUntil   *time.Time
 	Status       SyncStatus
@@ -166,35 +166,34 @@ func (n NewKnowledgeSource) Check() error {
 		errs = append(errs, CheckSecretName(n.Secret))
 	}
 
-	switch n.Kind {
-	case SourceUpload:
-		if n.Connection != "" || n.Secret != "" {
-			errs = append(errs, fmt.Errorf("an upload source reads no connection or secret: %w", ErrInvalid))
-		}
-	case SourceRepository:
-		if n.Connection != "" {
-			errs = append(errs, fmt.Errorf("a repository source reads with a secret, not a connection: %w", ErrInvalid))
-		}
-	case SourceConfluence:
-		if n.Connection != "" || n.Secret == "" {
-			errs = append(errs, fmt.Errorf("a Confluence source reads with a secret and no connection: %w", ErrInvalid))
-		}
-	case SourceSynced:
-		switch {
-		case (n.Connection == "") == (n.Secret == ""):
-			errs = append(errs, fmt.Errorf("a synced source reads with a secret: %w", ErrInvalid))
-		case n.Secret != "":
-			errs = append(errs, checkSourceReader(n.Config))
-		}
-	case SourceLive:
-		if n.Connection == "" || n.Secret != "" {
-			errs = append(errs, fmt.Errorf("a live source reads a connection and no secret: %w", ErrInvalid))
-		}
-	default:
-		errs = append(errs, fmt.Errorf("source kind %q is not upload, repository, confluence, synced or live: %w", n.Kind, ErrInvalid))
+	return errors.Join(append(errs, n.checkReads())...)
+}
+
+// checkReads enforces what a new source of each kind reads: a connection, a secret or neither.
+func (n NewKnowledgeSource) checkReads() error {
+	conn, secret := n.Connection != "", n.Secret != ""
+
+	rule, ok := map[KnowledgeSourceKind]struct {
+		holds bool
+		says  string
+	}{
+		SourceUpload:     {!conn && !secret, "an upload source reads no connection or secret"},
+		SourceRepository: {!conn, "a repository source reads with a secret, not a connection"},
+		SourceConfluence: {!conn && secret, "a Confluence source reads with a secret and no connection"},
+		SourceSynced:     {conn != secret, "a synced source reads with a secret"},
+		SourceLive:       {conn && !secret, "a live source reads a connection and no secret"},
+	}[n.Kind]
+
+	switch {
+	case !ok:
+		return fmt.Errorf("source kind %q is not upload, repository, confluence, synced or live: %w", n.Kind, ErrInvalid)
+	case !rule.holds:
+		return fmt.Errorf("%s: %w", rule.says, ErrInvalid)
+	case n.Kind == SourceSynced && secret:
+		return checkSourceReader(n.Config)
 	}
 
-	return errors.Join(errs...)
+	return nil
 }
 
 // KnowledgeSourcePatch changes a source: Title, ReadWhen, SyncEvery and Secret when set, Config

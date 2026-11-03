@@ -1033,12 +1033,15 @@ func testNoOrg(f *fixture) {
 			return err
 		},
 		"Snapshots": func() error { _, err := f.Knowledge.Snapshots(ctx, "abc"); return err },
-		"Files":     func() error { _, err := f.Knowledge.Files(ctx, domain.KnowledgeFileQuery{Source: "abc", Limit: 1}); return err },
+		"Files": func() error {
+			_, err := f.Knowledge.Files(ctx, domain.KnowledgeFileQuery{Source: "abc", Limit: 1})
+			return err
+		},
 		"AddReads": func() error {
-			return f.Knowledge.AddReads(ctx, []domain.KnowledgeFileReads{{Source: id, Path: "a.md", Factory: factoryA, Day: now, Reads: 1}})
+			return f.Knowledge.AddReads(ctx, []domain.KnowledgeFileReads{{Source: id, Path: fileA, Factory: factoryA, Day: now, Reads: 1}})
 		},
 		"FileReads": func() error { _, err := f.Knowledge.FileReads(ctx, "abc", now); return err },
-		"Documents":    func() error { _, err := f.Knowledge.Documents(ctx, "abc", "", 1); return err },
+		"Documents": func() error { _, err := f.Knowledge.Documents(ctx, "abc", "", 1); return err },
 		"Search": func() error {
 			_, err := f.Knowledge.Search(ctx, domain.KnowledgeQuery{Text: "x", Sources: []string{"abc"}, Limit: 1})
 			return err

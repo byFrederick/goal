@@ -26,7 +26,7 @@ func Run(t *testing.T, newStore func(t *testing.T) ports.ObjectStore) {
 
 	tests := []struct {
 		name string
-		test func(t *testing.T, s ports.ObjectStore)
+		test func(f fixture)
 	}{
 		{"GetRange_Middle", testRangeMiddle},
 		{"GetRange_End", testRangeEnd},
@@ -42,9 +42,15 @@ func Run(t *testing.T, newStore func(t *testing.T) ports.ObjectStore) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			tc.test(t, newStore(t))
+			tc.test(fixture{t: t, s: newStore(t)})
 		})
 	}
+}
+
+// fixture is one test's store.
+type fixture struct {
+	t *testing.T
+	s ports.ObjectStore
 }
 
 const (
@@ -80,7 +86,9 @@ func readRange(t *testing.T, s ports.ObjectStore, key string, offset, length int
 	return string(b)
 }
 
-func testRangeMiddle(t *testing.T, s ports.ObjectStore) {
+func testRangeMiddle(f fixture) {
+	t, s := f.t, f.s
+
 	putDigits(t, s)
 
 	if got := readRange(t, s, digitsKey, 2, 3); got != "234" {
@@ -92,7 +100,9 @@ func testRangeMiddle(t *testing.T, s ports.ObjectStore) {
 	}
 }
 
-func testRangeEnd(t *testing.T, s ports.ObjectStore) {
+func testRangeEnd(f fixture) {
+	t, s := f.t, f.s
+
 	putDigits(t, s)
 
 	for _, tc := range []struct {
@@ -111,7 +121,9 @@ func testRangeEnd(t *testing.T, s ports.ObjectStore) {
 	}
 }
 
-func testRangePastEnd(t *testing.T, s ports.ObjectStore) {
+func testRangePastEnd(f fixture) {
+	t, s := f.t, f.s
+
 	putDigits(t, s)
 
 	for _, tc := range []struct{ offset, length int64 }{{10, 5}, {11, 1}, {1 << 40, 1}, {10, -1}, {3, 0}} {
@@ -121,7 +133,9 @@ func testRangePastEnd(t *testing.T, s ports.ObjectStore) {
 	}
 }
 
-func testRangeMissing(t *testing.T, s ports.ObjectStore) {
+func testRangeMissing(f fixture) {
+	t, s := f.t, f.s
+
 	for _, tc := range []struct{ offset, length int64 }{{0, 10}, {5, -1}, {0, 0}} {
 		r, err := s.GetRange(t.Context(), "orgs/acme/knowledge/missing.zip", tc.offset, tc.length)
 		if !errors.Is(err, ports.ErrNotFound) {
@@ -134,7 +148,9 @@ func testRangeMissing(t *testing.T, s ports.ObjectStore) {
 	}
 }
 
-func testRangeNegative(t *testing.T, s ports.ObjectStore) {
+func testRangeNegative(f fixture) {
+	t, s := f.t, f.s
+
 	putDigits(t, s)
 
 	r, err := s.GetRange(t.Context(), digitsKey, -1, 2)
@@ -168,7 +184,9 @@ func (c *chunks) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func testStreamLarge(t *testing.T, s ports.ObjectStore) {
+func testStreamLarge(f fixture) {
+	t, s := f.t, f.s
+
 	body := make([]byte, StreamBytes)
 	_, _ = rand.Read(body)
 
@@ -205,7 +223,9 @@ func testStreamLarge(t *testing.T, s ports.ObjectStore) {
 	}
 }
 
-func testStreamSmall(t *testing.T, s ports.ObjectStore) {
+func testStreamSmall(f fixture) {
+	t, s := f.t, f.s
+
 	putDigits(t, s)
 
 	info, err := s.PutStream(t.Context(), digitsKey, &chunks{r: bytes.NewReader([]byte("abc"))})
@@ -229,7 +249,9 @@ func testStreamSmall(t *testing.T, s ports.ObjectStore) {
 	}
 }
 
-func testStreamReaderError(t *testing.T, s ports.ObjectStore) {
+func testStreamReaderError(f fixture) {
+	t, s := f.t, f.s
+
 	boom := errors.New("disk gone")
 	body := make([]byte, StreamBytes)
 

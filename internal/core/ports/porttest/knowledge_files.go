@@ -97,10 +97,11 @@ func (k *Knowledge) Files(ctx context.Context, q domain.KnowledgeFileQuery) ([]d
 		prefix := strings.ToLower(q.Prefix)
 
 		for _, p := range slices.Sorted(maps.Keys(s.files)) {
-			f := s.files[p]
 			if len(out) == limit {
 				break
 			}
+
+			f := s.files[p]
 
 			if p > q.After && (strings.HasPrefix(p, q.Prefix) || strings.HasPrefix(strings.ToLower(f.Title), prefix)) {
 				out = append(out, f)

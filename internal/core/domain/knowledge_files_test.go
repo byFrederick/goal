@@ -7,10 +7,17 @@ import (
 	"time"
 )
 
+const (
+	fileA     = "a.md"
+	srcID     = "src"
+	docsTitle = "Docs"
+	docsName  = "docs"
+)
+
 func TestCheckFilePath_RelativeCleanAndBounded(t *testing.T) {
 	t.Parallel()
 
-	for _, ok := range []string{"a.md", "runbooks/pager/alert.md", "Über uns.md", strings.Repeat("a", MaxFilePath)} {
+	for _, ok := range []string{fileA, "runbooks/pager/alert.md", "Über uns.md", strings.Repeat("a", MaxFilePath)} {
 		if err := CheckFilePath(ok); err != nil {
 			t.Errorf("CheckFilePath(%.40q) = %v", ok, err)
 		}
@@ -43,7 +50,7 @@ func TestCheckReadWhen_OneLineOfAtMost160(t *testing.T) {
 }
 
 func snapshotOf(files ...KnowledgeFile) KnowledgeSnapshot {
-	s := KnowledgeSnapshot{ID: "s1", Source: "src", Files: len(files), CreatedAt: time.Unix(1, 0)}
+	s := KnowledgeSnapshot{ID: "s1", Source: srcID, Files: len(files), CreatedAt: time.Unix(1, 0)}
 	for _, f := range files {
 		s.Bytes += f.Bytes
 	}
@@ -54,7 +61,7 @@ func snapshotOf(files ...KnowledgeFile) KnowledgeSnapshot {
 func TestKnowledgeSnapshot_Check(t *testing.T) {
 	t.Parallel()
 
-	a := KnowledgeFile{Path: "a.md", Title: "A", Bytes: 10, Version: "v1"}
+	a := KnowledgeFile{Path: fileA, Title: "A", Bytes: 10, Version: "v1"}
 	b := KnowledgeFile{Path: "b/c.md", Title: "C", Bytes: 20, Version: "v1"}
 
 	if err := snapshotOf(a, b).Check([]KnowledgeFile{a, b}); err != nil {
@@ -89,20 +96,20 @@ func TestKnowledgeSnapshot_Check(t *testing.T) {
 		s     KnowledgeSnapshot
 		files []KnowledgeFile
 	}{
-		"no id":                    {KnowledgeSnapshot{Source: "src", Files: 1, Bytes: 10, CreatedAt: time.Unix(1, 0)}, []KnowledgeFile{a}},
+		"no id":                    {KnowledgeSnapshot{Source: srcID, Files: 1, Bytes: 10, CreatedAt: time.Unix(1, 0)}, []KnowledgeFile{a}},
 		"no source":                {KnowledgeSnapshot{ID: "s", Files: 1, Bytes: 10, CreatedAt: time.Unix(1, 0)}, []KnowledgeFile{a}},
-		"no time":                  {KnowledgeSnapshot{ID: "s", Source: "src", Files: 1, Bytes: 10}, []KnowledgeFile{a}},
+		"no time":                  {KnowledgeSnapshot{ID: "s", Source: srcID, Files: 1, Bytes: 10}, []KnowledgeFile{a}},
 		"a count that is not len":  {snapshotOf(a, b), []KnowledgeFile{a}},
-		"bytes that are not a sum": {KnowledgeSnapshot{ID: "s", Source: "src", Files: 1, Bytes: 11, CreatedAt: time.Unix(1, 0)}, []KnowledgeFile{a}},
+		"bytes that are not a sum": {KnowledgeSnapshot{ID: "s", Source: srcID, Files: 1, Bytes: 11, CreatedAt: time.Unix(1, 0)}, []KnowledgeFile{a}},
 		"a path twice":             {snapshotOf(a, a), []KnowledgeFile{a, a}},
 		"a bad path":               {snapshotOf(KnowledgeFile{Path: "../a.md", Version: "v"}), []KnowledgeFile{{Path: "../a.md", Version: "v"}}},
-		"a file with no version":   {snapshotOf(KnowledgeFile{Path: "a.md"}), []KnowledgeFile{{Path: "a.md"}}},
-		"a file too big":           {snapshotOf(KnowledgeFile{Path: "a.md", Version: "v", Bytes: MaxFileBytes + 1}), []KnowledgeFile{{Path: "a.md", Version: "v", Bytes: MaxFileBytes + 1}}},
+		"a file with no version":   {snapshotOf(KnowledgeFile{Path: fileA}), []KnowledgeFile{{Path: fileA}}},
+		"a file too big":           {snapshotOf(KnowledgeFile{Path: fileA, Version: "v", Bytes: MaxFileBytes + 1}), []KnowledgeFile{{Path: fileA, Version: "v", Bytes: MaxFileBytes + 1}}},
 		"more than 50 MB":          {snapshotOf(manyBig...), manyBig},
 		"more than 20,000 files":   {tooMany, nil},
-		"a read-when of two lines": {KnowledgeSnapshot{ID: "s", Source: "src", ReadWhen: "a\nb", CreatedAt: time.Unix(1, 0)}, nil},
-		"fewer failed than listed": {KnowledgeSnapshot{ID: "s", Source: "src", CreatedAt: time.Unix(1, 0), Changes: SnapshotChanges{Failed: []FileFailure{{Path: "a.md", Error: "x"}}}}, nil},
-		"negative counts":          {KnowledgeSnapshot{ID: "s", Source: "src", CreatedAt: time.Unix(1, 0), Changes: SnapshotChanges{Removed: -1}}, nil},
+		"a read-when of two lines": {KnowledgeSnapshot{ID: "s", Source: srcID, ReadWhen: "a\nb", CreatedAt: time.Unix(1, 0)}, nil},
+		"fewer failed than listed": {KnowledgeSnapshot{ID: "s", Source: srcID, CreatedAt: time.Unix(1, 0), Changes: SnapshotChanges{Failed: []FileFailure{{Path: fileA, Error: "x"}}}}, nil},
+		"negative counts":          {KnowledgeSnapshot{ID: "s", Source: srcID, CreatedAt: time.Unix(1, 0), Changes: SnapshotChanges{Removed: -1}}, nil},
 	} {
 		if err := tc.s.Check(tc.files); !errors.Is(err, ErrInvalid) {
 			t.Errorf("Check of a snapshot with %s = %v, want ErrInvalid", what, err)
@@ -121,19 +128,19 @@ func TestKnowledgeSnapshotKey(t *testing.T) {
 func TestKnowledgeFileReads_Check(t *testing.T) {
 	t.Parallel()
 
-	ok := KnowledgeFileReads{Source: "src", Path: "a.md", Factory: "f", Day: time.Unix(1, 0), Reads: 2}
+	ok := KnowledgeFileReads{Source: srcID, Path: fileA, Factory: "f", Day: time.Unix(1, 0), Reads: 2}
 	if err := ok.Check(); err != nil {
 		t.Errorf("Check = %v", err)
 	}
 
 	for what, r := range map[string]KnowledgeFileReads{
-		"no source":         {Path: "a.md", Factory: "f", Day: time.Unix(1, 0), Reads: 1},
-		"no factory":        {Source: "src", Path: "a.md", Day: time.Unix(1, 0), Reads: 1},
-		"no day":            {Source: "src", Path: "a.md", Factory: "f", Reads: 1},
-		"a bad path":        {Source: "src", Path: "/a.md", Factory: "f", Day: time.Unix(1, 0), Reads: 1},
-		"negative reads":    {Source: "src", Path: "a.md", Factory: "f", Day: time.Unix(1, 0), Reads: -1, Searches: 2},
-		"neither one":       {Source: "src", Path: "a.md", Factory: "f", Day: time.Unix(1, 0)},
-		"negative searches": {Source: "src", Path: "a.md", Factory: "f", Day: time.Unix(1, 0), Reads: 1, Searches: -1},
+		"no source":         {Path: fileA, Factory: "f", Day: time.Unix(1, 0), Reads: 1},
+		"without a factory": {Source: srcID, Path: fileA, Day: time.Unix(1, 0), Reads: 1},
+		"no day":            {Source: srcID, Path: fileA, Factory: "f", Reads: 1},
+		"a bad path":        {Source: srcID, Path: "/a.md", Factory: "f", Day: time.Unix(1, 0), Reads: 1},
+		"negative reads":    {Source: srcID, Path: fileA, Factory: "f", Day: time.Unix(1, 0), Reads: -1, Searches: 2},
+		"neither one":       {Source: srcID, Path: fileA, Factory: "f", Day: time.Unix(1, 0)},
+		"negative searches": {Source: srcID, Path: fileA, Factory: "f", Day: time.Unix(1, 0), Reads: 1, Searches: -1},
 	} {
 		if err := r.Check(); !errors.Is(err, ErrInvalid) {
 			t.Errorf("Check of reads with %s = %v, want ErrInvalid", what, err)
@@ -150,8 +157,8 @@ func TestNewKnowledgeSource_RepositoryAndConfluence(t *testing.T) {
 	t.Parallel()
 
 	for what, n := range map[string]NewKnowledgeSource{
-		"a public repository":      {Name: "docs", Title: "Docs", Kind: SourceRepository},
-		"a repository on a secret": {Name: "docs", Title: "Docs", Kind: SourceRepository, Secret: "gh-token", ReadWhen: "Read for setup."},
+		"a public repository":      {Name: docsName, Title: docsTitle, Kind: SourceRepository},
+		"a repository on a secret": {Name: docsName, Title: docsTitle, Kind: SourceRepository, Secret: "gh-token", ReadWhen: "Read for setup."},
 		"confluence on a secret":   {Name: "wiki", Title: "Wiki", Kind: SourceConfluence, Secret: "wiki-token"},
 	} {
 		if err := n.Check(); err != nil {
@@ -161,8 +168,8 @@ func TestNewKnowledgeSource_RepositoryAndConfluence(t *testing.T) {
 
 	for what, n := range map[string]NewKnowledgeSource{
 		"confluence without a secret":  {Name: "wiki", Title: "Wiki", Kind: SourceConfluence},
-		"a repository on a connection": {Name: "docs", Title: "Docs", Kind: SourceRepository, Connection: "docs"},
-		"a read-when too long":         {Name: "docs", Title: "Docs", Kind: SourceUpload, ReadWhen: strings.Repeat("x", MaxReadWhen+1)},
+		"a repository on a connection": {Name: docsName, Title: docsTitle, Kind: SourceRepository, Connection: docsName},
+		"a read-when too long":         {Name: docsName, Title: docsTitle, Kind: SourceUpload, ReadWhen: strings.Repeat("x", MaxReadWhen+1)},
 	} {
 		if err := n.Check(); !errors.Is(err, ErrInvalid) {
 			t.Errorf("Check of %s = %v, want ErrInvalid", what, err)

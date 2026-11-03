@@ -19,6 +19,13 @@ const (
 	snap3 domain.KnowledgeSnapshotID = "01900000-0000-7000-8000-0000000000a3"
 )
 
+// Paths of files the tests use.
+const (
+	fileA  = "a.md"
+	fileBA = "b/a.md"
+	fileBB = "b/b.md"
+)
+
 // Factories that read.
 const (
 	factoryA domain.FactoryID = "01900000-0000-7000-8000-0000000000f1"
@@ -90,11 +97,11 @@ func testSnapshots(f *fixture) {
 	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Microsecond)
 	c := f.claimSource(src, t0)
 
-	s1 := snapshot(snap1, src.ID, t0, file("a.md", "A", "v1", 10), file("b/c.md", "C", "v1", 20))
+	s1 := snapshot(snap1, src.ID, t0, file(fileA, "A", "v1", 10), file("b/c.md", "C", "v1", 20))
 	s1.ReadWhen = "Read before changing the handbook."
 	s1.Changes = domain.SnapshotChanges{Added: 2}
 
-	got := f.putSnapshot(c, s1, file("a.md", "A", "v1", 10), file("b/c.md", "C", "v1", 20))
+	got := f.putSnapshot(c, s1, file(fileA, "A", "v1", 10), file("b/c.md", "C", "v1", 20))
 	f.want("PutSnapshot", got, got.Key == domain.KnowledgeSnapshotKey(f.org, src.ID, snap1), got.ID == snap1, got.Files == 2, got.Bytes == 30)
 
 	cur := f.get(f.org, handbook)
@@ -102,7 +109,7 @@ func testSnapshots(f *fixture) {
 
 	first := f.files(f.org, domain.KnowledgeFileQuery{Source: handbook, Limit: 10})
 	f.want("Files", first, reflect.DeepEqual(first, []domain.KnowledgeFile{
-		{Source: src.ID, Path: "a.md", Title: "A", Bytes: 10, Version: "v1"},
+		{Source: src.ID, Path: fileA, Title: "A", Bytes: 10, Version: "v1"},
 		{Source: src.ID, Path: "b/c.md", Title: "C", Bytes: 20, Version: "v1"},
 	}))
 
@@ -163,7 +170,7 @@ func testSnapshotRules(f *fixture) {
 	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Microsecond)
 	c := f.claimSource(src, t0)
 
-	a := file("a.md", "A", "v1", 10)
+	a := file(fileA, "A", "v1", 10)
 	f.putSnapshot(c, snapshot(snap1, src.ID, t0, a), a)
 
 	other := f.upload(runbooks)
@@ -190,7 +197,7 @@ func testSnapshotRules(f *fixture) {
 	f.refused("PutSnapshot under a malformed lease", err, ports.ErrLeaseLost)
 
 	got := f.files(f.org, domain.KnowledgeFileQuery{Source: handbook, Limit: 10})
-	f.want("Files after the refusals", got, slices.Equal(paths(got), []string{"a.md"}))
+	f.want("Files after the refusals", got, slices.Equal(paths(got), []string{fileA}))
 
 	snaps, err := f.Knowledge.Snapshots(ctx, handbook)
 	f.must(err)
@@ -211,8 +218,8 @@ func testFilesPage(f *fixture) {
 	c := f.claimSource(src, t0)
 
 	all := []domain.KnowledgeFile{
-		file("Z.md", "Zebra", "v", 1), file("a.md", "Overview", "v", 1), file("b/a.md", "Alpha", "v", 1),
-		file("b/b.md", "Beta", "v", 1), file("c.md", "alpine guide", "v", 1),
+		file("Z.md", "Zebra", "v", 1), file(fileA, "Overview", "v", 1), file(fileBA, "Alpha", "v", 1),
+		file(fileBB, "Beta", "v", 1), file("c.md", "alpine guide", "v", 1),
 	}
 	// Given out of order: the store orders them.
 	f.putSnapshot(c, snapshot(snap1, src.ID, t0, all...), all[4], all[2], all[0], all[3], all[1])
@@ -221,13 +228,13 @@ func testFilesPage(f *fixture) {
 		q    domain.KnowledgeFileQuery
 		want []string
 	}{
-		"every file":           {domain.KnowledgeFileQuery{Limit: 10}, []string{"Z.md", "a.md", "b/a.md", "b/b.md", "c.md"}},
-		"the first page":       {domain.KnowledgeFileQuery{Limit: 2}, []string{"Z.md", "a.md"}},
-		"the page after a.md":  {domain.KnowledgeFileQuery{After: "a.md", Limit: 2}, []string{"b/a.md", "b/b.md"}},
-		"the last page":        {domain.KnowledgeFileQuery{After: "b/b.md", Limit: 2}, []string{"c.md"}},
-		"a path prefix":        {domain.KnowledgeFileQuery{Prefix: "b/", Limit: 10}, []string{"b/a.md", "b/b.md"}},
-		"a title prefix":       {domain.KnowledgeFileQuery{Prefix: "AL", Limit: 10}, []string{"b/a.md", "c.md"}},
-		"a prefix after":       {domain.KnowledgeFileQuery{Prefix: "b/", After: "b/a.md", Limit: 10}, []string{"b/b.md"}},
+		"every file":           {domain.KnowledgeFileQuery{Limit: 10}, []string{"Z.md", fileA, fileBA, fileBB, "c.md"}},
+		"the first page":       {domain.KnowledgeFileQuery{Limit: 2}, []string{"Z.md", fileA}},
+		"the page after a.md":  {domain.KnowledgeFileQuery{After: fileA, Limit: 2}, []string{fileBA, fileBB}},
+		"the last page":        {domain.KnowledgeFileQuery{After: fileBB, Limit: 2}, []string{"c.md"}},
+		"a path prefix":        {domain.KnowledgeFileQuery{Prefix: "b/", Limit: 10}, []string{fileBA, fileBB}},
+		"a title prefix":       {domain.KnowledgeFileQuery{Prefix: "AL", Limit: 10}, []string{fileBA, "c.md"}},
+		"a prefix after":       {domain.KnowledgeFileQuery{Prefix: "b/", After: fileBA, Limit: 10}, []string{fileBB}},
 		"a prefix of nothing":  {domain.KnowledgeFileQuery{Prefix: "x", Limit: 10}, []string{}},
 		"no limit, no files":   {domain.KnowledgeFileQuery{}, []string{}},
 		"a prefix with a % in": {domain.KnowledgeFileQuery{Prefix: "%", Limit: 10}, []string{}},
@@ -248,14 +255,14 @@ func testReads(f *fixture) {
 	day := time.Date(2026, 11, 3, 0, 0, 0, 0, time.UTC)
 
 	f.must(f.Knowledge.AddReads(ctx, []domain.KnowledgeFileReads{
-		{Source: src.ID, Path: "a.md", Factory: factoryA, Day: day.Add(9 * time.Hour), Reads: 2},
-		{Source: src.ID, Path: "a.md", Factory: factoryA, Day: day.Add(10 * time.Hour), Searches: 1},
-		{Source: src.ID, Path: "a.md", Factory: factoryB, Day: day.Add(11 * time.Hour), Reads: 1},
+		{Source: src.ID, Path: fileA, Factory: factoryA, Day: day.Add(9 * time.Hour), Reads: 2},
+		{Source: src.ID, Path: fileA, Factory: factoryA, Day: day.Add(10 * time.Hour), Searches: 1},
+		{Source: src.ID, Path: fileA, Factory: factoryB, Day: day.Add(11 * time.Hour), Reads: 1},
 	}))
 	f.must(f.Knowledge.AddReads(ctx, []domain.KnowledgeFileReads{
 		// 23:30 at UTC-2 is the next UTC day.
-		{Source: src.ID, Path: "a.md", Factory: factoryA, Day: time.Date(2026, 11, 3, 23, 30, 0, 0, time.FixedZone("acme", -2*3600)), Reads: 4},
-		{Source: src.ID, Path: "a.md", Factory: factoryA, Day: day.Add(23 * time.Hour), Reads: 1, Searches: 2},
+		{Source: src.ID, Path: fileA, Factory: factoryA, Day: time.Date(2026, 11, 3, 23, 30, 0, 0, time.FixedZone("acme", -2*3600)), Reads: 4},
+		{Source: src.ID, Path: fileA, Factory: factoryA, Day: day.Add(23 * time.Hour), Reads: 1, Searches: 2},
 		{Source: src.ID, Path: "b.md", Factory: factoryA, Day: day, Reads: 1},
 	}))
 
@@ -264,10 +271,10 @@ func testReads(f *fixture) {
 
 	next := day.Add(24 * time.Hour)
 	want := []domain.KnowledgeFileReads{
-		{Source: src.ID, Path: "a.md", Factory: factoryA, Day: day, Reads: 3, Searches: 3},
-		{Source: src.ID, Path: "a.md", Factory: factoryB, Day: day, Reads: 1},
+		{Source: src.ID, Path: fileA, Factory: factoryA, Day: day, Reads: 3, Searches: 3},
+		{Source: src.ID, Path: fileA, Factory: factoryB, Day: day, Reads: 1},
 		{Source: src.ID, Path: "b.md", Factory: factoryA, Day: day, Reads: 1},
-		{Source: src.ID, Path: "a.md", Factory: factoryA, Day: next, Reads: 4},
+		{Source: src.ID, Path: fileA, Factory: factoryA, Day: next, Reads: 4},
 	}
 
 	if !readsEqual(got, want) {
@@ -279,8 +286,8 @@ func testReads(f *fixture) {
 	f.want("FileReads since the next day", later, readsEqual(later, want[3:]))
 
 	err = f.Knowledge.AddReads(ctx, []domain.KnowledgeFileReads{
-		{Source: src.ID, Path: "a.md", Factory: factoryA, Day: day, Reads: 100},
-		{Source: "01900000-0000-7000-8000-0000000000ee", Path: "a.md", Factory: factoryA, Day: day, Reads: 1},
+		{Source: src.ID, Path: fileA, Factory: factoryA, Day: day, Reads: 100},
+		{Source: "01900000-0000-7000-8000-0000000000ee", Path: fileA, Factory: factoryA, Day: day, Reads: 1},
 	})
 	f.refused("AddReads of an unknown source", err, ports.ErrNotFound)
 
@@ -308,11 +315,11 @@ func testFilesIsolation(f *fixture) {
 	src := f.upload(handbook)
 	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Microsecond)
 	c := f.claimSource(src, t0)
-	a := file("a.md", "A", "v1", 10)
+	a := file(fileA, "A", "v1", 10)
 	f.putSnapshot(c, snapshot(snap1, src.ID, t0, a), a)
 
 	day := time.Date(2026, 11, 3, 0, 0, 0, 0, time.UTC)
-	f.must(f.Knowledge.AddReads(f.ctx(), []domain.KnowledgeFileReads{{Source: src.ID, Path: "a.md", Factory: factoryA, Day: day, Reads: 1}}))
+	f.must(f.Knowledge.AddReads(f.ctx(), []domain.KnowledgeFileReads{{Source: src.ID, Path: fileA, Factory: factoryA, Day: day, Reads: 1}}))
 
 	other := f.NewOrg(f.t)
 	octx := f.in(other)
@@ -328,7 +335,7 @@ func testFilesIsolation(f *fixture) {
 	_, err = f.Knowledge.PutSnapshot(octx, c.Lease, snapshot(snap2, src.ID, t0, b), []domain.KnowledgeFile{b})
 	f.refused("PutSnapshot in another organization", err, ports.ErrLeaseLost)
 
-	err = f.Knowledge.AddReads(octx, []domain.KnowledgeFileReads{{Source: src.ID, Path: "a.md", Factory: factoryA, Day: day, Reads: 1}})
+	err = f.Knowledge.AddReads(octx, []domain.KnowledgeFileReads{{Source: src.ID, Path: fileA, Factory: factoryA, Day: day, Reads: 1}})
 	f.refused("AddReads in another organization", err, ports.ErrNotFound)
 
 	// The other organization's own source of the same name holds nothing of the first's.
@@ -338,7 +345,7 @@ func testFilesIsolation(f *fixture) {
 	f.want("Files of the other organization's own source", files, len(files) == 0)
 
 	got := f.files(f.org, domain.KnowledgeFileQuery{Source: handbook, Limit: 10})
-	f.want("Files in the first organization", got, slices.Equal(paths(got), []string{"a.md"}))
+	f.want("Files in the first organization", got, slices.Equal(paths(got), []string{fileA}))
 
 	reads, err := f.Knowledge.FileReads(f.ctx(), handbook, day)
 	f.must(err)

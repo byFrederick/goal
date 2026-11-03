@@ -111,7 +111,11 @@ func versioning(t *testing.T, s *Store) types.BucketVersioningStatus {
 func TestObjectStore_Conformance(t *testing.T) {
 	t.Parallel()
 
-	objectstoretest.Run(t, func(t *testing.T) ports.ObjectStore { return newTestStore(t) })
+	objectstoretest.Run(t, func(t *testing.T) ports.ObjectStore {
+		t.Helper()
+
+		return newTestStore(t)
+	})
 }
 
 // A streamed write of more than one part leaves no multipart upload behind, and neither does
