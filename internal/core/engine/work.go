@@ -268,10 +268,11 @@ func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) boo
 //     (webTools); ask is served as off, as for builtins, since no tool approval is enforced.
 //   - Merge a pull request, off: an approving gate whose action is merge does not merge, and the
 //     item waits there for a person's merge (noMerge); review_approval is the version's say.
-//   - Use credentials, off: the agent's connections list is emptied, so neither its env nor its
-//     task token gets any of them; the runtime's model and repository connections still reach
-//     the run, which cannot start without them. attached_only is the agent's list. On secrets
-//     the agent's environment env is emptied, and the model key still reaches the run.
+//   - Use secrets (use_credentials), off: the agent's connections list is emptied, so neither its
+//     env nor its task token gets any of them; the runtime's model and repository connections
+//     still reach the run, which cannot start without them. On secrets the agent's environment
+//     env, files and MCP servers are emptied, and the model key still reaches the run.
+//     environment, and its deprecated alias attached_only, give the agent what it names.
 //   - Write outside the item's branch is not applied: comments, issues, tickets and messages go
 //     through connections' CLIs and MCP servers, and no engine or gateway step can ask a person
 //     for one, refuse it or allow it.
