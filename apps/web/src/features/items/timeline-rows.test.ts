@@ -20,6 +20,28 @@ function one(steps: StepRow[]): StepRow {
 /** A step's sentence as the words a person reads, without the code styling. */
 const sentence = (step: { segments: { text: string }[] }) => step.segments.map((s) => s.text).join('');
 
+describe('toolSteps under /knowledge', () => {
+  it('tags a read and a search of a source and keeps them apart from the checkout', () => {
+    const steps = toolSteps([
+      call({ tool: 'Read', argument: '/knowledge/handbook/leave.md', path: '/knowledge/handbook/leave.md' }),
+      call({ tool: 'Read', argument: '/knowledge/handbook/pay.md', path: '/knowledge/handbook/pay.md' }),
+      call({ tool: 'Read', argument: 'apps/web/src/a.ts' }),
+      call({ tool: 'Grep', argument: 'parental', path: '/knowledge/handbook' }),
+    ]);
+    expect(steps.map((s) => [s.knowledge, sentence(s)])).toEqual([
+      ['handbook', 'Read 2 files in handbook'],
+      [undefined, 'Read apps/web/src/a.ts'],
+      ['handbook', 'Searched handbook'],
+    ]);
+  });
+
+  it('names the file when one is read', () => {
+    const [step] = toolSteps([call({ tool: 'Read', argument: '/knowledge/runbooks/deploy.md' })]);
+    expect(step?.knowledge).toBe('runbooks');
+    expect(step && sentence(step)).toBe('Read runbooks/deploy.md');
+  });
+});
+
 describe('toolSteps', () => {
   it('groups consecutive reads under their common directory', () => {
     const steps = toolSteps([
