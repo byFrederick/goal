@@ -1,5 +1,5 @@
 // Organization settings (canvas "Org-Settings", docs/design/screens/organization/org-settings): General
-// (name, address, factories), Slots (the caps goald enforces), Sign-in, Data, and the Danger zone for
+// (name, address, factories), Slots (the caps goald enforces), Sign-in, Notifications (the Slack secret), Data, and the Danger zone for
 // owners. One form saves General and Slots with "Save changes", sending only what changed. The
 // controls the picture shows that the API does not have yet render disabled ("Not available yet").
 // Leaving with unsaved changes asks first. A new address moves the page to it: links with the old one
@@ -30,6 +30,7 @@ import { ViewOnlyBanner } from '../../ui/view-only-banner';
 import { describedBy, SettingsRow, SettingsSection } from './card';
 import { DangerZone } from './danger-zone';
 import { changedFields, type FieldErrors, formOf, type SettingsForm, slotNote, validate } from './form';
+import { NotificationsSection } from './notifications-section';
 import { SectionNav } from './section-nav';
 
 const formId = 'org-settings';
@@ -69,6 +70,7 @@ const sections = [
   ['general', 'General'],
   ['slots', 'Slots'],
   ['signin', 'Sign-in'],
+  ['notifications', 'Notifications'],
   ['data', 'Data'],
 ] as const;
 
@@ -331,6 +333,8 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
               </NotAvailable>
             </SettingsRow>
           </SettingsSection>
+
+          <NotificationsSection />
 
           <SettingsSection id="data" title="Data">
             <SettingsRow label="Definitions and knowledge" help="Versioned files, one folder per factory">

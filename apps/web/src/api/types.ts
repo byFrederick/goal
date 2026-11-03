@@ -251,6 +251,8 @@ export type ServerTest = Schemas['ServerTest'];
 export type SecretImportOutcome = Schemas['SecretImportOutcome'];
 // The signed-in person's notification preferences (ADR 0023, decision 1): the events, their channels and the email.
 export type NotificationPreferences = Schemas['NotificationPreferences'];
+export type OrgNotificationSettings = Schemas['NotificationSettings'];
+export type NotificationTestResult = Schemas['NotificationTestResult'];
 export type NotificationEvents = Schemas['NotificationEvents'];
 export type NotificationChannels = Schemas['NotificationChannels'];
 // What a code host connection reaches (GET …/connections/{connection}/repositories), for the Code step.
