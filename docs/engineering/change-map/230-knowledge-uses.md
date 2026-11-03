@@ -1,6 +1,6 @@
 ## When you change
 
-Knowledge reads: the `knowledge_reads` daily rollup (`db/migrations/00094_knowledge_snapshots.sql` and the migrations after it), its queries in `db/queries/knowledge.sql` or the adapter; how a run's touches count (`TouchOfKnowledge` and `KnowledgeTally` in `internal/core/domain/knowledge_files.go`, the engine's `countReads` in `internal/core/engine/runtask.go`); or the worker's `path` field of `tool_use` events (`toolPath` in `apps/worker/src/events.ts`). Until the cut-over (ADR 0038 decision 16) also the `knowledge_uses` and `knowledge_verdicts` tables (`db/migrations/00072_knowledge_uses.sql`) and their adapter (`internal/adapters/store/postgres/knowledge_uses.go`)
+Knowledge reads: the `knowledge_reads` daily rollup (`db/migrations/00095_knowledge_snapshots.sql` and the migrations after it), its queries in `db/queries/knowledge.sql` or the adapter; how a run's touches count (`TouchOfKnowledge` and `KnowledgeTally` in `internal/core/domain/knowledge_files.go`, the engine's `countReads` in `internal/core/engine/runtask.go`); or the worker's `path` field of `tool_use` events (`toolPath` in `apps/worker/src/events.ts`). Until the cut-over (ADR 0038 decision 16) also the `knowledge_uses` and `knowledge_verdicts` tables (`db/migrations/00072_knowledge_uses.sql`) and their adapter (`internal/adapters/store/postgres/knowledge_uses.go`)
 
 ## Also change
 
