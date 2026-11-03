@@ -123,6 +123,25 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 .toc a[aria-current="true"]{color:var(--ink);font-weight:500}
 .ref{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 6px;border-radius:4px;background:var(--pri-t);color:var(--pri-ink);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;white-space:nowrap;vertical-align:middle}.ref svg{flex:none}
 @media (max-width:640px){.fr{grid-template-columns:minmax(0,1fr);padding:12px 16px}.inl>*{min-width:0;max-width:100%;overflow-wrap:anywhere}.inl .chip,.inl .ref{height:auto;min-height:22px;white-space:normal}.inl .btn{white-space:normal;height:auto;min-height:32px}}
+
+/* phone taps for the desktop shell, on the boards ADRs 0040 and 0041 revised */
+@media (max-width:640px){
+.crumb a{min-height:44px;display:inline-flex;align-items:center}
+.top .btn,.top .ib,main .btn,main .ib{min-height:44px;min-width:44px}
+main .lnk{min-height:44px;display:inline-flex;align-items:center}
+main .rf{padding:15px 0}
+main a.chip{min-height:44px;display:inline-flex;align-items:center}
+.tabs a{min-height:44px;display:inline-flex;align-items:center}
+main .seg button,main .sg3 button{min-height:44px}
+main .sw{position:relative}
+main .sw::after{content:"";position:absolute;inset:-13px -6px}
+header .ib,main .inl .btn{min-height:44px;min-width:44px}
+main .sw8{flex-wrap:wrap}main .sw8 button{min-width:44px;min-height:44px}
+main a.sm,main .nm2 a{min-height:44px;display:inline-flex;align-items:center}
+.toc a{min-height:44px;display:flex;align-items:center}
+main .seg4 button{min-height:44px}
+main p a,main dd a{padding:15px 0}
+}
 </style>
 </helmet>
 <div class="g app ">
@@ -184,9 +203,10 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
           <section class="sct" id="repo" aria-labelledby="r-h">
             <h2 id="r-h">Code</h2>
             <div class="fr"><span class="lb">Repositories</span><div style="display: flex; flex-direction: column; gap: 10px; padding-top: 4px">
-<div class="inl" style="flex-wrap: wrap"><b style="font-weight:500">goal</b><span class="code m2" style="font-size: 12.5px">github.com/byFrederick/goal</span><span class="chip">Read and write</span><span class="chip grn"><span class="dot"></span>Can read and push, tested Nov 3</span><button class="btn sm" type="button">Test</button><span class="ref"><svg width="13" height="13" viewBox="0 0 18 18" aria-hidden="true"><circle cx="6" cy="12" r="3.25" fill="none" stroke="currentColor" stroke-width="1.8"></circle><path d="M8.4 9.6 15 3M12.5 5.5l2 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>github-byfrederick</span><a href="#" class="sm" style="text-decoration: none; font-weight:500">Change</a></div>
+<div class="inl" style="flex-wrap: wrap"><b style="font-weight:500">goal</b><span class="code m2" style="font-size: 12.5px">github.com/byFrederick/goal</span><span class="chip">Read and write</span><span class="chip">Default</span><span class="chip grn"><span class="dot"></span>Can read and push, tested Nov 3</span><button class="btn sm" type="button">Test</button><span class="ref"><svg width="13" height="13" viewBox="0 0 18 18" aria-hidden="true"><circle cx="6" cy="12" r="3.25" fill="none" stroke="currentColor" stroke-width="1.8"></circle><path d="M8.4 9.6 15 3M12.5 5.5l2 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>github-byfrederick</span><a href="#" class="sm" style="text-decoration: none; font-weight:500">Change</a></div>
 <div><button class="btn sm" type="button">Add a repository</button></div>
-<span class="hp">Each item works in one of them. A new secret needs an owner or admin.</span></div></div>
+<span class="hp">Agents open the ones an item needs. A new secret needs an owner or admin.</span></div></div>
+            <div class="fr"><span class="lb">Agents that write</span><div class="inl" style="padding-top: 7px"><span>All agents</span><span class="m3 sm">unless one is set to read, on Agents</span></div></div>
             <div class="fr"><span class="lb">Default branch</span><div class="inl" style="padding-top: 7px"><span class="code" style="font-size: 13px">main</span><span class="m3 sm">from GitHub</span></div></div>
             <div class="fr"><span class="lb">Branch names</span><div class="inl" style="padding-top: 7px"><span class="code" style="font-size: 13px">goal/software/147-sidebar-spend</span><span class="m3 sm">number and title, set by Goal</span></div></div>
           </section>

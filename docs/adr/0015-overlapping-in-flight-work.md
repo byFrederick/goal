@@ -1,6 +1,6 @@
 # ADR 0015 — Overlapping in-flight work: plans see open work, bind late and wait for the files they share
 
-Status: accepted · 2026-10-26 · Amended by [ADR 0041](0041-code-and-github-without-an-app.md) (paths overlap only within one repository) and [ADR 0040](0040-one-door-for-every-source.md) (people and follow-ups set `after` when they file an item, a done ref is met at filing, and an item held by `after` waits at the first station) · Builds on [ADR 0012](0012-assemblies-and-parts.md) (assemblies, parts, `work_items.paths` and the waiting reason) and the item dependencies of migration 00058 (`item_edges` and the claim gate)
+Status: accepted · 2026-10-26 · Amended by [ADR 0041](0041-code-and-github-without-an-app.md) (paths overlap only within the same repository) and [ADR 0040](0040-one-door-for-every-source.md) (people and follow-ups set `after` when they file an item, a done ref is met at filing, and an item held by `after` waits at the first station) · Builds on [ADR 0012](0012-assemblies-and-parts.md) (assemblies, parts, `work_items.paths` and the waiting reason) and the item dependencies of migration 00058 (`item_edges` and the claim gate)
 
 ## Context
 

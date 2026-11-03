@@ -556,6 +556,43 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 @media (max-width:1180px){.sgrid2{grid-template-columns:minmax(0,1fr)}.sgrid2>nav{display:none}}
 @media (max-width:1100px){.sgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.whl .wr{grid-template-columns:28px minmax(0,1fr) auto}.whl .wr>.fx,.whl .wr>.n4{grid-column:2}.whl .wr>.st2{grid-column:3;grid-row:1}}
 @media (max-width:640px){.pc>header>.r{margin-left:0}.rpl .rr2 .x2 .kv{max-width:100%;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:middle}.sgrid,.acc2{grid-template-columns:minmax(0,1fr)}.rpl .rr2{grid-template-columns:minmax(0,1fr) auto}.rpl .rr2 .u{grid-column:1/-1}}
+
+/* ADR 0040/0041 revision: checks, repositories per item, write per agent */
+.dcs{display:flex;flex-direction:column}
+.dcs .dr{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:4px 12px;align-items:start;padding:11px 16px;border-top:1px solid var(--rule);font-size:13px}
+.dcs .dr:first-child{border-top:0}
+.dcs .dr .tm{color:var(--ink3);font-variant-numeric:tabular-nums;padding-top:1px}
+.dcs .dr .ds{display:flex;flex-direction:column;gap:6px;min-width:0}
+.dcs .dr .ds>b{font-weight:500}
+.dcs .dr .ds>.vd{align-self:flex-start}
+.dcs .dr .cost{color:var(--ink3);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;padding-top:1px}
+.dcs .dl{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none}
+.dcs .dl li{display:grid;grid-template-columns:62px minmax(0,1fr);gap:8px;font-size:12.5px;color:var(--ink2)}
+.dcs .dl li .k5{font-size:11.5px;color:var(--ink3);text-transform:none}
+.dcs .dl li .x5{min-width:0;overflow-wrap:anywhere}
+.mem{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--ink2)}
+.toks{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:40px;padding:6px 8px;border:1px solid var(--rule2);border-radius:6px;background:var(--bg)}
+.toks .add{font-size:13px;color:var(--ink3);padding:0 4px}
+@media (max-width:640px){.dcs .dr{grid-template-columns:minmax(0,1fr) auto}.dcs .dr .tm{grid-column:1/-1}.dcs .dl li{grid-template-columns:minmax(0,1fr)}.toks .tok button{min-width:44px;min-height:44px}}
+
+/* phone taps for the desktop shell, on the boards ADRs 0040 and 0041 revised */
+@media (max-width:640px){
+.crumb a{min-height:44px;display:inline-flex;align-items:center}
+.top .btn,.top .ib,main .btn,main .ib{min-height:44px;min-width:44px}
+main .lnk{min-height:44px;display:inline-flex;align-items:center}
+main .rf{padding:15px 0}
+main a.chip{min-height:44px;display:inline-flex;align-items:center}
+.tabs a{min-height:44px;display:inline-flex;align-items:center}
+main .seg button,main .sg3 button{min-height:44px}
+main .sw{position:relative}
+main .sw::after{content:"";position:absolute;inset:-13px -6px}
+header .ib,main .inl .btn{min-height:44px;min-width:44px}
+main .sw8{flex-wrap:wrap}main .sw8 button{min-width:44px;min-height:44px}
+main a.sm,main .nm2 a{min-height:44px;display:inline-flex;align-items:center}
+.toc a{min-height:44px;display:flex;align-items:center}
+main .seg4 button{min-height:44px}
+main p a,main dd a{padding:15px 0}
+}
 </style>
 </helmet>
 <div class="g app ">
@@ -601,10 +638,12 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 <div class="col">
 <section class="pc" aria-labelledby="g-h"><header><h2 id="g-h">General</h2></header><div class="pb"><div class="kl">
 <div class="kr"><span>Name</span><span>SRE</span></div>
-<div class="kr"><span>Purpose</span><span>Investigates alerts and incidents, and writes up what it finds.</span></div></div></div></section>
-<section class="pc" aria-labelledby="cd-h"><header><h2 id="cd-h">Code</h2><span class="ii"><button type="button" aria-label="About code access" aria-describedby="tip9"><svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M9 8v4.5M9 5.6v.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></button><span role="tooltip" id="tip9">Each item clones the one repository its event names, from any repository this entry covers. Goal never pushes to a read-only repository; a read-only token makes sure agents can’t either.</span></span><span class="r">1 entry</span></header><div class="pb" style="display:flex;flex-direction:column;gap:12px">
-<div class="rpl"><div class="rr2"><span class="nm"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h8a1 1 0 0 1 1 1v9h-8a1 1 0 0 0-1 1Zm0 11a1 1 0 0 0 1 1h8v-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path></svg>services</span><span class="u">github.com/byFrederick/*</span><span class="ro">Read only</span><a class="btn sm" href="#">Test</a><span class="x2"><span class="okl" style="font-size:12px"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.4"></circle><path d="m5.3 8.2 1.9 1.9 3.6-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>Can read, tested Nov 3</span><span class="kv">github-byfrederick-read</span><span>Every repository of byFrederick</span></span></div></div><div><a class="btn sm" href="#"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 2.5v9M2.5 7h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Add a repository</a></div><span class="hint">A new secret or webhook needs an owner or admin.</span></div></section>
-<section class="pc" aria-labelledby="wh-h"><header><h2 id="wh-h">Webhooks open to SRE</h2><span class="r"><a class="lnk" href="V2-Org-Webhooks.dc.html">Manage</a></span></header><div class="pb"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="typ">github-byfrederick</span><span class="typ">pagerduty</span><span class="typ">datadog</span></div></div></section>
+<div class="kr"><span>Purpose</span><span>Investigates alerts and incidents, fixes what it can, and writes up what it finds.</span></div></div></div></section>
+<section class="pc" aria-labelledby="cd-h"><header><h2 id="cd-h">Code</h2><span class="ii"><button type="button" aria-label="About code access" aria-describedby="tip7"><svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M9 8v4.5M9 5.6v.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></button><span role="tooltip" id="tip7">Agents open the repositories an item needs, from what these entries cover. Only agents that write push, and only where an entry allows it; the others use the read-only token.</span></span><span class="r">2 entries</span></header><div class="pb" style="display:flex;flex-direction:column;gap:12px">
+<div class="rpl"><div class="rr2"><span class="nm"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h8a1 1 0 0 1 1 1v9h-8a1 1 0 0 0-1 1Zm0 11a1 1 0 0 0 1 1h8v-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path></svg>services</span><span class="u">github.com/byFrederick/*</span><span class="ro">Read only</span><a class="btn sm" href="#">Test</a><span class="x2"><span class="okl" style="font-size:12px"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.4"></circle><path d="m5.3 8.2 1.9 1.9 3.6-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>Can read 48 repositories, tested Nov 3</span><span class="kv">github-byfrederick-read</span></span></div><div class="rr2"><span class="nm"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h8a1 1 0 0 1 1 1v9h-8a1 1 0 0 0-1 1Zm0 11a1 1 0 0 0 1 1h8v-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path></svg>fixes</span><span class="u">github.com/byFrederick/*</span><span class="ro">Read and write</span><a class="btn sm" href="#">Test</a><span class="x2"><span class="okl" style="font-size:12px"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.4"></circle><path d="m5.3 8.2 1.9 1.9 3.6-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>Can read and push, tested Nov 3</span><span class="kv">github-byfrederick-fix</span></span></div></div>
+<div class="kl"><div class="kr"><span>Agents that write</span><span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="typ">fixer</span><a class="lnk" href="V2-Agents.dc.html">Agents</a></span></div></div>
+<div><a class="btn sm" href="#"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 2.5v9M2.5 7h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Add a repository</a></div><span class="hint">A new secret or webhook needs an owner or admin.</span></div></section>
+<section class="pc" aria-labelledby="wh-h"><header><h2 id="wh-h">Webhooks open to SRE</h2><span class="r"><a class="lnk" href="V2-Org-Webhooks.dc.html">Manage</a></span></header><div class="pb"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="typ">github-byfrederick</span><span class="typ">datadog</span></div></div></section>
 </div>
 <nav class="col" aria-label="Sections" style="font-size:13px;gap:8px;color:var(--ink2)"><b style="color:var(--ink);font-weight:500">General</b><span>Code</span><span>Webhooks</span><span>Runtime</span><span>Budgets and targets</span><span>Flow</span></nav>
 </div></main>

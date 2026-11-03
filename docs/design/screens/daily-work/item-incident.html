@@ -569,6 +569,45 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 @media (max-width:1180px){.sgrid2{grid-template-columns:minmax(0,1fr)}.sgrid2>nav{display:none}}
 @media (max-width:1100px){.sgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.whl .wr{grid-template-columns:28px minmax(0,1fr) auto}.whl .wr>.fx,.whl .wr>.n4{grid-column:2}.whl .wr>.st2{grid-column:3;grid-row:1}}
 @media (max-width:640px){.pc>header>.r{margin-left:0}.rpl .rr2 .x2 .kv{max-width:100%;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:middle}.sgrid,.acc2{grid-template-columns:minmax(0,1fr)}.rpl .rr2{grid-template-columns:minmax(0,1fr) auto}.rpl .rr2 .u{grid-column:1/-1}}
+.steps{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
+@media (max-width:640px){.steps{overflow-x:auto;grid-auto-columns:minmax(96px,1fr);padding-bottom:6px}}
+
+/* ADR 0040/0041 revision: checks, repositories per item, write per agent */
+.dcs{display:flex;flex-direction:column}
+.dcs .dr{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:4px 12px;align-items:start;padding:11px 16px;border-top:1px solid var(--rule);font-size:13px}
+.dcs .dr:first-child{border-top:0}
+.dcs .dr .tm{color:var(--ink3);font-variant-numeric:tabular-nums;padding-top:1px}
+.dcs .dr .ds{display:flex;flex-direction:column;gap:6px;min-width:0}
+.dcs .dr .ds>b{font-weight:500}
+.dcs .dr .ds>.vd{align-self:flex-start}
+.dcs .dr .cost{color:var(--ink3);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;padding-top:1px}
+.dcs .dl{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none}
+.dcs .dl li{display:grid;grid-template-columns:62px minmax(0,1fr);gap:8px;font-size:12.5px;color:var(--ink2)}
+.dcs .dl li .k5{font-size:11.5px;color:var(--ink3);text-transform:none}
+.dcs .dl li .x5{min-width:0;overflow-wrap:anywhere}
+.mem{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--ink2)}
+.toks{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:40px;padding:6px 8px;border:1px solid var(--rule2);border-radius:6px;background:var(--bg)}
+.toks .add{font-size:13px;color:var(--ink3);padding:0 4px}
+@media (max-width:640px){.dcs .dr{grid-template-columns:minmax(0,1fr) auto}.dcs .dr .tm{grid-column:1/-1}.dcs .dl li{grid-template-columns:minmax(0,1fr)}.toks .tok button{min-width:44px;min-height:44px}}
+
+/* phone taps for the desktop shell, on the boards ADRs 0040 and 0041 revised */
+@media (max-width:640px){
+.crumb a{min-height:44px;display:inline-flex;align-items:center}
+.top .btn,.top .ib,main .btn,main .ib{min-height:44px;min-width:44px}
+main .lnk{min-height:44px;display:inline-flex;align-items:center}
+main .rf{padding:15px 0}
+main a.chip{min-height:44px;display:inline-flex;align-items:center}
+.tabs a{min-height:44px;display:inline-flex;align-items:center}
+main .seg button,main .sg3 button{min-height:44px}
+main .sw{position:relative}
+main .sw::after{content:"";position:absolute;inset:-13px -6px}
+header .ib,main .inl .btn{min-height:44px;min-width:44px}
+main .sw8{flex-wrap:wrap}main .sw8 button{min-width:44px;min-height:44px}
+main a.sm,main .nm2 a{min-height:44px;display:inline-flex;align-items:center}
+.toc a{min-height:44px;display:flex;align-items:center}
+main .seg4 button{min-height:44px}
+main p a,main dd a{padding:15px 0}
+}
 </style>
 </helmet>
 <div class="g app ">
@@ -612,21 +651,23 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 
     <main class="page">
 <div style="display: flex; flex-direction: column; gap: 10px"><div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center"><span class="m2 code" style="margin-right: 4px">#88</span><span class="chip">incident</span></div><h1 class="h1">Find why api’s p95 latency is above 2 s</h1></div>
-<ol class="steps" aria-label="Progress through the line"><li class="stp done"><span class="c" aria-hidden="true"></span><b>Intake</b><span class="m3">1 min</span></li><li class="stp done"><span class="c" aria-hidden="true"></span><b>Triage</b><span class="m3">2 min</span></li><li class="stp cur"><span class="c" aria-hidden="true"></span><b>Investigate</b><span class="m3">9 min so far</span></li><li class="stp"><span class="c" aria-hidden="true"></span><b class="m2">Report</b><span class="m3"></span></li><li class="stp"><span class="c" aria-hidden="true"></span><b class="m2">Done</b><span class="m3">Target 4 h</span></li></ol>
+<ol class="steps" aria-label="Progress through the line"><li class="stp done"><span class="c" aria-hidden="true"></span><b>Intake</b><span class="m3">1 min</span></li><li class="stp done"><span class="c" aria-hidden="true"></span><b>Triage</b><span class="m3">2 min</span></li><li class="stp cur"><span class="c" aria-hidden="true"></span><b>Investigate</b><span class="m3">9 min so far</span></li><li class="stp"><span class="c" aria-hidden="true"></span><b class="m2">Fix</b><span class="m3"></span></li><li class="stp"><span class="c" aria-hidden="true"></span><b class="m2">Review</b><span class="m3"></span></li><li class="stp"><span class="c" aria-hidden="true"></span><b class="m2">Done</b><span class="m3">Target 4 h</span></li></ol>
 <div class="cols"><div style="display: flex; flex-direction: column; gap: 16px; min-width: 0"><nav class="tabs" aria-label="Item views"><a href="#" aria-current="page">Timeline</a><a href="#">Brief</a><a href="#">Trace</a><a href="#">Teardown</a></nav>
-<section class="pc" aria-labelledby="e-h"><header><h2 id="e-h">From Datadog</h2><span class="ii"><button type="button" aria-label="About event text" aria-describedby="tip10"><svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M9 8v4.5M9 5.6v.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></button><span role="tooltip" id="tip10">The delivery’s fields, given to agents marked as untrusted data. A person merges any change this work leads to.</span></span><span class="r">14:05</span></header><div class="pb"><pre class="evblk">{
-  "monitor": "api p95 latency above 2 s",
+<section class="pc" aria-labelledby="e-h"><header><h2 id="e-h">From PagerDuty</h2><span class="ii"><button type="button" aria-label="About source text" aria-describedby="tip8"><svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M9 8v4.5M9 5.6v.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></button><span role="tooltip" id="tip8">What the check’s agent read, given to agents marked as untrusted data. A person merges any change this work leads to.</span></span><span class="r">14:05</span></header><div class="pb"><pre class="evblk">{
+  "incident": "Q3T8",
+  "title": "api p95 latency above 2 s",
   "service": "api",
-  "env": "production",
-  "value": "2.84 s"
+  "urgency": "high",
+  "opened": "14:03"
 }</pre></div></section>
 <article class="run" aria-labelledby="r1-h"><div class="rh"><span class="chip">Investigate</span><span class="av2" aria-hidden="true">IN</span><h3 id="r1-h" style="font-size: 14px; font-weight:600">investigator</h3><span class="chip run"><span class="dot live"></span>Running</span><span class="meta"><span>9 min</span><span>Turn 14</span><span>$0.41</span></span></div>
 <ol class="rb" style="gap: 0">
-<li class="ev"><span class="t">14:07</span><span class="i" aria-hidden="true"></span><span class="tx">Cloned <span class="code">byFrederick/api</span>, read only</span><span class="r">4 s</span></li>
+<li class="ev"><span class="t">14:07</span><span class="i" aria-hidden="true"></span><span class="tx">Opened <span class="code">byFrederick/api</span>, read only</span><span class="r">4 s</span></li>
 <li class="ev"><span class="t">14:08</span><span class="i" aria-hidden="true"></span><span class="tx">Queried Datadog: p95 by endpoint, last 2 hours</span><span class="r">datadog tools</span></li>
 <li class="ev"><span class="t">14:11</span><span class="i" aria-hidden="true"></span><span class="tx">Read 9 files in <span class="code">internal/orders</span></span><span class="r">3 turns</span></li>
-<li class="ev"><span class="t">14:14</span><span class="i" aria-hidden="true"></span><span class="tx">Read <span class="code">byFrederick/infra</span> through the GitHub tools: the last database change</span><span class="r">github tools</span></li>
-</ol></article></div><aside style="display: flex; flex-direction: column; gap: 14px; min-width: 0"><section class="card" aria-labelledby="d-h" style="gap: 14px"><h2 id="d-h" class="h2">Details</h2><dl class="dl2"><dt>Working on it</dt><dd><span class="who"><i aria-hidden="true">IN</i>investigator</span></dd><dt>Repository</dt><dd>byFrederick/api <span class="ro">Read only</span></dd><dt>Station</dt><dd>Investigate</dd><dt>Came from</dt><dd>The trigger API latency high, on the webhook datadog</dd><dt>Other repositories</dt><dd>The rest of byFrederick, through the GitHub tools</dd></dl></section></aside></div>
+<li class="ev"><span class="t">14:12</span><span class="i" aria-hidden="true"></span><span class="tx">Opened <span class="code">byFrederick/payments</span>, read only: checkout waits on its client</span><span class="r">3 s</span></li>
+<li class="ev"><span class="t">14:14</span><span class="i" aria-hidden="true"></span><span class="tx">Read the last database change in <span class="code">byFrederick/infra</span> through the GitHub tools</span><span class="r">github tools</span></li>
+</ol></article></div><aside style="display: flex; flex-direction: column; gap: 14px; min-width: 0"><section class="card" aria-labelledby="d-h" style="gap: 14px"><h2 id="d-h" class="h2">Details</h2><dl class="dl2"><dt>Working on it</dt><dd><span class="who"><i aria-hidden="true">IN</i>investigator</span></dd><dt>Repositories</dt><dd>None yet. Investigate names them for Fix.</dd><dt>This run opened</dt><dd><span style="display:flex;flex-direction:column;gap:4px"><span>byFrederick/api <span class="ro">Read only</span></span><span>byFrederick/payments <span class="ro">Read only</span></span></span></dd><dt>Station</dt><dd>Investigate</dd><dt>Came from</dt><dd>The check New incidents, PagerDuty incident Q3T8</dd><dt>Next</dt><dd>Fix, where the fixer can write</dd></dl></section></aside></div>
 </main>
   </div>
 </div>
