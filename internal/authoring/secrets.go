@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -50,10 +49,6 @@ var keyNameSuffixes = []string{"_TOKEN", "_KEY", "_SECRET", "_PASSWORD"}
 type KnowledgeSources interface {
 	Sources(ctx context.Context) ([]domain.KnowledgeSource, error)
 }
-
-// sourceRepositoryKey is the config key of the repository a Repository source, or a synced
-// source read by gitdocs, reads.
-const sourceRepositoryKey = "repository"
 
 // SecretsCheck is the credentials check from ADR 0037 on: every {{secret}} the definition refers
 // to exists (secret-missing) and is open to the factory (secret-not-in-scope); no environment
@@ -217,7 +212,7 @@ func (r *secretsRun) knowledge(sources []domain.KnowledgeSource) {
 					"add the factory to the secret's scope on the Secrets page, or remove the source", name, src.Secret))
 		}
 
-		if repo := r.f.Spec.Runtime.Repository; repo != nil && copiesCheckout(src, repo.URL) {
+		if repo := r.f.Spec.Runtime.Repository; repo != nil && src.CopiesCheckout(repo.URL) {
 			r.add(at, domain.SeverityWarning, CodeKnowledgeCopiesCheckout, fmt.Sprintf(
 				"knowledge.sources: the source %s reads runtime.repository, %s, whose files every run already has on the item's branch",
 				name, repo.URL))
@@ -225,34 +220,6 @@ func (r *secretsRun) knowledge(sources []domain.KnowledgeSource) {
 	}
 }
 
-// copiesCheckout reports whether src reads the repository at checkout: a Repository source, or a
-// synced source that gitdocs reads, until the cut-over converts it (ADR 0038 decision 16), whose
-// repository has the same host and path, whatever their case, a trailing slash or .git.
-func copiesCheckout(src domain.KnowledgeSource, checkout string) bool {
-	if src.Kind != domain.SourceRepository && src.Kind != domain.SourceSynced {
-		return false
-	}
-
-	a, b := repositoryKey(src.Config[sourceRepositoryKey]), repositoryKey(checkout)
-
-	return a != "" && a == b
-}
-
-// repositoryKey is a repository URL as host/owner/repo in lower case, "" for a value that is not
-// an absolute URL.
-func repositoryKey(raw string) string {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || u.Host == "" {
-		return ""
-	}
-
-	path := strings.TrimSuffix(strings.Trim(u.Path, "/"), ".git")
-	if path == "" {
-		return ""
-	}
-
-	return strings.ToLower(u.Host + "/" + path)
-}
 
 // merge reports each merge station of a factory whose repository has no token: nothing could
 // merge the item's pull requests. The fix takes the merge off the station.

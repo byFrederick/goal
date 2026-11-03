@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"net/url"
 	"path"
 	"slices"
 	"strings"
@@ -386,6 +387,47 @@ func CheckReadWhen(s string) error {
 	}
 
 	return nil
+}
+
+// SourceRepositoryKey is the config key of the repository a Repository source, or a synced source
+// read by gitdocs, reads.
+const SourceRepositoryKey = "repository"
+
+// CopiesCheckout reports whether s reads the repository at checkout: a Repository source, or a
+// synced source that gitdocs reads, until the cut-over converts it (ADR 0038 decision 16), whose
+// repository has the same host and path, whatever their case, a trailing slash or .git.
+func (s KnowledgeSource) CopiesCheckout(checkout string) bool {
+	if s.Kind != SourceRepository && s.Kind != SourceSynced {
+		return false
+	}
+
+	a, b := repositoryKey(s.Config[SourceRepositoryKey]), repositoryKey(checkout)
+
+	return a != "" && a == b
+}
+
+// repositoryKey is a repository URL as host/owner/repo in lower case, "" for a value that is not
+// an absolute URL.
+func repositoryKey(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" {
+		return ""
+	}
+
+	p := strings.TrimSuffix(strings.Trim(u.Path, "/"), ".git")
+	if p == "" {
+		return ""
+	}
+
+	return strings.ToLower(u.Host + "/" + p)
+}
+
+// SourceCheck is what listing a source with settings not saved yet found (ADR 0038 decision 12's
+// Check): Error says why it could not be listed ("" when it could), and Files how many items it
+// lists, counting at most MaxSourceFiles+1, past which a sync fails.
+type SourceCheck struct {
+	Error string
+	Files int
 }
 
 // KnowledgeEntry is one source of a factory's knowledge.sources (ADR 0038 decision 5): the source's

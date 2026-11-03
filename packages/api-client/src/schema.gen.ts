@@ -3776,6 +3776,156 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/knowledge/sources/{source}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge source's name */
+                source: components["parameters"]["SourceRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One page of a source's current files
+         * @description The files of the source's current snapshot (ADR 0038 decision 3), in path order, after the path after; next_after, when set, is the after of the next page. With find, only those whose path, or title in any case, starts with it. None before the first snapshot. 404 knowledge-source-not-found.
+         */
+        get: operations["listKnowledgeFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/knowledge/sources/{source}/files/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge source's name */
+                source: components["parameters"]["SourceRef"];
+                /** @description A file's path in its source's folder, as in db/disk.md; percent-encode its slashes as %2F so it is one path segment */
+                path: components["parameters"]["KnowledgeFilePath"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One file's Markdown
+         * @description The file as runs read it under /knowledge/<source>/, from the source's current snapshot. goald reads it from the snapshot's zip by range (the end record, the central directory, then the one entry), never the whole zip. 404 knowledge-source-not-found, 404 knowledge-file-not-found for a path the snapshot does not hold or a source with no snapshot yet.
+         */
+        get: operations["getKnowledgeFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/knowledge/sources/{source}/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge source's name */
+                source: components["parameters"]["SourceRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload files to an upload source
+         * @description Each part named files is one file at the path its file name gives, which may hold folders (runbooks/db/disk.md); a path that is not relative and clean is 400. Text, Markdown, HTML, JSON or YAML of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most that and 1 MiB more. The upload makes the source due, and its next sync writes the snapshot that holds them. Every file is checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as knowledge_document.uploaded.
+         */
+        post: operations["uploadKnowledgeFiles"];
+        /**
+         * Delete an uploaded file
+         * @description The upload at path, with its stored file when no other upload holds the same content; the next sync, which the deletion makes due, leaves it out of the snapshot. 404 knowledge-file-not-found, 409 not-an-upload-source. Audited as knowledge_document.deleted.
+         */
+        delete: operations["deleteKnowledgeUpload"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/knowledge/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check a source's settings before saving them
+         * @description The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
+         */
+        post: operations["checkKnowledgeSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/knowledge/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Find a file across every source
+         * @description The current files of every source whose path, or title in any case, starts with find, by source name then path, at most limit.
+         */
+        get: operations["findKnowledgeFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/knowledge/reads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * How often runs read and searched the sources' files
+         * @description The daily rollup of runs' reads and searches under /knowledge (ADR 0038 decision 10), of one source or every one, over the last days days counting today (UTC): one row per source, path, factory and day, by day, source, path and factory. A search of a whole source counts at the path ".". Factories the caller may not see are left out. 404 knowledge-source-not-found.
+         */
+        get: operations["listKnowledgeReads"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/knowledge/sources/{source}/documents": {
         parameters: {
             query?: never;
@@ -3877,31 +4027,6 @@ export interface paths {
          */
         get: operations["listKnowledgeDocumentUses"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/knowledge/documents/{document}/verdict": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The knowledge document's id */
-                document: components["parameters"]["DocumentRef"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Say whether a document helped or misled
-         * @description The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
-         */
-        put: operations["giveKnowledgeVerdict"];
         post?: never;
         delete?: never;
         options?: never;
@@ -8329,6 +8454,8 @@ export interface components {
             config: {
                 [key: string]: string;
             };
+            /** @description The line that tells agents when to open it; empty when it has none */
+            read_when: string;
             /** @description How often it syncs */
             sync_every_seconds: number;
             /**
@@ -8360,8 +8487,11 @@ export interface components {
             /** @description The factories whose current version may search it (those the caller sees) */
             factories: components["schemas"]["ConnectionFactory"][];
         };
-        /** @enum {string} */
-        KnowledgeSourceKind: "upload" | "synced" | "live";
+        /**
+         * @description upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over
+         * @enum {string}
+         */
+        KnowledgeSourceKind: "upload" | "repository" | "confluence" | "synced" | "live";
         NewKnowledgeSource: {
             name: components["schemas"]["KnowledgeSourceName"];
             title: string;
@@ -8374,11 +8504,15 @@ export interface components {
             config?: {
                 [key: string]: string;
             };
+            read_when?: components["schemas"]["KnowledgeReadWhen"];
             /** @description How often it syncs (default 3600) */
             sync_every_seconds?: number;
         };
+        /** @description One line that tells agents when to open the source, as "How to fix what pages us. Read before acting on an alert." */
+        KnowledgeReadWhen: string;
         KnowledgeSourcePatch: {
             title?: string;
+            read_when?: components["schemas"]["KnowledgeReadWhen"];
             /** @description A synced source's new secret: it reads with it from its next sync */
             secret?: components["schemas"]["SecretName"];
             /** @description Replaces the config */
@@ -8386,6 +8520,105 @@ export interface components {
                 [key: string]: string;
             };
             sync_every_seconds?: number;
+        };
+        /** @description One file of a source's current snapshot */
+        KnowledgeFile: {
+            /** @description Its source's name */
+            source: string;
+            /** @description Its path in the source's folder, /knowledge/<source>/<path> in a run */
+            path: string;
+            title: string;
+            /**
+             * Format: int64
+             * @description Its Markdown's size
+             */
+            bytes: number;
+            /** @description Changes whenever its content does: a content hash, a blob id, a page version */
+            version: string;
+        };
+        KnowledgeFilePage: {
+            files: components["schemas"]["KnowledgeFile"][];
+            /** @description The after of the next page; absent on the last */
+            next_after?: string;
+        };
+        KnowledgeFileList: {
+            files: components["schemas"]["KnowledgeFile"][];
+        };
+        KnowledgeUploadList: {
+            files: {
+                path: string;
+                /** Format: int64 */
+                bytes: number;
+            }[];
+        };
+        /** @description A source's settings, not saved, as Add a source has them */
+        KnowledgeCheckInput: {
+            name: components["schemas"]["KnowledgeSourceName"];
+            kind: components["schemas"]["KnowledgeSourceKind"];
+            secret?: components["schemas"]["SecretName"];
+            /** @description What its reader reads, as createKnowledgeSource takes it */
+            config?: {
+                [key: string]: string;
+            };
+            read_when?: components["schemas"]["KnowledgeReadWhen"];
+            /** @description The factories that would read it (each one's metadata.id or metadata.name) */
+            factories?: string[];
+        };
+        KnowledgeCheck: {
+            access: components["schemas"]["KnowledgeCheckAccess"];
+            /** @description How many files it lists; 0 when access failed */
+            files: number;
+            /**
+             * Format: int64
+             * @description Their Markdown's size, only when goald knows it: the current snapshot of a source of that name and kind that exists. A listing does not say how big each file is.
+             */
+            bytes?: number;
+            limits: components["schemas"]["KnowledgeLimits"];
+            /** @description The limits it is over, which a sync would fail on */
+            over_limit: ("files" | "bytes")[];
+            warnings: components["schemas"]["KnowledgeCheckWarning"][];
+            /** @description The line agents will see for it in their prompt's Knowledge section */
+            line: string;
+        };
+        KnowledgeCheckAccess: {
+            /** @description Whether goald could list the source with these settings */
+            ok: boolean;
+            /** @description Why it could not; never holds the secret's value */
+            error?: string;
+        };
+        /** @description A source's limits (ADR 0038 decision 4) */
+        KnowledgeLimits: {
+            files: number;
+            /** Format: int64 */
+            bytes: number;
+            /** Format: int64 */
+            file_bytes: number;
+        };
+        KnowledgeCheckWarning: {
+            /** @description knowledge-secret-not-in-scope, knowledge-copies-checkout and knowledge-too-many are the definition checks the factory's draft would fail or warn with; knowledge-source-name-taken and knowledge-source-listed say the name is in use or the factory lists it already */
+            code: string;
+            /** @description The picked factory's name; absent for a warning about the source */
+            factory?: string;
+            message: string;
+        };
+        KnowledgeReadList: {
+            reads: components["schemas"]["KnowledgeReadCount"][];
+        };
+        KnowledgeReadCount: {
+            /** @description The source's name */
+            source: string;
+            /** @description The file read, or the folder searched ("." for the whole source) */
+            path: string;
+            factory_id: string;
+            /** @description The factory's name */
+            factory: string;
+            /**
+             * Format: date
+             * @description The UTC day
+             */
+            day: string;
+            reads: number;
+            searches: number;
         };
         KnowledgeDocument: {
             id: string;
@@ -8478,13 +8711,6 @@ export interface components {
              * @description The run's first use of the document
              */
             at: string;
-        };
-        KnowledgeVerdictInput: {
-            /** @enum {string} */
-            verdict: "helped" | "misled";
-            /** @description A run of the organization that used the document */
-            run_id?: string;
-            note?: string;
         };
         KnowledgeVerdict: {
             /** @description The document's id */
@@ -8593,6 +8819,8 @@ export interface components {
         SecretRef: string;
         /** @description The knowledge source's name */
         SourceRef: string;
+        /** @description A file's path in its source's folder, as in db/disk.md; percent-encode its slashes as %2F so it is one path segment */
+        KnowledgeFilePath: string;
         /** @description The knowledge document's id */
         DocumentRef: string;
         /** @description The connection kind's name */
@@ -13912,6 +14140,208 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    listKnowledgeFiles: {
+        parameters: {
+            query?: {
+                /** @description Only the files whose path, or title in any case, starts with this */
+                find?: string;
+                /** @description The last path of the previous page */
+                after?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge source's name */
+                source: components["parameters"]["SourceRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeFilePage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getKnowledgeFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge source's name */
+                source: components["parameters"]["SourceRef"];
+                /** @description A file's path in its source's folder, as in db/disk.md; percent-encode its slashes as %2F so it is one path segment */
+                path: components["parameters"]["KnowledgeFilePath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file's Markdown */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/markdown": string;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    uploadKnowledgeFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge source's name */
+                source: components["parameters"]["SourceRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    files: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description The files, stored until the next sync takes them */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeUploadList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteKnowledgeUpload: {
+        parameters: {
+            query: {
+                /** @description The upload's path in the source */
+                path: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The knowledge source's name */
+                source: components["parameters"]["SourceRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    checkKnowledgeSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeCheckInput"];
+            };
+        };
+        responses: {
+            /** @description The answers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeCheck"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    findKnowledgeFiles: {
+        parameters: {
+            query: {
+                find: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The files found */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeFileList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listKnowledgeReads: {
+        parameters: {
+            query?: {
+                /** @description Only this source's reads */
+                source?: string;
+                days?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The counts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeReadList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     listKnowledgeDocuments: {
         parameters: {
             query?: {
@@ -14077,36 +14507,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgeDocumentUsePage"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    giveKnowledgeVerdict: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The knowledge document's id */
-                document: components["parameters"]["DocumentRef"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["KnowledgeVerdictInput"];
-            };
-        };
-        responses: {
-            /** @description The verdict as stored */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeVerdict"];
                 };
             };
             default: components["responses"]["Problem"];

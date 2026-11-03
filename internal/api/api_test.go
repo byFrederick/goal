@@ -196,6 +196,11 @@ type harness struct {
 	// bytes each; searches are by keywords.
 	kb        *porttest.Knowledge
 	kbObjects *porttest.ObjectStore
+	// kbRanges counts the ranged reads of kbObjects the API makes; ingestor syncs kb's sources into
+	// snapshots in kbObjects, its repositories read by kbDocs (knowledge_files_test.go).
+	kbRanges *rangeCounter
+	ingestor *knowledge.Ingestor
+	kbDocs   *docsReader
 	uploads   *knowledge.Uploads
 	// evals are the factories' eval runs, evalJudges the versions' judges as tests set them, and
 	// evalLoop the jonah eval loop that starts, prices and cancels runs over them.
@@ -528,6 +533,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		// GitLab's code host lists no repositories, as the gitlab adapter.
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()}, RepositoryTestTimeout: 50 * time.Millisecond,
 		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,
+		KnowledgeObjects: h.kbRanges, KnowledgeCheck: h.ingestor,
 		OrgPolicies: porttest.NewOrgPolicies([]string{modelOpus, modelHaiku}, tenancy, h.clock.Now), BoxSizes: testBoxSizes, EgressAddresses: testEgressAddresses,
 		NotificationPreferences: h.notifications,
 		DraftRequests:           h.drafts,
@@ -670,6 +676,11 @@ func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 	kb.ReadSecrets(h.secrets)
 	h.kb, h.kbObjects = kb, porttest.NewObjectStore()
 	h.uploads = knowledge.NewUploads(h.kb, h.kbObjects, testUploadMax)
+	h.kbRanges, h.kbDocs = &rangeCounter{ObjectStore: h.kbObjects}, &docsReader{}
+	h.ingestor = knowledge.NewIngestor(knowledge.IngestorConfig{
+		Knowledge: h.kb, Secrets: h.secrets, Uploads: h.uploads, Readers: map[string]ports.SourceReader{"gitdocs": h.kbDocs},
+		Objects: h.kbObjects, Clock: h.clock, TempDir: t.TempDir(),
+	})
 
 	kinds, err := connkind.Platform()
 	if err != nil {

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -52,11 +51,16 @@ func (h usedHandbook) use(t *testing.T, it domain.Item, run domain.RunID, docume
 	}
 }
 
-// verdict puts body as the caller's verdict on document.
-func (h usedHandbook) verdict(t *testing.T, document, body string) response {
+// verdict stores a person's verdict on document, of run and its item when run is set: the API no
+// longer takes verdicts (ADR 0038 decision 9), and those stored still show until the cut-over.
+func (h usedHandbook) verdict(t *testing.T, document string, run domain.RunID, item domain.ItemID, v domain.KnowledgeVerdictKind, note string) {
 	t.Helper()
 
-	return h.request(t, http.MethodPut, documentsPath+"/"+document+"/verdict", body, nil)
+	if _, err := h.kb.GiveVerdict(inOrg(t), domain.KnowledgeVerdict{
+		Document: domain.KnowledgeDocumentID(document), Run: run, Item: item, Verdict: v, Note: note, By: domain.LocalUser,
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // usageLine renders a source's usage as "title runs agents+/- people+/-" per document.
@@ -91,7 +95,7 @@ func TestKnowledgeUses_Usage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	decode[gen.KnowledgeVerdict](t, h.verdict(t, h.leave, `{"verdict":"helped"}`), http.StatusOK)
+	h.verdict(t, h.leave, "", "", domain.KnowledgeHelped, "")
 
 	got := decode[gen.KnowledgeUsage](t, h.request(t, http.MethodGet, usagePath+"?source=handbook", "", nil), http.StatusOK)
 	if want := []string{"handbook/expenses.txt 2 0/0 0/0", "handbook/" + leaveFile + " 1 0/1 1/0"}; !slices.Equal(usageLine(got), want) {
@@ -165,8 +169,8 @@ func TestKnowledgeUses_DocumentAndRunUses(t *testing.T) {
 func (h usedHandbook) wantRunKnowledge(t *testing.T, build domain.Item, older, newer domain.RunID) {
 	t.Helper()
 
-	decode[gen.KnowledgeVerdict](t, h.verdict(t, h.leave, `{"verdict":"misled","run_id":"`+string(older)+`","note":"old policy"}`), http.StatusOK)
-	decode[gen.KnowledgeVerdict](t, h.verdict(t, h.leave, `{"verdict":"helped"}`), http.StatusOK) // of no run
+	h.verdict(t, h.leave, older, build.ID, domain.KnowledgeMisled, "old policy")
+	h.verdict(t, h.leave, "", "", domain.KnowledgeHelped, "") // of no run
 
 	run := decode[gen.RunKnowledge](t, h.request(t, http.MethodGet, runsPath+string(older)+"/knowledge", "", nil), http.StatusOK)
 
@@ -179,7 +183,7 @@ func (h usedHandbook) wantRunKnowledge(t *testing.T, build domain.Item, older, n
 		t.Errorf("the run's uses = %v; want %v", uses, want)
 	}
 
-	if len(run.Verdicts) != 1 || run.Verdicts[0].Verdict != gen.KnowledgeVerdictVerdictMisled || valueOf(run.Verdicts[0].RunId) != string(older) ||
+	if len(run.Verdicts) != 1 || run.Verdicts[0].Verdict != gen.Misled || valueOf(run.Verdicts[0].RunId) != string(older) ||
 		valueOf(run.Verdicts[0].ItemId) != string(build.ID) || valueOf(run.Verdicts[0].Note) != "old policy" || run.Verdicts[0].Source != srcHandbook {
 		t.Errorf("the run's verdicts = %s; want the one misled given for it", asJSON(t, run.Verdicts))
 	}
@@ -195,78 +199,7 @@ func (h usedHandbook) wantRunKnowledge(t *testing.T, build domain.Item, older, n
 		h.request(t, http.MethodGet, "/v1/orgs/"+labsSlug+"/runs/"+string(older)+"/knowledge", "", nil), http.StatusNotFound, "run-not-found")
 }
 
-// A person's verdict is stored, replaced by their next one, audited without its note; it must name
-// a known document and, with a run, one that used it.
-func TestKnowledgeUses_Verdict(t *testing.T) {
-	t.Parallel()
-
-	h := newUsedHandbook(t)
-	build := h.seedTitled(t, "Fix the backend build")
-	used := h.orgRun(t, build, agBackend, t0, domain.RunResult{Status: domain.RunSucceeded})
-	other := h.orgRun(t, build, agBackend, t0.Add(time.Minute), domain.RunResult{Status: domain.RunSucceeded})
-
-	h.use(t, build, used, h.leave, domain.KnowledgeRead)
-
-	first := decode[gen.KnowledgeVerdict](t, h.verdict(t, h.leave, `{"verdict":"helped","run_id":"`+string(used)+`","note":"clear steps"}`), http.StatusOK)
-	wantVerdict(t, "the first verdict", first, verdictShape{h.leave, srcHandbook, "helped", string(used), string(build.ID), "clear steps", gen.ActorKindUser})
-
-	second := decode[gen.KnowledgeVerdict](t, h.verdict(t, h.leave, `{"verdict":"misled","run_id":"`+string(used)+`"}`), http.StatusOK)
-	wantVerdict(t, "the second verdict", second, verdictShape{h.leave, srcHandbook, "misled", string(used), string(build.ID), "", gen.ActorKindUser})
-
-	run := decode[gen.RunKnowledge](t, h.request(t, http.MethodGet, runsPath+string(used)+"/knowledge", "", nil), http.StatusOK)
-	if len(run.Verdicts) != 1 || run.Verdicts[0].Verdict != gen.KnowledgeVerdictVerdictMisled {
-		t.Errorf("the run's verdicts = %s; want the second only, which replaced the first", asJSON(t, run.Verdicts))
-	}
-
-	audit := decode[gen.AuditPage](t, h.request(t, http.MethodGet, "/v1/orgs/acme/audit?target_kind=knowledge_document", "", nil), http.StatusOK)
-	if got := actions(audit.Entries); len(got) < 2 || got[0] != domain.AuditKnowledgeVerdictGiven || got[1] != domain.AuditKnowledgeVerdictGiven {
-		t.Errorf("audit = %v; want knowledge_verdict.given twice, newest first", got)
-	}
-
-	if e := audit.Entries[1]; e.Data["verdict"] != "helped" || e.Data["run"] != string(used) || strings.Contains(asJSON(t, e), "clear steps") {
-		t.Errorf("the first verdict's entry = %s; want its kind and run, never its note", asJSON(t, e))
-	}
-
-	const noDoc, noRun = "01900000-0000-7000-8000-000000000009", "01900000-0000-7000-8000-000000000009"
-
-	for _, c := range []struct {
-		what, document, body string
-		status               int
-		code                 string
-	}{
-		{"a verdict on no document", noDoc, `{"verdict":"helped"}`, http.StatusNotFound, "knowledge-document-not-found"},
-		{
-			"a verdict for a run with no use of the document", h.leave, `{"verdict":"helped","run_id":"` + string(other) + `"}`,
-			http.StatusUnprocessableEntity, "knowledge-document-not-used",
-		},
-		{
-			"a verdict on no document for a run", noDoc, `{"verdict":"helped","run_id":"` + string(used) + `"}`, http.StatusNotFound,
-			"knowledge-document-not-found",
-		},
-		{"a verdict for no run", h.leave, `{"verdict":"helped","run_id":"` + noRun + `"}`, http.StatusNotFound, "run-not-found"},
-		{"a note over 500 characters", h.leave, `{"verdict":"helped","note":"` + strings.Repeat("x", 501) + `"}`, http.StatusBadRequest, ""},
-		{"an unknown verdict", h.leave, `{"verdict":"meh"}`, http.StatusBadRequest, ""},
-	} {
-		refused(t, c.what, h.verdict(t, c.document, c.body), c.status, c.code)
-	}
-}
-
-// verdictShape is what the tests check of a verdict.
-type verdictShape struct {
-	Document, Source, Verdict, Run, Item, Note string
-	By                                         gen.ActorKind
-}
-
-func wantVerdict(t *testing.T, what string, v gen.KnowledgeVerdict, want verdictShape) {
-	t.Helper()
-
-	got := verdictShape{v.Document, v.Source, string(v.Verdict), valueOf(v.RunId), valueOf(v.ItemId), valueOf(v.Note), v.By.Kind}
-	if got != want || v.At.IsZero() {
-		t.Errorf("%s = %+v at %v; want %+v at a time", what, got, v.At, want)
-	}
-}
-
-// A key without knowledge:read or knowledge:verdict reads no usage and gives no verdict.
+// A key without knowledge:read reads no usage and no document's uses.
 func TestKnowledgeUses_Refused(t *testing.T) {
 	t.Parallel()
 
@@ -276,7 +209,6 @@ func TestKnowledgeUses_Refused(t *testing.T) {
 	for _, c := range []struct{ method, path, body string }{
 		{http.MethodGet, usagePath + "?source=handbook", ""},
 		{http.MethodGet, documentsPath + "/d/uses", ""},
-		{http.MethodPut, documentsPath + "/d/verdict", `{"verdict":"helped"}`},
 	} {
 		refused(t, "the key's "+c.method+" "+c.path, h.request(t, c.method, c.path, c.body, bearer(created.Secret)), http.StatusForbidden, "forbidden")
 	}

@@ -101,32 +101,37 @@ func (k KnowledgeIndex) groundRules() string {
 
 func (k KnowledgeIndex) sourceLines() string {
 	lines := make([]string, 0, len(k.Sources))
-
 	for _, s := range k.Sources {
-		line := fmt.Sprintf("- `%s/%s/`: ", KnowledgeRoot, s.Name)
-		if r := oneLine(s.ReadWhen); r != "" {
-			line += strings.TrimSuffix(r, ".") + ". "
-		}
-
-		if s.Files == 1 {
-			line += "1 file"
-		} else {
-			line += fmt.Sprintf("%d files", s.Files)
-		}
-
-		if len(s.Folders) > 0 {
-			folders := make([]string, 0, len(s.Folders))
-			for _, f := range s.Folders {
-				folders = append(folders, "`"+f+"`")
-			}
-
-			line += "; top folders: " + strings.Join(folders, ", ")
-		}
-
-		lines = append(lines, line+".")
+		lines = append(lines, s.Line())
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// Line is the source's line in the Knowledge section: its folder, its read-when line, its file
+// count and its top folders.
+func (s IndexedSource) Line() string {
+	line := fmt.Sprintf("- `%s/%s/`: ", KnowledgeRoot, s.Name)
+	if r := oneLine(s.ReadWhen); r != "" {
+		line += strings.TrimSuffix(r, ".") + ". "
+	}
+
+	if s.Files == 1 {
+		line += "1 file"
+	} else {
+		line += fmt.Sprintf("%d files", s.Files)
+	}
+
+	if len(s.Folders) > 0 {
+		folders := make([]string, 0, len(s.Folders))
+		for _, f := range s.Folders {
+			folders = append(folders, "`"+f+"`")
+		}
+
+		line += "; top folders: " + strings.Join(folders, ", ")
+	}
+
+	return line + "."
 }
 
 func (k KnowledgeIndex) memoryLines() string {
