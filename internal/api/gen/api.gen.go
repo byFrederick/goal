@@ -5835,6 +5835,9 @@ type OrgSearch struct {
 	Connections []ConnectionHit `json:"connections"`
 	Factories   []FactoryHit    `json:"factories"`
 	Items       []SearchItem    `json:"items"`
+
+	// Secrets Empty unless the caller holds secret:read
+	Secrets []SecretHit `json:"secrets"`
 }
 
 // OrgSettings defines model for OrgSettings.
@@ -6588,6 +6591,18 @@ type Secret struct {
 type SecretExpiry struct {
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 	RemindDays *int       `json:"remind_days,omitempty"`
+}
+
+// SecretHit A secret whose name matched, never its value
+type SecretHit struct {
+	// ExpiresAt When the value expires
+	ExpiresAt *time.Time `json:"expires_at"`
+
+	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+	Name SecretName `json:"name"`
+
+	// Scope The factories whose runs may open it; neither all nor any listed reaches no run
+	Scope SecretScope `json:"scope"`
 }
 
 // SecretImport defines model for SecretImport.

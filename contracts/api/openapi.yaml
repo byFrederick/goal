@@ -8162,7 +8162,7 @@ components:
     OrgSearch:
       type: object
       description: What a search found in the organization, by group, each best first
-      required: [items, agents, factories, connections]
+      required: [items, agents, factories, connections, secrets]
       properties:
         items:
           type: array
@@ -8177,6 +8177,10 @@ components:
           type: array
           description: Empty unless the caller holds connection:read
           items: { $ref: "#/components/schemas/ConnectionHit" }
+        secrets:
+          type: array
+          description: Empty unless the caller holds secret:read
+          items: { $ref: "#/components/schemas/SecretHit" }
     SearchItem:
       type: object
       required: [id, number, factory_id, factory_name, title, state, station]
@@ -8213,6 +8217,14 @@ components:
       properties:
         name: { type: string }
         kind: { type: string }
+    SecretHit:
+      type: object
+      description: A secret whose name matched, never its value
+      required: [name, scope, expires_at]
+      properties:
+        name: { $ref: "#/components/schemas/SecretName" }
+        scope: { $ref: "#/components/schemas/SecretScope" }
+        expires_at: { type: string, format: date-time, nullable: true, description: When the value expires }
     SpendWindow:
       type: string
       enum: [week, month, 90d]

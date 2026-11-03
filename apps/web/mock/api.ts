@@ -990,6 +990,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       connections: caller.can?.includes('connection:read')
         ? connections.outlines(org.id).map((c) => ({ name: c.name, kind: c.kind }))
         : [],
+      // goald answers secrets only with secret:read; the mock's caller holds every org permission
+      // that matters here, so it finds them, metadata only.
+      secrets: secrets.outlines(org.id).map((s) => ({ name: s.name, scope: s.scope, expires_at: s.expires_at })),
     };
     return json(res, 200, search(source, q, limit));
   }

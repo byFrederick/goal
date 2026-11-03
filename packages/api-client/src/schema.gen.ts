@@ -6665,6 +6665,8 @@ export interface components {
             factories: components["schemas"]["FactoryHit"][];
             /** @description Empty unless the caller holds connection:read */
             connections: components["schemas"]["ConnectionHit"][];
+            /** @description Empty unless the caller holds secret:read */
+            secrets: components["schemas"]["SecretHit"][];
         };
         SearchItem: {
             id: string;
@@ -6697,6 +6699,16 @@ export interface components {
         ConnectionHit: {
             name: string;
             kind: string;
+        };
+        /** @description A secret whose name matched, never its value */
+        SecretHit: {
+            name: components["schemas"]["SecretName"];
+            scope: components["schemas"]["SecretScope"];
+            /**
+             * Format: date-time
+             * @description When the value expires
+             */
+            expires_at: string | null;
         };
         /**
          * @default week
