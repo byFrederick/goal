@@ -15,7 +15,7 @@ import { ImportCredentialsCard } from './import-credentials-card';
 export function NewCredentialPage() {
   const org = useOrg();
   const { panel } = useSearch({ from: '/o/$org/_org/credentials/new' });
-  const manage = useOrgHolds('credential:manage');
+  const manage = useOrgHolds('secret:manage');
   const factories = useQuery(factoriesQuery(org.id));
   const importing = panel === 'import';
 

@@ -60,7 +60,14 @@ tags:
       The organization's credentials (ADR 0017): named secrets sealed under the platform's master
       key, never readable back, that connections refer to as {{name}} and listed agents get as env.
       Members read names and metadata; owners and admins create, change, replace, delete and
-      import them, after a recent sign-in.
+      import them, after a recent sign-in. Deprecated: the secrets API replaces these routes (ADR
+      0037), and they go away when the web moves to it. They need secret:read and secret:manage.
+  - name: secrets
+    description: >-
+      The organization's secrets (ADR 0037): the only place a value lives, sealed under the
+      platform's master key and never readable back. Members, keys and personal tokens read names,
+      metadata and where each secret is used (secret:read); owners and admins create, change,
+      replace, delete and import them, after a recent sign-in (secret:manage).
   - name: knowledge
     description: >-
       The organization's knowledge base (spec 4 §4.8): sources of uploaded files, of connections
@@ -4061,7 +4068,8 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: listCredentials
-      x-goal-scope: credential:read
+      x-goal-scope: secret:read
+      deprecated: true
       tags: [credentials]
       summary: The organization's credentials
       description: >-
@@ -4077,7 +4085,8 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     post:
       operationId: createCredential
-      x-goal-scope: credential:manage
+      x-goal-scope: secret:manage
+      deprecated: true
       tags: [credentials]
       summary: Create a credential
       description: >-
@@ -4104,7 +4113,8 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     post:
       operationId: importCredentials
-      x-goal-scope: credential:manage
+      x-goal-scope: secret:manage
+      deprecated: true
       tags: [credentials]
       summary: Import credentials from a .env or YAML text
       description: >-
@@ -4136,7 +4146,8 @@ paths:
       - $ref: "#/components/parameters/CredentialRef"
     get:
       operationId: getCredential
-      x-goal-scope: credential:read
+      x-goal-scope: secret:read
+      deprecated: true
       tags: [credentials]
       summary: One credential, never its value
       responses:
@@ -4148,7 +4159,8 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     patch:
       operationId: patchCredential
-      x-goal-scope: credential:manage
+      x-goal-scope: secret:manage
+      deprecated: true
       tags: [credentials]
       summary: Change a credential's metadata, or replace its value
       description: >-
@@ -4173,7 +4185,8 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     delete:
       operationId: deleteCredential
-      x-goal-scope: credential:manage
+      x-goal-scope: secret:manage
+      deprecated: true
       tags: [credentials]
       summary: Delete a credential
       description: >-
@@ -4183,6 +4196,157 @@ paths:
       responses:
         "204":
           description: Deleted
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/secrets:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listSecrets
+      x-goal-scope: secret:read
+      tags: [secrets]
+      summary: The organization's secrets
+      description: >-
+        By name, each with its source, description, factory scope, expiry, reminder, last use and
+        what uses it. Never a value.
+      responses:
+        "200":
+          description: The secrets
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecretList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createSecret
+      x-goal-scope: secret:manage
+      tags: [secrets]
+      summary: Create a secret
+      description: >-
+        A named secret with its value, sealed under the platform's master key and never returned
+        (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a
+        name that is not a secret name, a missing or oversized value, a description over 500
+        characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all
+        factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no
+        master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewSecret" }
+      responses:
+        "201":
+          description: The secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Secret" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/secrets/import:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    post:
+      operationId: importSecrets
+      x-goal-scope: secret:manage
+      tags: [secrets]
+      summary: Import secrets from a .env or YAML text
+      description: >-
+        env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is
+        sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked
+        before anything is written: 400 secret-invalid for an unknown format, text that does not
+        parse, an empty import, or a name that is not a secret name or whose env variable is
+        reserved. A dry run answers each name as new or existing, with what uses the existing one,
+        and stores nothing. A real run creates each new name open to no factory, and replaces
+        (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the
+        default) each existing one. A real run is not one transaction: should a write fail, the
+        names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs
+        a sign-in from the last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SecretImport" }
+      responses:
+        "200":
+          description: What the import does, or did
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecretImportResult" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/secrets/{secret}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/SecretRef"
+    get:
+      operationId: getSecret
+      x-goal-scope: secret:read
+      tags: [secrets]
+      summary: One secret, never its value
+      description: 404 secret-not-found.
+      responses:
+        "200":
+          description: The secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Secret" }
+        default: { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: patchSecret
+      x-goal-scope: secret:manage
+      tags: [secrets]
+      summary: Change a secret's description, scope, expiry or reminder
+      description: >-
+        Each property present replaces its own: scope replaces the factory scope, expiry replaces
+        the expiry and the reminder together (an empty expiry clears both). The value changes only
+        through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes
+        nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SecretPatch" }
+      responses:
+        "200":
+          description: The secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Secret" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteSecret
+      x-goal-scope: secret:manage
+      tags: [secrets]
+      summary: Delete a secret
+      description: >-
+        409 secret-in-use, deleting nothing, while something uses it: the problem's uses names each
+        use. 404 secret-not-found. Needs a sign-in from the last 10 minutes. Audited as
+        secret.deleted.
+      responses:
+        "204":
+          description: Deleted
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/secrets/{secret}/value:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/SecretRef"
+    put:
+      operationId: replaceSecretValue
+      x-goal-scope: secret:manage
+      tags: [secrets]
+      summary: Replace a secret's value
+      description: >-
+        Runs that start afterwards get the new value; nothing else changes, and the answer holds no
+        value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized
+        value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a
+        sign-in from the last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SecretValue" }
+      responses:
+        "200":
+          description: The secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Secret" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/knowledge/sources:
     parameters:
@@ -4566,6 +4730,12 @@ components:
       required: true
       description: The credential's name
       schema: { type: string }
+    SecretRef:
+      name: secret
+      in: path
+      required: true
+      description: The secret's name
+      schema: { type: string }
     SourceRef:
       name: source
       in: path
@@ -4748,6 +4918,9 @@ components:
             Credentials (ADR 0017): credential-not-found (404), credential-invalid (400),
             credential-name-taken and credential-in-use (409, naming the connections),
             credentials-unavailable (503: goald has no master key).
+            Secrets (ADR 0037): secret-not-found (404), secret-invalid (400),
+            secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use),
+            secrets-unavailable (503: goald has no master key).
             Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found
             (404), connection-cannot-sync (400), knowledge-source-name-taken,
             knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413),
@@ -4789,6 +4962,10 @@ components:
         estimate:
           allOf: [{ $ref: "#/components/schemas/EvalEstimate" }]
           description: learning-budget-exhausted only, the estimate of the bake-off it refused
+        uses:
+          type: array
+          description: secret-in-use only, what uses the secret
+          items: { $ref: "#/components/schemas/SecretUse" }
     EvalList:
       type: object
       required: [summary, cases]
@@ -9417,6 +9594,140 @@ components:
         name: { type: string }
         exists: { type: boolean, description: A credential had the name before the import }
         connections: { type: integer, description: How many connections use the existing one }
+        outcome:
+          type: string
+          enum: [created, replaced, skipped]
+          description: A real run only, what it did
+    SecretName:
+      type: string
+      description: >-
+        3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the
+        organization
+      pattern: "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
+    SecretSource:
+      type: string
+      description: "Where the value comes from. value: pasted or imported, and the run gets it as it is"
+      enum: [value]
+      x-enum-varnames: [SecretSourceValue]
+    SecretScope:
+      type: object
+      description: The factories whose runs may open it; neither all nor any listed reaches no run
+      required: [all_factories, factories]
+      properties:
+        all_factories: { type: boolean, description: Every factory, ones created later included }
+        factories:
+          type: array
+          description: The factories' metadata.id, when not all_factories
+          items: { type: string }
+    SecretUse:
+      type: object
+      description: One thing that uses a secret; while one does, it cannot be deleted
+      required: [kind, name]
+      properties:
+        kind:
+          type: string
+          enum: [definition, knowledge_source, webhook, slack, connection]
+          x-enum-varnames: [SecretUseDefinition, SecretUseKnowledgeSource, SecretUseWebhook, SecretUseSlack, SecretUseConnection]
+          description: >-
+            What uses it: a factory's published definition, a knowledge source, a webhook, the
+            organization's Slack setting, or a connection that refers to it as {{name}}
+        name: { type: string, description: "The factory, knowledge source, webhook or connection that uses it; slack: the organization's Slack setting" }
+    SecretList:
+      type: object
+      required: [secrets]
+      properties:
+        secrets:
+          type: array
+          items: { $ref: "#/components/schemas/Secret" }
+    Secret:
+      type: object
+      description: An organization's secret (ADR 0037), never its value
+      required: [id, name, source, description, scope, expires_at, remind_days, last_used_at, uses, created_by, created_at, updated_by, updated_at]
+      properties:
+        id: { type: string }
+        name: { $ref: "#/components/schemas/SecretName" }
+        source: { $ref: "#/components/schemas/SecretSource" }
+        description: { type: string }
+        scope: { $ref: "#/components/schemas/SecretScope" }
+        expires_at: { type: string, format: date-time, nullable: true, description: When the value expires }
+        remind_days: { type: integer, description: "Days before expires_at a reminder is due; 0: none" }
+        last_used_at: { type: string, format: date-time, nullable: true, description: When a run last opened it }
+        uses:
+          type: array
+          description: What uses it, by kind then name
+          items: { $ref: "#/components/schemas/SecretUse" }
+        created_by: { $ref: "#/components/schemas/Actor" }
+        created_at: { type: string, format: date-time }
+        updated_by: { $ref: "#/components/schemas/Actor" }
+        updated_at: { type: string, format: date-time }
+    NewSecret:
+      type: object
+      required: [name, value]
+      properties:
+        name: { $ref: "#/components/schemas/SecretName" }
+        description: { type: string, maxLength: 500 }
+        scope: { $ref: "#/components/schemas/SecretScope" }
+        expires_at: { type: string, format: date-time }
+        remind_days: { type: integer, minimum: 0, maximum: 90 }
+        value:
+          type: string
+          writeOnly: true
+          maxLength: 65536
+          description: The value; sealed and never answered
+    SecretPatch:
+      type: object
+      properties:
+        description: { type: string, maxLength: 500 }
+        scope: { $ref: "#/components/schemas/SecretScope" }
+        expiry: { $ref: "#/components/schemas/SecretExpiry" }
+    SecretExpiry:
+      type: object
+      description: An expiry and its reminder; without expires_at, neither
+      properties:
+        expires_at: { type: string, format: date-time }
+        remind_days: { type: integer, minimum: 0, maximum: 90 }
+    SecretValue:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: string
+          writeOnly: true
+          maxLength: 65536
+          description: The new value; sealed and never answered
+    SecretImport:
+      type: object
+      required: [format, text]
+      properties:
+        format: { type: string, enum: [env, yaml] }
+        text:
+          type: string
+          writeOnly: true
+          description: The .env or YAML text; its values are sealed and never answered
+        on_conflict:
+          type: string
+          enum: [replace, skip]
+          description: What a real run does with a name that exists; skip when absent
+        dry_run: { type: boolean, description: Answer what the import would do and store nothing }
+    SecretImportResult:
+      type: object
+      required: [dry_run, secrets]
+      properties:
+        dry_run: { type: boolean }
+        secrets:
+          type: array
+          description: Each name of the import, in its order
+          items: { $ref: "#/components/schemas/SecretImportOutcome" }
+    SecretImportOutcome:
+      type: object
+      required: [name, exists, uses]
+      properties:
+        name: { type: string }
+        exists: { type: boolean, description: A secret had the name before the import }
+        uses:
+          type: array
+          description: What uses the existing one
+          items: { $ref: "#/components/schemas/SecretUse" }
         outcome:
           type: string
           enum: [created, replaced, skipped]

@@ -399,7 +399,7 @@ export const connectionActivityQuery = (org: string, id?: string) =>
     staleTime: 30_000,
   });
 
-/** The organization's credentials, by name, never a value (credential:read: every member). */
+/** The organization's credentials, by name, never a value (secret:read: every member). */
 export const credentialsQuery = (org: string) =>
   queryOptions({
     queryKey: keys.credentials(org),

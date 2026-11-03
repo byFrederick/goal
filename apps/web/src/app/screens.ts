@@ -181,7 +181,7 @@ export const credentialsScreen: OrgScreen = {
   label: 'Credentials',
   icon: KeyRound,
   to: '/o/$org/credentials',
-  permissions: ['credential:read'],
+  permissions: ['secret:read'],
 };
 /** The organization's knowledge base (spec 4 §10): every member reads and searches it; owners and admins change it. */
 export const knowledgeScreen: OrgScreen = {

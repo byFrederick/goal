@@ -157,8 +157,9 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 
 	// Connections and their kinds (spec 4): definitions are validated against them, the API serves
-	// them, runs get them and the gateway describes them in run bundles. Credentials (ADR 0017) are
-	// sealed under the same master keys, and so are webhook endpoints' signing secrets (ADR 0026).
+	// them, runs get them and the gateway describes them in run bundles. Credentials (ADR 0017) and
+	// the organizations' secrets (ADR 0037, the same table) are sealed under the same master keys,
+	// and so are webhook endpoints' signing secrets (ADR 0026).
 	connections, credentials, orgSecrets, intake, err := openConnections(ctx, store, os.Getenv, log)
 	if err != nil {
 		return err
@@ -256,7 +257,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 			Mode: api.AuthMode(s.Auth), EmailCodes: s.EmailCodes, Google: s.Google, SecureCookies: s.strictTransport(),
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
-		Connections: connections, Credentials: credentials, Intake: intake, DraftRequests: postgres.NewDraftRequests(store),
+		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store),
 		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
@@ -381,7 +382,7 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 // openConnections loads the platform's master keys (GOAL_MASTER_KEYS or GOAL_MASTER_KEY_FILE),
 // refuses to start while a secret, connection or webhook endpoint is sealed under a key id they
 // lack (spec 4 §5.2, threat row 12, ADR 0017, ADR 0037 decision 1), makes the kinds goald ships the platform's, and returns the
-// connections, the credentials, the organizations' secrets and the intake state sealed with those keys. Without a master key goald serves
+// connections, the credentials, the secrets and the intake state sealed with those keys. Without a master key goald serves
 // everything but connections with secrets and credentials' values, and says so.
 func openConnections(ctx context.Context, store *postgres.Store, getenv func(string) string, log *slog.Logger,
 ) (*postgres.Connections, *postgres.Credentials, *postgres.Secrets, *postgres.Intake, error) {
