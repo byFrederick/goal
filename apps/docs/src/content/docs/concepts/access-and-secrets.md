@@ -65,10 +65,12 @@ goald reads and merges pull requests with the same token: a person's merge, a ga
 
 1. The run starts the agent's environment from the version the run is pinned to. A secret you replace applies to runs that start afterwards.
 2. goald checks that every referenced secret is open to the factory, then opens each one.
-3. It sets each `env` value in the box's environment, writes the `files` and renders the MCP configuration. A header that names a secret reaches Claude Code as a variable the box expands, so the run's bundle never holds a value.
+3. It puts each `env` value, each file's content and each MCP secret in the box's environment, and renders the MCP configuration. A header that names a secret reaches Claude Code as a variable the box expands, so the run's bundle never holds a value.
 4. Every opened value goes on the run's scrub list, and one `secret.used` audit entry is written per secret per run, without a value.
-5. The prompt lists the box's command-line tools, the names of its variables, its file paths and its MCP servers, never a value.
-6. The worker checks every tool call against the agent's rules before it runs (see [skills and rules](../skills-and-rules/)).
+5. The box clones the repository and installs its tools, then the environment's `tools`.
+6. Before the agent starts, the box writes each of the `files` at its path, `~/` being the agent's home, with mode 0600. Then it runs the `setup` commands in order in the checkout, each with a 30-minute limit. A command that exits non-zero or runs past its limit fails the run, and the run's error names the command and shows its last 50 lines of output with secret values removed. Setup runs again when a run is retried in the same box, so write commands that are safe to repeat.
+7. The agent gets the environment's MCP servers. The prompt has a **Your box** section that lists the box's command-line tools, the names of its variables, its file paths and its MCP servers, never a value. It takes the place of the Connections section that runs on connections get.
+8. Each call to an MCP server's tool follows the environment's mode for it: `allow` runs, `ask` waits for a person, and `off` is refused. The worker checks the agent's other tool calls against its rules (see [skills and rules](../skills-and-rules/)).
 
 An agent holds the secrets of its environment for the whole run, and it has network access from the box. A prompt-injected agent can misuse what its tokens reach. The control for that is a narrow token, with only the repositories and permissions the agent needs. The organization policy's **Use secrets** can switch an agent's environment off: it then gets no `env`, `files` or MCP servers, while the repository and model keys still reach the run. ADR 0008 and ADR 0037 (`docs/adr/` in the repository) record these decisions and their accepted risks.
 
