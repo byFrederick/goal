@@ -96,7 +96,11 @@ describe('the mock secrets', () => {
         { name: 'github-token', exists: true },
       ],
     });
-    expect((real.answer.secrets as { outcome: string }[]).map((s) => s.outcome)).toEqual(['skipped', 'skipped', 'skipped']);
+    expect((real.answer.secrets as { outcome: string }[]).map((s) => s.outcome)).toEqual([
+      'skipped',
+      'skipped',
+      'skipped',
+    ]);
   });
 
   it('replaces a value without answering it, and shows the replace in the secret’s activity', async () => {

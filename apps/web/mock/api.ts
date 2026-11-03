@@ -63,7 +63,6 @@ import type { IntakeEvent, TriggerTry, TriggerTryStep } from '../src/api/types.t
 import { authSettings, createMockAuth } from './auth.ts';
 import { createBakeOffs } from './bake-offs.ts';
 import { createConnections } from './connections.ts';
-import { createSecrets } from './secrets.ts';
 import { createDefinitions } from './definitions.ts';
 import { createEvals } from './evals.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
@@ -89,6 +88,7 @@ import { createPolicy } from './policy.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
 import { orgRunsOf, runsCsvOf } from './runs.ts';
 import { type SearchSource, search } from './search.ts';
+import { createSecrets } from './secrets.ts';
 import { createSpend } from './spend.ts';
 import { starterItem } from './starter.ts';
 import { teardownOf } from './teardown.ts';

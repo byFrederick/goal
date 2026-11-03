@@ -173,7 +173,14 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
   let nextAudit = 1;
 
   const entry = (id: string, by: Actor, action: string, at: number, data: Record<string, unknown> = {}) =>
-    ({ id: nextAudit++, at: new Date(at).toISOString(), actor: by, action, target: { kind: 'secret', id }, data }) satisfies AuditEntry;
+    ({
+      id: nextAudit++,
+      at: new Date(at).toISOString(),
+      actor: by,
+      action,
+      target: { kind: 'secret', id },
+      data,
+    }) satisfies AuditEntry;
 
   const reset = (now: number) => {
     const by: Actor = { kind: 'user', id: 'local', name: 'Local user' };
@@ -200,7 +207,15 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
           const activity = [
             ...(seed.usedAgo === null
               ? []
-              : [entry(id, { kind: 'run', id: 'run-147', name: 'run #147, frontend-engineer' }, 'secret.used', now - seed.usedAgo, { run: 147, role: 'frontend-engineer' })]),
+              : [
+                  entry(
+                    id,
+                    { kind: 'agent', id: 'frontend-engineer', name: 'frontend-engineer' },
+                    'secret.used',
+                    now - seed.usedAgo,
+                    { run: 147, role: 'frontend-engineer' },
+                  ),
+                ]),
             entry(id, by, 'secret.value_replaced', now - 3 * dayMs),
             entry(id, by, 'secret.created', now - 10 * dayMs),
           ];
@@ -266,7 +281,11 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
       updated_by: by,
       updated_at: new Date(now).toISOString(),
     };
-    const s: Stored = { secret, scopeNames: scopeOf(org, input.scope) ?? null, activity: [entry(id, by, 'secret.created', now)] };
+    const s: Stored = {
+      secret,
+      scopeNames: scopeOf(org, input.scope) ?? null,
+      activity: [entry(id, by, 'secret.created', now)],
+    };
     if (input.scope === undefined) s.scopeNames = [];
     list(org).push(s);
     return s;
@@ -389,9 +408,15 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
         return true;
       }
       if (s.secret.uses.length > 0) {
-        refuse(res, 409, `secret ${name} is in use by ${s.secret.uses.map((u) => u.name).join(', ')}`, 'secret-in-use', {
-          uses: s.secret.uses,
-        });
+        refuse(
+          res,
+          409,
+          `secret ${name} is in use by ${s.secret.uses.map((u) => u.name).join(', ')}`,
+          'secret-in-use',
+          {
+            uses: s.secret.uses,
+          },
+        );
         return true;
       }
       list(org.id).splice(list(org.id).indexOf(s), 1);

@@ -63,7 +63,6 @@ import {
   listConnectionRepositories,
   listConnections,
 } from './connections';
-import { getSecret, listSecretActivity, listSecrets } from './secrets';
 import {
   getDraft,
   getDraftFile,
@@ -96,6 +95,7 @@ import {
 import { getNotificationPreferences } from './notifications';
 import { getOrgPolicy } from './policy';
 import { type SearchQuery, searchOrg } from './search';
+import { getSecret, listSecretActivity, listSecrets } from './secrets';
 import { getOrgSpend } from './spend';
 import type { Factory, ItemEvent, ProposalState, SpendWindow } from './types';
 import { getWebhookDelivery, listWebhookDeliveries, listWebhookEndpoints } from './webhooks';

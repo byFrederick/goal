@@ -15,9 +15,7 @@ export async function listSecrets(org: string, signal?: AbortSignal): Promise<Se
 
 /** One secret; 404 secret-not-found. */
 export function getSecret(org: string, secret: string, signal?: AbortSignal): Promise<Secret> {
-  return unwrap(
-    goal.GET(orgPath('/secrets/{secret}'), { params: { path: { org, secret } }, ...cancel(signal) }),
-  );
+  return unwrap(goal.GET(orgPath('/secrets/{secret}'), { params: { path: { org, secret } }, ...cancel(signal) }));
 }
 
 /** Creates a secret with its pasted value, sealed (400 secret-invalid, 409 secret-name-taken). The value is never answered. */
@@ -37,9 +35,7 @@ export function patchSecret(org: string, secret: string, patch: SecretPatch): Pr
 
 /** Replaces the value; the answer holds none. */
 export function replaceSecretValue(org: string, secret: string, value: string): Promise<Secret> {
-  return unwrap(
-    goal.PUT(orgPath('/secrets/{secret}/value'), { params: { path: { org, secret } }, body: { value } }),
-  );
+  return unwrap(goal.PUT(orgPath('/secrets/{secret}/value'), { params: { path: { org, secret } }, body: { value } }));
 }
 
 /** 409 secret-in-use while something uses it. */
