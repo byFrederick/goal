@@ -270,6 +270,56 @@ func (k *Knowledge) UpdateSource(ctx context.Context, name string, p domain.Know
 	return out, nil
 }
 
+// ConvertSource implements ports.Knowledge: the source is locked while its rules are checked.
+func (k *Knowledge) ConvertSource(ctx context.Context, name string, kind domain.KnowledgeSourceKind, by domain.Actor) (domain.KnowledgeSource, error) {
+	var out domain.KnowledgeSource
+
+	err := k.s.inTx(ctx, func(q *db.Queries) error {
+		locked, err := q.LockKnowledgeSource(ctx, name)
+		if notFound(err) {
+			return fmt.Errorf("knowledge source %q: %w", name, ports.ErrNotFound)
+		}
+
+		if err != nil {
+			return err
+		}
+
+		what := "knowledge source " + name
+
+		src, err := oneSource(ctx, q, db.KnowledgeSourcesParams{ID: &locked.ID}, what)
+		if err != nil {
+			return err
+		}
+
+		if err := src.CheckConvert(kind); err != nil {
+			return err
+		}
+
+		raw, err := json.Marshal(src.ConvertedConfig())
+		if err != nil {
+			return fmt.Errorf("config: %w", err)
+		}
+
+		if err := q.ConvertKnowledgeSource(ctx, db.ConvertKnowledgeSourceParams{Kind: string(kind), Config: raw, ID: locked.ID}); err != nil {
+			return ruleError(err, "")
+		}
+
+		if err := sourceAudit(ctx, q, by, domain.AuditKnowledgeSourceUpdated, locked.ID,
+			map[string]any{auditName: name, "kind": string(kind)}); err != nil {
+			return err
+		}
+
+		out, err = oneSource(ctx, q, db.KnowledgeSourcesParams{ID: &locked.ID}, what)
+
+		return err
+	})
+	if err != nil {
+		return domain.KnowledgeSource{}, fmt.Errorf("convert knowledge source: %w", err)
+	}
+
+	return out, nil
+}
+
 // DeleteSource implements ports.Knowledge: the source's upload contents are held
 // (LockKnowledgeBlobs) from before the deletion until drop has run and the transaction ends.
 func (k *Knowledge) DeleteSource(ctx context.Context, name string, by domain.Actor, drop ports.DropBlobs) error {

@@ -34,6 +34,12 @@ type Knowledge interface {
 	// calls drop, before the deletion commits, with the uploads' content hashes no document of
 	// the organization holds any more (DropBlobs). ErrNotFound when there is none.
 	DeleteSource(ctx context.Context, name string, by domain.Actor, drop DropBlobs) error
+	// ConvertSource moves a synced source that reads with a secret over to kind, a repository or
+	// Confluence source (ADR 0038 decision 16; KnowledgeSource.CheckConvert): it clears its
+	// connection, drops its reader from its config and keeps the other keys and the secret, makes
+	// it due at once and audits knowledge_source.updated with the new kind. domain.ErrInvalid for
+	// any other source or kind, ErrNotFound when there is none.
+	ConvertSource(ctx context.Context, name string, kind domain.KnowledgeSourceKind, by domain.Actor) (domain.KnowledgeSource, error)
 	// SyncNow makes a source due at once. ErrNotFound when there is none; a live source never
 	// syncs (domain.ErrInvalid).
 	SyncNow(ctx context.Context, name string) error

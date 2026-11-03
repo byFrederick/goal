@@ -48,6 +48,13 @@ SET title = coalesce(sqlc.narg(title)::text, title), config = coalesce(sqlc.narg
 WHERE name = sqlc.arg(name)
 RETURNING id;
 
+-- name: ConvertKnowledgeSource :exec
+-- Moves a synced source over to its kind (ports.Knowledge.ConvertSource): off its connection,
+-- with the config it keeps, due at once.
+UPDATE knowledge_sources
+SET kind = sqlc.arg(kind), connection_id = NULL, config = sqlc.arg(config)::jsonb, next_sync_at = now(), updated_at = now()
+WHERE id = sqlc.arg(id) AND kind = 'synced' AND secret_id IS NOT NULL;
+
 -- name: LockKnowledgeSource :one
 SELECT id, kind FROM knowledge_sources WHERE name = sqlc.arg(name) FOR UPDATE;
 
