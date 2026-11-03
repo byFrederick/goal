@@ -631,8 +631,12 @@ func (w *world) addSources(t *testing.T) {
 	}
 }
 
-// approvedOn is the item the seeded standing rules were approved on.
-const approvedOn = domain.ItemID("0b6f1c9e-0000-7000-8000-0000000000bb")
+// approvedOn is the item the seeded standing rules were approved on; ruleAgent is the production
+// factory's agent role they let.
+const (
+	approvedOn = domain.ItemID("0b6f1c9e-0000-7000-8000-0000000000bb")
+	ruleAgent  = "engineer"
+)
 
 // A converted factory gets a copy of each active connection's rule on every environment whose
 // file has a server named after the connection, made by Goal with the rule's item; the rules
@@ -648,10 +652,10 @@ func TestRun_ReKeysStandingRulesOnce(t *testing.T) {
 
 	ctx := w.ctx(t)
 	for _, n := range []domain.NewStandingRule{
-		{Connection: connContext7, Tool: "resolve-library-id", Agent: "engineer", Item: approvedOn},
+		{Connection: connContext7, Tool: "resolve-library-id", Agent: ruleAgent, Item: approvedOn},
 		{Connection: connGitHub, Tool: "create_pull_request", Agent: "reviewer", Item: approvedOn},
-		{Connection: connCloudflare, Tool: "list_zones", Agent: "engineer", Item: approvedOn}, // no server
-		{Connection: connGitHub, Tool: "merge_pull_request", Agent: "engineer", Item: approvedOn},
+		{Connection: connCloudflare, Tool: "list_zones", Agent: ruleAgent, Item: approvedOn}, // no server
+		{Connection: connGitHub, Tool: "merge_pull_request", Agent: ruleAgent, Item: approvedOn},
 	} {
 		if _, err := w.conns.CreateStandingRule(ctx, n, person); err != nil {
 			t.Fatal(err)
