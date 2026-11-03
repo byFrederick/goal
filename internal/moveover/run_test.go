@@ -61,6 +61,7 @@ type world struct {
 	key         ports.MasterKey
 	conns       *porttest.Connections
 	secrets     *porttest.OrgSecrets
+	kb          *porttest.Knowledge
 	defs        *porttest.Definitions
 	conversions *porttest.FactoryConversions
 	mover       *moveover.Mover
@@ -83,6 +84,8 @@ func newWorld(t *testing.T) *world {
 	w.org = o.ID
 	w.conns = porttest.NewConnections(w.key, w.tenancy)
 	w.secrets = porttest.NewOrgSecrets(w.key, w.tenancy, w.conns)
+	w.kb = porttest.NewKnowledge(w.conns, w.tenancy)
+	w.kb.ReadSecrets(w.secrets)
 	w.defs = porttest.NewDefinitions(porttest.DefinitionsDeps{Objects: porttest.NewObjectStore(), Items: w.store, Audit: w.tenancy, Now: w.clock.Now})
 	w.conversions = porttest.NewFactoryConversions()
 
@@ -131,7 +134,7 @@ func newWorld(t *testing.T) *world {
 	})
 
 	w.mover = moveover.New(moveover.Deps{
-		Orgs: w.tenancy, Connections: w.conns, Secrets: w.secrets, Definitions: w.defs, Publisher: authors,
+		Orgs: w.tenancy, Connections: w.conns, Secrets: w.secrets, Knowledge: w.kb, Definitions: w.defs, Publisher: authors,
 		Conversions: w.conversions, Clock: w.clock, Logger: slog.New(slog.NewJSONHandler(w.logs, nil)),
 	})
 
@@ -498,3 +501,104 @@ func (w *world) oneRun(t *testing.T, line domain.Line) map[string]string {
 }
 
 var _ io.Writer = (*logBuffer)(nil)
+
+// docsPairKind syncs with gitdocs and has two secret fields, neither of them the token.
+const docsPairKind = `apiVersion: goal/v1
+kind: ConnectionKind
+metadata: {name: docs-pair, title: Docs pair}
+spec:
+  fields:
+    - {name: key_id, title: Key ID, secret: true, required: true}
+    - {name: key_secret, title: Key secret, secret: true, required: true}
+  sync: gitdocs
+`
+
+// Moving over points each synced source still on a connection at the secret its connection's
+// token became, with the reader and the connection's other values in its config; a second run
+// changes nothing, and a source it cannot map is logged once, naming it and never a value.
+func TestRun_PointsKnowledgeSourcesAtSecrets(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	ctx := w.ctx(t)
+
+	k, err := connkind.Parse([]byte(docsPairKind))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.conns.PutKind(ctx, k, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, n := range []domain.NewConnection{
+		{Name: "wiki", Kind: "confluence", Fields: map[string]string{"site": "acme.atlassian.net", "email": "ada@example.com"},
+			Secrets: map[string]string{fieldToken: "confluence-token-for-tests"}},
+		{Name: "pair", Kind: "docs-pair", Secrets: map[string]string{"key_id": "pair-id-for-tests", "key_secret": "pair-secret-for-tests"}},
+	} {
+		if _, err := w.conns.Create(ctx, n, domain.LocalUser); err != nil {
+			t.Fatalf("connection %s: %v", n.Name, err)
+		}
+	}
+
+	for _, n := range []domain.NewKnowledgeSource{
+		{Name: "docs", Title: "Docs", Kind: domain.SourceSynced, Connection: connGitHub, Config: map[string]string{"repository": "https://github.com/acme/docs"}},
+		{Name: "wiki", Title: "Wiki", Kind: domain.SourceSynced, Connection: "wiki", Config: map[string]string{"spaces": "ENG"}},
+		{Name: "paired", Title: "Paired", Kind: domain.SourceSynced, Connection: "pair"},
+		{Name: "notes", Title: "Notes", Kind: domain.SourceUpload},
+	} {
+		if _, err := w.kb.CreateSource(ctx, n, person); err != nil {
+			t.Fatalf("source %s: %v", n.Name, err)
+		}
+	}
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[string]struct {
+		secret string
+		config map[string]string
+	}{
+		"docs":   {connGitHub, map[string]string{"repository": "https://github.com/acme/docs", domain.SourceReaderKey: "gitdocs", "code_host": "github"}},
+		"wiki":   {"wiki", map[string]string{"spaces": "ENG", domain.SourceReaderKey: "confluence", "site": "acme.atlassian.net", "email": "ada@example.com"}},
+		"paired": {"", nil},
+		"notes":  {"", map[string]string{}},
+	}
+
+	got := map[string]domain.KnowledgeSource{}
+
+	for name, wt := range want {
+		src, err := w.kb.Source(ctx, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		got[name] = src
+
+		if src.Secret != wt.secret || (wt.config != nil && !maps.Equal(src.Config, wt.config)) {
+			t.Errorf("source %s = secret %q, config %v; want %q, %v", name, src.Secret, src.Config, wt.secret, wt.config)
+		}
+	}
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, before := range got {
+		if after, err := w.kb.Source(ctx, name); err != nil || !after.UpdatedAt.Equal(before.UpdatedAt) {
+			t.Errorf("source %s changed on the second run: %v", name, err)
+		}
+	}
+
+	logs := w.logs.String()
+	if n := strings.Count(logs, `"msg":"knowledge source not moved over"`); n != 2 || !strings.Contains(logs, `"source":"paired"`) {
+		t.Errorf("logs hold %d lines for an unmapped source; want one a run, naming paired:\n%s", n, logs)
+	}
+
+	for _, v := range []string{githubValue, "confluence-token-for-tests", "pair-id-for-tests", "pair-secret-for-tests"} {
+		if strings.Contains(logs, v) {
+			t.Errorf("the logs hold a value")
+		}
+	}
+}

@@ -282,14 +282,15 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 }
 
 // moveOver moves every organization from connections and credentials to secrets and environment
-// files, once (ADR 0037 decision 19): run before the lines load, so they load the converted
+// files, once (ADR 0037 decision 19), and points synced knowledge sources at their connections'
+// secrets: run before the lines load, so they load the converted
 // versions. A failure is logged and goald starts, an unconverted factory running on the old path.
 func moveOver(ctx context.Context, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets,
 	definitions ports.DefinitionStore, authors *authoring.Service, clock ports.Clock, log *slog.Logger,
 ) {
 	err := moveover.New(moveover.Deps{
-		Orgs: store, Connections: connections, Secrets: secrets, Definitions: definitions, Publisher: authors,
-		Conversions: postgres.NewFactoryConversions(store), Clock: clock, Logger: log,
+		Orgs: store, Connections: connections, Secrets: secrets, Knowledge: postgres.NewKnowledge(store), Definitions: definitions,
+		Publisher: authors, Conversions: postgres.NewFactoryConversions(store), Clock: clock, Logger: log,
 	}).Run(ctx)
 	if err != nil {
 		log.ErrorContext(ctx, "move over failed", slog.Any("error", err))
