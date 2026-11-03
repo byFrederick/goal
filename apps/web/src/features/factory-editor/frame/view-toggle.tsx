@@ -8,6 +8,7 @@ import { placeAtLine } from '../../../shared/definition/place';
 import { useFactoryParams } from '../../../shared/factory';
 import { SegmentedControl } from '../../../ui/segmented-control';
 import { useDraft, useModel } from '../draft/use-draft';
+import { defaultEnvironment, envName, envPath } from '../environments/env-file';
 import { yamlView } from '../section-views';
 import type { EditorSection } from '../sections';
 import { validateDefinitionSearch } from '../sections';
@@ -24,17 +25,23 @@ export function ViewToggle({ section, yaml }: { section: EditorSection; yaml: bo
       ? placeAtLine(model, ranges, file ?? 'factory.yaml', line ?? 0)
       : undefined;
   const { section: formSection, ...formEntity } = here ?? { section, ...entity };
+  // The Environments page's tab is the YAML view's file, and back.
+  const fileEnvironment = file ? envName(file) : undefined;
   const toForm = () =>
     navigate({
       to: '/o/$org/f/$factory/definition/$section',
       params: { ...params, section: formSection },
-      search: (here ? formEntity : entity) as never,
+      search: (here ? formEntity : fileEnvironment ? { ...entity, environment: fileEnvironment } : entity) as never,
     });
   const toYaml = () =>
     navigate({
       to: '/o/$org/f/$factory/definition/$section',
       params: { ...params, section },
-      search: { ...entity, mode: 'yaml' } as never,
+      search: {
+        ...entity,
+        mode: 'yaml',
+        ...(section === 'environments' ? { file: envPath(entity.environment ?? defaultEnvironment) } : {}),
+      } as never,
     });
 
   return (

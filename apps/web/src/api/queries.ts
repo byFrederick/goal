@@ -64,6 +64,7 @@ import {
   listConnections,
 } from './connections';
 import {
+  getCatalog,
   getDraft,
   getDraftFile,
   getDraftModel,
@@ -988,4 +989,12 @@ export const eventsQuery = (client: QueryClient, org: string, item: string) =>
 
       return events;
     },
+  });
+
+/** The tool templates of Add a tool: the same for every organization, so kept for a while. */
+export const catalogQuery = () =>
+  queryOptions({
+    queryKey: ['catalog'] as const,
+    queryFn: ({ signal }) => getCatalog(signal),
+    staleTime: 5 * 60_000,
   });
