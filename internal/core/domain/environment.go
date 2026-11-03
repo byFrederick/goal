@@ -100,6 +100,16 @@ func (s MCPServer) SecretNames() []string {
 	return out
 }
 
+// ToolModes are the server's Tools, each mode as a ConnectionToolMode.
+func (s MCPServer) ToolModes() map[string]ConnectionToolMode {
+	out := make(map[string]ConnectionToolMode, len(s.Tools))
+	for p, m := range s.Tools {
+		out[p] = ConnectionToolMode(m)
+	}
+
+	return out
+}
+
 // Rendered is the server with each {{secret}} of its headers and env rendered as RenderSecrets
 // does.
 func (s MCPServer) Rendered() MCPServer {

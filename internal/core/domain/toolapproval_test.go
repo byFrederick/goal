@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"errors"
+	"path"
 	"reflect"
 	"testing"
 	"time"
@@ -15,6 +16,9 @@ const (
 	toolCloseIssue       = "close_issue"
 	toolEditIssue        = "edit_issue"
 	toolLabelIssue       = "label_issue"
+	toolDeleteRepo       = "delete_repo"
+	globCreate           = "create_*"
+	globDelete           = "delete_*"
 )
 
 // requested is a tool_approval_requested event as the engine writes it; input is its data as the
@@ -172,20 +176,20 @@ func TestEffectiveToolModes(t *testing.T) {
 	revokedAt, revoker := qt0, LocalUser
 	modes := map[string]ConnectionToolMode{
 		"read_issue": ToolModeAllow, toolCreateComment: ToolModeAsk, toolCloseIssue: ToolModeAsk,
-		"delete_repo": ToolModeOff, toolEditIssue: ToolModeAsk, toolLabelIssue: ToolModeAsk,
+		toolDeleteRepo: ToolModeOff, toolEditIssue: ToolModeAsk, toolLabelIssue: ToolModeAsk,
 	}
 	rules := []StandingRule{
 		{ConnectionID: conn, Tool: toolCreateComment, Agent: roleArchitect},                                          // active: allow
 		{ConnectionID: conn, Tool: toolCloseIssue, Agent: roleArchitect, RevokedAt: &revokedAt, RevokedBy: &revoker}, // revoked
 		{ConnectionID: conn, Tool: toolEditIssue, Agent: "reviewer"},                                                 // another role
 		{ConnectionID: other, Tool: toolLabelIssue, Agent: roleArchitect},                                            // another connection
-		{ConnectionID: conn, Tool: "delete_repo", Agent: roleArchitect},                                              // never lifts off
+		{ConnectionID: conn, Tool: toolDeleteRepo, Agent: roleArchitect},                                             // never lifts off
 	}
 
 	got := EffectiveToolModes(modes, rules, conn, roleArchitect)
 	want := RunToolModes{
 		Modes: map[string]ConnectionToolMode{
-			toolCloseIssue: ToolModeAsk, "delete_repo": ToolModeOff, toolEditIssue: ToolModeAsk, toolLabelIssue: ToolModeAsk,
+			toolCloseIssue: ToolModeAsk, toolDeleteRepo: ToolModeOff, toolEditIssue: ToolModeAsk, toolLabelIssue: ToolModeAsk,
 		},
 		AlwaysAllowOffered: []string{toolCloseIssue, toolEditIssue, toolLabelIssue},
 	}
@@ -204,56 +208,132 @@ func TestEffectiveToolModes(t *testing.T) {
 	}
 }
 
-func TestEffectiveServerToolModes(t *testing.T) {
+func TestServerToolModes(t *testing.T) {
 	t.Parallel()
 
 	const (
-		toolDeleteRepo, toolFork, toolMergePR, toolPush = "delete_repo", "fork", "merge_pr", "push"
-
 		factory, otherFactory FactoryID = "f-1", "f-2"
 		server                          = "acme-git"
 		env                             = DefaultEnvironment
 	)
 
 	revokedAt, revoker := qt0, LocalUser
-	modes := map[string]ConnectionToolMode{
-		"read_issue": ToolModeAllow, toolCreateComment: ToolModeAsk, toolCloseIssue: ToolModeAsk, toolDeleteRepo: ToolModeOff,
-		toolEditIssue: ToolModeAsk, toolLabelIssue: ToolModeAsk, toolMergePR: ToolModeAsk, toolPush: ToolModeAsk, toolFork: ToolModeAsk,
+	rule := func(tool string) StandingRule {
+		return StandingRule{Factory: factory, Environment: env, Server: server, Tool: tool, Agent: roleArchitect}
 	}
-	key := func(tool, agent string) StandingRule {
-		return StandingRule{Factory: factory, Environment: env, Server: server, Tool: tool, Agent: agent}
-	}
-	other := func(change func(*StandingRule)) StandingRule {
-		r := key(toolLabelIssue, roleArchitect)
+	other := func(tool string, change func(*StandingRule)) StandingRule {
+		r := rule(tool)
 		change(&r)
 
 		return r
 	}
-	rules := []StandingRule{
-		key(toolCreateComment, roleArchitect), // active: allow
-		{Factory: factory, Environment: env, Server: server, Tool: toolCloseIssue, Agent: roleArchitect, RevokedAt: &revokedAt, RevokedBy: &revoker},
-		key(toolEditIssue, "reviewer"),                                                     // another role
-		other(func(r *StandingRule) { r.Server = "acme-docs" }),                            // another server
-		key(toolDeleteRepo, roleArchitect),                                                 // never lifts off
-		{ConnectionID: "c-1", Connection: server, Tool: toolMergePR, Agent: roleArchitect}, // a connection's rule
-		other(func(r *StandingRule) { r.Tool, r.Environment = toolPush, testAgent }),       // another environment
-		other(func(r *StandingRule) { r.Tool, r.Factory = toolFork, otherFactory }),        // another factory
-	}
 
-	got := EffectiveServerToolModes(modes, rules, factory, env, server, roleArchitect)
-	want := RunToolModes{
-		Modes: map[string]ConnectionToolMode{
-			toolCloseIssue: ToolModeAsk, toolDeleteRepo: ToolModeOff, toolEditIssue: ToolModeAsk, toolFork: ToolModeAsk,
-			toolLabelIssue: ToolModeAsk, toolMergePR: ToolModeAsk, toolPush: ToolModeAsk,
+	tests := []struct {
+		name  string
+		file  map[string]ConnectionToolMode
+		cap   map[string]ConnectionToolMode
+		rules []StandingRule
+		// want is each tool's mode as the worker resolves it: the first entry it matches.
+		want map[string]ConnectionToolMode
+		// list, when set, is the whole ordered list.
+		list []ToolModeEntry
+	}{
+		{
+			name: "no modes allows every tool",
+			want: map[string]ConnectionToolMode{"anything": ToolModeAllow},
+			list: []ToolModeEntry{},
 		},
-		AlwaysAllowOffered: []string{toolCloseIssue, toolEditIssue, toolFork, toolLabelIssue, toolMergePR, toolPush},
+		{
+			name: "the most specific pattern comes first",
+			file: map[string]ConnectionToolMode{"*": ToolModeAsk, globDelete: ToolModeOff, "delete_branch": ToolModeAllow, "*_issue": ToolModeAllow, globCreate: ToolModeAsk},
+			want: map[string]ConnectionToolMode{
+				"delete_branch": ToolModeAllow, toolDeleteRepo: ToolModeOff, "read_issue": ToolModeAllow,
+				"create_issue": ToolModeAsk, "push": ToolModeAsk,
+			},
+			list: []ToolModeEntry{
+				{"delete_branch", ToolModeAllow},
+				{globCreate, ToolModeAsk},
+				{globDelete, ToolModeOff},
+				{"*_issue", ToolModeAllow},
+				{"*", ToolModeAsk},
+			},
+		},
+		{
+			name: "an active rule lifts an ask of its own factory, environment, server and role, never off",
+			file: map[string]ConnectionToolMode{toolCreateComment: ToolModeAsk, "close_*": ToolModeAsk, globDelete: ToolModeOff, toolEditIssue: ToolModeAsk, "label_*": ToolModeAsk},
+			rules: []StandingRule{
+				rule(toolCreateComment), // an exact ask
+				rule(toolCloseIssue),    // an ask from a glob
+				rule(toolDeleteRepo),    // off stays off
+				other(toolEditIssue, func(r *StandingRule) { r.RevokedAt, r.RevokedBy = &revokedAt, &revoker }),
+				other(toolEditIssue, func(r *StandingRule) { r.Agent = "reviewer" }),
+				other(toolEditIssue, func(r *StandingRule) { r.Server = "acme-docs" }),
+				other(toolEditIssue, func(r *StandingRule) { r.Environment = "staging" }),
+				other(toolEditIssue, func(r *StandingRule) { r.Factory = otherFactory }),
+				{ConnectionID: "c-1", Connection: server, Tool: toolLabelIssue, Agent: roleArchitect},
+			},
+			want: map[string]ConnectionToolMode{
+				toolCreateComment: ToolModeAllow, toolCloseIssue: ToolModeAllow, "close_pr": ToolModeAsk, toolDeleteRepo: ToolModeOff,
+				toolEditIssue: ToolModeAsk, toolLabelIssue: ToolModeAsk, "get_doc": ToolModeAllow,
+			},
+		},
+		{
+			name: "a cap makes a mode stricter, never looser",
+			file: map[string]ConnectionToolMode{globCreate: ToolModeAllow, globDelete: ToolModeOff, "get_doc": ToolModeAllow},
+			cap:  map[string]ConnectionToolMode{"*": ToolModeAsk, globDelete: ToolModeAllow},
+			want: map[string]ConnectionToolMode{
+				"create_issue": ToolModeAsk, toolDeleteRepo: ToolModeOff, "get_doc": ToolModeAsk, "push": ToolModeAsk,
+			},
+		},
+		{
+			name: "a cap glob that overlaps a file glob",
+			file: map[string]ConnectionToolMode{globCreate: ToolModeAllow, "*": ToolModeAllow},
+			cap:  map[string]ConnectionToolMode{"*_repo": ToolModeOff, "x*": ToolModeAsk},
+			want: map[string]ConnectionToolMode{"create_repo": ToolModeOff, "push_repo": ToolModeOff, "xray": ToolModeAsk, "push": ToolModeAllow},
+		},
+		{
+			name:  "a lifted ask under a cap of ask stays ask",
+			file:  map[string]ConnectionToolMode{toolCreateComment: ToolModeAsk, toolCloseIssue: ToolModeAsk},
+			cap:   map[string]ConnectionToolMode{toolCreateComment: ToolModeAsk},
+			rules: []StandingRule{rule(toolCreateComment), rule(toolCloseIssue)},
+			want:  map[string]ConnectionToolMode{toolCreateComment: ToolModeAsk, toolCloseIssue: ToolModeAllow},
+		},
 	}
 
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("EffectiveServerToolModes = %+v; want %+v", got, want)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := ServerToolModes(tt.file, tt.cap, tt.rules, factory, env, server, roleArchitect)
+
+			for tool, want := range tt.want {
+				if mode := firstMatch(t, got, tool); mode != want {
+					t.Errorf("%s resolves to %s in %+v; want %s", tool, mode, got, want)
+				}
+			}
+
+			if tt.list != nil && !reflect.DeepEqual(got, tt.list) {
+				t.Errorf("ServerToolModes = %+v; want %+v", got, tt.list)
+			}
+		})
+	}
+}
+
+// firstMatch is tool's mode as the worker resolves it from modes: the first entry whose pattern
+// matches it as path.Match does, and allow when none does.
+func firstMatch(t *testing.T, modes []ToolModeEntry, tool string) ConnectionToolMode {
+	t.Helper()
+
+	for _, m := range modes {
+		ok, err := path.Match(m.Tool, tool)
+		if err != nil {
+			t.Fatalf("pattern %q: %v", m.Tool, err)
+		}
+
+		if ok {
+			return m.Mode
+		}
 	}
 
-	if none := EffectiveServerToolModes(nil, nil, factory, env, server, roleArchitect); len(none.Modes) != 0 || len(none.AlwaysAllowOffered) != 0 {
-		t.Errorf("EffectiveServerToolModes without modes = %+v; want every tool allowed", none)
-	}
+	return ToolModeAllow
 }
