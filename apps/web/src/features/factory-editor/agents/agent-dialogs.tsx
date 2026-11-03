@@ -203,7 +203,7 @@ export function RenameAgentDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={`Rename ${agent.name}`}
-      description="Stations, lanes and connections that name it follow, and its prompt file moves."
+      description="Stations and lanes that name it follow, and its prompt file moves."
       submitLabel="Rename"
       initial={agent.name}
       taken={(model.agents.agents ?? []).map((a) => a.name)}
@@ -294,7 +294,7 @@ export function RemoveAgentDialog({
       }}
       tone="danger"
       title={`Remove ${agent.name}?`}
-      description="Its prompt file goes with it, and connections stop listing it. Undo puts it back."
+      description="Its prompt file goes with it. Undo puts it back."
       confirmLabel="Remove agent"
       pendingLabel="Removing…"
       pending={pending}
@@ -372,7 +372,7 @@ export function CopyAgentButton() {
       setOpen(false);
       reset();
       setSearch({ agent: name, add: undefined });
-      toast.success(`${name} copied. Connections aren’t copied. Set them in Connections.`);
+      toast.success(`${name} copied. Its environment isn’t copied. Pick one on its page.`);
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -397,7 +397,7 @@ export function CopyAgentButton() {
       >
         <DialogContent
           title="Copy an agent from another factory"
-          description="Its role, model, prompt and skills come along. Connections don’t."
+          description="Its role, model, prompt and skills come along. Its environment doesn’t."
           className="max-w-[560px]"
         >
           <div className="flex flex-col gap-4">
