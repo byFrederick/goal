@@ -3,7 +3,6 @@ package authoring_test
 import (
 	"encoding/json"
 	"errors"
-	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -116,8 +115,18 @@ func TestCreateFactory_BlankSkeletonNamesNoStationOrAgent(t *testing.T) {
 		t.Errorf("blank model = %+v", m.Model)
 	}
 
-	if m.Model.Basics["size"] != "medium" || m.Model.Basics["image"] != nil || m.Model.Basics["auth"] != nil {
-		t.Errorf("skeleton basics = %v, want size medium and none of the removed runtime keys", m.Model.Basics)
+	if m.Model.Basics["size"] != nil || m.Model.Basics["image"] != nil || m.Model.Basics["auth"] != nil {
+		t.Errorf("skeleton basics = %v, want no size, which moved to the environment, and none of the removed runtime keys", m.Model.Basics)
+	}
+
+	files, err := h.svc.DraftFiles(h.ctx, c.Factory.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantEnv := domain.HashBlob([]byte("apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n"))
+	if !slices.ContainsFunc(files, func(f authoring.FileInfo) bool { return f.Path == envFile && f.SHA256 == wantEnv }) {
+		t.Errorf("skeleton files = %+v, want %s with size medium", files, envFile)
 	}
 
 	if c.Draft.Source.Kind != domain.SourceBlank || c.Draft.Source.Template != "" {
@@ -125,10 +134,9 @@ func TestCreateFactory_BlankSkeletonNamesNoStationOrAgent(t *testing.T) {
 	}
 }
 
-// A blank start is publishable with what the wizard's Visual sections write (a line, an agent and
-// the model connection its runs get, which publish refuses without): nothing it needs is
-// YAML-only, so the skeleton's missing knowledge base is not an error.
-func TestCreateFactory_BlankSkeletonPublishesWithALineAnAgentAndAModel(t *testing.T) {
+// A blank start is publishable with what the wizard's Visual sections write (a line and an
+// agent): nothing it needs is YAML-only, and its default environment is there already.
+func TestCreateFactory_BlankSkeletonPublishesWithALineAndAnAgent(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
@@ -159,23 +167,6 @@ func TestCreateFactory_BlankSkeletonPublishesWithALineAnAgentAndAModel(t *testin
 			`{"id":"done","kind":"done"}`),
 	}); err != nil {
 		t.Fatalf("add the line: %v", err)
-	}
-
-	_, err = h.svc.Publish(h.ctx, f, h.publishRequest(t, f))
-	if invalid, ok := errors.AsType[*authoring.InvalidError](err); !ok || !slices.Contains(codes(invalid.Problems), authoring.CodeModelConnectionMissing) {
-		t.Fatalf("publish without a model connection = %v; want refused with %s", err, authoring.CodeModelConnectionMissing)
-	}
-
-	basics := maps.Clone(m.Model.Basics)
-	basics["model_connection"] = "claude"
-
-	value, err := json.Marshal(basics)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := h.svc.SaveSection(h.ctx, f, authoring.SectionSave{Section: authoring.Basics, IfMatch: m.ETags[authoring.Basics], Value: value}); err != nil {
-		t.Fatalf("name the model connection: %v", err)
 	}
 
 	v, err := h.svc.Publish(h.ctx, f, h.publishRequest(t, f))

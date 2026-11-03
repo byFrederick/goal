@@ -233,7 +233,7 @@ type Deps struct {
 	Loads Loads
 	// Templates is the bucket the template catalog (catalog/templates/) is read from.
 	Templates ports.ObjectStore
-	// Credentials is the connections check: ConnectionsCheck; nil skips it.
+	// Credentials is the secrets check: SecretsCheck; nil skips it.
 	// Nil leaves the credentials check out.
 	Credentials Credentials
 	// EvalGate, when set, gates every publish of a draft with eval cases on their run
