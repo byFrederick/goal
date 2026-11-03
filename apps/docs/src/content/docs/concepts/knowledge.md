@@ -96,6 +96,6 @@ A factory reads a source when its definition lists it under `spec.knowledge.sour
 - `goal knowledge add`, `check`, `sync`, `upload` and `rm` manage sources and their uploaded files.
 - `goal knowledge files` lists a source's files or finds one across sources, and `cat` prints one as runs read it.
 - `goal knowledge reads` shows the read counts.
-- `goal memory list`, `add` and `rm` edit the factory memory in a factory's draft; `add --publish` publishes the draft too.
+- `goal memory list` shows the factory memory of a factory's open draft, or of its current version when no draft is open, and opens no draft. `goal memory add` and `rm` edit it in the factory's draft, opening one when none is open; `add --publish` publishes the draft too.
 
 The flags are in the [CLI reference](../../reference/). The [glossary](../../reference/) defines the terms.

@@ -168,7 +168,9 @@ usage:
   goal knowledge reads [--source S] [--days N]    how often runs read each file and searched each folder
                                                   under /knowledge over the window (default 7 days, at
                                                   most 90), by factory, the most read first
-  goal memory list <factory>                      the factory memory in its draft (memory.yaml), numbered
+  goal memory list <factory>                      the factory memory (memory.yaml), numbered: the open
+                                                  draft's, or the current version's when no draft is
+                                                  open; it opens no draft
   goal memory add <factory> "<text>" [--from <factory>#<n>] [--publish]
                                                   add a fact to the draft's memory.yaml, dated today
                                                   (--from: the items it came from, comma-separated;
