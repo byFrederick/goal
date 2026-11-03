@@ -14,7 +14,7 @@ import (
 
 // The secret the Check tests read with, and its value, which no answer may hold.
 const (
-	checkToken = "docs-token"
+	checkToken = "check-token"
 	checkValue = "test-token"
 )
 

@@ -25,7 +25,11 @@ func TestDocumentType_ByExtensionElseByContent(t *testing.T) {
 		t.Errorf("DocumentType of HTML without an extension = %q, %v", got, err)
 	}
 
-	for name, body := range map[string]string{"report.pdf": "%PDF", "image": "\x89PNG\x00\x01", "sheet.xlsx": "PK"} {
+	if got, err := DocumentType("report.pdf", []byte("%PDF")); err != nil || got != MediaPDF {
+		t.Errorf("DocumentType of a PDF = %q, %v; want it for the conversion service", got, err)
+	}
+
+	for name, body := range map[string]string{"image": "\x89PNG\x00\x01", "slides.key": "PK", "archive.zip": "PK"} {
 		if _, err := DocumentType(name, []byte(body)); !errors.Is(err, ErrUnsupportedDocument) {
 			t.Errorf("DocumentType(%s) = %v, want it unsupported", name, err)
 		}

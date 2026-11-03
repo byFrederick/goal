@@ -310,7 +310,7 @@ func TestSnapshot_UploadsWriteTheirFiles(t *testing.T) {
 }
 
 // A Confluence source is read by its kind's reader with its secret opened at sync time, and
-// syncs into a snapshot only: it keeps no documents.
+// syncs into a snapshot.
 func TestSnapshot_AConfluenceSourceReadsWithItsSecret(t *testing.T) {
 	t.Parallel()
 
@@ -335,7 +335,7 @@ func TestSnapshot_AConfluenceSourceReadsWithItsSecret(t *testing.T) {
 	w.syncDue(w.ingestor(nil))
 
 	src := w.source("wiki")
-	w.want("the wiki", src, src.Status == domain.SyncIdle, src.Documents == 0, src.CurrentSnapshot != "", w.docs.secret == "test-token")
+	w.want("the wiki", src, src.Status == domain.SyncIdle, src.CurrentSnapshot != "", w.docs.secret == "test-token")
 
 	files := w.zipOf(w.snapshots("wiki")[0])
 	w.want("its files", files, len(files) == 1)
