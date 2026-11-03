@@ -96,6 +96,8 @@ const rows = {
   }),
 };
 
+const slackRow = row({ kind: 'slack', name: 'Slack notifications', secrets: ['slack-bot'], uses: [] });
+
 const reach = (): Access => ({
   by: 'reach',
   reached: 6,
@@ -247,6 +249,24 @@ describe('the Access page', () => {
     const table = await screen.findByRole('table');
     expect(within(table).getByText('Test failed: 401')).toBeTruthy();
     expect(within(table).getByText('Expires in 3 days')).toBeTruthy();
+  });
+
+  it('shows the Slack notifications row with its secret and no factory or environment cells', async () => {
+    const withSlack = reach();
+    withSlack.groups.push({ key: 'slack', title: 'Slack notifications', rows: [slackRow] });
+    renderAccess({ seeded: { reach: withSlack } });
+
+    const table = await screen.findByRole('table');
+    expect(within(table).getAllByText('Slack notifications')).toHaveLength(3);
+    const slack = within(table).getByRole('link', { name: 'slack-bot' }).closest('tr') as HTMLElement;
+    expect(within(slack).getByRole('link', { name: 'slack-bot' }).getAttribute('href')).toBe(
+      '/o/acme/secrets/slack-bot',
+    );
+    expect(within(slack).queryByText('–')).toBeNull();
+    expect(within(slack).getAllByRole('cell')).toHaveLength(4);
+    expect(within(slack).queryByRole('link', { name: /in software|software · / })).toBeNull();
+    const list = screen.getByRole('region', { name: 'Slack notifications' });
+    expect(within(list).getAllByRole('list')).toHaveLength(1);
   });
 
   it('lists the same rows with their environments as chips for a narrow screen', async () => {

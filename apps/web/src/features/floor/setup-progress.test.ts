@@ -28,6 +28,7 @@ const empty: SetupInput = {
   members: [member],
   invitations: [],
   connections: [],
+  slackSet: false,
   knowledge: [],
   model: { basics: {}, line: { stations: [] }, review: {} } as unknown as Model,
   triggers: [],
@@ -38,7 +39,8 @@ const empty: SetupInput = {
 const withAll: SetupInput = {
   members: [member, { member_id: 'm-2' } as Member],
   invitations: [],
-  connections: [connection('slack'), connection('github')],
+  connections: [connection('github')],
+  slackSet: true,
   knowledge: [source],
   model,
   triggers: [trigger(true), trigger(true), trigger(true)],
@@ -85,9 +87,11 @@ describe('setupRows', () => {
     ).toBe(true);
   });
 
-  it('marks Connect Slack done only for a slack connection, not a GitHub one', () => {
-    expect(row(setupRows({ ...empty, connections: [connection('github')] }), 'slack').done).toBe(false);
-    expect(row(setupRows({ ...empty, connections: [connection('slack')] }), 'slack').done).toBe(true);
+  it('marks Set up Slack notifications done only when the setting is set', () => {
+    expect(row(setupRows({ ...empty, connections: [connection('slack')] }), 'slack').done).toBe(false);
+    const set = row(setupRows({ ...empty, slackSet: true }), 'slack');
+    expect(set.done).toBe(true);
+    expect(set.text).toBe('Set up Slack notifications');
   });
 
   it('marks Add knowledge done when any knowledge source exists', () => {
