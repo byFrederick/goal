@@ -512,9 +512,11 @@ func (w *world) oneRun(t *testing.T, line domain.Line) map[string]string {
 		t.Fatal("the run did not finish")
 	}
 
+	// The first station's run comes first. When it finishes before the tick's claim loop reaches
+	// the next agent station, the same tick claims the item there too, so later runs may follow.
 	runs := worker.Runs()
-	if len(runs) != 1 {
-		t.Fatalf("%d agent runs; want 1:\n%s", len(runs), logs.String())
+	if len(runs) == 0 {
+		t.Fatalf("no agent run; want the first station's:\n%s", logs.String())
 	}
 
 	return runs[0].Env
