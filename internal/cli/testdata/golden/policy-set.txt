@@ -7,7 +7,7 @@ models (* the default):
 denied commands:
   Bash(git push --force:*)
   Bash(rm -rf /:*)
-tools: write outside the item's branch off, merge pull requests review_approval, read the web ask, use secrets environment
+tools: write outside the item's branch off, merge pull requests review_approval, read the web ask, use credentials environment
 box time limit: 90 minutes
 box sizes:
   small   1 vCPU, 2 GiB  not used yet

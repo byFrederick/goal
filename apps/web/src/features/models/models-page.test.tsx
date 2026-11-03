@@ -233,6 +233,23 @@ describe('Models and policies', () => {
     expect(body.allowed_models).not.toContain('claude-fable-5-1');
   });
 
+  it('shows Environment for Use secrets and saves environment', async () => {
+    api.putOrgPolicy.mockResolvedValue({ view: acme(), etag: '"4"' });
+    renderPage();
+    await screen.findByRole('heading', { name: 'Models agents may use' });
+
+    const select = screen.getByRole('combobox', { name: /Use secrets/ }) as HTMLSelectElement;
+    expect(select.value).toBe('environment');
+    expect(select.selectedOptions[0]?.textContent).toBe('Environment');
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Allow Claude Fable 5.1' }));
+    fireEvent.click(save());
+
+    await waitFor(() => expect(api.putOrgPolicy).toHaveBeenCalledTimes(1));
+    const [, body] = api.putOrgPolicy.mock.calls[0] as [string, { tools: { use_credentials: string } }];
+    expect(body.tools.use_credentials).toBe('environment');
+  });
+
   it('keeps the edits and asks for a save again when the policy changed while editing', async () => {
     api.putOrgPolicy.mockRejectedValue(
       new ApiError({ status: 409, title: 'Conflict', code: 'policy-conflict', detail: 'stale' }),

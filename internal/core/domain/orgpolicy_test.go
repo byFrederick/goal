@@ -31,8 +31,9 @@ func TestOrgPolicy_Validate(t *testing.T) {
 		{"an unknown write value", func(p *OrgPolicy) { p.WriteOutsideBranch = ToolReviewApproval }, false},
 		{"an unknown merge value", func(p *OrgPolicy) { p.MergePullRequest = ToolAllowed }, false},
 		{"an unknown web value", func(p *OrgPolicy) { p.ReadWeb = ToolEnvironment }, false},
+		{"secrets from the environment", func(p *OrgPolicy) { p.UseCredentials = ToolEnvironment }, true},
+		{"the deprecated attached_only alias", func(p *OrgPolicy) { p.UseCredentials = ToolAttachedOnly }, true},
 		{"an unknown credentials value", func(p *OrgPolicy) { p.UseCredentials = ToolAsk }, false},
-		{"the old use secrets value attached_only", func(p *OrgPolicy) { p.UseCredentials = "attached_only" }, false},
 		{"an empty tool value", func(p *OrgPolicy) { p.ReadWeb = "" }, false},
 		{"an empty denied command", func(p *OrgPolicy) { p.DeniedCommands = []string{""} }, false},
 		{"a blank denied command", func(p *OrgPolicy) { p.DeniedCommands = []string{"Bash(rm -rf:*)", "  "} }, false},
@@ -101,5 +102,19 @@ func TestDefaultOrgPolicy_OwnsItsModels(t *testing.T) {
 
 	if d := DefaultOrgPolicy(nil); d.DefaultModel != "" || len(d.AllowedModels) != 0 {
 		t.Errorf("DefaultOrgPolicy(nil) = %+v; want no models", d)
+	}
+}
+
+// Normalized saves the deprecated attached_only as environment and keeps every other value.
+func TestOrgPolicy_Normalized(t *testing.T) {
+	t.Parallel()
+
+	for in, want := range map[ToolSetting]ToolSetting{ToolAttachedOnly: ToolEnvironment, ToolEnvironment: ToolEnvironment, ToolOff: ToolOff} {
+		p := DefaultOrgPolicy(testPolicyModels)
+		p.UseCredentials = in
+
+		if got := p.Normalized().UseCredentials; got != want {
+			t.Errorf("Normalized() of %q = %q; want %q", in, got, want)
+		}
 	}
 }

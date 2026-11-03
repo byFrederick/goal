@@ -5887,8 +5887,11 @@ components:
           description: Search, fetch and documentation tools
         use_credentials:
           type: string
-          enum: ["off", environment]
-          description: Use secrets. environment gives an agent what its environment names; off gives it no env, files or MCP servers from its environment
+          enum: ["off", environment, attached_only]
+          description: >-
+            Use secrets: environment gives an agent what its environment names; off gives it no
+            env, files or MCP servers. attached_only is a deprecated alias for environment: a save
+            stores it as environment, and every read returns environment.
     OrgPolicyView:
       type: object
       required: [policy, revision, models, box_sizes, egress_addresses]

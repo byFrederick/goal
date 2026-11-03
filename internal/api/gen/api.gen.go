@@ -1913,13 +1913,16 @@ func (e ToolPolicyReadWeb) Valid() bool {
 
 // Defines values for ToolPolicyUseCredentials.
 const (
-	ToolPolicyUseCredentialsEnvironment ToolPolicyUseCredentials = "environment"
-	ToolPolicyUseCredentialsOff         ToolPolicyUseCredentials = "off"
+	ToolPolicyUseCredentialsAttachedOnly ToolPolicyUseCredentials = "attached_only"
+	ToolPolicyUseCredentialsEnvironment  ToolPolicyUseCredentials = "environment"
+	ToolPolicyUseCredentialsOff          ToolPolicyUseCredentials = "off"
 )
 
 // Valid indicates whether the value is a known member of the ToolPolicyUseCredentials enum.
 func (e ToolPolicyUseCredentials) Valid() bool {
 	switch e {
+	case ToolPolicyUseCredentialsAttachedOnly:
+		return true
 	case ToolPolicyUseCredentialsEnvironment:
 		return true
 	case ToolPolicyUseCredentialsOff:
@@ -7243,7 +7246,7 @@ type ToolPolicy struct {
 	// ReadWeb Search, fetch and documentation tools
 	ReadWeb ToolPolicyReadWeb `json:"read_web"`
 
-	// UseCredentials Use secrets. environment gives an agent what its environment names; off gives it no env, files or MCP servers from its environment
+	// UseCredentials Use secrets: environment gives an agent what its environment names; off gives it no env, files or MCP servers. attached_only is a deprecated alias for environment: a save stores it as environment, and every read returns environment.
 	UseCredentials ToolPolicyUseCredentials `json:"use_credentials"`
 
 	// WriteOutsideBranch Comments, issues, tickets and messages outside the item's branch
@@ -7256,7 +7259,7 @@ type ToolPolicyMergePullRequest string
 // ToolPolicyReadWeb Search, fetch and documentation tools
 type ToolPolicyReadWeb string
 
-// ToolPolicyUseCredentials Use secrets. environment gives an agent what its environment names; off gives it no env, files or MCP servers from its environment
+// ToolPolicyUseCredentials Use secrets: environment gives an agent what its environment names; off gives it no env, files or MCP servers. attached_only is a deprecated alias for environment: a save stores it as environment, and every read returns environment.
 type ToolPolicyUseCredentials string
 
 // ToolPolicyWriteOutsideBranch Comments, issues, tickets and messages outside the item's branch

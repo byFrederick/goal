@@ -136,6 +136,25 @@ func TestPutOrgPolicy_SavesAtTheNextRevision(t *testing.T) {
 	}
 }
 
+// A save with the deprecated use_credentials attached_only, as an older client sends it, is saved
+// as environment: the save answers environment and so does every read after it.
+func TestPutOrgPolicy_AttachedOnlyReadsBackEnvironment(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	body := strings.Replace(policyBody, `"use_credentials":"environment"`, `"use_credentials":"attached_only"`, 1)
+	saved := decode[gen.OrgPolicyView](t, h.request(t, http.MethodPut, policyPath, body, quoted("0")), http.StatusOK)
+
+	if saved.Policy.Tools.UseCredentials != gen.ToolPolicyUseCredentialsEnvironment {
+		t.Errorf("save answered use_credentials %q; want environment", saved.Policy.Tools.UseCredentials)
+	}
+
+	read := decode[gen.OrgPolicyView](t, h.request(t, http.MethodGet, policyPath, "", nil), http.StatusOK)
+	if read.Policy.Tools.UseCredentials != gen.ToolPolicyUseCredentialsEnvironment {
+		t.Errorf("read use_credentials %q; want environment", read.Policy.Tools.UseCredentials)
+	}
+}
+
 // A save without If-Match is 428: without it, it could overwrite a change it never saw.
 func TestPutOrgPolicy_WithoutIfMatchIsPreconditionRequired(t *testing.T) {
 	t.Parallel()
@@ -173,23 +192,6 @@ func TestPutOrgPolicy_ModelNotInstalledIsInvalid(t *testing.T) {
 	p := refused(t, "a model not installed", h.request(t, http.MethodPut, policyPath, body, quoted("0")), http.StatusUnprocessableEntity, codePolicyInvalid)
 	if p.Detail == nil || !strings.Contains(*p.Detail, "claude-fable-5-1") {
 		t.Errorf("detail %v; want it to name the model", p.Detail)
-	}
-
-	unchanged(t, h)
-}
-
-// Use secrets' old value attached_only (ADR 0037 decision 12 renamed it environment) is 422, and
-// the problem names the values it takes.
-func TestPutOrgPolicy_OldUseCredentialsValueIsInvalid(t *testing.T) {
-	t.Parallel()
-
-	h := newHarness(t)
-	body := `{"allowed_models":["claude-opus-5-5"],"default_model":"claude-opus-5-5","denied_commands":[],
-"tools":{"write_outside_branch":"ask","merge_pull_request":"off","read_web":"off","use_credentials":"attached_only"},"box_time_limit_minutes":10}`
-
-	p := refused(t, "use_credentials attached_only", h.request(t, http.MethodPut, policyPath, body, quoted("0")), http.StatusUnprocessableEntity, codePolicyInvalid)
-	if d := valueOf(p.Detail); !strings.Contains(d, "use secrets") || !strings.Contains(d, "[off environment]") {
-		t.Errorf("detail %q; want it to name use secrets and its values off and environment", d)
 	}
 
 	unchanged(t, h)

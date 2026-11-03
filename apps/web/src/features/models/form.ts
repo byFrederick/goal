@@ -73,7 +73,7 @@ export const toolOptions: { [K in keyof ToolPolicy]: readonly { value: ToolPolic
     { value: 'allowed', label: 'Allowed' },
   ],
   use_credentials: [
-    { value: 'environment', label: 'Environment' },
     { value: 'off', label: 'Off' },
+    { value: 'environment', label: 'Environment' },
   ],
 };

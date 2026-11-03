@@ -4667,10 +4667,10 @@ export interface components {
              */
             read_web: "off" | "ask" | "allowed";
             /**
-             * @description Use secrets. environment gives an agent what its environment names; off gives it no env, files or MCP servers from its environment
+             * @description Use secrets: environment gives an agent what its environment names; off gives it no env, files or MCP servers. attached_only is a deprecated alias for environment: a save stores it as environment, and every read returns environment.
              * @enum {string}
              */
-            use_credentials: "off" | "environment";
+            use_credentials: "off" | "environment" | "attached_only";
         };
         OrgPolicyView: {
             policy: components["schemas"]["OrgPolicyInput"];

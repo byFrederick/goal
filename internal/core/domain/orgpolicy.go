@@ -18,15 +18,19 @@ const (
 	ToolAsk            ToolSetting = "ask"
 	ToolAllowed        ToolSetting = "allowed"
 	ToolReviewApproval ToolSetting = "review_approval" // only a review station with merge on approval merges
-	ToolEnvironment    ToolSetting = "environment"     // an agent gets what its environment names (Use secrets)
+	ToolEnvironment    ToolSetting = "environment"     // Use secrets: an agent gets what its environment names (ADR 0037 decision 12)
+	// ToolAttachedOnly is the deprecated alias of ToolEnvironment, the Use credentials value
+	// before ADR 0037. Validate accepts it and Normalized saves it as ToolEnvironment.
+	ToolAttachedOnly ToolSetting = "attached_only"
 )
 
-// The values each tool default takes, as 00069's CHECK constraints list them (00092 for Use secrets).
+// The values each tool default takes, as 00069's CHECK constraints list them (use_credentials as
+// 00092 widens it).
 var (
 	WriteOutsideBranchSettings = []ToolSetting{ToolOff, ToolAsk, ToolAllowed}
 	MergePullRequestSettings   = []ToolSetting{ToolOff, ToolReviewApproval}
 	ReadWebSettings            = []ToolSetting{ToolOff, ToolAsk, ToolAllowed}
-	UseCredentialsSettings     = []ToolSetting{ToolOff, ToolEnvironment}
+	UseCredentialsSettings     = []ToolSetting{ToolOff, ToolEnvironment, ToolAttachedOnly}
 )
 
 // DefaultBoxTimeLimitMinutes is the default policy's box time limit: 3 hours.
@@ -46,7 +50,7 @@ type OrgPolicy struct {
 	WriteOutsideBranch ToolSetting // comments, issues, tickets and messages
 	MergePullRequest   ToolSetting
 	ReadWeb            ToolSetting // search, fetch and documentation tools
-	UseCredentials     ToolSetting
+	UseCredentials     ToolSetting // Use secrets (ADR 0037 decision 12): environment or off
 	// BoxTimeLimitMinutes is how long a box may run before the engine stops it.
 	BoxTimeLimitMinutes int
 	// Revision counts the saves: 0 for the default policy, then one more for each Put. A Put
@@ -76,6 +80,17 @@ func DefaultOrgPolicy(models []string) OrgPolicy {
 
 	if len(models) > 0 {
 		p.DefaultModel = models[0]
+	}
+
+	return p
+}
+
+// Normalized is p with each deprecated value replaced by the one it stands for: Use secrets
+// attached_only becomes environment, so a save from an older client is stored and read back as
+// environment.
+func (p OrgPolicy) Normalized() OrgPolicy {
+	if p.UseCredentials == ToolAttachedOnly {
+		p.UseCredentials = ToolEnvironment
 	}
 
 	return p
