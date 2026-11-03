@@ -79,7 +79,7 @@ How to use them:
 
 ## Jonah (`jonah/`)
 
-Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jonah-evals.md)): `jonah` (overview), `proposal`, `proposal-memory` (a factory memory proposal: the `memory.yaml` diff, each fact's evidence, the eval gate skipped; [ADR 0038](../../adr/0038-knowledge-is-files.md) decision 11), `judges`, `judge`, `evals`, `bake-off`, under `…/jonah/…`.
+Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jonah-evals.md)): `jonah` (overview), `proposal`, `judges`, `judge`, `evals`, `bake-off`, under `…/jonah/…`.
 
 ## Access, secrets and knowledge (`connections/`)
 

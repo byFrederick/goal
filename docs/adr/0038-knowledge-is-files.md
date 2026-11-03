@@ -7,14 +7,14 @@ Status: proposed · 2026-11-03
   - [ADR 0027](0027-knowledge-use-and-verdicts.md), knowledge uses and verdicts. Uses become reads (decision 10), and verdicts go.
   - The built-in Learned source of [spec 5](../history/specs/5-continuous-learning.md). Factory memory (decision 6) takes its place.
 - **Amends:**
-  - [ADR 0034](0034-jonah-proposals.md): Jonah's inputs, its allowlist, and the eval gate for memory (decision 11).
+  - [ADR 0025](0025-judges-and-evals-as-the-screens-show-them.md), decision 4: a version whose only change is `memory.yaml` publishes without the eval gate (decision 6).
   - [ADR 0014](0014-factory-rules.md): factory memory joins the kinds of guidance.
   - The tool list in ADR 0008's phase 6 amendment: the gateway's knowledge tools go.
 - **Builds on:**
   - [ADR 0037](0037-secrets-and-environment-files.md): secrets, and MCP servers in environment files.
   - [ADR 0005](0005-factory-definitions-in-object-storage.md): definitions are versioned files.
   - [ADR 0019](0019-item-watch-live-trace-teardown.md): the trace of tool calls.
-- **Screens:** the canvas pages "Access, secrets and knowledge", "Build a factory", "Jonah" and "Mobile", exported to [docs/design/screens/](../design/screens/README.md). They are binding ([ADR 0016](0016-ui-revamp.md), [ADR 0036](0036-design-system-v3-plain-and-motion-binding.md)).
+- **Screens:** the canvas pages "Access, secrets and knowledge", "Build a factory", "Daily work", "Get started" and "Mobile", exported to [docs/design/screens/](../design/screens/README.md). They are binding ([ADR 0016](0016-ui-revamp.md), [ADR 0036](0036-design-system-v3-plain-and-motion-binding.md)).
 
 ## Context
 
@@ -138,8 +138,9 @@ An independent review of the first draft against the code changed nine things, a
    - **Who writes it:**
      - people, in the Form view, the YAML view, or with `goal memory add`;
      - a definition folder pushed with `goal factory push` (a local agent that sets a factory up adds facts this way, as the person it acts for);
-     - Jonah's proposals (decision 11).
-   - **Why one file:** add, merge and remove are edits to one file, which is what proposals can express. A `ProposalFile` writes whole files and never deletes one.
+     - Jonah, once its redesign decides how (decision 11).
+   - **Why one file:** add, merge and remove are edits to one file, easy to review as a diff. It is also what today's proposals can express: a `ProposalFile` writes whole files and never deletes one.
+   - **Publishing:** a version whose only change is `memory.yaml` publishes without the eval gate (ADR 0025, decision 4). A fact is reviewed as text, and eval runs pick it up with the next change that runs the gate.
    - **Facts for the whole organization** belong in a source that every factory lists, not in memory.
    - **The name:** the UI calls it "factory memory" wherever "memory" alone could mean a box's memory or Claude Code's.
 
@@ -175,18 +176,18 @@ An independent review of the first draft against the code changed nine things, a
     - **The worker** puts a structured `path` field in each `tool_use` event for Read, Grep and Glob. Today's tool input is JSON clipped at 500 characters, which often doesn't parse.
     - **goald** counts a Read under `/knowledge/<source>/` as a read of that file, and a Grep or Glob there as a search of the source. It keeps them in a daily rollup by source, path, factory and day. Per-item views come from the events.
     - **Best effort:** a failure is logged and never touches the run.
-    - **Where reads show:** Most read on the Knowledge page, Read by on the source page, the trace, and Jonah's reviews.
+    - **Where reads show:** Most read on the Knowledge page, Read by on the source page, and the trace.
 
 ### Learning
 
-11. **Jonah turns what people told the factory into memory.** ADR 0034's review changes in five ways:
-    - **Inputs:** it also reads each item's answered questions ([ADR 0018](0018-agents-ask-questions.md)), its notes (`goal note`), and the knowledge files that sent-back runs read.
-    - **Allowlist:** it gains `memory.yaml`.
-    - **Memory proposals:** a review proposes at most one memory change, which may add, merge, reword and remove entries together. One person's answer, note or send-back reason is enough evidence for a fact, with no threshold. Behaviour changes keep `proposeAfter`.
-    - **The eval gate:** a version whose only change is `memory.yaml` publishes without the eval gate, and eval runs pick it up with the next change that runs the gate. Approve publishes it and Restore undoes it, as it does a person's edit in the Form view.
-    - **Observations** may name a knowledge file that the sent-back runs read, with their items. The document is fixed where it lives: an item for the factory that owns it, or a new upload.
+11. **How Jonah fills factory memory is left to the Jonah redesign.** This ADR builds no Jonah change: `internal/jonah/`, `features/jonah` and Jonah's tables stay as they are. Until that redesign lands, people and local agents write `memory.yaml` (decision 6).
 
-    Later, agents may suggest facts themselves through a gateway tool. Each suggested fact would need two items, so that one prompt-injected run can't write into every later prompt.
+    This design leaves three directions for it:
+    - One person's answer, note or send-back reason is enough evidence for a fact.
+    - A memory change is one proposal of `memory.yaml`, with each fact's items in `from`.
+    - Agents suggest facts only with evidence from two items, so one prompt-injected run can't write into every later prompt.
+
+    The canvas's Jonah page holds a draft of such a proposal as input. It is not part of this build.
 
 ### Where it shows
 
@@ -215,7 +216,6 @@ An independent review of the first draft against the code changed nine things, a
       - **What agents see:** the prompt section as one agent gets it.
 
       The YAML view shows `knowledge:` and `memory.yaml`.
-    - **A memory proposal** (page "Jonah"): the `memory.yaml` diff with each entry's evidence (the answer, note or send-back reason, with its item), and the eval gate marked as skipped.
     - **The trace:** reads and searches under `/knowledge`, with a knowledge tag.
     - **Needs you:** a source that keeps failing, shown under each factory that reads it.
     - **Every screen works at 1440, 1280, 1024, 768 and 390 pixels.** The tablet and phone versions are on the canvas.
@@ -287,22 +287,23 @@ An independent review of the first draft against the code changed nine things, a
 
 ## Consequences
 
-- **Agents read knowledge the way they read code,** led by an index that is always in the prompt. What they read shows in the trace, and what people tell the factory comes back as reviewed memory.
+- **Agents read knowledge the way they read code,** led by an index that is always in the prompt. What they read shows in the trace, and what people add to factory memory reaches every run.
 - **One model for every factory.** A Software, SRE or Support factory, or one shaped like none of them, gets the same `/knowledge` layout and the same prompt section, whether or not it checks out a repository. `appliesTo` and `readWhen` fit the sources to how that factory works.
-- **In the definition, like everything else.** A factory's sources, their scope and wording, and its memory are versioned, reviewed, published and restored, and Jonah can propose changes to them.
+- **In the definition, like everything else.** A factory's sources, their scope and wording, and its memory are versioned, reviewed, published and restored.
 - **Much less to run.**
   - **Removed:** the embedder, vectors, chunks, rank fusion, three tools and verdicts, with the `vector` extension and the embedding use of the Workers AI token.
   - **Added:** snapshots, the object store's ranged and streamed calls, a converter port, the Check, the daily reads rollup and the prompt section.
 - **A box downloads its sources once per claim, straight from the bucket.** Typical sources are a few MB, and the limits cap the worst case at 500 MB.
 - **Other ADRs:**
   - ADR 0014 gains factory memory as a kind of guidance.
-  - ADR 0034's allowlist gains `memory.yaml`, and memory-only versions skip the eval gate.
+  - ADR 0025's eval gate lets memory-only versions through.
   - ADR 0008's tool list and the docs site's Knowledge page are rewritten.
+  - ADR 0034 is unchanged: the Jonah redesign decides how Jonah writes memory.
 - **Accepted risk:** source files are reference text, and a prompt injection could hide in them. Boxes have open internet and hold their environment's secrets (ADR 0009).
   - The prompt says source files are reference, not instructions.
   - Folder names are slugs.
   - Only owners and admins add sources.
-  - Nothing an agent writes reaches memory without a person's approval.
+  - Agents can't write factory memory at all; people do.
 
 ## The build plan
 
@@ -316,16 +317,15 @@ An independent review of the first draft against the code changed nine things, a
 
 | # | Pull request | Lane | What it changes | Merges after |
 |---|---|---|---|---|
-| 1 | **Design docs.** Merge `design/knowledge`. | docs | This ADR, the ADR index, the status lines of ADRs 0027, 0008, 0014 and 0034, and `docs/design/screens/**` with its README | — |
+| 1 | **Design docs.** Merge `design/knowledge`. | docs | This ADR, the ADR index, the status lines of ADRs 0027, 0008, 0014 and 0025, and `docs/design/screens/**` with its README | — |
 | 2 | **Store, additive.** Decisions 1, 3 and 15. | backend | A migration that adds the new columns and the `knowledge_snapshots`, `knowledge_files` and `knowledge_reads` tables with row-level security, beside today's tables. The domain types, the reshaped `ports.Knowledge`, `ports.Converter`, the object store's ranged read and streamed write with their adapters, and conformance tests. | 1 |
 | 3 | **Sync.** Decisions 2–4. | backend | The loop writes zip snapshots on local disk and copies unchanged entries. Per-file failures, the key scan, retention by open claims, and a Needs you entry per listing factory. Readers: Upload; Repository (generalized from `gitdocs`, with the archive path for big changes); Confluence by page tree. The HTML converter and the Workers AI `toMarkdown` adapter. The Workers AI token's rename from the embedder's is in this row's Terraform, applied through the coordinator with the owner's authorization. | 2 |
-| 4 | **Definition.** Decisions 5 and 6. | backend | Entry objects in `knowledge.sources` (`appliesTo`, `readWhen`) and `memory.yaml` in `contracts/definitions/`. Config and factorymodel. The checks `knowledge-too-many`, `knowledge-secret-not-in-scope`, `knowledge-copies-checkout`, `memory-too-long` and `memory-too-big`. | 2 |
+| 4 | **Definition.** Decisions 5 and 6. | backend | Entry objects in `knowledge.sources` (`appliesTo`, `readWhen`) and `memory.yaml` in `contracts/definitions/`. Config and factorymodel. The checks `knowledge-too-many`, `knowledge-secret-not-in-scope`, `knowledge-copies-checkout`, `memory-too-long` and `memory-too-big`. A version whose only change is `memory.yaml` passes the eval gate (`internal/authoring/evalgate.go`). | 2 |
 | 5 | **Run start.** Decisions 7–9. | backend | Pins on the claim, in the task token and the `knowledge_pinned` event. The bundle's snapshot URLs, and the gateway's `GET /run/knowledge/<source>` for local runs. The prompt section, built per run from `appliesTo`. The three knowledge tools are removed. In `apps/worker`: `prepare` downloads in parallel with the clone, `/knowledge` goes into the image and the sandbox contract, and `agent` adds `additionalDirectories` and the section. | 3, 4 |
 | 6 | **Reads.** Decision 10. | backend | The worker's structured `path` for Read, Grep and Glob. goald counts reads and searches into the daily rollup. | 5 |
 | 7 | **API and CLI.** Decisions 13 and 14. | backend | The endpoints and permissions in `contracts/api/`, the handlers, `goal knowledge` and `goal memory`. | 3, 6 |
-| 8 | **Jonah.** Decision 11. | backend | The new inputs, `memory.yaml` in the allowlist (`proposalPathPattern` and its SQL check), one memory proposal per review, memory-only versions past the eval gate, and observations that name knowledge files. | 4 |
-| 9 | **Moving over.** Decision 16. | backend | The conversion of sources. Then a migration that drops the old tables and the `vector` extension, and the removal of `ports.Embedder`, the OpenAI embedder adapter and `GOAL_EMBED_*`. | 5, 7 |
-| 10 | **Knowledge pages.** | frontend | `features/knowledge`: the list with Find a file and Most read; Add a source with its kinds, the Check panel and the factory checkboxes; and the source page. | 7 |
-| 11 | **Knowledge in the definition editor, and memory proposals.** | frontend | `features/factory-editor`: the Form view's Knowledge section (sources with `appliesTo` and `readWhen`, factory memory, the prompt preview) and `memory.yaml` in the YAML view. `features/jonah`: the memory proposal view. | 7, 8 |
-| 12 | **Everything else that showed knowledge.** | frontend | As the exported screens show them: the trace's knowledge reads, Needs you's failing source per factory, the secret page's uses, onboarding's Add knowledge card, and the phone screens. | 10, 11 |
-| 13 | **Docs.** | docs | Rewrite `apps/docs/src/content/docs/concepts/knowledge.md`. Add Knowledge and factory memory sections to `docs/engineering/factory-definition.md`. Update the glossary, the CLI reference, and the change-map entries for sources, snapshots, reads and memory. | 12 |
+| 8 | **Moving over.** Decision 16. | backend | The conversion of sources. Then a migration that drops the old tables and the `vector` extension, and the removal of `ports.Embedder`, the OpenAI embedder adapter and `GOAL_EMBED_*`. | 5, 7 |
+| 9 | **Knowledge pages.** | frontend | `features/knowledge`: the list with Find a file and Most read; Add a source with its kinds, the Check panel and the factory checkboxes; and the source page. | 7 |
+| 10 | **Knowledge in the definition editor.** | frontend | `features/factory-editor`: the Form view's Knowledge section (sources with `appliesTo` and `readWhen`, factory memory, the prompt preview) and `memory.yaml` in the YAML view. | 4, 7 |
+| 11 | **Everything else that showed knowledge.** | frontend | As the exported screens show them: the trace's knowledge reads, Needs you's failing source per factory, the secret page's uses, onboarding's Add knowledge card, and the phone screens. | 9, 10 |
+| 12 | **Docs.** | docs | Rewrite `apps/docs/src/content/docs/concepts/knowledge.md`. Add Knowledge and factory memory sections to `docs/engineering/factory-definition.md`. Update the glossary, the CLI reference, and the change-map entries for sources, snapshots, reads and memory. | 11 |
