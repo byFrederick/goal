@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Software intake on a phone</title>
+
 </head>
 <body>
 <x-dc>
@@ -158,7 +159,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 
 </style>
 </helmet>
-<div class="g ph {{theme}}" style="height: 1450px">
+<div class="g ph " style="height: 1450px">
   <header class="tb">
     <a class="hb" href="V2-M-Drawer.dc.html" aria-label="Open menu"><span class="omk" aria-hidden="true"><svg width="19" height="19" viewBox="0 0 24 24"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#EAB308"></circle></svg></span></a>
     <h1 class="ttl"><span class="fb" style="background: #2B5BD7" aria-hidden="true">S</span> Intake</h1>
@@ -178,7 +179,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
     <article class="trg"><span class="srci" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5.5h12M2 10.5h12M6 2 5 14M11 2l-1 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></span><div style="min-width: 0"><a class="n" href="#">Requests in #goal-dev</a><span class="w">Someone mentions @software in Slack #goal-dev</span><span class="f">Type set by the architect, at Spec<span style="margin-left: auto; font-weight: 500; color: var(--ink); white-space: nowrap">6 this week</span></span></div><button class="sw" type="button" role="switch" aria-checked="true" aria-label="Requests in #goal-dev on" style="margin-top: 4px"><span></span></button></article>
     <article class="trg"><span class="srci" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></span><div style="min-width: 0"><a class="n" href="#">Architecture check</a><span class="w">Every Friday at 16:00</span><span class="f"><span class="chip">refactor</span> at Spec<span style="margin-left: auto; font-weight: 500; color: var(--ink); white-space: nowrap">1 this week</span></span></div><button class="sw" type="button" role="switch" aria-checked="true" aria-label="Architecture check on" style="margin-top: 4px"><span></span></button></article>
     <article class="trg"><span class="srci" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5a2.5 2.5 0 1 1 3.5 2.3L8 9M4 12.5a2.5 2.5 0 1 1 1.5-4.6l2.5 0M12 12.5a2.5 2.5 0 1 1-1-4.8L9.5 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></span><div style="min-width: 0"><a class="n" href="#">Deploy failed</a><span class="xs" style="display: block; color: var(--red-ink); font-weight: 500">2 events refused, bad signature</span><span class="w">Cloudflare posts deploy.failed to its webhook</span><span class="f"><span class="chip">fix</span> at Spec <span class="chip yel"><span class="dot"></span>expedite</span><span style="margin-left: auto; font-weight: 500; color: var(--ink); white-space: nowrap">0</span></span></div><button class="sw" type="button" role="switch" aria-checked="true" aria-label="Deploy failed on" style="margin-top: 4px"><span></span></button></article>
-    <article class="trg"><span class="srci" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 1.5 13.5h4M8 2l6.5 11.5h-4M8 2 5.2 7a6 6 0 0 1 3.3 6.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg></span><div style="min-width: 0"><a class="n" href="#">Errors in production</a><span class="xs m3" style="display: block">Needs the Sentry connection. <a href="#" style="text-decoration: none; font-weight: 500">Connect</a></span><span class="w">A new Sentry issue passes 50 events</span><span class="f"><span class="chip">fix</span> at Spec<span style="margin-left: auto; font-weight: 500; color: var(--ink); white-space: nowrap">Off</span></span></div><button class="sw" type="button" role="switch" aria-checked="false" aria-label="Errors in production off" style="margin-top: 4px"><span></span></button></article>
+    <article class="trg"><span class="srci" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 1.5 13.5h4M8 2l6.5 11.5h-4M8 2 5.2 7a6 6 0 0 1 3.3 6.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg></span><div style="min-width: 0"><a class="n" href="#">Errors in production</a><span class="xs m3" style="display: block">Needs a Sentry webhook. <a href="#" style="text-decoration: none; font-weight: 500">Set up</a></span><span class="w">A new Sentry issue passes 50 events</span><span class="f"><span class="chip">fix</span> at Spec<span style="margin-left: auto; font-weight: 500; color: var(--ink); white-space: nowrap">Off</span></span></div><button class="sw" type="button" role="switch" aria-checked="false" aria-label="Errors in production off" style="margin-top: 4px"><span></span></button></article>
     <p class="sm m3">New item, the goal CLI and the API are always on.</p>
   </main>
   <nav class="tabs" aria-label="Main">
@@ -190,12 +191,6 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
   </nav>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":390,"height":1450}}'>
-class Component extends DCLogic {
-  renderVals() {
-    return { theme: this.props.dark ? 'dark' : '' };
-  }
-}
-</script>
+
 </body>
 </html>

@@ -1,6 +1,6 @@
 # ADR 0014 — Factory rules: always-on guidance for a factory's agents
 
-Status: accepted · 2026-10-26 · Builds on [ADR 0005](0005-factory-definitions-in-object-storage.md) (definitions as content-addressed blobs, versions that runs pin) and [ADR 0012](0012-assemblies-and-parts.md) (the assembly that carries this out)
+Status: accepted · 2026-10-26 · Amended by [ADR 0038](0038-knowledge-is-files.md) (factory memory, `memory.yaml`, joins the kinds of guidance) · Builds on [ADR 0005](0005-factory-definitions-in-object-storage.md) (definitions as content-addressed blobs, versions that runs pin) and [ADR 0012](0012-assemblies-and-parts.md) (the assembly that carries this out)
 
 ## Context
 
