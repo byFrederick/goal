@@ -21,8 +21,8 @@ export type OrgPermission =
   | 'personal_token:manage'
   | 'connection:read'
   | 'connection:manage'
-  | 'credential:read'
-  | 'credential:manage'
+  | 'secret:read'
+  | 'secret:manage'
   | 'knowledge:read'
   | 'knowledge:manage'
   | 'audit:read';

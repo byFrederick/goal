@@ -3414,12 +3414,14 @@ export interface paths {
         };
         /**
          * The organization's credentials
+         * @deprecated
          * @description By name, each with its type, description, factory scope, agents per factory, expiry, rotation reminder, last use and what uses it (the connections that refer to it as {{name}} and the agents listed). Never a value.
          */
         get: operations["listCredentials"];
         put?: never;
         /**
          * Create a credential
+         * @deprecated
          * @description A named credential with its value, sealed under the platform's master key and never returned (ADR 0017). 400 credential-invalid for a name that is not a credential name or whose env variable is reserved for the platform, a missing or oversized value, an unknown type, a reminder without an expiry, or agents of a factory outside the scope; 409 credential-name-taken; 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as credential.created.
          */
         post: operations["createCredential"];
@@ -3443,6 +3445,7 @@ export interface paths {
         put?: never;
         /**
          * Import credentials from a .env or YAML text
+         * @deprecated
          * @description env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
          */
         post: operations["importCredentials"];
@@ -3464,12 +3467,16 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** One credential, never its value */
+        /**
+         * One credential, never its value
+         * @deprecated
+         */
         get: operations["getCredential"];
         put?: never;
         post?: never;
         /**
          * Delete a credential
+         * @deprecated
          * @description 409 credential-in-use, naming the connections, while a connection refers to it as {{name}}; 404 credential-not-found. Needs a sign-in from the last 10 minutes. Audited as credential.deleted.
          */
         delete: operations["deleteCredential"];
@@ -3477,9 +3484,118 @@ export interface paths {
         head?: never;
         /**
          * Change a credential's metadata, or replace its value
+         * @deprecated
          * @description Each property present replaces its own: name renames it, scope and agents replace the scope and the agent list, expiry replaces the expiry and the reminder together (an empty expiry clears both), value replaces the value for runs that start afterwards (audited as credential.value_replaced); a change of the rest is audited as credential.updated. 400 credential-invalid, 404 credential-not-found, 409 credential-name-taken, 503 credentials-unavailable for a value while goald has no master key. Needs a sign-in from the last 10 minutes.
          */
         patch: operations["patchCredential"];
+        trace?: never;
+    };
+    "/v1/orgs/{org}/secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's secrets
+         * @description By name, each with its source, description, factory scope, expiry, reminder, last use and what uses it. Never a value.
+         */
+        get: operations["listSecrets"];
+        put?: never;
+        /**
+         * Create a secret
+         * @description A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+         */
+        post: operations["createSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/secrets/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import secrets from a .env or YAML text
+         * @description env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+         */
+        post: operations["importSecrets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/secrets/{secret}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The secret's name */
+                secret: components["parameters"]["SecretRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One secret, never its value
+         * @description 404 secret-not-found.
+         */
+        get: operations["getSecret"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a secret
+         * @description 409 secret-in-use, deleting nothing, while something uses it: the problem's uses names each use. 404 secret-not-found. Needs a sign-in from the last 10 minutes. Audited as secret.deleted.
+         */
+        delete: operations["deleteSecret"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a secret's description, scope, expiry or reminder
+         * @description Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+         */
+        patch: operations["patchSecret"];
+        trace?: never;
+    };
+    "/v1/orgs/{org}/secrets/{secret}/value": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The secret's name */
+                secret: components["parameters"]["SecretRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a secret's value
+         * @description Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+         */
+        put: operations["replaceSecretValue"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/orgs/{org}/knowledge/sources": {
@@ -3758,7 +3874,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422). */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422). */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -3780,6 +3896,8 @@ export interface components {
             failing_cases?: string[];
             /** @description learning-budget-exhausted only, the estimate of the bake-off it refused */
             estimate?: components["schemas"]["EvalEstimate"];
+            /** @description secret-in-use only, what uses the secret */
+            uses?: components["schemas"]["SecretUse"][];
         };
         EvalList: {
             summary: components["schemas"]["EvalSummary"];
@@ -7740,6 +7858,116 @@ export interface components {
              */
             outcome?: "created" | "replaced" | "skipped";
         };
+        /** @description 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization */
+        SecretName: string;
+        /**
+         * @description Where the value comes from. value: pasted or imported, and the run gets it as it is
+         * @enum {string}
+         */
+        SecretSource: "value";
+        /** @description The factories whose runs may open it; neither all nor any listed reaches no run */
+        SecretScope: {
+            /** @description Every factory */
+            all_factories: boolean;
+            /** @description The factories' metadata.id, when not all_factories */
+            factories: string[];
+        };
+        /** @description One thing that uses a secret; while one does, it cannot be deleted */
+        SecretUse: {
+            /**
+             * @description What uses it: a factory's published definition, a knowledge source, a webhook, the organization's Slack setting, or a connection that refers to it as {{name}}
+             * @enum {string}
+             */
+            kind: "definition" | "knowledge_source" | "webhook" | "slack" | "connection";
+            /** @description The factory, knowledge source, webhook or connection that uses it; slack: the organization's Slack setting */
+            name: string;
+        };
+        SecretList: {
+            secrets: components["schemas"]["Secret"][];
+        };
+        /** @description An organization's secret (ADR 0037), never its value */
+        Secret: {
+            id: string;
+            name: components["schemas"]["SecretName"];
+            source: components["schemas"]["SecretSource"];
+            description: string;
+            scope: components["schemas"]["SecretScope"];
+            /**
+             * Format: date-time
+             * @description When the value expires
+             */
+            expires_at: string | null;
+            /** @description Days before expires_at a reminder is due; 0: none */
+            remind_days: number;
+            /**
+             * Format: date-time
+             * @description When a run last opened it
+             */
+            last_used_at: string | null;
+            /** @description What uses it, by kind then name */
+            uses: components["schemas"]["SecretUse"][];
+            created_by: components["schemas"]["Actor"];
+            /** Format: date-time */
+            created_at: string;
+            updated_by: components["schemas"]["Actor"];
+            /** Format: date-time */
+            updated_at: string;
+        };
+        NewSecret: {
+            name: components["schemas"]["SecretName"];
+            description?: string;
+            scope?: components["schemas"]["SecretScope"];
+            /** Format: date-time */
+            expires_at?: string;
+            remind_days?: number;
+            /** @description The value; sealed and never answered */
+            value: string;
+        };
+        SecretPatch: {
+            description?: string;
+            scope?: components["schemas"]["SecretScope"];
+            expiry?: components["schemas"]["SecretExpiry"];
+        };
+        /** @description An expiry and its reminder; without expires_at, neither */
+        SecretExpiry: {
+            /** Format: date-time */
+            expires_at?: string;
+            remind_days?: number;
+        };
+        SecretValue: {
+            /** @description The new value; sealed and never answered */
+            value: string;
+        };
+        SecretImport: {
+            /** @enum {string} */
+            format: "env" | "yaml";
+            /** @description The .env or YAML text; its values are sealed and never answered */
+            text: string;
+            /**
+             * @description What a real run does with a name that exists; skip when absent
+             * @enum {string}
+             */
+            on_conflict?: "replace" | "skip";
+            /** @description Answer what the import would do and store nothing */
+            dry_run?: boolean;
+        };
+        SecretImportResult: {
+            dry_run: boolean;
+            /** @description Each name of the import, in its order */
+            secrets: components["schemas"]["SecretImportOutcome"][];
+        };
+        SecretImportOutcome: {
+            name: string;
+            /** @description A secret had the name before the import */
+            exists: boolean;
+            /** @description What uses the existing one */
+            uses: components["schemas"]["SecretUse"][];
+            /**
+             * @description A real run only, what it did
+             * @enum {string}
+             */
+            outcome?: "created" | "replaced" | "skipped";
+        };
         ConnectionTestResult: {
             ok: boolean;
             /** @description The test request's HTTP status, when it got one */
@@ -8057,6 +8285,8 @@ export interface components {
         ConnectionRef: string;
         /** @description The credential's name */
         CredentialRef: string;
+        /** @description The secret's name */
+        SecretRef: string;
         /** @description The knowledge source's name */
         SourceRef: string;
         /** @description The knowledge document's id */
@@ -12915,6 +13145,196 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Credential"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listSecrets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The secrets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewSecret"];
+            };
+        };
+        responses: {
+            /** @description The secret */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Secret"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    importSecrets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecretImport"];
+            };
+        };
+        responses: {
+            /** @description What the import does, or did */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretImportResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The secret's name */
+                secret: components["parameters"]["SecretRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The secret */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Secret"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The secret's name */
+                secret: components["parameters"]["SecretRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    patchSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The secret's name */
+                secret: components["parameters"]["SecretRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecretPatch"];
+            };
+        };
+        responses: {
+            /** @description The secret */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Secret"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    replaceSecretValue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The secret's name */
+                secret: components["parameters"]["SecretRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecretValue"];
+            };
+        };
+        responses: {
+            /** @description The secret */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Secret"];
                 };
             };
             default: components["responses"]["Problem"];

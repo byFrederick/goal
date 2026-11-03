@@ -375,6 +375,15 @@ var probes = map[string]probe{
 	"patchCredential":   {method: http.MethodPatch, path: "/v1/orgs/acme/credentials/acme-token", body: `{"description":"rotated"}`, org: testOrg},
 	"deleteCredential":  {method: http.MethodDelete, path: "/v1/orgs/acme/credentials/acme-token", org: testOrg},
 	"importCredentials": {method: http.MethodPost, path: "/v1/orgs/acme/credentials/import", body: `{"format":"env","text":"A_B=c","dry_run":true}`, org: testOrg},
+	"listSecrets":       {method: http.MethodGet, path: "/v1/orgs/acme/secrets", org: testOrg},
+	"createSecret":      {method: http.MethodPost, path: "/v1/orgs/acme/secrets", org: testOrg, body: `{"name":"acme-token","value":"v"}`},
+	"getSecret":         {method: http.MethodGet, path: "/v1/orgs/acme/secrets/acme-token", org: testOrg},
+	"patchSecret":       {method: http.MethodPatch, path: "/v1/orgs/acme/secrets/acme-token", body: `{"description":"rotated"}`, org: testOrg},
+	"replaceSecretValue": {
+		method: http.MethodPut, path: "/v1/orgs/acme/secrets/acme-token/value", body: `{"value":"v"}`, org: testOrg,
+	},
+	"deleteSecret":  {method: http.MethodDelete, path: "/v1/orgs/acme/secrets/acme-token", org: testOrg},
+	"importSecrets": {method: http.MethodPost, path: "/v1/orgs/acme/secrets/import", body: `{"format":"env","text":"A_B=c","dry_run":true}`, org: testOrg},
 
 	"listWebhookEndpoints": {method: http.MethodGet, path: probeHooks, org: testOrg, factory: acmeID},
 	"createWebhookEndpoint": {

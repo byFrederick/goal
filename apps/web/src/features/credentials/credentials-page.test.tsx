@@ -130,7 +130,7 @@ const picture = (): Credential[] => [
 ];
 
 function renderPage({
-  can = ['credential:read', 'credential:manage'],
+  can = ['secret:read', 'secret:manage'],
   search,
 }: {
   can?: string[];
@@ -328,7 +328,7 @@ describe('the Credentials page', () => {
 
   it('hides Replace and the row menu from a member who only reads', async () => {
     state.rows = picture();
-    renderPage({ can: ['credential:read'] });
+    renderPage({ can: ['secret:read'] });
 
     await screen.findByRole('table');
     expect(screen.queryByRole('button', { name: 'Replace' })).toBeNull();
@@ -387,7 +387,7 @@ describe('the Credentials page', () => {
 
   it('gives a member no New credential menu', async () => {
     state.rows = picture();
-    renderPage({ can: ['credential:read'] });
+    renderPage({ can: ['secret:read'] });
 
     await screen.findByRole('table');
     expect(screen.queryByRole('button', { name: /New credential/ })).toBeNull();

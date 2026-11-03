@@ -1482,6 +1482,105 @@ func (e RunStatus) Valid() bool {
 	}
 }
 
+// Defines values for SecretImportFormat.
+const (
+	SecretImportFormatEnv  SecretImportFormat = "env"
+	SecretImportFormatYaml SecretImportFormat = "yaml"
+)
+
+// Valid indicates whether the value is a known member of the SecretImportFormat enum.
+func (e SecretImportFormat) Valid() bool {
+	switch e {
+	case SecretImportFormatEnv:
+		return true
+	case SecretImportFormatYaml:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretImportOnConflict.
+const (
+	SecretImportOnConflictReplace SecretImportOnConflict = "replace"
+	SecretImportOnConflictSkip    SecretImportOnConflict = "skip"
+)
+
+// Valid indicates whether the value is a known member of the SecretImportOnConflict enum.
+func (e SecretImportOnConflict) Valid() bool {
+	switch e {
+	case SecretImportOnConflictReplace:
+		return true
+	case SecretImportOnConflictSkip:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretImportOutcomeOutcome.
+const (
+	SecretImportOutcomeOutcomeCreated  SecretImportOutcomeOutcome = "created"
+	SecretImportOutcomeOutcomeReplaced SecretImportOutcomeOutcome = "replaced"
+	SecretImportOutcomeOutcomeSkipped  SecretImportOutcomeOutcome = "skipped"
+)
+
+// Valid indicates whether the value is a known member of the SecretImportOutcomeOutcome enum.
+func (e SecretImportOutcomeOutcome) Valid() bool {
+	switch e {
+	case SecretImportOutcomeOutcomeCreated:
+		return true
+	case SecretImportOutcomeOutcomeReplaced:
+		return true
+	case SecretImportOutcomeOutcomeSkipped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretSource.
+const (
+	SecretSourceValue SecretSource = "value"
+)
+
+// Valid indicates whether the value is a known member of the SecretSource enum.
+func (e SecretSource) Valid() bool {
+	switch e {
+	case SecretSourceValue:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretUseKind.
+const (
+	SecretUseConnection      SecretUseKind = "connection"
+	SecretUseDefinition      SecretUseKind = "definition"
+	SecretUseKnowledgeSource SecretUseKind = "knowledge_source"
+	SecretUseSlack           SecretUseKind = "slack"
+	SecretUseWebhook         SecretUseKind = "webhook"
+)
+
+// Valid indicates whether the value is a known member of the SecretUseKind enum.
+func (e SecretUseKind) Valid() bool {
+	switch e {
+	case SecretUseConnection:
+		return true
+	case SecretUseDefinition:
+		return true
+	case SecretUseKnowledgeSource:
+		return true
+	case SecretUseSlack:
+		return true
+	case SecretUseWebhook:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for Section.
 const (
 	Agents      Section = "agents"
@@ -5264,6 +5363,22 @@ type NewSavedView struct {
 	Shared bool `json:"shared"`
 }
 
+// NewSecret defines model for NewSecret.
+type NewSecret struct {
+	Description *string    `json:"description,omitempty"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+
+	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+	Name       SecretName `json:"name"`
+	RemindDays *int       `json:"remind_days,omitempty"`
+
+	// Scope The factories whose runs may open it; neither all nor any listed reaches no run
+	Scope *SecretScope `json:"scope,omitempty"`
+
+	// Value The value; sealed and never answered
+	Value *string `json:"value,omitempty"`
+}
+
 // NewWebhookEndpoint defines model for NewWebhookEndpoint.
 type NewWebhookEndpoint struct {
 	// Kind How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's X-Hub-Signature-256 and X-GitHub-Event.
@@ -5715,7 +5830,7 @@ type PolicyModel struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422).
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422).
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -5750,6 +5865,9 @@ type Problem struct {
 	Sha256 *string `json:"sha256,omitempty"`
 	Status int     `json:"status"`
 	Title  string  `json:"title"`
+
+	// Uses secret-in-use only, what uses the secret
+	Uses *[]SecretUse `json:"uses,omitempty"`
 
 	// Value draft-conflict on a section save only, the section's value now (Keep theirs / Overwrite)
 	Value interface{} `json:"value,omitempty"`
@@ -6149,6 +6267,139 @@ type SearchItem struct {
 	// Station The id of the station the item is at
 	Station string `json:"station"`
 	Title   string `json:"title"`
+}
+
+// Secret An organization's secret (ADR 0037), never its value
+type Secret struct {
+	CreatedAt time.Time `json:"created_at"`
+
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	CreatedBy   Actor  `json:"created_by"`
+	Description string `json:"description"`
+
+	// ExpiresAt When the value expires
+	ExpiresAt *time.Time `json:"expires_at"`
+	Id        string     `json:"id"`
+
+	// LastUsedAt When a run last opened it
+	LastUsedAt *time.Time `json:"last_used_at"`
+
+	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+	Name SecretName `json:"name"`
+
+	// RemindDays Days before expires_at a reminder is due; 0: none
+	RemindDays int `json:"remind_days"`
+
+	// Scope The factories whose runs may open it; neither all nor any listed reaches no run
+	Scope SecretScope `json:"scope"`
+
+	// Source Where the value comes from. value: pasted or imported, and the run gets it as it is
+	Source    SecretSource `json:"source"`
+	UpdatedAt time.Time    `json:"updated_at"`
+
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	UpdatedBy Actor `json:"updated_by"`
+
+	// Uses What uses it, by kind then name
+	Uses []SecretUse `json:"uses"`
+}
+
+// SecretExpiry An expiry and its reminder; without expires_at, neither
+type SecretExpiry struct {
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	RemindDays *int       `json:"remind_days,omitempty"`
+}
+
+// SecretImport defines model for SecretImport.
+type SecretImport struct {
+	// DryRun Answer what the import would do and store nothing
+	DryRun *bool              `json:"dry_run,omitempty"`
+	Format SecretImportFormat `json:"format"`
+
+	// OnConflict What a real run does with a name that exists; skip when absent
+	OnConflict *SecretImportOnConflict `json:"on_conflict,omitempty"`
+
+	// Text The .env or YAML text; its values are sealed and never answered
+	Text *string `json:"text,omitempty"`
+}
+
+// SecretImportFormat defines model for SecretImport.Format.
+type SecretImportFormat string
+
+// SecretImportOnConflict What a real run does with a name that exists; skip when absent
+type SecretImportOnConflict string
+
+// SecretImportOutcome defines model for SecretImportOutcome.
+type SecretImportOutcome struct {
+	// Exists A secret had the name before the import
+	Exists bool   `json:"exists"`
+	Name   string `json:"name"`
+
+	// Outcome A real run only, what it did
+	Outcome *SecretImportOutcomeOutcome `json:"outcome,omitempty"`
+
+	// Uses What uses the existing one
+	Uses []SecretUse `json:"uses"`
+}
+
+// SecretImportOutcomeOutcome A real run only, what it did
+type SecretImportOutcomeOutcome string
+
+// SecretImportResult defines model for SecretImportResult.
+type SecretImportResult struct {
+	DryRun bool `json:"dry_run"`
+
+	// Secrets Each name of the import, in its order
+	Secrets []SecretImportOutcome `json:"secrets"`
+}
+
+// SecretList defines model for SecretList.
+type SecretList struct {
+	Secrets []Secret `json:"secrets"`
+}
+
+// SecretName 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+type SecretName = string
+
+// SecretPatch defines model for SecretPatch.
+type SecretPatch struct {
+	Description *string `json:"description,omitempty"`
+
+	// Expiry An expiry and its reminder; without expires_at, neither
+	Expiry *SecretExpiry `json:"expiry,omitempty"`
+
+	// Scope The factories whose runs may open it; neither all nor any listed reaches no run
+	Scope *SecretScope `json:"scope,omitempty"`
+}
+
+// SecretScope The factories whose runs may open it; neither all nor any listed reaches no run
+type SecretScope struct {
+	// AllFactories Every factory
+	AllFactories bool `json:"all_factories"`
+
+	// Factories The factories' metadata.id, when not all_factories
+	Factories []string `json:"factories"`
+}
+
+// SecretSource Where the value comes from. value: pasted or imported, and the run gets it as it is
+type SecretSource string
+
+// SecretUse One thing that uses a secret; while one does, it cannot be deleted
+type SecretUse struct {
+	// Kind What uses it: a factory's published definition, a knowledge source, a webhook, the organization's Slack setting, or a connection that refers to it as {{name}}
+	Kind SecretUseKind `json:"kind"`
+
+	// Name The factory, knowledge source, webhook or connection that uses it; slack: the organization's Slack setting
+	Name string `json:"name"`
+}
+
+// SecretUseKind What uses it: a factory's published definition, a knowledge source, a webhook, the organization's Slack setting, or a connection that refers to it as {{name}}
+type SecretUseKind string
+
+// SecretValue defines model for SecretValue.
+type SecretValue struct {
+	// Value The new value; sealed and never answered
+	Value *string `json:"value,omitempty"`
 }
 
 // Section defines model for Section.
@@ -7180,6 +7431,9 @@ type RangeTo = openapi_types.Date
 // SavedViewRef defines model for SavedViewRef.
 type SavedViewRef = string
 
+// SecretRef defines model for SecretRef.
+type SecretRef = string
+
 // SectionRef defines model for SectionRef.
 type SectionRef = Section
 
@@ -7615,12 +7869,18 @@ type CreateConnectionJSONRequestBody = NewConnection
 type UpdateConnectionJSONRequestBody = ConnectionPatch
 
 // CreateCredentialJSONRequestBody defines body for CreateCredential for application/json ContentType.
+//
+// Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 type CreateCredentialJSONRequestBody = NewCredential
 
 // ImportCredentialsJSONRequestBody defines body for ImportCredentials for application/json ContentType.
+//
+// Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 type ImportCredentialsJSONRequestBody = CredentialImport
 
 // PatchCredentialJSONRequestBody defines body for PatchCredential for application/json ContentType.
+//
+// Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 type PatchCredentialJSONRequestBody = CredentialPatch
 
 // ValidateDefinitionJSONRequestBody defines body for ValidateDefinition for application/json ContentType.
@@ -7754,6 +8014,18 @@ type CreatePersonalTokenJSONRequestBody = NewPersonalToken
 
 // PutOrgPolicyJSONRequestBody defines body for PutOrgPolicy for application/json ContentType.
 type PutOrgPolicyJSONRequestBody = OrgPolicyInput
+
+// CreateSecretJSONRequestBody defines body for CreateSecret for application/json ContentType.
+type CreateSecretJSONRequestBody = NewSecret
+
+// ImportSecretsJSONRequestBody defines body for ImportSecrets for application/json ContentType.
+type ImportSecretsJSONRequestBody = SecretImport
+
+// PatchSecretJSONRequestBody defines body for PatchSecret for application/json ContentType.
+type PatchSecretJSONRequestBody = SecretPatch
+
+// ReplaceSecretValueJSONRequestBody defines body for ReplaceSecretValue for application/json ContentType.
+type ReplaceSecretValueJSONRequestBody = SecretValue
 
 // UpdateOrgSettingsJSONRequestBody defines body for UpdateOrgSettings for application/json ContentType.
 type UpdateOrgSettingsJSONRequestBody = OrgSettingsPatch
@@ -8346,6 +8618,8 @@ type ClientInterface interface {
 	// By name, each with its type, description, factory scope, agents per factory, expiry, rotation reminder, last use and what uses it (the connections that refer to it as {{name}} and the agents listed). Never a value.
 	//
 	// Corresponds with GET /v1/orgs/{org}/credentials (the `ListCredentials` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ListCredentials(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateCredentialWithBody Create a credential
@@ -8355,6 +8629,8 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CreateCredentialWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateCredential Create a credential
@@ -8364,6 +8640,8 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CreateCredential(ctx context.Context, org OrgRef, body CreateCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ImportCredentialsWithBody Import credentials from a .env or YAML text
@@ -8373,6 +8651,8 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ImportCredentialsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ImportCredentials Import credentials from a .env or YAML text
@@ -8382,6 +8662,8 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ImportCredentials(ctx context.Context, org OrgRef, body ImportCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteCredential Delete a credential
@@ -8389,11 +8671,15 @@ type ClientInterface interface {
 	// 409 credential-in-use, naming the connections, while a connection refers to it as {{name}}; 404 credential-not-found. Needs a sign-in from the last 10 minutes. Audited as credential.deleted.
 	//
 	// Corresponds with DELETE /v1/orgs/{org}/credentials/{credential} (the `DeleteCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	DeleteCredential(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetCredential One credential, never its value
 	//
 	// Corresponds with GET /v1/orgs/{org}/credentials/{credential} (the `GetCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	GetCredential(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PatchCredentialWithBody Change a credential's metadata, or replace its value
@@ -8403,6 +8689,8 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PatchCredentialWithBody(ctx context.Context, org OrgRef, credential CredentialRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PatchCredential Change a credential's metadata, or replace its value
@@ -8412,6 +8700,8 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PatchCredential(ctx context.Context, org OrgRef, credential CredentialRef, body PatchCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// FormatDefinitionWithBody Format a factory.yaml the way Visual saves write changed lines (Format)
@@ -9815,6 +10105,99 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/search (the `SearchOrg` operationId).
 	SearchOrg(ctx context.Context, org OrgRef, params *SearchOrgParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListSecrets The organization's secrets
+	//
+	// By name, each with its source, description, factory scope, expiry, reminder, last use and what uses it. Never a value.
+	//
+	// Corresponds with GET /v1/orgs/{org}/secrets (the `ListSecrets` operationId).
+	ListSecrets(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSecretWithBody Create a secret
+	//
+	// A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/secrets (the `CreateSecret` operationId).
+	CreateSecretWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSecret Create a secret
+	//
+	// A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/secrets (the `CreateSecret` operationId).
+	CreateSecret(ctx context.Context, org OrgRef, body CreateSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ImportSecretsWithBody Import secrets from a .env or YAML text
+	//
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/secrets/import (the `ImportSecrets` operationId).
+	ImportSecretsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ImportSecrets Import secrets from a .env or YAML text
+	//
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/secrets/import (the `ImportSecrets` operationId).
+	ImportSecrets(ctx context.Context, org OrgRef, body ImportSecretsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteSecret Delete a secret
+	//
+	// 409 secret-in-use, deleting nothing, while something uses it: the problem's uses names each use. 404 secret-not-found. Needs a sign-in from the last 10 minutes. Audited as secret.deleted.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/secrets/{secret} (the `DeleteSecret` operationId).
+	DeleteSecret(ctx context.Context, org OrgRef, secret SecretRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSecret One secret, never its value
+	//
+	// 404 secret-not-found.
+	//
+	// Corresponds with GET /v1/orgs/{org}/secrets/{secret} (the `GetSecret` operationId).
+	GetSecret(ctx context.Context, org OrgRef, secret SecretRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchSecretWithBody Change a secret's description, scope, expiry or reminder
+	//
+	// Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/secrets/{secret} (the `PatchSecret` operationId).
+	PatchSecretWithBody(ctx context.Context, org OrgRef, secret SecretRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchSecret Change a secret's description, scope, expiry or reminder
+	//
+	// Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/secrets/{secret} (the `PatchSecret` operationId).
+	PatchSecret(ctx context.Context, org OrgRef, secret SecretRef, body PatchSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReplaceSecretValueWithBody Replace a secret's value
+	//
+	// Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/secrets/{secret}/value (the `ReplaceSecretValue` operationId).
+	ReplaceSecretValueWithBody(ctx context.Context, org OrgRef, secret SecretRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReplaceSecretValue Replace a secret's value
+	//
+	// Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/secrets/{secret}/value (the `ReplaceSecretValue` operationId).
+	ReplaceSecretValue(ctx context.Context, org OrgRef, secret SecretRef, body ReplaceSecretValueJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetOrgSettings The organization's settings, slot caps included
 	//
 	// Corresponds with GET /v1/orgs/{org}/settings (the `GetOrgSettings` operationId).
@@ -10588,6 +10971,7 @@ func (c *Client) TestConnection(ctx context.Context, org OrgRef, connection Conn
 // By name, each with its type, description, factory scope, agents per factory, expiry, rotation reminder, last use and what uses it (the connections that refer to it as {{name}} and the agents listed). Never a value.
 //
 // Corresponds with GET /v1/orgs/{org}/credentials (the `ListCredentials` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) ListCredentials(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListCredentialsRequest(c.Server, org)
 	if err != nil {
@@ -10607,6 +10991,7 @@ func (c *Client) ListCredentials(ctx context.Context, org OrgRef, reqEditors ...
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) CreateCredentialWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateCredentialRequestWithBody(c.Server, org, contentType, body)
 	if err != nil {
@@ -10626,6 +11011,7 @@ func (c *Client) CreateCredentialWithBody(ctx context.Context, org OrgRef, conte
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) CreateCredential(ctx context.Context, org OrgRef, body CreateCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateCredentialRequest(c.Server, org, body)
 	if err != nil {
@@ -10645,6 +11031,7 @@ func (c *Client) CreateCredential(ctx context.Context, org OrgRef, body CreateCr
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) ImportCredentialsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewImportCredentialsRequestWithBody(c.Server, org, contentType, body)
 	if err != nil {
@@ -10664,6 +11051,7 @@ func (c *Client) ImportCredentialsWithBody(ctx context.Context, org OrgRef, cont
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) ImportCredentials(ctx context.Context, org OrgRef, body ImportCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewImportCredentialsRequest(c.Server, org, body)
 	if err != nil {
@@ -10681,6 +11069,7 @@ func (c *Client) ImportCredentials(ctx context.Context, org OrgRef, body ImportC
 // 409 credential-in-use, naming the connections, while a connection refers to it as {{name}}; 404 credential-not-found. Needs a sign-in from the last 10 minutes. Audited as credential.deleted.
 //
 // Corresponds with DELETE /v1/orgs/{org}/credentials/{credential} (the `DeleteCredential` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) DeleteCredential(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteCredentialRequest(c.Server, org, credential)
 	if err != nil {
@@ -10696,6 +11085,7 @@ func (c *Client) DeleteCredential(ctx context.Context, org OrgRef, credential Cr
 // GetCredential One credential, never its value
 //
 // Corresponds with GET /v1/orgs/{org}/credentials/{credential} (the `GetCredential` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) GetCredential(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetCredentialRequest(c.Server, org, credential)
 	if err != nil {
@@ -10715,6 +11105,7 @@ func (c *Client) GetCredential(ctx context.Context, org OrgRef, credential Crede
 // Takes any type of body and a specified content type.
 //
 // Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) PatchCredentialWithBody(ctx context.Context, org OrgRef, credential CredentialRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPatchCredentialRequestWithBody(c.Server, org, credential, contentType, body)
 	if err != nil {
@@ -10734,6 +11125,7 @@ func (c *Client) PatchCredentialWithBody(ctx context.Context, org OrgRef, creden
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) PatchCredential(ctx context.Context, org OrgRef, credential CredentialRef, body PatchCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPatchCredentialRequest(c.Server, org, credential, body)
 	if err != nil {
@@ -13927,6 +14319,209 @@ func (c *Client) ListRunKnowledge(ctx context.Context, org OrgRef, run string, r
 // Corresponds with GET /v1/orgs/{org}/search (the `SearchOrg` operationId).
 func (c *Client) SearchOrg(ctx context.Context, org OrgRef, params *SearchOrgParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSearchOrgRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListSecrets The organization's secrets
+//
+// By name, each with its source, description, factory scope, expiry, reminder, last use and what uses it. Never a value.
+//
+// Corresponds with GET /v1/orgs/{org}/secrets (the `ListSecrets` operationId).
+func (c *Client) ListSecrets(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListSecretsRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateSecretWithBody Create a secret
+//
+// A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/secrets (the `CreateSecret` operationId).
+func (c *Client) CreateSecretWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSecretRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateSecret Create a secret
+//
+// A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/secrets (the `CreateSecret` operationId).
+func (c *Client) CreateSecret(ctx context.Context, org OrgRef, body CreateSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSecretRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ImportSecretsWithBody Import secrets from a .env or YAML text
+//
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/secrets/import (the `ImportSecrets` operationId).
+func (c *Client) ImportSecretsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewImportSecretsRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ImportSecrets Import secrets from a .env or YAML text
+//
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/secrets/import (the `ImportSecrets` operationId).
+func (c *Client) ImportSecrets(ctx context.Context, org OrgRef, body ImportSecretsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewImportSecretsRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteSecret Delete a secret
+//
+// 409 secret-in-use, deleting nothing, while something uses it: the problem's uses names each use. 404 secret-not-found. Needs a sign-in from the last 10 minutes. Audited as secret.deleted.
+//
+// Corresponds with DELETE /v1/orgs/{org}/secrets/{secret} (the `DeleteSecret` operationId).
+func (c *Client) DeleteSecret(ctx context.Context, org OrgRef, secret SecretRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteSecretRequest(c.Server, org, secret)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetSecret One secret, never its value
+//
+// 404 secret-not-found.
+//
+// Corresponds with GET /v1/orgs/{org}/secrets/{secret} (the `GetSecret` operationId).
+func (c *Client) GetSecret(ctx context.Context, org OrgRef, secret SecretRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSecretRequest(c.Server, org, secret)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PatchSecretWithBody Change a secret's description, scope, expiry or reminder
+//
+// Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /v1/orgs/{org}/secrets/{secret} (the `PatchSecret` operationId).
+func (c *Client) PatchSecretWithBody(ctx context.Context, org OrgRef, secret SecretRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchSecretRequestWithBody(c.Server, org, secret, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PatchSecret Change a secret's description, scope, expiry or reminder
+//
+// Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /v1/orgs/{org}/secrets/{secret} (the `PatchSecret` operationId).
+func (c *Client) PatchSecret(ctx context.Context, org OrgRef, secret SecretRef, body PatchSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchSecretRequest(c.Server, org, secret, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReplaceSecretValueWithBody Replace a secret's value
+//
+// Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/secrets/{secret}/value (the `ReplaceSecretValue` operationId).
+func (c *Client) ReplaceSecretValueWithBody(ctx context.Context, org OrgRef, secret SecretRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReplaceSecretValueRequestWithBody(c.Server, org, secret, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReplaceSecretValue Replace a secret's value
+//
+// Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/secrets/{secret}/value (the `ReplaceSecretValue` operationId).
+func (c *Client) ReplaceSecretValue(ctx context.Context, org OrgRef, secret SecretRef, body ReplaceSecretValueJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReplaceSecretValueRequest(c.Server, org, secret, body)
 	if err != nil {
 		return nil, err
 	}
@@ -23445,6 +24040,324 @@ func NewSearchOrgRequest(server string, org OrgRef, params *SearchOrgParams) (*h
 	return req, nil
 }
 
+// NewListSecretsRequest constructs an http.Request for the ListSecrets method
+func NewListSecretsRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/secrets", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateSecretRequest calls the generic CreateSecret builder with application/json body
+func NewCreateSecretRequest(server string, org OrgRef, body CreateSecretJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateSecretRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewCreateSecretRequestWithBody constructs an http.Request for the CreateSecret method, with any body, and a specified content type
+func NewCreateSecretRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/secrets", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewImportSecretsRequest calls the generic ImportSecrets builder with application/json body
+func NewImportSecretsRequest(server string, org OrgRef, body ImportSecretsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewImportSecretsRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewImportSecretsRequestWithBody constructs an http.Request for the ImportSecrets method, with any body, and a specified content type
+func NewImportSecretsRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/secrets/import", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteSecretRequest constructs an http.Request for the DeleteSecret method
+func NewDeleteSecretRequest(server string, org OrgRef, secret SecretRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "secret", secret, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/secrets/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetSecretRequest constructs an http.Request for the GetSecret method
+func NewGetSecretRequest(server string, org OrgRef, secret SecretRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "secret", secret, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/secrets/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchSecretRequest calls the generic PatchSecret builder with application/json body
+func NewPatchSecretRequest(server string, org OrgRef, secret SecretRef, body PatchSecretJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchSecretRequestWithBody(server, org, secret, "application/json", bodyReader)
+}
+
+// NewPatchSecretRequestWithBody constructs an http.Request for the PatchSecret method, with any body, and a specified content type
+func NewPatchSecretRequestWithBody(server string, org OrgRef, secret SecretRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "secret", secret, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/secrets/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewReplaceSecretValueRequest calls the generic ReplaceSecretValue builder with application/json body
+func NewReplaceSecretValueRequest(server string, org OrgRef, secret SecretRef, body ReplaceSecretValueJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewReplaceSecretValueRequestWithBody(server, org, secret, "application/json", bodyReader)
+}
+
+// NewReplaceSecretValueRequestWithBody constructs an http.Request for the ReplaceSecretValue method, with any body, and a specified content type
+func NewReplaceSecretValueRequestWithBody(server string, org OrgRef, secret SecretRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "secret", secret, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/secrets/%s/value", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetOrgSettingsRequest constructs an http.Request for the GetOrgSettings method
 func NewGetOrgSettingsRequest(server string, org OrgRef) (*http.Request, error) {
 	var err error
@@ -24578,6 +25491,8 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/orgs/{org}/credentials (the `ListCredentials` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ListCredentialsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListCredentialsResponse, error)
 
 	// CreateCredentialWithBodyWithResponse Create a credential
@@ -24587,6 +25502,8 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CreateCredentialWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCredentialResponse, error)
 
 	// CreateCredentialWithResponse Create a credential
@@ -24596,6 +25513,8 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CreateCredentialWithResponse(ctx context.Context, org OrgRef, body CreateCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCredentialResponse, error)
 
 	// ImportCredentialsWithBodyWithResponse Import credentials from a .env or YAML text
@@ -24605,6 +25524,8 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ImportCredentialsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ImportCredentialsResponse, error)
 
 	// ImportCredentialsWithResponse Import credentials from a .env or YAML text
@@ -24614,6 +25535,8 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ImportCredentialsWithResponse(ctx context.Context, org OrgRef, body ImportCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*ImportCredentialsResponse, error)
 
 	// DeleteCredentialWithResponse Delete a credential
@@ -24623,6 +25546,8 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /v1/orgs/{org}/credentials/{credential} (the `DeleteCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	DeleteCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*DeleteCredentialResponse, error)
 
 	// GetCredentialWithResponse One credential, never its value
@@ -24630,6 +25555,8 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/orgs/{org}/credentials/{credential} (the `GetCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	GetCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*GetCredentialResponse, error)
 
 	// PatchCredentialWithBodyWithResponse Change a credential's metadata, or replace its value
@@ -24639,6 +25566,8 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PatchCredentialWithBodyWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchCredentialResponse, error)
 
 	// PatchCredentialWithResponse Change a credential's metadata, or replace its value
@@ -24648,6 +25577,8 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PatchCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, body PatchCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchCredentialResponse, error)
 
 	// FormatDefinitionWithBodyWithResponse Format a factory.yaml the way Visual saves write changed lines (Format)
@@ -26230,6 +27161,105 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/search (the `SearchOrg` operationId).
 	SearchOrgWithResponse(ctx context.Context, org OrgRef, params *SearchOrgParams, reqEditors ...RequestEditorFn) (*SearchOrgResponse, error)
+
+	// ListSecretsWithResponse The organization's secrets
+	//
+	// By name, each with its source, description, factory scope, expiry, reminder, last use and what uses it. Never a value.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/secrets (the `ListSecrets` operationId).
+	ListSecretsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListSecretsResponse, error)
+
+	// CreateSecretWithBodyWithResponse Create a secret
+	//
+	// A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/secrets (the `CreateSecret` operationId).
+	CreateSecretWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSecretResponse, error)
+
+	// CreateSecretWithResponse Create a secret
+	//
+	// A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/secrets (the `CreateSecret` operationId).
+	CreateSecretWithResponse(ctx context.Context, org OrgRef, body CreateSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSecretResponse, error)
+
+	// ImportSecretsWithBodyWithResponse Import secrets from a .env or YAML text
+	//
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/secrets/import (the `ImportSecrets` operationId).
+	ImportSecretsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ImportSecretsResponse, error)
+
+	// ImportSecretsWithResponse Import secrets from a .env or YAML text
+	//
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/secrets/import (the `ImportSecrets` operationId).
+	ImportSecretsWithResponse(ctx context.Context, org OrgRef, body ImportSecretsJSONRequestBody, reqEditors ...RequestEditorFn) (*ImportSecretsResponse, error)
+
+	// DeleteSecretWithResponse Delete a secret
+	//
+	// 409 secret-in-use, deleting nothing, while something uses it: the problem's uses names each use. 404 secret-not-found. Needs a sign-in from the last 10 minutes. Audited as secret.deleted.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/secrets/{secret} (the `DeleteSecret` operationId).
+	DeleteSecretWithResponse(ctx context.Context, org OrgRef, secret SecretRef, reqEditors ...RequestEditorFn) (*DeleteSecretResponse, error)
+
+	// GetSecretWithResponse One secret, never its value
+	//
+	// 404 secret-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/secrets/{secret} (the `GetSecret` operationId).
+	GetSecretWithResponse(ctx context.Context, org OrgRef, secret SecretRef, reqEditors ...RequestEditorFn) (*GetSecretResponse, error)
+
+	// PatchSecretWithBodyWithResponse Change a secret's description, scope, expiry or reminder
+	//
+	// Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/secrets/{secret} (the `PatchSecret` operationId).
+	PatchSecretWithBodyWithResponse(ctx context.Context, org OrgRef, secret SecretRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchSecretResponse, error)
+
+	// PatchSecretWithResponse Change a secret's description, scope, expiry or reminder
+	//
+	// Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/secrets/{secret} (the `PatchSecret` operationId).
+	PatchSecretWithResponse(ctx context.Context, org OrgRef, secret SecretRef, body PatchSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchSecretResponse, error)
+
+	// ReplaceSecretValueWithBodyWithResponse Replace a secret's value
+	//
+	// Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/secrets/{secret}/value (the `ReplaceSecretValue` operationId).
+	ReplaceSecretValueWithBodyWithResponse(ctx context.Context, org OrgRef, secret SecretRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReplaceSecretValueResponse, error)
+
+	// ReplaceSecretValueWithResponse Replace a secret's value
+	//
+	// Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/secrets/{secret}/value (the `ReplaceSecretValue` operationId).
+	ReplaceSecretValueWithResponse(ctx context.Context, org OrgRef, secret SecretRef, body ReplaceSecretValueJSONRequestBody, reqEditors ...RequestEditorFn) (*ReplaceSecretValueResponse, error)
 
 	// GetOrgSettingsWithResponse The organization's settings, slot caps included
 	//
@@ -34612,6 +35642,335 @@ func (r SearchOrgResponse) ContentType() string {
 	return ""
 }
 
+type ListSecretsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SecretList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListSecretsResponse) GetJSON200() *SecretList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListSecretsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListSecretsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListSecretsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListSecretsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListSecretsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateSecretResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Secret
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateSecretResponse) GetJSON201() *Secret {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateSecretResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateSecretResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateSecretResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateSecretResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateSecretResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ImportSecretsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SecretImportResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ImportSecretsResponse) GetJSON200() *SecretImportResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ImportSecretsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ImportSecretsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ImportSecretsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ImportSecretsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ImportSecretsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteSecretResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DeleteSecretResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteSecretResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteSecretResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteSecretResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteSecretResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetSecretResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Secret
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetSecretResponse) GetJSON200() *Secret {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetSecretResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetSecretResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSecretResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSecretResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetSecretResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PatchSecretResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Secret
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PatchSecretResponse) GetJSON200() *Secret {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PatchSecretResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PatchSecretResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchSecretResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchSecretResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PatchSecretResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReplaceSecretValueResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Secret
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReplaceSecretValueResponse) GetJSON200() *Secret {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ReplaceSecretValueResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ReplaceSecretValueResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReplaceSecretValueResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReplaceSecretValueResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReplaceSecretValueResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetOrgSettingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -35897,6 +37256,8 @@ func (c *ClientWithResponses) TestConnectionWithResponse(ctx context.Context, or
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /v1/orgs/{org}/credentials (the `ListCredentials` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) ListCredentialsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListCredentialsResponse, error) {
 	rsp, err := c.ListCredentials(ctx, org, reqEditors...)
 	if err != nil {
@@ -35912,6 +37273,8 @@ func (c *ClientWithResponses) ListCredentialsWithResponse(ctx context.Context, o
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) CreateCredentialWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCredentialResponse, error) {
 	rsp, err := c.CreateCredentialWithBody(ctx, org, contentType, body, reqEditors...)
 	if err != nil {
@@ -35927,6 +37290,7 @@ func (c *ClientWithResponses) CreateCredentialWithBodyWithResponse(ctx context.C
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) CreateCredentialWithResponse(ctx context.Context, org OrgRef, body CreateCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCredentialResponse, error) {
 	rsp, err := c.CreateCredential(ctx, org, body, reqEditors...)
 	if err != nil {
@@ -35942,6 +37306,8 @@ func (c *ClientWithResponses) CreateCredentialWithResponse(ctx context.Context, 
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) ImportCredentialsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ImportCredentialsResponse, error) {
 	rsp, err := c.ImportCredentialsWithBody(ctx, org, contentType, body, reqEditors...)
 	if err != nil {
@@ -35957,6 +37323,7 @@ func (c *ClientWithResponses) ImportCredentialsWithBodyWithResponse(ctx context.
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) ImportCredentialsWithResponse(ctx context.Context, org OrgRef, body ImportCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*ImportCredentialsResponse, error) {
 	rsp, err := c.ImportCredentials(ctx, org, body, reqEditors...)
 	if err != nil {
@@ -35972,6 +37339,8 @@ func (c *ClientWithResponses) ImportCredentialsWithResponse(ctx context.Context,
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /v1/orgs/{org}/credentials/{credential} (the `DeleteCredential` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) DeleteCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*DeleteCredentialResponse, error) {
 	rsp, err := c.DeleteCredential(ctx, org, credential, reqEditors...)
 	if err != nil {
@@ -35985,6 +37354,8 @@ func (c *ClientWithResponses) DeleteCredentialWithResponse(ctx context.Context, 
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /v1/orgs/{org}/credentials/{credential} (the `GetCredential` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) GetCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*GetCredentialResponse, error) {
 	rsp, err := c.GetCredential(ctx, org, credential, reqEditors...)
 	if err != nil {
@@ -36000,6 +37371,8 @@ func (c *ClientWithResponses) GetCredentialWithResponse(ctx context.Context, org
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) PatchCredentialWithBodyWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchCredentialResponse, error) {
 	rsp, err := c.PatchCredentialWithBody(ctx, org, credential, contentType, body, reqEditors...)
 	if err != nil {
@@ -36015,6 +37388,7 @@ func (c *ClientWithResponses) PatchCredentialWithBodyWithResponse(ctx context.Co
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) PatchCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, body PatchCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchCredentialResponse, error) {
 	rsp, err := c.PatchCredential(ctx, org, credential, body, reqEditors...)
 	if err != nil {
@@ -38676,6 +40050,171 @@ func (c *ClientWithResponses) SearchOrgWithResponse(ctx context.Context, org Org
 		return nil, err
 	}
 	return ParseSearchOrgResponse(rsp)
+}
+
+// ListSecretsWithResponse The organization's secrets
+//
+// By name, each with its source, description, factory scope, expiry, reminder, last use and what uses it. Never a value.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/secrets (the `ListSecrets` operationId).
+func (c *ClientWithResponses) ListSecretsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListSecretsResponse, error) {
+	rsp, err := c.ListSecrets(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListSecretsResponse(rsp)
+}
+
+// CreateSecretWithBodyWithResponse Create a secret
+//
+// A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/secrets (the `CreateSecret` operationId).
+func (c *ClientWithResponses) CreateSecretWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSecretResponse, error) {
+	rsp, err := c.CreateSecretWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSecretResponse(rsp)
+}
+
+// CreateSecretWithResponse Create a secret
+//
+// A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/secrets (the `CreateSecret` operationId).
+func (c *ClientWithResponses) CreateSecretWithResponse(ctx context.Context, org OrgRef, body CreateSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSecretResponse, error) {
+	rsp, err := c.CreateSecret(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSecretResponse(rsp)
+}
+
+// ImportSecretsWithBodyWithResponse Import secrets from a .env or YAML text
+//
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/secrets/import (the `ImportSecrets` operationId).
+func (c *ClientWithResponses) ImportSecretsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ImportSecretsResponse, error) {
+	rsp, err := c.ImportSecretsWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseImportSecretsResponse(rsp)
+}
+
+// ImportSecretsWithResponse Import secrets from a .env or YAML text
+//
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/secrets/import (the `ImportSecrets` operationId).
+func (c *ClientWithResponses) ImportSecretsWithResponse(ctx context.Context, org OrgRef, body ImportSecretsJSONRequestBody, reqEditors ...RequestEditorFn) (*ImportSecretsResponse, error) {
+	rsp, err := c.ImportSecrets(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseImportSecretsResponse(rsp)
+}
+
+// DeleteSecretWithResponse Delete a secret
+//
+// 409 secret-in-use, deleting nothing, while something uses it: the problem's uses names each use. 404 secret-not-found. Needs a sign-in from the last 10 minutes. Audited as secret.deleted.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/secrets/{secret} (the `DeleteSecret` operationId).
+func (c *ClientWithResponses) DeleteSecretWithResponse(ctx context.Context, org OrgRef, secret SecretRef, reqEditors ...RequestEditorFn) (*DeleteSecretResponse, error) {
+	rsp, err := c.DeleteSecret(ctx, org, secret, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteSecretResponse(rsp)
+}
+
+// GetSecretWithResponse One secret, never its value
+//
+// 404 secret-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/secrets/{secret} (the `GetSecret` operationId).
+func (c *ClientWithResponses) GetSecretWithResponse(ctx context.Context, org OrgRef, secret SecretRef, reqEditors ...RequestEditorFn) (*GetSecretResponse, error) {
+	rsp, err := c.GetSecret(ctx, org, secret, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSecretResponse(rsp)
+}
+
+// PatchSecretWithBodyWithResponse Change a secret's description, scope, expiry or reminder
+//
+// Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{org}/secrets/{secret} (the `PatchSecret` operationId).
+func (c *ClientWithResponses) PatchSecretWithBodyWithResponse(ctx context.Context, org OrgRef, secret SecretRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchSecretResponse, error) {
+	rsp, err := c.PatchSecretWithBody(ctx, org, secret, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchSecretResponse(rsp)
+}
+
+// PatchSecretWithResponse Change a secret's description, scope, expiry or reminder
+//
+// Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{org}/secrets/{secret} (the `PatchSecret` operationId).
+func (c *ClientWithResponses) PatchSecretWithResponse(ctx context.Context, org OrgRef, secret SecretRef, body PatchSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchSecretResponse, error) {
+	rsp, err := c.PatchSecret(ctx, org, secret, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchSecretResponse(rsp)
+}
+
+// ReplaceSecretValueWithBodyWithResponse Replace a secret's value
+//
+// Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/secrets/{secret}/value (the `ReplaceSecretValue` operationId).
+func (c *ClientWithResponses) ReplaceSecretValueWithBodyWithResponse(ctx context.Context, org OrgRef, secret SecretRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReplaceSecretValueResponse, error) {
+	rsp, err := c.ReplaceSecretValueWithBody(ctx, org, secret, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReplaceSecretValueResponse(rsp)
+}
+
+// ReplaceSecretValueWithResponse Replace a secret's value
+//
+// Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/secrets/{secret}/value (the `ReplaceSecretValue` operationId).
+func (c *ClientWithResponses) ReplaceSecretValueWithResponse(ctx context.Context, org OrgRef, secret SecretRef, body ReplaceSecretValueJSONRequestBody, reqEditors ...RequestEditorFn) (*ReplaceSecretValueResponse, error) {
+	rsp, err := c.ReplaceSecretValue(ctx, org, secret, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReplaceSecretValueResponse(rsp)
 }
 
 // GetOrgSettingsWithResponse The organization's settings, slot caps included
@@ -44751,6 +46290,233 @@ func ParseSearchOrgResponse(rsp *http.Response) (*SearchOrgResponse, error) {
 	return response, nil
 }
 
+// ParseListSecretsResponse parses an HTTP response from a ListSecretsWithResponse call
+func ParseListSecretsResponse(rsp *http.Response) (*ListSecretsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListSecretsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SecretList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateSecretResponse parses an HTTP response from a CreateSecretWithResponse call
+func ParseCreateSecretResponse(rsp *http.Response) (*CreateSecretResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateSecretResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Secret
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseImportSecretsResponse parses an HTTP response from a ImportSecretsWithResponse call
+func ParseImportSecretsResponse(rsp *http.Response) (*ImportSecretsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ImportSecretsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SecretImportResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteSecretResponse parses an HTTP response from a DeleteSecretWithResponse call
+func ParseDeleteSecretResponse(rsp *http.Response) (*DeleteSecretResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteSecretResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSecretResponse parses an HTTP response from a GetSecretWithResponse call
+func ParseGetSecretResponse(rsp *http.Response) (*GetSecretResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSecretResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Secret
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchSecretResponse parses an HTTP response from a PatchSecretWithResponse call
+func ParsePatchSecretResponse(rsp *http.Response) (*PatchSecretResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchSecretResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Secret
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReplaceSecretValueResponse parses an HTTP response from a ReplaceSecretValueWithResponse call
+func ParseReplaceSecretValueResponse(rsp *http.Response) (*ReplaceSecretValueResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReplaceSecretValueResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Secret
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetOrgSettingsResponse parses an HTTP response from a GetOrgSettingsWithResponse call
 func ParseGetOrgSettingsResponse(rsp *http.Response) (*GetOrgSettingsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -45372,21 +47138,33 @@ type ServerInterface interface {
 	TestConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
 	// ListCredentials The organization's credentials
 	// (GET /v1/orgs/{org}/credentials)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ListCredentials(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// CreateCredential Create a credential
 	// (POST /v1/orgs/{org}/credentials)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CreateCredential(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// ImportCredentials Import credentials from a .env or YAML text
 	// (POST /v1/orgs/{org}/credentials/import)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ImportCredentials(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// DeleteCredential Delete a credential
 	// (DELETE /v1/orgs/{org}/credentials/{credential})
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	DeleteCredential(w http.ResponseWriter, r *http.Request, org OrgRef, credential CredentialRef)
 	// GetCredential One credential, never its value
 	// (GET /v1/orgs/{org}/credentials/{credential})
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	GetCredential(w http.ResponseWriter, r *http.Request, org OrgRef, credential CredentialRef)
 	// PatchCredential Change a credential's metadata, or replace its value
 	// (PATCH /v1/orgs/{org}/credentials/{credential})
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PatchCredential(w http.ResponseWriter, r *http.Request, org OrgRef, credential CredentialRef)
 	// FormatDefinition Format a factory.yaml the way Visual saves write changed lines (Format)
 	// (POST /v1/orgs/{org}/definitions/format)
@@ -45796,6 +47574,27 @@ type ServerInterface interface {
 	// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
 	// (GET /v1/orgs/{org}/search)
 	SearchOrg(w http.ResponseWriter, r *http.Request, org OrgRef, params SearchOrgParams)
+	// ListSecrets The organization's secrets
+	// (GET /v1/orgs/{org}/secrets)
+	ListSecrets(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// CreateSecret Create a secret
+	// (POST /v1/orgs/{org}/secrets)
+	CreateSecret(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// ImportSecrets Import secrets from a .env or YAML text
+	// (POST /v1/orgs/{org}/secrets/import)
+	ImportSecrets(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// DeleteSecret Delete a secret
+	// (DELETE /v1/orgs/{org}/secrets/{secret})
+	DeleteSecret(w http.ResponseWriter, r *http.Request, org OrgRef, secret SecretRef)
+	// GetSecret One secret, never its value
+	// (GET /v1/orgs/{org}/secrets/{secret})
+	GetSecret(w http.ResponseWriter, r *http.Request, org OrgRef, secret SecretRef)
+	// PatchSecret Change a secret's description, scope, expiry or reminder
+	// (PATCH /v1/orgs/{org}/secrets/{secret})
+	PatchSecret(w http.ResponseWriter, r *http.Request, org OrgRef, secret SecretRef)
+	// ReplaceSecretValue Replace a secret's value
+	// (PUT /v1/orgs/{org}/secrets/{secret}/value)
+	ReplaceSecretValue(w http.ResponseWriter, r *http.Request, org OrgRef, secret SecretRef)
 	// GetOrgSettings The organization's settings, slot caps included
 	// (GET /v1/orgs/{org}/settings)
 	GetOrgSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -53013,6 +54812,224 @@ func (siw *ServerInterfaceWrapper) SearchOrg(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// ListSecrets operation middleware
+func (siw *ServerInterfaceWrapper) ListSecrets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSecrets(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSecret operation middleware
+func (siw *ServerInterfaceWrapper) CreateSecret(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSecret(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ImportSecrets operation middleware
+func (siw *ServerInterfaceWrapper) ImportSecrets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ImportSecrets(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteSecret operation middleware
+func (siw *ServerInterfaceWrapper) DeleteSecret(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "secret" -------------
+	var secret SecretRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secret", r.PathValue("secret"), &secret, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secret", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteSecret(w, r, org, secret)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSecret operation middleware
+func (siw *ServerInterfaceWrapper) GetSecret(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "secret" -------------
+	var secret SecretRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secret", r.PathValue("secret"), &secret, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secret", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSecret(w, r, org, secret)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PatchSecret operation middleware
+func (siw *ServerInterfaceWrapper) PatchSecret(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "secret" -------------
+	var secret SecretRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secret", r.PathValue("secret"), &secret, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secret", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PatchSecret(w, r, org, secret)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReplaceSecretValue operation middleware
+func (siw *ServerInterfaceWrapper) ReplaceSecretValue(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "secret" -------------
+	var secret SecretRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secret", r.PathValue("secret"), &secret, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secret", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReplaceSecretValue(w, r, org, secret)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetOrgSettings operation middleware
 func (siw *ServerInterfaceWrapper) GetOrgSettings(w http.ResponseWriter, r *http.Request) {
 
@@ -53827,6 +55844,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/credentials/{credential}", wrapper.DeleteCredential)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/credentials/{credential}", wrapper.GetCredential)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/credentials/{credential}", wrapper.PatchCredential)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/secrets", wrapper.ListSecrets)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/secrets", wrapper.CreateSecret)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/secrets/import", wrapper.ImportSecrets)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/secrets/{secret}", wrapper.DeleteSecret)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/secrets/{secret}", wrapper.GetSecret)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/secrets/{secret}", wrapper.PatchSecret)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/secrets/{secret}/value", wrapper.ReplaceSecretValue)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources", wrapper.ListKnowledgeSources)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources", wrapper.CreateKnowledgeSource)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}", wrapper.DeleteKnowledgeSource)
@@ -61005,6 +63029,281 @@ func (response SearchOrgdefaultApplicationProblemPlusJSONResponse) VisitSearchOr
 	return err
 }
 
+type ListSecretsRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type ListSecretsResponseObject interface {
+	VisitListSecretsResponse(w http.ResponseWriter) error
+}
+
+type ListSecrets200JSONResponse SecretList
+
+func (response ListSecrets200JSONResponse) VisitListSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSecretsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListSecretsdefaultApplicationProblemPlusJSONResponse) VisitListSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSecretRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *CreateSecretJSONRequestBody
+}
+
+type CreateSecretResponseObject interface {
+	VisitCreateSecretResponse(w http.ResponseWriter) error
+}
+
+type CreateSecret201JSONResponse Secret
+
+func (response CreateSecret201JSONResponse) VisitCreateSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSecretdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateSecretdefaultApplicationProblemPlusJSONResponse) VisitCreateSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ImportSecretsRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *ImportSecretsJSONRequestBody
+}
+
+type ImportSecretsResponseObject interface {
+	VisitImportSecretsResponse(w http.ResponseWriter) error
+}
+
+type ImportSecrets200JSONResponse SecretImportResult
+
+func (response ImportSecrets200JSONResponse) VisitImportSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ImportSecretsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ImportSecretsdefaultApplicationProblemPlusJSONResponse) VisitImportSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteSecretRequestObject struct {
+	Org    OrgRef    `json:"org"`
+	Secret SecretRef `json:"secret"`
+}
+
+type DeleteSecretResponseObject interface {
+	VisitDeleteSecretResponse(w http.ResponseWriter) error
+}
+
+type DeleteSecret204Response struct {
+}
+
+func (response DeleteSecret204Response) VisitDeleteSecretResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteSecretdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteSecretdefaultApplicationProblemPlusJSONResponse) VisitDeleteSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecretRequestObject struct {
+	Org    OrgRef    `json:"org"`
+	Secret SecretRef `json:"secret"`
+}
+
+type GetSecretResponseObject interface {
+	VisitGetSecretResponse(w http.ResponseWriter) error
+}
+
+type GetSecret200JSONResponse Secret
+
+func (response GetSecret200JSONResponse) VisitGetSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecretdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetSecretdefaultApplicationProblemPlusJSONResponse) VisitGetSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchSecretRequestObject struct {
+	Org    OrgRef    `json:"org"`
+	Secret SecretRef `json:"secret"`
+	Body   *PatchSecretJSONRequestBody
+}
+
+type PatchSecretResponseObject interface {
+	VisitPatchSecretResponse(w http.ResponseWriter) error
+}
+
+type PatchSecret200JSONResponse Secret
+
+func (response PatchSecret200JSONResponse) VisitPatchSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchSecretdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PatchSecretdefaultApplicationProblemPlusJSONResponse) VisitPatchSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceSecretValueRequestObject struct {
+	Org    OrgRef    `json:"org"`
+	Secret SecretRef `json:"secret"`
+	Body   *ReplaceSecretValueJSONRequestBody
+}
+
+type ReplaceSecretValueResponseObject interface {
+	VisitReplaceSecretValueResponse(w http.ResponseWriter) error
+}
+
+type ReplaceSecretValue200JSONResponse Secret
+
+func (response ReplaceSecretValue200JSONResponse) VisitReplaceSecretValueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceSecretValuedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ReplaceSecretValuedefaultApplicationProblemPlusJSONResponse) VisitReplaceSecretValueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetOrgSettingsRequestObject struct {
 	Org OrgRef `json:"org"`
 }
@@ -61787,21 +64086,33 @@ type StrictServerInterface interface {
 	TestConnection(ctx context.Context, request TestConnectionRequestObject) (TestConnectionResponseObject, error)
 	// ListCredentials The organization's credentials
 	// (GET /v1/orgs/{org}/credentials)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ListCredentials(ctx context.Context, request ListCredentialsRequestObject) (ListCredentialsResponseObject, error)
 	// CreateCredential Create a credential
 	// (POST /v1/orgs/{org}/credentials)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CreateCredential(ctx context.Context, request CreateCredentialRequestObject) (CreateCredentialResponseObject, error)
 	// ImportCredentials Import credentials from a .env or YAML text
 	// (POST /v1/orgs/{org}/credentials/import)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ImportCredentials(ctx context.Context, request ImportCredentialsRequestObject) (ImportCredentialsResponseObject, error)
 	// DeleteCredential Delete a credential
 	// (DELETE /v1/orgs/{org}/credentials/{credential})
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	DeleteCredential(ctx context.Context, request DeleteCredentialRequestObject) (DeleteCredentialResponseObject, error)
 	// GetCredential One credential, never its value
 	// (GET /v1/orgs/{org}/credentials/{credential})
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	GetCredential(ctx context.Context, request GetCredentialRequestObject) (GetCredentialResponseObject, error)
 	// PatchCredential Change a credential's metadata, or replace its value
 	// (PATCH /v1/orgs/{org}/credentials/{credential})
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PatchCredential(ctx context.Context, request PatchCredentialRequestObject) (PatchCredentialResponseObject, error)
 	// FormatDefinition Format a factory.yaml the way Visual saves write changed lines (Format)
 	// (POST /v1/orgs/{org}/definitions/format)
@@ -62211,6 +64522,27 @@ type StrictServerInterface interface {
 	// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
 	// (GET /v1/orgs/{org}/search)
 	SearchOrg(ctx context.Context, request SearchOrgRequestObject) (SearchOrgResponseObject, error)
+	// ListSecrets The organization's secrets
+	// (GET /v1/orgs/{org}/secrets)
+	ListSecrets(ctx context.Context, request ListSecretsRequestObject) (ListSecretsResponseObject, error)
+	// CreateSecret Create a secret
+	// (POST /v1/orgs/{org}/secrets)
+	CreateSecret(ctx context.Context, request CreateSecretRequestObject) (CreateSecretResponseObject, error)
+	// ImportSecrets Import secrets from a .env or YAML text
+	// (POST /v1/orgs/{org}/secrets/import)
+	ImportSecrets(ctx context.Context, request ImportSecretsRequestObject) (ImportSecretsResponseObject, error)
+	// DeleteSecret Delete a secret
+	// (DELETE /v1/orgs/{org}/secrets/{secret})
+	DeleteSecret(ctx context.Context, request DeleteSecretRequestObject) (DeleteSecretResponseObject, error)
+	// GetSecret One secret, never its value
+	// (GET /v1/orgs/{org}/secrets/{secret})
+	GetSecret(ctx context.Context, request GetSecretRequestObject) (GetSecretResponseObject, error)
+	// PatchSecret Change a secret's description, scope, expiry or reminder
+	// (PATCH /v1/orgs/{org}/secrets/{secret})
+	PatchSecret(ctx context.Context, request PatchSecretRequestObject) (PatchSecretResponseObject, error)
+	// ReplaceSecretValue Replace a secret's value
+	// (PUT /v1/orgs/{org}/secrets/{secret}/value)
+	ReplaceSecretValue(ctx context.Context, request ReplaceSecretValueRequestObject) (ReplaceSecretValueResponseObject, error)
 	// GetOrgSettings The organization's settings, slot caps included
 	// (GET /v1/orgs/{org}/settings)
 	GetOrgSettings(ctx context.Context, request GetOrgSettingsRequestObject) (GetOrgSettingsResponseObject, error)
@@ -67304,6 +69636,220 @@ func (sh *strictHandler) SearchOrg(w http.ResponseWriter, r *http.Request, org O
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SearchOrgResponseObject); ok {
 		if err := validResponse.VisitSearchOrgResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListSecrets operation middleware
+func (sh *strictHandler) ListSecrets(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ListSecretsRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListSecrets(ctx, request.(ListSecretsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListSecrets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListSecretsResponseObject); ok {
+		if err := validResponse.VisitListSecretsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateSecret operation middleware
+func (sh *strictHandler) CreateSecret(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request CreateSecretRequestObject
+
+	request.Org = org
+
+	var body CreateSecretJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateSecret(ctx, request.(CreateSecretRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateSecret")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateSecretResponseObject); ok {
+		if err := validResponse.VisitCreateSecretResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ImportSecrets operation middleware
+func (sh *strictHandler) ImportSecrets(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ImportSecretsRequestObject
+
+	request.Org = org
+
+	var body ImportSecretsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ImportSecrets(ctx, request.(ImportSecretsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ImportSecrets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ImportSecretsResponseObject); ok {
+		if err := validResponse.VisitImportSecretsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteSecret operation middleware
+func (sh *strictHandler) DeleteSecret(w http.ResponseWriter, r *http.Request, org OrgRef, secret SecretRef) {
+	var request DeleteSecretRequestObject
+
+	request.Org = org
+	request.Secret = secret
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteSecret(ctx, request.(DeleteSecretRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteSecret")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteSecretResponseObject); ok {
+		if err := validResponse.VisitDeleteSecretResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSecret operation middleware
+func (sh *strictHandler) GetSecret(w http.ResponseWriter, r *http.Request, org OrgRef, secret SecretRef) {
+	var request GetSecretRequestObject
+
+	request.Org = org
+	request.Secret = secret
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSecret(ctx, request.(GetSecretRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSecret")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSecretResponseObject); ok {
+		if err := validResponse.VisitGetSecretResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PatchSecret operation middleware
+func (sh *strictHandler) PatchSecret(w http.ResponseWriter, r *http.Request, org OrgRef, secret SecretRef) {
+	var request PatchSecretRequestObject
+
+	request.Org = org
+	request.Secret = secret
+
+	var body PatchSecretJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PatchSecret(ctx, request.(PatchSecretRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PatchSecret")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PatchSecretResponseObject); ok {
+		if err := validResponse.VisitPatchSecretResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReplaceSecretValue operation middleware
+func (sh *strictHandler) ReplaceSecretValue(w http.ResponseWriter, r *http.Request, org OrgRef, secret SecretRef) {
+	var request ReplaceSecretValueRequestObject
+
+	request.Org = org
+	request.Secret = secret
+
+	var body ReplaceSecretValueJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReplaceSecretValue(ctx, request.(ReplaceSecretValueRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReplaceSecretValue")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReplaceSecretValueResponseObject); ok {
+		if err := validResponse.VisitReplaceSecretValueResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

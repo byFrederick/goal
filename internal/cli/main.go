@@ -148,20 +148,24 @@ const usage = `usage:
                                                   the organization's
   goal connection kind push <file.yaml>           create or replace an organization kind from its file
   goal connection kind delete <name>              delete an organization kind no connection is of
-  goal credential list                            the organization's credentials: type, factories, what uses
-                                                  them, last use and expiry (never a value)
-  goal credential create <name> --type T [--description D] [--factory <id>]... [--all-factories] [--expires YYYY-MM-DD] [--remind-days N]
-                                                  create a credential (owners and admins; types api_key,
-                                                  oauth_token, ssh_key, cloud_role, app_key); its value
-                                                  comes from stdin, never argv: ... < value-file
-  goal credential replace <name>                  replace its value with the one on stdin
-  goal credential rm <name>                       delete it (refused while a connection refers to it as
-                                                  {{name}}; the error names them)
-  goal credential import <file> [--format env|yaml] [--on-conflict replace|skip] [--dry-run]
-                                                  import a .env or YAML file's credentials (format from
-                                                  the extension by default; a name that exists is skipped
+  goal secret list                                the organization's secrets: factories, what uses them,
+                                                  last use and expiry (never a value)
+  goal secret show <name>                         one secret: source, description, factories, what uses
+                                                  it, expiry and reminder, last use, who changed it
+  goal secret create <name> [--description D] [--factory <id>]... [--all-factories] [--expires YYYY-MM-DD] [--remind-days N]
+                                                  create a secret (owners and admins), open to no factory
+                                                  unless --factory or --all-factories; its value comes
+                                                  from stdin, never argv: ... < value-file
+  goal secret replace <name>                      replace its value with the one on stdin
+  goal secret delete <name>                       delete it (refused while something uses it; the error
+                                                  names each use)
+  goal secret import <file> [--format env|yaml] [--on-conflict replace|skip] [--dry-run]
+                                                  import a .env file or a YAML file's credentials: map
+                                                  (format from the extension by default; new names are
+                                                  open to no factory, a name that exists is skipped
                                                   unless --on-conflict replace); prints each name as new
                                                   or exists (--dry-run) or what was done with it
+  goal credential ...                             moved to goal secret; prints where and exits 2
   goal knowledge sources [--factory F]            the knowledge base's sources: kind, status, documents,
                                                   last and next sync, the factories that search them
   goal knowledge add <name> --kind upload|synced|live [--connection C] [--config k=v]... [--title T] [--every 1h]
@@ -304,7 +308,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, credential, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one
+Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, secret, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
@@ -322,17 +326,24 @@ func Usage() string { return usage }
 var errUsage = errors.New(usage)
 
 // Run runs the command line args (without the program name) and returns the exit code: 2 for a
-// command line that names no valid command, exitNoPerm when goald refuses a credential or
-// permission, 1 for any other error and 0 on success.
+// command line that names no valid command or a command that moved, exitNoPerm when goald
+// refuses a credential or permission, 1 for any other error and 0 on success.
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(string) string, readBuildInfo buildInfoFunc) int {
 	out := &printer{w: stdout, e: stderr, in: stdin}
 	err := errors.Join(run(ctx, args, out, getenv, readBuildInfo), out.err)
 
-	var refused *accessError
+	var (
+		refused *accessError
+		moved   *movedError
+	)
 
 	switch {
 	case errors.Is(err, errUsage):
 		_, _ = fmt.Fprintln(stderr, err)
+
+		return 2
+	case errors.As(err, &moved):
+		_, _ = fmt.Fprintln(stderr, "goal:", moved)
 
 		return 2
 	case errors.As(err, &refused):
@@ -347,6 +358,11 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 
 	return 0
 }
+
+// movedError is a command that moved: Run prints where it went, without the usage, and exits 2.
+type movedError struct{ msg string }
+
+func (e *movedError) Error() string { return e.msg }
 
 // command is a command, or a group of them, given its arguments.
 type command func(ctx context.Context, out *printer, getenv func(string) string, args []string) error
@@ -377,7 +393,7 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 	if handler, ok := map[string]command{
 		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbLane: laneItem, verbPause: pauseItem, verbCancel: cancelItem, verbDeny: denyItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
-		"connection": connectionCommand, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "search": search, "runs": runs, "eval": evalCommand, "bake-off": bakeOffCommand, "spend": spend,
+		"connection": connectionCommand, "secret": secretCommand, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "search": search, "runs": runs, "eval": evalCommand, "bake-off": bakeOffCommand, "spend": spend,
 		"judge": judgeCommand, "jonah": jonahCommand, "triggers": triggersCommand, "webhooks": webhooksCommand, cmdStandingRules: standingRulesCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)
