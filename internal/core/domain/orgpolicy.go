@@ -18,15 +18,19 @@ const (
 	ToolAsk            ToolSetting = "ask"
 	ToolAllowed        ToolSetting = "allowed"
 	ToolReviewApproval ToolSetting = "review_approval" // only a review station with merge on approval merges
-	ToolAttachedOnly   ToolSetting = "attached_only"   // an agent gets only the credentials attached to it
+	ToolEnvironment    ToolSetting = "environment"     // Use secrets: an agent gets what its environment names (ADR 0037 decision 12)
+	// ToolAttachedOnly is the deprecated alias of ToolEnvironment, the Use credentials value
+	// before ADR 0037. Validate accepts it and Normalized saves it as ToolEnvironment.
+	ToolAttachedOnly ToolSetting = "attached_only"
 )
 
-// The values each tool default takes, as 00069's CHECK constraints list them.
+// The values each tool default takes, as 00069's CHECK constraints list them (use_credentials as
+// 00092 widens it).
 var (
 	WriteOutsideBranchSettings = []ToolSetting{ToolOff, ToolAsk, ToolAllowed}
 	MergePullRequestSettings   = []ToolSetting{ToolOff, ToolReviewApproval}
 	ReadWebSettings            = []ToolSetting{ToolOff, ToolAsk, ToolAllowed}
-	UseCredentialsSettings     = []ToolSetting{ToolOff, ToolAttachedOnly}
+	UseCredentialsSettings     = []ToolSetting{ToolOff, ToolEnvironment, ToolAttachedOnly}
 )
 
 // DefaultBoxTimeLimitMinutes is the default policy's box time limit: 3 hours.
@@ -46,7 +50,7 @@ type OrgPolicy struct {
 	WriteOutsideBranch ToolSetting // comments, issues, tickets and messages
 	MergePullRequest   ToolSetting
 	ReadWeb            ToolSetting // search, fetch and documentation tools
-	UseCredentials     ToolSetting
+	UseCredentials     ToolSetting // Use secrets (ADR 0037 decision 12): environment or off
 	// BoxTimeLimitMinutes is how long a box may run before the engine stops it.
 	BoxTimeLimitMinutes int
 	// Revision counts the saves: 0 for the default policy, then one more for each Put. A Put
@@ -66,16 +70,27 @@ const AuditTargetOrgPolicy = "org_policy"
 
 // DefaultOrgPolicy is the policy of an organization without one, over the platform's models:
 // every model allowed, the first the default, no denied commands, the tool defaults ask,
-// review_approval, allowed and attached_only, and a 3-hour box time limit.
+// review_approval, allowed and environment, and a 3-hour box time limit.
 func DefaultOrgPolicy(models []string) OrgPolicy {
 	p := OrgPolicy{
 		AllowedModels:      slices.Clone(models),
-		WriteOutsideBranch: ToolAsk, MergePullRequest: ToolReviewApproval, ReadWeb: ToolAllowed, UseCredentials: ToolAttachedOnly,
+		WriteOutsideBranch: ToolAsk, MergePullRequest: ToolReviewApproval, ReadWeb: ToolAllowed, UseCredentials: ToolEnvironment,
 		BoxTimeLimitMinutes: DefaultBoxTimeLimitMinutes,
 	}
 
 	if len(models) > 0 {
 		p.DefaultModel = models[0]
+	}
+
+	return p
+}
+
+// Normalized is p with each deprecated value replaced by the one it stands for: Use secrets
+// attached_only becomes environment, so a save from an older client is stored and read back as
+// environment.
+func (p OrgPolicy) Normalized() OrgPolicy {
+	if p.UseCredentials == ToolAttachedOnly {
+		p.UseCredentials = ToolEnvironment
 	}
 
 	return p
@@ -115,7 +130,7 @@ func (p OrgPolicy) Validate() error {
 		checkToolSetting("write outside the item's branch", p.WriteOutsideBranch, WriteOutsideBranchSettings),
 		checkToolSetting("merge a pull request", p.MergePullRequest, MergePullRequestSettings),
 		checkToolSetting("read the web and docs", p.ReadWeb, ReadWebSettings),
-		checkToolSetting("use credentials", p.UseCredentials, UseCredentialsSettings))
+		checkToolSetting("use secrets", p.UseCredentials, UseCredentialsSettings))
 
 	if p.BoxTimeLimitMinutes <= 0 {
 		errs = append(errs, fmt.Errorf("the box time limit is a positive number of minutes, not %d: %w", p.BoxTimeLimitMinutes, ErrInvalid))

@@ -72,7 +72,7 @@ describe('the mock policy answers', () => {
       write_outside_branch: 'ask',
       merge_pull_request: 'review_approval',
       read_web: 'allowed',
-      use_credentials: 'attached_only',
+      use_credentials: 'environment',
     });
     expect(view.models.map((m) => m.id)).toEqual([
       'claude-opus-5-5',
