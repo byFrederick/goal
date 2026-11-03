@@ -139,7 +139,7 @@ describe('SetupCard', () => {
 
     expect(screen.getByRole('link', { name: 'Invite' }).getAttribute('href')).toBe('/o/acme/members');
     expect(screen.getByRole('link', { name: 'Connect' }).getAttribute('href')).toBe(
-      '/o/acme/connections/new?kind=slack',
+      '/o/acme/secrets?new=true',
     );
     expect(screen.getByRole('link', { name: 'Add' }).getAttribute('href')).toBe('/o/acme/knowledge/new');
   });

@@ -116,7 +116,7 @@ describe('WaysInCard', () => {
 
     expect(await screen.findByText('@software')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Connect' }).getAttribute('href')).toBe(
-      '/o/acme/connections/new?kind=slack',
+      '/o/acme/secrets?new=true',
     );
   });
 

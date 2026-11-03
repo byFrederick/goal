@@ -121,11 +121,11 @@ function renderStep(url = '/o/acme/get-started/code') {
       return key === 'code' ? <CodeStep org={org} search={search} /> : <p>Factory step</p>;
     },
   });
-  const add = createRoute({ getParentRoute: () => root, path: '/o/$org/connections/new', component: () => <p>Add</p> });
+  const add = createRoute({ getParentRoute: () => root, path: '/o/$org/secrets', component: () => <p>Add</p> });
   const connection = createRoute({
     getParentRoute: () => root,
-    path: '/o/$org/connections/$connection',
-    component: () => <p>Connection page</p>,
+    path: '/o/$org/access',
+    component: () => <p>Access page</p>,
   });
   const router = createRouter({
     routeTree: root.addChildren([step, add, connection]),
@@ -163,25 +163,24 @@ function row(name: string): HTMLInputElement {
 }
 
 describe('the Code step', () => {
-  it('shows the account a GitHub connection signs in as, and Switch account to its page', async () => {
+  it('shows the account a GitHub connection signs in as, and Switch account to its place in Access', async () => {
     renderStep();
 
     expect(await screen.findByText('Connected as acme')).toBeTruthy();
     expect(screen.getByText('Connected')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Switch account' }).getAttribute('href')).toBe(
-      '/o/acme/connections/github',
+      '/o/acme/access?q=github',
     );
   });
 
-  it('links a person with no GitHub connection to add one, which returns to this step', async () => {
+  it('links a person with no GitHub connection to add a key', async () => {
     api.connections = [];
     renderStep();
 
     const link = await screen.findByRole('link', { name: 'Connect GitHub' });
     const href = new URL(link.getAttribute('href') ?? '', 'http://goal.invalid');
-    expect(href.pathname).toBe('/o/acme/connections/new');
-    expect(href.searchParams.get('kind')).toBe('github');
-    expect(href.searchParams.get('next')).toBe('/o/acme/get-started/code');
+    expect(href.pathname).toBe('/o/acme/secrets');
+    expect(href.searchParams.get('new')).toBe('true');
     expect(listConnectionRepositories).not.toHaveBeenCalled();
   });
 

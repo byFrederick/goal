@@ -209,13 +209,12 @@ function Matrix({ groups, now }: { groups: readonly AccessGroup[]; now: number }
             </th>
             {columns.map((c) => (
               <th key={placeLabel(c)} scope="col" className="w-24 text-center leading-snug">
-                {c.factory.name}
-                <br />
-                {c.environment}
+                <span className="block">{c.factory.name}</span>
+                <span className="block">{c.environment}</span>
               </th>
             ))}
             <th scope="col">Key</th>
-            <th scope="col" className="w-[22%]">
+            <th scope="col" className="min-w-40">
               Status
             </th>
           </tr>
@@ -223,7 +222,7 @@ function Matrix({ groups, now }: { groups: readonly AccessGroup[]; now: number }
         {groups.map((g) => (
           <tbody key={g.key}>
             <tr className="border-t border-line bg-panel">
-              <th scope="colgroup" colSpan={span} className="px-4 py-2.5 text-left font-medium text-ink-soft">
+              <th scope="colgroup" colSpan={span} className="px-4 py-3 text-left font-medium text-ink-soft">
                 {g.title}
               </th>
             </tr>
@@ -291,7 +290,7 @@ function RowList({ groups, now }: { groups: readonly AccessGroup[]; now: number 
     <div className="overflow-hidden rounded-card border border-line bg-card min-[1000px]:hidden">
       {groups.map((g) => (
         <section key={g.key} aria-label={g.title}>
-          <h2 className="m-0 border-t border-line bg-panel px-4 py-2.5 text-secondary font-medium text-ink-soft first:border-t-0">
+          <h2 className="m-0 border-t border-line bg-panel px-4 py-3 text-secondary font-medium text-ink-soft first:border-t-0">
             {g.title}
           </h2>
           <ul className="m-0 flex list-none flex-col p-0">
@@ -405,7 +404,7 @@ export function AccessPage() {
       <div className="@container flex min-w-0 flex-col gap-5">
         <div className="flex min-w-0 flex-col gap-1 md:gap-2">
           <h1 className="m-0 text-page-title tracking-display max-md:sr-only">Access</h1>
-          <p className="m-0 max-w-[680px] text-body text-ink-soft">
+          <p className="m-0 max-w-2xl text-body text-ink-soft">
             <span className="md:hidden">What every factory’s agents can reach, from their environment files.</span>
             <span className="max-md:hidden">
               What every factory’s agents can reach, read from their environment files. To change it, open the
