@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -352,4 +353,60 @@ func (h *harness) expectLandingReworkRun(t *testing.T, run porttest.ExecCall) {
 			t.Errorf("feedback %q mentions %q at a station that does not land", note, s)
 		}
 	}
+}
+
+// On secrets, the landing gate's approval merges the pull request from the integration branch
+// with the repository token, and the assembly goes to done.
+func TestRun_IntegrationApprovalOnSecretsMerges(t *testing.T) {
+	t.Parallel()
+
+	line := onSecrets(landingLine(), domain.Repository{URL: appRepo, Token: repositoryToken})
+	h := newHarness(t, line, byAgent(map[string]string{
+		agReviewer: `{"decision":"approve","pull_request":"` + landingURL + `"}`,
+	}))
+	h.addSecrets(t)
+
+	pr := openPR(landingURL)
+	pr.HeadBranch = integrationBranch
+	h.codehost.Add(pr)
+
+	root := h.landing(t)
+	h.step(t)
+
+	if got := h.item(t, root.ID); got.Position() != (domain.Position{Station: stDone, State: domain.StateDone}) {
+		t.Fatalf("assembly at %+v, want done (events %v)", got.Position(), h.kinds(root.ID))
+	}
+
+	if merges := h.codehost.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{squashOf(landingURL, repositoryLogin)}) {
+		t.Errorf("merges %+v, want the landing pull request with the repository token", merges)
+	}
+
+	h.expectRepositoryLogin(t, root.ID, h.codehost)
+}
+
+// On secrets, a part whose pull request is open reads its base through the repository token.
+func TestRun_PartHearsItsIntegrationBaseOnSecrets(t *testing.T) {
+	t.Parallel()
+
+	line := onSecrets(integrationLine(domain.IntegrationModeBranch, 1), domain.Repository{URL: appRepo, Token: repositoryToken})
+	h := newHarness(t, line, porttest.Succeed(`{}`))
+	h.addSecrets(t)
+	root, parts := h.assembly(t, 1)
+
+	if _, err := h.store.SetIntegrationBranch(inOrg(t), root.ID, integrationBranch, stMerge, h.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	pr := openPR(prURL)
+	pr.BaseBranch = integrationBranch
+	h.codehost.Add(pr)
+	h.namePR(t, parts[0])
+
+	h.step(t)
+
+	if c := h.claims(t, h.worker.Runs()[0].Env["GOAL_GATEWAY_TOKEN"]); c.Base != integrationBranch {
+		t.Errorf("token base %q, want %q", c.Base, integrationBranch)
+	}
+
+	h.expectRepositoryLogin(t, parts[0].ID, h.codehost)
 }

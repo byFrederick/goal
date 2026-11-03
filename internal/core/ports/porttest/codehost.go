@@ -38,6 +38,7 @@ type CodeHost struct {
 	access   map[string]ports.RepositoryAccess // repo + " " + token → what RepositoryAccess answers
 	stall    bool                              // RepositoryAccess waits for its context to end
 	tokens   []string                          // the tokens RepositoryAccess was given, in order
+	logins   []string                          // the tokens of the other calls' logins, in order
 }
 
 // SetAccess makes a what RepositoryAccess answers for token in the repository at repo. Any other
@@ -245,7 +246,7 @@ func (c *CodeHost) DeletedBranches() []string {
 
 // PullRequest implements ports.CodeHost.
 func (c *CodeHost) PullRequest(_ context.Context, login domain.CodeHostLogin, url string) (ports.PullRequest, error) {
-	if err := onHost(login, url); err != nil {
+	if err := c.onHost(login, url); err != nil {
 		return ports.PullRequest{}, err
 	}
 
@@ -281,7 +282,7 @@ func (c *CodeHost) PullRequest(_ context.Context, login domain.CodeHostLogin, ur
 
 // Merge implements ports.CodeHost.
 func (c *CodeHost) Merge(_ context.Context, login domain.CodeHostLogin, url string, m ports.Merge) (string, error) {
-	if err := onHost(login, url); err != nil {
+	if err := c.onHost(login, url); err != nil {
 		return "", err
 	}
 
@@ -311,7 +312,7 @@ func (c *CodeHost) Merge(_ context.Context, login domain.CodeHostLogin, url stri
 // UpdateBranch implements ports.CodeHost. An update moves the head to "updated-" and the head
 // it was given; an up-to-date branch (UpToDate) is left as it is.
 func (c *CodeHost) UpdateBranch(_ context.Context, login domain.CodeHostLogin, url, headSHA string) error {
-	if err := onHost(login, url); err != nil {
+	if err := c.onHost(login, url); err != nil {
 		return err
 	}
 
@@ -344,7 +345,7 @@ func (c *CodeHost) UpdateBranch(_ context.Context, login domain.CodeHostLogin, u
 
 // DeleteBranch implements ports.CodeHost.
 func (c *CodeHost) DeleteBranch(_ context.Context, login domain.CodeHostLogin, url, branch string) error {
-	if err := onHost(login, url); err != nil {
+	if err := c.onHost(login, url); err != nil {
 		return err
 	}
 
@@ -358,7 +359,7 @@ func (c *CodeHost) DeleteBranch(_ context.Context, login domain.CodeHostLogin, u
 
 // BranchHead implements ports.CodeHost from SetBranchHead.
 func (c *CodeHost) BranchHead(_ context.Context, login domain.CodeHostLogin, repo, branch string) (string, error) {
-	if err := onHost(login, repo); err != nil {
+	if err := c.onHost(login, repo); err != nil {
 		return "", err
 	}
 
@@ -376,7 +377,7 @@ func (c *CodeHost) BranchHead(_ context.Context, login domain.CodeHostLogin, rep
 // Compare implements ports.CodeHost from AddCommits: the commits after base up to head, none
 // when head is not after base.
 func (c *CodeHost) Compare(_ context.Context, login domain.CodeHostLogin, repo, base, head string) (ports.Comparison, error) {
-	if err := onHost(login, repo); err != nil {
+	if err := c.onHost(login, repo); err != nil {
 		return ports.Comparison{}, err
 	}
 
@@ -469,8 +470,22 @@ func (c *CodeHost) RepositoryAccess(ctx context.Context, repo, token string) (po
 	return a, nil
 }
 
-// onHost refuses a pull request or repository URL that is not on the login's host.
-func onHost(login domain.CodeHostLogin, raw string) error {
+// LoginTokens are the tokens of the logins the pull request and repository calls were made
+// with, in order, refused ones included.
+func (c *CodeHost) LoginTokens() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return slices.Clone(c.logins)
+}
+
+// onHost records login's token and refuses a pull request or repository URL that is not on the
+// login's host.
+func (c *CodeHost) onHost(login domain.CodeHostLogin, raw string) error {
+	c.mu.Lock()
+	c.logins = append(c.logins, login.Token)
+	c.mu.Unlock()
+
 	if err := login.Validate(); err != nil {
 		return err
 	}
