@@ -229,6 +229,9 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `CLOUDFLARE_ACCOUNT_ID` | config | no | The Cloudflare account the Terraform and deploy tasks act on (the operator's environment or CI). |
 | `CLOUDFLARE_API_TOKEN` | secret | no | The Cloudflare API token the Terraform and deploy tasks use (the operator's environment or CI). |
 | `GITHUB_ACTIONS` | config | no | Set to true by CI; the Terraform tasks then expect GOOGLE_OAUTH_ACCESS_TOKEN instead of the operator's own sign-in. |
+| `GOAL_E2E_MODEL_KEY` | secret | no | The model key (an Anthropic API key) that task e2e:secrets gives its factory's runs as the secret model-key; the test skips while it is unset. |
+| `GOAL_E2E_REPOSITORY_TOKEN` | secret | no | A fine-grained token for GOAL_E2E_REPOSITORY_URL's repository (contents and pull requests, read and write) that task e2e:secrets stores as the secret repo-token; the test skips while it is unset. |
+| `GOAL_E2E_REPOSITORY_URL` | config | no | The private github.com repository that task e2e:secrets runs an item on, used for nothing else: the test pushes and merges branches there and deletes them after; it never writes the default branch. |
 | `GOAL_FACTORIES_DIR` | config | no | The local working copy of the factory definitions that the factory tasks read and write, outside this repository. |
 | `GOAL_S3_ACCESS_KEY` | secret | no | The object storage access key. |
 | `GOAL_S3_BUCKET` | config | yes | The bucket that holds factory definition blobs and the catalogs. |

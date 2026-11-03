@@ -28,6 +28,7 @@ docs:site:check
 docs:site:dev
 docs:site:install
 e2e:auth
+e2e:secrets
 egress:image
 env:check
 factory:list
