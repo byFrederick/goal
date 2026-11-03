@@ -4,7 +4,7 @@ The conversion from connections to secrets and environment files (`internal/move
 
 ## Also change
 
-`TestConvert`, `TestRun_Idempotent` and `TestConvert_GoalProductionFactory` in `internal/moveover`; `ports.FactoryConversions` with its fake, `porttest/conversiontest` and the postgres adapter (00087's `factory_conversions`) when what a conversion records changes; the conversion inbox entry (`internal/api/inbox.go`, `InboxConversion` in `contracts/api/openapi.yaml`); the "Moving to secrets and environment files" section of `apps/docs/src/content/docs/concepts/connections.md`
+`TestConvert`, `TestRun_Idempotent`, `TestRun_PointsKnowledgeSourcesAtSecrets` and `TestConvert_GoalProductionFactory` in `internal/moveover`; `ports.FactoryConversions` with its fake, `porttest/conversiontest` and the postgres adapter (00087's `factory_conversions`) when what a conversion records changes; the conversion inbox entry (`internal/api/inbox.go`, `InboxConversion` in `contracts/api/openapi.yaml`); the "Moving to secrets and environment files" section of `apps/docs/src/content/docs/concepts/connections.md`
 
 ## Run
 

@@ -13,7 +13,7 @@ Every command of the `goal` CLI, in the order its usage text lists them: each se
 
 Factory definitions live in goald (drafts and published versions), not in files: goal factory push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
+Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
 
 With sign-in on (GOAL\_AUTH=session), commands send GOAL\_API\_KEY (an API key goal\_sk\_… or a personal token goal\_pat\_…) when it is set, else what goal login stored for goald's origin, and only over https or to this machine; a refused credential or permission exits 77
 
@@ -480,6 +480,16 @@ call tools/list on the environment's remote MCP servers (default: default) from 
 
 Flags: `--server <name>`, `--version draft|current|N`.
 
+## goal repository test
+
+```text
+goal repository test <url> --secret <name>
+```
+
+whether the secret's token can read the repository and push to it (github.com and gitlab.com), asked of the code host by goald with the secret opened there (owners and admins; exit 1 when a check fails)
+
+Flags: `--secret <name>`.
+
 ## goal access
 
 ```text
@@ -503,12 +513,12 @@ Flags: `--factory F`.
 ## goal knowledge add
 
 ```text
-goal knowledge add <name> --kind upload|synced|live [--connection C] [--config k=v]... [--title T] [--every 1h]
+goal knowledge add <name> --kind upload|synced|live [--secret S] [--connection C] [--config k=v]... [--title T] [--every 1h]
 ```
 
-add a source (owners and admins); a synced or live one reads a connection, --config says what (space=ENG)
+add a source (owners and admins); a synced one reads with secret S, --config names its reader and what it reads (reader=gitdocs repository=URL, or reader=confluence site=… email=… spaces=ENG); a live one reads connection C
 
-Flags: `--kind upload|synced|live`, `--connection C`, `--config k=v`, `--title T`, `--every 1h`.
+Flags: `--kind upload|synced|live`, `--secret S`, `--connection C`, `--config k=v`, `--title T`, `--every 1h`.
 
 ## goal knowledge sync
 
