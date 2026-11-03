@@ -30,8 +30,8 @@ type OrgSecrets interface {
 	// has the new name, ErrNoMasterKey for Replace without a master key.
 	Patch(ctx context.Context, name string, p domain.SecretPatch, by domain.Actor) (domain.Secret, error)
 	// Delete deletes a secret (secret.deleted). ErrNotFound when there is none; ErrConflict,
-	// deleting nothing, while a connection refers to it as {{name}} or a knowledge source reads
-	// with it, naming them.
+	// deleting nothing, while a connection refers to it as {{name}}, a knowledge source reads with
+	// it or the Slack notification setting (NotificationSettings) uses it, naming them.
 	Delete(ctx context.Context, name string, by domain.Actor) error
 	// Resolve opens the named secrets for use's run, audits each as secret.used with the factory,
 	// agent and run, and sets last_used_at. ErrNotFound names the first unknown one, and
