@@ -176,9 +176,7 @@ func TestSecretCommand_ListAndShow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := g.goalIn(t, "{{acme-token}}", cmdConnection, verbCreate, importedGitHub, "--kind", importedGitHub, "--secret", "token=-"); err != nil {
-		t.Fatal(err)
-	}
+	g.githubConnection(t)
 
 	lines := strings.Split(strings.TrimSpace(g.mustGoal(t, cmdSecret, subList)), "\n")
 	if len(lines) != 2 {
@@ -222,9 +220,7 @@ func TestSecretCommand_ImportDryRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := g.goalIn(t, "{{acme-token}}", cmdConnection, verbCreate, importedGitHub, "--kind", importedGitHub, "--secret", "token=-"); err != nil {
-		t.Fatal(err)
-	}
+	g.githubConnection(t)
 
 	file := filepath.Join(t.TempDir(), "secrets.env")
 	if err := os.WriteFile(file, []byte("ACME_TOKEN="+secretValue+"\nSENTRY_TOKEN="+secretValue+"-2\n"), 0o600); err != nil {
@@ -296,16 +292,14 @@ func TestSecretCommand_DeleteInUse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := g.goalIn(t, "{{acme-token}}", cmdConnection, verbCreate, importedGitHub, "--kind", importedGitHub, "--secret", "token=-"); err != nil {
-		t.Fatal(err)
-	}
+	g.githubConnection(t)
 
 	stdout, stderr, code := g.goalRun(t, "", cmdSecret, verbDelete, secretName)
 	if code != 1 || !strings.Contains(stderr, "secret acme-token is used by connection github") {
 		t.Errorf("delete in use = exit %d, stdout %q, stderr %q; want exit 1 naming connection github", code, stdout, stderr)
 	}
 
-	g.mustGoal(t, cmdConnection, verbDelete, importedGitHub)
+	g.deleteGitHubConnection(t)
 
 	if out := g.mustGoal(t, cmdSecret, verbDelete, secretName); !strings.Contains(out, "deleted secret acme-token") {
 		t.Errorf("delete = %q", out)

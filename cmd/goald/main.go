@@ -62,6 +62,7 @@ import (
 	"github.com/byFrederick/goal/internal/gateway"
 	"github.com/byFrederick/goal/internal/jonah"
 	"github.com/byFrederick/goal/internal/knowledge"
+	"github.com/byFrederick/goal/internal/moveover"
 	"github.com/byFrederick/goal/internal/notify"
 	"github.com/byFrederick/goal/internal/retention"
 )
@@ -192,6 +193,17 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.searcher},
 		Policies:    policies, Clock: clock,
 	})
+
+	// Every organization moves from connections and credentials to secrets and environment files
+	// once (ADR 0037 decision 19), before the lines load, so they load the converted versions. A
+	// failure is logged and goald starts: an unconverted factory runs on the old path.
+	mover := moveover.New(moveover.Deps{
+		Orgs: store, Connections: connections, Secrets: orgSecrets, Definitions: definitionStore, Publisher: authors,
+		Conversions: postgres.NewFactoryConversions(store), Clock: clock, Logger: log,
+	})
+	if err := mover.Run(ctx); err != nil {
+		log.ErrorContext(ctx, "move over failed", slog.Any("error", err))
+	}
 
 	boxes, err := sandboxes(ctx, s, log)
 	if err != nil {
