@@ -64,7 +64,7 @@ export function SourcesCard({
             const line = e.readWhen ?? source?.read_when;
             return (
               <li key={e.name} className={cn(rowClass, arrived(e.name) && arrivalClass)}>
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
                   <Link
                     to="/o/$org/knowledge/$source"
                     params={{ org: org.slug, source: e.name }}
