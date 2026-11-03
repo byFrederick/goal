@@ -496,27 +496,44 @@ func TestDecideToolApproval_AlwaysAllowOnSecretsKeysByServer(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			rules, err := h.connections.StandingRules(inOrg(t), true)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if len(rules) != 1 || rules[0].ConnectionID != "" || rules[0].Factory != factoryID || rules[0].Environment != want ||
-				rules[0].Server != connTracker || rules[0].Tool != askTool || rules[0].Agent != agWorker || rules[0].ItemID != it.ID ||
-				!rules[0].Active() || rules[0].CreatedBy.Ref() != human.Ref() {
-				t.Fatalf("standing rules %+v; want one rule keyed by the factory, environment %s and server %s", rules, want, connTracker)
-			}
-
-			modes := map[string]domain.ConnectionToolMode{askTool: domain.ToolModeAsk, offTool: domain.ToolModeOff}
-			if got := domain.EffectiveServerToolModes(modes, rules, factoryID, want, connTracker, agWorker); got.Modes[askTool] != "" ||
-				got.Modes[offTool] != domain.ToolModeOff {
-				t.Errorf("effective modes %+v; want %s allowed and %s off", got, askTool, offTool)
-			}
-
-			if got := domain.EffectiveToolModes(modes, rules, "", agWorker); got.Modes[askTool] != domain.ToolModeAsk {
-				t.Errorf("a server's rule lifted a connection's ask: %+v", got)
-			}
+			h.expectServerRule(t, it.ID, want)
 		})
+	}
+}
+
+// expectServerRule checks that the organization has one standing rule, for askTool of server
+// connTracker in the test factory's environment env, approved on item by human, and that it lifts
+// askTool's ask there and nowhere else, and leaves offTool off.
+func (h *harness) expectServerRule(t *testing.T, item domain.ItemID, env string) {
+	t.Helper()
+
+	rules, err := h.connections.StandingRules(inOrg(t), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(rules) != 1 {
+		t.Fatalf("standing rules %+v; want one", rules)
+	}
+
+	r := rules[0]
+	want := domain.StandingRule{
+		ID: r.ID, Factory: factoryID, Environment: env, Server: connTracker, Tool: askTool, Agent: agWorker, CreatedBy: r.CreatedBy,
+		CreatedAt: r.CreatedAt, ItemID: item,
+	}
+
+	if r != want || r.CreatedBy.Ref() != human.Ref() {
+		t.Fatalf("standing rules %+v; want one rule keyed by the factory, environment %s and server %s", rules, env, connTracker)
+	}
+
+	modes := map[string]domain.ConnectionToolMode{askTool: domain.ToolModeAsk, offTool: domain.ToolModeOff}
+	if got := domain.EffectiveServerToolModes(modes, rules, factoryID, env, connTracker, agWorker); got.Modes[askTool] != "" ||
+		got.Modes[offTool] != domain.ToolModeOff {
+		t.Errorf("effective modes %+v; want %s allowed and %s off", got, askTool, offTool)
+	}
+
+	if got := domain.EffectiveToolModes(modes, rules, "", agWorker); got.Modes[askTool] != domain.ToolModeAsk {
+		t.Errorf("a server's rule lifted a connection's ask: %+v", got)
 	}
 }
 
