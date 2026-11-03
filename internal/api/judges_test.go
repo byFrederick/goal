@@ -20,8 +20,6 @@ const (
 	specFollowed = "spec-followed"
 	// writerAgent is acme's one agent.
 	writerAgent = "writer"
-	// modelConnection is acme's model connection.
-	modelConnection = "claude"
 )
 
 var _ api.JudgeTries = (*jonah.Loop)(nil)
@@ -256,11 +254,11 @@ func wantGot(t *testing.T, j gen.Judge) {
 			check{deref(r.Outcome) == "yes" && r.Score != nil && *r.Score == 1 && deref(r.Reason) == "Because.", "yes, 1, its reason"})
 	}
 
-	// acme names no size, and its connection is its model connection.
+	// acme names no size, and no connection: its model key is a secret (ADR 0037).
 	r := j.RunsOn
 	wantAll(t, "runs on", r,
 		check{r.Size == "medium" && r.Inherited, "medium, inherited"},
-		check{slices.Equal(r.Connections, []string{modelConnection}), modelConnection},
+		check{len(r.Connections) == 0, "no connection"},
 		check{slices.Equal(r.Sees, []gen.JudgeRunsOnSees{gen.Events, gen.Spec, gen.PullRequest}), "events, spec and pull request"})
 }
 

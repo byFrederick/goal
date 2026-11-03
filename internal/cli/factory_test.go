@@ -38,7 +38,7 @@ const factoryYAML = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + factoryID + `, name: acme, title: Acme }
 spec:
-  runtime: { modelConnection: claude }
+  runtime: { modelKey: "{{claude-key}}" }
   agents:
     - { name: writer, prompt: ./agents/writer.md }
   board:
@@ -54,11 +54,15 @@ const (
 	yamlPath   = "factory.yaml"
 	promptPath = "agents/writer.md"
 	binaryPath = "evals/fixture.bin"
+	envPath    = "environments/default.yaml"
 )
 
 // workingCopy is the factory's files; fixture.bin is not text, so it travels as base64.
 func workingCopy() map[string]string {
-	return map[string]string{yamlPath: factoryYAML, promptPath: "# writer\n", binaryPath: "\x00\x01\xff"}
+	return map[string]string{
+		yamlPath: factoryYAML, promptPath: "# writer\n", binaryPath: "\x00\x01\xff",
+		envPath: "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n",
+	}
 }
 
 // defGoald is goald's API over in-memory ports with one organization, acme.
@@ -298,7 +302,7 @@ func TestFactoryPush_PublishThenRun(t *testing.T) {
 	}
 
 	if rec := readRecord(t, dir); rec.FactoryID != factoryID || rec.Org != string(g.orgID) || rec.Number != 1 || rec.Revision != 0 ||
-		len(rec.Manifest) != 3 {
+		len(rec.Manifest) != 4 {
 		t.Errorf("pulled.json after the publish = %+v", rec)
 	}
 
@@ -354,7 +358,7 @@ func TestFactoryPush_DraftWithoutPublish(t *testing.T) {
 	}
 
 	out := g.mustGoal(t, "factory", "push", dir)
-	for _, want := range []string{"updated   " + promptPath, "deleted   " + binaryPath, "unchanged 1 files", "goal factory publish acme"} {
+	for _, want := range []string{"updated   " + promptPath, "deleted   " + binaryPath, "unchanged 2 files", "goal factory publish acme"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("push output lacks %q:\n%s", want, out)
 		}
@@ -446,7 +450,7 @@ func TestFactoryPush_RefusesAnOpenDraftItWasNotPulledFrom(t *testing.T) {
 
 	// Pulling the draft makes it the folder's base; then the push replaces it.
 	drafted := filepath.Join(t.TempDir(), "draft")
-	if out := g.mustGoal(t, "factory", "pull", "acme", drafted, "--version", "draft"); !strings.Contains(out, "the draft of acme at revision 2 (3 files)") {
+	if out := g.mustGoal(t, "factory", "pull", "acme", drafted, "--version", "draft"); !strings.Contains(out, "the draft of acme at revision 2 (4 files)") {
 		t.Errorf("pull of the draft = %s", out)
 	}
 
@@ -566,7 +570,7 @@ func TestFactoryValidate_PrintsQuickFixes(t *testing.T) {
 	t.Parallel()
 
 	g := newDefGoald(t)
-	dir := newCopy(t, map[string]string{yamlPath: strings.Replace(factoryYAML, "modelConnection: claude", "modelConnection: claude, image: ghcr.io/acme/agent:1.0.0", 1)})
+	dir := newCopy(t, map[string]string{yamlPath: strings.Replace(factoryYAML, `modelKey: "{{claude-key}}"`, `modelKey: "{{claude-key}}", image: ghcr.io/acme/agent:1.0.0`, 1)})
 
 	// A form connections replaced is an error since the cutover: the folder is invalid, and the
 	// problem says how to fix it.

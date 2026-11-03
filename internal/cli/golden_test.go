@@ -30,7 +30,7 @@ func TestRun_Golden(t *testing.T) {
 		{"help", "help"},
 		{"unknown-command", cmdUnknownName},
 		{"version-extra-argument", "version now"},
-		{"validate-fixture", "validate ../../internal/config/testdata/line"},
+		{"validate-fixture", "validate ../../internal/config/testdata/build"},
 		{"validate-no-factory", "validate ../../internal/config/testdata"},
 		{"validate-no-arguments", "validate"},
 		{"factory-help", "factory -h"},
