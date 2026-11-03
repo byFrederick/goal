@@ -76,7 +76,7 @@ func TestGoald_RefusesUnknownMasterKeyID(t *testing.T) {
 }
 
 // ADR 0017: a credential counts as a connection does. One sealed under k3 alone stops a goald that
-// holds k2 and k1, and the refusal names the key and credentials, never the value.
+// holds k2 and k1, and the refusal names the key and secrets, never the value.
 func TestGoald_RefusesUnknownCredentialKeyID(t *testing.T) {
 	t.Parallel()
 
@@ -101,8 +101,8 @@ func TestGoald_RefusesUnknownCredentialKeyID(t *testing.T) {
 	}
 
 	_, _, _, _, err = openConnections(t.Context(), store, keysEnv(masterKeyEntry("k2", 2)+","+masterKeyEntry("k1", 1)), log)
-	if err == nil || !strings.Contains(err.Error(), "master key k3") || !strings.Contains(err.Error(), "credentials") ||
+	if err == nil || !strings.Contains(err.Error(), "master key k3") || !strings.Contains(err.Error(), "secrets") ||
 		strings.Contains(err.Error(), "sk-only-k3") {
-		t.Errorf("with a credential sealed under k3: %v; want a refusal naming k3 and credentials", err)
+		t.Errorf("with a credential sealed under k3: %v; want a refusal naming k3 and secrets", err)
 	}
 }
