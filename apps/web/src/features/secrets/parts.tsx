@@ -36,14 +36,14 @@ export function ExpiryText({ expiry }: { expiry: Expiry }) {
       return <span className="text-muted">{expiry.date}</span>;
     case 'expired':
       return (
-        <span className="inline-flex items-center gap-1.5 font-semibold text-rework-ink">
+        <span className="inline-flex items-center gap-2 font-semibold text-rework-ink">
           <span aria-hidden="true" className="size-1.5 rounded-full bg-rework" />
           Expired {expiry.date}
         </span>
       );
     case 'reminder':
       return (
-        <span className="inline-flex items-center gap-1.5 text-rework-ink">
+        <span className="inline-flex items-center gap-2 text-rework-ink">
           <span aria-hidden="true" className="size-1.5 rounded-full bg-rework" />
           In {expiry.days} {expiry.days === 1 ? 'day' : 'days'}
         </span>
@@ -130,7 +130,7 @@ export function ExpiryFields({
       >
         <Input type="date" value={expires} onChange={(e) => onExpires(e.target.value)} />
       </Field>
-      <div className="flex min-w-0 flex-col gap-1.5">
+      <div className="flex min-w-0 flex-col gap-2">
         <label htmlFor={remindId} className="text-sm font-medium text-ink">
           Remind me
         </label>

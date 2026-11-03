@@ -127,7 +127,7 @@ export function SecretsPage() {
               aria-hidden="true"
               className="hidden shrink-0 text-rework-ink @[640px]:block"
             />
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
               <p className="m-0 text-body font-semibold text-ink">{expiringHeadline(soonest, now)}</p>
               <p className="m-0 text-secondary text-ink-soft">
                 {soonest.uses[0] ? `${usedAtLabel(soonest.uses[0])} uses it.` : 'Nothing uses it yet.'}
@@ -215,7 +215,7 @@ export function SecretsPage() {
                               {expiry.state === 'reminder' || expiry.state === 'expired' ? (
                                 <ExpiryText expiry={expiry} />
                               ) : s.uses.length === 0 ? (
-                                <span className="inline-flex items-center gap-1.5 text-muted">
+                                <span className="inline-flex items-center gap-2 text-muted">
                                   <span aria-hidden="true" className="size-1.5 rounded-full bg-muted" />
                                   Not used
                                 </span>
@@ -266,8 +266,12 @@ export function SecretsPage() {
                               params={{ org: org.slug, secret: s.name }}
                               className="flex min-w-0 flex-col text-ink no-underline after:absolute after:inset-0 after:content-['']"
                             >
-                              <span className="truncate font-mono text-body font-medium">{s.name}</span>
-                              <span className="truncate text-meta text-muted">{s.description}</span>
+                              <span title={s.name} className="truncate font-mono text-body font-medium">
+                                {s.name}
+                              </span>
+                              <span title={s.description} className="truncate text-meta text-muted">
+                                {s.description}
+                              </span>
                             </Link>
                           </td>
                           <td>

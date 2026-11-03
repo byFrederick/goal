@@ -20,6 +20,9 @@ const routes = [
   { name: 'Runs', url: '/o/acme/runs' },
   { name: 'Agents', url: '/o/acme/f/goal/agents' },
   { name: 'Jonah', url: '/o/acme/f/goal/jonah' },
+  { name: 'Secrets', url: '/o/acme/secrets' },
+  { name: 'Secret', url: '/o/acme/secrets/github-token' },
+  { name: 'Import secrets', url: '/o/acme/secrets/import' },
 ];
 
 test.beforeEach(async ({ request }) => {

@@ -197,7 +197,7 @@ function DeleteCard({ org, secret }: { org: string; secret: Secret }) {
         </p>
         <Button
           variant="rework"
-          className="h-11 md:h-9"
+          className="h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-55 md:h-9"
           aria-disabled={inUse || undefined}
           aria-describedby={reasonId}
           onClick={() => {

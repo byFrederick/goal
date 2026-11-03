@@ -112,7 +112,7 @@ export function ImportSecretsPage() {
                   <h2 id="paste-heading" className="m-0 text-heading">
                     Paste or drop a file
                   </h2>
-                  <label className="inline-flex h-11 cursor-pointer items-center rounded-control border border-rule bg-card px-3 text-body font-control text-ink transition-colors duration-(--duration-quick) hover:border-muted focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus md:h-8.5">
+                  <label className="inline-flex h-11 cursor-pointer items-center rounded-control border border-rule bg-card px-3 text-body font-control text-ink transition-colors duration-(--duration-quick) hover:border-muted focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-run md:h-8.5">
                     <input
                       type="file"
                       accept=".env,.yaml,.yml,text/plain"

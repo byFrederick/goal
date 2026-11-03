@@ -149,7 +149,7 @@ export function usedInText(n: number): string {
 
 const data = (e: AuditEntry, key: string): unknown => (e.data as Record<string, unknown>)[key];
 
-/** What the audit log says happened to a secret: "Replaced by Freddy Cruz", "Used by run #147, frontend-engineer". */
+/** What the audit log says happened to a secret: "Replaced by Freddy Cruz", "Used by run 147, frontend-engineer". */
 export function activityText(e: AuditEntry): string {
   switch (e.action) {
     case 'secret.created':
