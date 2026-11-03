@@ -249,7 +249,8 @@ func (s *Service) ownChecks(ctx context.Context, c candidate, f *config.Factory,
 			return ownResult{}, fmt.Errorf("read the organization policy: %w", err)
 		}
 
-		out.problems, out.ran = append(out.problems, config.ModelProblems(f, pol.AllowedModels)...), append(out.ran, config.CheckPolicy)
+		out.problems = append(out.problems, config.ModelProblems(f, pol.AllowedModels)...)
+		out.problems, out.ran = append(out.problems, config.MCPCapProblems(f, pol.MCPToolModes)...), append(out.ran, config.CheckPolicy)
 	}
 
 	return out, nil

@@ -689,7 +689,8 @@ func (g *Gateway) addRepository(
 
 // addEnvironment describes the agent's environment file in b on a version on secrets, as the
 // engine resolved it at run start (engine.agentEnvironment): its MCP servers with their tool modes
-// for the agent, its setup, files, variable names and tools.
+// for the agent under the organization policy's MCP tool mode cap, its setup, files, variable
+// names and tools.
 func (g *Gateway) addEnvironment(ctx context.Context, c domain.TaskClaims, line domain.Line, agent domain.AgentSpec, b *runBundle) error {
 	env, ok := line.Environment(agent.Environment)
 	if !ok {
@@ -708,7 +709,10 @@ func (g *Gateway) addEnvironment(ctx context.Context, c domain.TaskClaims, line 
 		Env: append([]string{}, slices.Sorted(maps.Keys(env.Env))...), CLIs: []string{},
 	}
 
-	var rules standingRules
+	var (
+		rules  standingRules
+		policy *domain.OrgPolicy
+	)
 
 	for _, name := range slices.Sorted(maps.Keys(env.MCP)) {
 		s := env.MCP[name].Rendered()
@@ -719,10 +723,17 @@ func (g *Gateway) addEnvironment(ctx context.Context, c domain.TaskClaims, line 
 			return err
 		}
 
-		// ADR 0037 decision 12 caps the file's modes by the organization policy, which has no MCP cap
-		// yet: the cap is empty.
+		if policy == nil {
+			p, err := g.policies.Get(ctx)
+			if err != nil {
+				return fmt.Errorf("organization policy: %w", err)
+			}
+
+			policy = &p
+		}
+
 		modes := []bundleToolMode{}
-		for _, m := range domain.ServerToolModes(file, nil, active, c.FactoryID, env.Name, name, agent.Name) {
+		for _, m := range domain.ServerToolModes(file, policy.MCPToolModes, active, c.FactoryID, env.Name, name, agent.Name) {
 			modes = append(modes, bundleToolMode{Tool: m.Tool, Mode: m.Mode})
 		}
 

@@ -398,6 +398,12 @@ func (c *checker) environment(p, name string) (Environment, bool) {
 		}
 	}
 
+	if e.Spec.Image != "" {
+		c.problems = append(c.problems, e.Locate(keySpec, "image").Problem(checkEnvironments, codeEnvironmentImage, domain.SeverityWarning,
+			fmt.Sprintf("%s: image: a box on Cloudflare runs only the Worker's own images, so a run there fails on %q; "+
+				"a box on Docker Compose runs it", p, e.Spec.Image)))
+	}
+
 	c.environmentRefs(e)
 
 	return e, true

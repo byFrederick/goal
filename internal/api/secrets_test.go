@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"reflect"
 	"slices"
@@ -114,6 +115,81 @@ func expectCreatedSecret(t *testing.T, created gen.Secret) {
 		created.Scope.AllFactories || !slices.Equal(created.Scope.Factories, []string{string(acmeID)}) ||
 		created.ExpiresAt == nil || created.RemindDays != 14 || len(created.Uses) != 0 || created.CreatedBy.Id != domain.LocalUser.ID {
 		t.Errorf("created = %+v; want acme-token, a value scoped to acme, expiring, used by nothing", created)
+	}
+}
+
+// replaceSecret replaces acme-token's value with secretReplacedValue.
+func (h *harness) replaceSecret(t *testing.T) response {
+	t.Helper()
+
+	return h.request(t, http.MethodPut, secretValuePath, `{"value":"`+secretReplacedValue+`"}`, nil)
+}
+
+// Replacing a secret re-tests the remote MCP servers whose headers name it, with the new value,
+// and keeps their results; a server that does not name it is not called.
+func TestAPI_SecretReplaceRetestsServersThatUseIt(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createSecret(t)
+	h.draftEnvironment(t, testedEnvYAML)
+	h.tools.Serve(linearURL, "list_issues")
+	h.tools.Serve(docsURL, "search")
+
+	decode[gen.Secret](t, h.replaceSecret(t), http.StatusOK)
+
+	called := h.tools.Called()
+	if len(called) != 1 || called[0].URL != linearURL || called[0].Headers[authorization] != "Bearer "+secretReplacedValue {
+		t.Errorf("called = %d servers; want linear only, with the new value", len(called))
+	}
+
+	kept, err := h.envTests.List(inOrg(t), acmeID)
+	if err != nil || keptServers(kept) != "linear:ok" || kept[0].Environment != defaultEnvironment {
+		t.Errorf("kept = %+v, %v; want a new linear result", kept, err)
+	}
+}
+
+// A server that fails its re-test keeps a scrubbed failure, and the replace still answers 200.
+func TestAPI_SecretReplaceSucceedsWhenAServerFails(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createSecret(t)
+	h.draftEnvironment(t, testedEnvYAML)
+	h.tools.Fail(linearURL, errors.New("401 Unauthorized: the key Bearer "+secretReplacedValue+" is revoked"))
+
+	r := h.replaceSecret(t)
+	if strings.Contains(string(r.body), secretReplacedValue) {
+		t.Fatal("the answer holds the value")
+	}
+
+	if got := decode[gen.Secret](t, r, http.StatusOK); got.Name != secretName {
+		t.Errorf("replaced = %+v; want acme-token", got)
+	}
+
+	kept, err := h.envTests.List(inOrg(t), acmeID)
+	if err != nil || keptServers(kept) != "linear:failed" || strings.Contains(kept[0].Error, secretReplacedValue) {
+		t.Errorf("kept = %v, %v; want one scrubbed linear failure", keptServers(kept), err)
+	}
+}
+
+// Replacing a secret no environment's MCP headers name calls no server and keeps no test.
+func TestAPI_SecretReplaceUnusedRunsNoTest(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createSecret(t)
+	h.draftEnvironment(t, strings.ReplaceAll(testedEnvYAML, "Bearer {{"+secretName+"}}", "Bearer {{other-key}}"))
+	h.tools.Serve(linearURL, "list_issues")
+
+	decode[gen.Secret](t, h.replaceSecret(t), http.StatusOK)
+
+	if called := h.tools.Called(); len(called) != 0 {
+		t.Errorf("called = %d servers; want none", len(called))
+	}
+
+	if kept, err := h.envTests.List(inOrg(t), acmeID); err != nil || len(kept) != 0 {
+		t.Errorf("kept = %v, %v; want none", keptServers(kept), err)
 	}
 }
 

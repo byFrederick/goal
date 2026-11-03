@@ -109,9 +109,10 @@ func DefaultJonahPolicy() JonahPolicy {
 // connections (spec 4 §14, step 5) a version that still has a form connections replaced is
 // refused, and so is one that names nothing that gives every run its model: runtime.modelKey on
 // secrets (ADR 0037 decision 7), runtime.modelConnection on connections. The engine blocks its
-// items with this reason.
+// items with this reason, whose fix names environment files and secrets.
 func (l Line) Refusal() string {
-	const fix = "publish a version with connections (spec 4 §4.4); goal factory validate and the builder show the fix of each problem"
+	const fix = "publish a version on environment files and secrets (ADR 0037): runtime.modelKey names the {{secret}} " +
+		"that holds the model's key; goal factory validate and the builder show the fix of each problem"
 
 	switch {
 	case len(l.Removed) > 0:

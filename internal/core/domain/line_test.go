@@ -49,7 +49,7 @@ func TestLine_Refusal(t *testing.T) {
 			name: "a removed form", line: Line{
 				Number: 3, Runtime: Runtime{ModelConnection: testModelConn}, Removed: []string{"spec.runtime.repository.token (env-reference-removed)"},
 			},
-			want: []string{"version 3", "spec.runtime.repository.token (env-reference-removed)", "publish a version with connections (spec 4 §4.4)"},
+			want: []string{"version 3", "spec.runtime.repository.token (env-reference-removed)", "publish a version on environment files and secrets (ADR 0037)"},
 		},
 		{
 			name: "no model connection", line: Line{Number: 2},

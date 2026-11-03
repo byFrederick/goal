@@ -2,6 +2,7 @@ package porttest
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -84,6 +85,7 @@ func (o *OrgPolicies) Put(ctx context.Context, p domain.OrgPolicy, revision int6
 
 func clonePolicy(p domain.OrgPolicy) domain.OrgPolicy {
 	p.AllowedModels, p.DeniedCommands = slices.Clone(p.AllowedModels), slices.Clone(p.DeniedCommands)
+	p.MCPToolModes = maps.Clone(p.MCPToolModes)
 
 	return p
 }
