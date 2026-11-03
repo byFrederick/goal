@@ -214,6 +214,8 @@ type harness struct {
 	// tools answers.
 	catalog  []domain.ToolTemplate
 	envTests *porttest.EnvironmentTests
+	// conversions are the factories' conversions to secrets, which the inbox lists when refused.
+	conversions *porttest.FactoryConversions
 	tools    *porttest.ToolLister
 }
 
@@ -513,6 +515,10 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.keys.AddFactory(testOrg, acmeID)
 	h.keys.AddFactory(testOrg, lineID)
 
+	h.conversions = porttest.NewFactoryConversions()
+	h.conversions.AddFactory(testOrg, acmeID)
+	h.conversions.AddFactory(testOrg, lineID)
+
 	h.platform = porttest.NewPlatform(h.keys)
 	h.notifications = porttest.NewNotificationPreferences()
 
@@ -529,6 +535,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		NotificationPreferences: h.notifications,
 		DraftRequests:           h.drafts,
 		Catalog:                 h.catalog, EnvironmentTests: h.envTests, ToolLister: h.tools,
+		Conversions: h.conversions,
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity

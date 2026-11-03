@@ -8415,8 +8415,11 @@ components:
       type: string
       description: >-
         What waits; later phases add kinds, which clients that do not know them show as a generic
-        row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny
-      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite]
+        row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny.
+        conversion: a factory Goal could not move from connections to secrets and environment files
+        (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and
+        publishes
+      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite, conversion]
     InboxEntry:
       type: object
       required: [id, kind, factory, since, item, station, action, approval, blocked, andon, rework]
@@ -8425,7 +8428,7 @@ components:
           type: string
           description: >-
             "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>,
-            andon:<pull id>, rework_warning:<factory id>:<gate station>
+            andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>
         kind: { $ref: "#/components/schemas/InboxEntryKind" }
         factory:
           type: object
@@ -8439,7 +8442,7 @@ components:
           format: date-time
           description: >-
             Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation
-            (expedite), the pull (andon), now (rework_warning)
+            (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion)
         item:
           description: The item it is about, or null for an entry that is about no item
           nullable: true
@@ -8481,6 +8484,27 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/ReworkWarning"
+        conversion:
+          description: Why Goal could not convert the factory; absent or null for other kinds
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/InboxConversion"
+    InboxConversion:
+      type: object
+      description: >-
+        A factory Goal could not move from connections to secrets and environment files. It runs
+        on its version, on connections, until a version on secrets is published.
+      required: [reason, problems]
+      properties:
+        reason:
+          type: string
+          description: Every problem in one sentence each, for a row that shows one line
+        problems:
+          type: array
+          description: >-
+            What to fix, one entry each, such as "connection aws-prod uses the aws kind, which Goal no
+            longer converts: remove it from the factory"
+          items: { type: string }
     ApprovalBrief:
       type: object
       description: >-

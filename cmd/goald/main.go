@@ -197,9 +197,10 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// Every organization moves from connections and credentials to secrets and environment files
 	// once (ADR 0037 decision 19), before the lines load, so they load the converted versions. A
 	// failure is logged and goald starts: an unconverted factory runs on the old path.
+	conversions := postgres.NewFactoryConversions(store)
 	mover := moveover.New(moveover.Deps{
 		Orgs: store, Connections: connections, Secrets: orgSecrets, Definitions: definitionStore, Publisher: authors,
-		Conversions: postgres.NewFactoryConversions(store), Clock: clock, Logger: log,
+		Conversions: conversions, Clock: clock, Logger: log,
 	})
 	if err := mover.Run(ctx); err != nil {
 		log.ErrorContext(ctx, "move over failed", slog.Any("error", err))
@@ -271,7 +272,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 			Mode: api.AuthMode(s.Auth), EmailCodes: s.EmailCodes, Google: s.Google, SecureCookies: s.strictTransport(),
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
-		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), ToolLister: toollister.New(connectionTransport(s.AllowPrivateUpstreams)),
+		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), Conversions: conversions, ToolLister: toollister.New(connectionTransport(s.AllowPrivateUpstreams)),
 		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,

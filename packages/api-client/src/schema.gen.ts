@@ -6901,12 +6901,12 @@ export interface components {
             truncated: boolean;
         };
         /**
-         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny
+         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes
          * @enum {string}
          */
-        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite";
+        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite" | "conversion";
         InboxEntry: {
-            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station> */
+            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id> */
             id: string;
             kind: components["schemas"]["InboxEntryKind"];
             factory: {
@@ -6916,7 +6916,7 @@ export interface components {
             };
             /**
              * Format: date-time
-             * @description Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning)
+             * @description Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion)
              */
             since: string;
             /** @description The item it is about, or null for an entry that is about no item */
@@ -6937,6 +6937,15 @@ export interface components {
             andon: components["schemas"]["AndonPull"] | null;
             /** @description The gate tally of a rework warning; null for other kinds */
             rework: components["schemas"]["ReworkWarning"] | null;
+            /** @description Why Goal could not convert the factory; absent or null for other kinds */
+            conversion?: components["schemas"]["InboxConversion"] | null;
+        };
+        /** @description A factory Goal could not move from connections to secrets and environment files. It runs on its version, on connections, until a version on secrets is published. */
+        InboxConversion: {
+            /** @description Every problem in one sentence each, for a row that shows one line */
+            reason: string;
+            /** @description What to fix, one entry each, such as "connection aws-prod uses the aws kind, which Goal no longer converts: remove it from the factory" */
+            problems: string[];
         };
         /** @description From the output of the latest station that has one: its summary field, up to four of its other short top-level fields (strings of at most 120 characters, numbers, booleans; by key; never summary, pull_request, lane, decision, reason or category), the pull request the outputs name, and what the item has cost */
         ApprovalBrief: {
