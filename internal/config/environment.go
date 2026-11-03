@@ -307,6 +307,10 @@ var compiledEnvironment = sync.OnceValues(func() (*jsonschema.Schema, error) {
 // needs runtime.repository.forge.
 var knownForges = map[string]string{"github.com": "github", "gitlab.com": "gitlab"}
 
+// KnownForge is the code host adapter host's name says (github or gitlab), or "" for a host
+// whose adapter only runtime.repository.forge names.
+func KnownForge(host string) string { return knownForges[strings.ToLower(host)] }
+
 // environments checks the environment files and what refers to them (ADR 0037 decisions 5-7):
 // each file is named as a slug, satisfies environment.schema.json, says its own name, lists
 // mise tool specs and writes references well; environments/default.yaml exists; every agent's

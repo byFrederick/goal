@@ -2867,6 +2867,40 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EnvironmentTestResult" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/repositories/test:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    post:
+      operationId: testRepository
+      x-goal-scope: factory:create
+      tags: [access]
+      summary: Test a token's read and push access to a repository
+      description: >-
+        Tests, before any factory exists, whether the token in the named secret can read the
+        repository at url and push to it, through the code host's API (github.com: GET
+        /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its
+        access level, Developer or more pushes), never git. The secret is opened inside goald
+        without a factory (audited as secret.used), so it must be open to all factories. Each
+        check answers ok with a one-line reason from the host; a check that fails is an answer,
+        not an error. For a classic GitHub token, permissions.push reflects the account's role,
+        not the token's scopes, so push ok can be optimistic; a fine-grained token answers its
+        own grant. A host that gives no answer within 10 seconds answers tested false with
+        "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found;
+        400 repository-host-unknown for a host other than github.com and gitlab.com,
+        repository-url-invalid for a URL that names no repository, and secret-not-allowed for a
+        secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RepositoryTestRequest" }
+      responses:
+        "200":
+          description: The results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RepositoryTestResult" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/webhooks:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -4476,13 +4510,14 @@ paths:
       tags: [knowledge]
       summary: Add a source to the knowledge base
       description: >-
-        An upload source holds files people upload; a synced source reads a connection whose kind
-        syncs (its config names what: a repository, a branch and paths, a Confluence space); a
-        live source is a connection whose own tools search, which nothing indexes. Due to sync at
-        once. 400 for a broken rule (a name, a title, a connection on an upload source or none on
-        another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a
-        connection whose kind cannot sync, 404 connection-not-found, 409
-        knowledge-source-name-taken. Audited as knowledge_source.created.
+        An upload source holds files people upload; a synced source reads with a secret, its
+        config naming its reader and what it reads (a repository, a branch and paths; Confluence
+        spaces); a live source is a connection whose own tools search, which nothing indexes. Due
+        to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an
+        upload source, a synced source without a secret or reader or with a connection, a live
+        source without a connection, a schedule under 15 minutes), 404 secret-not-found or
+        connection-not-found, 409 knowledge-source-name-taken. Audited as
+        knowledge_source.created.
       requestBody:
         required: true
         content:
@@ -4518,8 +4553,10 @@ paths:
       tags: [knowledge]
       summary: Change a source's title, config or schedule
       description: >-
-        config, when present, replaces the source's config. The name, kind and connection never
-        change. Audited as knowledge_source.updated.
+        config, when present, replaces the source's config. secret, when present, is a synced
+        source's new secret, which moves a source still on its connection over to it (400 for
+        another kind, 404 secret-not-found). The name, kind and connection never change. Audited
+        as knowledge_source.updated.
       requestBody:
         required: true
         content:
@@ -9842,6 +9879,25 @@ components:
           type: object
           description: The template's plain env values to use instead of its own, by name
           additionalProperties: { type: string }
+    RepositoryTestRequest:
+      type: object
+      required: [url, secret]
+      properties:
+        url: { type: string, description: "The repository's https URL, such as https://github.com/acme/app" }
+        secret: { $ref: "#/components/schemas/SecretName" }
+    RepositoryTestResult:
+      type: object
+      required: [tested, read, push]
+      properties:
+        tested: { type: boolean, description: "false when the host gave no answer within 10 seconds: read and push then say couldn't test" }
+        read: { $ref: "#/components/schemas/RepositoryCheck" }
+        push: { $ref: "#/components/schemas/RepositoryCheck" }
+    RepositoryCheck:
+      type: object
+      required: [ok, reason]
+      properties:
+        ok: { type: boolean }
+        reason: { type: string, description: The host's one-line reason }
     EnvironmentTestResult:
       type: object
       required: [environment, version, servers]
@@ -10104,10 +10160,14 @@ components:
         name: { $ref: "#/components/schemas/KnowledgeSourceName" }
         title: { type: string }
         kind: { $ref: "#/components/schemas/KnowledgeSourceKind" }
-        connection: { type: string, description: "The connection a synced or live source reads; absent for an upload source" }
+        connection: { type: string, description: "The connection a live source reads, or a synced one not yet on a secret; absent for an upload source" }
+        secret: { type: string, description: "The secret a synced source reads with, opened at each sync; absent for an upload or live source and a synced one still on its connection" }
         config:
           type: object
-          description: What its reader reads (a repository, a branch and path globs; a Confluence space)
+          description: >-
+            What its reader reads (a repository, a branch and path globs; a Confluence space). A
+            synced source on a secret also names its reader (reader: gitdocs or confluence) and,
+            for confluence, the site and the account's email.
           additionalProperties: { type: string }
         sync_every_seconds: { type: integer, description: How often it syncs }
         status:
@@ -10142,15 +10202,28 @@ components:
         name: { $ref: "#/components/schemas/KnowledgeSourceName" }
         title: { type: string, minLength: 1, maxLength: 120 }
         kind: { $ref: "#/components/schemas/KnowledgeSourceKind" }
-        connection: { type: string, description: The connection a synced or live source reads }
+        connection: { type: string, description: The connection a live source reads }
+        secret:
+          allOf: [{ $ref: "#/components/schemas/SecretName" }]
+          description: >-
+            The secret a synced source reads with: the code host's token for gitdocs, the API token
+            for confluence. It must be open to all factories.
         config:
           type: object
+          description: >-
+            What its reader reads. A synced source names its reader (reader: gitdocs or
+            confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or
+            on the host code_host names: github or gitlab), branch, include and exclude;
+            confluence reads site, email and spaces.
           additionalProperties: { type: string }
         sync_every_seconds: { type: integer, minimum: 900, description: "How often it syncs (default 3600)" }
     KnowledgeSourcePatch:
       type: object
       properties:
         title: { type: string, minLength: 1, maxLength: 120 }
+        secret:
+          allOf: [{ $ref: "#/components/schemas/SecretName" }]
+          description: "A synced source's new secret: it reads with it from its next sync"
         config:
           type: object
           description: Replaces the config

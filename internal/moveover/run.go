@@ -31,6 +31,7 @@ type Deps struct {
 	Orgs        Orgs
 	Connections ports.Connections
 	Secrets     ports.OrgSecrets
+	Knowledge   ports.Knowledge
 	Definitions ports.DefinitionStore
 	Publisher   Publisher
 	Conversions ports.FactoryConversions
@@ -49,6 +50,8 @@ func New(d Deps) *Mover { return &Mover{d: d} }
 // Tally is what the conversion did in one organization.
 type Tally struct {
 	Converted, Refused, Secrets int
+	// Sources are the knowledge sources pointed at a secret.
+	Sources int
 }
 
 // Run converts every organization once, under the install's conversion lock, and logs one line
@@ -71,7 +74,7 @@ func (m *Mover) Run(ctx context.Context) error {
 			}
 
 			m.d.Logger.InfoContext(ctx, "moved over", slog.String("org", string(org)),
-				slog.Int("converted", t.Converted), slog.Int("refused", t.Refused), slog.Int("secrets", t.Secrets))
+				slog.Int("converted", t.Converted), slog.Int("refused", t.Refused), slog.Int("secrets", t.Secrets), slog.Int("sources", t.Sources))
 		}
 
 		return nil
@@ -87,8 +90,9 @@ func (m *Mover) Run(ctx context.Context) error {
 	return nil
 }
 
-// Org converts the organization in ctx: its connections' secrets first, then each factory with
-// no conversion recorded whose current version is on connections.
+// Org converts the organization in ctx: its connections' secrets first, then its synced
+// knowledge sources still on a connection, then each factory with no conversion recorded whose
+// current version is on connections.
 func (m *Mover) Org(ctx context.Context) (Tally, error) {
 	var t Tally
 
@@ -101,14 +105,24 @@ func (m *Mover) Org(ctx context.Context) (Tally, error) {
 		return t, err
 	}
 
+	if t.Sources, err = m.sources(ctx, conns); err != nil {
+		return t, err
+	}
+
+	return t, m.factories(ctx, conns, &t)
+}
+
+// factories converts each factory with no conversion recorded whose current version is on
+// connections, counting them in t.
+func (m *Mover) factories(ctx context.Context, conns []domain.ResolvedConnection, t *Tally) error {
 	done, err := m.d.Conversions.List(ctx)
 	if err != nil {
-		return t, fmt.Errorf("list conversions: %w", err)
+		return fmt.Errorf("list conversions: %w", err)
 	}
 
 	recs, err := m.d.Definitions.FactoryRecords(ctx)
 	if err != nil {
-		return t, fmt.Errorf("list factories: %w", err)
+		return fmt.Errorf("list factories: %w", err)
 	}
 
 	for _, rec := range recs {
@@ -118,7 +132,7 @@ func (m *Mover) Org(ctx context.Context) (Tally, error) {
 
 		c, err := m.factory(ctx, rec, conns)
 		if err != nil {
-			return t, fmt.Errorf("factory %s: %w", rec.ID, err)
+			return fmt.Errorf("factory %s: %w", rec.ID, err)
 		}
 
 		if c == nil {
@@ -126,7 +140,7 @@ func (m *Mover) Org(ctx context.Context) (Tally, error) {
 		}
 
 		if _, err := m.d.Conversions.Record(ctx, *c); err != nil {
-			return t, err
+			return err
 		}
 
 		if c.Refused() {
@@ -136,7 +150,7 @@ func (m *Mover) Org(ctx context.Context) (Tally, error) {
 		}
 	}
 
-	return t, nil
+	return nil
 }
 
 // opened are the organization's connections with their values. A failure names the connection,
@@ -184,6 +198,111 @@ func (m *Mover) secrets(ctx context.Context, conns []domain.ResolvedConnection) 
 	}
 
 	return n, nil
+}
+
+// sources points each synced knowledge source that reads a connection and no secret at the
+// secret its connection's token became (SecretName), with its reader, its code host and the
+// connection's other set values in its config, which keeps its own keys; it keeps the connection
+// until connections go. A source it cannot map is logged (knowledge source not moved over) with
+// the reason, never a value, and keeps reading its connection. It counts the sources it changed;
+// a second run finds none.
+func (m *Mover) sources(ctx context.Context, conns []domain.ResolvedConnection) (int, error) {
+	list, err := m.d.Knowledge.Sources(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list knowledge sources: %w", err)
+	}
+
+	n := 0
+
+	for _, src := range list {
+		if src.Kind != domain.SourceSynced || src.Connection == "" || src.Secret != "" {
+			continue
+		}
+
+		p, reason, err := m.sourcePatch(ctx, src, conns)
+		if err != nil {
+			return n, err
+		}
+
+		if reason != "" {
+			m.d.Logger.WarnContext(ctx, "knowledge source not moved over", slog.String("source", src.Name),
+				slog.String("connection", src.Connection), slog.String("reason", reason))
+
+			continue
+		}
+
+		if _, err := m.d.Knowledge.UpdateSource(ctx, src.Name, p, Actor); err != nil {
+			return n, fmt.Errorf("point knowledge source %s at its secret: %w", src.Name, err)
+		}
+
+		n++
+	}
+
+	return n, nil
+}
+
+// sourcePatch is what points src at its connection's secret, or why it cannot ("" when it can).
+func (m *Mover) sourcePatch(ctx context.Context, src domain.KnowledgeSource, conns []domain.ResolvedConnection) (domain.KnowledgeSourcePatch, string, error) {
+	i := slices.IndexFunc(conns, func(rc domain.ResolvedConnection) bool { return rc.Connection.Name == src.Connection })
+	if i < 0 {
+		return domain.KnowledgeSourcePatch{}, "its connection was not found", nil
+	}
+
+	rc := conns[i]
+
+	if rc.Kind.Spec.Sync == "" {
+		return domain.KnowledgeSourcePatch{}, "its connection's kind " + rc.Kind.Name + " names no reader", nil
+	}
+
+	field, ok := tokenField(rc.Kind)
+	if !ok {
+		return domain.KnowledgeSourcePatch{}, "its connection's kind " + rc.Kind.Name + " has no one secret field that holds its token", nil
+	}
+
+	name := SecretName(rc.Connection, rc.Kind, field)
+
+	_, err := m.d.Secrets.Get(ctx, name)
+
+	switch {
+	case errors.Is(err, ports.ErrNotFound):
+		return domain.KnowledgeSourcePatch{}, "there is no secret " + name, nil
+	case err != nil:
+		return domain.KnowledgeSourcePatch{}, "", fmt.Errorf("read secret %s: %w", name, err)
+	}
+
+	config := maps.Clone(src.Config)
+	if config == nil {
+		config = map[string]string{}
+	}
+
+	config[domain.SourceReaderKey] = rc.Kind.Spec.Sync
+
+	if rc.Kind.Spec.CodeHost != "" {
+		config["code_host"] = rc.Kind.Spec.CodeHost
+	}
+
+	for _, f := range rc.Kind.Spec.Fields {
+		if _, set := config[f.Name]; !f.Secret && !set && rc.Values[f.Name] != "" {
+			config[f.Name] = rc.Values[f.Name]
+		}
+	}
+
+	return domain.KnowledgeSourcePatch{Secret: &name, Config: config}, "", nil
+}
+
+// tokenField is the secret field of k that holds the token a reader reads with: its one secret
+// field, or the one named token among several.
+func tokenField(k domain.ConnectionKind) (string, bool) {
+	fields := secretFields(k)
+
+	switch {
+	case len(fields) == 1:
+		return fields[0], true
+	case slices.Contains(fields, "token"):
+		return "token", true
+	default:
+		return "", false
+	}
 }
 
 // files reads version v's tree.

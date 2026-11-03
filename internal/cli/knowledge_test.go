@@ -115,8 +115,13 @@ func TestKnowledge_Refusals(t *testing.T) {
 
 	g := newDefGoald(t)
 
-	if _, err := g.goal(t, cmdKnowledge, "add", srcHandbook, "--kind", "synced"); err == nil || !strings.Contains(err.Error(), "connection") {
-		t.Errorf("add synced without a connection = %v; want goald's refusal", err)
+	if _, err := g.goal(t, cmdKnowledge, "add", srcHandbook, "--kind", "synced"); err == nil || !strings.Contains(err.Error(), "secret") {
+		t.Errorf("add synced without a secret = %v; want goald's refusal", err)
+	}
+
+	if _, err := g.goal(t, cmdKnowledge, "add", srcHandbook, "--kind", "synced", "--secret", "gone", "--config", "reader=gitdocs"); err == nil ||
+		!strings.Contains(err.Error(), "gone") {
+		t.Errorf("add synced on an unknown secret = %v; want goald's 404 naming it", err)
 	}
 
 	if _, err := g.goal(t, cmdKnowledge, kindUpload, "nothing", filepath.Join(t.TempDir(), "missing.md")); err == nil {
@@ -379,4 +384,26 @@ func TestKnowledge_VerdictRefusesValue(t *testing.T) {
 	if got := bodies(); len(got) != 0 {
 		t.Errorf("requests = %q; want none", got)
 	}
+}
+
+// goal knowledge add --secret adds a synced source that reads with the secret, and goal knowledge
+// sources shows it.
+func TestKnowledge_AddWithASecret(t *testing.T) {
+	t.Parallel()
+
+	g := newDefGoald(t)
+
+	if out, err := g.goalIn(t, "test-token\n", cmdSecret, verbCreate, "docs-token", "--all-factories"); err != nil {
+		t.Fatalf("create = %q, %v", out, err)
+	}
+
+	expectOutput(t, "add", g.mustGoal(t, cmdKnowledge, "add", "runbooks", "--kind", "synced", "--secret", "docs-token",
+		"--config", "reader=gitdocs", "--config", "repository=https://github.com/acme/docs"), []string{"added knowledge source runbooks (synced)"})
+
+	src, err := g.kb.Source(g.ctx(t), "runbooks")
+	if err != nil || src.Secret != "docs-token" || src.Connection != "" || src.Config["reader"] != "gitdocs" {
+		t.Errorf("runbooks = %+v, %v; want it on secret docs-token", src, err)
+	}
+
+	expectOutput(t, "sources", g.mustGoal(t, cmdKnowledge, "sources"), []string{"synced (secret docs-token)"})
 }

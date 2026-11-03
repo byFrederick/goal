@@ -76,9 +76,8 @@ type Secret struct {
 func CheckSecret(s Secret) error {
 	var errs []error
 
-	if !namePattern.MatchString(s.Name) {
-		errs = append(errs, fmt.Errorf("secret name %q must be 3 to 40 lowercase letters, digits or dashes, "+
-			"starting with a letter and not ending with a dash: %w", s.Name, ErrInvalid))
+	if err := CheckSecretName(s.Name); err != nil {
+		errs = append(errs, err)
 	}
 
 	if !s.Source.Valid() {
@@ -121,6 +120,16 @@ func checkScope(s SecretScope) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// CheckSecretName refuses a name that is not a secret's. The error wraps ErrInvalid.
+func CheckSecretName(name string) error {
+	if !namePattern.MatchString(name) {
+		return fmt.Errorf("secret name %q must be 3 to 40 lowercase letters, digits or dashes, "+
+			"starting with a letter and not ending with a dash: %w", name, ErrInvalid)
+	}
+
+	return nil
 }
 
 // checkSecretValue refuses an empty or oversized value; the error never shows it.

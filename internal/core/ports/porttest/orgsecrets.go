@@ -32,6 +32,10 @@ type OrgSecrets struct {
 type secretData struct {
 	mu   sync.Mutex
 	rows map[domain.OrgID]map[string]*secretRow
+	// readBy are the knowledge sources of org that read with secret name, and renamed tells
+	// them a secret's new name: Knowledge.ReadSecrets sets them. Both are called under mu.
+	readBy  func(org domain.OrgID, name string) []string
+	renamed func(org domain.OrgID, from, to string)
 }
 
 type secretRow struct {
@@ -202,6 +206,10 @@ func (s *OrgSecrets) Patch(ctx context.Context, name string, p domain.SecretPatc
 	delete(s.d.rows[org], name)
 	s.d.rows[org][next.Name] = r
 
+	if next.Name != name && s.d.renamed != nil {
+		s.d.renamed(org, name, next.Name)
+	}
+
 	return cloneSecret(r.secret), nil
 }
 
@@ -223,6 +231,12 @@ func (s *OrgSecrets) Delete(ctx context.Context, name string, by domain.Actor) e
 	if s.conns != nil {
 		if users := s.conns.referrers(org, name); len(users) > 0 {
 			return fmt.Errorf("secret %q is used by connections %s: %w", name, strings.Join(users, ", "), ports.ErrConflict)
+		}
+	}
+
+	if s.d.readBy != nil {
+		if sources := s.d.readBy(org, name); len(sources) > 0 {
+			return fmt.Errorf("secret %q is used by knowledge sources %s: %w", name, strings.Join(sources, ", "), ports.ErrConflict)
 		}
 	}
 

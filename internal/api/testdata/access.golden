@@ -4784,6 +4784,32 @@ testEnvironment      pat-demoted      404 factory-not-found    404 org-not-found
 testEnvironment      pat-removed      401 unauthenticated      401 unauthenticated
 testEnvironment      pat-platform     200                      404 org-not-found
 testEnvironment      pat-deleted-org  401 unauthenticated      401 unauthenticated
+testRepository       anonymous        401 unauthenticated      401 unauthenticated
+testRepository       owner            200                      404 org-not-found
+testRepository       admin            200                      404 org-not-found
+testRepository       viewer           403 forbidden            404 org-not-found
+testRepository       approver         403 forbidden            404 org-not-found
+testRepository       editor           403 forbidden            404 org-not-found
+testRepository       member-no-roles  403 forbidden            404 org-not-found
+testRepository       other-org-owner  404 org-not-found        200
+testRepository       platform-admin   404 org-not-found        404 org-not-found
+testRepository       stale-owner      200                      404 org-not-found
+testRepository       key-scoped       403 forbidden            404 org-not-found
+testRepository       key-restricted   200                      404 org-not-found
+testRepository       key-other-org    404 org-not-found        200
+testRepository       key-expired      401 unauthenticated      401 unauthenticated
+testRepository       key-revoked      401 unauthenticated      401 unauthenticated
+testRepository       bearer-owner     200                      404 org-not-found
+testRepository       pat-approver     403 forbidden            404 org-not-found
+testRepository       pat-owner        200                      404 org-not-found
+testRepository       pat-viewer       403 forbidden            404 org-not-found
+testRepository       pat-other-org    404 org-not-found        200
+testRepository       pat-expired      401 unauthenticated      401 unauthenticated
+testRepository       pat-revoked      401 unauthenticated      401 unauthenticated
+testRepository       pat-demoted      403 forbidden            404 org-not-found
+testRepository       pat-removed      401 unauthenticated      401 unauthenticated
+testRepository       pat-platform     200                      404 org-not-found
+testRepository       pat-deleted-org  401 unauthenticated      401 unauthenticated
 transferOwnership    anonymous        401 unauthenticated      401 unauthenticated
 transferOwnership    owner            200                      404 org-not-found
 transferOwnership    admin            403 forbidden            404 org-not-found

@@ -18,15 +18,18 @@ import (
 // problem, log line or audit entry does. The store audits every change in its transaction, so
 // these handlers write no audit of their own.
 //
-// What uses a secret is, for now, the connections that refer to it as {{name}}, read through
-// ports.Credentials.UsedBy (the same table). The parts that let definitions, knowledge sources,
-// webhooks and the Slack setting refer to secrets add their uses to secretUses.
+// What uses a secret is, for now, the knowledge sources that read with it and the connections that
+// refer to it as {{name}}, read through ports.Credentials.UsedBy (the same table). The parts that
+// let definitions, webhooks and the Slack setting refer to secrets add their uses to secretUses.
 
 // Errors of the secret routes, answered with their codes by secretProblem.
 var (
 	errSecretNotFound = errors.New("secret not found")
 	errSecretTaken    = errors.New("secret name taken")
 	errSecretInvalid  = errors.New("secret invalid")
+	// errSecretNotAllowed is a secret opened without a factory, such as a repository test's or a
+	// knowledge source's, that is open to some factories only.
+	errSecretNotAllowed = errors.New("secret not open to all factories")
 	// errSecretsUnavailable is a value to seal while goald has no master key.
 	errSecretsUnavailable = errors.New("secrets unavailable")
 )
@@ -72,6 +75,7 @@ func secretProblem(err error) (gen.Problem, bool) {
 		{errSecretNotFound, http.StatusNotFound, "secret-not-found"},
 		{errSecretTaken, http.StatusConflict, "secret-name-taken"},
 		{errSecretInvalid, http.StatusBadRequest, "secret-invalid"},
+		{errSecretNotAllowed, http.StatusBadRequest, "secret-not-allowed"},
 	}
 
 	for _, a := range answers {
@@ -96,6 +100,8 @@ func secretError(err error) error {
 		return fmt.Errorf("%w: %w", errSecretNotFound, err)
 	case errors.Is(err, ports.ErrNameTaken):
 		return fmt.Errorf("%w: %w", errSecretTaken, err)
+	case errors.Is(err, ports.ErrSecretNotAllowed):
+		return fmt.Errorf("%w: %w", errSecretNotAllowed, err)
 	case errors.Is(err, ports.ErrNoMasterKey):
 		return fmt.Errorf("%w: %w", errSecretsUnavailable, err)
 	case errors.Is(err, domain.ErrInvalid):
@@ -363,16 +369,29 @@ func (s *server) importSecret(ctx context.Context, e domain.CredentialImportEntr
 }
 
 // secretUses is what uses secret name, by kind then name: today the connections that refer to it
-// as {{name}}.
+// as {{name}} and the knowledge sources that read with it.
 func (s *server) secretUses(ctx context.Context, name string) ([]gen.SecretUse, error) {
 	conns, err := s.credentials.UsedBy(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("the uses of secret %q: %w", name, err)
 	}
 
+	sources, err := s.knowledge.Sources(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("the uses of secret %q: %w", name, err)
+	}
+
 	uses := make([]gen.SecretUse, 0, len(conns))
+
 	for _, c := range conns {
 		uses = append(uses, gen.SecretUse{Kind: gen.SecretUseConnection, Name: c})
+	}
+
+	// Sources come by name.
+	for _, src := range sources {
+		if src.Secret == name {
+			uses = append(uses, gen.SecretUse{Kind: gen.SecretUseKnowledgeSource, Name: src.Name})
+		}
 	}
 
 	return uses, nil

@@ -46,6 +46,7 @@ Each tool of an MCP connection is `allow`, `ask` or `off`. A tool with no mode i
 
 - `goal connection` moved: whatever follows it, it prints where connections went (Access with `goal access`, Secrets with `goal secret`, and the factory's environment files) and exits 2.
 - `goal secret list`, `show`, `create`, `replace`, `delete` and `import` manage the organization's secrets, which a connection refers to as `{{name}}`. A value comes only from stdin or the import file and is never shown. `goal credential` moved to `goal secret`: it prints where and exits 2.
+- `goal repository test <url> --secret <name>` checks, before any factory exists, whether the secret's token can read a repository on github.com or gitlab.com and push to it. goald asks the code host's API, never git, and prints each check with the host's reason. A host that gives no answer within 10 seconds answers "couldn't test". For a classic GitHub token, push ok reflects the account's role rather than the token's scopes; a fine-grained token answers its own grant. Owners and admins can run it, and the secret must be open to all factories. The API route is `POST /v1/orgs/{org}/repositories/test`.
 
 Flags and output are in the [CLI reference](../../reference/).
 
@@ -62,7 +63,9 @@ Goal moves every organization from connections to secrets and environment files 
    - each tool mode set on a connection, other than `allow`, becomes that server's `tools:` entry.
 3. Reopens a draft that was open on the new version, converted, for its author. A draft that does not convert is reopened as it was, and publishing it shows what to fix.
 
-Running items keep the version they started on. goald logs one `moved over` line per organization, with how many factories it converted and refused and how many secrets it created. Running it again changes nothing.
+It also points each synced knowledge source still on a connection at the secret its connection's token became, and copies the reader and the connection's other values into the source's config ([Knowledge](../knowledge/)).
+
+Running items keep the version they started on. goald logs one `moved over` line per organization, with how many factories it converted and refused, how many secrets it created and how many knowledge sources it moved. A knowledge source it can't move gets its own `knowledge source not moved over` line with the reason. Running it again changes nothing.
 
 A factory Goal cannot convert keeps its version and runs on connections. Needs you shows a conversion entry for it that names each problem, for example "connection aws-prod uses the aws kind, which Goal no longer converts: remove it from the factory". Goal refuses connections of the `aws` and `bedrock` kinds, and custom kinds that start a command with no fields. The entry goes away once the factory publishes a version with environment files.
 

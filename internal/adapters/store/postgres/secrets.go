@@ -303,6 +303,15 @@ func (t secretTable) delete(ctx context.Context, name string, by domain.Actor) e
 			return fmt.Errorf("%s %q is used by connections %s: %w", t.kind.noun, name, strings.Join(users, ", "), ports.ErrConflict)
 		}
 
+		sources, err := q.SecretKnowledgeSources(ctx, name)
+		if err != nil {
+			return err
+		}
+
+		if len(sources) > 0 {
+			return fmt.Errorf("%s %q is used by knowledge sources %s: %w", t.kind.noun, name, strings.Join(sources, ", "), ports.ErrConflict)
+		}
+
 		id, err := q.DeleteSecret(ctx, name)
 		if err != nil {
 			return err
