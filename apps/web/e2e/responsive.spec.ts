@@ -1,7 +1,7 @@
 // No page scrolls sideways (MASTER.md "Layout" and "Accessibility and checks"): the document is never wider than
 // the window (documentElement.scrollWidth against clientWidth, which counts a button's hit area), at 1440, 1280, 1024, 768 and 390 px wide, in light and
 // dark, against the mock. The routes: Runs, Items, Needs you, Item (/items/12), New trigger, Jonah, Home,
-// Definition line, Board, Account, Factory settings, Assembly item (/items/17), Agents, Agent (reviewer),
+// Definition line, Definition knowledge, Board, Account, Factory settings, Assembly item (/items/17), Agents, Agent (reviewer),
 // Connections, GitHub connection, Knowledge, Add a source (upload, repository, Confluence), Knowledge source (goal-docs, handbook), Secrets, the New secret sheet, a secret (github-token), Import secrets and Spend. A wide table scrolls in its own box, so
 // the document's width is asserted, and so is that no visible element ends past the right edge outside a
 // horizontal scroller (expectNoClippedElements): the shell clips overflow, so scrollWidth alone misses cut-off content. Each visit attaches a screenshot. Not run in the box (no browser): the
@@ -92,6 +92,14 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
       await page.goto('/o/acme/f/software/definition/line');
       await expect(page.getByRole('heading', { level: 1, name: 'Definition' })).toBeVisible();
       await expect(page.getByRole('list', { name: 'Stations, in order' })).toBeVisible();
+    },
+  },
+  {
+    name: 'Definition knowledge',
+    open: async (page) => {
+      await page.goto('/o/acme/f/software/definition/knowledge');
+      await expect(page.getByRole('heading', { level: 2, name: 'Knowledge' })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 3, name: 'Factory memory' })).toBeVisible();
     },
   },
   {

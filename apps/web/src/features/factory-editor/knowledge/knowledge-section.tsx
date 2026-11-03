@@ -21,7 +21,7 @@ export function KnowledgeSection() {
   const basics = useSection('basics');
   const agents = useSection('agents').agents ?? [];
   const hasDraft = useDraft((s) => s.hasDraft);
-  const known = useQuery(knowledgeSourcesQuery(org.slug)).data ?? [];
+  const known = useQuery(knowledgeSourcesQuery(org.slug)).data;
 
   const raw = basics.knowledge_sources ?? [];
   const entries = useMemo(() => raw.map(entryOf), [raw]);

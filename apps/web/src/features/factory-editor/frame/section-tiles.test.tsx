@@ -37,10 +37,10 @@ const props = {
 };
 
 describe('the section nav', () => {
-  it('lists five links, marks the current one and names the changes and the problem', () => {
+  it('lists six links, marks the current one and names the changes and the problem', () => {
     render(<SectionTiles {...props} />);
     const nav = screen.getByRole('navigation', { name: 'Definition sections' });
-    expect(nav.querySelectorAll('a')).toHaveLength(5);
+    expect(nav.querySelectorAll('a')).toHaveLength(6);
     const current = nav.querySelectorAll('a[aria-current="location"]');
     expect(current).toHaveLength(1);
     expect(current[0]?.textContent).toContain('Basics');
@@ -48,10 +48,11 @@ describe('the section nav', () => {
     expect(connections.textContent).toContain('default, deploy');
     expect(connections.textContent).toContain('1 change');
     expect(connections.textContent).toContain('1 problem');
+    expect(screen.getByRole('link', { name: /^Knowledge/ }).textContent).toContain('No sources');
   });
 
-  it('view only shows four links', () => {
+  it('view only shows five links', () => {
     render(<SectionTiles {...props} viewOnly />);
-    expect(screen.getByRole('navigation').querySelectorAll('a')).toHaveLength(4);
+    expect(screen.getByRole('navigation').querySelectorAll('a')).toHaveLength(5);
   });
 });

@@ -43,9 +43,11 @@ export function SectionTiles({
 }: TilesProps) {
   const model = useModel();
   const envs = useEnvironmentNames();
-  const shown: readonly (Section | 'knowledge')[] = (
-    viewOnly ? sections.filter((s) => s !== 'review') : sections
-  ).flatMap((s) => (s === 'review' ? (['knowledge', s] as const) : [s]));
+  const shown: readonly (Section | 'knowledge')[] = [
+    ...sections.filter((s) => s !== 'review'),
+    'knowledge',
+    ...(viewOnly ? [] : (['review'] as const)),
+  ];
   const knowledgeText = knowledgeTileText(model.basics.knowledge_sources?.length ?? 0);
   return (
     <nav

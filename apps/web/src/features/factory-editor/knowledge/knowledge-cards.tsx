@@ -39,8 +39,8 @@ export function SourcesCard({
 }: {
   /** The factory's entries, in its order. */
   entries: readonly SourceEntry[];
-  /** The organization's sources, to name sizes and to pick from. */
-  known: readonly KnowledgeSource[];
+  /** The organization's sources, to name sizes and to pick from; undefined while they load. */
+  known: readonly KnowledgeSource[] | undefined;
   readOnly: boolean;
   onAdd: (name: string) => void;
   onRemove: (name: string) => void;
@@ -49,7 +49,7 @@ export function SourcesCard({
   const arrived = useArrivals(entries.map((e) => e.name));
   const [pick, setPick] = useState('');
   const listed = new Set(entries.map((e) => e.name));
-  const choices = known.filter((s) => !listed.has(s.name));
+  const choices = (known ?? []).filter((s) => !listed.has(s.name));
   return (
     <Card title="Sources" hint="Folders of files agents read. Each run gets the ones that apply to it.">
       {entries.length === 0 ? (
@@ -59,7 +59,7 @@ export function SourcesCard({
       ) : (
         <ul className="m-0 flex list-none flex-col p-0">
           {entries.map((e) => {
-            const source = known.find((s) => s.name === e.name);
+            const source = known?.find((s) => s.name === e.name);
             const size = source ? sizeOf(source) : undefined;
             const line = e.readWhen ?? source?.read_when;
             return (
@@ -89,7 +89,7 @@ export function SourcesCard({
           })}
         </ul>
       )}
-      {readOnly ? null : (
+      {readOnly || known === undefined ? null : (
         <div className={cn('flex flex-wrap items-end gap-2 border-t border-line py-4', rowPad)}>
           {choices.length === 0 ? (
             <span className="text-sm text-muted">

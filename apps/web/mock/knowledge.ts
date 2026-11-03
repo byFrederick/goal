@@ -196,7 +196,6 @@ function seed(now: number, by: Actor): MockSource[] {
         config: { repository: 'https://github.com/acme/goal', branch: 'main', include: 'docs/**/*.md' },
         last_synced_at: at(-45 * 60_000),
         next_sync_at: at(15 * 60_000),
-        embed_model: '@cf/baai/bge-m3',
       }),
       docs: [
         {

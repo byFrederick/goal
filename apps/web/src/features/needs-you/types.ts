@@ -10,7 +10,7 @@ export type EntryType = 'approval' | 'decision' | 'question' | 'alert' | 'generi
 /** A tab of the Needs you page: All, or one type. */
 export type NeedsTab = 'all' | 'approval' | 'decision' | 'question' | 'alert';
 
-const alertKinds: ReadonlySet<string> = new Set(['andon', 'rework_warning', 'blocked', 'expedite']);
+const alertKinds: ReadonlySet<string> = new Set(['andon', 'rework_warning', 'blocked', 'expedite', 'knowledge_source']);
 
 /** The type of an entry: Approval, Decision, Question, Alert, or generic for a kind this build does not know. */
 export function typeOf(entry: Pick<InboxEntry, 'kind'>): EntryType {
