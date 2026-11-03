@@ -1,11 +1,13 @@
 // The parts the Secrets screens share: a secret's factory chips, its expiry text, and the two form
 // groups the New secret sheet and the secret page's settings both use (the factory scope, and the
 // expiry with its reminder).
+import { Lock } from 'lucide-react';
 import { useId } from 'react';
 import type { Factory, Secret, SecretScope } from '../../api/types';
 import { FactoryBadge } from '../../app/factory-badge';
 import { factoryMark } from '../../shared/marks';
 import { Checkbox } from '../../ui/checkbox';
+import { Chip } from '../../ui/chip';
 import { Field, Input } from '../../ui/field';
 import { Select } from '../../ui/select';
 import { type Expiry, remindOptions } from './words';
@@ -152,3 +154,13 @@ export const expiresAt = (day: string): string | undefined =>
 
 /** An ISO date-time as the date input's value, "" for none. */
 export const dayOf = (iso: string | null): string => (iso ? iso.slice(0, 10) : '');
+
+/** The mark beside a secret field's label. */
+export function WriteOnly() {
+  return (
+    <Chip tone="quiet" className="font-normal text-muted">
+      <Lock size={12} strokeWidth={1.75} aria-hidden="true" />
+      Write-only
+    </Chip>
+  );
+}

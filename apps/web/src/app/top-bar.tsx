@@ -18,8 +18,8 @@ import { useOrg } from '../shared/org';
 import { cn } from '../ui/cn';
 import { FactoryBadge } from './factory-badge';
 import {
+  accessScreen,
   apiKeysScreen,
-  connectionsScreen,
   homeScreen,
   knowledgeScreen,
   membersScreen,
@@ -99,9 +99,7 @@ export const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/o/$org/_org/needs-you': needsYouScreen,
   '/o/$org/_org/settings': settingsScreen,
   '/o/$org/_org/spend': spendScreen,
-  '/o/$org/_org/connections/': connectionsScreen,
-  '/o/$org/_org/connections/$connection': connectionsScreen,
-  '/o/$org/_org/connections/new': connectionsScreen,
+  '/o/$org/_org/access': accessScreen,
   '/o/$org/_org/credentials/': secretsScreen,
   '/o/$org/_org/credentials/new': secretsScreen,
   '/o/$org/_org/knowledge/': knowledgeScreen,

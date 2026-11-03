@@ -1,14 +1,8 @@
-// Replace secret (spec 4 §10): one dialog per secret field. The new value goes to goald once, in
-// PATCH …/connections/{name} {secrets}, and is cleared here; goald seals it and never answers
-// it. A fresh sign-in is asked first when the session is older than 10 minutes (session.ts).
-// SecretReplaceDialog is the same dialog over any save: the Credentials screen replaces a
-// credential's value with it (PATCH …/credentials/{name} {value}).
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+// Replace secret: one dialog that takes a new value and hands it to goald once, then clears it;
+// goald seals it and never answers it. A fresh sign-in is asked first when the session is older
+// than 10 minutes (session.ts). The Secrets pages replace a secret's value with it.
+import { useMutation } from '@tanstack/react-query';
 import { type FormEvent, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { updateConnection } from '../../api/connections';
-import { keys } from '../../api/queries';
-import type { Connection, ConnectionKindField } from '../../api/types';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Dialog, DialogClose, DialogContent } from '../../ui/dialog';
@@ -100,46 +94,5 @@ export function SecretReplaceDialog<Saved>({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/** A connection's secret field: its replace dialog, with the connection's own toast and cache. */
-export function ReplaceSecretDialog({
-  org,
-  connection,
-  field,
-  onClose,
-}: {
-  org: string;
-  connection: Connection;
-  /** The secret field to replace; null closes the dialog. */
-  field: ConnectionKindField | null;
-  onClose: () => void;
-}) {
-  const client = useQueryClient();
-  const set = connection.secrets_set.includes(field?.name ?? '');
-  const verb = set ? 'Replace' : 'Set';
-  const fieldTitle = field?.title ?? 'Secret';
-
-  return (
-    <SecretReplaceDialog<Connection>
-      open={field !== null}
-      title={`${verb} ${field?.title.toLowerCase() ?? 'secret'} of ${connection.name}`}
-      label={fieldTitle}
-      help={field?.description}
-      actionLabel={`${verb} ${field?.title.toLowerCase() ?? 'secret'}`}
-      pendingLabel={`${verb === 'Set' ? 'Setting' : 'Replacing'}…`}
-      save={(value) => updateConnection(org, connection.name, { secrets: { [field?.name ?? '']: value } })}
-      onSaved={async (updated) => {
-        client.setQueryData(keys.connection(org, updated.name), (old: Connection | undefined) =>
-          old ? { ...old, ...updated } : updated,
-        );
-        toast.success(`${fieldTitle} ${set ? 'replaced' : 'set'} on ${updated.name}`, {
-          description: 'Runs get it from their next start. Test it to check it works.',
-        });
-        await client.invalidateQueries({ queryKey: keys.connections(org) });
-      }}
-      onClose={onClose}
-    />
   );
 }

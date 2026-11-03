@@ -44,7 +44,7 @@ export function ConnectionsSection(_: SectionViewProps) {
         <>
           Which of {org.name}’s connections {factory}’s runs get, per agent, and what its agents may search. Secrets
           stay with the connections; owners and admins manage them in{' '}
-          <Link to="/o/$org/connections" params={{ org: org.slug }} className="text-ink underline underline-offset-2">
+          <Link to="/o/$org/access" params={{ org: org.slug }} className="text-ink underline underline-offset-2">
             Connections
           </Link>
           .
@@ -99,8 +99,9 @@ function FactoryConnections({ factory }: { factory: string }) {
         </h3>
         {manage && !viewOnly ? (
           <Link
-            to="/o/$org/connections/new"
+            to="/o/$org/secrets"
             params={{ org: org.slug }}
+            search={{ new: true }}
             className="inline-flex min-h-11 items-center text-sm text-ink underline underline-offset-3 hover:text-link md:min-h-6"
           >
             New connection

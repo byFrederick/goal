@@ -11,9 +11,8 @@ import { formatDay } from '../../shared/format';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Field, Input } from '../../ui/field';
-import { refusalText } from '../connections/words';
 import { dayOf, ExpiryFields, expiresAt, ScopeField, type ScopeState, scopeBody, scopeOf } from './parts';
-import { expiryOf, reminderText } from './words';
+import { expiryOf, refusalText, reminderText } from './words';
 
 const rowClass = 'grid grid-cols-[88px_minmax(0,1fr)] gap-x-4 text-secondary';
 
