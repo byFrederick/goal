@@ -114,7 +114,12 @@ function rows(now: number): AccessRow[] {
 }
 
 const attention = new Set<AccessStatus>(['missing', 'failed', 'expired', 'expiring']);
-const kindTitles = { mcp: 'MCP servers', env: 'Keys in variables and files', file: 'Keys in variables and files' };
+const kindTitles = {
+  mcp: 'MCP servers',
+  env: 'Keys in variables and files',
+  file: 'Keys in variables and files',
+  slack: 'Notifications',
+};
 
 /** The rows grouped as `by` says, the contract's groups. */
 function group(list: AccessRow[], by: AccessView): Access['groups'] {

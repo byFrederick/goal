@@ -7,7 +7,12 @@ import { formatDay, plural } from '../../shared/format';
 const DAY = 86_400_000;
 
 /** "Variable", "File", "MCP server": what a row is, in words. */
-export const rowKindLabels: Record<AccessRow['kind'], string> = { mcp: 'MCP server', env: 'Variable', file: 'File' };
+export const rowKindLabels: Record<AccessRow['kind'], string> = {
+  mcp: 'MCP server',
+  env: 'Variable',
+  file: 'File',
+  slack: 'Slack notifications',
+};
 
 /** "linear" is one row however many groups list it: rows counted by kind and name. */
 export function uniqueRows(access: Access): AccessRow[] {
@@ -105,6 +110,8 @@ export function readsAs(row: AccessRow): string {
       return `mounts it as ${row.name}`;
     case 'mcp':
       return `sends it to ${row.name}`;
+    case 'slack':
+      return 'sends Slack notifications with it';
   }
 }
 
