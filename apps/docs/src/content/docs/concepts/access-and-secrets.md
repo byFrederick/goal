@@ -44,7 +44,9 @@ spec:
       tools: {create_comment: ask, "delete_*": off}
 ```
 
-The `{{name}}` placeholder names a secret. It is valid in an environment file's `env`, `files` and `mcp`, in `runtime.repository.token`, in `runtime.modelKey` and in a trigger's `modelAgrees.key`, and nowhere else. Publishing checks that each secret exists and is open to the factory. Each MCP server's tools are `allow`, `ask` or `off`; a tool with no mode is `allow`, and the most specific match wins. See [skills and rules](../skills-and-rules/#tools-that-ask-first).
+The `{{name}}` placeholder names a secret. It is valid in an environment file's `env`, `files` and `mcp`, in `runtime.repository.token`, in `runtime.modelKey` and in a trigger's `modelAgrees.key`, and nowhere else. Publishing checks that each secret exists and is open to the factory. Each MCP server's name is 3 to 40 lowercase letters, digits and hyphens, starting with a letter and ending with a letter or digit, so `playwright` publishes and `play_wright` does not. Each MCP server's tools are `allow`, `ask` or `off`; a tool with no mode is `allow`, and the most specific match wins. See [skills and rules](../skills-and-rules/#tools-that-ask-first).
+
+An environment can set `image` to run its box from an image of your own. A box on Cloudflare runs only the Worker's own images, so a run there fails on it. Publishing shows a warning at `image` and still publishes, since a box on Docker Compose runs it.
 
 In the Definition, the **Environments** section has a tab per environment, and **Add a tool** adds an MCP server, a command-line tool or an API from a catalog, or a custom one, to the draft. You pick a secret or create one in place, and the page shows the lines it adds before you add them. The same file is under `environments/` in the YAML view. Remote MCP servers are tested with the draft's secrets, and the result is shown, never required to publish.
 
