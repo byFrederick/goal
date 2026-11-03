@@ -47,6 +47,7 @@ import { Route as OOrgFFactoryAgentsIndexRouteImport } from './routes/o.$org.f.$
 import { Route as OOrgFFactoryAgentsAgentRouteImport } from './routes/o.$org.f.$factory.agents.$agent'
 import { Route as OOrgFFactoryDefinitionIndexRouteImport } from './routes/o.$org.f.$factory.definition.index'
 import { Route as OOrgFFactoryDefinitionSectionRouteImport } from './routes/o.$org.f.$factory.definition.$section'
+import { Route as OOrgFFactoryDefinitionAddToolRouteImport } from './routes/o.$org.f.$factory.definition_.add-tool'
 import { Route as OOrgFFactoryIntakeIndexRouteImport } from './routes/o.$org.f.$factory.intake.index'
 import { Route as OOrgFFactoryIntakeTriggerRouteImport } from './routes/o.$org.f.$factory.intake.$trigger'
 import { Route as OOrgFFactoryIntakeNewRouteImport } from './routes/o.$org.f.$factory.intake.new'
@@ -252,6 +253,12 @@ const OOrgFFactoryDefinitionSectionRoute =
     path: '/$section',
     getParentRoute: () => OOrgFFactoryDefinitionRoute,
   } as any)
+const OOrgFFactoryDefinitionAddToolRoute =
+  OOrgFFactoryDefinitionAddToolRouteImport.update({
+    id: '/definition_/add-tool',
+    path: '/definition/add-tool',
+    getParentRoute: () => OOrgFFactoryRoute,
+  } as any)
 const OOrgFFactoryIntakeIndexRoute = OOrgFFactoryIntakeIndexRouteImport.update({
   id: '/intake/',
   path: '/intake/',
@@ -361,6 +368,7 @@ export interface FileRoutesByFullPath {
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
+  '/o/$org/f/$factory/definition/add-tool': typeof OOrgFFactoryDefinitionAddToolRoute
   '/o/$org/f/$factory/intake/$trigger': typeof OOrgFFactoryIntakeTriggerRoute
   '/o/$org/f/$factory/intake/new': typeof OOrgFFactoryIntakeNewRoute
   '/o/$org/f/$factory/intake/webhooks': typeof OOrgFFactoryIntakeWebhooksRoute
@@ -410,6 +418,7 @@ export interface FileRoutesByTo {
   '/o/$org/f/$factory': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
+  '/o/$org/f/$factory/definition/add-tool': typeof OOrgFFactoryDefinitionAddToolRoute
   '/o/$org/f/$factory/intake/$trigger': typeof OOrgFFactoryIntakeTriggerRoute
   '/o/$org/f/$factory/intake/new': typeof OOrgFFactoryIntakeNewRoute
   '/o/$org/f/$factory/intake/webhooks': typeof OOrgFFactoryIntakeWebhooksRoute
@@ -464,6 +473,7 @@ export interface FileRoutesById {
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
+  '/o/$org/f/$factory/definition_/add-tool': typeof OOrgFFactoryDefinitionAddToolRoute
   '/o/$org/f/$factory/intake/$trigger': typeof OOrgFFactoryIntakeTriggerRoute
   '/o/$org/f/$factory/intake/new': typeof OOrgFFactoryIntakeNewRoute
   '/o/$org/f/$factory/intake/webhooks': typeof OOrgFFactoryIntakeWebhooksRoute
@@ -518,6 +528,7 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
+    | '/o/$org/f/$factory/definition/add-tool'
     | '/o/$org/f/$factory/intake/$trigger'
     | '/o/$org/f/$factory/intake/new'
     | '/o/$org/f/$factory/intake/webhooks'
@@ -567,6 +578,7 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
+    | '/o/$org/f/$factory/definition/add-tool'
     | '/o/$org/f/$factory/intake/$trigger'
     | '/o/$org/f/$factory/intake/new'
     | '/o/$org/f/$factory/intake/webhooks'
@@ -620,6 +632,7 @@ export interface FileRouteTypes {
     | '/o/$org/f/$factory/'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
+    | '/o/$org/f/$factory/definition_/add-tool'
     | '/o/$org/f/$factory/intake/$trigger'
     | '/o/$org/f/$factory/intake/new'
     | '/o/$org/f/$factory/intake/webhooks'
@@ -918,6 +931,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgFFactoryDefinitionSectionRouteImport
       parentRoute: typeof OOrgFFactoryDefinitionRoute
     }
+    '/o/$org/f/$factory/definition_/add-tool': {
+      id: '/o/$org/f/$factory/definition_/add-tool'
+      path: '/definition/add-tool'
+      fullPath: '/o/$org/f/$factory/definition/add-tool'
+      preLoaderRoute: typeof OOrgFFactoryDefinitionAddToolRouteImport
+      parentRoute: typeof OOrgFFactoryRoute
+    }
     '/o/$org/f/$factory/intake/': {
       id: '/o/$org/f/$factory/intake/'
       path: '/intake'
@@ -1077,6 +1097,7 @@ interface OOrgFFactoryRouteChildren {
   OOrgFFactorySettingsRoute: typeof OOrgFFactorySettingsRoute
   OOrgFFactoryIndexRoute: typeof OOrgFFactoryIndexRoute
   OOrgFFactoryAgentsAgentRoute: typeof OOrgFFactoryAgentsAgentRoute
+  OOrgFFactoryDefinitionAddToolRoute: typeof OOrgFFactoryDefinitionAddToolRoute
   OOrgFFactoryIntakeTriggerRoute: typeof OOrgFFactoryIntakeTriggerRoute
   OOrgFFactoryIntakeNewRoute: typeof OOrgFFactoryIntakeNewRoute
   OOrgFFactoryIntakeWebhooksRoute: typeof OOrgFFactoryIntakeWebhooksRoute
@@ -1099,6 +1120,7 @@ const OOrgFFactoryRouteChildren: OOrgFFactoryRouteChildren = {
   OOrgFFactorySettingsRoute: OOrgFFactorySettingsRoute,
   OOrgFFactoryIndexRoute: OOrgFFactoryIndexRoute,
   OOrgFFactoryAgentsAgentRoute: OOrgFFactoryAgentsAgentRoute,
+  OOrgFFactoryDefinitionAddToolRoute: OOrgFFactoryDefinitionAddToolRoute,
   OOrgFFactoryIntakeTriggerRoute: OOrgFFactoryIntakeTriggerRoute,
   OOrgFFactoryIntakeNewRoute: OOrgFFactoryIntakeNewRoute,
   OOrgFFactoryIntakeWebhooksRoute: OOrgFFactoryIntakeWebhooksRoute,

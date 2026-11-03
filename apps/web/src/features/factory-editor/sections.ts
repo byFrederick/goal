@@ -3,7 +3,7 @@
 // only, never content (D §11).
 
 /** The five sections with tiles, then Versions (reached from the header). */
-export const editorSections = ['basics', 'line', 'agents', 'connections', 'review', 'versions'] as const;
+export const editorSections = ['basics', 'line', 'agents', 'environments', 'review', 'versions'] as const;
 
 export type EditorSection = (typeof editorSections)[number];
 
@@ -18,7 +18,16 @@ export interface SectionInfo {
   description: string;
 }
 
-export const sectionInfo: Record<EditorSection, SectionInfo> = {
+/** The editor route a model section (goald's model still calls the Environments page's section connections) is shown on: the model's connections are the Environments page. */
+export const routeSection = (section: EditorSection | 'connections'): EditorSection =>
+  section === 'connections' ? 'environments' : section;
+
+const environmentsInfo: SectionInfo = {
+  label: 'Environments',
+  description: 'What each agent’s box installs and what it can reach. Keys come from Secrets.',
+};
+
+export const sectionInfo: Record<EditorSection | 'connections', SectionInfo> = {
   basics: {
     label: 'Basics',
     description: 'What this factory is for and where its work lives. Agents see the purpose in every prompt.',
@@ -29,10 +38,8 @@ export const sectionInfo: Record<EditorSection, SectionInfo> = {
     description:
       'Who works on the line. Each agent gets a role, a model, a prompt, skills and the built-in tools it may use.',
   },
-  connections: {
-    label: 'Connections',
-    description: 'Which organization connections runs get, per agent, and the knowledge agents may search.',
-  },
+  environments: environmentsInfo,
+  connections: environmentsInfo,
   review: { label: 'Review and publish', description: 'Checks, the changes from the running version, and publish.' },
   versions: { label: 'Versions', description: 'Every published version, the one that runs, compare and restore.' },
 };
@@ -49,6 +56,8 @@ export interface DefinitionSearch {
   agent?: string;
   station?: string;
   connection?: string;
+  /** Environments: the tab (environments/<name>.yaml); Add a tool: the environment it adds to. */
+  environment?: string;
   /** Review's comparison, "<from>..<to>" (current..draft). */
   compare?: string;
   /** Agents: open the skill picker. */
@@ -66,7 +75,7 @@ export function validateDefinitionSearch(search: Record<string, unknown>): Defin
   if (search.mode === 'yaml') out.mode = 'yaml';
   if (search.add === 'skill') out.add = 'skill';
   if (Number.isInteger(line) && line > 0) out.line = line;
-  for (const key of ['file', 'agent', 'station', 'connection', 'compare', 'request'] as const) {
+  for (const key of ['file', 'agent', 'station', 'connection', 'environment', 'compare', 'request'] as const) {
     const v = text(search[key]);
     if (v !== undefined) out[key] = v;
   }

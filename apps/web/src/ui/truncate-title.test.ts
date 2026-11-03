@@ -23,7 +23,6 @@ const allowed: Record<string, { count: number; reason: string }> = {
   'features/factories/spend-week.tsx': { count: 1, reason: shown },
   'features/factory-editor/agents/agents-section.tsx': { count: 2, reason: shown },
   'features/factory-editor/agents/prompt-editor.tsx': { count: 1, reason: shown },
-  'features/factory-editor/connections/connections-section.tsx': { count: 2, reason: shown },
   'features/factory-editor/frame/wizard-steps.tsx': { count: 1, reason: shown },
   'features/factory-editor/line/station-dnd.tsx': { count: 1, reason: shown },
   'features/factory-editor/line/station-rules.tsx': { count: 1, reason: shown },

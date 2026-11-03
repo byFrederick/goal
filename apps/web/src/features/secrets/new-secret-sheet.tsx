@@ -22,25 +22,49 @@ export function NewSecretSheet({
   open,
   onOpenChange,
   factories,
+  initial,
+  onCreated,
 }: {
   org: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   factories: readonly Factory[];
+  /** Fills the form: the suggested name, and a value moved out of a file (Move to Secrets). */
+  initial?: { name?: string; value?: string } | undefined;
+  /** Called with the secret's name once it is created (Add a tool picks it, Move to Secrets writes its reference). */
+  onCreated?: ((name: string) => void) | undefined;
 }) {
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent title="New secret">
-        <NewSecretForm org={org} factories={factories} onDone={() => onOpenChange(false)} />
+        <NewSecretForm
+          org={org}
+          factories={factories}
+          initial={initial}
+          onCreated={onCreated}
+          onDone={() => onOpenChange(false)}
+        />
       </DrawerContent>
     </Drawer>
   );
 }
 
-function NewSecretForm({ org, factories, onDone }: { org: string; factories: readonly Factory[]; onDone: () => void }) {
+function NewSecretForm({
+  org,
+  factories,
+  initial,
+  onCreated,
+  onDone,
+}: {
+  org: string;
+  factories: readonly Factory[];
+  initial: { name?: string; value?: string } | undefined;
+  onCreated: ((name: string) => void) | undefined;
+  onDone: () => void;
+}) {
   const client = useQueryClient();
-  const [name, setName] = useState('');
-  const [value, setValue] = useState('');
+  const [name, setName] = useState(initial?.name ?? '');
+  const [value, setValue] = useState(initial?.value ?? '');
   const [description, setDescription] = useState('');
   const [scope, setScope] = useState<ScopeState>({ all: false, chosen: [] });
   const [expires, setExpires] = useState('');
@@ -52,6 +76,7 @@ function NewSecretForm({ org, factories, onDone }: { org: string; factories: rea
     gcTime: 0,
     onSuccess: async (saved) => {
       onDone();
+      onCreated?.(saved.name);
       toast.success(`${saved.name} created`, { description: 'Nobody can read its value back.' });
       await client.invalidateQueries({ queryKey: keys.secrets(org) });
     },

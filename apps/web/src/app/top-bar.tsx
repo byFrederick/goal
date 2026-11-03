@@ -74,6 +74,7 @@ const factoryRoutePages: Record<string, string> = {
   '/o/$org/f/$factory/agents/$agent': 'agents',
   '/o/$org/f/$factory/definition/': 'definition',
   '/o/$org/f/$factory/definition/$section': 'definition',
+  '/o/$org/f/$factory/definition_/add-tool': 'definition',
   '/o/$org/f/$factory/intake/': 'intake',
   '/o/$org/f/$factory/intake/webhooks': 'intake',
   '/o/$org/f/$factory/intake/$trigger': 'intake',
