@@ -33,8 +33,18 @@ type runEnv struct {
 // listed for the run's agent (ADR 0017 decisions 5 to 7), each use audited as credential.used by
 // the port. A Jonah run (ADR 0017 decision 1) gets only the model connection's env, so after
 // resolving it keeps only the credentials the model connection refers to. The line runs
-// (domain.Line.Refusal), so it has a model connection.
+// (domain.Line.Refusal), so it has a model connection. A request with a model key is of a version
+// on secrets, which opens no connection or credential (secretEnv).
 func (e *Engine) runEnv(ctx context.Context, req domain.RunRequest, own []string, run domain.RunID) (runEnv, error) {
+	if req.ModelKey != "" {
+		return e.secretEnv(ctx, domain.SecretUse{Factory: req.FactoryID, Agent: req.Agent, Run: run}, req.ModelKey, req.Environment)
+	}
+
+	return e.connectionEnv(ctx, req, own, run)
+}
+
+// connectionEnv is runEnv of a version on connections.
+func (e *Engine) connectionEnv(ctx context.Context, req domain.RunRequest, own []string, run domain.RunID) (runEnv, error) {
 	var names []string
 
 	for _, n := range append([]string{req.ModelConnection, req.Repository.Connection}, own...) {
