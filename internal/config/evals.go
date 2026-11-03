@@ -233,10 +233,7 @@ func (c *checker) judge(p string) {
 		}
 	}
 
-	if env := j.Environment; env != "" && !slices.Contains(c.envNames, env) {
-		c.problems = append(c.problems, ef.problem(checkEnvironments, codeEnvironmentUnknown, at("environment"),
-			"judge %s: unknown environment %q; an environment is a file %s/<name>.yaml", p, env, EnvironmentsDir))
-	}
+	c.evalEnvironment(ef, "judge", j.Environment, at("environment"))
 
 	for i, o := range j.Outcomes {
 		earlier := j.Outcomes[:i]
@@ -296,10 +293,7 @@ func (c *checker) evalCases(judges []string) {
 				"case %s: unknown agent %q", p, a))
 		}
 
-		if env := ec.Spec.Environment; env != "" && !slices.Contains(c.envNames, env) {
-			c.problems = append(c.problems, ef.problem(checkEnvironments, codeEnvironmentUnknown, at("spec", "environment"),
-				"case %s: unknown environment %q; an environment is a file %s/<name>.yaml", p, env, EnvironmentsDir))
-		}
+		c.evalEnvironment(ef, "case", ec.Spec.Environment, at("spec", "environment"))
 
 		if j := ec.Spec.Check.Judge; j != "" && !slices.Contains(judges, j) {
 			c.problems = append(c.problems, ef.problem(checkReferences, codeUnknownJudge, at("spec", "check", "judge"),
@@ -310,6 +304,15 @@ func (c *checker) evalCases(judges []string) {
 			c.problems = append(c.problems, ef.problem(checkReferences, codePatchNotFound, at("spec", "check", "referencePatch"),
 				"case %s: reference patch %s not found", p, rp))
 		}
+	}
+}
+
+// evalEnvironment reports env, the environment a judge or case (what) names at path, when it has
+// no file; "" is the default environment, which the environments check covers.
+func (c *checker) evalEnvironment(ef evalFile, what, env string, path []string) {
+	if env != "" && !slices.Contains(c.envNames, env) {
+		c.problems = append(c.problems, ef.problem(checkEnvironments, codeEnvironmentUnknown, path,
+			"%s %s: unknown environment %q; an environment is a file %s/<name>.yaml", what, ef.path, env, EnvironmentsDir))
 	}
 }
 

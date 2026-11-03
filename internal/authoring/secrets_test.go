@@ -1,10 +1,12 @@
 package authoring_test
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -25,6 +27,20 @@ func withEnv(vars ...string) string {
 // mergeYAML is acmeYAML whose review station merges.
 var mergeYAML = strings.Replace(acmeYAML, "{ id: review, kind: human }", "{ id: review, kind: human, action: merge }", 1)
 
+// secretsRow is one row of TestSecretsCheck: a definition and the one secrets problem it must
+// produce, none when code is "".
+type secretsRow struct {
+	name     string
+	yaml     string
+	env      string
+	code     string
+	severity domain.ProblemSeverity
+	file     string
+	pointer  string
+	fixes    []domain.ProblemFix
+	inPlaces []string // the message names these
+}
+
 // The secrets check reports each problem at its key, for both editors: a {{secret}} the
 // organization lacks or that is not open to the factory, a variable the platform keeps, a key in
 // plain text, a knowledge source the organization lacks and a merge without a repository token.
@@ -32,17 +48,7 @@ var mergeYAML = strings.Replace(acmeYAML, "{ id: review, kind: human }", "{ id: 
 func TestSecretsCheck(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name     string
-		yaml     string
-		env      string
-		code     string
-		severity domain.ProblemSeverity
-		file     string
-		pointer  string
-		fixes    []domain.ProblemFix
-		inPlaces []string // the message names these
-	}{
+	tests := []secretsRow{
 		{name: "every secret exists and is open", yaml: acmeYAML, env: withEnv(`GH_TOKEN: "{{code-token}}"`, "SENTRY_ORG: acme")},
 		{
 			name: "a model key the organization lacks", yaml: strings.Replace(acmeYAML, "{{claude-key}}", "{{ghost-key}}", 1),
@@ -105,50 +111,62 @@ func TestSecretsCheck(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			var found []domain.DefinitionProblem
-
-			for _, p := range v.Problems {
-				if strings.Contains(p.Message, "test-value-") {
-					t.Errorf("problem %s repeats a secret's value: %s", p.Code, p.Message)
-				}
-
-				if p.Check == authoring.CheckSecrets {
-					found = append(found, p)
-				}
-			}
-
-			if tt.code == "" {
-				if len(v.Problems) > 0 || !v.OK {
-					t.Fatalf("problems = %+v, want none", v.Problems)
-				}
-
-				return
-			}
-
-			if len(found) != 1 || found[0].Code != tt.code {
-				t.Fatalf("secrets problems = %+v, want one %s", found, tt.code)
-			}
-
-			p, sev := found[0], tt.severity
-			if sev == "" {
-				sev = domain.SeverityError
-			}
-
-			if p.Severity != sev || p.File != tt.file || p.Pointer != tt.pointer || p.Line == 0 || v.OK != (sev != domain.SeverityError) {
-				t.Errorf("problem = %+v (ok %v); want a %s in %s at %s, located", p, v.OK, sev, tt.file, tt.pointer)
-			}
-
-			for _, s := range tt.inPlaces {
-				if !strings.Contains(p.Message, s) {
-					t.Errorf("message %q does not name %q", p.Message, s)
-				}
-			}
-
-			if !reflect.DeepEqual(p.Fixes, tt.fixes) {
-				t.Errorf("fixes =\n%+v\nwant\n%+v", p.Fixes, tt.fixes)
-			}
+			wantSecretsProblem(t, tt, v)
 		})
 	}
+}
+
+// wantSecretsProblem fails unless v has the row's one secrets problem, or none, and no problem
+// repeats a secret's value.
+func wantSecretsProblem(t *testing.T, tt secretsRow, v authoring.Validation) {
+	t.Helper()
+
+	found := secretsProblems(t, v)
+
+	if tt.code == "" {
+		if len(v.Problems) > 0 || !v.OK {
+			t.Fatalf("problems = %+v, want none", v.Problems)
+		}
+
+		return
+	}
+
+	if len(found) != 1 || found[0].Code != tt.code {
+		t.Fatalf("secrets problems = %+v, want one %s", found, tt.code)
+	}
+
+	p, sev := found[0], cmp.Or(tt.severity, domain.SeverityError)
+	if p.Severity != sev || p.File != tt.file || p.Pointer != tt.pointer || p.Line == 0 || v.OK != (sev != domain.SeverityError) {
+		t.Errorf("problem = %+v (ok %v); want a %s in %s at %s, located", p, v.OK, sev, tt.file, tt.pointer)
+	}
+
+	if missing := slices.DeleteFunc(slices.Clone(tt.inPlaces), func(s string) bool { return strings.Contains(p.Message, s) }); len(missing) > 0 {
+		t.Errorf("message %q does not name %q", p.Message, missing)
+	}
+
+	if !reflect.DeepEqual(p.Fixes, tt.fixes) {
+		t.Errorf("fixes =\n%+v\nwant\n%+v", p.Fixes, tt.fixes)
+	}
+}
+
+// secretsProblems are v's problems of the secrets check; it fails on any problem that repeats a
+// secret's value.
+func secretsProblems(t *testing.T, v authoring.Validation) []domain.DefinitionProblem {
+	t.Helper()
+
+	var found []domain.DefinitionProblem
+
+	for _, p := range v.Problems {
+		if strings.Contains(p.Message, "test-value-") {
+			t.Errorf("problem %s repeats a secret's value: %s", p.Code, p.Message)
+		}
+
+		if p.Check == authoring.CheckSecrets {
+			found = append(found, p)
+		}
+	}
+
+	return found
 }
 
 // A knowledge source the organization has passes, and the check's green line counts what it found.

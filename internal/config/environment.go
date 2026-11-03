@@ -9,6 +9,7 @@ import (
 	"path"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -93,7 +94,7 @@ func (e Environment) pointer(path []string) string {
 // sectionPath is the pointer of a file path relative to the Environments section, the form a
 // ProblemFix's patch uses: /<name>/<keys below spec>.
 func (e Environment) sectionPath(path []string) string {
-	if len(path) > 0 && path[0] == "spec" {
+	if len(path) > 0 && path[0] == keySpec {
 		path = path[1:]
 	}
 
@@ -179,24 +180,24 @@ type SecretRef struct {
 // factoryRefPlaces are the factory.yaml keys a {{secret}} may be in (ADR 0037 decision 6); a *
 // is any one key or index. Every other key that has one is a secret-placement problem.
 var factoryRefPlaces = [][]string{
-	{"spec", "runtime", "repository", "token"},
-	{"spec", "runtime", "modelKey"},
-	{"spec", "board", "triggers", "*", "only", "modelAgrees", "key"},
+	{keySpec, "runtime", "repository", "token"},
+	{keySpec, "runtime", "modelKey"},
+	{keySpec, keyBoard, "triggers", "*", "only", "modelAgrees", "key"},
 }
 
 // factoryTemplatePlaces are the factory.yaml keys whose {{field}} placeholders take an event's
 // fields, so they are not secret references.
 var factoryTemplatePlaces = [][]string{
-	{"spec", "board", "triggers", "*", "create", "title"},
-	{"spec", "board", "triggers", "*", "create", "brief"},
+	{keySpec, keyBoard, "triggers", "*", "create", "title"},
+	{keySpec, keyBoard, "triggers", "*", "create", "brief"},
 }
 
 // environmentRefPlaces are the keys of an environment file a {{secret}} may be in.
 var environmentRefPlaces = [][]string{
-	{"spec", "env", "*"},
-	{"spec", "files", "*"},
-	{"spec", "mcp", "*", "headers", "*"},
-	{"spec", "mcp", "*", "env", "*"},
+	{keySpec, "env", "*"},
+	{keySpec, "files", "*"},
+	{keySpec, "mcp", "*", "headers", "*"},
+	{keySpec, "mcp", "*", "env", "*"},
 }
 
 // SecretRefs are every {{secret}} reference the definition makes in a place decision 6 allows:
@@ -242,7 +243,7 @@ func walkScalars(n *yaml.Node, p []string, fn func(path []string, value string))
 		}
 	case yaml.SequenceNode:
 		for i, c := range n.Content {
-			walkScalars(c, append(slices.Clone(p), fmt.Sprint(i)), fn)
+			walkScalars(c, append(slices.Clone(p), strconv.Itoa(i)), fn)
 		}
 	case yaml.ScalarNode:
 		if n.Tag == "!!str" || n.Tag == "" {
@@ -361,30 +362,38 @@ func (c *checker) environment(p, name string) (Environment, bool) {
 			at := at("spec", "tools", i)
 			c.envError(e, codeToolSpecInvalid, at,
 				"%s: tools: %q is not a mise tool spec, such as go, go@1.26.10 or npm:@acme/cli@2", p, t).
-				Fixes = []domain.ProblemFix{{Label: "Remove " + t, Section: domain.SectionEnvironments,
-				Patch: []domain.PatchOp{{Op: domain.PatchRemove, Path: e.sectionPath(at)}}}}
+				Fixes = []domain.ProblemFix{{
+				Label: "Remove " + t, Section: domain.SectionEnvironments,
+				Patch: []domain.PatchOp{{Op: domain.PatchRemove, Path: e.sectionPath(at)}},
+			}}
 		}
 	}
 
-	walkScalars(doc.root, nil, func(at []string, value string) {
+	c.environmentRefs(e)
+
+	return e, true
+}
+
+// environmentRefs reports each {{…}} of e outside the places a reference may be, and each one
+// there that does not name a secret.
+func (c *checker) environmentRefs(e Environment) {
+	walkScalars(e.doc.root, nil, func(at []string, value string) {
 		if !strings.Contains(value, "{{") && !strings.Contains(value, "}}") {
 			return
 		}
 
 		if !matchesAny(at, environmentRefPlaces) {
 			c.envError(e, codeSecretPlacement, at, "%s %s: a {{secret}} reference is valid only in env, files and mcp headers "+
-				"and a stdio server's env; a literal {{ is not supported", p, displayPath(at[1:]))
+				"and a stdio server's env; a literal {{ is not supported", e.file, displayPath(at[1:]))
 
 			return
 		}
 
 		if bad := badReference(value); bad != "" {
-			c.envError(e, codeSecretRefInvalid, at, "%s %s: %q is not a {{secret}} reference; it names a secret: "+
-				"3 to 40 lowercase letters, digits and hyphens, starting with a letter", p, displayPath(at[1:]), bad)
+			c.envError(e, codeReferenceInvalid, at, "%s %s: %q is not a {{secret}} reference; it names a secret: "+
+				"3 to 40 lowercase letters, digits and hyphens, starting with a letter", e.file, displayPath(at[1:]), bad)
 		}
 	})
-
-	return e, true
 }
 
 // envError records an error at path in environment e and returns it, so a caller can attach fixes.
@@ -484,7 +493,7 @@ func (c *checker) factoryPlacement() {
 		case p[len(p)-1] == "token" && !braces:
 			// env-reference-removed
 		case !wholeReference(value):
-			c.errorf(checkEnvironments, codeSecretRefInvalid, p,
+			c.errorf(checkEnvironments, codeReferenceInvalid, p,
 				"%s: %q is not a {{secret}} reference; write the secret's name in double braces, such as {{model-key}}", displayPath(p[1:]), value)
 		}
 	})

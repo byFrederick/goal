@@ -100,7 +100,7 @@ const (
 	codeEnvironmentUnknown        = "environment-unknown"
 	codeForgeMissing              = "forge-missing"
 	codeSecretPlacement           = "secret-placement"
-	codeSecretRefInvalid          = "secret-ref-invalid"
+	codeReferenceInvalid          = "secret-ref-invalid"
 
 	// codeMovedToEnvironment: a key ADR 0037 moved (spec.connections, an agent's connections,
 	// runtime.modelConnection, size, tools and repository.connection, modelAgrees.connection). An

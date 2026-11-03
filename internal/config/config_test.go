@@ -154,7 +154,7 @@ func TestLoad_AcceptsTheBuilderKeys(t *testing.T) {
 
 	r := f.Spec.Runtime
 	if r.ModelKey != "{{claude-key}}" || f.Spec.Agents[0].EnvironmentName() != "browser" ||
-		*r.Repository != (Repository{URL: "https://git.example.com/acme/app", Token: "{{ci-token}}", Forge: "gitlab"}) {
+		*r.Repository != (Repository{URL: "https://git.example.com/acme/app", Token: "{{ci-token}}", Forge: "gitlab"}) { //nolint:gosec // a reference, not a secret
 		t.Errorf("runtime = %+v, agents %+v; want its model key, repository and the agent's environment", r, f.Spec.Agents)
 	}
 
@@ -180,12 +180,14 @@ func TestLoad_RemovedFormsAreErrorsAndTheirVersionsDoNotRun(t *testing.T) {
 
 	counts := map[string]int{}
 
+	// ADR 0037's moved keys and environment checks, which Load skips for a version without
+	// environments, are TestLoad_MovedKeysStillRunOnTheOldPath's.
+	problems = slices.DeleteFunc(problems, func(p domain.DefinitionProblem) bool {
+		return p.Check == checkMoved || p.Check == checkEnvironments
+	})
+
 	for _, p := range problems {
 		removed := p.Code == codeFieldRemoved || p.Code == codeEnvReferenceRemoved || p.Code == codeInlineRemoved
-		if p.Check == checkMoved || p.Check == checkEnvironments {
-			continue // ADR 0037's, which Load skips for a version without environments
-		}
-
 		if removed != p.Blocking() {
 			t.Errorf("problem %s is %s; want the removed forms errors and nothing else blocking", p.Code, p.Severity)
 		}
@@ -224,9 +226,9 @@ func TestLoad_MovedKeysStillRunOnTheOldPath(t *testing.T) {
 	}
 
 	line := f.Line()
-	if !slices.Equal(line.Connections, []string{"github", "datadog"}) || line.Runtime.ModelConnection != "claude" ||
+	if !slices.Equal(line.Connections, []string{"github", f.Spec.Agents[0].Connections[0]}) || line.Runtime.ModelConnection != "claude" ||
 		line.Runtime.Size != "large" || !slices.Equal(line.Runtime.Tools, []string{"go@1.26.10", "task"}) ||
-		line.Runtime.Repository.Connection != "github" || !slices.Equal(line.Agents[0].Connections, []string{"datadog"}) {
+		line.Runtime.Repository.Connection != "github" || !slices.Equal(line.Agents[0].Connections, f.Spec.Agents[0].Connections) || len(line.Agents[0].Connections) != 1 {
 		t.Errorf("line = %+v; want the old path's connections, model connection, size, tools and repository", line)
 	}
 

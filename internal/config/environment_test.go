@@ -84,20 +84,28 @@ func TestEnvironmentSchema(t *testing.T) {
 				return
 			}
 
-			i := indexOf(problems, tt.code)
-			if i < 0 {
-				t.Fatalf("no %s problem in %+v", tt.code, problems)
-			}
-
-			p := problems[i]
-			if p.Check != checkSchema || p.File != defaultEnvFile || p.Section != domain.SectionEnvironments || !p.Blocking() || p.Line == 0 {
-				t.Errorf("problem = %+v, want a located schema error in %s", p, defaultEnvFile)
-			}
-
-			if want := markedLine(tt.env); want > 0 && p.Line != want {
-				t.Errorf("problem line = %d, want %d", p.Line, want)
-			}
+			wantSchemaProblem(t, problems, tt.code, markedLine(tt.env))
 		})
+	}
+}
+
+// wantSchemaProblem fails unless problems have a schema error of code in the default
+// environment's file, at line when it is not 0.
+func wantSchemaProblem(t *testing.T, problems []domain.DefinitionProblem, code string, line int) {
+	t.Helper()
+
+	i := indexOf(problems, code)
+	if i < 0 {
+		t.Fatalf("no %s problem in %+v", code, problems)
+	}
+
+	p := problems[i]
+	if p.Check != checkSchema || p.File != defaultEnvFile || p.Section != domain.SectionEnvironments || !p.Blocking() || p.Line == 0 {
+		t.Errorf("problem = %+v, want a located schema error in %s", p, defaultEnvFile)
+	}
+
+	if line > 0 && p.Line != line {
+		t.Errorf("problem line = %d, want %d", p.Line, line)
 	}
 }
 
@@ -175,6 +183,14 @@ func TestCheck_EnvironmentFiles(t *testing.T) {
 		},
 	}
 
+	runEnvRows(t, rows)
+}
+
+// runEnvRows runs each row's definition through Check and wants none of its problems or exactly
+// one of its code: an error in its file, at the #here line, with its pointer and fixes.
+func runEnvRows(t *testing.T, rows []envRow) {
+	t.Helper()
+
 	for _, tt := range rows {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -188,29 +204,35 @@ func TestCheck_EnvironmentFiles(t *testing.T) {
 				return
 			}
 
-			var found []domain.DefinitionProblem
-
-			for _, p := range problems {
-				if p.Code == tt.code {
-					found = append(found, p)
-				}
-			}
-
-			if len(found) != 1 {
-				t.Fatalf("want one %s problem, got %+v", tt.code, problems)
-			}
-
-			p := found[0]
-			text := tt.doc
-			if tt.file != FileName {
-				text = tt.files[tt.file]
-			}
-
-			if p.File != tt.file || !p.Blocking() || p.Check == "" || p.Line != markedLine(text) ||
-				tt.pointer != "" && p.Pointer != tt.pointer || !slices.Equal(fixLabels(p.Fixes), tt.fixes) {
-				t.Errorf("problem = %+v; want an error in %s at line %d, pointer %q, fixes %q", p, tt.file, markedLine(text), tt.pointer, tt.fixes)
-			}
+			wantEnvProblem(t, tt, problems)
 		})
+	}
+}
+
+// wantEnvProblem fails unless problems hold exactly one of the row's code, located as the row says.
+func wantEnvProblem(t *testing.T, tt envRow, problems []domain.DefinitionProblem) {
+	t.Helper()
+
+	var found []domain.DefinitionProblem
+
+	for _, p := range problems {
+		if p.Code == tt.code {
+			found = append(found, p)
+		}
+	}
+
+	if len(found) != 1 {
+		t.Fatalf("want one %s problem, got %+v", tt.code, problems)
+	}
+
+	text := tt.doc
+	if tt.file != FileName {
+		text = tt.files[tt.file]
+	}
+
+	if p := found[0]; p.File != tt.file || !p.Blocking() || p.Check == "" || p.Line != markedLine(text) ||
+		tt.pointer != "" && p.Pointer != tt.pointer || !slices.Equal(fixLabels(p.Fixes), tt.fixes) {
+		t.Errorf("problem = %+v; want an error in %s at line %d, pointer %q, fixes %q", p, tt.file, markedLine(text), tt.pointer, tt.fixes)
 	}
 }
 
@@ -231,9 +253,11 @@ func TestCheck_SecretPlacement(t *testing.T) {
 	t.Parallel()
 
 	rows := []envRow{
-		{name: "every allowed place", doc: replaced(withTriggers("dedupe: check.name }", `dedupe: check.name, modelAgrees: { question: "Real?", key: "{{haiku-key}}" } }`),
-			runtimeModel, runtimeModel+`    repository: { url: "https://github.com/acme/app", token: "{{gh-token}}" }`+"\n"),
-			files: map[string]string{defaultEnvFile: fullEnvironment}},
+		{
+			name: "every allowed place", doc: replaced(withTriggers("dedupe: check.name }", `dedupe: check.name, modelAgrees: { question: "Real?", key: "{{haiku-key}}" } }`),
+				runtimeModel, runtimeModel+`    repository: { url: "https://github.com/acme/app", token: "{{gh-token}}" }`+"\n"),
+			files: map[string]string{defaultEnvFile: fullEnvironment},
+		},
 		{
 			name: "an agent's description", doc: edited(agentPrompt, agentPrompt+"      description: Uses {{gh-token}} #here\n"),
 			code: codeSecretPlacement, file: FileName, pointer: "/agents/agents/0/description",
@@ -254,48 +278,21 @@ func TestCheck_SecretPlacement(t *testing.T) {
 		},
 		{
 			name: "a model key that is not a reference", doc: edited(runtimeModel, "    modelKey: sk-ant-api03-plain #here\n"),
-			code: codeSecretRefInvalid, file: FileName, pointer: "/basics/model_key",
+			code: codeReferenceInvalid, file: FileName, pointer: "/basics/model_key",
 		},
 		{
 			name: "a reference that names no secret", doc: baseFactory,
 			files: map[string]string{defaultEnvFile: baseEnvironment + "  env:\n    API: \"{{Not A Name}}\" #here\n"},
-			code:  codeSecretRefInvalid, file: defaultEnvFile,
+			code:  codeReferenceInvalid, file: defaultEnvFile,
 		},
 		{
 			name: "an unclosed reference", doc: baseFactory,
 			files: map[string]string{defaultEnvFile: baseEnvironment + "  env:\n    API: \"{{api-key\" #here\n"},
-			code:  codeSecretRefInvalid, file: defaultEnvFile,
+			code:  codeReferenceInvalid, file: defaultEnvFile,
 		},
 	}
 
-	for _, tt := range rows {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			_, problems := Check(checkTree(tt.doc, tt.files))
-			if tt.code == "" {
-				if len(problems) > 0 {
-					t.Fatalf("problems = %+v, want none", problems)
-				}
-
-				return
-			}
-
-			i := indexOf(problems, tt.code)
-			if i < 0 || slices.ContainsFunc(problems[i+1:], func(p domain.DefinitionProblem) bool { return p.Code == tt.code }) {
-				t.Fatalf("want one %s problem, got %+v", tt.code, problems)
-			}
-
-			text := tt.doc
-			if tt.file != FileName {
-				text = tt.files[tt.file]
-			}
-
-			if p := problems[i]; p.File != tt.file || p.Check != checkEnvironments || p.Line != markedLine(text) || tt.pointer != "" && p.Pointer != tt.pointer {
-				t.Errorf("problem = %+v; want an environments error in %s at line %d, pointer %q", p, tt.file, markedLine(text), tt.pointer)
-			}
-		})
-	}
+	runEnvRows(t, rows)
 }
 
 // SecretRefs lists every reference in an allowed place with the key it is at, so authoring's
@@ -338,7 +335,7 @@ func TestFactory_SecretRefs(t *testing.T) {
 	fix := env.ReplaceFix("Move to Secrets", at("spec", "env", "SENTRY_ORG"), "{{sentry-org}}")
 
 	if want := (domain.ProblemFix{Label: "Move to Secrets", Section: domain.SectionEnvironments, Patch: []domain.PatchOp{
-		{Op: "replace", Path: "/default/env/SENTRY_ORG", Value: json.RawMessage(`"{{sentry-org}}"`)},
+		{Op: domain.PatchReplace, Path: "/default/env/SENTRY_ORG", Value: json.RawMessage(`"{{sentry-org}}"`)},
 	}}); !reflect.DeepEqual(fix, want) || !strings.HasPrefix(env.Locate("spec", "env", "SENTRY_ORG").Pointer, "/environments/default/env/") {
 		t.Errorf("fix = %+v, want %+v", fix, want)
 	}

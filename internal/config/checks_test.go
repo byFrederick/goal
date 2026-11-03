@@ -356,8 +356,8 @@ func TestCheck_FixesPatchTheirSection(t *testing.T) {
 
 	p := problems[indexOf(problems, "agents-exceed-wip")]
 	want := []domain.ProblemFix{
-		{Label: "Set WIP to 3", Section: domain.SectionLine, Patch: []domain.PatchOp{{Op: "replace", Path: "/stations/1/wip", Value: json.RawMessage("3")}}},
-		{Label: "Set agents to 2", Section: domain.SectionLine, Patch: []domain.PatchOp{{Op: "replace", Path: "/stations/1/agents", Value: json.RawMessage("2")}}},
+		{Label: "Set WIP to 3", Section: domain.SectionLine, Patch: []domain.PatchOp{{Op: domain.PatchReplace, Path: "/stations/1/wip", Value: json.RawMessage("3")}}},
+		{Label: "Set agents to 2", Section: domain.SectionLine, Patch: []domain.PatchOp{{Op: domain.PatchReplace, Path: "/stations/1/agents", Value: json.RawMessage("2")}}},
 	}
 
 	if !reflect.DeepEqual(p.Fixes, want) {
@@ -401,7 +401,7 @@ func TestCheck_RemovedFormsAreFixed(t *testing.T) {
 				specAgents, agentPrompt, agentPrompt+"      connections: [tickets]\n"),
 			want: domain.ProblemFix{
 				Label: "Use the organization's connection tickets", Section: domain.SectionConnections,
-				Patch: []domain.PatchOp{{Op: "replace", Path: "/0", Value: json.RawMessage(`{"name":"tickets"}`)}},
+				Patch: []domain.PatchOp{{Op: domain.PatchReplace, Path: "/0", Value: json.RawMessage(`{"name":"tickets"}`)}},
 			},
 		},
 	}
@@ -446,7 +446,7 @@ func TestCheck_MovedKeysAreFixed(t *testing.T) {
 	want := map[string]domain.ProblemFix{
 		"/connections": {
 			Label: "Remove connections", Section: domain.SectionConnections,
-			Patch: []domain.PatchOp{{Op: "replace", Path: "", Value: json.RawMessage("[]")}},
+			Patch: []domain.PatchOp{{Op: domain.PatchReplace, Path: "", Value: json.RawMessage("[]")}},
 		},
 		"/basics/model_connection":      remove("Remove runtime.modelConnection", domain.SectionBasics, "/model_connection"),
 		"/basics/size":                  remove("Remove runtime.size", domain.SectionBasics, "/size"),

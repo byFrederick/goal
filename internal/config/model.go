@@ -26,6 +26,8 @@ func ModelPointer(path []string) (section, pointer string) {
 
 // Keys that appear in several of the mappings below.
 const (
+	keySpec     = "spec"
+	keyBoard    = "board"
 	keyName     = "name"
 	keyAgents   = "agents"
 	keyStations = "stations"
@@ -35,7 +37,7 @@ func modelPath(p []string) (string, []string) {
 	switch {
 	case len(p) >= 1 && p[0] == "metadata":
 		return metadataPath(p[1:])
-	case len(p) < 2 || p[0] != "spec":
+	case len(p) < 2 || p[0] != keySpec:
 		return domain.SectionFiles, nil
 	}
 
@@ -46,7 +48,7 @@ func specPath(key string, rest []string) (string, []string) {
 	switch key {
 	case "runtime":
 		return runtimePath(rest)
-	case "board":
+	case keyBoard:
 		return boardPath(rest)
 	case keyAgents:
 		return domain.SectionAgents, append([]string{domain.SectionAgents, keyAgents}, agentPath(rest)...)

@@ -119,18 +119,25 @@ func TestCreateFactory_BlankSkeletonNamesNoStationOrAgent(t *testing.T) {
 		t.Errorf("skeleton basics = %v, want no size, which moved to the environment, and none of the removed runtime keys", m.Model.Basics)
 	}
 
-	files, err := h.svc.DraftFiles(h.ctx, c.Factory.ID)
+	h.wantDraftFile(t, c.Factory.ID, envFile, "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n")
+
+	if c.Draft.Source.Kind != domain.SourceBlank || c.Draft.Source.Template != "" {
+		t.Errorf("source = %+v", c.Draft.Source)
+	}
+}
+
+// wantDraftFile fails unless the draft of f has the file path with content.
+func (h *harness) wantDraftFile(t *testing.T, f domain.FactoryID, path, content string) {
+	t.Helper()
+
+	files, err := h.svc.DraftFiles(h.ctx, f)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	wantEnv := domain.HashBlob([]byte("apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n"))
-	if !slices.ContainsFunc(files, func(f authoring.FileInfo) bool { return f.Path == envFile && f.SHA256 == wantEnv }) {
-		t.Errorf("skeleton files = %+v, want %s with size medium", files, envFile)
-	}
-
-	if c.Draft.Source.Kind != domain.SourceBlank || c.Draft.Source.Template != "" {
-		t.Errorf("source = %+v", c.Draft.Source)
+	want := domain.HashBlob([]byte(content))
+	if !slices.ContainsFunc(files, func(fi authoring.FileInfo) bool { return fi.Path == path && fi.SHA256 == want }) {
+		t.Errorf("draft files = %+v, want %s with %q", files, path, content)
 	}
 }
 
