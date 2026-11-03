@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -252,5 +253,65 @@ func TestKnowledgeTouch_CountsAReadAndAGrep(t *testing.T) {
 
 	if got := tally.Reads(nil, "f", day); len(got) != 0 {
 		t.Errorf("Reads without the sources' ids = %+v, want none", got)
+	}
+}
+
+// Touched lists each touched pinned source's reads and searches once, sorted, and past
+// MaxKnowledgeTouchedPaths in all leaves the rest out, counted in More.
+func TestKnowledgeTally_Touched(t *testing.T) {
+	t.Parallel()
+
+	tally := NewKnowledgeTally([]KnowledgePin{{Source: srcRunbooks, Snapshot: "r1"}, {Source: "handbook", Snapshot: "h1"}})
+
+	for _, c := range [][2]string{
+		{toolRead, "/knowledge/runbooks/db/disk.md"},
+		{toolRead, "/knowledge/runbooks/db/disk.md"},
+		{toolRead, "/knowledge/runbooks/a.md"},
+		{toolGrep, "/knowledge/runbooks"},
+		{toolGrep, "/knowledge/handbook/hr"},
+		{toolRead, "/knowledge/unpinned/a.md"},
+	} {
+		tally.Add(c[0], c[1])
+	}
+
+	want := []KnowledgeTouched{
+		{Source: "handbook", Searches: []string{"hr"}},
+		{Source: srcRunbooks, Reads: []string{fileA, "db/disk.md"}, Searches: []string{KnowledgeSourceRoot}},
+	}
+	if got := tally.Touched(); !reflect.DeepEqual(got, want) {
+		t.Errorf("Touched = %+v\nwant %+v", got, want)
+	}
+
+	if got := NewKnowledgeTally(nil).Touched(); len(got) != 0 {
+		t.Errorf("Touched of no touches = %+v, want none", got)
+	}
+
+	big := NewKnowledgeTally([]KnowledgePin{{Source: srcRunbooks, Snapshot: "r1"}, {Source: "handbook", Snapshot: "h1"}})
+	for i := range 500 {
+		big.Add(toolRead, fmt.Sprintf("/knowledge/handbook/f%03d.md", i))
+		big.Add(toolRead, fmt.Sprintf("/knowledge/runbooks/f%03d.md", i))
+	}
+
+	got := big.Touched()
+	if len(got) != 2 {
+		t.Fatalf("Touched of two sources = %d sources", len(got))
+	}
+
+	listed, more := 0, 0
+	for _, s := range got {
+		listed += len(s.Reads) + len(s.Searches)
+		more += s.More
+
+		if len(s.Reads)+len(s.Searches)+s.More != 500 {
+			t.Errorf("source %s lists %d and leaves out %d, want 500 in all", s.Source, len(s.Reads)+len(s.Searches), s.More)
+		}
+	}
+
+	if listed != MaxKnowledgeTouchedPaths || more != 1000-MaxKnowledgeTouchedPaths {
+		t.Errorf("Touched lists %d paths and leaves out %d; want %d and %d", listed, more, MaxKnowledgeTouchedPaths, 1000-MaxKnowledgeTouchedPaths)
+	}
+
+	if got[0].Reads[0] != "f000.md" {
+		t.Errorf("first listed read = %q, want the first by path", got[0].Reads[0])
 	}
 }

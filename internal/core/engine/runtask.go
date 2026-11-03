@@ -176,7 +176,7 @@ func (e *Engine) agent(ctx context.Context, t runTask, runID domain.RunID, env m
 	started := e.clock.Now()
 	tally := domain.NewKnowledgeTally(t.Knowledge)
 
-	defer e.countReads(ctx, t, runID, tally)
+	defer e.countReads(ctx, t, runID, tally, scrub)
 
 	st, err := execLines(ctx, t.box.sandbox, ports.Exec{Argv: argvAgent, Env: env, Timeout: t.Timeout}, func(line []byte) {
 		ev, f, err := domain.DecodeWorkerLine(line, e.clock.Now())
@@ -246,17 +246,24 @@ func countTouch(tally *domain.KnowledgeTally, ev domain.Event) {
 // countReadsTimeout bounds counting a run's knowledge reads once the run ended.
 const countReadsTimeout = 10 * time.Second
 
-// countReads adds a run's reads and searches of its pinned knowledge sources to its factory's
-// rollup for today (ADR 0038 decision 10). It is best effort: a failure is logged and never
-// changes the run, and it counts even when the run's ctx ended.
-func (e *Engine) countReads(ctx context.Context, t runTask, runID domain.RunID, tally *domain.KnowledgeTally) {
+// countReads records the knowledge_read event of a run that read or searched its pinned knowledge
+// sources and adds those touches to its factory's rollup for today (ADR 0038 decision 10). It is
+// best effort: a failure is logged and never changes the run, and it counts even when the run's
+// ctx ended.
+func (e *Engine) countReads(ctx context.Context, t runTask, runID domain.RunID, tally *domain.KnowledgeTally, scrub scrubber) {
 	sources := tally.Sources()
-	if e.knowledge == nil || len(sources) == 0 {
+	if len(sources) == 0 {
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), countReadsTimeout)
 	defer cancel()
+
+	e.recordReads(ctx, t, runID, tally, scrub)
+
+	if e.knowledge == nil {
+		return
+	}
 
 	ids := make(map[string]domain.KnowledgeSourceID, len(sources))
 
@@ -278,6 +285,46 @@ func (e *Engine) countReads(ctx context.Context, t runTask, runID domain.RunID, 
 	if err := e.knowledge.AddReads(ctx, reads); err != nil {
 		e.log.WarnContext(ctx, "knowledge reads not counted", slog.String("run", string(runID)), slog.Int("counts", len(reads)), slog.Any("error", err))
 	}
+}
+
+// recordReads appends the run's knowledge_read event, by its agent, listing what tally touched. A
+// run without an item (a Jonah run) records none; a failure is only logged.
+func (e *Engine) recordReads(ctx context.Context, t runTask, runID domain.RunID, tally *domain.KnowledgeTally, scrub scrubber) {
+	if t.item.ID == "" {
+		return
+	}
+
+	touched := tally.Touched()
+	sources := make([]any, 0, len(touched))
+
+	for _, s := range touched {
+		src := map[string]any{"source": s.Source, "reads": anyStrings(s.Reads), "searches": anyStrings(s.Searches)}
+		if s.More > 0 {
+			src["more"] = s.More
+		}
+
+		sources = append(sources, src)
+	}
+
+	data := map[string]any{"sources": sources}
+	scrub.value(data)
+
+	rec := event(t.item, domain.EventKnowledgeRead, e.clock.Now(), t.Agent, data)
+	rec.RunID = runID
+
+	if err := e.store.AppendEvents(ctx, rec); err != nil {
+		e.log.WarnContext(ctx, "knowledge read event not recorded", slog.String("run", string(runID)), slog.Any("error", err))
+	}
+}
+
+// anyStrings is ss as the []any of a decoded JSON list, so scrubber.value reaches each string.
+func anyStrings(ss []string) []any {
+	out := make([]any, 0, len(ss))
+	for _, s := range ss {
+		out = append(out, s)
+	}
+
+	return out
 }
 
 // relay records one event the agent reported, by the agent, for its run. A run without an item
