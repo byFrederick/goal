@@ -12,7 +12,7 @@ Knowledge is folders of files that agents read before they act. Each organizatio
 A source has a name, a kind, a read-when line and the settings of its kind.
 
 - **Name:** a slug of 3 to 40 lowercase letters, digits and dashes. It is the source's folder in every run, `/knowledge/<name>/`, and it never changes.
-- **Read-when line:** one line of at most 160 characters that tells agents when to open the source, such as "How to fix what pages us. Read before acting on an alert." The pages ask for it as "When should agents read it?" Every run's prompt shows it, so say when to read the files, not only what they are.
+- **Read-when line:** one line of at most 160 characters that tells agents when to open the source, such as "How to fix what pages us. Read before acting on an alert." The pages ask for it as "When should agents read it?" Every run's prompt shows it, so say when to read the files, not only what they are. Each snapshot keeps the line it was written with. An edited line reaches new runs after the source's next sync, which starts right after you save the edit, even when no file changed; a run that already started keeps the line of the snapshot it pinned.
 - **Kind:** where the files come from.
 
 | Kind | Where the files come from |

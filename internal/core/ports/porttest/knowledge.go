@@ -315,14 +315,7 @@ func (k *Knowledge) UpdateSource(ctx context.Context, name string, p domain.Know
 		}
 
 		now := time.Now().UTC()
-
-		if p.ReadWhen != nil && *p.ReadWhen != s.src.ReadWhen {
-			s.src.ReadWhen = *p.ReadWhen
-
-			if writesSnapshots(s.src.Kind) {
-				s.src.NextSyncAt = &now
-			}
-		}
+		newReadWhen(&s.src, p.ReadWhen, now)
 
 		if p.Secret != nil {
 			s.src.Secret = *p.Secret
@@ -337,10 +330,20 @@ func (k *Knowledge) UpdateSource(ctx context.Context, name string, p domain.Know
 	return out, err
 }
 
-// writesSnapshots reports whether a source of kind writes snapshots, so a new read-when line
-// makes it due.
-func writesSnapshots(kind domain.KnowledgeSourceKind) bool {
-	return kind == domain.SourceUpload || kind == domain.SourceRepository || kind == domain.SourceConfluence
+// newReadWhen sets src's read-when line to line when it differs, and then makes a source that
+// writes snapshots (upload, repository, Confluence) due at now.
+func newReadWhen(src *domain.KnowledgeSource, line *string, now time.Time) {
+	if line == nil || *line == src.ReadWhen {
+		return
+	}
+
+	src.ReadWhen = *line
+
+	switch src.Kind {
+	case domain.SourceUpload, domain.SourceRepository, domain.SourceConfluence:
+		src.NextSyncAt = &now
+	case domain.SourceSynced, domain.SourceLive:
+	}
 }
 
 // ConvertSource implements ports.Knowledge.
