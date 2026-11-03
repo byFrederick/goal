@@ -145,6 +145,7 @@ func TestCredentialCommand_ValueNeverFromArgv(t *testing.T) {
 }
 
 // goal credential list prints each credential's name, type, factories, users, last use and expiry.
+// The type is api_key whatever a create sent: credentials are secrets, which have none (ADR 0037).
 func TestCredentialCommand_List(t *testing.T) {
 	t.Parallel()
 
@@ -169,7 +170,7 @@ func TestCredentialCommand_List(t *testing.T) {
 
 	for i, want := range [][]string{
 		{credName, credAPIKey, "factories all", "used by connection github", "last used never", "expires 2027-03-01"},
-		{"deploy-key", "ssh_key", "factories f-1", "used by nothing", "last used never", "expires none"},
+		{"deploy-key", credAPIKey, "factories f-1", "used by nothing", "last used never", "expires none"},
 	} {
 		for _, w := range want {
 			if !strings.Contains(lines[i], w) {
