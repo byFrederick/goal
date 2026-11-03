@@ -1,6 +1,6 @@
 # ADR 0039 — Jonah learns from the line: evidence from every item, tries on past items, a watch on every change
 
-Status: proposed · 2026-11-03
+Status: accepted · 2026-11-03
 
 - **Replaces:**
   - [ADR 0025](0025-judges-and-evals-as-the-screens-show-them.md): judges go, and eval cases become past items kept as tests (decisions 8–12).

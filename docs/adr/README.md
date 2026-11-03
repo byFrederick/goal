@@ -41,4 +41,4 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0036](0036-design-system-v3-plain-and-motion-binding.md): Design system v3 "Plain" and MOTION.md are binding. Status: accepted.
 - [ADR 0037](0037-secrets-and-environment-files.md): Secrets hold the keys, environment files say what agents reach. Status: accepted.
 - [ADR 0038](0038-knowledge-is-files.md): Knowledge is files: synced folders, factory memory, an index in every prompt. Status: proposed.
-- [ADR 0039](0039-jonah-learns-from-the-line.md): Jonah learns from the line: evidence from every item, tries on past items, a watch on every change. Status: proposed.
+- [ADR 0039](0039-jonah-learns-from-the-line.md): Jonah learns from the line: evidence from every item, tries on past items, a watch on every change. Status: accepted.
