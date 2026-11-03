@@ -1465,6 +1465,9 @@ func environmentBundle(t *testing.T, env string, rules ...domain.NewServerStandi
 	return cappedEnvironmentBundle(t, env, nil, rules...)
 }
 
+// serverLinear is the environment MCP server of the tool-mode tests.
+const serverLinear = "linear"
+
 // cappedEnvironmentBundle is environmentBundle with mcpCap as the organization policy's MCP tool
 // mode cap.
 func cappedEnvironmentBundle(
@@ -1524,7 +1527,7 @@ func TestBundle_EnvironmentServersOnSecrets(t *testing.T) {
 
 	want := []bundleMCPServer{
 		{
-			Name: "linear", URL: "https://mcp.linear.example.com/mcp",
+			Name: serverLinear, URL: "https://mcp.linear.example.com/mcp",
 			Headers:   map[string]string{"Authorization": "Bearer ${GOAL_SECRET_LINEAR_KEY}", "X-Org": "acme"},
 			ToolModes: []bundleToolMode{},
 		},
@@ -1554,7 +1557,7 @@ func TestBundle_EnvironmentToolModesWithStandingRule(t *testing.T) {
 	t.Parallel()
 
 	rule := func(tool, agent string) domain.NewServerStandingRule {
-		return domain.NewServerStandingRule{Factory: factoryID, Environment: envCI, Server: "linear", Tool: tool, Agent: agent}
+		return domain.NewServerStandingRule{Factory: factoryID, Environment: envCI, Server: serverLinear, Tool: tool, Agent: agent}
 	}
 	got, _ := environmentBundle(t, `  mcp:
     linear:
@@ -1562,7 +1565,7 @@ func TestBundle_EnvironmentToolModesWithStandingRule(t *testing.T) {
       tools: {create_comment: ask, "delete_*": off, "close_*": ask}
 `,
 		rule("create_comment", agentEngineer), rule("delete_issue", agentEngineer), rule("close_issue", "reviewer"),
-		domain.NewServerStandingRule{Factory: factoryID, Environment: domain.DefaultEnvironment, Server: "linear", Tool: "close_pr", Agent: agentEngineer},
+		domain.NewServerStandingRule{Factory: factoryID, Environment: domain.DefaultEnvironment, Server: serverLinear, Tool: "close_pr", Agent: agentEngineer},
 	)
 
 	want := []bundleToolMode{
@@ -1584,12 +1587,14 @@ func TestBundle_EnvironmentToolModesUnderThePolicyCap(t *testing.T) {
       url: https://mcp.linear.example.com/mcp
       tools: {create_issue: allow, create_comment: ask, "delete_*": off}
 `, map[string]domain.ConnectionToolMode{"*": domain.ToolModeAsk},
-		domain.NewServerStandingRule{Factory: factoryID, Environment: envCI, Server: "linear", Tool: "create_comment", Agent: agentEngineer},
+		domain.NewServerStandingRule{Factory: factoryID, Environment: envCI, Server: serverLinear, Tool: "create_comment", Agent: agentEngineer},
 	)
 
 	want := []bundleToolMode{
-		{Tool: "create_comment", Mode: domain.ToolModeAsk}, {Tool: "create_issue", Mode: domain.ToolModeAsk},
-		{Tool: "delete_*", Mode: domain.ToolModeOff}, {Tool: "*", Mode: domain.ToolModeAsk},
+		{Tool: "create_comment", Mode: domain.ToolModeAsk},
+		{Tool: "create_issue", Mode: domain.ToolModeAsk},
+		{Tool: "delete_*", Mode: domain.ToolModeOff},
+		{Tool: "*", Mode: domain.ToolModeAsk},
 	}
 	if servers := got.Spec.Environment.MCPServers; len(servers) != 1 || !reflect.DeepEqual(servers[0].ToolModes, want) {
 		t.Errorf("mcp_servers %+v; want linear with tool_modes %+v", servers, want)

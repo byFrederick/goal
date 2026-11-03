@@ -111,6 +111,8 @@ func expectModelProblem(t *testing.T, p domain.DefinitionProblem, want config.Lo
 func TestMCPCapProblems(t *testing.T) {
 	t.Parallel()
 
+	const deletes = "delete_*"
+
 	env := "apiVersion: goal/v1\nkind: Environment\nspec:\n  mcp:\n    linear:\n      url: https://mcp.linear.example.com/mcp\n" +
 		"      tools: {create_comment: allow, close_issue: ask, \"delete_*\": allow, list_issues: off}\n"
 
@@ -130,7 +132,7 @@ func TestMCPCapProblems(t *testing.T) {
 	cases := []struct {
 		name string
 		cap  map[string]domain.ConnectionToolMode
-		want map[string][]string // tool → what its message names
+		want map[string][]string // tool entry → what its message names
 	}{
 		{name: "no cap"},
 		{name: "a cap looser than the file", cap: map[string]domain.ConnectionToolMode{"*": domain.ToolModeAllow}},
@@ -138,12 +140,12 @@ func TestMCPCapProblems(t *testing.T) {
 			name: "ask everything", cap: map[string]domain.ConnectionToolMode{"*": domain.ToolModeAsk},
 			want: map[string][]string{
 				"create_comment": {"linear", "create_comment", "allow", "ask"},
-				"delete_*":       {"linear", "delete_*", "allow", "ask"},
+				deletes:          {"linear", deletes, "allow", "ask"},
 			},
 		},
 		{
 			name: "a glob entry under an exact cap", cap: map[string]domain.ConnectionToolMode{"delete_project": domain.ToolModeOff},
-			want: map[string][]string{"delete_*": {"linear", "delete_*", "allow", "off"}},
+			want: map[string][]string{deletes: {"linear", "delete_project", deletes, "allow", "off"}},
 		},
 	}
 
@@ -157,33 +159,40 @@ func TestMCPCapProblems(t *testing.T) {
 			}
 
 			for _, p := range got {
-				if p.Check != config.CheckPolicy || p.Code != config.CodeMCPToolModeCapped || p.Severity != domain.SeverityWarning {
-					t.Errorf("problem %+v, want a warning of check policy, code mcp-tool-mode-capped", p)
-				}
-
-				var tool string
-
-				for tl := range tc.want {
-					if w := envs[0].Locate("spec", "mcp", "linear", "tools", tl); w.Pointer == p.Pointer {
-						tool = tl
-
-						if p.File != w.File || p.Line != w.Line || p.Line == 0 {
-							t.Errorf("problem at %s:%d, want at %s:%d", p.File, p.Line, w.File, w.Line)
-						}
-					}
-				}
-
-				if tool == "" {
-					t.Errorf("problem at %q, want one at the tools %v", p.Pointer, tc.want)
-					continue
-				}
-
-				for _, w := range tc.want[tool] {
-					if !strings.Contains(p.Message, w) {
-						t.Errorf("message %q does not name %q", p.Message, w)
-					}
-				}
+				expectCapProblem(t, envs[0], p, tc.want)
 			}
 		})
 	}
+}
+
+// expectCapProblem fails the test unless p is an mcp-tool-mode-capped warning of the policy check
+// at one of want's tool entries of the linear server in env, whose message names what want lists
+// for it.
+func expectCapProblem(t *testing.T, env config.Environment, p domain.DefinitionProblem, want map[string][]string) {
+	t.Helper()
+
+	if p.Check != config.CheckPolicy || p.Code != config.CodeMCPToolModeCapped || p.Severity != domain.SeverityWarning {
+		t.Errorf("problem %+v, want a warning of check policy, code mcp-tool-mode-capped", p)
+	}
+
+	for tool, names := range want {
+		w := env.Locate("spec", "mcp", "linear", "tools", tool)
+		if w.Pointer != p.Pointer {
+			continue
+		}
+
+		if p.File != w.File || p.Line != w.Line || p.Line == 0 {
+			t.Errorf("problem at %s:%d, want at %s:%d", p.File, p.Line, w.File, w.Line)
+		}
+
+		for _, n := range names {
+			if !strings.Contains(p.Message, n) {
+				t.Errorf("message %q does not name %q", p.Message, n)
+			}
+		}
+
+		return
+	}
+
+	t.Errorf("problem at %q, want one at the tools %v", p.Pointer, want)
 }
