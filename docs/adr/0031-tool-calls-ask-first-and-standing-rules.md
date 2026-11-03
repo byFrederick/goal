@@ -1,14 +1,14 @@
 # ADR 0031 — Tool calls that ask first: the run ends until a person approves, and Always allow records a standing rule
 
-Status: accepted · 2026-10-27 · Builds on [ADR 0018](0018-agents-ask-questions.md) (a run that needs a person ends, and the item waits in Needs you; this ADR follows its decisions 2, 4 and 5) and [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (a run uses its organization connections directly from its box, so the box is where a call can be stopped)
+Status: accepted · 2026-10-27 · Builds on [ADR 0018](0018-agents-ask-questions.md) (a run that needs a person ends, and the item waits in Needs you; this ADR follows its decisions 2, 4 and 5) and [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (a run uses its organization connections directly from its box, so the box is where a call can be stopped) · Amended by [ADR 0037](0037-secrets-and-environment-files.md): tool modes live in environment files, and standing rules are keyed by factory, environment server and tool (its decision 8)
 
 ## Context
 
 An agent that may call a connection's tool calls it at once. A person cannot say "let the architect read the issue tracker, but show me every comment before it is posted". The screens ask for exactly that:
 
-- [connection-add.html](../design/screens/connections/connection-add.html) lists the tools a connection's MCP server offers ("Tools agents may use, 14 found") and gives each tool three choices: Allow, Ask first and Off.
+- [connection-add.html](../design/screens/build/add-tool.html) (now `add-tool`) lists the tools a connection's MCP server offers ("Tools agents may use, 14 found") and gives each tool three choices: Allow, Ask first and Off.
 - [needs-you.html](../design/screens/daily-work/needs-you.html) and [mobile/approve.html](../design/screens/mobile/approve.html) show a waiting call ("waiting for your OK to post") with Approve, Deny and a checkbox "Always allow architect to comment on linked issues".
-- [connections.html](../design/screens/connections/connections.html) shows "Writes waiting for your OK 2".
+- [connections.html](../design/screens/connections/access.html) (now `access`) shows "Writes waiting for your OK 2".
 
 What the code offers today:
 
