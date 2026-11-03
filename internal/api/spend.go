@@ -240,9 +240,11 @@ func (s *server) spendBudget(ctx context.Context, f *config.Factory, andon *doma
 	return out, nil
 }
 
-// modelConnections are, by factory goald runs that is not archived, the organization's
-// connections its current version gets its model from (runtime.modelConnection), with their
-// kinds. A name the organization has no connection for is left out.
+// modelConnections are, by factory goald runs that is not archived, what its current version
+// gets its model from: the organization's connections it names in runtime.modelConnection, with
+// their kinds, and on secrets the secret runtime.modelKey names, by name with kind secret and
+// never its value (ADR 0037 decision 7). A name the organization has no connection or secret
+// for is left out.
 func (s *server) modelConnections(ctx context.Context) (map[domain.FactoryID][]gen.ConnectionHit, error) {
 	users, err := s.usersBy(ctx, func(f *config.Factory) []string {
 		if m := f.Spec.Runtime.ModelConnection; m != "" {
@@ -268,5 +270,27 @@ func (s *server) modelConnections(ctx context.Context) (map[domain.FactoryID][]g
 		}
 	}
 
+	keys, err := s.usersBy(ctx, func(f *config.Factory) []string { return config.SecretNames(f.Spec.Runtime.ModelKey) })
+	if err != nil {
+		return nil, err
+	}
+
+	secrets, err := s.secrets.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list the organization's secrets: %w", err)
+	}
+
+	for _, sec := range secrets {
+		for _, f := range keys[sec.Name] {
+			hit := gen.ConnectionHit{Name: sec.Name, Kind: modelKeyKind}
+			if !slices.Contains(out[f.id], hit) {
+				out[f.id] = append(out[f.id], hit)
+			}
+		}
+	}
+
 	return out, nil
 }
+
+// modelKeyKind is the kind of a model_connections entry that is the model key's secret.
+const modelKeyKind = "secret"

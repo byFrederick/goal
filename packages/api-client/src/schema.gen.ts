@@ -6822,7 +6822,7 @@ export interface components {
             state: components["schemas"]["SpendBudgetState"];
             /** @description The open andon pull's reason when stopped, the spend against the cap when over_budget, else null */
             reason: string | null;
-            /** @description The organization's connections that give the factory's runs their model (runtime.modelConnection), for "Who pays for models"; empty when it names none */
+            /** @description What gives the factory's runs their model, for "Who pays for models": the organization's connection runtime.modelConnection names, with its kind, and on secrets the organization's secret runtime.modelKey names, by name with kind "secret" and never its value (ADR 0037 decision 7); empty when it names neither */
             model_connections: components["schemas"]["ConnectionHit"][];
         };
         /**
