@@ -82,8 +82,6 @@ const (
 	MaxExternalID = 2000
 	// MaxKnowledgeError is a stored error message in characters.
 	MaxKnowledgeError = 500
-	// EmbeddingDimensions is every embedding's size: one embedding space per install.
-	EmbeddingDimensions = 1024
 	// SearchCandidates is how many chunks each ranking of a search contributes before fusion.
 	SearchCandidates = 50
 	// RRFK is reciprocal rank fusion's constant: a chunk scores 1/(RRFK+rank) in each ranking.
@@ -126,9 +124,9 @@ type KnowledgeSource struct {
 	Status       SyncStatus
 	LastSyncedAt *time.Time
 	LastError    string
-	// EmbedModel is the model the source's chunks were embedded with at its last full sync; ""
-	// when they have no embeddings.
-	EmbedModel string
+	// SyncFailures is how many syncs failed in a row; a successful one resets it, and three show
+	// the source in Needs you (ADR 0038 decision 3).
+	SyncFailures int
 	// Documents is how many documents it has.
 	Documents int
 	CreatedBy Actor
@@ -348,14 +346,12 @@ func checkSyncEvery(d time.Duration) error {
 	return nil
 }
 
-// SyncResult is how a source's sync ended: Error "" when it went through, EmbedModel the model
-// every chunk now has ("" without one), At when it ended. Due is the source's NextSyncAt when
+// SyncResult is how a source's sync ended: Error "" when it went through, At when it ended. Due is the source's NextSyncAt when
 // it was claimed: the next sync is At plus the source's interval unless someone made it due
 // since (Sync now, an upload), which then stands.
 type SyncResult struct {
-	At, Due    time.Time
-	Error      string
-	EmbedModel string
+	At, Due time.Time
+	Error   string
 }
 
 // SourceClaim is a source claimed for one sync, with its organization (a claim reaches every
@@ -395,9 +391,7 @@ type KnowledgeDocument struct {
 	// SeenAt is when a sync last listed it.
 	SeenAt    time.Time
 	IndexedAt *time.Time
-	// EmbedModel is the model its chunks were embedded with; "" without embeddings.
-	EmbedModel string
-	CreatedBy  Actor
+	CreatedBy Actor
 }
 
 // KnowledgeKey is the bucket key of an organization's uploaded document with content hash h:
@@ -405,23 +399,19 @@ type KnowledgeDocument struct {
 func KnowledgeKey(org OrgID, h BlobHash) string { return OrgPrefix(org) + "knowledge/" + string(h) }
 
 // Chunk is one indexed piece of a document's text, in document order. Heading is the path of the
-// headings it is under ("Install > Docker"); Embedding is nil without an embedding model.
+// headings it is under ("Install > Docker").
 type Chunk struct {
-	Ord       int
-	Heading   string
-	Text      string
-	Embedding []float32
+	Ord     int
+	Heading string
+	Text    string
 }
 
-// KnowledgeQuery is a search: Text ranked by keywords and, with Embedding (Text's embedding by
-// Model), by nearest neighbours among the chunks of Model; only chunks of the named Sources are
+// KnowledgeQuery is a search: Text ranked by keywords; only chunks of the named Sources are
 // ranked. Limit is how many hits at most.
 type KnowledgeQuery struct {
-	Text      string
-	Sources   []string
-	Limit     int
-	Embedding []float32
-	Model     string
+	Text    string
+	Sources []string
+	Limit   int
 }
 
 // KnowledgeHit is one chunk a search found, best first.

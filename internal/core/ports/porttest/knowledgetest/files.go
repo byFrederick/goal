@@ -50,7 +50,7 @@ func snapshot(id domain.KnowledgeSnapshotID, source domain.KnowledgeSourceID, at
 func (f *fixture) claimSource(src domain.KnowledgeSource, now time.Time) domain.SourceClaim {
 	f.t.Helper()
 
-	c := f.claimed("claim "+src.Name, now, 10*time.Minute, "")
+	c := f.claimed("claim "+src.Name, now, 10*time.Minute)
 	if c.Source.ID != src.ID {
 		f.t.Fatalf("claimed %s, want %s", c.Source.Name, src.Name)
 	}
@@ -187,7 +187,7 @@ func testSnapshotRules(f *fixture) {
 	_, err := f.Knowledge.PutSnapshot(ctx, c.Lease, snapshot(snap2, src.ID, t0, a, a), []domain.KnowledgeFile{a, a})
 	f.refused("PutSnapshot with a path twice", err, domain.ErrInvalid)
 
-	f.finish(c, t0.Add(time.Minute), "", "")
+	f.finish(c, t0.Add(time.Minute), "")
 
 	b := file("b.md", "B", "v1", 1)
 	_, err = f.Knowledge.PutSnapshot(ctx, c.Lease, snapshot(snap2, src.ID, t0, b), []domain.KnowledgeFile{b})

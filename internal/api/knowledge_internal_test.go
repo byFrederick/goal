@@ -1,12 +1,14 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/config"
@@ -180,5 +182,52 @@ func checkReaders(t *testing.T, readers []gen.KnowledgeSourceReader, agents, lan
 	r := readers[0]
 	if !slices.Equal(r.Agents, agents) || !slices.Equal(r.Lanes, lanes) || r.Stations == nil || len(r.Stations) != 0 || r.WorkTypes == nil || len(r.WorkTypes) != 0 {
 		t.Errorf("reader = %+v; want agents %v, lanes %v, no stations or work types", r, agents, lanes)
+	}
+}
+
+// sourcesOnly is a knowledge base that lists the sources it was given and nothing else.
+type sourcesOnly struct {
+	ports.Knowledge
+
+	sources []domain.KnowledgeSource
+}
+
+func (k sourcesOnly) Sources(context.Context) ([]domain.KnowledgeSource, error) {
+	return k.sources, nil
+}
+
+// A source whose last three syncs failed is a Needs you entry for each factory that lists it, with
+// what the last sync said; a source with fewer failures, one that went through since, or one no
+// factory lists, is none.
+func TestInbox_AFailingKnowledgeSource(t *testing.T) {
+	t.Parallel()
+
+	f := &config.Factory{}
+	f.Metadata.ID, f.Metadata.Name = string(mxF), factoryBuilder
+	f.Spec.Knowledge = &config.Knowledge{Sources: []config.KnowledgeSource{{Name: kbHandbook}, {Name: "runbooks"}, {Name: "recovered"}}}
+
+	since := mxNow.Add(-time.Hour)
+	kb := sourcesOnly{sources: []domain.KnowledgeSource{
+		{Name: kbHandbook, Status: domain.SyncFailed, SyncFailures: 3, LastError: "401 from the host", UpdatedAt: since},
+		{Name: "runbooks", Status: domain.SyncFailed, SyncFailures: 2, LastError: "timeout"},
+		{Name: "recovered", Status: domain.SyncIdle},
+		{Name: kbArchive, Status: domain.SyncFailed, SyncFailures: 9, LastError: "gone"},
+	}}
+
+	w := workInbox{s: &server{knowledge: kb}}
+
+	got, err := w.knowledgeEntries(t.Context(), []*config.Factory{f})
+	if err != nil || len(got) != 1 {
+		t.Fatalf("entries = %+v, %v; want the handbook's only", got, err)
+	}
+
+	e := got[0]
+	if e.Id != "knowledge_source:"+string(mxF)+":"+kbHandbook || e.Kind != gen.InboxEntryKindKnowledgeSource || e.Factory.Name != factoryBuilder ||
+		!e.Since.Equal(since) {
+		t.Errorf("entry %+v; want knowledge_source:%s:%s of the factory, since its last failure", e, mxF, kbHandbook)
+	}
+
+	if e.KnowledgeSource == nil || e.KnowledgeSource.Source != kbHandbook || e.KnowledgeSource.Error != "401 from the host" || e.KnowledgeSource.FailedSyncs != 3 {
+		t.Errorf("knowledge_source %+v", e.KnowledgeSource)
 	}
 }

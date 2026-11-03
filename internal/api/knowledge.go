@@ -648,11 +648,15 @@ func (s *server) sourceOut(ctx context.Context, src domain.KnowledgeSource, by [
 		Id: string(src.ID), Name: src.Name, Title: src.Title, Kind: gen.KnowledgeSourceKind(src.Kind), Connection: optional(src.Connection),
 		Secret: optional(src.Secret), Config: map[string]string{}, ReadWhen: src.ReadWhen, SyncEverySeconds: int(src.SyncEvery / time.Second), Status: gen.KnowledgeSourceStatus(src.Status),
 		LastError: optional(src.LastError), LastSyncedAt: src.LastSyncedAt, NextSyncAt: src.NextSyncAt, Documents: src.Documents,
-		EmbedModel: optional(src.EmbedModel), UsedBy: gen.KnowledgeSourceUsers{Factories: []gen.ConnectionFactory{}, Readers: []gen.KnowledgeSourceReader{}},
+		UsedBy:    gen.KnowledgeSourceUsers{Factories: []gen.ConnectionFactory{}, Readers: []gen.KnowledgeSourceReader{}},
 		CreatedBy: s.actorOut(src.CreatedBy), CreatedAt: src.CreatedAt, UpdatedAt: src.UpdatedAt,
 	}
 
 	maps.Copy(out.Config, src.Config)
+
+	if src.SyncFailures > 0 {
+		out.SyncFailures = &src.SyncFailures
+	}
 
 	if len(snaps) > 0 {
 		n := snaps[0]

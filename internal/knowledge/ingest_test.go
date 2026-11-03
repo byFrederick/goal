@@ -3,14 +3,12 @@ package knowledge_test
 import (
 	"context"
 	"errors"
-	"hash/fnv"
 	"iter"
 	"maps"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,7 +22,6 @@ var admin = domain.Actor{Kind: domain.ActorUser, ID: "00000000-0000-7000-8000-00
 
 // Names the tests use.
 const (
-	embedModel     = "acme-embed-1"
 	deployMD       = "docs/deploy.md"
 	oncallMD       = "docs/oncall.md"
 	newMD          = "docs/new.md"
@@ -46,40 +43,6 @@ func (w *world) want(what string, got any, conds ...bool) {
 			return
 		}
 	}
-}
-
-// embedder embeds a text as its bag of words, each word hashed onto one dimension, so texts
-// sharing words are near. It counts its calls and fails while fail is set.
-type embedder struct {
-	model string
-	calls atomic.Int64
-	fail  atomic.Bool
-}
-
-func (e *embedder) Model() string { return e.model }
-
-func (e *embedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
-	e.calls.Add(1)
-
-	if e.fail.Load() {
-		return nil, errors.New("the embedding model is down")
-	}
-
-	out := make([][]float32, len(texts))
-
-	for i, t := range texts {
-		v := make([]float32, domain.EmbeddingDimensions)
-
-		for w := range strings.FieldsSeq(strings.ToLower(t)) {
-			h := fnv.New32a()
-			_, _ = h.Write([]byte(w))
-			v[h.Sum32()%domain.EmbeddingDimensions]++
-		}
-
-		out[i] = v
-	}
-
-	return out, nil
 }
 
 // reader is a synced source's documents in memory: path → content, versioned by content. It
@@ -173,7 +136,6 @@ type world struct {
 	uploads *knowledge.Uploads
 	clock   *porttest.Clock
 	docs    *reader
-	embed   *embedder
 }
 
 func newWorld(t *testing.T) *world {
@@ -182,7 +144,6 @@ func newWorld(t *testing.T) *world {
 	// The clock starts a second on, so the sources created now are due.
 	w := &world{
 		t: t, clock: porttest.NewClock(time.Now().UTC().Add(time.Second)), objects: porttest.NewObjectStore(), docs: &reader{},
-		embed: &embedder{model: embedModel},
 	}
 	w.tenancy = porttest.NewTenancy(w.clock.Now)
 	w.conns = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), w.tenancy)
@@ -224,16 +185,15 @@ func newWorld(t *testing.T) *world {
 
 func (w *world) ctx() context.Context { return domain.WithOrg(w.t.Context(), w.org) }
 
-// ingestor syncs with the embedder, or keywords only when it is nil, and the kb given (w.kb by
-// default).
-func (w *world) ingestor(e ports.Embedder, kb ports.Knowledge) *knowledge.Ingestor {
+// ingestor syncs the kb given (w.kb by default).
+func (w *world) ingestor(kb ports.Knowledge) *knowledge.Ingestor {
 	if kb == nil {
 		kb = w.kb
 	}
 
 	return knowledge.NewIngestor(knowledge.IngestorConfig{
 		Knowledge: kb, Connections: w.conns, Secrets: w.secrets, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: w.docs, "confluence": w.docs},
-		Objects: w.objects, Embedder: e, Clock: w.clock, TempDir: w.t.TempDir(),
+		Objects: w.objects, Clock: w.clock, TempDir: w.t.TempDir(),
 	})
 }
 
@@ -276,10 +236,10 @@ func (w *world) documents(source string) map[string]domain.KnowledgeDocument {
 	return out
 }
 
-func (w *world) search(e ports.Embedder, text string) []string {
+func (w *world) search(text string) []string {
 	w.t.Helper()
 
-	hits, err := knowledge.NewSearcher(w.kb, e, nil).Search(w.ctx(), text, []string{"runbooks", "handbook"}, 5)
+	hits, err := knowledge.NewSearcher(w.kb).Search(w.ctx(), text, []string{"runbooks", "handbook"}, 5)
 	if err != nil {
 		w.t.Fatal(err)
 	}
@@ -299,7 +259,7 @@ func TestIngestor_SyncsIncrementallyAndDeletesWhatGoes(t *testing.T) {
 	deploy, oncall := "# Deploy\n\nShip with the release train on Tuesdays.", "# On call\n\nPage the primary, then the secondary."
 	w.docs.set(map[string]string{deployMD: deploy, oncallMD: oncall})
 
-	in := w.ingestor(w.embed, nil)
+	in := w.ingestor(nil)
 	n := w.syncDue(in)
 	w.want("sources synced (both new ones)", n, n == 2)
 
@@ -308,12 +268,12 @@ func TestIngestor_SyncsIncrementallyAndDeletesWhatGoes(t *testing.T) {
 	w.want("the reader's connection (docs opened)", w.docs.conn, w.docs.conn != nil && w.docs.conn.Values["token"] == "s3cret")
 
 	src := w.source("runbooks")
-	w.want("runbooks after its sync", src, src.Status == domain.SyncIdle, src.EmbedModel == embedModel, src.Documents == 2, src.LeaseUntil == nil)
+	w.want("runbooks after its sync", src, src.Status == domain.SyncIdle, src.Documents == 2, src.LeaseUntil == nil)
 
 	d := w.documents("runbooks")[deployMD]
-	w.want(deployMD, d, d.Status == domain.DocumentIndexed, d.EmbedModel == embedModel, d.URL == "https://git.example.com/"+deployMD, d.IndexedAt != nil)
+	w.want(deployMD, d, d.Status == domain.DocumentIndexed, d.URL == "https://git.example.com/"+deployMD, d.IndexedAt != nil)
 
-	hits := w.search(w.embed, "when do we ship a release")
+	hits := w.search("when do we ship a release")
 	w.want("search (deploy.md first)", hits, len(hits) > 0 && hits[0] == deployMD)
 
 	// An hour on: oncall.md changed, deploy.md did not, a page is new and none went yet.
@@ -335,47 +295,8 @@ func TestIngestor_SyncsIncrementallyAndDeletesWhatGoes(t *testing.T) {
 	docs := slices.Sorted(maps.Keys(w.documents("runbooks")))
 	w.want("documents (deploy.md gone)", docs, slices.Equal(docs, []string{newMD, oncallMD}))
 
-	hits = w.search(nil, "release train")
+	hits = w.search("release train")
 	w.want("search after deploy.md went", hits, len(hits) == 0)
-}
-
-func TestIngestor_KeywordsOnlyWithoutAnEmbedder(t *testing.T) {
-	t.Parallel()
-
-	w := newWorld(t)
-	w.docs.set(map[string]string{deployMD: "# Deploy\n\nShip with the release train."})
-
-	w.syncDue(w.ingestor(nil, nil))
-
-	if src := w.source("runbooks"); src.Status != domain.SyncIdle || src.EmbedModel != "" {
-		t.Errorf("runbooks = %+v, want synced without a model", src)
-	}
-
-	if got := w.search(nil, "train"); !slices.Equal(got, []string{deployMD}) {
-		t.Errorf("keyword search = %v", got)
-	}
-
-	// An embedder that fails at search time leaves the keywords.
-	w.embed.fail.Store(true)
-
-	if got := w.search(w.embed, "train"); !slices.Equal(got, []string{deployMD}) {
-		t.Errorf("search with a failing embedder = %v, want the keyword hit", got)
-	}
-
-	// Once there is a model, every source is due for a full sync, changed or not.
-	w.embed.fail.Store(false)
-
-	if n := w.syncDue(w.ingestor(w.embed, nil)); n != 2 {
-		t.Fatalf("synced %d with a new model, want both sources", n)
-	}
-
-	if got := w.docs.fetches(); !slices.Equal(got, []string{deployMD, deployMD}) {
-		t.Errorf("fetched %v, want deploy.md again", got)
-	}
-
-	if src := w.source("runbooks"); src.EmbedModel != embedModel {
-		t.Errorf("runbooks model = %q", src.EmbedModel)
-	}
 }
 
 func TestIngestor_FailuresAreRecorded(t *testing.T) {
@@ -384,20 +305,7 @@ func TestIngestor_FailuresAreRecorded(t *testing.T) {
 	w := newWorld(t)
 	w.docs.set(map[string]string{"docs/good.md": "# Good\n\nfine", "docs/bad.md": "caf\xe9"})
 
-	w.embed.fail.Store(true)
-	w.syncDue(w.ingestor(w.embed, nil))
-
-	if src := w.source("runbooks"); src.Status != domain.SyncFailed || !strings.Contains(src.LastError, "the embedding model is down") {
-		t.Errorf("runbooks with the model down = %+v, want failed with the reason", src)
-	}
-
-	if _, ok := w.documents("runbooks")["docs/good.md"]; ok {
-		t.Error("good.md was stored without its embeddings")
-	}
-
-	w.embed.fail.Store(false)
-	w.clock.Advance(time.Hour + time.Minute)
-	w.syncDue(w.ingestor(w.embed, nil))
+	w.syncDue(w.ingestor(nil))
 
 	docs := w.documents("runbooks")
 	if src := w.source("runbooks"); src.Status != domain.SyncIdle || docs["docs/good.md"].Status != domain.DocumentIndexed {
@@ -418,7 +326,7 @@ func TestIngestor_ATooLongIDIsLeftOut(t *testing.T) {
 	long := "docs/" + strings.Repeat("日", 700) + ".md"
 	w.docs.set(map[string]string{deployMD: shipOnTuesdays, long: "# Long\n\nA page."})
 
-	w.syncDue(w.ingestor(w.embed, nil))
+	w.syncDue(w.ingestor(nil))
 
 	src := w.source("runbooks")
 	w.want("runbooks", src, src.Status == domain.SyncIdle, src.Documents == 1)
@@ -433,7 +341,7 @@ func TestIngestor_AFailedFetchKeepsWhatWasIndexed(t *testing.T) {
 
 	w := newWorld(t)
 	w.docs.set(map[string]string{deployMD: "# Deploy\n\nShip with the release train."})
-	in := w.ingestor(w.embed, nil)
+	in := w.ingestor(nil)
 	w.syncDue(in)
 
 	w.docs.set(map[string]string{deployMD: "# Deploy\n\nShip on Fridays.", newMD: newPage})
@@ -447,7 +355,7 @@ func TestIngestor_AFailedFetchKeepsWhatWasIndexed(t *testing.T) {
 	w.want(deployMD, docs[deployMD], docs[deployMD].Status == domain.DocumentIndexed, docs[deployMD].Version != "")
 	w.want(newMD, docs[newMD], docs[newMD].Status == domain.DocumentFailed, docs[newMD].Version == "")
 
-	if hits := w.search(nil, "release train"); !slices.Equal(hits, []string{deployMD}) {
+	if hits := w.search("release train"); !slices.Equal(hits, []string{deployMD}) {
 		t.Errorf("search for the indexed text = %v, want deploy.md's", hits)
 	}
 
@@ -458,7 +366,7 @@ func TestIngestor_AFailedFetchKeepsWhatWasIndexed(t *testing.T) {
 	w.clock.Advance(time.Hour + time.Minute)
 	w.syncDue(in)
 
-	if hits := w.search(nil, "fridays"); !slices.Equal(hits, []string{deployMD}) {
+	if hits := w.search("fridays"); !slices.Equal(hits, []string{deployMD}) {
 		t.Errorf("search after the source answers = %v, want deploy.md's new text", hits)
 	}
 }
@@ -529,14 +437,14 @@ func TestIngestor_UploadsIndexedFromTheBucket(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w.syncDue(w.ingestor(w.embed, nil))
+	w.syncDue(w.ingestor(nil))
 
 	docs := w.documents("handbook")
 	if got := docs["leave.md"]; got.ID != d.ID || got.Status != domain.DocumentIndexed || got.Blob != d.Blob || got.MIME != domain.MediaMarkdown {
 		t.Errorf("leave.md after the sync = %+v", got)
 	}
 
-	if got := w.search(w.embed, "receipts"); len(got) == 0 || got[0] != "page.html" {
+	if got := w.search("receipts"); len(got) == 0 || got[0] != "page.html" {
 		t.Errorf("search = %v, want the HTML upload", got)
 	}
 
@@ -545,13 +453,12 @@ func TestIngestor_UploadsIndexedFromTheBucket(t *testing.T) {
 		t.Errorf("Document text = %q, %v", text, err)
 	}
 
-	// Unchanged, an upload is never fetched or embedded again.
-	calls := w.embed.calls.Load()
+	// Unchanged, an upload is indexed once: its document and its chunks stay as they are.
 	w.clock.Advance(time.Hour + time.Minute)
-	w.syncDue(w.ingestor(w.embed, nil))
+	w.syncDue(w.ingestor(nil))
 
-	if w.embed.calls.Load() != calls {
-		t.Errorf("an unchanged upload was embedded again")
+	if got := w.documents("handbook")["leave.md"]; got.ID != d.ID || got.IndexedAt == nil || !got.IndexedAt.Equal(*docs["leave.md"].IndexedAt) {
+		t.Errorf("leave.md after a sync with no change = %+v", got)
 	}
 }
 
@@ -738,7 +645,7 @@ func TestIngestor_ATakenOverSyncRecordsNothing(t *testing.T) {
 	kb := &stalled{Knowledge: w.kb, renewing: make(chan struct{}, 1)}
 	first := knowledge.NewIngestor(knowledge.IngestorConfig{
 		Knowledge: kb, Connections: w.conns, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: slow},
-		Embedder: w.embed, Clock: w.clock,
+		Clock: w.clock,
 	})
 	done := make(chan struct{})
 
@@ -756,7 +663,7 @@ func TestIngestor_ATakenOverSyncRecordsNothing(t *testing.T) {
 	w.clock.Advance(knowledge.Lease + time.Second)
 	<-kb.renewing
 
-	if n := w.syncDue(w.ingestor(w.embed, nil)); n != 1 {
+	if n := w.syncDue(w.ingestor(nil)); n != 1 {
 		t.Fatalf("a second goald synced %d sources after the first's lease ended, want runbooks", n)
 	}
 
@@ -793,7 +700,7 @@ func TestIngestor_LeasesSurviveAKilledGoald(t *testing.T) {
 	go func() {
 		defer close(done)
 
-		_, _ = w.ingestor(w.embed, first).SyncDue(killed)
+		_, _ = w.ingestor(first).SyncDue(killed)
 	}()
 
 	// The first goald holds runbooks and renews its lease every third of it.
@@ -807,7 +714,7 @@ func TestIngestor_LeasesSurviveAKilledGoald(t *testing.T) {
 		t.Fatalf("renewal = %v", err)
 	}
 
-	second := w.ingestor(w.embed, nil)
+	second := w.ingestor(nil)
 
 	// Past the first lease, but the renewal holds it: nobody else claims it.
 	w.clock.Advance(knowledge.Lease - knowledge.Lease/3)
@@ -877,7 +784,7 @@ func TestIngest_SyncOpensTheSecret(t *testing.T) {
 	}
 
 	w.docs.set(map[string]string{deployMD: shipOnTuesdays})
-	w.syncDue(w.ingestor(nil, nil))
+	w.syncDue(w.ingestor(nil))
 
 	w.want("the reader's secret (opened at sync time)", w.docs.secret == replaced, w.docs.secret == replaced)
 	w.want("the reader's connection", w.docs.conn, w.docs.conn == nil)

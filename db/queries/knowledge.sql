@@ -1,11 +1,11 @@
 -- The knowledge base (00054), under row-level security: every statement sees the transaction's
--- organization only. Embeddings travel as pgvector's text form ('[0.1,0.2,…]'), '' for none.
+-- organization only.
 
 -- name: KnowledgeSources :many
 -- The organization's sources, or the one named or with the given id.
 SELECT s.id, s.name, s.title, s.kind, c.name AS connection, sc.name AS secret, s.config, s.read_when, s.current_snapshot_id,
        extract(epoch FROM s.sync_every)::bigint AS sync_every_seconds, s.next_sync_at, s.lease_until, s.status,
-       s.last_synced_at, s.last_error, s.embed_model, s.created_by, s.created_at, s.updated_at,
+       s.last_synced_at, s.last_error, s.sync_failures, s.created_by, s.created_at, s.updated_at,
        (SELECT count(*) FROM knowledge_documents d WHERE d.org_id = s.org_id AND d.source_id = s.id) AS documents
 FROM knowledge_sources s
 LEFT JOIN connections c ON c.org_id = s.org_id AND c.id = s.connection_id
@@ -88,7 +88,7 @@ RETURNING kind;
 -- The source due first in any live organization, leased under a new token (00055), in no
 -- organization: the caller binds the transaction to the one returned.
 SELECT c.org_id::uuid AS org_id, c.id::uuid AS id, c.lease_token::uuid AS lease_token
-FROM goal_claim_knowledge_source(sqlc.arg(now)::timestamptz, sqlc.arg(until)::timestamptz, sqlc.arg(model)::text) c;
+FROM goal_claim_knowledge_source(sqlc.arg(now)::timestamptz, sqlc.arg(until)::timestamptz) c;
 
 -- name: RenewKnowledgeSource :execrows
 UPDATE knowledge_sources SET lease_until = sqlc.arg(until)::timestamptz
@@ -107,7 +107,7 @@ UPDATE knowledge_sources
 SET status = CASE WHEN sqlc.arg(error)::text = '' THEN 'idle' ELSE 'failed' END,
     last_error = nullif(sqlc.arg(error)::text, ''),
     last_synced_at = CASE WHEN sqlc.arg(error)::text = '' THEN sqlc.arg(at)::timestamptz ELSE last_synced_at END,
-    embed_model = CASE WHEN sqlc.arg(error)::text = '' THEN nullif(sqlc.arg(model)::text, '') ELSE embed_model END,
+    sync_failures = CASE WHEN sqlc.arg(error)::text = '' THEN 0 ELSE sync_failures + 1 END,
     lease_until = NULL, lease_token = NULL,
     next_sync_at = CASE WHEN next_sync_at IS DISTINCT FROM sqlc.arg(due)::timestamptz THEN next_sync_at
                         ELSE sqlc.arg(at)::timestamptz + sync_every END,
@@ -130,14 +130,14 @@ WHERE source_id = sqlc.arg(source_id) AND status <> 'pending';
 -- org_id comes from its default, goal_org(); an upload's hash stays when a sync rewrites it, and
 -- its seen time never goes back (a sync that stalled past its lease writes an older one).
 INSERT INTO knowledge_documents AS d (id, source_id, external_id, version, title, url, mime, bytes, blob_sha256, status, error,
-                                      seen_at, indexed_at, embed_model, created_by)
+                                      seen_at, indexed_at, created_by)
 VALUES (sqlc.arg(id), sqlc.arg(source_id), sqlc.arg(external_id), sqlc.arg(version), sqlc.arg(title), sqlc.narg(url),
         sqlc.arg(mime), sqlc.arg(bytes), sqlc.narg(blob_sha256), sqlc.arg(status), sqlc.narg(error), sqlc.arg(seen_at),
-        sqlc.narg(indexed_at), sqlc.narg(embed_model), sqlc.arg(created_by))
+        sqlc.narg(indexed_at), sqlc.arg(created_by))
 ON CONFLICT (source_id, external_id) DO UPDATE
 SET version = EXCLUDED.version, title = EXCLUDED.title, url = EXCLUDED.url, mime = EXCLUDED.mime, bytes = EXCLUDED.bytes,
     blob_sha256 = coalesce(EXCLUDED.blob_sha256, d.blob_sha256), status = EXCLUDED.status, error = EXCLUDED.error,
-    seen_at = greatest(d.seen_at, EXCLUDED.seen_at), indexed_at = EXCLUDED.indexed_at, embed_model = EXCLUDED.embed_model
+    seen_at = greatest(d.seen_at, EXCLUDED.seen_at), indexed_at = EXCLUDED.indexed_at
 RETURNING id;
 
 -- name: KnowledgeSourceKind :one
@@ -149,7 +149,7 @@ SELECT kind FROM knowledge_sources WHERE id = sqlc.arg(id);
 UPDATE knowledge_documents
 SET version = sqlc.arg(version), title = sqlc.arg(title), mime = sqlc.arg(mime), bytes = sqlc.arg(bytes),
     status = sqlc.arg(status), error = sqlc.narg(error), seen_at = greatest(seen_at, sqlc.arg(seen_at)),
-    indexed_at = sqlc.narg(indexed_at), embed_model = sqlc.narg(embed_model)
+    indexed_at = sqlc.narg(indexed_at)
 WHERE source_id = sqlc.arg(source_id) AND external_id = sqlc.arg(external_id)
 RETURNING id;
 
@@ -157,11 +157,10 @@ RETURNING id;
 DELETE FROM knowledge_chunks WHERE document_id = sqlc.arg(document_id);
 
 -- name: InsertKnowledgeChunks :exec
--- A document's chunks in one statement; an empty embedding is none.
-INSERT INTO knowledge_chunks (source_id, document_id, ord, heading, text, embedding, embed_model)
+-- A document's chunks in one statement.
+INSERT INTO knowledge_chunks (source_id, document_id, ord, heading, text)
 SELECT sqlc.arg(source_id), sqlc.arg(document_id), (sqlc.arg(ords)::int[])[i], (sqlc.arg(headings)::text[])[i],
-       (sqlc.arg(texts)::text[])[i], nullif((sqlc.arg(embeddings)::text[])[i], '')::halfvec(1024),
-       CASE WHEN (sqlc.arg(embeddings)::text[])[i] = '' THEN NULL ELSE sqlc.arg(model)::text END
+       (sqlc.arg(texts)::text[])[i]
 FROM generate_series(1, cardinality(sqlc.arg(ords)::int[])) AS i;
 
 -- name: MarkKnowledgeSeen :exec
@@ -182,7 +181,7 @@ RETURNING id;
 -- name: KnowledgeDocuments :many
 -- A page of a source's documents in id order, or the document of an external id, or with an id.
 SELECT d.id, d.source_id, d.external_id, d.version, d.title, d.url, d.mime, d.bytes, d.blob_sha256, d.status, d.error,
-       d.seen_at, d.indexed_at, d.embed_model, d.created_by, s.kind AS source_kind
+       d.seen_at, d.indexed_at, d.created_by, s.kind AS source_kind
 FROM knowledge_documents d JOIN knowledge_sources s ON s.org_id = d.org_id AND s.id = d.source_id
 WHERE (sqlc.narg(source_id)::uuid IS NULL OR d.source_id = sqlc.narg(source_id)::uuid)
   AND (sqlc.narg(external_id)::text IS NULL OR d.external_id = sqlc.narg(external_id)::text)
@@ -203,54 +202,15 @@ DELETE FROM knowledge_documents WHERE id = sqlc.arg(id);
 -- name: DocumentText :one
 SELECT coalesce(string_agg(text, E'\n\n' ORDER BY ord), '')::text AS text FROM knowledge_chunks WHERE document_id = sqlc.arg(document_id);
 
--- name: SetSearchScan :exec
--- The nearest-neighbour scan over the HNSW index goes on past chunks the filters drop
--- (pgvector's iterative scan), so a search over large sources still finds its candidates when
--- other organizations' or sources' chunks are nearer. Small sources are searched exactly instead
--- (SearchKnowledge).
-SELECT set_config('hnsw.iterative_scan', 'relaxed_order', true), set_config('hnsw.ef_search', '100', true);
-
 -- name: SearchKnowledge :many
--- Two candidate lists over the named sources only, the nearest chunks of the model by cosine
--- distance (with an embedding) and the best by keywords (any of the query's words, ts_rank on
+-- The best chunks of the named sources only by keywords: any of the query's words, ts_rank on
 -- the simple tsvector divided by 1 + the log of the chunk's length, so long chunks full of
--- common words do not win), fused by reciprocal rank (k = 60; domain.FuseRanks).
---
--- The nearest are exact when the sources hold at most 20,000 chunks: their distances, computed
--- behind a fence (OFFSET 0) that keeps the HNSW index out, and sorted. The index holds every
--- organization's chunks and the filters apply after it, so walking it for sources that are a
--- small share of the table finds too few of theirs within pgvector's scan budget, or none
--- (review 4 SQL M2). Larger sources walk the index; partitioning by organization (spec 4 §6) is
--- the step after this if installs outgrow that.
+-- common words do not win; a chunk scores 1/(60 + its rank), as reciprocal rank fusion would.
 WITH src AS (
   SELECT id, name FROM knowledge_sources WHERE name = ANY (sqlc.arg(sources)::text[])
 ),
 query AS (
   SELECT nullif(replace(plainto_tsquery('simple', sqlc.arg(query)::text)::text, ' & ', ' | '), '')::tsquery AS q
-),
-small AS (
-  SELECT count(*) <= 20000 AS exact
-  FROM (SELECT 1 FROM knowledge_chunks c WHERE c.source_id IN (SELECT id FROM src) LIMIT 20001) n
-),
-near AS (
-  SELECT n.id, row_number() OVER (ORDER BY n.distance, n.id) AS r FROM (
-    (SELECT e.id, e.distance FROM (
-       SELECT c.id, c.embedding <=> nullif(sqlc.arg(embedding)::text, '')::halfvec(1024) AS distance
-       FROM knowledge_chunks c
-       WHERE (SELECT exact FROM small) AND sqlc.arg(embedding)::text <> '' AND c.embed_model = sqlc.arg(model)::text
-         AND c.source_id IN (SELECT id FROM src)
-       OFFSET 0
-     ) e
-     ORDER BY e.distance, e.id
-     LIMIT 50)
-    UNION ALL
-    (SELECT c.id, c.embedding <=> nullif(sqlc.arg(embedding)::text, '')::halfvec(1024) AS distance
-     FROM knowledge_chunks c
-     WHERE NOT (SELECT exact FROM small) AND sqlc.arg(embedding)::text <> '' AND c.embed_model = sqlc.arg(model)::text
-       AND c.source_id IN (SELECT id FROM src)
-     ORDER BY c.embedding <=> nullif(sqlc.arg(embedding)::text, '')::halfvec(1024)
-     LIMIT 50)
-  ) n
 ),
 words AS (
   SELECT w.id, row_number() OVER (ORDER BY w.rank DESC, w.id) AS r FROM (
@@ -260,17 +220,13 @@ words AS (
     ORDER BY rank DESC, c.id
     LIMIT 50
   ) w
-),
-fused AS (
-  SELECT f.id, sum(1.0 / (60 + f.r))::float8 AS score FROM (SELECT id, r FROM near UNION ALL SELECT id, r FROM words) f
-  GROUP BY f.id
 )
-SELECT c.id, c.document_id, src.name AS source, d.title, d.url, c.heading, c.text, fused.score
-FROM fused
-JOIN knowledge_chunks c ON c.id = fused.id
+SELECT c.id, c.document_id, src.name AS source, d.title, d.url, c.heading, c.text, (1.0 / (60 + words.r))::float8 AS score
+FROM words
+JOIN knowledge_chunks c ON c.id = words.id
 JOIN knowledge_documents d ON d.org_id = c.org_id AND d.source_id = c.source_id AND d.id = c.document_id
 JOIN src ON src.id = c.source_id
-ORDER BY fused.score DESC, c.id
+ORDER BY words.r, c.id
 LIMIT sqlc.arg(max_hits);
 
 -- Knowledge use and verdicts (00072, ADR 0027).

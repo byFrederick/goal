@@ -3,7 +3,7 @@
 // Value card draws dots for a write-only field. Delete is disabled, with its reason, while something uses
 // the secret. People without secret:manage see none of the controls that change it.
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { Lock } from 'lucide-react';
 import { useId, useState } from 'react';
 import { factoriesQuery, secretActivityQuery, secretQuery } from '../../api/queries';
@@ -108,6 +108,7 @@ export function SecretPage() {
 
 /** Where it's used: one row per use, with its kind. */
 function UsesCard({ secret }: { secret: Secret }) {
+  const org = useOrg();
   return (
     <section aria-labelledby="uses-heading" className={card}>
       <div className={cardHead}>
@@ -125,7 +126,15 @@ function UsesCard({ secret }: { secret: Secret }) {
               key={`${u.kind}-${u.name}`}
               className="flex min-h-14 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-line px-4 py-3 first:border-t-0 md:px-5"
             >
-              <span className="min-w-0 break-words text-body font-medium">{u.name}</span>
+              <span className="min-w-0 break-words text-body font-medium">
+                {u.kind === 'knowledge_source' ? (
+                  <Link to="/o/$org/knowledge/$source" params={{ org: org.slug, source: u.name }}>
+                    {u.name}
+                  </Link>
+                ) : (
+                  u.name
+                )}
+              </span>
               <span className="text-secondary text-muted">{useKindLabels[u.kind]}</span>
             </li>
           ))}

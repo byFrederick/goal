@@ -5011,8 +5011,7 @@ paths:
       tags: [knowledge]
       summary: Search the knowledge base as agents do
       description: >-
-        What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an
-        embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or
+        Chunks ranked by keywords, over every source, or
         the named ones (404 knowledge-source-not-found for a name the organization has not).
       parameters:
         - name: q
@@ -8689,8 +8688,9 @@ components:
         row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny.
         conversion: a factory Goal could not move from connections to secrets and environment files
         (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and
-        publishes
-      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite, conversion]
+        publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038
+        decision 3), once for each factory that lists it
+      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite, conversion, knowledge_source]
     InboxEntry:
       type: object
       required: [id, kind, factory, since, item, station, action, approval, blocked, andon, rework]
@@ -8760,6 +8760,19 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/InboxConversion"
+        knowledge_source:
+          description: Why the knowledge source does not sync; absent or null for other kinds
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/InboxKnowledgeSource"
+    InboxKnowledgeSource:
+      type: object
+      description: A knowledge source whose last syncs failed, shown under each factory that lists it.
+      required: [source, error, failed_syncs]
+      properties:
+        source: { type: string, description: The source's name }
+        error: { type: string, description: What the last sync said }
+        failed_syncs: { type: integer, description: How many syncs failed in a row }
     InboxConversion:
       type: object
       description: >-
@@ -10447,7 +10460,7 @@ components:
           description: Its newest snapshot; null before the first sync
           nullable: true
           allOf: [{ $ref: "#/components/schemas/KnowledgeSnapshotSummary" }]
-        embed_model: { type: string, description: "The model its chunks are embedded with; absent when they have no embeddings" }
+        sync_failures: { type: integer, description: "How many syncs failed in a row; a successful one resets it, and three show the source in Needs you" }
         used_by: { $ref: "#/components/schemas/KnowledgeSourceUsers" }
         created_by: { $ref: "#/components/schemas/Actor" }
         created_at: { type: string, format: date-time }

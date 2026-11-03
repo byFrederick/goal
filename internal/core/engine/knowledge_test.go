@@ -67,7 +67,7 @@ func (k *knowledgeBase) putSnapshot(t *testing.T, name string, id domain.Knowled
 
 	k.at = k.at.Add(time.Minute)
 
-	c, err := k.kb.ClaimSource(ctx, k.at, k.at.Add(time.Minute), "")
+	c, err := k.kb.ClaimSource(ctx, k.at, k.at.Add(time.Minute))
 	if err != nil || c == nil || c.Source.Name != name {
 		t.Errorf("claim %s = %+v, %v; want its sync", name, c, err)
 		return

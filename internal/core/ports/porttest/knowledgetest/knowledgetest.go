@@ -51,7 +51,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Claim_EveryOrganizationOldestDueFirst", testClaimAcrossOrgs},
 		{"Claim_ScheduleAndSyncNow", testClaimSchedule},
 		{"FinishSync_AnErrorThatIsNoUTF8", testFinishInvalidUTF8},
-		{"Claim_AnotherModelIsDue", testClaimModel},
+		{"Finish_CountsFailuresInARow", testFinishFailures},
 		{"Documents_ReplacedSeenAndUnseenDeleted", testDocuments},
 		{"Uploads_PendingDueAndOrphans", testUploads},
 		{"Search_HybridRanking", testSearchRanking},
@@ -93,8 +93,6 @@ const (
 	// docsSecret is the secret synced sources read with, and readerGitDocs their reader.
 	docsSecret    = "docs-token"
 	readerGitDocs = "gitdocs"
-	model         = "acme-embed-1"
-	otherName     = "acme-embed-2"
 )
 
 var admin = domain.Actor{Kind: domain.ActorUser, ID: "00000000-0000-7000-8000-000000000001", Name: "Ada"}
@@ -197,8 +195,8 @@ func (f *fixture) refused(what string, err, want error) {
 	}
 }
 
-// put stores a document of source with one chunk per text, embedded by vecs when given.
-func (f *fixture) put(org domain.OrgID, source domain.KnowledgeSourceID, ext, version string, texts []string, vecs [][]float32) {
+// put stores a document of source with one chunk per text.
+func (f *fixture) put(org domain.OrgID, source domain.KnowledgeSourceID, ext, version string, texts []string) {
 	f.t.Helper()
 
 	d := domain.KnowledgeDocument{
@@ -209,13 +207,7 @@ func (f *fixture) put(org domain.OrgID, source domain.KnowledgeSourceID, ext, ve
 	chunks := make([]domain.Chunk, 0, len(texts))
 
 	for i, text := range texts {
-		c := domain.Chunk{Ord: i, Heading: "Section " + ext, Text: text}
-		if vecs != nil {
-			c.Embedding = vecs[i]
-			d.EmbedModel = model
-		}
-
-		chunks = append(chunks, c)
+		chunks = append(chunks, domain.Chunk{Ord: i, Heading: "Section " + ext, Text: text})
 	}
 
 	if err := f.Knowledge.PutDocument(f.in(org), d, chunks); err != nil {
@@ -236,18 +228,6 @@ func (f *fixture) search(org domain.OrgID, q domain.KnowledgeQuery) []domain.Kno
 	}
 
 	return got
-}
-
-// axis is the unit vector along dimension i, plus tilt along dimension j (none when j < 0).
-func axis(i, j int, tilt float32) []float32 {
-	v := make([]float32, domain.EmbeddingDimensions)
-	v[i] = 1
-
-	if j >= 0 {
-		v[j] = tilt
-	}
-
-	return v
 }
 
 // texts are the hits' chunk texts in order.
@@ -483,20 +463,20 @@ func testSecretSources(f *fixture) {
 
 // claim claims at now for lease, in no organization (a claim reaches every one), failing the
 // test on an error.
-func (f *fixture) claim(now time.Time, lease time.Duration, m string) *domain.SourceClaim {
+func (f *fixture) claim(now time.Time, lease time.Duration) *domain.SourceClaim {
 	f.t.Helper()
 
-	c, err := f.Knowledge.ClaimSource(f.t.Context(), now, now.Add(lease), m)
+	c, err := f.Knowledge.ClaimSource(f.t.Context(), now, now.Add(lease))
 	f.must(err)
 
 	return c
 }
 
 // claimed claims at now for lease and fails the test unless it gets a source.
-func (f *fixture) claimed(what string, now time.Time, lease time.Duration, m string) domain.SourceClaim {
+func (f *fixture) claimed(what string, now time.Time, lease time.Duration) domain.SourceClaim {
 	f.t.Helper()
 
-	c := f.claim(now, lease, m)
+	c := f.claim(now, lease)
 	if c == nil {
 		f.t.Fatalf("%s: ClaimSource = nil, want a source", what)
 	}
@@ -505,19 +485,19 @@ func (f *fixture) claimed(what string, now time.Time, lease time.Duration, m str
 }
 
 // none fails the test when a claim at now gets a source.
-func (f *fixture) none(what string, now time.Time, m string) {
+func (f *fixture) none(what string, now time.Time) {
 	f.t.Helper()
 
-	if c := f.claim(now, time.Minute, m); c != nil {
+	if c := f.claim(now, time.Minute); c != nil {
 		f.t.Errorf("%s: ClaimSource = %+v, want none", what, c)
 	}
 }
 
-// finish ends c's sync at the time at, with errText ("" for success) and model.
-func (f *fixture) finish(c domain.SourceClaim, at time.Time, errText, m string) {
+// finish ends c's sync at the time at, with errText ("" for success).
+func (f *fixture) finish(c domain.SourceClaim, at time.Time, errText string) {
 	f.t.Helper()
 
-	f.must(f.Knowledge.FinishSync(f.in(c.Org), c.Lease, domain.SyncResult{At: at, Due: *c.Source.NextSyncAt, Error: errText, EmbedModel: m}))
+	f.must(f.Knowledge.FinishSync(f.in(c.Org), c.Lease, domain.SyncResult{At: at, Due: *c.Source.NextSyncAt, Error: errText}))
 }
 
 // testClaimLease: a claimed source is leased; while the lease runs nobody else claims it; a
@@ -530,17 +510,17 @@ func testClaimLease(f *fixture) {
 	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Millisecond)
 	lease := 10 * time.Minute
 
-	first := f.claimed("the due source", t0, lease, "")
+	first := f.claimed("the due source", t0, lease)
 	f.want("claimed", first, first.Org == f.org, first.Source.ID == src.ID, first.Source.Status == domain.SyncSyncing,
 		equalTime(first.Source.LeaseUntil, t0.Add(lease)), first.Lease.Source == src.ID, first.Lease.Token != "")
 
-	f.none("while leased (live sources never)", t0.Add(5*time.Minute), "")
+	f.none("while leased (live sources never)", t0.Add(5*time.Minute))
 	f.must(f.Knowledge.RenewSource(ctx, first.Lease, t0.Add(5*time.Minute), t0.Add(15*time.Minute)))
 
 	// The holder dies: nothing renews the lease, which ends at t0+15m.
-	f.none("before the renewed lease ends", t0.Add(14*time.Minute), "")
+	f.none("before the renewed lease ends", t0.Add(14*time.Minute))
 
-	second := f.claimed("after the lease ended", t0.Add(16*time.Minute), lease, "")
+	second := f.claimed("after the lease ended", t0.Add(16*time.Minute), lease)
 	f.want("taken over", second, second.Source.ID == src.ID, second.Lease.Token != first.Lease.Token)
 
 	f.refused("RenewSource after the lease ended",
@@ -555,15 +535,15 @@ func testClaimLease(f *fixture) {
 func testClaimFenced(f *fixture) {
 	ctx := f.ctx()
 	src := f.synced(f.org, runbooks)
-	f.put(f.org, src.ID, docA, "v1", []string{"alpha"}, nil)
-	f.put(f.org, src.ID, "docs/b.md", "v1", []string{"beta"}, nil)
+	f.put(f.org, src.ID, docA, "v1", []string{"alpha"})
+	f.put(f.org, src.ID, "docs/b.md", "v1", []string{"beta"})
 
 	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Millisecond)
 	lease := 10 * time.Minute
-	stale := f.claimed("the first holder", t0, lease, "")
+	stale := f.claimed("the first holder", t0, lease)
 
 	t1 := t0.Add(lease + time.Minute)
-	fresh := f.claimed("after the first lease ended", t1, lease, "")
+	fresh := f.claimed("after the first lease ended", t1, lease)
 	f.must(f.Knowledge.MarkSeen(ctx, fresh.Lease, []string{docA}, t1))
 
 	// The first holder wakes, its clock behind: within its own lease by that clock.
@@ -596,7 +576,7 @@ func testClaimFenced(f *fixture) {
 	n, err = f.Knowledge.DeleteUnseen(ctx, fresh.Lease, t1)
 	f.must(err)
 	f.want("DeleteUnseen of the newer holder (b.md)", n, n == 1)
-	f.finish(fresh, t1.Add(2*time.Minute), "", "")
+	f.finish(fresh, t1.Add(2*time.Minute), "")
 	f.refused("MarkSeen after the sync ended", f.Knowledge.MarkSeen(ctx, fresh.Lease, []string{docA}, t1), ports.ErrLeaseLost)
 }
 
@@ -617,11 +597,11 @@ func testClaimAcrossOrgs(f *fixture) {
 		org domain.OrgID
 		id  domain.KnowledgeSourceID
 	}{{f.org, first.ID}, {other, second.ID}, {f.org, third.ID}} {
-		c := f.claimed("claim", t0, time.Minute, "")
+		c := f.claimed("claim", t0, time.Minute)
 		f.want("claim in due order", []any{i, c.Org, c.Source.Name}, c.Org == want.org, c.Source.ID == want.id, c.Lease.Source == want.id)
 	}
 
-	f.none("all three claimed", t0, "")
+	f.none("all three claimed", t0)
 }
 
 // testClaimSchedule: a finished sync is due again after the interval; a failed one says why;
@@ -632,25 +612,25 @@ func testClaimSchedule(f *fixture) {
 
 	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Millisecond)
 	t1 := t0.Add(2 * time.Minute)
-	f.finish(f.claimed("the new source", t0, 10*time.Minute, ""), t1, "", "")
+	f.finish(f.claimed("the new source", t0, 10*time.Minute), t1, "")
 
 	got := f.get(f.org, handbook)
 	f.want("after FinishSync", got, got.Status == domain.SyncIdle, got.LeaseUntil == nil, equalTime(got.LastSyncedAt, t1),
 		equalTime(got.NextSyncAt, t1.Add(time.Hour)), got.LastError == "")
 
-	f.none("before the next sync", t1.Add(30*time.Minute), "")
+	f.none("before the next sync", t1.Add(30*time.Minute))
 
 	t2 := t1.Add(62 * time.Minute)
-	f.finish(f.claimed("due again", t1.Add(61*time.Minute), 10*time.Minute, ""), t2, "the bucket is unreachable", "")
+	f.finish(f.claimed("due again", t1.Add(61*time.Minute), 10*time.Minute), t2, "the bucket is unreachable")
 
 	got = f.get(f.org, handbook)
 	f.want("after a failed sync", got, got.Status == domain.SyncFailed, got.LastError == "the bucket is unreachable",
 		equalTime(got.LastSyncedAt, t1), equalTime(got.NextSyncAt, t2.Add(time.Hour)))
 
 	// Sync now while a sync runs: the source is due again as soon as that one ends.
-	s := f.claimed("due after the failure", t2.Add(61*time.Minute), 10*time.Minute, "")
+	s := f.claimed("due after the failure", t2.Add(61*time.Minute), 10*time.Minute)
 	f.must(f.Knowledge.SyncNow(ctx, handbook))
-	f.finish(s, t2.Add(62*time.Minute), "", "")
+	f.finish(s, t2.Add(62*time.Minute), "")
 
 	got = f.get(f.org, handbook)
 	f.want("next sync after Sync now during a sync (now)", got.NextSyncAt, got.NextSyncAt != nil && !got.NextSyncAt.After(time.Now()))
@@ -663,30 +643,33 @@ func testFinishInvalidUTF8(f *fixture) {
 	f.upload(handbook)
 
 	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Millisecond)
-	f.finish(f.claimed("the new source", t0, 10*time.Minute, ""), t0, "embed: 500 caf\xc3", "")
+	f.finish(f.claimed("the new source", t0, 10*time.Minute), t0, "embed: 500 caf\xc3")
 
 	got := f.get(f.org, handbook)
 	f.want("after a failed sync", got, got.Status == domain.SyncFailed, utf8.ValidString(got.LastError),
 		strings.HasPrefix(got.LastError, "embed: 500 caf"))
 }
 
-// testClaimModel: a source whose chunks are of another model is due for a full sync, unless its
-// last sync failed.
-func testClaimModel(f *fixture) {
+// testFinishFailures: failed syncs in a row are counted, and a successful one starts again (a source
+// at three shows in Needs you).
+func testFinishFailures(f *fixture) {
 	f.upload(handbook)
 
-	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Millisecond)
-	f.finish(f.claimed("the new source", t0, 10*time.Minute, model), t0, "", model)
+	sync := func(errText string, wantFailures int) {
+		f.t.Helper()
+		f.must(f.Knowledge.SyncNow(f.ctx(), handbook))
 
-	got := f.get(f.org, handbook)
-	f.want("EmbedModel", got.EmbedModel, got.EmbedModel == model)
+		at := time.Now().UTC().Add(time.Hour).Truncate(time.Millisecond)
+		f.finish(f.claimed("a source made due", at, 10*time.Minute), at.Add(time.Minute), errText)
 
-	f.none("the same model before due", t0.Add(time.Minute), model)
+		got := f.get(f.org, handbook)
+		f.want("SyncFailures after a sync", got.SyncFailures, got.SyncFailures == wantFailures)
+	}
 
-	s := f.claimed("another model (a full sync)", t0.Add(time.Minute), 10*time.Minute, otherName)
-	f.finish(s, t0.Add(2*time.Minute), "no embedder", "")
-
-	f.none("another model after a failed sync, before due", t0.Add(3*time.Minute), otherName)
+	sync("the host is down", 1)
+	sync("the host is down", 2)
+	sync("the host is down", 3)
+	sync("", 0)
 }
 
 // docNamed is the document of source with external id ext.
@@ -713,8 +696,8 @@ func testDocuments(f *fixture) {
 	ctx := f.ctx()
 	src := f.synced(f.org, runbooks)
 
-	f.put(f.org, src.ID, docA, "v1", []string{"alpha one", "alpha two"}, nil)
-	f.put(f.org, src.ID, "docs/b.md", "v1", []string{"beta"}, nil)
+	f.put(f.org, src.ID, docA, "v1", []string{"alpha one", "alpha two"})
+	f.put(f.org, src.ID, "docs/b.md", "v1", []string{"beta"})
 
 	versions, err := f.Knowledge.Versions(ctx, src.ID)
 	f.must(err)
@@ -726,7 +709,7 @@ func testDocuments(f *fixture) {
 	f.must(err)
 	f.want("Document text", text, text == "alpha one\n\nalpha two")
 
-	f.put(f.org, src.ID, docA, "v2", []string{"alpha again"}, nil)
+	f.put(f.org, src.ID, docA, "v2", []string{"alpha again"})
 
 	got, text, err := f.Knowledge.Document(ctx, a.ID)
 	f.must(err)
@@ -744,7 +727,7 @@ func testDocuments(f *fixture) {
 	f.want("the next page", rest, len(rest) == 1, len(rest) == 1 && rest[0].ID != page[0].ID)
 
 	pass := time.Now().UTC().Add(time.Second).Truncate(time.Millisecond)
-	sync := f.claimed("runbooks", pass, time.Minute, "")
+	sync := f.claimed("runbooks", pass, time.Minute)
 	f.must(f.Knowledge.MarkSeen(ctx, sync.Lease, []string{docA}, pass))
 
 	n, err := f.Knowledge.DeleteUnseen(ctx, sync.Lease, pass)
@@ -794,8 +777,8 @@ func testUploads(f *fixture) {
 
 	// The new sources are due: sync them, so only an upload makes one due again.
 	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Millisecond)
-	for s := f.claim(t0, time.Minute, ""); s != nil; s = f.claim(t0, time.Minute, "") {
-		f.finish(*s, t0, "", "")
+	for s := f.claim(t0, time.Minute); s != nil; s = f.claim(t0, time.Minute) {
+		f.finish(*s, t0, "")
 	}
 
 	h1, h2 := domain.HashBlob([]byte("one")), domain.HashBlob([]byte("two"))
@@ -806,7 +789,7 @@ func testUploads(f *fixture) {
 
 	again := f.add(handbook, h1)
 	f.want("the same content again (the same document)", again.ID, again.ID == d1.ID)
-	f.none("after an upload, before Sync now", t0.Add(2*time.Minute), "")
+	f.none("after an upload, before Sync now", t0.Add(2*time.Minute))
 
 	v, err := f.Knowledge.Versions(ctx, d1.Source)
 	f.must(err)
@@ -866,7 +849,7 @@ func (f *fixture) uploadRefusals(h domain.BlobHash) {
 	_, err = f.Knowledge.AddUpload(ctx, handbook, domain.KnowledgeDocument{Title: "x", MIME: plainText, Blob: "nothex"}, admin)
 	f.refused("AddUpload without a content hash", err, domain.ErrInvalid)
 
-	f.put(f.org, f.get(f.org, runbooks).ID, docA, "v1", []string{"alpha"}, nil)
+	f.put(f.org, f.get(f.org, runbooks).ID, docA, "v1", []string{"alpha"})
 
 	err = f.Knowledge.DeleteDocument(ctx, f.docNamed(runbooks, docA).ID, admin, nil)
 	f.refused("DeleteDocument of a synced document", err, domain.ErrNotUploadSource)
@@ -879,27 +862,24 @@ const (
 	keyword = "lease renewal lease rotation lease audit"
 )
 
-// testSearchRanking: keyword and nearest-neighbour rankings fused by reciprocal rank, each alone
-// when the other finds nothing, chunks of another model never ranked by distance.
+// testSearchRanking: chunks ranked by keywords, each scored 1/(60 + its rank).
 func testSearchRanking(f *fixture) {
 	src := f.synced(f.org, runbooks)
-	f.put(f.org, src.ID, "docs/leases.md", "v1", []string{exact, near, keyword},
-		[][]float32{axis(0, -1, 0), axis(0, 1, 0.25), axis(5, -1, 0)})
+	f.put(f.org, src.ID, "docs/leases.md", "v1", []string{exact, near, keyword})
 
 	all := []string{runbooks}
-	query := axis(0, -1, 0)
 
-	// Nearest: exact, near, keyword. Keywords: keyword (lease three times), exact (once).
-	hybrid := f.search(f.org, domain.KnowledgeQuery{Text: leaseWord, Sources: all, Embedding: query, Model: model})
-	if got, want := texts(hybrid), []string{exact, keyword, near}; !slices.Equal(got, want) {
-		f.t.Fatalf("hybrid = %q, want %q", got, want)
+	// Keywords: keyword (lease three times), exact (once); near has none.
+	ranked := f.search(f.org, domain.KnowledgeQuery{Text: leaseWord, Sources: all})
+	if got, want := texts(ranked), []string{keyword, exact}; !slices.Equal(got, want) {
+		f.t.Fatalf("ranked = %q, want %q", got, want)
 	}
 
-	for i, want := range []float64{1.0/61 + 1.0/62, 1.0/63 + 1.0/61, 1.0 / 62} {
-		f.want("hit's reciprocal rank score (k = 60)", hybrid[i], math.Abs(hybrid[i].Score-want) < 1e-9)
+	for i, want := range []float64{1.0 / 61, 1.0 / 62} {
+		f.want("hit's reciprocal rank score (k = 60)", ranked[i], math.Abs(ranked[i].Score-want) < 1e-9)
 	}
 
-	h := hybrid[0]
+	h := ranked[0]
 	f.want("hit", h, h.Source == runbooks, h.Title == "Doc docs/leases.md", h.URL == "https://git.example.com/acme/docs/docs/leases.md",
 		h.Heading == "Section docs/leases.md", h.Document != "", h.Chunk != 0)
 
@@ -907,32 +887,26 @@ func testSearchRanking(f *fixture) {
 		q    domain.KnowledgeQuery
 		want []string
 	}{
-		"keywords only":          {domain.KnowledgeQuery{Text: leaseWord}, []string{keyword, exact}},
-		"nearest only":           {domain.KnowledgeQuery{Text: "zebra", Embedding: query, Model: model}, []string{exact, near, keyword}},
-		"another model's query":  {domain.KnowledgeQuery{Text: leaseWord, Embedding: query, Model: otherName}, []string{keyword, exact}},
-		"limit 1":                {domain.KnowledgeQuery{Text: leaseWord, Embedding: query, Model: model, Limit: 1}, []string{exact}},
-		"a word no chunk has":    {domain.KnowledgeQuery{Text: "the"}, []string{}},
-		"no words, no embedding": {domain.KnowledgeQuery{Text: "  "}, []string{}},
+		"limit 1":             {domain.KnowledgeQuery{Text: leaseWord, Limit: 1}, []string{keyword}},
+		"a word no chunk has": {domain.KnowledgeQuery{Text: "the"}, []string{}},
+		"no words":            {domain.KnowledgeQuery{Text: "  "}, []string{}},
 	} {
 		tc.q.Sources = all
 		got := texts(f.search(f.org, tc.q))
 		f.want(what, got, slices.Equal(got, tc.want))
 	}
-
-	_, err := f.Knowledge.Search(f.ctx(), domain.KnowledgeQuery{Text: "x", Sources: all, Limit: 5, Embedding: []float32{1, 2}, Model: model})
-	f.refused("Search with an embedding of other dimensions", err, domain.ErrInvalid)
 }
 
-// testSearchSources: a search ranks the chunks of the named sources only, however near or
+// testSearchSources: a search ranks the chunks of the named sources only, however
 // relevant the others' are (spec 4 §11.2 row 8).
 func testSearchSources(f *fixture) {
 	listed := f.synced(f.org, runbooks)
 	unlisted := f.synced(f.org, "secrets")
 
-	f.put(f.org, listed.ID, "docs/far.md", "v1", []string{"rotation schedule"}, [][]float32{axis(3, -1, 0)})
-	f.put(f.org, unlisted.ID, "docs/key.md", "v1", []string{"lease ledger lease log lease"}, [][]float32{axis(0, -1, 0)})
+	f.put(f.org, listed.ID, "docs/far.md", "v1", []string{"rotation schedule"})
+	f.put(f.org, unlisted.ID, "docs/key.md", "v1", []string{"lease ledger lease log lease"})
 
-	q := domain.KnowledgeQuery{Text: "lease rotation", Sources: []string{runbooks}, Embedding: axis(0, -1, 0), Model: model}
+	q := domain.KnowledgeQuery{Text: "lease rotation", Sources: []string{runbooks}}
 
 	hits := f.search(f.org, q)
 	f.want("Search over runbooks (its one chunk only)", hits, len(hits) == 1, len(hits) == 1 && hits[0].Source == runbooks,
@@ -954,7 +928,7 @@ func testSearchSources(f *fixture) {
 // id, claim or search, and writes none (spec 4 §11.2 row 1).
 func testIsolation(f *fixture) {
 	src := f.synced(f.org, runbooks)
-	f.put(f.org, src.ID, docA, "v1", []string{"lease expiry"}, [][]float32{axis(0, -1, 0)})
+	f.put(f.org, src.ID, docA, "v1", []string{"lease expiry"})
 	doc := f.docNamed(runbooks, docA)
 
 	other := f.NewOrg(f.t)
@@ -986,7 +960,7 @@ func testIsolation(f *fixture) {
 
 	// A lease is its organization's: under another, it renews, marks, deletes and ends nothing.
 	t0 := time.Now().UTC().Add(time.Minute)
-	c := f.claimed("runbooks", t0, time.Minute, model)
+	c := f.claimed("runbooks", t0, time.Minute)
 	f.want("the claim's organization", c.Org, c.Org == f.org)
 	f.refused("RenewSource in another org", f.Knowledge.RenewSource(in, c.Lease, t0, t0.Add(time.Minute)), ports.ErrLeaseLost)
 	f.refused("MarkSeen in another org", f.Knowledge.MarkSeen(in, c.Lease, []string{docA}, t0), ports.ErrLeaseLost)
@@ -995,14 +969,14 @@ func testIsolation(f *fixture) {
 	f.refused("DeleteUnseen in another org", err, ports.ErrLeaseLost)
 	f.refused("FinishSync in another org", f.Knowledge.FinishSync(in, c.Lease, domain.SyncResult{At: t0, Due: *c.Source.NextSyncAt}),
 		ports.ErrLeaseLost)
-	f.finish(c, t0, "", model)
+	f.finish(c, t0, "")
 
-	// The other org's own source of the same name, nearest to nothing: a search there never
-	// reaches the first org's chunk however near it is.
+	// The other org's own source of the same name: a search there never reaches the first org's
+	// chunk however relevant it is.
 	mine := f.synced(other, runbooks)
-	f.put(other, mine.ID, "docs/b.md", "v1", []string{"lease renewal"}, [][]float32{axis(9, -1, 0)})
+	f.put(other, mine.ID, "docs/b.md", "v1", []string{"lease renewal"})
 
-	hits := texts(f.search(other, domain.KnowledgeQuery{Text: "lease expiry", Sources: []string{runbooks}, Embedding: axis(0, -1, 0), Model: model}))
+	hits := texts(f.search(other, domain.KnowledgeQuery{Text: "lease expiry", Sources: []string{runbooks}}))
 	f.want("Search in another org (its own chunk only)", hits, slices.Equal(hits, []string{"lease renewal"}))
 
 	hits = texts(f.search(f.org, domain.KnowledgeQuery{Text: leaseWord, Sources: []string{runbooks}}))

@@ -7,27 +7,21 @@ import (
 )
 
 // Chunk sizes, in characters: about 512 tokens a piece, with about 64 tokens of the piece before
-// it as context for the embedding (spec 4 §4.8).
+// it as its context (spec 4 §4.8).
 const (
 	pieceChars   = 2048
 	overlapChars = 256
 	maxHeading   = 1000
 )
 
-// Piece is one chunk of a document's text before it is embedded. Its Text is its own part of the
+// Piece is one chunk of a document's text before it is stored. Its Text is its own part of the
 // document, the pieces in order joining back into the whole (a section's heading line is the
 // start of its first piece); Heading is the path of the headings it is under ("Install >
-// Docker"); Overlap is the end of the previous piece of its section, which only its embedding
-// sees.
+// Docker"); Overlap is the end of the previous piece of its section, as context.
 type Piece struct {
 	Heading string
 	Text    string
 	Overlap string
-}
-
-// EmbedText is what the embedding of p reads: its heading path, the overlap and its text.
-func (p Piece) EmbedText() string {
-	return strings.TrimSpace(p.Heading + "\n\n" + p.Overlap + p.Text)
 }
 
 var (

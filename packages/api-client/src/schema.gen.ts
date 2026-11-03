@@ -4094,7 +4094,7 @@ export interface paths {
         };
         /**
          * Search the knowledge base as agents do
-         * @description What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
+         * @description Chunks ranked by keywords, over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
          */
         get: operations["searchKnowledge"];
         put?: never;
@@ -7084,10 +7084,10 @@ export interface components {
             truncated: boolean;
         };
         /**
-         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes
+         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it
          * @enum {string}
          */
-        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite" | "conversion";
+        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite" | "conversion" | "knowledge_source";
         InboxEntry: {
             /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id> */
             id: string;
@@ -7122,6 +7122,17 @@ export interface components {
             rework: components["schemas"]["ReworkWarning"] | null;
             /** @description Why Goal could not convert the factory; absent or null for other kinds */
             conversion?: components["schemas"]["InboxConversion"] | null;
+            /** @description Why the knowledge source does not sync; absent or null for other kinds */
+            knowledge_source?: components["schemas"]["InboxKnowledgeSource"] | null;
+        };
+        /** @description A knowledge source whose last syncs failed, shown under each factory that lists it. */
+        InboxKnowledgeSource: {
+            /** @description The source's name */
+            source: string;
+            /** @description What the last sync said */
+            error: string;
+            /** @description How many syncs failed in a row */
+            failed_syncs: number;
         };
         /** @description A factory Goal could not move from connections to secrets and environment files. It runs on its version, on connections, until a version on secrets is published. */
         InboxConversion: {
@@ -8528,8 +8539,8 @@ export interface components {
             documents: number;
             /** @description Its newest snapshot; null before the first sync */
             latest_snapshot: components["schemas"]["KnowledgeSnapshotSummary"] | null;
-            /** @description The model its chunks are embedded with; absent when they have no embeddings */
-            embed_model?: string;
+            /** @description How many syncs failed in a row; a successful one resets it, and three show the source in Needs you */
+            sync_failures?: number;
             used_by: components["schemas"]["KnowledgeSourceUsers"];
             created_by: components["schemas"]["Actor"];
             /** Format: date-time */

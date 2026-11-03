@@ -63,7 +63,7 @@ func TestUploads_OriginalOfAnUploadOnly(t *testing.T) {
 	}
 
 	w.docs.set(map[string]string{deployMD: "# Deploy\n\nShip it."})
-	w.syncDue(w.ingestor(nil, nil))
+	w.syncDue(w.ingestor(nil))
 
 	synced := w.documents(srcRunbooks)[deployMD]
 	if _, _, err := w.uploads.Original(ctx, synced.ID); !errors.Is(err, domain.ErrNotUploadSource) {

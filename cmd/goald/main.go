@@ -36,8 +36,8 @@ import (
 
 	"github.com/byFrederick/goal/apps/web"
 	"github.com/byFrederick/goal/internal/adapters/clock/sys"
+	"github.com/byFrederick/goal/internal/adapters/converter/workersai"
 	"github.com/byFrederick/goal/internal/adapters/directmessage/slack"
-	"github.com/byFrederick/goal/internal/adapters/embedder/openai"
 	"github.com/byFrederick/goal/internal/adapters/mailer/smtp"
 	"github.com/byFrederick/goal/internal/adapters/masterkey/masterkey"
 	"github.com/byFrederick/goal/internal/adapters/minter/awssts"
@@ -360,10 +360,10 @@ type knowledgeBase struct {
 }
 
 // openKnowledge wires the knowledge base: uploads of at most GOAL_UPLOAD_MAX_BYTES each, read
-// from the bucket; embeddings from GOAL_EMBED_URL's model or, without one, keyword search only;
+// from the bucket; PDF and Office files converted by Workers AI when GOAL_WORKERS_AI_URL is set;
 // GOAL_KB_WORKERS workers syncing due sources. Upload, repository and Confluence sources sync
 // into zip snapshots in the bucket, written first in the system's temporary directory; with no
-// conversion service, what is neither text nor HTML is refused. A synced source is read with its secret by the
+// GOAL_WORKERS_AI_URL, what is neither text nor HTML is refused. A synced source is read with its secret by the
 // reader its config names, or by its connection kind's sync reader while it is still on a
 // connection, through the public-only transport: gitdocs (GitHub and GitLab repositories) or
 // confluence (the spaces of a Confluence Cloud site).
@@ -372,21 +372,20 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 ) knowledgeBase {
 	kb := postgres.NewKnowledge(store)
 
-	var embedder ports.Embedder
+	var converter ports.Converter
 
-	if s.Embed.URL == "" {
-		log.Info("knowledge base: keyword search only; set " + embedURLEnv + " (and " + embedModelEnv + ", " + embedKeyEnv +
-			") for an embedding model")
+	if s.WorkersAI.URL == "" {
+		log.Info("knowledge base: PDF and Office files are refused; set " + workersAIURLEnv + " (and " + workersAIKeyEnv +
+			") to convert them")
 	} else {
-		cfg := s.Embed
+		cfg := s.WorkersAI
 		cfg.Transport = connectionTransport(s.AllowPrivateUpstreams)
 
-		client, err := openai.New(cfg) // settingsFrom checked it
+		client, err := workersai.New(cfg) // settingsFrom checked it
 		if err != nil {
-			log.Error("knowledge base: keyword search only", slog.Any("error", err))
+			log.Error("knowledge base: PDF and Office files are refused", slog.Any("error", err))
 		} else {
-			embedder = client
-			log.Info("knowledge base: hybrid search", slog.String("embed_model", client.Model()))
+			converter = client
 		}
 	}
 
@@ -397,10 +396,10 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 	uploads := knowledge.NewUploads(kb, objects, s.UploadMaxBytes)
 
 	return knowledgeBase{
-		kb: kb, uploads: uploads, searcher: knowledge.NewSearcher(kb, embedder, log),
+		kb: kb, uploads: uploads, searcher: knowledge.NewSearcher(kb),
 		ingestor: knowledge.NewIngestor(knowledge.IngestorConfig{
 			Knowledge: kb, Connections: connections, Secrets: secrets, Uploads: uploads,
-			Readers: readers, Objects: objects, Embedder: embedder, Clock: clock, Log: log, Workers: s.KBWorkers,
+			Readers: readers, Objects: objects, Converter: converter, Clock: clock, Log: log, Workers: s.KBWorkers,
 		}),
 	}
 }
@@ -461,7 +460,7 @@ func minters(s settings) map[string]ports.Minter {
 }
 
 // connectionTransport carries every request goald makes for a connection (its test, STS, merges,
-// sync and embeddings): to public addresses only (egress.PublicDialer, threat row 4), unless
+// sync and conversions): to public addresses only (egress.PublicDialer, threat row 4), unless
 // GOAL_ALLOW_PRIVATE_UPSTREAMS lets a laptop reach its own test servers. It uses no proxy, so a
 // proxy variable cannot route around the address check.
 func connectionTransport(allowPrivate bool) *http.Transport {

@@ -854,14 +854,15 @@ func (e ImportStartKind) Valid() bool {
 
 // Defines values for InboxEntryKind.
 const (
-	InboxEntryKindAndon         InboxEntryKind = "andon"
-	InboxEntryKindBlocked       InboxEntryKind = "blocked"
-	InboxEntryKindConversion    InboxEntryKind = "conversion"
-	InboxEntryKindDecision      InboxEntryKind = "decision"
-	InboxEntryKindExpedite      InboxEntryKind = "expedite"
-	InboxEntryKindQuestion      InboxEntryKind = "question"
-	InboxEntryKindReworkWarning InboxEntryKind = "rework_warning"
-	InboxEntryKindToolApproval  InboxEntryKind = "tool_approval"
+	InboxEntryKindAndon           InboxEntryKind = "andon"
+	InboxEntryKindBlocked         InboxEntryKind = "blocked"
+	InboxEntryKindConversion      InboxEntryKind = "conversion"
+	InboxEntryKindDecision        InboxEntryKind = "decision"
+	InboxEntryKindExpedite        InboxEntryKind = "expedite"
+	InboxEntryKindKnowledgeSource InboxEntryKind = "knowledge_source"
+	InboxEntryKindQuestion        InboxEntryKind = "question"
+	InboxEntryKindReworkWarning   InboxEntryKind = "rework_warning"
+	InboxEntryKindToolApproval    InboxEntryKind = "tool_approval"
 )
 
 // Valid indicates whether the value is a known member of the InboxEntryKind enum.
@@ -876,6 +877,8 @@ func (e InboxEntryKind) Valid() bool {
 	case InboxEntryKindDecision:
 		return true
 	case InboxEntryKindExpedite:
+		return true
+	case InboxEntryKindKnowledgeSource:
 		return true
 	case InboxEntryKindQuestion:
 		return true
@@ -4264,8 +4267,11 @@ type InboxEntry struct {
 	// Item The item it is about, or null for an entry that is about no item
 	Item *ItemCard `json:"item"`
 
-	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes
+	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it
 	Kind InboxEntryKind `json:"kind"`
+
+	// KnowledgeSource Why the knowledge source does not sync; absent or null for other kinds
+	KnowledgeSource *InboxKnowledgeSource `json:"knowledge_source,omitempty"`
 
 	// Question A question entry's open question; absent or null for other kinds
 	Question *ItemQuestion `json:"question,omitempty"`
@@ -4283,8 +4289,20 @@ type InboxEntry struct {
 	ToolApproval *ToolApproval `json:"tool_approval,omitempty"`
 }
 
-// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes
+// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it
 type InboxEntryKind string
+
+// InboxKnowledgeSource A knowledge source whose last syncs failed, shown under each factory that lists it.
+type InboxKnowledgeSource struct {
+	// Error What the last sync said
+	Error string `json:"error"`
+
+	// FailedSyncs How many syncs failed in a row
+	FailedSyncs int `json:"failed_syncs"`
+
+	// Source The source's name
+	Source string `json:"source"`
+}
 
 // Intake defines model for Intake.
 type Intake struct {
@@ -5217,11 +5235,8 @@ type KnowledgeSource struct {
 	CreatedBy Actor `json:"created_by"`
 
 	// Documents Deprecated: use latest_snapshot.files. How many files its latest snapshot holds; 0 without one
-	Documents int `json:"documents"`
-
-	// EmbedModel The model its chunks are embedded with; absent when they have no embeddings
-	EmbedModel *string `json:"embed_model,omitempty"`
-	Id         string  `json:"id"`
+	Documents int    `json:"documents"`
+	Id        string `json:"id"`
 
 	// Kind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over
 	Kind         KnowledgeSourceKind `json:"kind"`
@@ -5247,9 +5262,12 @@ type KnowledgeSource struct {
 	Status KnowledgeSourceStatus `json:"status"`
 
 	// SyncEverySeconds How often it syncs
-	SyncEverySeconds int       `json:"sync_every_seconds"`
-	Title            string    `json:"title"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	SyncEverySeconds int `json:"sync_every_seconds"`
+
+	// SyncFailures How many syncs failed in a row; a successful one resets it, and three show the source in Needs you
+	SyncFailures *int      `json:"sync_failures,omitempty"`
+	Title        string    `json:"title"`
+	UpdatedAt    time.Time `json:"updated_at"`
 
 	// UsedBy What uses a source, so it cannot be deleted meanwhile
 	UsedBy KnowledgeSourceUsers `json:"used_by"`
@@ -10582,7 +10600,7 @@ type ClientInterface interface {
 
 	// SearchKnowledge Search the knowledge base as agents do
 	//
-	// What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
+	// Chunks ranked by keywords, over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
 	//
 	// Corresponds with GET /v1/orgs/{org}/knowledge/search (the `SearchKnowledge` operationId).
 	SearchKnowledge(ctx context.Context, org OrgRef, params *SearchKnowledgeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -14657,7 +14675,7 @@ func (c *Client) ListKnowledgeReads(ctx context.Context, org OrgRef, params *Lis
 
 // SearchKnowledge Search the knowledge base as agents do
 //
-// What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
+// Chunks ranked by keywords, over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
 //
 // Corresponds with GET /v1/orgs/{org}/knowledge/search (the `SearchKnowledge` operationId).
 func (c *Client) SearchKnowledge(ctx context.Context, org OrgRef, params *SearchKnowledgeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -28629,7 +28647,7 @@ type ClientWithResponsesInterface interface {
 
 	// SearchKnowledgeWithResponse Search the knowledge base as agents do
 	//
-	// What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
+	// Chunks ranked by keywords, over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -42000,7 +42018,7 @@ func (c *ClientWithResponses) ListKnowledgeReadsWithResponse(ctx context.Context
 
 // SearchKnowledgeWithResponse Search the knowledge base as agents do
 //
-// What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
+// Chunks ranked by keywords, over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
 //
 // Returns a wrapper object for the known response body format(s).
 //

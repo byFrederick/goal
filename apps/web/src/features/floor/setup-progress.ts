@@ -78,7 +78,7 @@ export function setupRows(input: SetupInput): SetupRow[] {
     {
       id: 'knowledge',
       text: 'Add knowledge',
-      hint: 'Docs and decisions agents read first',
+      hint: 'Files agents read before they act',
       done: input.knowledge.length > 0,
     },
     { id: 'organization', text: 'Organization', hint: null, done: true },

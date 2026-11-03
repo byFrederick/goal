@@ -104,8 +104,8 @@ func (f *fixture) twoDocs(org domain.OrgID) (src domain.KnowledgeSource, a, b do
 	f.t.Helper()
 
 	src = f.synced(org, runbooks)
-	f.put(org, src.ID, docA, "v1", []string{"apple"}, nil)
-	f.put(org, src.ID, docB, "v1", []string{"banana"}, nil)
+	f.put(org, src.ID, docA, "v1", []string{"apple"})
+	f.put(org, src.ID, docB, "v1", []string{"banana"})
 
 	if org == f.org {
 		return src, f.docNamed(runbooks, docA), f.docNamed(runbooks, docB)
@@ -260,7 +260,7 @@ func testUsageWindow(f *fixture) {
 	ctx := f.ctx()
 	_, a, b := f.twoDocs(f.org)
 	hb := f.synced(f.org, handbook)
-	f.put(f.org, hb.ID, docA, "v1", []string{"gamma"}, nil)
+	f.put(f.org, hb.ID, docA, "v1", []string{"gamma"})
 	c := f.docNamed(handbook, docA)
 
 	now := time.Now().UTC()

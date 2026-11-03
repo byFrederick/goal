@@ -15,7 +15,7 @@ module "r2_token" {
   }
 }
 
-# The embedder's bearer key for Workers AI (GOAL_EMBED_URL .../accounts/<id>/ai/v1, @cf/baai/bge-m3).
+# The bearer key for Workers AI's toMarkdown, which converts PDF and Office files (GOAL_WORKERS_AI_URL .../accounts/<id>/ai).
 module "workers_ai_token" {
   source = "./modules/cloudflare-account-token"
 

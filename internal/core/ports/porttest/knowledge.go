@@ -26,10 +26,9 @@ const auditKind = "kind"
 // Knowledge keeps knowledge bases in memory with the database's rules: names unique per
 // organization, sources reading their organization's connections (a synced one only through a
 // kind that syncs; a connection a source reads cannot be deleted), leases claimed by time, an
-// audit entry for every change people make, and the same search: the nearest chunks of the
-// query's model by cosine distance and the best by keywords (any of the query's words, each
-// occurrence counting), the 50 best of each over the named sources only, fused by
-// domain.FuseRanks.
+// audit entry for every change people make, and the same search: the best chunks by keywords (any
+// of the query's words, each occurrence counting), the 50 best over the named sources only, scored
+// by domain.FuseRanks.
 type Knowledge struct {
 	conns *Connections
 	audit ports.Audit
@@ -80,7 +79,6 @@ type verdictKey struct {
 type fakeChunk struct {
 	id    int64
 	chunk domain.Chunk
-	model string
 }
 
 // NewKnowledge returns an empty knowledge base whose sources read conns' connections, audited
@@ -499,7 +497,7 @@ func (k *Knowledge) SyncNow(ctx context.Context, name string) error {
 }
 
 // ClaimSource implements ports.Knowledge: the source due first of every organization's.
-func (k *Knowledge) ClaimSource(_ context.Context, now, until time.Time, model string) (*domain.SourceClaim, error) {
+func (k *Knowledge) ClaimSource(_ context.Context, now, until time.Time) (*domain.SourceClaim, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
@@ -510,7 +508,7 @@ func (k *Knowledge) ClaimSource(_ context.Context, now, until time.Time, model s
 
 	for org, o := range k.orgs {
 		for _, s := range o.sources {
-			if !claimable(s.src, now, model) {
+			if !claimable(s.src, now) {
 				continue
 			}
 
@@ -533,13 +531,13 @@ func (k *Knowledge) ClaimSource(_ context.Context, now, until time.Time, model s
 	}, nil
 }
 
-// claimable is the claim's rule: not live, its lease ended, and due or of another model.
-func claimable(s domain.KnowledgeSource, now time.Time, model string) bool {
+// claimable is the claim's rule: not live, its lease ended, and due.
+func claimable(s domain.KnowledgeSource, now time.Time) bool {
 	if s.Kind == domain.SourceLive || (s.LeaseUntil != nil && s.LeaseUntil.After(now)) {
 		return false
 	}
 
-	return !s.NextSyncAt.After(now) || (model != "" && s.EmbedModel != model && s.Status != domain.SyncFailed)
+	return !s.NextSyncAt.After(now)
 }
 
 // RenewSource implements ports.Knowledge.
@@ -593,9 +591,10 @@ func (k *Knowledge) FinishSync(ctx context.Context, l domain.SourceLease, r doma
 		s.src.LeaseUntil, s.token = nil, ""
 
 		if r.Error == "" {
-			s.src.Status, s.src.LastError, s.src.LastSyncedAt, s.src.EmbedModel = domain.SyncIdle, "", &at, r.EmbedModel
+			s.src.Status, s.src.LastError, s.src.LastSyncedAt, s.src.SyncFailures = domain.SyncIdle, "", &at, 0
 		} else {
 			s.src.Status, s.src.LastError = domain.SyncFailed, truncateRunes(r.Error, domain.MaxKnowledgeError)
+			s.src.SyncFailures++
 		}
 
 		if s.src.NextSyncAt.Equal(r.Due) {
@@ -633,10 +632,6 @@ func (k *Knowledge) PutDocument(ctx context.Context, d domain.KnowledgeDocument,
 	}
 
 	for _, c := range chunks {
-		if c.Embedding != nil && (d.EmbedModel == "" || len(c.Embedding) != domain.EmbeddingDimensions) {
-			return fmt.Errorf("put knowledge document %q: chunk %d's embedding: %w", d.ExternalID, c.Ord, domain.ErrInvalid)
-		}
-
 		if len([]rune(c.Text)) > domain.MaxChunkText {
 			return fmt.Errorf("put knowledge document %q: chunk %d is too long: %w", d.ExternalID, c.Ord, domain.ErrInvalid)
 		}
@@ -667,50 +662,11 @@ func (k *Knowledge) PutDocument(ctx context.Context, d domain.KnowledgeDocument,
 
 		for _, c := range chunks {
 			k.chunkID++
-			c.Embedding = halve(c.Embedding)
-			existing.chunks = append(existing.chunks, fakeChunk{id: k.chunkID, chunk: c, model: modelOf(c, d.EmbedModel)})
+			existing.chunks = append(existing.chunks, fakeChunk{id: k.chunkID, chunk: c})
 		}
 
 		return nil
 	})
-}
-
-func modelOf(c domain.Chunk, model string) string {
-	if c.Embedding == nil {
-		return ""
-	}
-
-	return model
-}
-
-// halve rounds v as the database's halfvec keeps it: to the nearest float16.
-func halve(v []float32) []float32 {
-	if v == nil {
-		return nil
-	}
-
-	out := make([]float32, len(v))
-	for i, x := range v {
-		out[i] = toFloat16(x)
-	}
-
-	return out
-}
-
-// toFloat16 rounds x to the nearest value a float16 holds (normal range; tiny values to zero).
-func toFloat16(x float32) float32 {
-	if x == 0 || math.IsNaN(float64(x)) || math.IsInf(float64(x), 0) {
-		return x
-	}
-
-	frac, exp := math.Frexp(float64(x))
-	if exp < -13 {
-		return 0
-	}
-
-	const mantissa = 1 << 11
-
-	return float32(math.Ldexp(math.Round(frac*mantissa)/mantissa, exp))
 }
 
 // document is the document of source with external id ext, or nil.
@@ -910,15 +866,11 @@ func (k *Knowledge) Search(ctx context.Context, q domain.KnowledgeQuery) ([]doma
 		return nil, nil
 	}
 
-	if q.Embedding != nil && (q.Model == "" || len(q.Embedding) != domain.EmbeddingDimensions) {
-		return nil, fmt.Errorf("search knowledge: the query's embedding: %w", domain.ErrInvalid)
-	}
-
 	var out []domain.KnowledgeHit
 
 	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
 		hits := o.candidates(q.Sources)
-		fused := domain.FuseRanks(nearest(hits, q), byWords(hits, q.Text))
+		fused := domain.FuseRanks(byWords(hits, q.Text))
 
 		for _, f := range fused[:min(len(fused), q.Limit, domain.SearchCandidates)] {
 			h := hits[f.Chunk]
@@ -935,9 +887,6 @@ func (k *Knowledge) Search(ctx context.Context, q domain.KnowledgeQuery) ([]doma
 // candidate is a chunk a search may rank.
 type candidate struct {
 	domain.KnowledgeHit
-
-	embedding []float32
-	model     string
 }
 
 // candidates are the chunks of the named sources, by id.
@@ -963,60 +912,11 @@ func (o *knowledgeOrg) candidates(sources []string) map[int64]candidate {
 				KnowledgeHit: domain.KnowledgeHit{
 					Chunk: c.id, Document: d.doc.ID, Source: name, Title: d.doc.Title, URL: d.doc.URL, Heading: c.chunk.Heading, Text: c.chunk.Text,
 				},
-				embedding: c.chunk.Embedding, model: c.model,
 			}
 		}
 	}
 
 	return out
-}
-
-// nearest ranks the chunks of q.Model by cosine distance to q.Embedding, at most
-// domain.SearchCandidates.
-func nearest(hits map[int64]candidate, q domain.KnowledgeQuery) []int64 {
-	if q.Embedding == nil {
-		return nil
-	}
-
-	type scored struct {
-		id int64
-		d  float64
-	}
-
-	var all []scored
-
-	query := halve(q.Embedding)
-
-	for id, h := range hits {
-		if h.embedding != nil && h.model == q.Model {
-			all = append(all, scored{id, cosineDistance(query, h.embedding)})
-		}
-	}
-
-	slices.SortFunc(all, func(a, b scored) int { return cmp.Or(cmp.Compare(a.d, b.d), cmp.Compare(a.id, b.id)) })
-
-	out := make([]int64, 0, min(len(all), domain.SearchCandidates))
-	for _, s := range all[:min(len(all), domain.SearchCandidates)] {
-		out = append(out, s.id)
-	}
-
-	return out
-}
-
-func cosineDistance(a, b []float32) float64 {
-	var dot, na, nb float64
-
-	for i := range a {
-		dot += float64(a[i]) * float64(b[i])
-		na += float64(a[i]) * float64(a[i])
-		nb += float64(b[i]) * float64(b[i])
-	}
-
-	if na == 0 || nb == 0 {
-		return math.NaN()
-	}
-
-	return 1 - dot/math.Sqrt(na*nb)
 }
 
 // byWords ranks the chunks holding any of text's words by how often they hold them over 1 + the

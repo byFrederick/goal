@@ -1,8 +1,7 @@
 // Package knowledge indexes and searches the organizations' knowledge bases (spec 4 §4.8): the
 // ingestion loop that syncs due sources under leases (Ingestor), the text extraction and the
-// chunking it uses, uploads kept in the bucket (Uploads) and search with or without an embedding
-// model (Searcher). It reaches the database, the bucket, the embedding model and the sources
-// only through ports.
+// chunking it uses, uploads kept in the bucket (Uploads) and keyword search (Searcher). It reaches
+// the database, the bucket and the sources only through ports.
 package knowledge
 
 import (
@@ -12,7 +11,6 @@ import (
 	"log/slog"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
@@ -36,14 +34,9 @@ const (
 	Lease = 10 * time.Minute
 	// Tick is how often an idle worker looks for a due source.
 	Tick = 15 * time.Second
-	// embedBatch is how many texts one embedding request carries at most, and embedBatchTokens
-	// how many tokens by estimateTokens: models bound a request's tokens (Workers AI's bge-m3 takes
-	// 60,000 in all).
-	embedBatch       = 64
-	embedBatchTokens = 40_000
 )
 
-// IngestorConfig wires an Ingestor. Embedder nil indexes keywords only; Readers are the source
+// IngestorConfig wires an Ingestor. Readers are the source
 // readers by name: a synced connection's kind's sync name (KindSpec.Sync), the reader a synced
 // source on a secret names, gitdocs for repository and confluence for Confluence sources; Uploads
 // reads upload sources. Objects stores the snapshots upload, repository and Confluence sources
@@ -59,7 +52,6 @@ type IngestorConfig struct {
 	Objects     ports.ObjectStore
 	Converter   ports.Converter
 	TempDir     string
-	Embedder    ports.Embedder
 	Clock       ports.Clock
 	Log         *slog.Logger
 	// Workers, Lease and Tick default to DefaultWorkers, Lease and Tick.
@@ -139,7 +131,7 @@ func (in *Ingestor) SyncDue(ctx context.Context) (int, error) {
 	for ctx.Err() == nil {
 		now := in.cfg.Clock.Now()
 
-		c, err := in.cfg.Knowledge.ClaimSource(ctx, now, now.Add(in.cfg.Lease), in.model())
+		c, err := in.cfg.Knowledge.ClaimSource(ctx, now, now.Add(in.cfg.Lease))
 		if err != nil {
 			errs = append(errs, fmt.Errorf("knowledge: claim: %w", err))
 
@@ -158,15 +150,6 @@ func (in *Ingestor) SyncDue(ctx context.Context) (int, error) {
 	}
 
 	return n, errors.Join(errs...)
-}
-
-// model is the embedding model, "" without one.
-func (in *Ingestor) model() string {
-	if in.cfg.Embedder == nil {
-		return ""
-	}
-
-	return in.cfg.Embedder.Model()
 }
 
 // sync runs one claimed source's sync, renewing its lease, and records how it ended. A sync cut
@@ -206,8 +189,6 @@ func (in *Ingestor) sync(ctx context.Context, c domain.SourceClaim) error {
 	r := domain.SyncResult{At: in.cfg.Clock.Now(), Due: *src.NextSyncAt}
 	if err != nil {
 		r.Error = err.Error()
-	} else {
-		r.EmbedModel = in.model()
 	}
 
 	in.cfg.Log.InfoContext(ctx, "knowledge sync", slog.String("source", src.Name), slog.String("source_id", string(src.ID)),
@@ -265,7 +246,7 @@ type syncStats struct {
 }
 
 // pass is one sync of src: for an upload or synced source every listed document whose version
-// changed (all of them when its chunks are of another model) indexed, the others marked seen,
+// changed indexed, the others marked seen,
 // and for a synced source the ones it no longer lists deleted; then for an upload, repository or
 // Confluence source its snapshot.
 func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim, started time.Time) (syncStats, error) {
@@ -331,15 +312,11 @@ func (in *Ingestor) chunks(ctx context.Context, c domain.SourceClaim, spec domai
 	return nil
 }
 
-// list indexes the listed documents of spec's source that changed (every one when its chunks
-// are of another model than the embedder's) and returns the external ids of those that stay as
+// list indexes the listed documents of spec's source that changed and returns the external ids of those that stay as
 // they are: unchanged, or indexed before and not fetched this time.
 func (in *Ingestor) list(ctx context.Context, spec domain.SyncSpec, reader ports.SourceReader, versions map[string]string,
 	started time.Time, stats *syncStats,
 ) ([]string, error) {
-	model := in.model()
-	fresh := model == "" || spec.Source.EmbedModel == model
-
 	var seen []string
 
 	for item, err := range reader.List(ctx, spec) {
@@ -357,7 +334,7 @@ func (in *Ingestor) list(ctx context.Context, spec domain.SyncSpec, reader ports
 		}
 
 		v, known := versions[item.ID]
-		if known && fresh && v == item.Version {
+		if known && v == item.Version {
 			seen = append(seen, item.ID)
 
 			continue
@@ -454,12 +431,12 @@ func (in *Ingestor) secretReader(ctx context.Context, spec domain.SyncSpec, name
 	return spec, reader, nil
 }
 
-// index fetches, extracts, chunks and embeds one document and stores it, and returns how many
+// index fetches, extracts and chunks one document and stores it, and returns how many
 // chunks it has. A document that cannot be read is stored failed with the reason; one that cannot
 // be fetched (the source failing for now) keeps what was indexed of it when it was known (kept:
 // the next sync tries again), else is stored failed without a version, so the next sync tries
-// again too. An upload deleted meanwhile stays deleted. Only the embedding model failing, the
-// database or ctx ending stop the sync.
+// again too. An upload deleted meanwhile stays deleted. Only the database or ctx ending stops
+// the sync.
 func (in *Ingestor) index(ctx context.Context, spec domain.SyncSpec, reader ports.SourceReader, item domain.SourceItem, seen time.Time,
 	known bool,
 ) (n int, kept bool, err error) {
@@ -489,14 +466,11 @@ func (in *Ingestor) index(ctx context.Context, spec domain.SyncSpec, reader port
 		d.Status = domain.DocumentIndexed
 	}
 
-	chunks, err := in.embed(ctx, pieces)
-	if err != nil {
-		return 0, false, err
-	}
+	chunks := chunksOf(pieces)
 
 	if d.Status == domain.DocumentIndexed {
 		now := in.cfg.Clock.Now()
-		d.IndexedAt, d.EmbedModel = &now, in.model()
+		d.IndexedAt = &now
 	}
 
 	err = in.cfg.Knowledge.PutDocument(ctx, d, chunks)
@@ -545,75 +519,12 @@ func (in *Ingestor) read(ctx context.Context, spec domain.SyncSpec, reader ports
 	return Chunk(text), nil
 }
 
-// batchEnd is where the embedding request of texts from start ends: at most embedBatch texts
-// and, as servers pad a batch to its longest text, at most embedBatchTokens estimated tokens for
-// that many texts of the longest's length; one text at least.
-func batchEnd(texts []string, start int) int {
-	end, longest := start, 0
-
-	for end < len(texts) && end-start < embedBatch {
-		longest = max(longest, estimateTokens(texts[end]))
-		if end > start && (end-start+1)*longest > embedBatchTokens {
-			break
-		}
-
-		end++
-	}
-
-	return end
-}
-
-// estimateTokens is a cautious count of the tokens in s: English and code run at about three
-// ASCII characters a token, other scripts and symbols (box drawing, CJK) at up to two tokens a
-// character.
-func estimateTokens(s string) int {
-	ascii, other := 0, 0
-
-	for _, r := range s {
-		if r < utf8.RuneSelf {
-			ascii++
-		} else {
-			other++
-		}
-	}
-
-	return ascii/3 + 2*other + 1
-}
-
-// embed turns pieces into chunks, with embeddings when there is a model, in batches.
-func (in *Ingestor) embed(ctx context.Context, pieces []Piece) ([]domain.Chunk, error) {
+// chunksOf turns pieces into chunks, in order.
+func chunksOf(pieces []Piece) []domain.Chunk {
 	chunks := make([]domain.Chunk, len(pieces))
 	for i, p := range pieces {
 		chunks[i] = domain.Chunk{Ord: i, Heading: p.Heading, Text: p.Text}
 	}
 
-	if in.cfg.Embedder == nil {
-		return chunks, nil
-	}
-
-	texts := make([]string, len(pieces))
-	for i, p := range pieces {
-		texts[i] = p.EmbedText()
-	}
-
-	for start := 0; start < len(texts); {
-		end := batchEnd(texts, start)
-
-		vecs, err := in.cfg.Embedder.Embed(ctx, texts[start:end])
-		if err != nil {
-			return nil, fmt.Errorf("embed: %w", err)
-		}
-
-		if len(vecs) != end-start {
-			return nil, fmt.Errorf("embed: %d embeddings for %d texts", len(vecs), end-start)
-		}
-
-		for i, v := range vecs {
-			chunks[start+i].Embedding = v
-		}
-
-		start = end
-	}
-
-	return chunks, nil
+	return chunks
 }

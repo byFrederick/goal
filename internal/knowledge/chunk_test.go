@@ -84,10 +84,6 @@ func TestChunk_LongSectionsSplitWithOverlap(t *testing.T) {
 			t.Errorf("piece %d overlap = %q, want the end of the piece before", i, p.Overlap)
 		}
 
-		if !strings.Contains(p.EmbedText(), strings.TrimSpace(p.Text)) || !strings.HasPrefix(p.EmbedText(), "Big") {
-			t.Errorf("piece %d embeds %q…, want its heading, overlap and text", i, p.EmbedText()[:20])
-		}
-
 		joined = append(joined, p.Text)
 	}
 

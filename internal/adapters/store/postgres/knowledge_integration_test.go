@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -35,8 +34,8 @@ func TestKnowledge_Conformance(t *testing.T) {
 }
 
 // knowledgeDoc gives org a synced source "runbooks" (on a connection "docs" of a kind that
-// syncs) with one document of one chunk embedded along dimension dim.
-func knowledgeDoc(t *testing.T, d connectionsDB, org domain.OrgID, text string, dim int) {
+// syncs) with one document of one chunk.
+func knowledgeDoc(t *testing.T, d connectionsDB, org domain.OrgID, text string) {
 	t.Helper()
 
 	ctx := domain.WithOrg(t.Context(), org)
@@ -52,13 +51,10 @@ func knowledgeDoc(t *testing.T, d connectionsDB, org domain.OrgID, text string, 
 		t.Fatal(err)
 	}
 
-	vec := make([]float32, domain.EmbeddingDimensions)
-	vec[dim] = 1
-
 	if err := k.PutDocument(ctx, domain.KnowledgeDocument{
 		Source: src.ID, ExternalID: "docs/a.md", Version: "v1", Title: "A", MIME: "text/markdown", Status: domain.DocumentIndexed,
-		SeenAt: time.Now(), CreatedBy: domain.EngineActor, EmbedModel: "acme-embed-1",
-	}, []domain.Chunk{{Text: text, Embedding: vec}}); err != nil {
+		SeenAt: time.Now(), CreatedBy: domain.EngineActor,
+	}, []domain.Chunk{{Text: text}}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -73,33 +69,24 @@ func syncingKind(t *testing.T, d connectionsDB) {
 	}
 }
 
-// Spec 4 §11.2 row 1: as goal_app, organization B never reads A's chunks, even when the
-// nearest-neighbour scan walks the HNSW index past them; nor does it see A's sources or
-// documents, or write into them.
-func TestKnowledge_RLSAcrossOrgsWithVectorScan(t *testing.T) {
+// Spec 4 §11.2 row 1: as goal_app, organization B never reads A's chunks; nor does it see A's
+// sources or documents, or write into them.
+func TestKnowledge_RLSAcrossOrgs(t *testing.T) {
 	t.Parallel()
 
 	d := newConnectionsDB(t)
 	syncingKind(t, d)
 
 	acme, labs := newOrgID(t, d.store), newOrgID(t, d.store)
-	knowledgeDoc(t, d, acme, "acme's secret runbook", 0)
-	knowledgeDoc(t, d, labs, "labs' own runbook", 7)
+	knowledgeDoc(t, d, acme, "acme's secret runbook")
+	knowledgeDoc(t, d, labs, "labs' own runbook")
 
-	along := make([]float32, domain.EmbeddingDimensions)
-	along[0] = 1 // acme's chunk is the nearest there is
-
-	query, err := vectorText(along)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := inOrgTx(t, d.store.pool, labs, func(tx pgx.Tx) error { return seesOnlyItsKnowledge(t, tx, acme, query) }); err != nil {
+	if err := inOrgTx(t, d.store.pool, labs, func(tx pgx.Tx) error { return seesOnlyItsKnowledge(t, tx, acme) }); err != nil {
 		t.Fatal(err)
 	}
 
 	// Nor writes into them: a source claiming acme's organization is refused by the policy.
-	err = inOrgTx(t, d.store.pool, labs, func(tx pgx.Tx) error {
+	err := inOrgTx(t, d.store.pool, labs, func(tx pgx.Tx) error {
 		_, err := tx.Exec(t.Context(), `INSERT INTO knowledge_sources (id, org_id, name, title, kind, next_sync_at, created_by)
 			VALUES (gen_random_uuid(), '`+string(acme)+`', 'forged', 'x', 'upload', now(), 'user:x')`)
 
@@ -110,36 +97,12 @@ func TestKnowledge_RLSAcrossOrgsWithVectorScan(t *testing.T) {
 	}
 }
 
-// seesOnlyItsKnowledge checks, in a transaction of another organization than acme, that the HNSW
-// scan nearest to query returns that organization's chunk only, and that no row of acme's
-// knowledge base is visible.
-func seesOnlyItsKnowledge(t *testing.T, tx pgx.Tx, acme domain.OrgID, query string) error {
+// seesOnlyItsKnowledge checks, in a transaction of another organization than acme, that its
+// chunks are that organization's only, and that no row of acme's knowledge base is visible.
+func seesOnlyItsKnowledge(t *testing.T, tx pgx.Tx, acme domain.OrgID) error {
 	t.Helper()
 
-	// The HNSW index, not a scan of the table or of the org index and a sort, so the test sees
-	// what HNSW returns under the policy.
-	if _, err := tx.Exec(t.Context(), "SET LOCAL enable_seqscan = off; SET LOCAL enable_bitmapscan = off; SET LOCAL enable_sort = off; "+
-		"SET LOCAL hnsw.iterative_scan = relaxed_order"); err != nil {
-		return err
-	}
-
-	const nearest = `SELECT text FROM knowledge_chunks ORDER BY embedding <=> $1::halfvec(1024) LIMIT 5`
-
-	rows, err := tx.Query(t.Context(), "EXPLAIN "+nearest, query)
-	if err != nil {
-		return err
-	}
-
-	plan, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		return err
-	}
-
-	if !strings.Contains(strings.Join(plan, "\n"), "knowledge_chunks_embedding_idx") {
-		t.Errorf("the nearest-neighbour query does not use the HNSW index:\n%s", strings.Join(plan, "\n"))
-	}
-
-	rows, err = tx.Query(t.Context(), nearest, query)
+	rows, err := tx.Query(t.Context(), `SELECT text FROM knowledge_chunks`)
 	if err != nil {
 		return err
 	}
@@ -150,7 +113,7 @@ func seesOnlyItsKnowledge(t *testing.T, tx pgx.Tx, acme domain.OrgID, query stri
 	}
 
 	if len(texts) != 1 || texts[0] != "labs' own runbook" {
-		t.Errorf("labs' nearest chunks = %q, want its own only", texts)
+		t.Errorf("labs' chunks = %q, want its own only", texts)
 	}
 
 	for _, table := range []string{"knowledge_sources", "knowledge_documents", "knowledge_chunks"} {
@@ -161,71 +124,6 @@ func seesOnlyItsKnowledge(t *testing.T, tx pgx.Tx, acme domain.OrgID, query stri
 	}
 
 	return nil
-}
-
-// Review 4 SQL M2: one HNSW index holds every organization's chunks, and the organization and
-// source filters apply after it. When the planner walks that index (a large table, which a test
-// cannot build in time, so this one makes the other plans dear), and more of other
-// organizations' chunks are nearer to the query than pgvector's iterative scan visits by default
-// (hnsw.max_scan_tuples, 20,000), the nearest list came back empty and the search fell back to
-// keywords. The scan is sized to the table, so an organization still finds its own nearest chunk
-// past every other's.
-func TestKnowledge_VectorSearchFindsPastOtherOrganizationsNearerChunks(t *testing.T) {
-	t.Parallel()
-
-	d := newConnectionsDB(t)
-	syncingKind(t, d)
-
-	acme, labs := newOrgID(t, d.store), newOrgID(t, d.store)
-	knowledgeDoc(t, d, acme, "acme's runbook", 0)
-	knowledgeDoc(t, d, labs, "labs' own runbook", 7)
-
-	// 30,000 more chunks of acme's, each nearer to the query (along dimension 0) than labs' one,
-	// added before the HNSW index is built, as one build is far faster than as many inserts.
-	execSQL(t, d.db.admin, `DROP INDEX knowledge_chunks_embedding_idx;
-		INSERT INTO knowledge_chunks (org_id, source_id, document_id, ord, text, embedding, embed_model)
-		SELECT c.org_id, c.source_id, c.document_id, g, 'decoy',
-		       ('[1,' || array_to_string(array_fill(0, ARRAY[g % 1000]), ',') || CASE WHEN g % 1000 > 0 THEN ',' ELSE '' END
-		        || '0.05,' || array_to_string(array_fill(0, ARRAY[1022 - g % 1000]), ',') || ']')::halfvec(1024), c.embed_model
-		FROM knowledge_chunks c, generate_series(1, 30000) g WHERE c.org_id = '`+string(acme)+`';
-		CREATE INDEX knowledge_chunks_embedding_idx ON knowledge_chunks USING hnsw (embedding halfvec_cosine_ops);
-		ANALYZE knowledge_chunks`)
-
-	u, err := url.Parse(d.db.app)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	q := u.Query()
-	q.Set("options", "-c enable_seqscan=off -c enable_bitmapscan=off -c enable_sort=off")
-	u.RawQuery = strings.ReplaceAll(q.Encode(), "+", "%20") // a space, which pgx reads only so
-
-	query := make([]float32, domain.EmbeddingDimensions)
-	query[0], query[7] = 1, 0.3
-
-	forced := NewKnowledge(New(openPool(t, u.String())))
-
-	search := func(org domain.OrgID) []domain.KnowledgeHit {
-		t.Helper()
-
-		hits, err := forced.Search(domain.WithOrg(t.Context(), org), domain.KnowledgeQuery{
-			Text: "zebra", Sources: []string{"runbooks"}, Embedding: query, Model: "acme-embed-1", Limit: 5,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		return hits
-	}
-
-	if hits := search(labs); len(hits) != 1 || hits[0].Text != "labs' own runbook" {
-		t.Errorf("labs' vector search = %+v, want its own runbook", hits)
-	}
-
-	// acme's source of 30,001 chunks walks the index (approximate: any five of its near ones).
-	if hits := search(acme); len(hits) != 5 {
-		t.Errorf("acme's vector search = %+v, want five of its chunks", hits)
-	}
 }
 
 // Review 4 SQL L1: a deletion holds the content it drops until it commits, so an upload of the
@@ -306,12 +204,12 @@ func TestKnowledge_ClaimSkipsDeletedOrganizations(t *testing.T) {
 
 	now := time.Now().Add(time.Minute)
 
-	c, err := k.ClaimSource(t.Context(), now, now.Add(time.Minute), "")
+	c, err := k.ClaimSource(t.Context(), now, now.Add(time.Minute))
 	if err != nil || c == nil || c.Org != live {
 		t.Fatalf("claim = %+v, %v; want the live organization's archive", c, err)
 	}
 
-	if c, err := k.ClaimSource(t.Context(), now, now.Add(time.Minute), ""); err != nil || c != nil {
+	if c, err := k.ClaimSource(t.Context(), now, now.Add(time.Minute)); err != nil || c != nil {
 		t.Errorf("second claim = %+v, %v; want none (the deleted organization's is left)", c, err)
 	}
 }
@@ -326,7 +224,7 @@ func TestPurgeOrg_RemovesKnowledge(t *testing.T) {
 
 	deleted := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 	org := newOrgID(t, d.store)
-	knowledgeDoc(t, d, org, "a runbook", 0)
+	knowledgeDoc(t, d, org, "a runbook")
 
 	if err := d.store.DeleteOrg(domain.WithOrg(t.Context(), org), domain.LocalUser, deleted); err != nil {
 		t.Fatal(err)
@@ -398,7 +296,7 @@ func TestNotices_SyncStartAndEndAreKnowledgeEvents(t *testing.T) {
 
 	now := time.Now().Add(time.Second)
 
-	claimed, err := k.ClaimSource(ctx, now, now.Add(time.Minute), "")
+	claimed, err := k.ClaimSource(ctx, now, now.Add(time.Minute))
 	if err != nil || claimed == nil || claimed.Source.ID != src.ID {
 		t.Fatalf("claim = %+v, %v; want handbook", claimed, err)
 	}

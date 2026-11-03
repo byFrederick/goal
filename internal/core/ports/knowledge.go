@@ -46,16 +46,15 @@ type Knowledge interface {
 
 	// ClaimSource leases from now to until, as syncing, the source due first in any live
 	// organization (ctx needs none), so every organization's sources take their turn in one
-	// order; nil when none is: a source not live whose next sync is due or, when model is not "",
-	// whose chunks are of another model (unless its last sync failed), and whose lease ended. The
+	// order; nil when none is: a source not live whose next sync is due and whose lease ended. The
 	// other lease methods take the claim's lease, under its organization in ctx.
-	ClaimSource(ctx context.Context, now, until time.Time, model string) (*domain.SourceClaim, error)
+	ClaimSource(ctx context.Context, now, until time.Time) (*domain.SourceClaim, error)
 	// RenewSource extends a lease held at now until until. ErrLeaseLost when it ended, another
 	// claim took the source, or the source is not syncing any more.
 	RenewSource(ctx context.Context, l domain.SourceLease, now, until time.Time) error
 	// FinishSync ends a sync: idle or failed with r.Error, its lease released and the next sync
-	// due r.At plus the source's interval, unless it was made due since its claim (r.Due); on
-	// success its model becomes r.EmbedModel. ErrLeaseLost, changing nothing, once another
+	// due r.At plus the source's interval, unless it was made due since its claim (r.Due); a
+	// failure adds one to the source's SyncFailures, a success resets them. ErrLeaseLost, changing nothing, once another
 	// claim took the source.
 	FinishSync(ctx context.Context, l domain.SourceLease, r domain.SyncResult) error
 
@@ -152,13 +151,6 @@ type Knowledge interface {
 // content meanwhile never ends up with its object gone; its error undoes the deletion. nil drops
 // nothing.
 type DropBlobs func(ctx context.Context, unheld []domain.BlobHash) error
-
-// Embedder turns texts into embeddings of domain.EmbeddingDimensions, one per text in order.
-// Model names the embedding space; chunks are searched only against queries of their model.
-type Embedder interface {
-	Embed(ctx context.Context, texts []string) ([][]float32, error)
-	Model() string
-}
 
 // SourceReader reads the items of a source, one reader per kind (ADR 0038 decision 2): an upload
 // source's from the bucket, a repository's from its code host, Confluence's pages, and until the

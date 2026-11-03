@@ -91,7 +91,7 @@ func (h *harness) putSnapshot(t *testing.T, name string, id domain.KnowledgeSnap
 	ctx := domain.WithOrg(t.Context(), h.org)
 	at := time.Now().UTC().Add(time.Hour)
 
-	c, err := h.kb.ClaimSource(ctx, at, at.Add(time.Minute), "")
+	c, err := h.kb.ClaimSource(ctx, at, at.Add(time.Minute))
 	if err != nil || c == nil || c.Source.Name != name {
 		t.Fatalf("claim %s = %+v, %v", name, c, err)
 	}

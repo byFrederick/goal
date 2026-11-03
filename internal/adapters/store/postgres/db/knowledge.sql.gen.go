@@ -46,13 +46,12 @@ func (q *Queries) AddKnowledgeReads(ctx context.Context, arg AddKnowledgeReadsPa
 
 const claimKnowledgeSource = `-- name: ClaimKnowledgeSource :one
 SELECT c.org_id::uuid AS org_id, c.id::uuid AS id, c.lease_token::uuid AS lease_token
-FROM goal_claim_knowledge_source($1::timestamptz, $2::timestamptz, $3::text) c
+FROM goal_claim_knowledge_source($1::timestamptz, $2::timestamptz) c
 `
 
 type ClaimKnowledgeSourceParams struct {
 	Now   time.Time
 	Until time.Time
-	Model string
 }
 
 type ClaimKnowledgeSourceRow struct {
@@ -64,7 +63,7 @@ type ClaimKnowledgeSourceRow struct {
 // The source due first in any live organization, leased under a new token (00055), in no
 // organization: the caller binds the transaction to the one returned.
 func (q *Queries) ClaimKnowledgeSource(ctx context.Context, arg ClaimKnowledgeSourceParams) (ClaimKnowledgeSourceRow, error) {
-	row := q.db.QueryRow(ctx, claimKnowledgeSource, arg.Now, arg.Until, arg.Model)
+	row := q.db.QueryRow(ctx, claimKnowledgeSource, arg.Now, arg.Until)
 	var i ClaimKnowledgeSourceRow
 	err := row.Scan(&i.OrgID, &i.ID, &i.LeaseToken)
 	return i, err
@@ -158,18 +157,17 @@ UPDATE knowledge_sources
 SET status = CASE WHEN $1::text = '' THEN 'idle' ELSE 'failed' END,
     last_error = nullif($1::text, ''),
     last_synced_at = CASE WHEN $1::text = '' THEN $2::timestamptz ELSE last_synced_at END,
-    embed_model = CASE WHEN $1::text = '' THEN nullif($3::text, '') ELSE embed_model END,
+    sync_failures = CASE WHEN $1::text = '' THEN 0 ELSE sync_failures + 1 END,
     lease_until = NULL, lease_token = NULL,
-    next_sync_at = CASE WHEN next_sync_at IS DISTINCT FROM $4::timestamptz THEN next_sync_at
+    next_sync_at = CASE WHEN next_sync_at IS DISTINCT FROM $3::timestamptz THEN next_sync_at
                         ELSE $2::timestamptz + sync_every END,
     updated_at = now()
-WHERE id = $5 AND lease_token = $6::uuid AND kind <> 'live'
+WHERE id = $4 AND lease_token = $5::uuid AND kind <> 'live'
 `
 
 type FinishKnowledgeSyncParams struct {
 	Error      string
 	At         time.Time
-	Model      string
 	Due        time.Time
 	ID         uuid.UUID
 	LeaseToken uuid.UUID
@@ -181,7 +179,6 @@ func (q *Queries) FinishKnowledgeSync(ctx context.Context, arg FinishKnowledgeSy
 	result, err := q.db.Exec(ctx, finishKnowledgeSync,
 		arg.Error,
 		arg.At,
-		arg.Model,
 		arg.Due,
 		arg.ID,
 		arg.LeaseToken,
@@ -211,10 +208,9 @@ func (q *Queries) HoldKnowledgeLease(ctx context.Context, arg HoldKnowledgeLease
 }
 
 const insertKnowledgeChunks = `-- name: InsertKnowledgeChunks :exec
-INSERT INTO knowledge_chunks (source_id, document_id, ord, heading, text, embedding, embed_model)
+INSERT INTO knowledge_chunks (source_id, document_id, ord, heading, text)
 SELECT $1, $2, ($3::int[])[i], ($4::text[])[i],
-       ($5::text[])[i], nullif(($6::text[])[i], '')::halfvec(1024),
-       CASE WHEN ($6::text[])[i] = '' THEN NULL ELSE $7::text END
+       ($5::text[])[i]
 FROM generate_series(1, cardinality($3::int[])) AS i
 `
 
@@ -224,11 +220,9 @@ type InsertKnowledgeChunksParams struct {
 	Ords       []int32
 	Headings   []string
 	Texts      []string
-	Embeddings []string
-	Model      string
 }
 
-// A document's chunks in one statement; an empty embedding is none.
+// A document's chunks in one statement.
 func (q *Queries) InsertKnowledgeChunks(ctx context.Context, arg InsertKnowledgeChunksParams) error {
 	_, err := q.db.Exec(ctx, insertKnowledgeChunks,
 		arg.SourceID,
@@ -236,8 +230,6 @@ func (q *Queries) InsertKnowledgeChunks(ctx context.Context, arg InsertKnowledge
 		arg.Ords,
 		arg.Headings,
 		arg.Texts,
-		arg.Embeddings,
-		arg.Model,
 	)
 	return err
 }
@@ -469,7 +461,7 @@ func (q *Queries) KnowledgeDocumentUses(ctx context.Context, arg KnowledgeDocume
 
 const knowledgeDocuments = `-- name: KnowledgeDocuments :many
 SELECT d.id, d.source_id, d.external_id, d.version, d.title, d.url, d.mime, d.bytes, d.blob_sha256, d.status, d.error,
-       d.seen_at, d.indexed_at, d.embed_model, d.created_by, s.kind AS source_kind
+       d.seen_at, d.indexed_at, d.created_by, s.kind AS source_kind
 FROM knowledge_documents d JOIN knowledge_sources s ON s.org_id = d.org_id AND s.id = d.source_id
 WHERE ($1::uuid IS NULL OR d.source_id = $1::uuid)
   AND ($2::text IS NULL OR d.external_id = $2::text)
@@ -501,7 +493,6 @@ type KnowledgeDocumentsRow struct {
 	Error      *string
 	SeenAt     time.Time
 	IndexedAt  *time.Time
-	EmbedModel *string
 	CreatedBy  string
 	SourceKind string
 }
@@ -536,7 +527,6 @@ func (q *Queries) KnowledgeDocuments(ctx context.Context, arg KnowledgeDocuments
 			&i.Error,
 			&i.SeenAt,
 			&i.IndexedAt,
-			&i.EmbedModel,
 			&i.CreatedBy,
 			&i.SourceKind,
 		); err != nil {
@@ -903,7 +893,7 @@ const knowledgeSources = `-- name: KnowledgeSources :many
 
 SELECT s.id, s.name, s.title, s.kind, c.name AS connection, sc.name AS secret, s.config, s.read_when, s.current_snapshot_id,
        extract(epoch FROM s.sync_every)::bigint AS sync_every_seconds, s.next_sync_at, s.lease_until, s.status,
-       s.last_synced_at, s.last_error, s.embed_model, s.created_by, s.created_at, s.updated_at,
+       s.last_synced_at, s.last_error, s.sync_failures, s.created_by, s.created_at, s.updated_at,
        (SELECT count(*) FROM knowledge_documents d WHERE d.org_id = s.org_id AND d.source_id = s.id) AS documents
 FROM knowledge_sources s
 LEFT JOIN connections c ON c.org_id = s.org_id AND c.id = s.connection_id
@@ -934,7 +924,7 @@ type KnowledgeSourcesRow struct {
 	Status            string
 	LastSyncedAt      *time.Time
 	LastError         *string
-	EmbedModel        *string
+	SyncFailures      int32
 	CreatedBy         string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
@@ -942,7 +932,7 @@ type KnowledgeSourcesRow struct {
 }
 
 // The knowledge base (00054), under row-level security: every statement sees the transaction's
-// organization only. Embeddings travel as pgvector's text form ('[0.1,0.2,…]'), ” for none.
+// organization only.
 // The organization's sources, or the one named or with the given id.
 func (q *Queries) KnowledgeSources(ctx context.Context, arg KnowledgeSourcesParams) ([]KnowledgeSourcesRow, error) {
 	rows, err := q.db.Query(ctx, knowledgeSources, arg.Name, arg.ID)
@@ -969,7 +959,7 @@ func (q *Queries) KnowledgeSources(ctx context.Context, arg KnowledgeSourcesPara
 			&i.Status,
 			&i.LastSyncedAt,
 			&i.LastError,
-			&i.EmbedModel,
+			&i.SyncFailures,
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -1134,30 +1124,6 @@ WITH src AS (
 query AS (
   SELECT nullif(replace(plainto_tsquery('simple', $3::text)::text, ' & ', ' | '), '')::tsquery AS q
 ),
-small AS (
-  SELECT count(*) <= 20000 AS exact
-  FROM (SELECT 1 FROM knowledge_chunks c WHERE c.source_id IN (SELECT id FROM src) LIMIT 20001) n
-),
-near AS (
-  SELECT n.id, row_number() OVER (ORDER BY n.distance, n.id) AS r FROM (
-    (SELECT e.id, e.distance FROM (
-       SELECT c.id, c.embedding <=> nullif($4::text, '')::halfvec(1024) AS distance
-       FROM knowledge_chunks c
-       WHERE (SELECT exact FROM small) AND $4::text <> '' AND c.embed_model = $5::text
-         AND c.source_id IN (SELECT id FROM src)
-       OFFSET 0
-     ) e
-     ORDER BY e.distance, e.id
-     LIMIT 50)
-    UNION ALL
-    (SELECT c.id, c.embedding <=> nullif($4::text, '')::halfvec(1024) AS distance
-     FROM knowledge_chunks c
-     WHERE NOT (SELECT exact FROM small) AND $4::text <> '' AND c.embed_model = $5::text
-       AND c.source_id IN (SELECT id FROM src)
-     ORDER BY c.embedding <=> nullif($4::text, '')::halfvec(1024)
-     LIMIT 50)
-  ) n
-),
 words AS (
   SELECT w.id, row_number() OVER (ORDER BY w.rank DESC, w.id) AS r FROM (
     SELECT c.id, ts_rank(c.tsv, query.q, 1) AS rank
@@ -1166,26 +1132,20 @@ words AS (
     ORDER BY rank DESC, c.id
     LIMIT 50
   ) w
-),
-fused AS (
-  SELECT f.id, sum(1.0 / (60 + f.r))::float8 AS score FROM (SELECT id, r FROM near UNION ALL SELECT id, r FROM words) f
-  GROUP BY f.id
 )
-SELECT c.id, c.document_id, src.name AS source, d.title, d.url, c.heading, c.text, fused.score
-FROM fused
-JOIN knowledge_chunks c ON c.id = fused.id
+SELECT c.id, c.document_id, src.name AS source, d.title, d.url, c.heading, c.text, (1.0 / (60 + words.r))::float8 AS score
+FROM words
+JOIN knowledge_chunks c ON c.id = words.id
 JOIN knowledge_documents d ON d.org_id = c.org_id AND d.source_id = c.source_id AND d.id = c.document_id
 JOIN src ON src.id = c.source_id
-ORDER BY fused.score DESC, c.id
+ORDER BY words.r, c.id
 LIMIT $1
 `
 
 type SearchKnowledgeParams struct {
-	MaxHits   int32
-	Sources   []string
-	Query     string
-	Embedding string
-	Model     string
+	MaxHits int32
+	Sources []string
+	Query   string
 }
 
 type SearchKnowledgeRow struct {
@@ -1199,25 +1159,11 @@ type SearchKnowledgeRow struct {
 	Score      float64
 }
 
-// Two candidate lists over the named sources only, the nearest chunks of the model by cosine
-// distance (with an embedding) and the best by keywords (any of the query's words, ts_rank on
+// The best chunks of the named sources only by keywords: any of the query's words, ts_rank on
 // the simple tsvector divided by 1 + the log of the chunk's length, so long chunks full of
-// common words do not win), fused by reciprocal rank (k = 60; domain.FuseRanks).
-//
-// The nearest are exact when the sources hold at most 20,000 chunks: their distances, computed
-// behind a fence (OFFSET 0) that keeps the HNSW index out, and sorted. The index holds every
-// organization's chunks and the filters apply after it, so walking it for sources that are a
-// small share of the table finds too few of theirs within pgvector's scan budget, or none
-// (review 4 SQL M2). Larger sources walk the index; partitioning by organization (spec 4 §6) is
-// the step after this if installs outgrow that.
+// common words do not win; a chunk scores 1/(60 + its rank), as reciprocal rank fusion would.
 func (q *Queries) SearchKnowledge(ctx context.Context, arg SearchKnowledgeParams) ([]SearchKnowledgeRow, error) {
-	rows, err := q.db.Query(ctx, searchKnowledge,
-		arg.MaxHits,
-		arg.Sources,
-		arg.Query,
-		arg.Embedding,
-		arg.Model,
-	)
+	rows, err := q.db.Query(ctx, searchKnowledge, arg.MaxHits, arg.Sources, arg.Query)
 	if err != nil {
 		return nil, err
 	}
@@ -1283,19 +1229,6 @@ type SetKnowledgeSnapshotParams struct {
 
 func (q *Queries) SetKnowledgeSnapshot(ctx context.Context, arg SetKnowledgeSnapshotParams) error {
 	_, err := q.db.Exec(ctx, setKnowledgeSnapshot, arg.SnapshotID, arg.ID)
-	return err
-}
-
-const setSearchScan = `-- name: SetSearchScan :exec
-SELECT set_config('hnsw.iterative_scan', 'relaxed_order', true), set_config('hnsw.ef_search', '100', true)
-`
-
-// The nearest-neighbour scan over the HNSW index goes on past chunks the filters drop
-// (pgvector's iterative scan), so a search over large sources still finds its candidates when
-// other organizations' or sources' chunks are nearer. Small sources are searched exactly instead
-// (SearchKnowledge).
-func (q *Queries) SetSearchScan(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, setSearchScan)
 	return err
 }
 
@@ -1404,8 +1337,8 @@ const updateKnowledgeUpload = `-- name: UpdateKnowledgeUpload :one
 UPDATE knowledge_documents
 SET version = $1, title = $2, mime = $3, bytes = $4,
     status = $5, error = $6, seen_at = greatest(seen_at, $7),
-    indexed_at = $8, embed_model = $9
-WHERE source_id = $10 AND external_id = $11
+    indexed_at = $8
+WHERE source_id = $9 AND external_id = $10
 RETURNING id
 `
 
@@ -1418,7 +1351,6 @@ type UpdateKnowledgeUploadParams struct {
 	Error      *string
 	SeenAt     time.Time
 	IndexedAt  *time.Time
-	EmbedModel *string
 	SourceID   uuid.UUID
 	ExternalID string
 }
@@ -1435,7 +1367,6 @@ func (q *Queries) UpdateKnowledgeUpload(ctx context.Context, arg UpdateKnowledge
 		arg.Error,
 		arg.SeenAt,
 		arg.IndexedAt,
-		arg.EmbedModel,
 		arg.SourceID,
 		arg.ExternalID,
 	)
@@ -1446,14 +1377,14 @@ func (q *Queries) UpdateKnowledgeUpload(ctx context.Context, arg UpdateKnowledge
 
 const upsertKnowledgeDocument = `-- name: UpsertKnowledgeDocument :one
 INSERT INTO knowledge_documents AS d (id, source_id, external_id, version, title, url, mime, bytes, blob_sha256, status, error,
-                                      seen_at, indexed_at, embed_model, created_by)
+                                      seen_at, indexed_at, created_by)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9, $10, $11, $12,
-        $13, $14, $15)
+        $13, $14)
 ON CONFLICT (source_id, external_id) DO UPDATE
 SET version = EXCLUDED.version, title = EXCLUDED.title, url = EXCLUDED.url, mime = EXCLUDED.mime, bytes = EXCLUDED.bytes,
     blob_sha256 = coalesce(EXCLUDED.blob_sha256, d.blob_sha256), status = EXCLUDED.status, error = EXCLUDED.error,
-    seen_at = greatest(d.seen_at, EXCLUDED.seen_at), indexed_at = EXCLUDED.indexed_at, embed_model = EXCLUDED.embed_model
+    seen_at = greatest(d.seen_at, EXCLUDED.seen_at), indexed_at = EXCLUDED.indexed_at
 RETURNING id
 `
 
@@ -1471,7 +1402,6 @@ type UpsertKnowledgeDocumentParams struct {
 	Error      *string
 	SeenAt     time.Time
 	IndexedAt  *time.Time
-	EmbedModel *string
 	CreatedBy  string
 }
 
@@ -1492,7 +1422,6 @@ func (q *Queries) UpsertKnowledgeDocument(ctx context.Context, arg UpsertKnowled
 		arg.Error,
 		arg.SeenAt,
 		arg.IndexedAt,
-		arg.EmbedModel,
 		arg.CreatedBy,
 	)
 	var id uuid.UUID

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -398,11 +397,11 @@ func (k *Knowledge) SyncNow(ctx context.Context, name string) error {
 // ClaimSource implements ports.Knowledge: goal_claim_knowledge_source claims across
 // organizations, then the transaction binds to the claim's to read the source; the claim
 // notifies the stream event knowledge (syncing).
-func (k *Knowledge) ClaimSource(ctx context.Context, now, until time.Time, model string) (*domain.SourceClaim, error) {
+func (k *Knowledge) ClaimSource(ctx context.Context, now, until time.Time) (*domain.SourceClaim, error) {
 	var out *domain.SourceClaim
 
 	err := k.s.systemTx(ctx, func(q *db.Queries) error {
-		c, err := q.ClaimKnowledgeSource(ctx, db.ClaimKnowledgeSourceParams{Until: until, Now: now, Model: model})
+		c, err := q.ClaimKnowledgeSource(ctx, db.ClaimKnowledgeSourceParams{Until: until, Now: now})
 		if notFound(err) {
 			return nil
 		}
@@ -487,7 +486,7 @@ func (k *Knowledge) FinishSync(ctx context.Context, l domain.SourceLease, r doma
 
 	n, err := fetch(ctx, k.s.inTx, func(q *db.Queries) (int64, error) {
 		n, err := q.FinishKnowledgeSync(ctx, db.FinishKnowledgeSyncParams{
-			Error: truncate(r.Error, domain.MaxKnowledgeError), At: r.At, Model: r.EmbedModel, Due: r.Due, ID: sid, LeaseToken: token,
+			Error: truncate(r.Error, domain.MaxKnowledgeError), At: r.At, Due: r.Due, ID: sid, LeaseToken: token,
 		})
 		if err != nil || n == 0 {
 			return n, err
@@ -538,10 +537,7 @@ func (k *Knowledge) PutDocument(ctx context.Context, d domain.KnowledgeDocument,
 		return err
 	}
 
-	params, err := chunkParams(sid, d.EmbedModel, chunks)
-	if err != nil {
-		return err
-	}
+	params := chunkParams(sid, chunks)
 
 	err = k.s.inTx(ctx, func(q *db.Queries) error {
 		docID, err := putDocument(ctx, q, id, sid, d)
@@ -585,7 +581,7 @@ func putDocument(ctx context.Context, q *db.Queries, id, source uuid.UUID, d dom
 	if kind == string(domain.SourceUpload) {
 		docID, err := q.UpdateKnowledgeUpload(ctx, db.UpdateKnowledgeUploadParams{
 			Version: d.Version, Title: title, Mime: d.MIME, Bytes: d.Bytes, Status: string(d.Status), Error: errText, SeenAt: d.SeenAt,
-			IndexedAt: d.IndexedAt, EmbedModel: optional(d.EmbedModel), SourceID: source, ExternalID: d.ExternalID,
+			IndexedAt: d.IndexedAt, SourceID: source, ExternalID: d.ExternalID,
 		})
 		if notFound(err) {
 			return id, fmt.Errorf("upload %s: %w", d.ExternalID, ports.ErrNotFound)
@@ -597,7 +593,7 @@ func putDocument(ctx context.Context, q *db.Queries, id, source uuid.UUID, d dom
 	docID, err := q.UpsertKnowledgeDocument(ctx, db.UpsertKnowledgeDocumentParams{
 		ID: id, SourceID: source, ExternalID: d.ExternalID, Version: d.Version, Title: title, Url: optional(d.URL), Mime: d.MIME,
 		Bytes: d.Bytes, BlobSha256: optional(string(d.Blob)), Status: string(d.Status), Error: errText, SeenAt: d.SeenAt,
-		IndexedAt: d.IndexedAt, EmbedModel: optional(d.EmbedModel), CreatedBy: d.CreatedBy.Ref(),
+		IndexedAt: d.IndexedAt, CreatedBy: d.CreatedBy.Ref(),
 	})
 
 	return docID, ruleError(err, "")
@@ -607,57 +603,19 @@ func putDocument(ctx context.Context, q *db.Queries, id, source uuid.UUID, d dom
 const maxDocumentTitle = 1024
 
 // chunkParams are chunks as the arrays InsertKnowledgeChunks takes.
-func chunkParams(source uuid.UUID, model string, chunks []domain.Chunk) (db.InsertKnowledgeChunksParams, error) {
+func chunkParams(source uuid.UUID, chunks []domain.Chunk) db.InsertKnowledgeChunksParams {
 	p := db.InsertKnowledgeChunksParams{
-		SourceID: source, Model: model, Ords: make([]int32, 0, len(chunks)), Headings: make([]string, 0, len(chunks)),
-		Texts: make([]string, 0, len(chunks)), Embeddings: make([]string, 0, len(chunks)),
+		SourceID: source, Ords: make([]int32, 0, len(chunks)), Headings: make([]string, 0, len(chunks)),
+		Texts: make([]string, 0, len(chunks)),
 	}
 
 	for _, c := range chunks {
-		if c.Embedding != nil && model == "" {
-			return p, fmt.Errorf("chunk %d has an embedding without a model: %w", c.Ord, domain.ErrInvalid)
-		}
-
-		vec, err := vectorText(c.Embedding)
-		if err != nil {
-			return p, fmt.Errorf("chunk %d: %w", c.Ord, err)
-		}
-
 		p.Ords = append(p.Ords, int32(c.Ord)) //nolint:gosec // a document has far fewer chunks than 2^31
 		p.Headings = append(p.Headings, c.Heading)
 		p.Texts = append(p.Texts, c.Text)
-		p.Embeddings = append(p.Embeddings, vec)
 	}
 
-	return p, nil
-}
-
-// vectorText is v in pgvector's text form, "" for nil. It must have domain.EmbeddingDimensions.
-func vectorText(v []float32) (string, error) {
-	if v == nil {
-		return "", nil
-	}
-
-	if len(v) != domain.EmbeddingDimensions {
-		return "", fmt.Errorf("an embedding has %d dimensions, not %d: %w", len(v), domain.EmbeddingDimensions, domain.ErrInvalid)
-	}
-
-	var b strings.Builder
-
-	b.Grow(len(v) * 8)
-	b.WriteByte('[')
-
-	for i, x := range v {
-		if i > 0 {
-			b.WriteByte(',')
-		}
-
-		b.WriteString(strconv.FormatFloat(float64(x), 'g', -1, 32))
-	}
-
-	b.WriteByte(']')
-
-	return b.String(), nil
+	return p
 }
 
 // seenBatch bounds the external ids of one MarkKnowledgeSeen statement: a source's unchanged
@@ -928,27 +886,14 @@ func (k *Knowledge) Search(ctx context.Context, q domain.KnowledgeQuery) ([]doma
 		return nil, nil
 	}
 
-	vec, err := vectorText(q.Embedding)
-	if err != nil {
-		return nil, fmt.Errorf("search knowledge: %w", err)
-	}
-
-	if vec != "" && q.Model == "" {
-		return nil, fmt.Errorf("search knowledge: an embedding without its model: %w", domain.ErrInvalid)
-	}
-
 	var rows []db.SearchKnowledgeRow
 
-	err = k.s.read(ctx, func(dq *db.Queries) error {
-		if err := dq.SetSearchScan(ctx); err != nil {
-			return err
-		}
-
+	err := k.s.read(ctx, func(dq *db.Queries) error {
 		var err error
 
 		rows, err = dq.SearchKnowledge(ctx, db.SearchKnowledgeParams{
 			MaxHits: int32(min(q.Limit, domain.SearchCandidates)), Sources: q.Sources, //nolint:gosec // bounded by SearchCandidates
-			Query: q.Text, Embedding: vec, Model: q.Model,
+			Query: q.Text,
 		})
 
 		return err
@@ -985,7 +930,7 @@ func sourceFrom(r db.KnowledgeSourcesRow) (domain.KnowledgeSource, error) {
 		Connection: deref(r.Connection), Secret: deref(r.Secret), Config: config, ReadWhen: r.ReadWhen,
 		CurrentSnapshot: snapshotID(r.CurrentSnapshotID), SyncEvery: time.Duration(r.SyncEverySeconds) * time.Second,
 		NextSyncAt: utc(r.NextSyncAt), LeaseUntil: utc(r.LeaseUntil), Status: domain.SyncStatus(r.Status),
-		LastSyncedAt: utc(r.LastSyncedAt), LastError: deref(r.LastError), EmbedModel: deref(r.EmbedModel),
+		LastSyncedAt: utc(r.LastSyncedAt), LastError: deref(r.LastError), SyncFailures: int(r.SyncFailures),
 		Documents: int(r.Documents), CreatedBy: namedActor(r.CreatedBy, ""), CreatedAt: r.CreatedAt.UTC(), UpdatedAt: r.UpdatedAt.UTC(),
 	}, nil
 }
@@ -995,7 +940,7 @@ func documentFrom(r db.KnowledgeDocumentsRow) domain.KnowledgeDocument {
 		ID: domain.KnowledgeDocumentID(r.ID.String()), Source: domain.KnowledgeSourceID(r.SourceID.String()), ExternalID: r.ExternalID,
 		Version: r.Version, Title: r.Title, URL: deref(r.Url), MIME: r.Mime, Bytes: r.Bytes, Blob: domain.BlobHash(deref(r.BlobSha256)),
 		Status: domain.DocumentStatus(r.Status), Error: deref(r.Error), SeenAt: r.SeenAt.UTC(), IndexedAt: utc(r.IndexedAt),
-		EmbedModel: deref(r.EmbedModel), CreatedBy: namedActor(r.CreatedBy, ""),
+		CreatedBy: namedActor(r.CreatedBy, ""),
 	}
 }
 

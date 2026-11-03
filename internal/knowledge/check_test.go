@@ -53,7 +53,7 @@ func TestCheck_ListsUnsavedSettings(t *testing.T) {
 
 	repo := domain.KnowledgeSource{Name: "guides", Kind: domain.SourceRepository, Secret: checkToken, Config: map[string]string{"repository": "https://git.example.com/acme/guides"}}
 
-	got, err := w.ingestor(nil, nil).Check(ctx, repo)
+	got, err := w.ingestor(nil).Check(ctx, repo)
 	w.want("the check", got, err == nil, got.Error == "", got.Files == 2, w.docs.secret == checkValue)
 	w.want("the sources after", w.snapshots(repoSource), len(w.snapshots(repoSource)) == 0)
 
@@ -64,7 +64,7 @@ func TestCheck_ListsUnsavedSettings(t *testing.T) {
 	narrow := repo
 	narrow.Secret = "narrow-token"
 
-	got, err = w.ingestor(nil, nil).Check(ctx, narrow)
+	got, err = w.ingestor(nil).Check(ctx, narrow)
 	w.want("a secret open to some factories only", got, err == nil, strings.Contains(got.Error, "open to some factories only"), got.Files == 0)
 
 	leaky := knowledge.NewIngestor(knowledge.IngestorConfig{
@@ -74,6 +74,6 @@ func TestCheck_ListsUnsavedSettings(t *testing.T) {
 	got, err = leaky.Check(ctx, repo)
 	w.want("a listing that fails", got, err == nil, strings.Contains(got.Error, "bad credentials"), !strings.Contains(got.Error, checkValue))
 
-	got, err = w.ingestor(nil, nil).Check(ctx, domain.KnowledgeSource{Name: "drops", Kind: domain.SourceUpload})
+	got, err = w.ingestor(nil).Check(ctx, domain.KnowledgeSource{Name: "drops", Kind: domain.SourceUpload})
 	w.want("an upload source not saved", got, err == nil, got.Error == "", got.Files == 0)
 }

@@ -114,7 +114,7 @@ func TestSnapshot_CopiesUnchangedEntriesRaw(t *testing.T) {
 	deploy := "# Deploy\n\n" + strings.Repeat("Ship with the release train on Tuesdays. ", 50)
 	w.docs.set(map[string]string{deployMD: deploy, oncallMD: "# On call\n\nPage the primary."})
 
-	in := w.ingestor(nil, nil)
+	in := w.ingestor(nil)
 	w.syncDue(in)
 
 	snaps := w.snapshots(repoSource)
@@ -168,7 +168,7 @@ func TestSnapshot_NothingChangedWritesNoSnapshot(t *testing.T) {
 	w := repoWorld(t)
 	w.docs.set(map[string]string{deployMD: shipOnTuesdays})
 
-	in := w.ingestor(nil, nil)
+	in := w.ingestor(nil)
 	w.syncDue(in)
 	w.clock.Advance(time.Hour + time.Minute)
 	w.syncDue(in)
@@ -185,7 +185,7 @@ func TestSnapshot_AFailedFileKeepsItsLastGoodVersion(t *testing.T) {
 	w := repoWorld(t)
 	w.docs.set(map[string]string{deployMD: shipOnTuesdays})
 
-	in := w.ingestor(nil, nil)
+	in := w.ingestor(nil)
 	w.syncDue(in)
 
 	before := w.zipOf(w.snapshots(repoSource)[0])
@@ -223,7 +223,7 @@ func TestSnapshot_AKeyLikeFileIsLeftOut(t *testing.T) {
 		leaky:    "# Setup\n\nexport GH_TOKEN=ghp_" + strings.Repeat("0", 36) + "\n",
 	})
 
-	w.syncDue(w.ingestor(nil, nil))
+	w.syncDue(w.ingestor(nil))
 
 	snap := w.snapshots(repoSource)[0]
 	w.want("the snapshot", snap, snap.Files == 1, snap.Failed == 1, len(snap.Changes.Failed) == 1,
@@ -275,7 +275,7 @@ func TestSnapshot_PastALimitFailsNamingIt(t *testing.T) {
 			w := repoWorld(t)
 			w.docs.set(tc.docs())
 
-			in := w.ingestor(nil, nil)
+			in := w.ingestor(nil)
 			in.SetByteLimits(tc.source, tc.file)
 			w.syncDue(in)
 
@@ -302,7 +302,7 @@ func TestSnapshot_UploadsWriteTheirFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w.syncDue(w.ingestor(nil, nil))
+	w.syncDue(w.ingestor(nil))
 
 	files := w.zipOf(w.snapshots("handbook")[0])
 	w.want("leave.md", files["leave.md"].text, files["leave.md"].text == "---\nsource: leave.md\n---\n\n# Leave\n\nAsk your lead.")
@@ -332,7 +332,7 @@ func TestSnapshot_AConfluenceSourceReadsWithItsSecret(t *testing.T) {
 	}
 
 	w.docs.set(map[string]string{deployMD: shipOnTuesdays})
-	w.syncDue(w.ingestor(nil, nil))
+	w.syncDue(w.ingestor(nil))
 
 	src := w.source("wiki")
 	w.want("the wiki", src, src.Status == domain.SyncIdle, src.Documents == 0, src.CurrentSnapshot != "", w.docs.secret == "test-token")
