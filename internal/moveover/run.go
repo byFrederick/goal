@@ -135,8 +135,8 @@ func (m *Mover) factories(ctx context.Context, conns []domain.ResolvedConnection
 	}
 
 	for _, rec := range recs {
-		i := slices.IndexFunc(done, func(c ports.FactoryConversion) bool { return c.Factory == rec.ID })
-		if rec.Current == nil || rec.Archived() || i >= 0 && !done[i].Refused() {
+		prev, due := pending(done, rec)
+		if !due {
 			continue
 		}
 
@@ -145,7 +145,7 @@ func (m *Mover) factories(ctx context.Context, conns []domain.ResolvedConnection
 			return fmt.Errorf("factory %s: %w", rec.ID, err)
 		}
 
-		if c == nil || i >= 0 && c.Refused() && c.From == done[i].From && slices.Equal(c.Problems, done[i].Problems) {
+		if c == nil || prev != nil && c.Refused() && c.From == prev.From && slices.Equal(c.Problems, prev.Problems) {
 			continue
 		}
 
@@ -161,6 +161,21 @@ func (m *Mover) factories(ctx context.Context, conns []domain.ResolvedConnection
 	}
 
 	return nil
+}
+
+// pending reports whether rec is due a conversion: it has a current version, is not archived and
+// is not converted yet. prev is its refusal recorded before, if any.
+func pending(done []ports.FactoryConversion, rec ports.FactoryRecord) (prev *ports.FactoryConversion, due bool) {
+	if rec.Current == nil || rec.Archived() {
+		return nil, false
+	}
+
+	i := slices.IndexFunc(done, func(c ports.FactoryConversion) bool { return c.Factory == rec.ID })
+	if i < 0 {
+		return nil, true
+	}
+
+	return &done[i], done[i].Refused()
 }
 
 // opened are the organization's connections with their values. A failure names the connection,

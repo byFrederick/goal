@@ -800,6 +800,7 @@ func (w *world) checkNoValue(t *testing.T, c ports.FactoryConversion) {
 	t.Helper()
 
 	all := strings.Join(c.Problems, "\n") + w.logs.String()
+
 	if slices.ContainsFunc([]string{githubValue, cfValue, ctx7Value, oauthValue}, func(v string) bool { return strings.Contains(all, v) }) {
 		t.Error("a secret's value reached a problem or the logs")
 	}

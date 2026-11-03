@@ -117,7 +117,7 @@ func testRefusedReplaced(t *testing.T, h Harness) {
 	for i, c := range []ports.FactoryConversion{
 		{Factory: f, From: v1, Problems: []string{"the token can't push"}, At: at},
 		{Factory: f, From: v1, Problems: []string{"MCP server docs did not answer"}, At: at.Add(time.Hour)},
-		{Factory: f, From: v1, To: v2, Names: map[string]map[string]string{"github": {"token": "github"}}, At: at.Add(2 * time.Hour)},
+		{Factory: f, From: v1, To: v2, Names: map[string]map[string]string{"gitlab": {"token": "gitlab"}}, At: at.Add(2 * time.Hour)},
 	} {
 		if ok, err := h.Conversions.Record(ctx, c); err != nil || !ok {
 			t.Fatalf("Record %d = %v, %v; want it to replace the refusal", i, ok, err)
@@ -134,7 +134,7 @@ func testRefusedReplaced(t *testing.T, h Harness) {
 	}
 
 	if len(got) != 1 || got[0].Refused() || got[0].To != v2 || len(got[0].Problems) != 0 || !got[0].At.Equal(at.Add(2*time.Hour)) ||
-		got[0].Names["github"]["token"] != "github" {
+		got[0].Names["gitlab"]["token"] != "gitlab" {
 		t.Errorf("List = %+v; want the conversion that replaced the refusals", got)
 	}
 }
