@@ -1340,3 +1340,115 @@ func TestServeRun_DraftRequestStaleRevision(t *testing.T) {
 		t.Errorf("tools for a draft request: status = %d, want 403 (%s)", status, body)
 	}
 }
+
+// secretsBundleYAML is a factory on secrets (ADR 0037) whose repository at url clones with the
+// {{github-token}} secret, and on a host other than github.com and gitlab.com with forge.
+func secretsBundleYAML(url, forge string) string {
+	repo := `{ url: "` + url + `", token: "{{github-token}}" }`
+	if forge != "" {
+		repo = `{ url: "` + url + `", token: "{{github-token}}", forge: ` + forge + ` }`
+	}
+
+	return `apiVersion: goal/v1
+kind: Factory
+metadata: { id: ` + string(factoryID) + `, name: acme-bundle, purpose: Ship small changes to acme's API. }
+spec:
+  runtime:
+    model: claude-sonnet-5-5
+    modelKey: "{{claude-key}}"
+    repository: ` + repo + `
+  agents:
+    - { name: engineer, prompt: ./agents/engineer.md }
+  board:
+    stations:
+      - { id: spec, kind: human }
+      - { id: build, kind: agent, agent: engineer }
+      - { id: done, kind: done }
+`
+}
+
+// secretsBundleFiles are the files secretsBundleYAML needs besides factory.yaml.
+var secretsBundleFiles = map[string]string{"environments/default.yaml": "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n"}
+
+// serveRunBundle serves the bundle of a run of a new item of the factory yaml describes.
+func serveRunBundle(t *testing.T, yaml string, files map[string]string) (runBundle, []byte) {
+	t.Helper()
+
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: yaml, files: files})
+	it := h.submit(t, factoryID, "Add a health endpoint", "")
+	c := h.claims()
+	c.ItemID = it.ID
+
+	status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", status, body)
+	}
+
+	var got runBundle
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	return got, body
+}
+
+// On a version on secrets, the repository token signs git in to the repository's host: one
+// stored login whose password is GOAL_REPOSITORY_TOKEN, as the forge names its user, never the
+// secret's name or value.
+func TestServeRun_GitLoginFromRepositoryToken(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, url, forge string
+		want             gitCredential
+	}{
+		{
+			name: "GitHub", url: "https://github.com/acme/api.git",
+			want: gitCredential{Host: "github.com", Username: "x-access-token", PasswordEnv: domain.RepositoryTokenEnv, Store: true},
+		},
+		{
+			name: "GitLab", url: "https://gitlab.com/acme/api.git",
+			want: gitCredential{Host: "gitlab.com", Username: "oauth2", PasswordEnv: domain.RepositoryTokenEnv, Store: true},
+		},
+		{
+			name: "a GitLab of its own", url: "https://git.example.com/acme/api.git", forge: "gitlab",
+			want: gitCredential{Host: "git.example.com", Username: "oauth2", PasswordEnv: domain.RepositoryTokenEnv, Store: true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, body := serveRunBundle(t, secretsBundleYAML(tt.url, tt.forge), secretsBundleFiles)
+
+			if len(got.Git) != 1 || got.Git[0] != tt.want {
+				t.Errorf("git credentials %+v; want [%+v]", got.Git, tt.want)
+			}
+
+			if got.Repository == nil || got.Repository.URL != tt.url {
+				t.Errorf("repository %+v; want %s", got.Repository, tt.url)
+			}
+
+			if strings.Contains(string(body), "github-token") {
+				t.Errorf("the bundle names the token's secret:\n%s", body)
+			}
+		})
+	}
+}
+
+// A public repository on secrets clones without a login.
+func TestServeRun_PublicRepositoryWithoutToken(t *testing.T) {
+	t.Parallel()
+
+	yaml := strings.Replace(secretsBundleYAML("https://github.com/acme/api.git", ""), `, token: "{{github-token}}"`, "", 1)
+	got, body := serveRunBundle(t, yaml, secretsBundleFiles)
+
+	if got.Repository == nil || len(got.Git) != 0 {
+		t.Errorf("repository %+v, git credentials %+v; want the repository and no login", got.Repository, got.Git)
+	}
+
+	if strings.Contains(string(body), `"store"`) {
+		t.Errorf("the bundle has a stored login:\n%s", body)
+	}
+}

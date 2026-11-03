@@ -3,6 +3,7 @@ package moveover_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"maps"
@@ -64,9 +65,20 @@ type world struct {
 	kb          *porttest.Knowledge
 	defs        *porttest.Definitions
 	conversions *porttest.FactoryConversions
+	hosts       *porttest.CodeHost
+	tools       *porttest.ToolLister
 	mover       *moveover.Mover
 	logs        *logBuffer
 }
+
+// repoURL is the production factory's repository.
+const (
+	repoURL      = "https://github.com/acme/app.git"
+	githubMCPURL = "https://api.githubcopilot.com/mcp/"
+)
+
+// canPush is a token's access that can read the repository and push to it.
+var canPush = ports.RepositoryAccess{Read: ports.AccessCheck{OK: true, Reason: "can read"}, Push: ports.AccessCheck{OK: true, Reason: "can push"}}
 
 var person = domain.Actor{Kind: domain.ActorUser, ID: "0b6f1c9e-0000-7000-8000-00000000aaaa", Name: "Ada"}
 
@@ -88,6 +100,13 @@ func newWorld(t *testing.T) *world {
 	w.kb.ReadSecrets(w.secrets)
 	w.defs = porttest.NewDefinitions(porttest.DefinitionsDeps{Objects: porttest.NewObjectStore(), Items: w.store, Audit: w.tenancy, Now: w.clock.Now})
 	w.conversions = porttest.NewFactoryConversions()
+
+	// The converted versions' checks pass unless a test says otherwise: the repository token can
+	// read and push, and the github and context7 MCP servers answer tools/list.
+	w.hosts, w.tools = porttest.NewCodeHost(), porttest.NewToolLister()
+	w.hosts.SetAccess(repoURL, githubValue, canPush)
+	w.tools.Serve(context7URL, "query-docs", "resolve-library-id")
+	w.tools.Serve(githubMCPURL, "create_pull_request")
 
 	platform, err := connkind.Platform()
 	if err != nil {
@@ -135,7 +154,8 @@ func newWorld(t *testing.T) *world {
 
 	w.mover = moveover.New(moveover.Deps{
 		Orgs: w.tenancy, Connections: w.conns, Secrets: w.secrets, Knowledge: w.kb, Definitions: w.defs, Publisher: authors,
-		Conversions: w.conversions, Clock: w.clock, Logger: slog.New(slog.NewJSONHandler(w.logs, nil)),
+		Conversions: w.conversions, CodeHosts: map[string]ports.CodeHost{connGitHub: w.hosts}, Tools: w.tools,
+		Clock: w.clock, Logger: slog.New(slog.NewJSONHandler(w.logs, nil)),
 	})
 
 	return w
@@ -628,6 +648,161 @@ func (w *world) addSources(t *testing.T) {
 		if _, err := w.kb.CreateSource(ctx, n, person); err != nil {
 			t.Fatalf("source %s: %v", n.Name, err)
 		}
+	}
+}
+
+// A converted version whose repository token can read and push, and whose remote MCP servers
+// answer tools/list, is published once, as Goal, after both were tested with the converted
+// secrets' values.
+func TestRun_PublishesWhenChecksPass(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	v1 := w.publishOld(t, factoryUUID, "acme-software", files(productionFactory))
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	v2 := w.checkPublished(t)
+
+	if c := w.conversion(t, factoryUUID); c.Refused() || c.From != v1.ID || c.To != v2.ID {
+		t.Errorf("conversion %+v; want v1 to v2", c)
+	}
+
+	if got := w.hosts.AccessTokens(); !slices.Equal(got, []string{githubValue}) {
+		t.Errorf("RepositoryAccess was given %d tokens; want the github secret's value once", len(got))
+	}
+
+	called := w.tools.Called()
+	if len(called) == 0 || !slices.ContainsFunc(called, func(e ports.MCPEndpoint) bool {
+		return e.URL == context7URL && e.Headers[envContext7] == ctx7Value
+	}) {
+		t.Errorf("tools/list was not asked of context7 with its key's value: %d calls", len(called))
+	}
+}
+
+// A converted version whose token can read but not push is not published: the factory keeps its
+// version, and its refusal names the repository and the missing push with the host's reason,
+// scrubbed of the token.
+func TestRun_TokenWithoutPushNotPublished(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	v1 := w.publishOld(t, factoryUUID, "acme-software", files(productionFactory))
+	w.hosts.SetAccess(repoURL, githubValue, ports.RepositoryAccess{
+		Read: ports.AccessCheck{OK: true, Reason: "can read"},
+		Push: ports.AccessCheck{Reason: "token " + githubValue + " has\nno write access"},
+	})
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	w.checkKept(t, v1)
+
+	c := w.conversion(t, factoryUUID)
+	if !c.Refused() || len(c.Problems) != 1 || !strings.Contains(c.Problems[0], repoURL) || !strings.Contains(c.Problems[0], "push") ||
+		!strings.Contains(c.Problems[0], "token [secret] has no write access") {
+		t.Errorf("refusal %+v; want one problem naming %s, the push and the host's scrubbed reason", c, repoURL)
+	}
+
+	w.checkNoValue(t, c)
+}
+
+// A remote MCP server whose tools/list fails keeps the version from publishing; the refusal
+// names the environment file, the server and its error, scrubbed of the key.
+func TestRun_MCPServerFailureBlocksPublish(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	v1 := w.publishOld(t, factoryUUID, "acme-software", files(productionFactory))
+	w.tools.Fail(context7URL, errors.New("401 Unauthorized: bad key "+ctx7Value))
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	w.checkKept(t, v1)
+
+	c := w.conversion(t, factoryUUID)
+	if !c.Refused() || !slices.ContainsFunc(c.Problems, func(p string) bool {
+		return strings.Contains(p, defaultFile) && strings.Contains(p, connContext7) && strings.Contains(p, "401 Unauthorized: bad key [secret]")
+	}) {
+		t.Errorf("refusal %+v; want a problem naming %s, context7 and its scrubbed error", c, defaultFile)
+	}
+
+	w.checkNoValue(t, c)
+}
+
+// After a refusal, fixing its cause and running again publishes exactly once and replaces the
+// refusal with the conversion; a third run changes nothing.
+func TestRun_RetriesAfterFix(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	v1 := w.publishOld(t, factoryUUID, "acme-software", files(productionFactory))
+	w.hosts.SetAccess(repoURL, githubValue, ports.RepositoryAccess{Read: ports.AccessCheck{OK: true}, Push: ports.AccessCheck{Reason: "no write access"}})
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	w.checkKept(t, v1)
+
+	w.hosts.SetAccess(repoURL, githubValue, canPush)
+
+	for range 2 {
+		if err := w.mover.Run(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	v2 := w.checkPublished(t)
+
+	if c := w.conversion(t, factoryUUID); c.Refused() || c.To != v2.ID || len(c.Problems) != 0 {
+		t.Errorf("conversion %+v; want the refusal replaced by v1 to v2", c)
+	}
+
+	if !strings.Contains(w.logs.String(), `"converted":1,"refused":0`) {
+		t.Errorf("no run counted the conversion:\n%s", w.logs.String())
+	}
+}
+
+// conversion is factory id's one conversion.
+func (w *world) conversion(t *testing.T, id domain.FactoryID) ports.FactoryConversion {
+	t.Helper()
+
+	convs, err := w.conversions.List(w.ctx(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	i := slices.IndexFunc(convs, func(c ports.FactoryConversion) bool { return c.Factory == id })
+	if i < 0 {
+		t.Fatalf("no conversion of %s in %+v", id, convs)
+	}
+
+	return convs[i]
+}
+
+// checkKept checks the production factory is still at v1, with no draft of Goal's left.
+func (w *world) checkKept(t *testing.T, v1 domain.DefinitionVersion) {
+	t.Helper()
+
+	if r := w.record(t, factoryUUID); r.Current == nil || r.Current.ID != v1.ID || r.LastVersionNumber != 1 || r.Draft != nil {
+		t.Errorf("factory at %+v (draft %+v); want its v1 and no draft", r.Current, r.Draft)
+	}
+}
+
+// checkNoValue checks no secret's value is in c's problems or the logs.
+func (w *world) checkNoValue(t *testing.T, c ports.FactoryConversion) {
+	t.Helper()
+
+	all := strings.Join(c.Problems, "\n") + w.logs.String()
+
+	if slices.ContainsFunc([]string{githubValue, cfValue, ctx7Value, oauthValue}, func(v string) bool { return strings.Contains(all, v) }) {
+		t.Error("a secret's value reached a problem or the logs")
 	}
 }
 

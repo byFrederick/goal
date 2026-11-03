@@ -1,5 +1,5 @@
 -- Standing rules (00075, ADR 0031 decision 7), under row-level security. A rule is never deleted;
--- revoking it sets revoked_at and revoked_by. A rule is keyed by its connection or, since 00090, by
+-- revoking it sets revoked_at and revoked_by. A rule is keyed by its connection or, since 00091, by
 -- its factory, environment and server. A connection-keyed rule's connection name comes from
 -- connections, NULL once the connection is deleted.
 

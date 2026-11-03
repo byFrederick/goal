@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -26,7 +27,7 @@ type Orgs interface {
 	ActiveOrgs(ctx context.Context) ([]domain.OrgID, error)
 }
 
-// Deps is what Run works with; every one is required.
+// Deps is what Run works with; every one is required but CheckTimeout.
 type Deps struct {
 	Orgs        Orgs
 	Connections ports.Connections
@@ -35,8 +36,15 @@ type Deps struct {
 	Definitions ports.DefinitionStore
 	Publisher   Publisher
 	Conversions ports.FactoryConversions
-	Clock       ports.Clock
-	Logger      *slog.Logger
+	// CodeHosts are the code host adapters by forge (github, gitlab): a converted version's
+	// repository token is tested on its repository's.
+	CodeHosts map[string]ports.CodeHost
+	// Tools lists a converted environment file's remote MCP servers' tools.
+	Tools ports.ToolLister
+	// CheckTimeout bounds each check's call to a host; CheckTimeout when zero.
+	CheckTimeout time.Duration
+	Clock        ports.Clock
+	Logger       *slog.Logger
 }
 
 // Mover converts every organization.
@@ -55,9 +63,9 @@ type Tally struct {
 }
 
 // Run converts every organization once, under the install's conversion lock, and logs one line
-// per organization (moved over). Another goald holding the lock runs it instead; a factory with a
-// conversion recorded is never converted again, so a second Run changes nothing. An organization
-// that fails is logged and the others go on.
+// per organization (moved over). Another goald holding the lock runs it instead; a converted
+// factory is never converted again, so a second Run changes nothing, and a refused one is tried
+// again. An organization that fails is logged and the others go on.
 func (m *Mover) Run(ctx context.Context) error {
 	ran, err := m.d.Conversions.WithLock(ctx, func(ctx context.Context) error {
 		orgs, err := m.d.Orgs.ActiveOrgs(ctx)
@@ -91,8 +99,8 @@ func (m *Mover) Run(ctx context.Context) error {
 }
 
 // Org converts the organization in ctx: its connections' secrets first, then its synced
-// knowledge sources still on a connection, then each factory with no conversion recorded whose
-// current version is on connections.
+// knowledge sources still on a connection, then each factory not converted yet whose current
+// version is on connections.
 func (m *Mover) Org(ctx context.Context) (Tally, error) {
 	var t Tally
 
@@ -112,8 +120,9 @@ func (m *Mover) Org(ctx context.Context) (Tally, error) {
 	return t, m.factories(ctx, conns, &t)
 }
 
-// factories converts each factory with no conversion recorded whose current version is on
-// connections, counting them in t.
+// factories converts each factory not converted yet whose current version is on connections,
+// counting them in t. A refusal replaces the one recorded before, unless it is the same: then
+// nothing is recorded or counted, so Needs you keeps the entry as it was.
 func (m *Mover) factories(ctx context.Context, conns []domain.ResolvedConnection, t *Tally) error {
 	done, err := m.d.Conversions.List(ctx)
 	if err != nil {
@@ -126,7 +135,8 @@ func (m *Mover) factories(ctx context.Context, conns []domain.ResolvedConnection
 	}
 
 	for _, rec := range recs {
-		if rec.Current == nil || rec.Archived() || slices.ContainsFunc(done, func(c ports.FactoryConversion) bool { return c.Factory == rec.ID }) {
+		prev, due := pending(done, rec)
+		if !due {
 			continue
 		}
 
@@ -135,7 +145,7 @@ func (m *Mover) factories(ctx context.Context, conns []domain.ResolvedConnection
 			return fmt.Errorf("factory %s: %w", rec.ID, err)
 		}
 
-		if c == nil {
+		if c == nil || prev != nil && c.Refused() && c.From == prev.From && slices.Equal(c.Problems, prev.Problems) {
 			continue
 		}
 
@@ -151,6 +161,21 @@ func (m *Mover) factories(ctx context.Context, conns []domain.ResolvedConnection
 	}
 
 	return nil
+}
+
+// pending reports whether rec is due a conversion: it has a current version, is not archived and
+// is not converted yet. prev is its refusal recorded before, if any.
+func pending(done []ports.FactoryConversion, rec ports.FactoryRecord) (prev *ports.FactoryConversion, due bool) {
+	if rec.Current == nil || rec.Archived() {
+		return nil, false
+	}
+
+	i := slices.IndexFunc(done, func(c ports.FactoryConversion) bool { return c.Factory == rec.ID })
+	if i < 0 {
+		return nil, true
+	}
+
+	return &done[i], done[i].Refused()
 }
 
 // opened are the organization's connections with their values. A failure names the connection,
@@ -322,9 +347,9 @@ func (m *Mover) files(ctx context.Context, v domain.DefinitionVersion) (map[stri
 }
 
 // factory converts rec's current version and returns its conversion: nil for a version on
-// secrets already, refused with the problems for one that cannot convert or fails its publish
-// checks. Once the converted version is published, it re-keys the organization's standing rules
-// onto its environments (rekey).
+// secrets already, refused with the problems for one that cannot convert, fails its tests (check)
+// or fails its publish checks. Once the converted version is published, it re-keys the
+// organization's standing rules onto its environments (rekey).
 func (m *Mover) factory(ctx context.Context, rec ports.FactoryRecord, conns []domain.ResolvedConnection) (*ports.FactoryConversion, error) {
 	current, err := m.d.Definitions.Version(ctx, rec.Current.ID)
 	if err != nil {
@@ -346,6 +371,10 @@ func (m *Mover) factory(ctx context.Context, rec ports.FactoryRecord, conns []do
 		c.Problems = r.Problems
 
 		return c, nil
+	}
+
+	if c.Problems, err = m.check(ctx, rec.ID, r.Files); err != nil || len(c.Problems) > 0 {
+		return c, err
 	}
 
 	open, err := m.d.Definitions.Draft(ctx, rec.ID)

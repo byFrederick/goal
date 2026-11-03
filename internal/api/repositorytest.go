@@ -12,6 +12,7 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/environmentcheck"
 )
 
 // Repository tests (ADR 0037 decision 14): POST /v1/orgs/{org}/repositories/test opens a secret
@@ -84,9 +85,9 @@ func (s *server) TestRepository(ctx context.Context, req gen.TestRepositoryReque
 
 	switch {
 	case errors.Is(err, domain.ErrInvalid):
-		return nil, fmt.Errorf("%w: %s", errRepositoryURLInvalid, scrubValues(err.Error(), values))
+		return nil, fmt.Errorf("%w: %s", errRepositoryURLInvalid, environmentcheck.Scrub(err.Error(), values))
 	case err != nil:
-		reason := couldNotTest + ": " + scrubValues(err.Error(), values)
+		reason := couldNotTest + ": " + environmentcheck.Scrub(err.Error(), values)
 		if errors.Is(err, context.DeadlineExceeded) {
 			reason = fmt.Sprintf("%s: %s gave no answer within %s", couldNotTest, u.Hostname(), s.repoTestTimeout)
 		}
@@ -100,12 +101,7 @@ func (s *server) TestRepository(ctx context.Context, req gen.TestRepositoryReque
 
 	return gen.TestRepository200JSONResponse(gen.RepositoryTestResult{
 		Tested: true,
-		Read:   gen.RepositoryCheck{Ok: access.Read.OK, Reason: oneLine(access.Read.Reason, values)},
-		Push:   gen.RepositoryCheck{Ok: access.Push.OK, Reason: oneLine(access.Push.Reason, values)},
+		Read:   gen.RepositoryCheck{Ok: access.Read.OK, Reason: environmentcheck.OneLine(access.Read.Reason, values)},
+		Push:   gen.RepositoryCheck{Ok: access.Push.OK, Reason: environmentcheck.OneLine(access.Push.Reason, values)},
 	}), nil
-}
-
-// oneLine is a host's reason scrubbed of opened's values, on one line and cut to what a test keeps.
-func oneLine(reason string, opened map[string]string) string {
-	return scrubValues(strings.Join(strings.Fields(reason), " "), opened)
 }

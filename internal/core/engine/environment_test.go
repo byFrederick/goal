@@ -196,7 +196,7 @@ func TestRunEnv_EnvironmentSecrets(t *testing.T) {
 }
 
 // An agent that names an environment gets that one's env, not the default's, and only its
-// secrets are opened.
+// secrets and the repository token are opened.
 func TestRunEnv_NamedEnvironment(t *testing.T) {
 	t.Parallel()
 
@@ -218,7 +218,7 @@ func TestRunEnv_NamedEnvironment(t *testing.T) {
 		}
 	}
 
-	if got, want := h.secretsUsed(t, agWorker), []string{secClaude, secTickets}; !slices.Equal(got, want) {
+	if got, want := h.secretsUsed(t, agWorker), []string{secClaude, secGitHub, secTickets}; !slices.Equal(got, want) {
 		t.Errorf("secret.used of %v; want %v", got, want)
 	}
 }
@@ -232,18 +232,28 @@ func TestRunEnv_RefusesSecretOutsideScope(t *testing.T) {
 	tests := []struct {
 		name string
 		line domain.Line
-		// db, when set, creates secDB with this scope.
-		db   []domain.FactoryID
-		want []string
+		// db and npm, when set, create secDB and secNPM with this scope, and tickets secTickets.
+		db, npm []domain.FactoryID
+		tickets bool
+		want    []string
 	}{
 		{
 			name: "a factory outside its scope", line: secretsLine(), db: []domain.FactoryID{otherFactory},
-			want: []string{"environment default", secDB, ports.ErrSecretNotAllowed.Error()},
+			want: []string{inDefault, secDB, ports.ErrSecretNotAllowed.Error()},
 		},
-		{name: "a missing secret", line: secretsLine(), want: []string{"environment default", secDB, ports.ErrNotFound.Error()}},
+		{name: "a missing secret", line: secretsLine(), want: []string{inDefault, secDB, ports.ErrNotFound.Error()}},
 		{
 			name: "a missing environment", line: withEnvironment(secretsLine(), agWorker, "gpu"), db: []domain.FactoryID{factoryID},
 			want: []string{"agent " + agWorker, "environment gpu"},
+		},
+		{
+			name: "a file's secret outside its scope", line: fullLine(), db: []domain.FactoryID{factoryID},
+			npm: []domain.FactoryID{otherFactory}, tickets: true,
+			want: []string{inDefault, secNPM, ports.ErrSecretNotAllowed.Error()},
+		},
+		{
+			name: "a header's missing secret", line: fullLine(), db: []domain.FactoryID{factoryID}, npm: []domain.FactoryID{factoryID},
+			want: []string{inDefault, secTickets, ports.ErrNotFound.Error()},
 		},
 	}
 
@@ -257,6 +267,14 @@ func TestRunEnv_RefusesSecretOutsideScope(t *testing.T) {
 
 			if tt.db != nil {
 				h.addSecret(t, secDB, dbPassValue, tt.db...)
+			}
+
+			if tt.npm != nil {
+				h.addSecret(t, secNPM, npmrcValue, tt.npm...)
+			}
+
+			if tt.tickets {
+				h.addSecret(t, secTickets, ticketsKeyValue)
 			}
 
 			it := h.submit(t, domain.NewItem{})
@@ -274,7 +292,7 @@ func TestRunEnv_RefusesSecretOutsideScope(t *testing.T) {
 				}
 			}
 
-			for _, v := range []string{apiKeyValue, githubTokenValue, dbPassValue} {
+			for _, v := range []string{apiKeyValue, githubTokenValue, dbPassValue, npmrcValue, ticketsKeyValue} {
 				if strings.Contains(reason, v) {
 					t.Errorf("blocked reason %q holds a secret value", reason)
 				}
@@ -327,47 +345,54 @@ func TestRunEnv_ModelKey(t *testing.T) {
 	}
 }
 
-// With the organization policy's Use credentials off, the agent gets no environment env and its
-// secrets are not opened, but the model key still reaches it.
+// With the organization policy's Use credentials off, the agent gets no env, files or MCP servers
+// from its environment and their secrets are not opened, but the model key still reaches it and
+// the repository token still clones.
 func TestRunEnv_PolicyOffKeepsModelKey(t *testing.T) {
 	t.Parallel()
 
-	h := newHarness(t, secretsLine(), porttest.Succeed(`{}`))
+	h := newHarness(t, fullLine(), porttest.Succeed(`{}`))
 	h.withPolicy(t, policy(func(p *domain.OrgPolicy) { p.UseCredentials = domain.ToolOff }))
-	h.addSecrets(t)
+	h.addFullSecrets(t)
 	it := h.submit(t, domain.NewItem{})
 
 	h.step(t)
 
-	env := h.oneAgentRun(t, it).Env
-	if env[domain.EnvAnthropicAPIKey] != apiKeyValue {
+	run := h.oneAgentRun(t, it)
+	if run.Env[domain.EnvAnthropicAPIKey] != apiKeyValue {
 		t.Error("the agent did not get the model key")
 	}
 
-	for _, name := range []string{envGHToken, envDatabaseURL, envSentryOrg} {
-		if _, ok := env[name]; ok {
+	for _, name := range []string{envGHToken, envDatabaseURL, envSentryOrg, "GOAL_FILE_1", "GOAL_FILE_2", envTicketsMC, envGitHubMC} {
+		if _, ok := run.Env[name]; ok {
 			t.Errorf("the agent got %s with Use credentials off", name)
 		}
 	}
 
-	if got, want := h.secretsUsed(t, agWorker), []string{secClaude}; !slices.Equal(got, want) {
+	// prepared records branch_existed only for a run with a repository.
+	if p := h.eventsOf(it.ID, domain.EventPrepared); len(p) != 1 || p[0].Data["branch_existed"] == nil {
+		t.Errorf("prepared %v; want one that checked out the repository's branch", p)
+	}
+
+	if got, want := h.secretsUsed(t, agWorker), []string{secClaude, secGitHub}; !slices.Equal(got, want) {
 		t.Errorf("secret.used of %v; want %v", got, want)
 	}
 }
 
 // Every value a run opens is scrubbed from what it reports, its events, its error and goald's
-// logs: a secret filled into part of a value too, when the agent prints it alone.
+// logs: a secret filled into part of a value too, when the agent prints it alone, and a file's or
+// an MCP header's.
 func TestRunEnv_ScrubsSecretValues(t *testing.T) {
 	t.Parallel()
 
-	h := newHarness(t, secretsLine(), func(_ context.Context, run porttest.ExecCall, stdout io.Writer) domain.RunResult {
+	h := newHarness(t, fullLine(), func(_ context.Context, run porttest.ExecCall, stdout io.Writer) domain.RunResult {
 		pass := strings.TrimSuffix(strings.TrimPrefix(run.Env[envDatabaseURL], "postgres://app:"), "@db/app")
 		_, _ = io.WriteString(stdout, `{"type":"message","at":"2026-10-23T09:00:02Z","text":"pass `+pass+
-			` token `+run.Env[envGHToken]+`"}`+"\n")
+			` token `+run.Env[envGHToken]+` npmrc `+run.Env["GOAL_FILE_2"]+` tickets `+run.Env[envTicketsMC]+`"}`+"\n")
 
 		return domain.RunResult{Status: domain.RunFailed, Error: "gave up: " + pass + " " + run.Env[domain.EnvAnthropicAPIKey]}
 	})
-	h.addSecrets(t)
+	h.addFullSecrets(t)
 	it := h.submit(t, domain.NewItem{})
 
 	h.step(t)
@@ -387,7 +412,7 @@ func TestRunEnv_ScrubsSecretValues(t *testing.T) {
 	}
 
 	for _, r := range reported {
-		for _, v := range []string{apiKeyValue, githubTokenValue, dbPassValue} {
+		for _, v := range []string{apiKeyValue, githubTokenValue, dbPassValue, npmrcValue, ticketsKeyValue} {
 			if strings.Contains(r, v) {
 				t.Errorf("a secret's value reached what the run reports:\n%s", r)
 			}
@@ -453,4 +478,222 @@ func TestRunDefinition_ModelKeyOnly(t *testing.T) {
 	}
 
 	h.noConnectionUsed(t)
+}
+
+// The secrets the whole default environment of fullLine refers to besides addSecrets' and their
+// values.
+const (
+	secNPM       = "npm-config"
+	npmrcValue   = "//npm.example.com/:_authToken=npm-token-for-tests-3233"
+	envTicketsMC = "GOAL_SECRET_TICKETS_KEY"
+	envGitHubMC  = "GOAL_SECRET_GITHUB_TOKEN"
+)
+
+// inDefault is what a blocked reason names a secret of the default environment with.
+const inDefault = "environment " + domain.DefaultEnvironment
+
+// fullLine is secretsLine whose default environment also writes two files, ~/.npmrc from
+// {{npm-config}} and /etc/app/db.pass from {{db-pass}}, which env refers to too, and gives a
+// remote MCP server with a {{tickets-key}} header and a stdio one with {{github-token}}, env's
+// GH_TOKEN, in its env.
+func fullLine() domain.Line {
+	line := secretsLine()
+	def := &line.Environments[0]
+	def.Files = map[string]string{"~/.npmrc": "{{" + secNPM + "}}", "/etc/app/db.pass": "{{" + secDB + "}}"}
+	def.MCP = map[string]domain.MCPServer{
+		"tickets": {
+			URL: "https://tickets.example.com/mcp", Headers: map[string]string{"Authorization": "Bearer {{" + secTickets + "}}"},
+			Tools: map[string]string{"create_comment": "ask"},
+		},
+		"github": {Command: []string{"github-mcp", "stdio"}, Env: map[string]string{"GITHUB_TOKEN": "{{" + secGitHub + "}}"}},
+	}
+
+	return line
+}
+
+// addFullSecrets creates every secret fullLine's default environment refers to.
+func (h *harness) addFullSecrets(t *testing.T) {
+	t.Helper()
+
+	h.addSecrets(t)
+	h.addSecret(t, secNPM, npmrcValue)
+	h.addSecret(t, secTickets, ticketsKeyValue)
+}
+
+// A run's box takes its size and image from the agent's environment, and medium and Goal's image
+// when the environment names neither.
+func TestRunTask_EnvironmentSizeAndImage(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		size      domain.SandboxSize
+		image     string
+		wantSize  domain.SandboxSize
+		wantImage string
+	}{
+		{
+			name: "a large environment with its own image", size: domain.SandboxLarge, image: "ghcr.io/acme/box:1",
+			wantSize: domain.SandboxLarge, wantImage: "ghcr.io/acme/box:1",
+		},
+		{name: "an environment that names neither", wantSize: domain.SandboxMedium, wantImage: agentImage},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			line := secretsLine()
+			line.Environments[0].Size, line.Environments[0].Image = tt.size, tt.image
+			h := newHarness(t, line, porttest.Succeed(`{}`))
+			h.addSecrets(t)
+			it := h.submit(t, domain.NewItem{})
+
+			h.step(t)
+
+			sb := h.oneAgentRun(t, it).Sandbox
+			if sb.Size != tt.wantSize || sb.Image != tt.wantImage {
+				t.Errorf("box of size %q and image %q; want %q and %q", sb.Size, sb.Image, tt.wantSize, tt.wantImage)
+			}
+
+			if e := h.eventsOf(it.ID, domain.EventSandboxStarted); len(e) != 1 || e[0].Data["size"] != string(tt.wantSize) {
+				t.Errorf("sandbox_started %v; want one of size %s", e, tt.wantSize)
+			}
+		})
+	}
+}
+
+// Each of the environment's files reaches the agent in its GOAL_FILE_<n> variable, numbered by
+// sorted path, and each secret an MCP server's header or stdio env names in its GOAL_SECRET_<NAME>
+// variable. Each secret is opened once, with one secret.used, however many places name it.
+func TestRunEnv_EnvironmentFilesAndMCP(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, fullLine(), porttest.Succeed(`{}`))
+	h.addFullSecrets(t)
+	it := h.submit(t, domain.NewItem{})
+
+	h.step(t)
+
+	env := h.oneAgentRun(t, it).Env
+	want := map[string]string{
+		"GOAL_FILE_1": dbPassValue, "GOAL_FILE_2": npmrcValue, // /etc/app/db.pass sorts before ~/.npmrc
+		envTicketsMC: ticketsKeyValue, envGitHubMC: githubTokenValue,
+		envGHToken: githubTokenValue, domain.EnvAnthropicAPIKey: apiKeyValue,
+	}
+
+	for name, v := range want {
+		if env[name] != v {
+			t.Errorf("the agent's %s = %q; want %q", name, env[name], v)
+		}
+	}
+
+	if got, want := h.secretsUsed(t, agWorker), []string{secClaude, secDB, secGitHub, secNPM, secTickets}; !slices.Equal(got, want) {
+		t.Errorf("secret.used of %v; want one each of %v", got, want)
+	}
+}
+
+// The repository token of a version on secrets is opened with the run's other secrets, one
+// secret.used, and goes to prepare alone as GOAL_REPOSITORY_TOKEN: an agent whose environment does
+// not name the secret never gets its value. A repository without a token opens nothing for git.
+func TestRunEnv_RepositoryTokenInPrepareOnly(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a token", func(t *testing.T) {
+		t.Parallel()
+
+		h := newHarness(t, withEnvironment(secretsLine(), agWorker, envBrowser), porttest.Succeed(`{}`))
+		h.addSecrets(t)
+		h.addSecret(t, secTickets, ticketsKeyValue)
+		it := h.submit(t, domain.NewItem{})
+
+		h.step(t)
+
+		prepares := h.worker.Prepares()
+		if len(prepares) != 1 || prepares[0].Env[domain.RepositoryTokenEnv] != githubTokenValue {
+			t.Fatalf("prepare's %s is not the repository token (%d prepares)", domain.RepositoryTokenEnv, len(prepares))
+		}
+
+		for name, v := range h.oneAgentRun(t, it).Env {
+			if name == domain.RepositoryTokenEnv || strings.Contains(v, githubTokenValue) {
+				t.Errorf("the agent's %s holds the repository token", name)
+			}
+		}
+
+		if got, want := h.secretsUsed(t, agWorker), []string{secClaude, secGitHub, secTickets}; !slices.Equal(got, want) {
+			t.Errorf("secret.used of %v; want one each of %v", got, want)
+		}
+	})
+
+	t.Run("a public repository", func(t *testing.T) {
+		t.Parallel()
+
+		line := withEnvironment(secretsLine(), agWorker, envBrowser)
+		line.Runtime.Repository.Token = ""
+		h := newHarness(t, line, porttest.Succeed(`{}`))
+		h.addSecret(t, secClaude, apiKeyValue)
+		h.addSecret(t, secTickets, ticketsKeyValue)
+		it := h.submit(t, domain.NewItem{})
+
+		h.step(t)
+
+		if _, ok := h.worker.Prepares()[0].Env[domain.RepositoryTokenEnv]; ok {
+			t.Errorf("prepare got %s without a repository token", domain.RepositoryTokenEnv)
+		}
+
+		if feedback := h.oneAgentRun(t, it).Env["GOAL_FEEDBACK"]; !strings.Contains(feedback, "no git credentials") {
+			t.Errorf("feedback %q does not say git has no login", feedback)
+		}
+
+		if got, want := h.secretsUsed(t, agWorker), []string{secClaude, secTickets}; !slices.Equal(got, want) {
+			t.Errorf("secret.used of %v; want %v", got, want)
+		}
+	})
+}
+
+// A repository token whose scope leaves out the factory blocks the run before any sandbox opens,
+// with a reason that names the secret and runtime.repository.token and holds no value.
+func TestRunEnv_RefusesRepositoryTokenOutsideScope(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, withEnvironment(secretsLine(), agWorker, envBrowser), porttest.Succeed(`{}`))
+	h.addSecret(t, secClaude, apiKeyValue)
+	h.addSecret(t, secTickets, ticketsKeyValue)
+	h.addSecret(t, secGitHub, githubTokenValue, otherFactory)
+	it := h.submit(t, domain.NewItem{})
+
+	h.step(t)
+
+	if got := h.item(t, it.ID); got.State != domain.StateBlocked {
+		t.Fatalf("item is %s, want blocked (events %v)", got.State, h.kinds(it.ID))
+	}
+
+	reason, _ := h.eventsOf(it.ID, domain.EventBlocked)[0].Data["reason"].(string)
+	for _, want := range []string{"runtime.repository.token", secGitHub, ports.ErrSecretNotAllowed.Error()} {
+		if !strings.Contains(reason, want) {
+			t.Errorf("blocked reason %q does not mention %q", reason, want)
+		}
+	}
+
+	if strings.Contains(reason, githubTokenValue) {
+		t.Errorf("blocked reason %q holds the token", reason)
+	}
+
+	h.noSandboxes(t)
+}
+
+// The agent hears that git signs in to the repository's host with the repository token.
+func TestPushNote_RepositoryToken(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, secretsLine(), porttest.Succeed(`{}`))
+	h.addSecrets(t)
+	it := h.submit(t, domain.NewItem{})
+
+	h.step(t)
+
+	want := "Git signs in to " + gitHost + " with the repository token."
+	if feedback := h.oneAgentRun(t, it).Env["GOAL_FEEDBACK"]; !strings.Contains(feedback, want) {
+		t.Errorf("feedback %q does not say %q", feedback, want)
+	}
 }

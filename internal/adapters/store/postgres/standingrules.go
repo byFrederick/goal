@@ -109,7 +109,7 @@ func (c *Connections) CreateStandingRule(ctx context.Context, n domain.NewStandi
 }
 
 // CreateServerStandingRule implements ports.Connections. A concurrent create of the same key
-// loses to 00090's partial unique index and returns the rule that won.
+// loses to 00091's partial unique index and returns the rule that won.
 func (c *Connections) CreateServerStandingRule(ctx context.Context, n domain.NewServerStandingRule, by domain.Actor) (domain.StandingRule, error) {
 	if _, ok := domain.OrgFrom(ctx); !ok {
 		return domain.StandingRule{}, domain.ErrNoOrg

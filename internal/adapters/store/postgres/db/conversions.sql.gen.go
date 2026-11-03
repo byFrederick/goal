@@ -48,7 +48,10 @@ const insertFactoryConversion = `-- name: InsertFactoryConversion :execrows
 
 INSERT INTO factory_conversions (factory_id, from_version, to_version, problems, names, at)
 VALUES ($1, $2, $3, $4::text[], $5, $6)
-ON CONFLICT (org_id, factory_id) DO NOTHING
+ON CONFLICT (org_id, factory_id) DO UPDATE
+SET from_version = excluded.from_version, to_version = excluded.to_version, problems = excluded.problems,
+    names = excluded.names, at = excluded.at
+WHERE factory_conversions.to_version IS NULL
 `
 
 type InsertFactoryConversionParams struct {
@@ -62,8 +65,9 @@ type InsertFactoryConversionParams struct {
 
 // Factory conversions (ports.FactoryConversions; migration 00088), under row-level security:
 // every statement sees the transaction's organization only.
-// org_id comes from its default, goal_org(). A factory that has its row already keeps it: no row
-// is inserted, and the caller learns it from the count.
+// org_id comes from its default, goal_org(). A refused factory's row is replaced by the new
+// try (migration 00090 grants the UPDATE); a converted one keeps its row: nothing is written, and
+// the caller learns it from the count.
 func (q *Queries) InsertFactoryConversion(ctx context.Context, arg InsertFactoryConversionParams) (int64, error) {
 	result, err := q.db.Exec(ctx, insertFactoryConversion,
 		arg.FactoryID,

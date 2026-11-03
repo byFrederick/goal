@@ -12,7 +12,7 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
-// Migration 00090 keys standing rules by server too: a rule keyed by its connection before it
+// Migration 00091 keys standing rules by server too: a rule keyed by its connection before it
 // is listed after it unchanged, with no server key, and a row with both keys, or with part of the
 // server key, is refused.
 func TestMigrate_StandingRulesServerKey(t *testing.T) {
@@ -37,12 +37,12 @@ func TestMigrate_StandingRulesServerKey(t *testing.T) {
 
 	got, err := NewConnections(store, testKey(t, "k1")).StandingRules(domain.WithOrg(t.Context(), org), false)
 	if err != nil || len(got) != 1 {
-		t.Fatalf("StandingRules after 00090 = %+v, %v; want the old rule", got, err)
+		t.Fatalf("StandingRules after 00091 = %+v, %v; want the old rule", got, err)
 	}
 
 	if r := got[0]; r.ID != domain.StandingRuleID(rule.String()) || r.ConnectionID != domain.ConnectionID(conn.String()) ||
 		r.Factory != "" || r.Environment != "" || r.Server != "" || !r.Active() {
-		t.Errorf("the old rule after 00090 = %+v; want it keyed by its connection, active", r)
+		t.Errorf("the old rule after 00091 = %+v; want it keyed by its connection, active", r)
 	}
 
 	factory := uuid.Must(uuid.NewV7())

@@ -177,8 +177,10 @@ type RunRequest struct {
 	Environment Environment
 	// DeniedCommands are added to the agent's deny rules (TaskClaims.DeniedCommands).
 	DeniedCommands []string
-	// Size is the sandbox's size; empty is medium.
-	Size SandboxSize
+	// Size is the sandbox's size; empty is medium. Image is the sandbox's image; empty is the
+	// engine's, Goal's own.
+	Size  SandboxSize
+	Image string
 	// Timeout bounds the run; BoxLimit, when set, bounds how long its sandbox may live (the
 	// organization policy's box time limit). Zero takes the engine's defaults.
 	Timeout, BoxLimit time.Duration
