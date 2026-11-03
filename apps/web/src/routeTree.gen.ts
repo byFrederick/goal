@@ -38,6 +38,9 @@ import { Route as OOrgOrgCredentialsNewRouteImport } from './routes/o.$org._org.
 import { Route as OOrgOrgKnowledgeIndexRouteImport } from './routes/o.$org._org.knowledge.index'
 import { Route as OOrgOrgKnowledgeSourceRouteImport } from './routes/o.$org._org.knowledge.$source'
 import { Route as OOrgOrgKnowledgeNewRouteImport } from './routes/o.$org._org.knowledge.new'
+import { Route as OOrgOrgSecretsIndexRouteImport } from './routes/o.$org._org.secrets.index'
+import { Route as OOrgOrgSecretsSecretRouteImport } from './routes/o.$org._org.secrets.$secret'
+import { Route as OOrgOrgSecretsImportRouteImport } from './routes/o.$org._org.secrets.import'
 import { Route as OOrgFFactoryIndexRouteImport } from './routes/o.$org.f.$factory.index'
 import { Route as OOrgFFactoryBoardRouteImport } from './routes/o.$org.f.$factory.board'
 import { Route as OOrgFFactoryDefinitionRouteImport } from './routes/o.$org.f.$factory.definition'
@@ -205,6 +208,21 @@ const OOrgOrgKnowledgeNewRoute = OOrgOrgKnowledgeNewRouteImport.update({
   path: '/knowledge/new',
   getParentRoute: () => OOrgOrgRoute,
 } as any)
+const OOrgOrgSecretsIndexRoute = OOrgOrgSecretsIndexRouteImport.update({
+  id: '/secrets/',
+  path: '/secrets/',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
+const OOrgOrgSecretsSecretRoute = OOrgOrgSecretsSecretRouteImport.update({
+  id: '/secrets/$secret',
+  path: '/secrets/$secret',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
+const OOrgOrgSecretsImportRoute = OOrgOrgSecretsImportRouteImport.update({
+  id: '/secrets/import',
+  path: '/secrets/import',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
 const OOrgFFactoryIndexRoute = OOrgFFactoryIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -346,12 +364,15 @@ export interface FileRoutesByFullPath {
   '/o/$org/credentials/new': typeof OOrgOrgCredentialsNewRoute
   '/o/$org/knowledge/$source': typeof OOrgOrgKnowledgeSourceRoute
   '/o/$org/knowledge/new': typeof OOrgOrgKnowledgeNewRoute
+  '/o/$org/secrets/$secret': typeof OOrgOrgSecretsSecretRoute
+  '/o/$org/secrets/import': typeof OOrgOrgSecretsImportRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionRouteWithChildren
   '/o/$org/f/$factory/settings': typeof OOrgFFactorySettingsRoute
   '/o/$org/connections/': typeof OOrgOrgConnectionsIndexRoute
   '/o/$org/credentials/': typeof OOrgOrgCredentialsIndexRoute
   '/o/$org/knowledge/': typeof OOrgOrgKnowledgeIndexRoute
+  '/o/$org/secrets/': typeof OOrgOrgSecretsIndexRoute
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
@@ -395,11 +416,14 @@ export interface FileRoutesByTo {
   '/o/$org/credentials/new': typeof OOrgOrgCredentialsNewRoute
   '/o/$org/knowledge/$source': typeof OOrgOrgKnowledgeSourceRoute
   '/o/$org/knowledge/new': typeof OOrgOrgKnowledgeNewRoute
+  '/o/$org/secrets/$secret': typeof OOrgOrgSecretsSecretRoute
+  '/o/$org/secrets/import': typeof OOrgOrgSecretsImportRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory/settings': typeof OOrgFFactorySettingsRoute
   '/o/$org/connections': typeof OOrgOrgConnectionsIndexRoute
   '/o/$org/credentials': typeof OOrgOrgCredentialsIndexRoute
   '/o/$org/knowledge': typeof OOrgOrgKnowledgeIndexRoute
+  '/o/$org/secrets': typeof OOrgOrgSecretsIndexRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
@@ -447,12 +471,15 @@ export interface FileRoutesById {
   '/o/$org/_org/credentials/new': typeof OOrgOrgCredentialsNewRoute
   '/o/$org/_org/knowledge/$source': typeof OOrgOrgKnowledgeSourceRoute
   '/o/$org/_org/knowledge/new': typeof OOrgOrgKnowledgeNewRoute
+  '/o/$org/_org/secrets/$secret': typeof OOrgOrgSecretsSecretRoute
+  '/o/$org/_org/secrets/import': typeof OOrgOrgSecretsImportRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionRouteWithChildren
   '/o/$org/f/$factory/settings': typeof OOrgFFactorySettingsRoute
   '/o/$org/_org/connections/': typeof OOrgOrgConnectionsIndexRoute
   '/o/$org/_org/credentials/': typeof OOrgOrgCredentialsIndexRoute
   '/o/$org/_org/knowledge/': typeof OOrgOrgKnowledgeIndexRoute
+  '/o/$org/_org/secrets/': typeof OOrgOrgSecretsIndexRoute
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
@@ -500,12 +527,15 @@ export interface FileRouteTypes {
     | '/o/$org/credentials/new'
     | '/o/$org/knowledge/$source'
     | '/o/$org/knowledge/new'
+    | '/o/$org/secrets/$secret'
+    | '/o/$org/secrets/import'
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory/definition'
     | '/o/$org/f/$factory/settings'
     | '/o/$org/connections/'
     | '/o/$org/credentials/'
     | '/o/$org/knowledge/'
+    | '/o/$org/secrets/'
     | '/o/$org/f/$factory/'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
@@ -549,11 +579,14 @@ export interface FileRouteTypes {
     | '/o/$org/credentials/new'
     | '/o/$org/knowledge/$source'
     | '/o/$org/knowledge/new'
+    | '/o/$org/secrets/$secret'
+    | '/o/$org/secrets/import'
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory/settings'
     | '/o/$org/connections'
     | '/o/$org/credentials'
     | '/o/$org/knowledge'
+    | '/o/$org/secrets'
     | '/o/$org/f/$factory'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
@@ -600,12 +633,15 @@ export interface FileRouteTypes {
     | '/o/$org/_org/credentials/new'
     | '/o/$org/_org/knowledge/$source'
     | '/o/$org/_org/knowledge/new'
+    | '/o/$org/_org/secrets/$secret'
+    | '/o/$org/_org/secrets/import'
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory/definition'
     | '/o/$org/f/$factory/settings'
     | '/o/$org/_org/connections/'
     | '/o/$org/_org/credentials/'
     | '/o/$org/_org/knowledge/'
+    | '/o/$org/_org/secrets/'
     | '/o/$org/f/$factory/'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
@@ -844,6 +880,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgOrgKnowledgeNewRouteImport
       parentRoute: typeof OOrgOrgRoute
     }
+    '/o/$org/_org/secrets/': {
+      id: '/o/$org/_org/secrets/'
+      path: '/secrets'
+      fullPath: '/o/$org/secrets/'
+      preLoaderRoute: typeof OOrgOrgSecretsIndexRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
+    '/o/$org/_org/secrets/$secret': {
+      id: '/o/$org/_org/secrets/$secret'
+      path: '/secrets/$secret'
+      fullPath: '/o/$org/secrets/$secret'
+      preLoaderRoute: typeof OOrgOrgSecretsSecretRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
+    '/o/$org/_org/secrets/import': {
+      id: '/o/$org/_org/secrets/import'
+      path: '/secrets/import'
+      fullPath: '/o/$org/secrets/import'
+      preLoaderRoute: typeof OOrgOrgSecretsImportRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
     '/o/$org/f/$factory/': {
       id: '/o/$org/f/$factory/'
       path: '/'
@@ -1008,9 +1065,12 @@ interface OOrgOrgRouteChildren {
   OOrgOrgCredentialsNewRoute: typeof OOrgOrgCredentialsNewRoute
   OOrgOrgKnowledgeSourceRoute: typeof OOrgOrgKnowledgeSourceRoute
   OOrgOrgKnowledgeNewRoute: typeof OOrgOrgKnowledgeNewRoute
+  OOrgOrgSecretsSecretRoute: typeof OOrgOrgSecretsSecretRoute
+  OOrgOrgSecretsImportRoute: typeof OOrgOrgSecretsImportRoute
   OOrgOrgConnectionsIndexRoute: typeof OOrgOrgConnectionsIndexRoute
   OOrgOrgCredentialsIndexRoute: typeof OOrgOrgCredentialsIndexRoute
   OOrgOrgKnowledgeIndexRoute: typeof OOrgOrgKnowledgeIndexRoute
+  OOrgOrgSecretsIndexRoute: typeof OOrgOrgSecretsIndexRoute
 }
 
 const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
@@ -1027,9 +1087,12 @@ const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
   OOrgOrgCredentialsNewRoute: OOrgOrgCredentialsNewRoute,
   OOrgOrgKnowledgeSourceRoute: OOrgOrgKnowledgeSourceRoute,
   OOrgOrgKnowledgeNewRoute: OOrgOrgKnowledgeNewRoute,
+  OOrgOrgSecretsSecretRoute: OOrgOrgSecretsSecretRoute,
+  OOrgOrgSecretsImportRoute: OOrgOrgSecretsImportRoute,
   OOrgOrgConnectionsIndexRoute: OOrgOrgConnectionsIndexRoute,
   OOrgOrgCredentialsIndexRoute: OOrgOrgCredentialsIndexRoute,
   OOrgOrgKnowledgeIndexRoute: OOrgOrgKnowledgeIndexRoute,
+  OOrgOrgSecretsIndexRoute: OOrgOrgSecretsIndexRoute,
 }
 
 const OOrgOrgRouteWithChildren =

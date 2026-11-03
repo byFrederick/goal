@@ -53,10 +53,6 @@ export type {
   ConstraintSource,
   CreatedApiKey,
   CreatedPersonalToken,
-  Credential,
-  CredentialPatch,
-  CredentialType,
-  CredentialUsers,
   CurrentRun,
   DefinitionCounts,
   DefinitionEvent,
@@ -225,11 +221,16 @@ export type MergeMethod = NonNullable<MergeRequest['method']>;
 
 // The spend shapes are the contract's, read from the generated schema (the api-client does not re-export them).
 type Schemas = components['schemas'];
-// The credential shapes a create or an import sends and answers (ADR 0017), read from the generated schema.
-export type NewCredential = Schemas['NewCredential'];
-export type CredentialImport = Schemas['CredentialImport'];
-export type CredentialImportResult = Schemas['CredentialImportResult'];
-export type CredentialImportOutcome = Schemas['CredentialImportOutcome'];
+// The secret shapes (ADR 0037), read from the generated schema. A value is in NewSecret, SecretValue and
+// SecretImport only, which go out; no answer carries one.
+export type Secret = Schemas['Secret'];
+export type SecretUse = Schemas['SecretUse'];
+export type SecretScope = Schemas['SecretScope'];
+export type NewSecret = Schemas['NewSecret'];
+export type SecretPatch = Schemas['SecretPatch'];
+export type SecretImport = Schemas['SecretImport'];
+export type SecretImportResult = Schemas['SecretImportResult'];
+export type SecretImportOutcome = Schemas['SecretImportOutcome'];
 // The signed-in person's notification preferences (ADR 0023, decision 1): the events, their channels and the email.
 export type NotificationPreferences = Schemas['NotificationPreferences'];
 export type NotificationEvents = Schemas['NotificationEvents'];
