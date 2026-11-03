@@ -23,6 +23,8 @@ export interface SetupInput {
   invitations: Invitation[];
   /** The organization's connections, every kind. */
   connections: Connection[];
+  /** Whether the organization's notification setting names a Slack secret (ADR 0037). */
+  slackSet: boolean;
   /** The organization's knowledge sources. */
   knowledge: KnowledgeSource[];
   /** The published version's model (the section values the definition editor reads). */
@@ -71,9 +73,9 @@ export function setupRows(input: SetupInput): SetupRow[] {
     },
     {
       id: 'slack',
-      text: 'Connect Slack',
+      text: 'Set up Slack notifications',
       hint: `Ask @${input.factoryName} from any channel`,
-      done: input.connections.some((connection) => connection.kind === 'slack'),
+      done: input.slackSet,
     },
     {
       id: 'knowledge',

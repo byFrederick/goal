@@ -10,14 +10,14 @@ import {
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  connectionsQuery,
   factoriesQuery,
   meQuery,
   notificationsQuery,
+  orgNotificationsQuery,
   orgQuery,
   personalTokensQuery,
 } from '../../api/queries';
-import type { Connection, Me, NotificationPreferences, Org, OrgSummary } from '../../api/types';
+import type { Me, NotificationPreferences, Org, OrgSummary } from '../../api/types';
 import { AccountProvider } from '../../app/account-menu';
 import { OrgContext } from '../../shared/org';
 import { TooltipProvider } from '../../ui/tooltip';
@@ -68,8 +68,6 @@ const saved: NotificationPreferences = {
   time_zone: 'Europe/Berlin',
 };
 
-const slackConnection = { id: 'c-slack', name: 'slack', kind: 'slack' } as Connection;
-
 /** The requests the client sent, as the stub below saw them: the method, the path and a JSON body. */
 const requests: { method: string; path: string; body: unknown }[] = [];
 
@@ -112,7 +110,7 @@ function stubMatchMedia() {
 /** The account page inside the organization's shell, with the person's state as `me`. */
 function renderAccount(
   me: Me | 'pending',
-  { prefs = saved, slack = [slackConnection] }: { prefs?: NotificationPreferences; slack?: Connection[] } = {},
+  { prefs = saved, slackSecret = 'slack-bot' }: { prefs?: NotificationPreferences; slackSecret?: string | null } = {},
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   const grants = { ...org, created_at: '2026-09-01T00:00:00Z', can: ['personal_token:read'] } as Org;
@@ -120,7 +118,7 @@ function renderAccount(
   client.setQueryData(factoriesQuery(org.id).queryKey, []);
   client.setQueryData(personalTokensQuery(org.id).queryKey, []);
   client.setQueryData(notificationsQuery.queryKey, prefs);
-  client.setQueryData(connectionsQuery(org.id, { kind: 'slack' }).queryKey, slack);
+  client.setQueryData(orgNotificationsQuery(org.id).queryKey, { slack_secret: slackSecret });
   if (me === 'pending') vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}));
   else client.setQueryData(meQuery.queryKey, me);
 

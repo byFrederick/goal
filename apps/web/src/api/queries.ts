@@ -93,6 +93,7 @@ import {
   listKnowledgeSources,
 } from './knowledge';
 import { getNotificationPreferences } from './notifications';
+import { getOrgNotificationSettings } from './org-notifications';
 import { getOrgPolicy } from './policy';
 import { testRepository } from './repositories';
 import { type SearchQuery, searchOrg } from './search';
@@ -156,6 +157,8 @@ export const keys = {
   /** What each factory needs from people now (the rail's badges). */
   attention: (org: string) => ['org', org, 'attention'] as const,
   settings: (org: string) => ['org', org, 'settings'] as const,
+  /** The organization's notification settings (the Slack secret). */
+  orgNotifications: (org: string) => ['org', org, 'settings', 'notifications'] as const,
   /** The organization's model and tool policy (ADR 0024), the Models and policies screen. */
   policy: (org: string) => ['org', org, 'policy'] as const,
   apiKeys: (org: string) => ['org', org, 'api-keys'] as const,
@@ -419,6 +422,14 @@ export const repositoryTestQuery = (org: string, url: string, secret: string) =>
     queryFn: ({ signal }) => testRepository(org, { url, secret }, signal),
     staleTime: 60_000,
     retry: false,
+  });
+
+/** The organization's notification settings (org:read). */
+export const orgNotificationsQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.orgNotifications(org),
+    queryFn: ({ signal }) => getOrgNotificationSettings(org, signal),
+    staleTime: 30_000,
   });
 
 /** The organization's secrets, by name, never a value (secret:read: every member). */

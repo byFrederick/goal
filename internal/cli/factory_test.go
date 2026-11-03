@@ -163,6 +163,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		ConnectionTransport: transport, CodeHosts: map[string]ports.CodeHost{"github": codehost}, Knowledge: kb, KnowledgeUploads: uploads,
 		KnowledgeObjects: kbObjects, KnowledgeCheck: knowledge.NewIngestor(knowledge.IngestorConfig{Knowledge: kb, Secrets: secrets, Uploads: uploads, Objects: kbObjects, Clock: clock}),
 		UploadMaxBytes: domain.DefaultMaxUpload, Clock: clock, NotificationPreferences: porttest.NewNotificationPreferences(),
+		NotificationSettings: porttest.NewNotificationSettings(secrets, tenancy), SlackMessenger: porttest.NewDirectMessenger(),
 		OrgPolicies: porttest.NewOrgPolicies(nil, tenancy, clock.Now), BoxSizes: []domain.BoxSize{{Size: domain.SandboxMedium, VCPUs: 2, MemoryBytes: 4 << 30}},
 	})
 	if err != nil {

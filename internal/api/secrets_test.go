@@ -565,3 +565,32 @@ func TestAPI_SecretResponsesHoldNoValue(t *testing.T) {
 		}
 	}
 }
+
+// A secret the Slack notification setting names lists it in its uses and is not deleted: the
+// 409 names the setting (ADR 0037 decision 4). Once Slack is off, the secret deletes.
+func TestAPI_SecretDeleteRefusedWhileSlackUsesIt(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createSlackSecret(t)
+
+	decode[gen.NotificationSettings](t, h.request(t, http.MethodPut, notifySettingsPath, `{"slack_secret":"`+slackSecret+`"}`, nil), http.StatusOK)
+
+	path := secretsPath + "/" + slackSecret
+	want := []gen.SecretUse{{Kind: gen.SecretUseSlack, Name: "Slack notifications"}}
+
+	if got := decode[gen.Secret](t, h.request(t, http.MethodGet, path, "", nil), http.StatusOK); !slices.Equal(got.Uses, want) {
+		t.Errorf("uses = %+v; want %+v", got.Uses, want)
+	}
+
+	p := refused(t, "delete in use", h.request(t, http.MethodDelete, path, "", nil), http.StatusConflict, "secret-in-use")
+	if p.Uses == nil || !slices.Equal(*p.Uses, want) || !strings.Contains(valueOf(p.Detail), "slack Slack notifications") {
+		t.Errorf("problem = %+v, detail %q; want it to name the Slack setting", p.Uses, valueOf(p.Detail))
+	}
+
+	decode[gen.NotificationSettings](t, h.request(t, http.MethodPut, notifySettingsPath, `{"slack_secret":null}`, nil), http.StatusOK)
+
+	if r := h.request(t, http.MethodDelete, path, "", nil); r.status != http.StatusNoContent {
+		t.Errorf("delete the secret Slack no longer uses = %d %s; want 204", r.status, r.body)
+	}
+}

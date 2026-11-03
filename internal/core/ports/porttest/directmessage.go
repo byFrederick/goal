@@ -16,11 +16,14 @@ type DirectSend struct {
 }
 
 // DirectMessenger records the messages it is given. Fail, when set, decides each send's error
-// first: a non-nil error fails the send and records nothing.
+// first: a non-nil error fails the send and records nothing. CheckWith, when set, answers each
+// check; unset, every token works in workspace "acme".
 type DirectMessenger struct {
-	mu   sync.Mutex
-	sent []DirectSend
-	Fail func(token string, m ports.DirectMessage) error
+	mu        sync.Mutex
+	sent      []DirectSend
+	checked   []string
+	Fail      func(token string, m ports.DirectMessage) error
+	CheckWith func(token string) (string, error)
 }
 
 // NewDirectMessenger returns a messenger that has sent nothing and fails nothing.
@@ -48,4 +51,26 @@ func (d *DirectMessenger) Sent() []DirectSend {
 	defer d.mu.Unlock()
 
 	return append([]DirectSend(nil), d.sent...)
+}
+
+// Check implements ports.DirectMessenger and records the token checked.
+func (d *DirectMessenger) Check(_ context.Context, token string) (string, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.checked = append(d.checked, token)
+
+	if d.CheckWith != nil {
+		return d.CheckWith(token)
+	}
+
+	return "acme", nil
+}
+
+// Checked returns the tokens checked so far, in order.
+func (d *DirectMessenger) Checked() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	return append([]string(nil), d.checked...)
 }

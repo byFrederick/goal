@@ -55,7 +55,7 @@ func (d *Digests) DigestRecipients(ctx context.Context) ([]ports.DigestRecipient
 	out := make([]ports.DigestRecipient, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, ports.DigestRecipient{
-			UserID: domain.UserID(r.UserID.String()), TimeZone: r.TimeZone, Email: r.Email, Slack: r.Slack && r.SlackConnected,
+			UserID: domain.UserID(r.UserID.String()), TimeZone: r.TimeZone, Email: r.Email, Slack: r.Slack && r.SlackEnabled,
 		})
 	}
 

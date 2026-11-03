@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Connection, NotificationPreferences } from '../../api/types';
+import type { NotificationPreferences } from '../../api/types';
 import { TooltipProvider } from '../../ui/tooltip';
 import { NotificationsTable } from './notifications-section';
 
@@ -35,7 +35,7 @@ const saved: NotificationPreferences = {
 /** What the fake goald holds, and how it answers: a read or a save can be made to fail or hang. */
 const goald = vi.hoisted(() => ({
   prefs: null as NotificationPreferences | null,
-  slack: [] as Connection[],
+  slackSecret: null as string | null,
   failRead: false,
   hangRead: false,
   failSave: false,
@@ -70,7 +70,8 @@ async function answer(input: unknown, init?: RequestInit): Promise<Response> {
     goald.prefs = body as NotificationPreferences;
     return json(200, goald.prefs);
   }
-  if (url.pathname === '/v1/orgs/org-goal/connections') return json(200, { connections: goald.slack });
+  if (url.pathname === '/v1/orgs/org-goal/settings/notifications')
+    return json(200, { slack_secret: goald.slackSecret });
   return json(404, { title: 'Not found', status: 404 });
 }
 
@@ -92,7 +93,7 @@ const box = (name: string) => screen.findByRole('checkbox', { name }) as Promise
 
 beforeEach(() => {
   goald.prefs = structuredClone(saved);
-  goald.slack = [{ id: 'c-slack', name: 'slack', kind: 'slack' } as Connection];
+  goald.slackSecret = 'slack-bot';
   goald.failRead = false;
   goald.hangRead = false;
   goald.failSave = false;
@@ -170,8 +171,8 @@ describe('the notification table', () => {
     expect(budget.checked).toBe(false);
   });
 
-  it('makes the Slack boxes not available with no Slack connection, and changes nothing', async () => {
-    goald.slack = [];
+  it('makes the Slack boxes not available with no Slack secret set, and changes nothing', async () => {
+    goald.slackSecret = null;
     renderTable();
     const approval = await box('An agent needs your OK for a write, Slack');
     expect(approval.checked).toBe(true);
@@ -183,10 +184,11 @@ describe('the notification table', () => {
     expect(saves()).toHaveLength(0);
   });
 
-  it('asks for the Slack connections of the organization, by kind', async () => {
+  it('reads the organization’s notification setting, not its connections', async () => {
     renderTable();
     await box('An agent needs your OK for a write, Slack');
-    expect(goald.requests.some((r) => r.path === '/v1/orgs/org-goal/connections' && r.kind === 'slack')).toBe(true);
+    expect(goald.requests.some((r) => r.path === '/v1/orgs/org-goal/settings/notifications')).toBe(true);
+    expect(goald.requests.some((r) => r.path === '/v1/orgs/org-goal/connections')).toBe(false);
   });
 
   it('keeps every box not available and requests nothing with sign-in off', async () => {

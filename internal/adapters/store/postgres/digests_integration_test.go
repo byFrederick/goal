@@ -31,11 +31,13 @@ func digestRecipients(t *testing.T, dg *Digests, o outboxOrg) map[domain.UserID]
 }
 
 // The digest recipients are the members with the digest on, with their time zone (UTC without a
-// saved one), and Slack only while the organization has a Slack connection.
+// saved one), and Slack only while the organization's notification setting names a secret,
+// whatever connections exist.
 func TestDigests_Recipients(t *testing.T) {
 	t.Parallel()
 
 	o := newOutboxOrg(t)
+	o.slackConnection(t)
 	dg := NewDigests(o.d.s)
 
 	// The viewer turns the digest off; the approver lives in Berlin and wants it on Slack too.
@@ -52,13 +54,13 @@ func TestDigests_Recipients(t *testing.T) {
 	}
 
 	if r := rs[domain.UserID(o.approver)]; r.TimeZone != "Europe/Berlin" || !r.Email || r.Slack {
-		t.Errorf("approver without a Slack connection = %+v; want Berlin, email and no Slack", r)
+		t.Errorf("approver without the Slack setting = %+v; want Berlin, email and no Slack", r)
 	}
 
-	o.slackConnection(t)
+	o.slackSetting(t)
 
 	if r := digestRecipients(t, dg, o)[domain.UserID(o.approver)]; !r.Slack {
-		t.Errorf("approver with a Slack connection = %+v; want Slack", r)
+		t.Errorf("approver with the Slack setting = %+v; want Slack", r)
 	}
 }
 
