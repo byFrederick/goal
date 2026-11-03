@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Sign in on a phone</title>
+
 </head>
 <body>
 <x-dc>
@@ -153,7 +154,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 
 </style>
 </helmet>
-<div class="g ph {{theme}}" style="height: 844px">
+<div class="g ph " style="height: 844px">
   <main class="si">
     <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 18px">
       <span class="omk" aria-hidden="true" style="width: 48px; height: 48px; border-radius: 10px"><svg width="32" height="32" viewBox="0 0 24 24"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#EAB308"></circle></svg></span>
@@ -172,12 +173,6 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
   </main>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":390,"height":844}}'>
-class Component extends DCLogic {
-  renderVals() {
-    return { theme: this.props.dark ? 'dark' : '' };
-  }
-}
-</script>
+
 </body>
 </html>

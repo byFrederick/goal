@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Software floor on a phone</title>
+
 </head>
 <body>
 <x-dc>
@@ -181,7 +182,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 
 </style>
 </helmet>
-<div class="g ph {{theme}}" style="height: 1160px">
+<div class="g ph " style="height: 1160px">
   <header class="tb">
     <a class="hb" href="V2-M-Drawer.dc.html" aria-label="Open menu"><span class="omk" aria-hidden="true"><svg width="19" height="19" viewBox="0 0 24 24"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#EAB308"></circle></svg></span></a>
     <h1 class="ttl"><span class="fb" style="background: #2B5BD7" aria-hidden="true">S</span> Floor</h1>
@@ -222,12 +223,6 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
   </nav>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":390,"height":1160}}'>
-class Component extends DCLogic {
-  renderVals() {
-    return { theme: this.props.dark ? 'dark' : '' };
-  }
-}
-</script>
+
 </body>
 </html>
