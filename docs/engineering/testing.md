@@ -28,6 +28,8 @@ Tests exist to stop real regressions. A test that would still pass if the behavi
 
 The rules for writing tests (what not to test, fakes instead of mocks, failing test first, bounded runs, no timing ratios) are in [`.claude/rules/tests.md`](../../.claude/rules/tests.md), which Claude Code loads whenever a test file is touched.
 
+Tests and helpers that run git must not inherit the GIT_* repository variables (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` and the others). git sets them when it runs a hook, and they override `git -C`, so a test that inherits them commits, checks out and changes config in the repository being pushed instead of its temporary one. Build the command's environment with a filter like `gitEnv` in `tools/checkplan/main.go`. The pre-push hook also unsets these variables before `task check`.
+
 ## Commands
 
 ```bash
