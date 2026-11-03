@@ -145,6 +145,27 @@ func TestKnowledge_SourcesCreateChangeAndSync(t *testing.T) {
 	}
 
 	refused(t, "get after delete", h.request(t, http.MethodGet, handbookPath, "", nil), http.StatusNotFound, "knowledge-source-not-found")
+
+	// A synced source reads with a secret: created, read and patched with secret.
+	h.createRepoSecret(t)
+	decode[gen.Secret](t, h.request(t, http.MethodPost, secretsPath, `{"name":"docs-token","value":"test-token","scope":{"all_factories":true}}`, nil),
+		http.StatusCreated)
+
+	synced := decode[gen.KnowledgeSource](t, h.request(t, http.MethodPost, sourcesPath, `{"name":"runbooks","title":"Runbooks","kind":"synced",
+"secret":"`+repoSecret+`","config":{"reader":"gitdocs","repository":"https://github.com/acme/docs"}}`, nil), http.StatusCreated)
+	if deref(synced.Secret) != repoSecret || synced.Connection != nil || synced.Config["reader"] != "gitdocs" {
+		t.Errorf("created synced = %s; want it on secret %s with its reader", body(t, synced), repoSecret)
+	}
+
+	got := decode[gen.KnowledgeSource](t, h.request(t, http.MethodGet, sourcesPath+"/runbooks", "", nil), http.StatusOK)
+	if deref(got.Secret) != repoSecret {
+		t.Errorf("read synced = %s; want secret %s", body(t, got), repoSecret)
+	}
+
+	patched := decode[gen.KnowledgeSource](t, h.request(t, http.MethodPatch, sourcesPath+"/runbooks", `{"secret":"docs-token"}`, nil), http.StatusOK)
+	if deref(patched.Secret) != "docs-token" || patched.Config["reader"] != "gitdocs" {
+		t.Errorf("patched synced = %s; want secret docs-token, its config kept", body(t, patched))
+	}
 }
 
 // Requests the source rules refuse answer their codes; a source reading a connection is listed
@@ -155,8 +176,7 @@ func TestKnowledge_SourceRefusals(t *testing.T) {
 	h := newHarness(t)
 	h.createHandbook(t)
 	h.createGitHub(t)
-	decode[gen.Connection](t, h.request(t, http.MethodPost, connectionsPath, `{"name":"claude","kind":"anthropic","secrets":{"key":"k"}}`, nil),
-		http.StatusCreated)
+	h.createRepoSecret(t)
 
 	for _, tc := range []struct {
 		name, body string
@@ -165,8 +185,12 @@ func TestKnowledge_SourceRefusals(t *testing.T) {
 	}{
 		{"name taken", `{"name":"handbook","title":"Again","kind":"upload"}`, http.StatusConflict, "knowledge-source-name-taken"},
 		{"upload with a connection", `{"name":"notes","title":"Notes","kind":"upload","connection":"github"}`, http.StatusBadRequest, ""},
-		{"synced on a kind that cannot sync", `{"name":"models","title":"Models","kind":"synced","connection":"claude"}`, http.StatusBadRequest, "connection-cannot-sync"},
-		{"unknown connection", `{"name":"wiki","title":"Wiki","kind":"synced","connection":"wiki"}`, http.StatusNotFound, "connection-not-found"},
+		{"synced on a connection", `{"name":"models","title":"Models","kind":"synced","connection":"github","config":{"reader":"gitdocs"}}`, http.StatusBadRequest, ""},
+		{"synced on no secret", `{"name":"models","title":"Models","kind":"synced"}`, http.StatusBadRequest, ""},
+		{"synced without a reader", `{"name":"models","title":"Models","kind":"synced","secret":"` + repoSecret + `"}`, http.StatusBadRequest, ""},
+		{"unknown secret", `{"name":"wiki","title":"Wiki","kind":"synced","secret":"wiki","config":{"reader":"confluence"}}`, http.StatusNotFound, "secret-not-found"},
+		{"live with a secret", `{"name":"wiki","title":"Wiki","kind":"live","connection":"github","secret":"` + repoSecret + `"}`, http.StatusBadRequest, ""},
+		{"unknown connection", `{"name":"wiki","title":"Wiki","kind":"live","connection":"wiki"}`, http.StatusNotFound, "connection-not-found"},
 		{"schedule too short", `{"name":"often","title":"Often","kind":"upload","sync_every_seconds":60}`, http.StatusBadRequest, ""},
 	} {
 		refused(t, tc.name, h.request(t, http.MethodPost, sourcesPath, tc.body, nil), tc.status, tc.code)
@@ -177,6 +201,9 @@ func TestKnowledge_SourceRefusals(t *testing.T) {
 
 	refused(t, "sync of a live source", h.request(t, http.MethodPost, sourcesPath+"/repo-search/sync", "", nil), http.StatusConflict, "knowledge-source-live")
 	refused(t, "patch of no source", h.request(t, http.MethodPatch, sourcesPath+"/nothing", `{"title":"x"}`, nil), http.StatusNotFound, "knowledge-source-not-found")
+	refused(t, "patch of an upload source's secret", h.request(t, http.MethodPatch, handbookPath, `{"secret":"`+repoSecret+`"}`, nil),
+		http.StatusBadRequest, "")
+	refused(t, "patch to an unknown secret", h.request(t, http.MethodPatch, handbookPath, `{"secret":"gone"}`, nil), http.StatusNotFound, "secret-not-found")
 
 	conn := decode[gen.Connection](t, h.request(t, http.MethodGet, githubPath, "", nil), http.StatusOK)
 	if !slices.Equal(conn.UsedBy.KnowledgeSources, []string{"repo-search"}) {
@@ -282,10 +309,9 @@ func TestKnowledge_UploadRefusals(t *testing.T) {
 		t.Errorf("the bucket holds %v (%v) after the refusals; want nothing", objects, err)
 	}
 
-	h.request(t, http.MethodPost, connectionsPath, `{"name":"wiki","kind":"confluence","fields":{"site":"acme.atlassian.net","email":"ada@example.com"},`+
-		`"secrets":{"token":"t"}}`, nil)
-	decode[gen.KnowledgeSource](t, h.request(t, http.MethodPost, sourcesPath,
-		`{"name":"wiki","title":"Wiki","kind":"synced","connection":"wiki","config":{"space":"ENG"}}`, nil), http.StatusCreated)
+	h.createRepoSecret(t)
+	decode[gen.KnowledgeSource](t, h.request(t, http.MethodPost, sourcesPath, `{"name":"wiki","title":"Wiki","kind":"synced","secret":"`+repoSecret+
+		`","config":{"reader":"confluence","site":"acme.atlassian.net","email":"ada@example.com","spaces":"ENG"}}`, nil), http.StatusCreated)
 
 	refused(t, "an upload to a synced source", h.upload(t, "wiki", [2]string{leaveFile, leaveMD}), http.StatusConflict, "not-an-upload-source")
 }

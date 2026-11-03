@@ -225,6 +225,38 @@ func TestAPI_SecretDeleteInUse(t *testing.T) {
 	decode[gen.Secret](t, h.request(t, http.MethodGet, secretPath, "", nil), http.StatusOK)
 }
 
+// A secret a knowledge source reads with lists the source in its uses and is not deleted: the 409
+// names it. Once the source is gone, the secret deletes.
+func TestAPI_SecretDeleteRefusedWhileASourceUsesIt(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createRepoSecret(t)
+
+	decode[gen.KnowledgeSource](t, h.request(t, http.MethodPost, sourcesPath, `{"name":"runbooks","title":"Runbooks","kind":"synced",
+"secret":"`+repoSecret+`","config":{"reader":"gitdocs","repository":"https://github.com/acme/docs"}}`, nil), http.StatusCreated)
+
+	path := secretsPath + "/" + repoSecret
+	want := []gen.SecretUse{{Kind: gen.SecretUseKnowledgeSource, Name: "runbooks"}}
+
+	if got := decode[gen.Secret](t, h.request(t, http.MethodGet, path, "", nil), http.StatusOK); !slices.Equal(got.Uses, want) {
+		t.Errorf("uses = %+v; want %+v", got.Uses, want)
+	}
+
+	p := refused(t, "delete in use", h.request(t, http.MethodDelete, path, "", nil), http.StatusConflict, "secret-in-use")
+	if p.Uses == nil || !slices.Equal(*p.Uses, want) || !strings.Contains(valueOf(p.Detail), "knowledge_source runbooks") {
+		t.Errorf("problem = %+v, detail %q; want it to name the source", p.Uses, valueOf(p.Detail))
+	}
+
+	if r := h.request(t, http.MethodDelete, sourcesPath+"/runbooks", "", nil); r.status != http.StatusNoContent {
+		t.Fatalf("delete the source = %d %s", r.status, r.body)
+	}
+
+	if r := h.request(t, http.MethodDelete, path, "", nil); r.status != http.StatusNoContent {
+		t.Errorf("delete the secret no source uses = %d %s; want 204", r.status, r.body)
+	}
+}
+
 // An import's dry run answers each name as new or existing, with what uses the existing one, and
 // stores nothing; a real run creates the new names open to no factory, and skips or replaces the
 // existing ones.

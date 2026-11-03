@@ -18,9 +18,9 @@ import (
 // problem, log line or audit entry does. The store audits every change in its transaction, so
 // these handlers write no audit of their own.
 //
-// What uses a secret is, for now, the connections that refer to it as {{name}}, read through
-// ports.Credentials.UsedBy (the same table). The parts that let definitions, knowledge sources,
-// webhooks and the Slack setting refer to secrets add their uses to secretUses.
+// What uses a secret is, for now, the knowledge sources that read with it and the connections that
+// refer to it as {{name}}, read through ports.Credentials.UsedBy (the same table). The parts that
+// let definitions, webhooks and the Slack setting refer to secrets add their uses to secretUses.
 
 // Errors of the secret routes, answered with their codes by secretProblem.
 var (
@@ -369,16 +369,29 @@ func (s *server) importSecret(ctx context.Context, e domain.CredentialImportEntr
 }
 
 // secretUses is what uses secret name, by kind then name: today the connections that refer to it
-// as {{name}}.
+// as {{name}} and the knowledge sources that read with it.
 func (s *server) secretUses(ctx context.Context, name string) ([]gen.SecretUse, error) {
 	conns, err := s.credentials.UsedBy(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("the uses of secret %q: %w", name, err)
 	}
 
+	sources, err := s.knowledge.Sources(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("the uses of secret %q: %w", name, err)
+	}
+
 	uses := make([]gen.SecretUse, 0, len(conns))
+
 	for _, c := range conns {
 		uses = append(uses, gen.SecretUse{Kind: gen.SecretUseConnection, Name: c})
+	}
+
+	// Sources come by name.
+	for _, src := range sources {
+		if src.Secret == name {
+			uses = append(uses, gen.SecretUse{Kind: gen.SecretUseKnowledgeSource, Name: src.Name})
+		}
 	}
 
 	return uses, nil

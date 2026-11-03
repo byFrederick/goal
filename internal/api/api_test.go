@@ -666,7 +666,9 @@ func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 	h.conns = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), audit)
 	h.creds = porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
 	h.secrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
-	h.kb, h.kbObjects = porttest.NewKnowledge(h.conns, audit), porttest.NewObjectStore()
+	kb := porttest.NewKnowledge(h.conns, audit)
+	kb.ReadSecrets(h.secrets)
+	h.kb, h.kbObjects = kb, porttest.NewObjectStore()
 	h.uploads = knowledge.NewUploads(h.kb, h.kbObjects, testUploadMax)
 
 	kinds, err := connkind.Platform()

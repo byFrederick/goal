@@ -109,4 +109,3 @@ func (s *server) TestRepository(ctx context.Context, req gen.TestRepositoryReque
 func oneLine(reason string, opened map[string]string) string {
 	return scrubValues(strings.Join(strings.Fields(reason), " "), opened)
 }
-
