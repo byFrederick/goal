@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -526,11 +527,14 @@ func (h *harness) expectServerRule(t *testing.T, item domain.ItemID, env string)
 		t.Fatalf("standing rules %+v; want one rule keyed by the factory, environment %s and server %s", rules, env, connTracker)
 	}
 
-	modes := map[string]domain.ConnectionToolMode{askTool: domain.ToolModeAsk, offTool: domain.ToolModeOff}
-	if got := domain.EffectiveServerToolModes(modes, rules, factoryID, env, connTracker, agWorker); got.Modes[askTool] != "" ||
-		got.Modes[offTool] != domain.ToolModeOff {
-		t.Errorf("effective modes %+v; want %s allowed and %s off", got, askTool, offTool)
+	file := map[string]string{askTool: string(domain.ToolModeAsk), offTool: string(domain.ToolModeOff)}
+	wantModes := []domain.ToolModeEntry{{Tool: askTool, Mode: domain.ToolModeAllow}, {Tool: offTool, Mode: domain.ToolModeOff}}
+
+	if got := domain.ServerToolModes(file, nil, rules, factoryID, env, connTracker, agWorker); !reflect.DeepEqual(got, wantModes) {
+		t.Errorf("server tool modes %+v; want %s allowed and %s off", got, askTool, offTool)
 	}
+
+	modes := map[string]domain.ConnectionToolMode{askTool: domain.ToolModeAsk, offTool: domain.ToolModeOff}
 
 	if got := domain.EffectiveToolModes(modes, rules, "", agWorker); got.Modes[askTool] != domain.ToolModeAsk {
 		t.Errorf("a server's rule lifted a connection's ask: %+v", got)
