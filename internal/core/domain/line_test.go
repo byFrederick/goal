@@ -96,6 +96,34 @@ func TestLine_MergeConnections(t *testing.T) {
 	}
 }
 
+// A repository's host names its code host on github.com and gitlab.com, whatever the case;
+// forge names it on any host and wins over the host's.
+func TestRepository_CodeHost(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		repo                Repository
+		wantHost, wantForge string
+	}{
+		{repo: Repository{URL: "https://github.com/acme/app.git"}, wantHost: "github.com", wantForge: "github"},
+		{repo: Repository{URL: "https://GitLab.com/acme/web.git"}, wantHost: "gitlab.com", wantForge: "gitlab"},
+		{repo: Repository{URL: "https://git.example.com/acme/app.git"}, wantHost: "git.example.com"},
+		{repo: Repository{URL: "https://git.example.com:8443/acme/app.git", Forge: "gitlab"}, wantHost: "git.example.com:8443", wantForge: "gitlab"},
+		{repo: Repository{URL: "https://github.com/acme/app.git", Forge: "gitlab"}, wantHost: "github.com", wantForge: "gitlab"},
+		{repo: Repository{}},
+	}
+
+	for _, tt := range tests {
+		if host, forge := tt.repo.CodeHost(); host != tt.wantHost || forge != tt.wantForge {
+			t.Errorf("CodeHost of %+v = %q, %q; want %q, %q", tt.repo, host, forge, tt.wantHost, tt.wantForge)
+		}
+	}
+
+	if KnownForge("GITHUB.COM") != "github" || KnownForge("git.example.com") != "" {
+		t.Error("KnownForge does not name github.com's adapter alone")
+	}
+}
+
 // A station's lane agents are its agent, or each agent its route uses once, sorted; queue,
 // human and done stations have none.
 func TestStation_LaneAgents(t *testing.T) {
