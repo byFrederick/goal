@@ -212,7 +212,6 @@ describe('the New source page', () => {
     expect(body).not.toHaveProperty('connection');
   });
 
-
   it('shows Kind as a radio group of three cards, and Cancel and Add source inside the form', async () => {
     renderPage('/o/acme/knowledge/new');
     const group = await screen.findByRole('group', { name: 'Kind' });

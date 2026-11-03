@@ -91,7 +91,7 @@ export function RuntimeFields({ basics }: { basics: BasicsSection }) {
               Change in Secrets
             </Link>
           </span>
-          <p className="m-0 text-[13px] leading-snug text-muted">The secret that gives every run its model.</p>
+          <p className="m-0 text-meta text-muted">The secret that gives every run its model.</p>
           <ProblemFixes pointer="/basics/model_connection" />
         </div>
         <div className="flex min-w-0 flex-col gap-1.5">

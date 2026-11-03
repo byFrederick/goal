@@ -95,14 +95,14 @@ export function factoryLines(spend: OrgSpend): FactoryLine[] {
 /** Whether a budget is stopped now: an andon pull is open on the factory. */
 export const isStopped = (b: SpendBudget): boolean => b.state === 'stopped';
 
-/** A connection's factories as words: "used by all 3 factories". */
+/** A model key's factories as words: "used by all 3 factories". */
 export function usedByText(used: number, total: number): string {
   if (used === total) return `used by all ${total} ${total === 1 ? 'factory' : 'factories'}`;
   return `used by ${used} of ${total} ${total === 1 ? 'factory' : 'factories'}`;
 }
 
-/** The model connections of every budget, each once, with the factories that use it. */
-export function connectionsOf(budgets: readonly SpendBudget[]): { name: string; kind: string; used: number }[] {
+/** The model keys of every budget, each once, with the factories that use it. */
+export function payersOf(budgets: readonly SpendBudget[]): { name: string; kind: string; used: number }[] {
   const byName = new Map<string, { name: string; kind: string; used: number }>();
   for (const b of budgets) {
     for (const c of b.model_connections) {

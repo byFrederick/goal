@@ -48,8 +48,8 @@ export function NewSourcePage() {
       <header className="flex flex-col gap-1">
         <h1 className="m-0 text-page-title">New source</h1>
         <p className="m-0 max-w-[680px] text-body text-muted">
-          Add text agents can search: files you upload, or a system Goal reaches with one of {org.name}’s
-          secrets. Factories add a source in their Definition.
+          Add text agents can search: files you upload, or a system Goal reaches with one of {org.name}’s secrets.
+          Factories add a source in their Definition.
         </p>
       </header>
       {manage ? (

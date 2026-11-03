@@ -6,8 +6,12 @@ import {
   defKeys,
   draftFileQuery,
   draftFilesQuery,
-  membersQuery, orgQuery, repositoryTestQuery, secretsQuery } from '../../api/queries';
-import type { Factory, OrgSummary, SectionSave, Secret } from '../../api/types';
+  membersQuery,
+  orgQuery,
+  repositoryTestQuery,
+  secretsQuery,
+} from '../../api/queries';
+import type { Factory, OrgSummary, Secret, SectionSave } from '../../api/types';
 import { factoryModelOf, type Model, type Section } from '../../shared/definition/model';
 import { renderFactoryPage } from '../../test/route';
 import { FactorySettingsPage } from './settings-page';

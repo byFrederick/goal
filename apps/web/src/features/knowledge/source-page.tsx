@@ -24,9 +24,9 @@ import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Field, Input, NativeSelect } from '../../ui/field';
 import { ReadOnly } from '../../ui/read-only';
 import { ConfigFields, configErrors, readerOf, trimmed } from './config-fields';
-import { SecretField } from './secret-field';
 import { DocumentDialog, DocumentList } from './documents';
 import { StatusText, SyncNowButton, useSyncSource } from './parts';
+import { SecretField } from './secret-field';
 import { DropZone, UploadRows, useUploader } from './upload';
 import { everyLabel, refusalText, sourceStatus, syncChoices, syncTimes } from './words';
 

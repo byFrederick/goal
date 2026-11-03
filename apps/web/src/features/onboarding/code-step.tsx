@@ -182,9 +182,7 @@ export function CodeStep({ org, search }: { org: OrgSummary; search: OnboardingS
             <div className="flex animate-fade-in flex-col gap-1">
               <Callout tone={answer.ok ? 'ok' : 'rework'}>{answer.text}</Callout>
               {answer.ok ? (
-                <p className="m-0 text-[13px] leading-snug text-muted">
-                  Saved as the secret {secret}. Change it later in Secrets.
-                </p>
+                <p className="m-0 text-meta text-muted">Saved as the secret {secret}. Change it later in Secrets.</p>
               ) : null}
             </div>
           ) : null}
