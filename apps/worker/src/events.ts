@@ -43,6 +43,11 @@ export interface Finished {
   input_tokens: number;
   output_tokens: number;
   session_id: string;
+  /**
+   * The item branch's commit on the remote when the agent ended (git ls-remote); absent without a
+   * repository, when the remote has no such branch or the lookup failed.
+   */
+  pushed_head?: string;
   /** The tool calls the agent's policy refused, by tool and call id (never their input); absent when none. */
   permission_denials?: { tool: string; id: string }[];
 }

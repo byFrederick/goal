@@ -370,6 +370,8 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 			// The engine chose the model and read the denied commands from the organization policy at
 			// run start (ADR 0024); a token from before the policy names neither.
 			Model: cmp.Or(c.Model, agent.Model, line.Runtime.Model), Skills: make([]string, 0, len(agent.Skills)),
+			// The engine records this brief with the run (runTask.work in internal/core/engine): the
+			// two must match.
 			ToolsAllow: nonNil(agent.ToolsAllow), ToolsDeny: withDenied(agent.ToolsDeny, c.DeniedCommands), Purpose: line.Purpose,
 			Brief: it.Work(), Inputs: it.Outputs, Output: station.Output, MaxTurns: maxTurns, MaxUSD: maxUSD,
 			Connections:      []bundleConnection{},

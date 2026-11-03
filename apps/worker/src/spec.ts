@@ -179,6 +179,8 @@ const taskFields = z.object({
   base_conflicts: z.array(z.string()).optional(),
   /** The branch those files conflict with when the bundle named a base; absent means the default branch. */
   base_branch: z.string().optional(),
+  /** The item's branch prepare checked out in /workspace; absent without a repository. */
+  branch: z.string().optional(),
   /** Definition mode (ADR 0021): the run changes the factory's draft files in /workspace for this request. */
   draft_request: DraftRequest.optional(),
   /** Judge mode (ADR 0025): the run scores this material with this judge, in one model call without tools. */
@@ -254,7 +256,7 @@ const toolSpec = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9@:/._+-]*$/);
 export const Bundle = z
   .object({
     spec: taskFields
-      .omit({ gateway_url: true, base_conflicts: true, base_branch: true })
+      .omit({ gateway_url: true, base_conflicts: true, base_branch: true, branch: true })
       .refine(itemNamed, itemMessage)
       .refine(oneMode, modeMessage),
     /** Files under /goal by path, base64. */

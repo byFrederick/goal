@@ -206,7 +206,13 @@ type Store interface {
 
 	// FinishRun records a run's result, adds its cost to the item and appends a run_finished
 	// event with its status, error, cost and turns. Finishing a run twice is a no-op.
+	// It also keeps the run's own output and the head it pushed (res.PushedHead).
 	FinishRun(ctx context.Context, id domain.RunID, res domain.RunResult, endedAt time.Time) error
+
+	// RecordRunInput records what a run was given: its brief and the heads before prepare's
+	// rebase (ADR 0039, decision 8), replacing any recorded before; empty fields are stored as
+	// unknown. A run of another organization, or none, is ErrNotFound.
+	RecordRunInput(ctx context.Context, id domain.RunID, in domain.RunInput) error
 
 	// Runs returns up to limit of an item's runs, oldest first (by start, then id). An unknown
 	// item has none.
