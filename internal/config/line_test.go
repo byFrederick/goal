@@ -823,6 +823,32 @@ func expectEnvironments(t *testing.T, l domain.Line) {
 		t.Errorf("browser environment = %+v, %v; want one without env", b, ok)
 	}
 
+	wantDef := domain.Environment{
+		Name: "default", Size: domain.SandboxMedium, Image: "ghcr.io/acme/box:1", Tools: []string{"go@1.26", "gh@2"},
+		Setup: []string{"go mod download"}, Env: def.Env, Files: map[string]string{"~/.npmrc": "{{npm-config}}"},
+	}
+	if !reflect.DeepEqual(def, wantDef) {
+		t.Errorf("default environment =\n%+v\nwant\n%+v", def, wantDef)
+	}
+
+	b, _ := l.Environment("browser")
+	wantBrowser := domain.Environment{
+		Name: "browser", Size: domain.SandboxLarge, Tools: []string{"node@22"},
+		MCP: map[string]domain.MCPServer{
+			"playwright": {
+				Command: []string{"npx", "@playwright/mcp@0.0.41"},
+				Tools:   map[string]string{"browser_*": "allow", "browser_install": "off"},
+			},
+			"tickets": {
+				URL: "https://tickets.example.com/mcp", Headers: map[string]string{"Authorization": "Bearer {{tickets-key}}"},
+				Tools: map[string]string{"create_comment": "ask"},
+			},
+		},
+	}
+	if !reflect.DeepEqual(b, wantBrowser) {
+		t.Errorf("browser environment =\n%+v\nwant\n%+v", b, wantBrowser)
+	}
+
 	envs := map[string]string{}
 	for _, a := range l.Agents {
 		envs[a.Name] = a.Environment

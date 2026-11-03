@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"maps"
 	"slices"
 	"testing"
 )
@@ -84,5 +85,58 @@ func TestLine_Environment(t *testing.T) {
 
 	if _, ok := l.Environment("missing"); ok {
 		t.Error("Environment(missing) found one; want none")
+	}
+}
+
+// FileEnv numbers a run's files GOAL_FILE_1, GOAL_FILE_2… by sorted path, whatever order the file
+// writes them in.
+func TestEnvironment_FileEnv(t *testing.T) {
+	t.Parallel()
+
+	got := FileEnv(map[string]string{"~/.npmrc": "a", "/etc/app.conf": "b", "~/.config/gh/hosts.yml": "c"})
+	want := map[string]string{"/etc/app.conf": "GOAL_FILE_1", "~/.config/gh/hosts.yml": "GOAL_FILE_2", "~/.npmrc": "GOAL_FILE_3"}
+
+	if !maps.Equal(got, want) {
+		t.Errorf("FileEnv = %v; want %v", got, want)
+	}
+
+	for _, v := range got {
+		if !ReservedRunEnv(v) {
+			t.Errorf("%s is not platform-reserved, so an environment's env could set it", v)
+		}
+	}
+}
+
+// An MCP server's header or env that names a secret renders as ${GOAL_SECRET_<NAME>}, the name
+// upper-cased with each other character an underscore; a plain value stays as written.
+func TestEnvironment_RenderedMCPServer(t *testing.T) {
+	t.Parallel()
+
+	s := MCPServer{
+		URL:     "https://tickets.example.com/mcp",
+		Headers: map[string]string{"Authorization": "Bearer {{ tickets-key }}", "X-Org": "acme"},
+		Env:     map[string]string{"TOKEN": "{{db-pass}}:{{tickets-key}}"},
+		Tools:   map[string]string{"create_comment": "ask"},
+	}
+
+	got := s.Rendered()
+	if want := map[string]string{"Authorization": "Bearer ${GOAL_SECRET_TICKETS_KEY}", "X-Org": "acme"}; !maps.Equal(got.Headers, want) {
+		t.Errorf("headers = %v; want %v", got.Headers, want)
+	}
+
+	if want := "${GOAL_SECRET_DB_PASS}:${GOAL_SECRET_TICKETS_KEY}"; got.Env["TOKEN"] != want {
+		t.Errorf("env TOKEN = %q; want %q", got.Env["TOKEN"], want)
+	}
+
+	if got.URL != s.URL || !maps.Equal(got.Tools, s.Tools) {
+		t.Errorf("rendered %+v lost the URL or tools of %+v", got, s)
+	}
+
+	if names, want := s.SecretNames(), []string{"tickets-key", "db-pass"}; !slices.Equal(names, want) {
+		t.Errorf("SecretNames = %v; want %v", names, want)
+	}
+
+	if s.Headers["Authorization"] != "Bearer {{ tickets-key }}" {
+		t.Error("Rendered changed the server it was called on")
 	}
 }
