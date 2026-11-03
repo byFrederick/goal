@@ -46,7 +46,7 @@ An adversarial review of the first draft against the code found 30 problems acro
          url: https://github.com/byFrederick/goal
          token: "{{github-byfrederick}}"
          access: write
-       - name: services                      # read entries may cover a whole owner
+       - name: services                      # an entry may be one repository or a whole organization
          url: https://github.com/byFrederick/*
          token: "{{github-byfrederick-read}}"
          access: read
@@ -54,7 +54,7 @@ An adversarial review of the first draft against the code found 30 problems acro
 
    - **Entries:**
      - `name` is a slug, unique in the factory.
-     - `url` is a repository on a listed host. A `read` entry may instead be an owner pattern ending in `/*`.
+     - `url` is one repository on a listed host, or a whole organization (an owner pattern ending in `/*`), for either access. One factory can mix them: one repository, several, or every repository of an organization.
      - `token` is a `{{secret}}`, required for `write`.
      - `access` is `read` or `write`.
 
@@ -80,9 +80,8 @@ An adversarial review of the first draft against the code found 30 problems acro
      - **a part** takes its assembly's;
      - **a follow-up's item** takes the follow-up's `start.repository`, one of the factory's, or else its source item's.
    - **When nothing sets it:**
-     - **one repository:** that one;
-     - **a merging line:** its first `write` repository;
-     - **several:** none, so the item starts with an empty workspace. A station can then set the repository once, through the output field the definition names (`board.flow.outputs.repository`, next to ADR 0040's `followUps` and `close`).
+     - **one entry naming one repository:** that one;
+     - **otherwise** (several entries, or a whole organization): none, so the item starts with an empty workspace. A station can then set the repository once, through the output field the definition names (`board.flow.outputs.repository`, next to ADR 0040's `followUps` and `close`).
    - **Setting it later** is refused on parts, into a `read` repository on a merging line, and after any run of the item cloned a repository. Runs record their repository (`agent_runs.repository_url`).
    - **A triage item** (ADR 0040) whose follow-ups come from several repositories gets none.
    - **Removing an entry** that open items use is refused at publish.
@@ -106,7 +105,7 @@ An adversarial review of the first draft against the code found 30 problems acro
 8. **Repository tests are per factory and kept.**
    - **The route:** `POST /v1/orgs/{org}/factories/{factory}/repositories/test` needs `definition:edit` and opens the secret for that factory, as the environment test does.
    - **The answers:**
-     - "Can read", with the warning of decision 3 when the token can also push;
+     - "Can read", with the warning of decision 3 when the token can also push; for an owner pattern, how many repositories the token can read ("Can read 48 repositories in byFrederick");
      - "Can read and push". The host reports no pull-request permission, so Goal can't check it.
    - **Kept results:** each result is kept per factory and repository, and reruns on Test or when the secret's value changes. Pages don't test on every view.
    - **What goes:** the organization-level test route, which only onboarding used before the factory existed.
@@ -117,6 +116,11 @@ An adversarial review of the first draft against the code found 30 problems acro
    - **The order** becomes Organization, Factory, Code, Line, Budget, Intake, People, First item. The template and the factory then exist when the code is chosen.
    - **Template needs:** each template's `template.yaml` says `code: none` or `code: read`, and `write` follows from a line that merges. This is exposed on `TemplateSummary`.
    - **The Code step** offers No code, Read only, and Read and write, and disables the choices the template's line can't use, with the reason.
+   - **One form for every case.**
+     - **No code** asks for nothing, so onboarding never needs a repository.
+     - **Read only, and Read and write,** ask the same two things: which repositories (a whole organization, or only some, one or more) and a token.
+     - So an incidents factory reading an organization, a software factory writing to one repository, and one writing to many all fill in the same form.
+     - Each item clones the one repository it's about.
    - **The token** is saved as a secret open to the new factory and tested for it. On a name clash, the step offers to use the existing secret or pick a new name, and never replaces a value.
 
 10. **Factory settings' Repository section becomes Code.**
@@ -211,7 +215,7 @@ An adversarial review of the first draft against the code found 30 problems acro
 
 ## Consequences
 
-- An incidents factory can have no code, or read access to every repository of a GitHub organization through one owner pattern. Each item clones only the repository its event names. Goal never pushes to them, and a read-only token makes sure agents can't either.
+- Any factory can have no code, one repository, several, or every repository of an organization, with read or write access. An incidents factory reads a whole organization; a software factory can write to one repository or many. Each item clones only the repository it's about. Goal never pushes to them, and a read-only token makes sure agents can't either.
 - Onboarding works for teams with read-only or no GitHub access, and for GitHub Enterprise and self-managed GitLab hosts that owners list.
 - One GitHub organization webhook serves every factory it's opened to. Adding a factory or a repository needs nothing new in GitHub.
 - Branch names change for new items, to include the factory.
@@ -230,7 +234,7 @@ An adversarial review of the first draft against the code found 30 problems acro
 
 | # | Pull request | Lane | What it changes | Merges after |
 |---|---|---|---|---|
-| 1 | **Hosts and repositories in the definition.** Decisions 1, 2 and 18. | backend | `code_hosts` and its routes; `runtime.repositories` with `name`, `url` (owner patterns for `read`), `token` and `access`; the shorthand; the publish rules, including the temporary refusal of a second repository and `read`; repository tokens as secret places and uses; `create.repository` as a template place; `code` in `template.yaml` and `TemplateSummary` | — |
+| 1 | **Hosts and repositories in the definition.** Decisions 1, 2 and 18. | backend | `code_hosts` and its routes; `runtime.repositories` with `name`, `url` (one repository or an owner pattern), `token` and `access`; the shorthand; the publish rules, including the temporary refusal of a second repository and `read`; repository tokens as secret places and uses; `create.repository` as a template place; `code` in `template.yaml` and `TemplateSummary` | — |
 | 2 | **The item's repository.** Decisions 4 and 13. | backend | `work_items.repository_url` with its backfill; filing by a person, a part, a follow-up's `start.repository` and `create.repository`, with its matching and the skip; the defaults; `board.flow.outputs.repository` with its refusals; `agent_runs.repository_url`; the publish refusal for a used entry; `goal run --repo` | 1 |
 | 3 | **Run start per item.** Decisions 3, 5 and 6. | backend | The bundle and prepare clone the item's repository; the fetch token for the agent's git, and the push guard for `read`; heads, base commit, changed-since and paths per repository; integration branches in the assembly's repository; the workspace note; branch names with the factory | 2 |
 | 4 | **Merges and hosts.** Decisions 5 and 7. | backend | The code host port by repository and token, for the organization's hosts; merging only the item's repository's pull requests; GitLab base commits and changed-since; `glab` in the image and the landing note; removes row 1's temporary refusal | 3 |
