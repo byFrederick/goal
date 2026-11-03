@@ -157,7 +157,7 @@ func TestWorkerFinished_ResultKeepsOnlyACommitAsPushedHead(t *testing.T) {
 	for in, want := range map[string]string{
 		sha1: sha1, sha256: sha256, "": "", "main": "", strings.ToUpper(sha1): "", sha1 + "\n": "", sha1[:39]: "",
 	} {
-		f := WorkerFinished{Status: "failed", PushedHead: in}
+		f := WorkerFinished{Status: string(RunFailed), PushedHead: in}
 		if got := f.Result().PushedHead; got != want {
 			t.Errorf("Result().PushedHead of %q = %q; want %q", in, got, want)
 		}

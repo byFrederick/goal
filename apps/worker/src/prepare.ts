@@ -43,6 +43,13 @@ export interface Prepared {
   branch?: string;
   /** Whether that branch already existed on the remote: earlier runs of the item pushed it. */
   branch_existed?: boolean;
+  /**
+   * The branch's commit right after checkout, before it was brought up to date with its base;
+   * absent without a repository or when git cannot name it.
+   */
+  branch_head?: string;
+  /** The base's commit the branch would be brought up to date with (origin/<base>, or origin/HEAD); absent likewise. */
+  base_head?: string;
   /** How the existing branch was brought up to date with its base; absent for a new one. */
   fresh_base?: FreshBase;
   /** The files that conflicted doing so, sorted; the rebase or merge was aborted. */
@@ -126,6 +133,11 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
     const start = base ? [`origin/${base}`] : [];
     const branch = existed ? ['-B', repo.branch, `origin/${repo.branch}`] : ['-b', repo.branch, ...start];
     await must(deps, 'git', ['checkout', '--quiet', ...branch], ws);
+    // The heads before the rebase or merge, for a later try to start where this run did (ADR 0039).
+    const branchHead = await commitOf(deps, ws, 'HEAD');
+    const baseHead = await commitOf(deps, ws, start[0] ?? 'origin/HEAD');
+    if (branchHead) out.branch_head = branchHead;
+    if (baseHead) out.base_head = baseHead;
     if (existed) {
       out.fresh_base = repo.fresh_base ?? 'rebase';
       const conflicts = await freshen(deps, ws, out.fresh_base, base);
@@ -145,6 +157,7 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
     gateway_url: gateway,
     ...(out.conflicts ? { base_conflicts: out.conflicts } : {}),
     ...(baseBranch ? { base_branch: baseBranch } : {}),
+    ...(out.branch ? { branch: out.branch } : {}),
   };
   await put(join(deps.dirs.goal, 'spec.json'), JSON.stringify(spec));
 
@@ -157,6 +170,21 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   out.at = done.toISOString();
   out.seconds = Math.round((done.getTime() - started.getTime()) / 100) / 10;
   return out;
+}
+
+/** The commit ref names in ws, or undefined when git cannot name one (an empty repository). */
+async function commitOf(deps: PrepareDeps, ws: string, ref: string): Promise<string | undefined> {
+  try {
+    const sha = (await deps.output('git', ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { cwd: ws })).trim();
+    return isCommitId(sha) ? sha : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Whether s is a full git commit id: 40 (SHA-1) or 64 (SHA-256) lowercase hex digits. */
+export function isCommitId(s: string): boolean {
+  return /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(s);
 }
 
 async function hasRemote(deps: PrepareDeps, ws: string, branch: string): Promise<boolean> {

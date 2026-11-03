@@ -99,7 +99,8 @@ func (w *Worker) prepare(c ExecCall, stdout, stderr io.Writer) int {
 		return code
 	}
 
-	writeLine(stdout, preparedLine{Type: "prepared", At: time.Now().UTC().Format(time.RFC3339), Seconds: 0.1, BranchExisted: existed,
+	writeLine(stdout, preparedLine{
+		Type: "prepared", At: time.Now().UTC().Format(time.RFC3339), Seconds: 0.1, BranchExisted: existed,
 		BranchHead: branch, BaseHead: base,
 	})
 
