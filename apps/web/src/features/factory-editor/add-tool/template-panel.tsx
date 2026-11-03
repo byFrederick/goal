@@ -11,7 +11,7 @@ import { useFactory } from '../../../shared/factory';
 import { plural } from '../../../shared/format';
 import { Button } from '../../../ui/button';
 import { Field, Input } from '../../../ui/field';
-import { refusalText } from '../../connections/words';
+import { refusalText } from '../../secrets/words';
 import { useDraftSession } from '../draft/use-draft';
 import { fillAdds, type ToolMode } from '../environments/env-file';
 import { pickedNames, type SlotPick, suggested } from './apply-template';

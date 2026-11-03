@@ -293,8 +293,9 @@ function UsedByCard({ source: s }: { source: KnowledgeSource }) {
         <p className="m-0 text-body text-muted">
           Reads the connection{' '}
           <Link
-            to="/o/$org/connections/$connection"
-            params={{ org: org.slug, connection: s.connection }}
+            to="/o/$org/access"
+            params={{ org: org.slug }}
+            search={{ q: s.connection }}
             className="font-mono text-ink underline underline-offset-3 hover:text-link"
             translate="no"
           >

@@ -173,17 +173,10 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
     },
   },
   {
-    name: 'Connections',
+    name: 'Access',
     open: async (page) => {
-      await page.goto('/o/acme/connections');
-      await expect(page.getByRole('heading', { level: 1, name: 'Connections' })).toBeVisible();
-    },
-  },
-  {
-    name: 'GitHub connection',
-    open: async (page) => {
-      await page.goto('/o/acme/connections/github');
-      await expect(page.getByRole('heading', { level: 1, name: /github/i })).toBeVisible();
+      await page.goto('/o/acme/access');
+      await expect(page.getByRole('heading', { level: 1, name: 'Access' })).toBeVisible();
     },
   },
   {

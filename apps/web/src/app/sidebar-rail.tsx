@@ -10,7 +10,6 @@ import { CircleHelp, PanelLeft, Plus } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import { attentionQuery, factoriesQuery, overviewQuery } from '../api/queries';
 import type { FactoryOverviewList, OrgSummary } from '../api/types';
-import { useConnectionTrouble } from '../shared/connections';
 import { formatUsdCompact } from '../shared/format';
 import { useOrgGrants, useOrgHolds } from '../shared/org';
 import { holds } from '../shared/permissions';
@@ -50,7 +49,6 @@ export function SidebarRail({ org, busy, animated = false, focusOnMount, onExpan
   const attention = useQuery(attentionQuery(org.id));
   const overview = useQuery(overviewQuery(org.id));
   const factories = useQuery(factoriesQuery(org.id));
-  const trouble = useConnectionTrouble(org.id);
   const waiting = attention.data?.waiting_on_you ?? 0;
   const expand = useRef<HTMLButtonElement>(null);
   // Like the sidebar's New item: shown while the factories load or fail, and once one may take items.
@@ -107,7 +105,7 @@ export function SidebarRail({ org, busy, animated = false, focusOnMount, onExpan
       <ul className="m-0 flex list-none flex-col items-center gap-1 p-0">
         {screensFor(sidebarOrgScreens, can).map((screen) => (
           <li key={screen.id}>
-            <RailEntry org={org} screen={screen} waiting={waiting} trouble={trouble} />
+            <RailEntry org={org} screen={screen} waiting={waiting} />
           </li>
         ))}
       </ul>
@@ -133,20 +131,13 @@ function RailEntry({
   org,
   screen,
   waiting,
-  trouble,
 }: {
   org: OrgSummary;
   screen: (typeof sidebarOrgScreens)[number];
   waiting: number;
-  trouble: number;
 }) {
   const needs = screen.id === 'needs-you' && waiting > 0;
-  const failing = screen.id === 'connections' && trouble > 0;
-  const name = needs
-    ? `${screen.label}, ${waiting} waiting on you`
-    : failing
-      ? `${screen.label}, ${trouble} failing`
-      : screen.label;
+  const name = needs ? `${screen.label}, ${waiting} waiting on you` : screen.label;
   const body = (
     <>
       {screen.icon ? <screen.icon {...iconProps} /> : null}
@@ -157,12 +148,6 @@ function RailEntry({
         >
           <NumberRoll value={waiting} />
         </span>
-      ) : null}
-      {failing ? (
-        <span
-          aria-hidden="true"
-          className="absolute top-1 right-1 size-2.5 rounded-full border-2 border-sidebar bg-rework"
-        />
       ) : null}
     </>
   );

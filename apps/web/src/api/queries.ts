@@ -12,6 +12,7 @@ import {
   type QueryKey,
   queryOptions,
 } from '@tanstack/react-query';
+import { getAccess } from './access';
 import { getBuilderMeta, getSkillFiles, type SkillKey, searchSkills } from './builder';
 import {
   ApiError,
@@ -98,7 +99,7 @@ import { getOrgPolicy } from './policy';
 import { type SearchQuery, searchOrg } from './search';
 import { getSecret, listSecretActivity, listSecrets } from './secrets';
 import { getOrgSpend } from './spend';
-import type { Factory, ItemEvent, ProposalState, SpendWindow } from './types';
+import type { AccessView, Factory, ItemEvent, ProposalState, SpendWindow } from './types';
 import { getWebhookDelivery, listWebhookDeliveries, listWebhookEndpoints } from './webhooks';
 
 /**
@@ -181,6 +182,8 @@ export const keys = {
   connectionRepositories: (org: string, connection: string, owner?: string) =>
     ['org', org, 'connections', 'repositories', connection, owner ?? 'account'] as const,
   /** The organization's secrets (ADR 0037): the list, one secret, and the audit entries about it. A connection's change also moves them. */
+  /** What the organization's agents reach (ADR 0037): the read model, by view. A secret's or a factory's change moves it. */
+  access: (org: string, by: string) => ['org', org, 'access', by] as const,
   secrets: (org: string) => ['org', org, 'secrets'] as const,
   secret: (org: string, name: string) => ['org', org, 'secrets', name] as const,
   secretActivity: (org: string, id: string) => ['org', org, 'secrets', 'activity', id] as const,
@@ -399,6 +402,14 @@ export const connectionActivityQuery = (org: string, id?: string) =>
   queryOptions({
     queryKey: keys.connectionActivity(org, id),
     queryFn: ({ signal }) => listConnectionAudit(org, { connection: id, limit: id ? 6 : 5 }, signal),
+    staleTime: 30_000,
+  });
+
+/** What every factory's agents reach, grouped `by` (access:read). */
+export const accessQuery = (org: string, by: AccessView) =>
+  queryOptions({
+    queryKey: keys.access(org, by),
+    queryFn: ({ signal }) => getAccess(org, by, signal),
     staleTime: 30_000,
   });
 

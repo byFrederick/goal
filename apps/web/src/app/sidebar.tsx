@@ -11,7 +11,6 @@ import { ChevronsUpDown, PanelLeft, Search } from 'lucide-react';
 import { type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { attentionQuery, overviewQuery } from '../api/queries';
 import type { FactoryOverviewList, OrgSummary } from '../api/types';
-import { useConnectionTrouble } from '../shared/connections';
 import { formatUsdCompact } from '../shared/format';
 import { NewItemFromSidebar } from '../shared/new-item';
 import { useOrgGrants } from '../shared/org';
@@ -165,7 +164,6 @@ export function SidebarContent({
   const can = useOrgGrants()?.can;
   const attention = useQuery(attentionQuery(org.id));
   const overview = useQuery(overviewQuery(org.id));
-  const trouble = useConnectionTrouble(org.id);
   const busy = useSidebarBusy(org.id);
   const [searching, setSearching] = useState(startSearching);
   const [composeWith, setComposeWith] = useState<{ title: string } | null>(null);
@@ -213,7 +211,6 @@ export function SidebarContent({
                   org={org}
                   screen={screen}
                   waiting={attention.data?.waiting_on_you ?? 0}
-                  trouble={trouble}
                   onNavigate={onNavigate}
                 />
               </li>
@@ -321,13 +318,11 @@ function OrgEntry({
   org,
   screen,
   waiting,
-  trouble,
   onNavigate,
 }: {
   org: OrgSummary;
   screen: (typeof sidebarOrgScreens)[number];
   waiting: number;
-  trouble: number;
   onNavigate?: (() => void) | undefined;
 }) {
   const body = (
@@ -335,7 +330,6 @@ function OrgEntry({
       {screen.icon ? <screen.icon {...iconProps} className="flex-none" /> : null}
       <span className="min-w-0 flex-1 truncate">{screen.label}</span>
       {screen.id === 'needs-you' && waiting > 0 ? <Count value={waiting} label=" waiting on you" /> : null}
-      {screen.id === 'connections' && trouble > 0 ? <TroubleDot count={trouble} /> : null}
     </>
   );
   if (!screen.available) {
@@ -357,16 +351,6 @@ function OrgEntry({
     >
       {body}
     </Link>
-  );
-}
-
-/** A rust dot at the end of the row, said as ", 1 failing" (Connections, while a connection's last test failed). */
-function TroubleDot({ count }: { count: number }) {
-  return (
-    <>
-      <span aria-hidden="true" className="ml-auto size-2.5 flex-none rounded-full bg-rework" />
-      <span className="sr-only">, {count} failing</span>
-    </>
   );
 }
 

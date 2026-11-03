@@ -236,11 +236,7 @@ function GitHubCard({
       </div>
       {connection === undefined ? (
         <Button asChild variant="primary">
-          <Link
-            to="/o/$org/connections/new"
-            params={{ org: org.slug }}
-            search={{ kind: 'github', next: `/o/${org.slug}/get-started/code` }}
-          >
+          <Link to="/o/$org/secrets" params={{ org: org.slug }} search={{ new: true }}>
             Connect GitHub
           </Link>
         </Button>
@@ -253,7 +249,7 @@ function GitHubCard({
             </Chip>
           ) : null}
           <Button asChild variant="secondary">
-            <Link to="/o/$org/connections/$connection" params={{ org: org.slug, connection: connection.name }}>
+            <Link to="/o/$org/access" params={{ org: org.slug }} search={{ q: connection.name }}>
               Switch account
             </Link>
           </Button>

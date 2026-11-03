@@ -1,6 +1,7 @@
 // The Secrets screens' words and counts, with a fixed clock: the expiry text's states, the banner's
 // headline, when each secret was last used, the activity sentences and the import's counts.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../../api/client';
 import type { AuditEntry, Secret } from '../../api/types';
 import {
   activityText,
@@ -13,6 +14,7 @@ import {
   lastUsedText,
   nameProblem,
   placesText,
+  refusalText,
   reminderText,
   usedAtLabel,
 } from './words';
@@ -150,5 +152,15 @@ describe('activityText', () => {
     expect(activityText(entry('secret.used', { run: 147, role: 'frontend-engineer' }))).toBe(
       'Used by run #147, frontend-engineer',
     );
+  });
+});
+
+describe('refusalText', () => {
+  it('says what to set when goald has no master key, and goald’s detail otherwise', () => {
+    const unavailable = new ApiError({ title: 'Service Unavailable', status: 503, code: 'connections-unavailable' });
+    expect(refusalText(unavailable)).toContain('GOAL_MASTER_KEYS');
+    const taken = new ApiError({ title: 'Conflict', status: 409, code: 'secret-in-use', detail: 'used by sre' });
+    expect(refusalText(taken)).toBe('used by sre');
+    expect(refusalText(new TypeError('fetch failed'))).toBe('goald is not answering. Try again once it is running.');
   });
 });

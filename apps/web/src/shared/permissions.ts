@@ -19,6 +19,7 @@ export type OrgPermission =
   | 'api_key:manage'
   | 'personal_token:read'
   | 'personal_token:manage'
+  | 'access:read'
   | 'connection:read'
   | 'connection:manage'
   | 'secret:read'

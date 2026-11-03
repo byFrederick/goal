@@ -23,8 +23,8 @@ import { Button } from '../ui/button';
 import { cn } from '../ui/cn';
 import { keyCap } from '../ui/kbd';
 import {
+  accessScreen,
   apiKeysScreen,
-  connectionsScreen,
   factoryScreens,
   homeScreen,
   knowledgeScreen,
@@ -191,7 +191,7 @@ export function SidebarSearch({
     // The organization's pages, then the open factory's. Its Settings is named for what it is; its
     // other pages carry the factory's own title.
     const orgPages = screensFor(
-      [homeScreen, membersScreen, apiKeysScreen, connectionsScreen, knowledgeScreen, settingsScreen],
+      [homeScreen, membersScreen, apiKeysScreen, accessScreen, knowledgeScreen, settingsScreen],
       can,
     ).map((screen: OrgScreen) => ({
       screen,
@@ -251,8 +251,7 @@ export function SidebarSearch({
           <span className="flex-none text-meta text-muted">{humanize(hit.kind)}</span>
         </>
       ),
-      open: () =>
-        go(() => navigate({ to: '/o/$org/connections/$connection', params: { org: org.slug, connection: hit.name } })),
+      open: () => go(() => navigate({ to: '/o/$org/access', params: { org: org.slug }, search: { q: hit.name } })),
     }));
 
     const factoryRows: Row[] = found.factories.map((hit) => ({
