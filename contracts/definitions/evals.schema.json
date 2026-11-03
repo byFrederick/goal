@@ -42,6 +42,7 @@
         "passMark": { "$ref": "#/$defs/share", "description": "A score below it fails and goes to Jonah." },
         "sample": { "$ref": "#/$defs/share", "description": "The share of the agents' finished production runs it scores. 0 pauses the judge." },
         "model": { "$ref": "#/$defs/model", "description": "The model the judge run uses. Omitted: the factory's runtime.model." },
+        "environment": { "$ref": "#/$defs/slug", "description": "The environment file the judge run's box gets, environments/<name>.yaml. Omitted: default." },
         "enabled": { "type": "boolean", "default": true }
       }
     },
@@ -67,6 +68,7 @@
           "additionalProperties": false,
           "properties": {
             "agent": { "$ref": "#/$defs/slug", "description": "The agent the case runs, by spec.agents name." },
+            "environment": { "$ref": "#/$defs/slug", "description": "The environment file the case's runs get, environments/<name>.yaml. Omitted: default." },
             "input": {
               "type": "object",
               "description": "The item as it reaches the agent.",

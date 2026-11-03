@@ -43,6 +43,8 @@ type Factory struct {
 	warnings []domain.DefinitionProblem
 	// removed names each form connections replaced that the definition has (domain.Line.Removed).
 	removed []string
+	// environments are its environment files that satisfy their schema, by name.
+	environments []Environment
 }
 
 // Metadata identifies a factory.
@@ -78,7 +80,11 @@ type Spec struct {
 // Runtime says what every run of the factory gets: its model and the connection that gives it,
 // the size of its box, the tools it installs and the repository it works on.
 type Runtime struct {
-	Model           string   `json:"model,omitempty"`
+	Model string `json:"model,omitempty"`
+	// ModelKey is the {{secret}} that gives every run its model (ADR 0037 decision 7).
+	ModelKey string `json:"modelKey,omitempty"`
+	// ModelConnection, Size and Tools moved to environment files and secrets (moved-to-environment);
+	// versions published before run with them until Goal converts them.
 	ModelConnection string   `json:"modelConnection,omitempty"`
 	Size            string   `json:"size,omitempty"`
 	Tools           []string `json:"tools,omitempty"`
@@ -87,11 +93,14 @@ type Runtime struct {
 	Budget     *Budget     `json:"budget,omitempty"`
 }
 
-// Repository is the git repository cloned into every run: a URL and the organization connection
-// that clones it (none for a public repository). The removed token (env-reference-removed) is
-// found in the document, not decoded.
+// Repository is the git repository cloned into every run: a URL, the {{secret}} token that clones
+// and merges it (none for a public repository) and, for a host other than github.com and
+// gitlab.com, its forge. Connection moved to Token (moved-to-environment); a token of another
+// form than a reference is the removed env-reference-removed.
 type Repository struct {
 	URL        string `json:"url"`
+	Token      string `json:"token,omitempty"`
+	Forge      string `json:"forge,omitempty"`
 	Connection string `json:"connection,omitempty"`
 }
 
@@ -182,9 +191,12 @@ type Agent struct {
 	Prompt      string `json:"prompt"`
 	Model       string `json:"model,omitempty"`
 	// MaxTurns and PerItemUSD override the runtime budget for this agent; zero means unset.
-	MaxTurns    int      `json:"maxTurns,omitempty"`
-	PerItemUSD  float64  `json:"perItemUsd,omitempty"`
-	Skills      []string `json:"skills,omitempty"`
+	MaxTurns   int      `json:"maxTurns,omitempty"`
+	PerItemUSD float64  `json:"perItemUsd,omitempty"`
+	Skills     []string `json:"skills,omitempty"`
+	// Environment is the environment file the agent's box gets; "" is DefaultEnvironment.
+	Environment string `json:"environment,omitempty"`
+	// Connections moved to environment files (moved-to-environment).
 	Connections []string `json:"connections,omitempty"`
 	// Tools are custom rules in Claude Code's permission syntax; Builtins replaces them.
 	Tools *struct {
@@ -279,9 +291,11 @@ type TriggerOnly struct {
 }
 
 // TriggerModelAgrees is the model check (ADR 0028 decision 3): the operator's question and,
-// optionally, the connection that pays for it and the model asked.
+// optionally, the {{secret}} key that pays for it and the model asked. Connection moved to Key
+// (moved-to-environment).
 type TriggerModelAgrees struct {
 	Question   string `json:"question"`
+	Key        string `json:"key,omitempty"`
 	Connection string `json:"connection,omitempty"`
 	Model      string `json:"model,omitempty"`
 }
@@ -505,17 +519,21 @@ func LoadDir(dir string) (*Factory, error) {
 }
 
 // Load is Check for callers that run published versions: it fails with every blocking problem,
-// one per line, when there is any, but the forms connections replaced. A version published
-// before the cutover may have those; it loads, so its items stay visible, and its line names
-// them (domain.Line.Removed), so the engine refuses to run it. Referenced paths resolve inside
-// files only; a path that leaves it is not found.
+// one per line, when there is any, but the forms connections replaced and the keys ADR 0037
+// moved. A version published before the cutover may have the forms; it loads, so its items stay
+// visible, and its line names them (domain.Line.Removed), so the engine refuses to run it. A
+// version published before ADR 0037 has the moved keys and no environments folder; it loads
+// without the environment checks and runs on the old path until Goal converts it. Referenced
+// paths resolve inside files only; a path that leaves it is not found.
 func Load(files fs.FS) (*Factory, error) {
 	f, problems := Check(files)
+	oldPath := !hasDir(files, EnvironmentsDir)
 
 	var errs []error
 
 	for _, p := range problems {
-		if p.Blocking() && p.Check != checkRemoved {
+		skipped := p.Check == checkRemoved || p.Check == checkMoved || oldPath && p.Check == checkEnvironments
+		if p.Blocking() && !skipped {
 			errs = append(errs, problemError(p))
 		}
 	}
@@ -525,6 +543,13 @@ func Load(files fs.FS) (*Factory, error) {
 	}
 
 	return f, nil
+}
+
+// hasDir reports whether files has the folder dir.
+func hasDir(files fs.FS, dir string) bool {
+	st, err := fs.Stat(files, dir)
+
+	return err == nil && st.IsDir()
 }
 
 // problemError writes a problem as path:line:column: message (code).

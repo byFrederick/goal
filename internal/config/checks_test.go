@@ -20,7 +20,7 @@ metadata:
   name: acme-check
 spec:
   runtime:
-    modelConnection: claude
+    modelKey: "{{claude-key}}"
   agents:
     - name: worker
       prompt: ./agents/worker.md
@@ -39,7 +39,7 @@ const (
 	workAgentLine = "        agent: worker\n"
 	doneStation   = "      - id: done\n"
 	agentPrompt   = "      prompt: ./agents/worker.md\n"
-	runtimeModel  = "    modelConnection: claude\n"
+	runtimeModel  = "    modelKey: \"{{claude-key}}\"\n"
 	specAgents    = "  agents:\n"
 	routeBackend  = "/line/stations/1/route/backend"
 	// answerContract is the output contract file the contract cases write.
@@ -56,13 +56,33 @@ func edited(pairs ...string) string {
 	return doc
 }
 
+// defaultEnvFile is the environment file every factory has; baseEnvironment is a valid one.
+const (
+	defaultEnvFile  = "environments/default.yaml"
+	baseEnvironment = "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n"
+)
+
+// absent, as an extra file's body, leaves the file out of the tree.
+const absent = "\x00absent"
+
+// checkTree is a definition of doc as factory.yaml, the worker's prompt, baseEnvironment as the
+// default environment and the extra files.
 func checkTree(doc string, extra map[string]string) fstest.MapFS {
-	files := fstest.MapFS{"agents/worker.md": {Data: []byte("# worker\n")}}
+	files := fstest.MapFS{
+		"agents/worker.md": {Data: []byte("# worker\n")},
+		defaultEnvFile:     {Data: []byte(baseEnvironment)},
+	}
 	if doc != "" {
 		files[FileName] = &fstest.MapFile{Data: []byte(doc)}
 	}
 
 	for p, body := range extra {
+		if body == absent {
+			delete(files, p)
+
+			continue
+		}
+
 		files[p] = &fstest.MapFile{Data: []byte(body)}
 	}
 
@@ -404,24 +424,68 @@ func TestCheck_RemovedFormsAreFixed(t *testing.T) {
 	}
 }
 
-// A definition in the new form names organization connections, which agents list like any
-// connection; it has no removed form to warn about.
-func TestCheck_OrganizationConnectionsAreNames(t *testing.T) {
+// oldPathFactory is baseFactory as versions published before ADR 0037 wrote it: every key the
+// ADR moved, and no environment files.
+var oldPathFactory = replaced(withTriggers("dedupe: check.name }", "dedupe: check.name, modelAgrees: { question: \"Real?\", connection: claude } }"),
+	runtimeModel, "    modelConnection: claude\n    size: large\n    tools: [\"go@1.26.10\", task]\n"+
+		"    repository: { url: \"https://github.com/acme/app\", connection: github }\n",
+	specAgents, "  connections: [github, datadog]\n"+specAgents,
+	agentPrompt, agentPrompt+"      connections: [datadog]\n",
+)
+
+// Each key ADR 0037 moved is an error at the key, whose message says where it moved and that Goal
+// converts published versions, and whose one fix takes it out of the draft. A trigger's key has no
+// fix: triggers are edited in YAML only.
+func TestCheck_MovedKeysAreFixed(t *testing.T) {
 	t.Parallel()
 
-	f, problems := Check(checkTree(edited(
-		runtimeModel, runtimeModel+"    size: large\n    tools: [\"go@1.26.10\", \"npm:@acme/cli@2\", \"aqua:cli/cli\", task]\n"+
-			"    repository: { url: \"https://github.com/acme/app\", connection: github }\n",
-		specAgents, "  connections: [github, datadog]\n  knowledge:\n    sources: [handbook]\n"+specAgents,
-		agentPrompt, agentPrompt+"      connections: [datadog]\n",
-	), nil))
-	if len(problems) > 0 {
-		t.Fatalf("problems = %+v, want none", problems)
+	remove := func(label, section, path string) domain.ProblemFix {
+		return domain.ProblemFix{Label: label, Section: section, Patch: []domain.PatchOp{{Op: "remove", Path: path}}}
 	}
 
-	if names := []string{f.Spec.Connections[0].Name, f.Spec.Connections[1].Name}; !reflect.DeepEqual(names, []string{"github", "datadog"}) ||
-		f.Spec.Connections[0].Inline() {
-		t.Errorf("connections = %+v, want the organization's github and datadog", f.Spec.Connections)
+	want := map[string]domain.ProblemFix{
+		"/connections": {
+			Label: "Remove connections", Section: domain.SectionConnections,
+			Patch: []domain.PatchOp{{Op: "replace", Path: "", Value: json.RawMessage("[]")}},
+		},
+		"/basics/model_connection":      remove("Remove runtime.modelConnection", domain.SectionBasics, "/model_connection"),
+		"/basics/size":                  remove("Remove runtime.size", domain.SectionBasics, "/size"),
+		"/basics/tools":                 remove("Remove runtime.tools", domain.SectionBasics, "/tools"),
+		"/basics/repository/connection": remove("Remove runtime.repository.connection", domain.SectionBasics, "/repository/connection"),
+		"/agents/agents/0/connections":  remove("Remove the agent's connections", domain.SectionAgents, "/agents/0/connections"),
+	}
+
+	_, problems := Check(checkTree(oldPathFactory, nil))
+
+	got, triggers := map[string]domain.ProblemFix{}, 0
+
+	for _, p := range problems {
+		if p.Code != codeMovedToEnvironment {
+			continue
+		}
+
+		if p.Check != checkMoved || !p.Blocking() || p.Line == 0 || !strings.Contains(p.Message, "moved") ||
+			!strings.Contains(p.Message, "Goal converts published versions") || len(p.Fixes) != 1 && p.Section != domain.SectionFiles {
+			t.Errorf("problem %+v, want a located error at the key saying where it moved, with one fix", p)
+
+			continue
+		}
+
+		if p.Section == domain.SectionFiles {
+			triggers++
+
+			continue
+		}
+
+		got[p.Pointer] = p.Fixes[0]
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("moved keys' fixes =\n%+v\nwant\n%+v", got, want)
+	}
+
+	if triggers != 1 {
+		t.Errorf("%d moved trigger keys, want modelAgrees.connection's", triggers)
 	}
 }
 

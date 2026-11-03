@@ -142,21 +142,20 @@ func TestLoad_AcceptsTheBuilderKeys(t *testing.T) {
 
 	f, err := Load(checkTree(edited(
 		"  name: acme-check\n", "  name: acme-check\n  purpose: Answers acme's support questions.\n",
-		runtimeModel, runtimeModel+"    size: small\n    tools: [\"go@1.26.10\"]\n"+
-			"    repository: { url: \"https://github.com/acme/app\", connection: github }\n"+
+		runtimeModel, runtimeModel+"    repository: { url: \"https://git.example.com/acme/app\", token: \"{{ci-token}}\", forge: gitlab }\n"+
 			"    budget: { weeklyUsd: 50, onExhausted: stop, perItemUsd: 2 }\n",
-		specAgents, "  connections: [github, playwright]\n  knowledge: { sources: [handbook] }\n"+specAgents,
-		agentPrompt, agentPrompt+"      maxTurns: 30\n      connections: [playwright]\n      builtins: { read: allowed, run: allowed, subagents: off }\n",
+		specAgents, "  knowledge: { sources: [handbook] }\n"+specAgents,
+		agentPrompt, agentPrompt+"      maxTurns: 30\n      environment: browser\n      builtins: { read: allowed, run: allowed, subagents: off }\n",
 		"      - id: work\n", "      - id: work\n        name: Work\n        description: Where the worker answers.\n        checks: [schema, make test]\n",
-	), nil))
+	), map[string]string{"environments/browser.yaml": baseEnvironment}))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	r := f.Spec.Runtime
-	if r.ModelConnection != "claude" || r.Size != "small" || !slices.Equal(r.Tools, []string{"go@1.26.10"}) ||
-		*r.Repository != (Repository{URL: "https://github.com/acme/app", Connection: "github"}) {
-		t.Errorf("runtime = %+v, want its model connection, size, tools and repository", r)
+	if r.ModelKey != "{{claude-key}}" || f.Spec.Agents[0].EnvironmentName() != "browser" ||
+		*r.Repository != (Repository{URL: "https://git.example.com/acme/app", Token: "{{ci-token}}", Forge: "gitlab"}) {
+		t.Errorf("runtime = %+v, agents %+v; want its model key, repository and the agent's environment", r, f.Spec.Agents)
 	}
 
 	if f.Spec.Knowledge == nil || !slices.Equal(f.Spec.Knowledge.Sources, []string{"handbook"}) {
@@ -183,6 +182,10 @@ func TestLoad_RemovedFormsAreErrorsAndTheirVersionsDoNotRun(t *testing.T) {
 
 	for _, p := range problems {
 		removed := p.Code == codeFieldRemoved || p.Code == codeEnvReferenceRemoved || p.Code == codeInlineRemoved
+		if p.Check == checkMoved || p.Check == checkEnvironments {
+			continue // ADR 0037's, which Load skips for a version without environments
+		}
+
 		if removed != p.Blocking() {
 			t.Errorf("problem %s is %s; want the removed forms errors and nothing else blocking", p.Code, p.Severity)
 		}
@@ -206,6 +209,29 @@ func TestLoad_RemovedFormsAreErrorsAndTheirVersionsDoNotRun(t *testing.T) {
 	if len(line.Removed) != 9 || !slices.Contains(line.Removed, "spec.runtime.repository.token (env-reference-removed)") ||
 		!strings.Contains(line.Refusal(), "publish a version with connections") {
 		t.Errorf("line removed %q, refusal %q; want the nine forms named and the fix", line.Removed, line.Refusal())
+	}
+}
+
+// A version published before ADR 0037 has the keys it moved and no environment files: it loads,
+// and its line is what the engine runs today, with its connections, model connection, size and
+// tools, no removed form and no refusal.
+func TestLoad_MovedKeysStillRunOnTheOldPath(t *testing.T) {
+	t.Parallel()
+
+	f, err := Load(checkTree(oldPathFactory, map[string]string{defaultEnvFile: absent}))
+	if err != nil {
+		t.Fatalf("Load = %v; want a version with the moved keys to load", err)
+	}
+
+	line := f.Line()
+	if !slices.Equal(line.Connections, []string{"github", "datadog"}) || line.Runtime.ModelConnection != "claude" ||
+		line.Runtime.Size != "large" || !slices.Equal(line.Runtime.Tools, []string{"go@1.26.10", "task"}) ||
+		line.Runtime.Repository.Connection != "github" || !slices.Equal(line.Agents[0].Connections, []string{"datadog"}) {
+		t.Errorf("line = %+v; want the old path's connections, model connection, size, tools and repository", line)
+	}
+
+	if len(line.Removed) != 0 || line.Refusal() != "" {
+		t.Errorf("removed %q, refusal %q; want none, so the engine runs it", line.Removed, line.Refusal())
 	}
 }
 

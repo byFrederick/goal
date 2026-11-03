@@ -101,7 +101,7 @@ func runtimePath(rest []string) (string, []string) {
 	switch rest[0] {
 	case "repository", "tools":
 		return domain.SectionBasics, append([]string{domain.SectionBasics, rest[0]}, rest[1:]...)
-	case "modelConnection", "size", "runner", "image", "auth": // the last three are removed
+	case "modelKey", "modelConnection", "size", "runner", "image", "auth": // the last three are removed
 		return domain.SectionBasics, []string{domain.SectionBasics, snake(rest[0])}
 	case "model":
 		return domain.SectionAgents, []string{domain.SectionAgents, "default_model"}

@@ -125,7 +125,7 @@ var triggerRows = []struct {
 		code: codePlaceholderInvalid, message: []string{"trigger red-main", "create.title", "{{check..name}}"},
 	},
 	{
-		name: "model check", doc: withTriggers("dedupe: check.name }", `dedupe: check.name, modelAgrees: { question: "Is this a real regression?", connection: claude, model: claude-haiku-5-5 } }`),
+		name: "model check", doc: withTriggers("dedupe: check.name }", `dedupe: check.name, modelAgrees: { question: "Is this a real regression?", key: "{{haiku-key}}", model: claude-haiku-5-5 } }`),
 	},
 	{
 		name: "model check with a blank question", doc: withTriggers("dedupe: check.name }", `dedupe: check.name, modelAgrees: { question: "   " } } #here`),

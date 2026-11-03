@@ -48,8 +48,9 @@ var evalSchemas = sync.OnceValues(func() (evalKinds, error) {
 
 // judgeFront is what the checks read of a judge's front matter; the schema checks the rest.
 type judgeFront struct {
-	Agents   []string  `json:"agents"`
-	Outcomes []outcome `json:"outcomes"`
+	Agents      []string  `json:"agents"`
+	Environment string    `json:"environment"`
+	Outcomes    []outcome `json:"outcomes"`
 }
 
 // outcome is one answer a judge may give.
@@ -61,8 +62,9 @@ type outcome struct {
 // evalCase is what the checks read of an eval case; the schema checks the rest.
 type evalCase struct {
 	Spec struct {
-		Agent string `json:"agent"`
-		Check struct {
+		Agent       string `json:"agent"`
+		Environment string `json:"environment"`
+		Check       struct {
 			Judge          string `json:"judge"`
 			ReferencePatch string `json:"referencePatch"`
 		} `json:"check"`
@@ -231,6 +233,11 @@ func (c *checker) judge(p string) {
 		}
 	}
 
+	if env := j.Environment; env != "" && !slices.Contains(c.envNames, env) {
+		c.problems = append(c.problems, ef.problem(checkEnvironments, codeEnvironmentUnknown, at("environment"),
+			"judge %s: unknown environment %q; an environment is a file %s/<name>.yaml", p, env, EnvironmentsDir))
+	}
+
 	for i, o := range j.Outcomes {
 		earlier := j.Outcomes[:i]
 
@@ -287,6 +294,11 @@ func (c *checker) evalCases(judges []string) {
 		if a := ec.Spec.Agent; !slices.Contains(c.agents, a) {
 			c.problems = append(c.problems, ef.problem(checkReferences, codeUnknownAgent, at("spec", "agent"),
 				"case %s: unknown agent %q", p, a))
+		}
+
+		if env := ec.Spec.Environment; env != "" && !slices.Contains(c.envNames, env) {
+			c.problems = append(c.problems, ef.problem(checkEnvironments, codeEnvironmentUnknown, at("spec", "environment"),
+				"case %s: unknown environment %q; an environment is a file %s/<name>.yaml", p, env, EnvironmentsDir))
 		}
 
 		if j := ec.Spec.Check.Judge; j != "" && !slices.Contains(judges, j) {
