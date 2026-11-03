@@ -26,6 +26,12 @@ type runEnv struct {
 	gitHosts map[string]string
 	// secrets are every secret value the run's commands get, scrubbed from what they report.
 	secrets []string
+	// files are, on a version on secrets, the paths of the environment's files with the variable
+	// of agent each one's content is in (domain.FileEnv), and mcp its MCP servers rendered to name
+	// GOAL_SECRET_<NAME> variables of agent instead of values (domain.MCPServer.Rendered); the
+	// run bundle carries them to the worker.
+	files map[string]string
+	mcp   map[string]domain.MCPServer
 }
 
 // runEnv resolves the run's connections, each use audited as connection.used: the request's model
