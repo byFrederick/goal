@@ -19,8 +19,8 @@ import (
 
 // The routes the knowledge tests call.
 const (
-	sourcesPath   = "/v1/orgs/acme/knowledge/sources"
-	handbookPath  = sourcesPath + "/handbook"
+	sourcesPath  = "/v1/orgs/acme/knowledge/sources"
+	handbookPath = sourcesPath + "/handbook"
 )
 
 // testUploadMax is the harness's GOAL_UPLOAD_MAX_BYTES.

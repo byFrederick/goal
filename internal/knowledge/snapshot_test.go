@@ -28,7 +28,7 @@ func repoWorld(t *testing.T) *world {
 	}
 
 	if _, err := w.kb.CreateSource(ctx, domain.NewKnowledgeSource{
-		Name: repoSource, Title: "Repo", Kind: domain.SourceRepository, Config: map[string]string{"repository": "https://git.example.com/acme/docs"},
+		Name: repoSource, Title: "Repo", Kind: domain.SourceRepository, Config: repoConfig,
 	}, admin); err != nil {
 		t.Fatal(err)
 	}

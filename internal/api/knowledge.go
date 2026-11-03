@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"maps"
-	"mime/multipart"
 	"net/http"
 	"slices"
 	"strings"
@@ -290,53 +288,6 @@ type uploadedFile struct {
 	body []byte
 }
 
-// uploadedFiles reads the files parts of an upload request, each at most the upload limit (the
-// request's body limit bounds them all together); other parts are ignored.
-func (s *server) uploadedFiles(r *multipart.Reader) ([]uploadedFile, error) {
-	if r == nil {
-		return nil, fmt.Errorf("%w: the body is multipart/form-data with files", errInvalid)
-	}
-
-	var files []uploadedFile
-
-	for {
-		part, err := r.NextPart()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-
-		if err != nil {
-			return nil, bodyError(err)
-		}
-
-		if part.FormName() != "files" {
-			continue
-		}
-
-		name := part.FileName()
-		if name == "" {
-			return nil, fmt.Errorf("%w: every file has a file name", errInvalid)
-		}
-
-		body, err := io.ReadAll(io.LimitReader(part, s.uploadMax+1))
-		if err != nil {
-			return nil, bodyError(err)
-		}
-
-		if int64(len(body)) > s.uploadMax {
-			return nil, fmt.Errorf("%w: %q has more than %d bytes", errUploadTooLarge, name, s.uploadMax)
-		}
-
-		files = append(files, uploadedFile{name: name, body: body})
-	}
-
-	if len(files) == 0 {
-		return nil, fmt.Errorf("%w: no files to upload", errInvalid)
-	}
-
-	return files, nil
-}
-
 // bodyError is a failure to read an upload's body: over its limit, or malformed.
 func bodyError(err error) error {
 	if tooLarge := new(http.MaxBytesError); errors.As(err, &tooLarge) {
@@ -378,21 +329,6 @@ func (s *server) sourceUsers(ctx context.Context) (map[string][]factoryUse, erro
 	}
 
 	return users, nil
-}
-
-// sourceNames are the organization's source names by id.
-func (s *server) sourceNames(ctx context.Context) (map[domain.KnowledgeSourceID]string, error) {
-	sources, err := s.knowledge.Sources(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make(map[domain.KnowledgeSourceID]string, len(sources))
-	for _, src := range sources {
-		out[src.ID] = src.Name
-	}
-
-	return out, nil
 }
 
 // connectionSources are the organization's sources by the connections they read.

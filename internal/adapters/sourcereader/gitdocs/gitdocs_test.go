@@ -34,6 +34,10 @@ import (
 const (
 	token = "glpat-s3cret-token"
 
+	// docsToken is the secret the source reads with, and docsSource its name.
+	docsToken  = "docs-token"
+	docsSource = "docs"
+
 	kindGitHub = "github"
 	kindGitLab = "gitlab"
 
@@ -685,14 +689,14 @@ func newWorld(t *testing.T, h *codeHost, kind string, config map[string]string) 
 	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, conns)
 	kb.ReadSecrets(secrets)
 
-	if _, err := secrets.Create(ctx, domain.NewSecret{Name: "docs-token", Value: token, Scope: domain.SecretScope{All: true}}, admin); err != nil {
+	if _, err := secrets.Create(ctx, domain.NewSecret{Name: docsToken, Value: token, Scope: domain.SecretScope{All: true}}, admin); err != nil {
 		t.Fatal(err)
 	}
 
 	cfg := maps.Clone(config)
 	cfg["code_host"] = kind
 
-	if _, err := kb.CreateSource(ctx, domain.NewKnowledgeSource{Name: "docs", Title: "Docs", Kind: domain.SourceRepository, Secret: "docs-token", Config: cfg}, admin); err != nil {
+	if _, err := kb.CreateSource(ctx, domain.NewKnowledgeSource{Name: docsSource, Title: "Docs", Kind: domain.SourceRepository, Secret: docsToken, Config: cfg}, admin); err != nil {
 		t.Fatal(err)
 	}
 
@@ -713,7 +717,7 @@ func (w *world) ctx() context.Context { return domain.WithOrg(w.t.Context(), w.o
 func (w *world) sync(h *codeHost, fetched, documents []string) map[string]file {
 	w.t.Helper()
 
-	if err := w.kb.SyncNow(w.ctx(), "docs"); err != nil {
+	if err := w.kb.SyncNow(w.ctx(), docsSource); err != nil {
 		w.t.Fatal(err)
 	}
 
@@ -742,7 +746,7 @@ func (w *world) sync(h *codeHost, fetched, documents []string) map[string]file {
 func (w *world) source() domain.KnowledgeSource {
 	w.t.Helper()
 
-	s, err := w.kb.Source(w.ctx(), "docs")
+	s, err := w.kb.Source(w.ctx(), docsSource)
 	if err != nil {
 		w.t.Fatal(err)
 	}
@@ -760,7 +764,7 @@ type file struct {
 func (w *world) files() map[string]file {
 	w.t.Helper()
 
-	snaps, err := w.kb.Snapshots(w.ctx(), "docs")
+	snaps, err := w.kb.Snapshots(w.ctx(), docsSource)
 	if err != nil || len(snaps) == 0 {
 		w.t.Fatalf("snapshots = %v, %v; want one", snaps, err)
 	}
@@ -791,12 +795,13 @@ func (w *world) files() map[string]file {
 		urls[f.Name] = url
 	}
 
-	listed, err := w.kb.Files(w.ctx(), domain.KnowledgeFileQuery{Source: "docs", Limit: 100})
+	listed, err := w.kb.Files(w.ctx(), domain.KnowledgeFileQuery{Source: docsSource, Limit: 100})
 	if err != nil {
 		w.t.Fatal(err)
 	}
 
 	out := map[string]file{}
+
 	for _, f := range listed {
 		// A file that was not Markdown has .md after its name.
 		id := f.Path
@@ -824,10 +829,10 @@ func TestReader_ReadsWithASecret(t *testing.T) {
 			r := gitdocs.New(gitdocs.Config{Transport: h.transport(true)})
 
 			spec := domain.SyncSpec{
-				Source: domain.KnowledgeSource{Name: "runbooks", Kind: domain.SourceSynced, Secret: "docs-token", Config: map[string]string{
+				Source: domain.KnowledgeSource{Name: "runbooks", Kind: domain.SourceSynced, Secret: docsToken, Config: map[string]string{
 					domain.SourceReaderKey: "gitdocs", "code_host": kind, cfgRepository: h.repository(),
 				}},
-				Secret: &domain.ResolvedSecret{Secret: domain.Secret{Name: "docs-token"}, Value: token},
+				Secret: &domain.ResolvedSecret{Secret: domain.Secret{Name: docsToken}, Value: token},
 			}
 
 			if got := list(t, r, spec); len(got) != 4 {

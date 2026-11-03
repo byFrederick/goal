@@ -51,7 +51,7 @@ func TestCheck_ListsUnsavedSettings(t *testing.T) {
 
 	w.docs.set(map[string]string{deployMD: shipOnTuesdays, "b.md": "# B"})
 
-	repo := domain.KnowledgeSource{Name: "guides", Kind: domain.SourceRepository, Secret: checkToken, Config: map[string]string{"repository": "https://git.example.com/acme/guides"}}
+	repo := domain.KnowledgeSource{Name: "guides", Kind: domain.SourceRepository, Secret: checkToken, Config: map[string]string{domain.SourceRepositoryKey: "https://git.example.com/acme/guides"}}
 
 	got, err := w.ingestor(nil).Check(ctx, repo)
 	w.want("the check", got, err == nil, got.Error == "", got.Files == 2, w.docs.secret == checkValue)

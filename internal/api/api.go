@@ -400,17 +400,17 @@ func definitionRoute(path string) bool {
 	}
 }
 
-// uploadRoute reports whether r uploads knowledge documents:
-// POST /v1/orgs/{org}/knowledge/sources/{source}/documents.
+// uploadRoute reports whether r uploads knowledge files:
+// POST /v1/orgs/{org}/knowledge/sources/{source}/uploads.
 func uploadRoute(r *http.Request) bool {
 	rest, ok := strings.CutPrefix(r.URL.Path, "/v1/orgs/")
 	if !ok || r.Method != http.MethodPost {
 		return false
 	}
 
-	parts := strings.Split(rest, "/") // org, knowledge, sources, source, documents or uploads
+	parts := strings.Split(rest, "/") // org, knowledge, sources, source, uploads
 
-	return len(parts) == 5 && parts[1] == "knowledge" && parts[2] == "sources" && (parts[4] == "documents" || parts[4] == "uploads")
+	return len(parts) == 5 && parts[1] == "knowledge" && parts[2] == "sources" && parts[4] == "uploads"
 }
 
 // errCrossOrigin marks an unsafe request from another origin, which cross-origin protection

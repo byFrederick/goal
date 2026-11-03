@@ -507,13 +507,6 @@ func (k *Knowledge) FinishSync(ctx context.Context, l domain.SourceLease, r doma
 // maxDocumentTitle bounds a document's title (00054's check).
 const maxDocumentTitle = 1024
 
-// seenBatch bounds the external ids of one MarkKnowledgeSeen statement: a source's unchanged
-// documents can be a hundred thousand.
-const seenBatch = 1000
-
-// maxDocumentPage bounds one page of documents.
-const maxDocumentPage = 1000
-
 func sourceAudit(ctx context.Context, q *db.Queries, by domain.Actor, action string, id uuid.UUID, data map[string]any) error {
 	return appendAudit(ctx, q, domain.AuditEntry{
 		Actor: by, Action: action, TargetKind: domain.AuditTargetKnowledgeSource, TargetID: id.String(), Data: data,
@@ -587,17 +580,8 @@ func (k *Knowledge) AddUpload(ctx context.Context, source string, u domain.Knowl
 			return fmt.Errorf("knowledge source %q: %w", source, domain.ErrNotUploadSource)
 		}
 
-		old, err := q.KnowledgeUploadNamed(ctx, db.KnowledgeUploadNamedParams{SourceID: src.ID, Name: u.Name})
-		if err != nil && !notFound(err) {
-			return err
-		}
-
-		blobs := []string{string(u.Blob)}
-		if err == nil {
-			blobs = append(blobs, old.BlobSha256)
-		}
-
-		if err := q.LockKnowledgeBlobs(ctx, blobs); err != nil {
+		blobs, err := lockUploadBlobs(ctx, q, src.ID, u)
+		if err != nil {
 			return err
 		}
 
@@ -622,24 +606,47 @@ func (k *Knowledge) AddUpload(ctx context.Context, source string, u domain.Knowl
 			}
 		}
 
-		files, err := q.KnowledgeUploads(ctx, src.ID)
-		if err != nil {
-			return err
-		}
+		out, err = uploadNamed(ctx, q, src.ID, truncate(u.Name, maxDocumentTitle))
 
-		for _, f := range files {
-			if f.Name == truncate(u.Name, maxDocumentTitle) {
-				out = uploadFrom(f)
-			}
-		}
-
-		return nil
+		return err
 	})
 	if err != nil {
 		return domain.KnowledgeUpload{}, fmt.Errorf("add upload: %w", err)
 	}
 
 	return out, nil
+}
+
+// lockUploadBlobs holds the content of u and of the file it replaces, and returns them, u's first.
+func lockUploadBlobs(ctx context.Context, q *db.Queries, source uuid.UUID, u domain.KnowledgeUpload) ([]string, error) {
+	blobs := []string{string(u.Blob)}
+
+	old, err := q.KnowledgeUploadNamed(ctx, db.KnowledgeUploadNamedParams{SourceID: source, Name: u.Name})
+	if err != nil && !notFound(err) {
+		return nil, err
+	}
+
+	if err == nil {
+		blobs = append(blobs, old.BlobSha256)
+	}
+
+	return blobs, q.LockKnowledgeBlobs(ctx, blobs)
+}
+
+// uploadNamed is the file named name of the source with id.
+func uploadNamed(ctx context.Context, q *db.Queries, source uuid.UUID, name string) (domain.KnowledgeUpload, error) {
+	files, err := q.KnowledgeUploads(ctx, source)
+	if err != nil {
+		return domain.KnowledgeUpload{}, err
+	}
+
+	for _, f := range files {
+		if f.Name == name {
+			return uploadFrom(f), nil
+		}
+	}
+
+	return domain.KnowledgeUpload{}, fmt.Errorf("knowledge upload %q: %w", name, ports.ErrNotFound)
 }
 
 // DeleteUpload implements ports.Knowledge, holding the file's content as DeleteSource does.

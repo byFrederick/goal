@@ -27,8 +27,9 @@ import (
 )
 
 const (
-	email = "ada@example.com"
-	token = "s3cret-api-token"
+	wikiToken = "wiki-token"
+	email     = "ada@example.com"
+	token     = "s3cret-api-token"
 
 	kindConfluence = "confluence"
 	cfgSpaces      = "spaces"
@@ -550,12 +551,12 @@ func newWorld(t *testing.T, s *site, spaces string) *world {
 	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, conns)
 	kb.ReadSecrets(secrets)
 
-	if _, err := secrets.Create(ctx, domain.NewSecret{Name: "wiki-token", Value: token, Scope: domain.SecretScope{All: true}}, admin); err != nil {
+	if _, err := secrets.Create(ctx, domain.NewSecret{Name: wikiToken, Value: token, Scope: domain.SecretScope{All: true}}, admin); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := kb.CreateSource(ctx, domain.NewKnowledgeSource{
-		Name: nameWiki, Title: "Wiki", Kind: domain.SourceConfluence, Secret: "wiki-token",
+		Name: nameWiki, Title: "Wiki", Kind: domain.SourceConfluence, Secret: wikiToken,
 		Config: map[string]string{cfgSpaces: spaces, fieldSite: s.host(), fieldEmail: email},
 	}, admin); err != nil {
 		t.Fatal(err)
@@ -680,10 +681,10 @@ func TestReader_ReadsWithASecret(t *testing.T) {
 
 	s := newSite(t, pages...)
 	spec := domain.SyncSpec{
-		Source: domain.KnowledgeSource{Name: nameWiki, Kind: domain.SourceSynced, Secret: "wiki-token", Config: map[string]string{
+		Source: domain.KnowledgeSource{Name: nameWiki, Kind: domain.SourceSynced, Secret: wikiToken, Config: map[string]string{
 			domain.SourceReaderKey: "confluence", fieldSite: s.host(), fieldEmail: email, cfgSpaces: spaceENG,
 		}},
-		Secret: &domain.ResolvedSecret{Secret: domain.Secret{Name: "wiki-token"}, Value: token},
+		Secret: &domain.ResolvedSecret{Secret: domain.Secret{Name: wikiToken}, Value: token},
 	}
 
 	if got := list(t, s.reader(), spec); !slices.Equal(slices.Sorted(maps.Keys(got)), []string{"11", "12", "13"}) {

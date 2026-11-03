@@ -20,6 +20,9 @@ import (
 
 var admin = domain.Actor{Kind: domain.ActorUser, ID: "00000000-0000-7000-8000-000000000001", Name: "Ada"}
 
+// repoConfig is the config of the repository sources the tests make.
+var repoConfig = map[string]string{domain.SourceRepositoryKey: "https://git.example.com/acme/docs"}
+
 // Names the tests use.
 const (
 	deployMD       = "docs/deploy.md"
@@ -163,7 +166,7 @@ func newWorld(t *testing.T) *world {
 	}
 
 	for _, n := range []domain.NewKnowledgeSource{
-		{Name: "runbooks", Title: "Runbooks", Kind: domain.SourceRepository, Secret: "docs-token", Config: map[string]string{"repository": "https://git.example.com/acme/docs"}},
+		{Name: "runbooks", Title: "Runbooks", Kind: domain.SourceRepository, Secret: "docs-token", Config: repoConfig},
 		{Name: "handbook", Title: "Handbook", Kind: domain.SourceUpload},
 	} {
 		if _, err := w.kb.CreateSource(ctx, n, admin); err != nil {
@@ -393,6 +396,15 @@ func TestUploads_StoredOnceAndDeletedWithTheLastHolder(t *testing.T) {
 	if _, err := w.objects.Get(ctx, key); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("Get after the file was replaced = %v, want the old original deleted", err)
 	}
+}
+
+// Uploads the knowledge base refuses: a type it does not take, a file over the limit, a source of
+// another kind. A refused upload writes nothing to the bucket.
+func TestUploads_RefusalsWriteNothing(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	ctx := w.ctx()
 
 	_, err := w.uploads.Upload(ctx, "handbook", "slides.key", []byte("PK"), admin)
 	if !errors.Is(err, domain.ErrUnsupportedDocument) {
@@ -659,8 +671,8 @@ func TestIngest_SyncOpensTheSecret(t *testing.T) {
 	}
 
 	for _, n := range []domain.NewKnowledgeSource{
-		{Name: "runbooks", Title: "Runbooks", Kind: domain.SourceRepository, Secret: "other-token", Config: map[string]string{"repository": "https://git.example.com/acme/docs"}},
-		{Name: "scoped", Title: "Scoped", Kind: domain.SourceRepository, Secret: "acme-only", Config: map[string]string{"repository": "https://git.example.com/acme/docs"}},
+		{Name: "runbooks", Title: "Runbooks", Kind: domain.SourceRepository, Secret: "other-token", Config: repoConfig},
+		{Name: "scoped", Title: "Scoped", Kind: domain.SourceRepository, Secret: "acme-only", Config: repoConfig},
 	} {
 		if _, err := w.kb.CreateSource(ctx, n, admin); err != nil {
 			t.Fatal(err)

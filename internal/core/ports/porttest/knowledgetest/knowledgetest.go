@@ -593,15 +593,8 @@ func testFinishFailures(f *fixture) {
 	sync("", 0)
 }
 
-// Chunk texts of the ranking fixture.
-const (
-	exact   = "lease claims and their expiry"
-	near    = "unrelated words only"
-	keyword = "lease renewal lease rotation lease audit"
-)
-
-// testIsolation: another organization sees none of the sources, documents and chunks, by name,
-// id, claim or search, and writes none (spec 4 §11.2 row 1).
+// testIsolation: another organization sees none of the sources and uploads, by name,
+// id or claim, and writes none (spec 4 §11.2 row 1).
 func testIsolation(f *fixture) {
 	f.synced(f.org, runbooks)
 
