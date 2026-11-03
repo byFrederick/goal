@@ -48,9 +48,11 @@ import (
 	"github.com/byFrederick/goal/internal/adapters/sourcereader/confluence"
 	"github.com/byFrederick/goal/internal/adapters/sourcereader/gitdocs"
 	"github.com/byFrederick/goal/internal/adapters/store/postgres"
+	toollister "github.com/byFrederick/goal/internal/adapters/toollister/mcp"
 	"github.com/byFrederick/goal/internal/api"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
+	"github.com/byFrederick/goal/internal/catalog"
 	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/engine"
@@ -251,6 +253,12 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// The docs site at /docs, from GOAL_DOCS_DIR; none without it.
 	site, siteErr := docsSite(s.DocsDir)
 
+	// The tool templates of Add a tool (ADR 0037 decision 15), shipped inside goald.
+	templates, err := catalog.Templates()
+	if err != nil {
+		return err
+	}
+
 	apiHandler, err := api.New(api.Deps{
 		Engine: eng, Items: store, Factories: defs, Definitions: authors, Versions: definitionStore, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
 		Authorizer: authorizer(s.Auth, clock), Auth: api.AuthConfig{
@@ -258,6 +266,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
 		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store),
+		Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), ToolLister: toollister.New(connectionTransport(s.AllowPrivateUpstreams)),
 		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,

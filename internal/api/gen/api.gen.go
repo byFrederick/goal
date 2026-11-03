@@ -24,6 +24,81 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AccessBy.
+const (
+	AccessByFactory AccessBy = "factory"
+	AccessByReach   AccessBy = "reach"
+	AccessBySecret  AccessBy = "secret"
+)
+
+// Valid indicates whether the value is a known member of the AccessBy enum.
+func (e AccessBy) Valid() bool {
+	switch e {
+	case AccessByFactory:
+		return true
+	case AccessByReach:
+		return true
+	case AccessBySecret:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AccessRowKind.
+const (
+	AccessRowKindEnv  AccessRowKind = "env"
+	AccessRowKindFile AccessRowKind = "file"
+	AccessRowKindMcp  AccessRowKind = "mcp"
+)
+
+// Valid indicates whether the value is a known member of the AccessRowKind enum.
+func (e AccessRowKind) Valid() bool {
+	switch e {
+	case AccessRowKindEnv:
+		return true
+	case AccessRowKindFile:
+		return true
+	case AccessRowKindMcp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AccessStatus.
+const (
+	AccessStatusExpired  AccessStatus = "expired"
+	AccessStatusExpiring AccessStatus = "expiring"
+	AccessStatusFailed   AccessStatus = "failed"
+	AccessStatusMissing  AccessStatus = "missing"
+	AccessStatusOk       AccessStatus = "ok"
+	AccessStatusTested   AccessStatus = "tested"
+	AccessStatusUntested AccessStatus = "untested"
+)
+
+// Valid indicates whether the value is a known member of the AccessStatus enum.
+func (e AccessStatus) Valid() bool {
+	switch e {
+	case AccessStatusExpired:
+		return true
+	case AccessStatusExpiring:
+		return true
+	case AccessStatusFailed:
+		return true
+	case AccessStatusMissing:
+		return true
+	case AccessStatusOk:
+		return true
+	case AccessStatusTested:
+		return true
+	case AccessStatusUntested:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ActorKind.
 const (
 	ActorKindAgent   ActorKind = "agent"
@@ -1740,6 +1815,27 @@ func (e TeardownRunOutcome) Valid() bool {
 	}
 }
 
+// Defines values for TemplateMCPTools.
+const (
+	TemplateMCPToolsAllow TemplateMCPTools = "allow"
+	TemplateMCPToolsAsk   TemplateMCPTools = "ask"
+	TemplateMCPToolsOff   TemplateMCPTools = "off"
+)
+
+// Valid indicates whether the value is a known member of the TemplateMCPTools enum.
+func (e TemplateMCPTools) Valid() bool {
+	switch e {
+	case TemplateMCPToolsAllow:
+		return true
+	case TemplateMCPToolsAsk:
+		return true
+	case TemplateMCPToolsOff:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TemplateStartKind.
 const (
 	TemplateStartKindTemplate TemplateStartKind = "template"
@@ -2058,6 +2154,27 @@ func (e WebhookKind) Valid() bool {
 	}
 }
 
+// Defines values for GetAccessParamsBy.
+const (
+	GetAccessParamsByFactory GetAccessParamsBy = "factory"
+	GetAccessParamsByReach   GetAccessParamsBy = "reach"
+	GetAccessParamsBySecret  GetAccessParamsBy = "secret"
+)
+
+// Valid indicates whether the value is a known member of the GetAccessParamsBy enum.
+func (e GetAccessParamsBy) Valid() bool {
+	switch e {
+	case GetAccessParamsByFactory:
+		return true
+	case GetAccessParamsByReach:
+		return true
+	case GetAccessParamsBySecret:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GetMetricsParamsCompare.
 const (
 	Previous GetMetricsParamsCompare = "previous"
@@ -2071,6 +2188,88 @@ func (e GetMetricsParamsCompare) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// Access defines model for Access.
+type Access struct {
+	By     AccessBy      `json:"by"`
+	Groups []AccessGroup `json:"groups"`
+
+	// NeedAttention Of those, the missing, failed, expired or expiring
+	NeedAttention int `json:"need_attention"`
+
+	// Reached What agents reach
+	Reached int `json:"reached"`
+}
+
+// AccessBy defines model for Access.By.
+type AccessBy string
+
+// AccessFactory defines model for AccessFactory.
+type AccessFactory struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// AccessGroup One group: a kind (mcp, env, file), a factory's id or a secret's name, by by
+type AccessGroup struct {
+	Key   string      `json:"key"`
+	Rows  []AccessRow `json:"rows"`
+	Title string      `json:"title"`
+}
+
+// AccessRow defines model for AccessRow.
+type AccessRow struct {
+	// ExpiresAt The soonest expiry of its secrets
+	ExpiresAt *time.Time    `json:"expires_at,omitempty"`
+	Kind      AccessRowKind `json:"kind"`
+
+	// LastUsedAt When a run last opened one of its secrets
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+
+	// Name The MCP server
+	Name string `json:"name"`
+
+	// Secrets The secrets it references
+	Secrets []string `json:"secrets"`
+
+	// Status The worst of its uses' statuses, in this order
+	Status AccessStatus `json:"status"`
+
+	// TestError Why its latest failed test failed
+	TestError *string `json:"test_error,omitempty"`
+
+	// TestedAt Its latest test
+	TestedAt *time.Time  `json:"tested_at,omitempty"`
+	Uses     []AccessUse `json:"uses"`
+}
+
+// AccessRowKind defines model for AccessRow.Kind.
+type AccessRowKind string
+
+// AccessStatus The worst of its uses' statuses, in this order
+type AccessStatus string
+
+// AccessTest defines model for AccessTest.
+type AccessTest struct {
+	At    time.Time `json:"at"`
+	Error *string   `json:"error,omitempty"`
+	Ok    bool      `json:"ok"`
+
+	// Tools How many tools it listed
+	Tools int `json:"tools"`
+}
+
+// AccessUse defines model for AccessUse.
+type AccessUse struct {
+	// Agents The agents on the environment
+	Agents      []string      `json:"agents"`
+	Environment string        `json:"environment"`
+	Factory     AccessFactory `json:"factory"`
+
+	// Status The worst of its uses' statuses, in this order
+	Status AccessStatus `json:"status"`
+	Test   *AccessTest  `json:"test,omitempty"`
 }
 
 // Activity defines model for Activity.
@@ -3510,6 +3709,36 @@ type DraftTree struct {
 
 	// Files Files by slash-separated relative path
 	Files FileMap `json:"files"`
+}
+
+// EnvironmentTestRequest defines model for EnvironmentTestRequest.
+type EnvironmentTestRequest struct {
+	// Server Only this MCP server
+	Server   *string                  `json:"server,omitempty"`
+	Template *EnvironmentTestTemplate `json:"template,omitempty"`
+
+	// Version draft (the default), current or a version number
+	Version *string `json:"version,omitempty"`
+}
+
+// EnvironmentTestResult defines model for EnvironmentTestResult.
+type EnvironmentTestResult struct {
+	Environment string              `json:"environment"`
+	Servers     []ServerTest        `json:"servers"`
+	Template    *TemplateTestResult `json:"template,omitempty"`
+
+	// Version The version tested: draft or its number
+	Version string `json:"version"`
+}
+
+// EnvironmentTestTemplate defines model for EnvironmentTestTemplate.
+type EnvironmentTestTemplate struct {
+	// Env The template's plain env values to use instead of its own, by name
+	Env  *map[string]string `json:"env,omitempty"`
+	Name string             `json:"name"`
+
+	// Secrets The secret each slot takes, by slot
+	Secrets map[string]SecretName `json:"secrets"`
 }
 
 // EvalCaseEntry defines model for EvalCaseEntry.
@@ -5830,7 +6059,7 @@ type PolicyModel struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422).
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422).
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -6452,6 +6681,22 @@ type SentBack struct {
 	Ratio *float64 `json:"ratio"`
 }
 
+// ServerTest defines model for ServerTest.
+type ServerTest struct {
+	At *time.Time `json:"at,omitempty"`
+
+	// Error Why it failed
+	Error  *string `json:"error,omitempty"`
+	Ok     bool    `json:"ok"`
+	Server string  `json:"server"`
+
+	// Tested False for a stdio server, which goald does not start
+	Tested bool `json:"tested"`
+
+	// Tools The tool names tools/list answered
+	Tools []string `json:"tools"`
+}
+
 // SetLaneRequest defines model for SetLaneRequest.
 type SetLaneRequest struct {
 	// Lane The lane to set
@@ -6760,9 +7005,45 @@ type Template struct {
 	Version  int          `json:"version"`
 }
 
+// TemplateAdds What the template writes into an environment file
+type TemplateAdds struct {
+	Env map[string]string `json:"env"`
+
+	// Files By absolute or ~/ path
+	Files map[string]string      `json:"files"`
+	Mcp   map[string]TemplateMCP `json:"mcp"`
+
+	// Tools mise tool specs
+	Tools []string `json:"tools"`
+}
+
 // TemplateList defines model for TemplateList.
 type TemplateList struct {
 	Templates []TemplateSummary `json:"templates"`
+}
+
+// TemplateMCP A remote (url, headers) or stdio (command, env) MCP server, with suggested tool modes
+type TemplateMCP struct {
+	Command *[]string                   `json:"command,omitempty"`
+	Env     *map[string]string          `json:"env,omitempty"`
+	Headers *map[string]string          `json:"headers,omitempty"`
+	Tools   map[string]TemplateMCPTools `json:"tools"`
+	Url     *string                     `json:"url,omitempty"`
+}
+
+// TemplateMCPTools defines model for TemplateMCP.Tools.
+type TemplateMCPTools string
+
+// TemplateSecret defines model for TemplateSecret.
+type TemplateSecret struct {
+	Description string `json:"description"`
+
+	// Slot The {{slot}} its values refer to
+	Slot string `json:"slot"`
+
+	// Suggest The name a new secret for it is suggested to have
+	Suggest string `json:"suggest"`
+	Title   string `json:"title"`
 }
 
 // TemplateStart defines model for TemplateStart.
@@ -6791,6 +7072,33 @@ type TemplateSummary struct {
 	Summary    string   `json:"summary"`
 	Title      string   `json:"title"`
 	Version    int      `json:"version"`
+}
+
+// TemplateTest An HTTP test request; its values may hold {{slot}} and ${VAR} of the template's plain env values
+type TemplateTest struct {
+	Basic *struct {
+		Password string `json:"password"`
+		Username string `json:"username"`
+	} `json:"basic,omitempty"`
+
+	// Expect The status that passes
+	Expect  int               `json:"expect"`
+	Headers map[string]string `json:"headers"`
+	Method  string            `json:"method"`
+	Url     string            `json:"url"`
+}
+
+// TemplateTestResult defines model for TemplateTestResult.
+type TemplateTestResult struct {
+	At time.Time `json:"at"`
+
+	// Error Why it failed
+	Error *string `json:"error,omitempty"`
+	Name  string  `json:"name"`
+	Ok    bool    `json:"ok"`
+
+	// Status The status the test request got
+	Status *int `json:"status,omitempty"`
 }
 
 // TextFile defines model for TextFile.
@@ -6874,6 +7182,26 @@ type ToolPolicyUseCredentials string
 
 // ToolPolicyWriteOutsideBranch Comments, issues, tickets and messages outside the item's branch
 type ToolPolicyWriteOutsideBranch string
+
+// ToolTemplate A tool template (ADR 0037 decision 15)
+type ToolTemplate struct {
+	// Adds What the template writes into an environment file
+	Adds TemplateAdds `json:"adds"`
+
+	// Description One line
+	Description string `json:"description"`
+	Name        string `json:"name"`
+
+	// Secrets Its secret slots, in order
+	Secrets []TemplateSecret `json:"secrets"`
+	Test    *TemplateTest    `json:"test"`
+	Title   string           `json:"title"`
+}
+
+// ToolTemplateList defines model for ToolTemplateList.
+type ToolTemplateList struct {
+	Templates []ToolTemplate `json:"templates"`
+}
 
 // Touch One action by a person on an item, named by its most specific event
 type Touch struct {
@@ -7455,6 +7783,17 @@ type WorkTypeFilter = string
 // Conflict defines model for Conflict.
 type Conflict = Problem
 
+// GetAccessParams defines parameters for GetAccess.
+type GetAccessParams struct {
+	By *GetAccessParamsBy `form:"by,omitempty" json:"by,omitempty"`
+
+	// Factory Only this factory's, by metadata.id or metadata.name
+	Factory *string `form:"factory,omitempty" json:"factory,omitempty"`
+}
+
+// GetAccessParamsBy defines parameters for GetAccess.
+type GetAccessParamsBy string
+
 // ListAuditParams defines parameters for ListAudit.
 type ListAuditParams struct {
 	// Before The cursor of the next page (next_before); entries with a smaller id
@@ -7916,6 +8255,9 @@ type ReplaceDraftTreeJSONRequestBody = DraftTree
 // ValidateDraftJSONRequestBody defines body for ValidateDraft for application/json ContentType.
 type ValidateDraftJSONRequestBody = ValidateDraftRequest
 
+// TestEnvironmentJSONRequestBody defines body for TestEnvironment for application/json ContentType.
+type TestEnvironmentJSONRequestBody = EnvironmentTestRequest
+
 // StartBakeOffJSONRequestBody defines body for StartBakeOff for application/json ContentType.
 type StartBakeOffJSONRequestBody = BakeOffRequest
 
@@ -8362,6 +8704,13 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/auth/device/{user_code} (the `GetDeviceRequest` operationId).
 	GetDeviceRequest(ctx context.Context, userCode string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetCatalog The tool templates
+	//
+	// Every template goald ships, by name: its title, description, secret slots with suggested secret names, what it adds (tools, env, files and MCP servers with suggested tool modes) and its HTTP test, if any. Values are plain or {{slot}} references to its slots.
+	//
+	// Corresponds with GET /v1/catalog (the `GetCatalog` operationId).
+	GetCatalog(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetHealth Liveness of goald
 	//
 	// Corresponds with GET /v1/health (the `GetHealth` operationId).
@@ -8446,6 +8795,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
 	GetOrg(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAccess What the organization's agents reach
+	//
+	// Computed from each factory's current published version, the environment tests and the secrets, over the factories the caller sees that are not archived: every MCP server, and every env variable and file that references a secret. Each row lists the factories and environments that use it with their agents, the secrets it references, and a status: missing (a secret it references does not exist), failed (its last test failed), expired or expiring (a secret's expiry has passed, or is within its reminder days), untested (a remote MCP server never tested), tested, or ok. by groups the rows by what agents reach (MCP servers, env variables, files; the default), by factory or by secret; factory keeps one factory's. reached counts what agents reach and need_attention what is missing, failed, expired or expiring, whatever by is.
+	//
+	// Corresponds with GET /v1/orgs/{org}/access (the `GetAccess` operationId).
+	GetAccess(ctx context.Context, org OrgRef, params *GetAccessParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListAPIKeys The organization's API keys
 	//
@@ -9039,6 +9395,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
 	ValidateDraft(ctx context.Context, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestEnvironmentWithBody Test an environment's MCP servers or a template
+	//
+	// Tests the environment of the draft, or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
+	TestEnvironmentWithBody(ctx context.Context, org OrgRef, factory FactoryRef, environment string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestEnvironment Test an environment's MCP servers or a template
+	//
+	// Tests the environment of the draft, or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
+	TestEnvironment(ctx context.Context, org OrgRef, factory FactoryRef, environment string, body TestEnvironmentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListEvals The eval cases of the current version, with their last tries and a summary
 	//
@@ -10385,6 +10759,23 @@ func (c *Client) GetDeviceRequest(ctx context.Context, userCode string, reqEdito
 	return c.Client.Do(req)
 }
 
+// GetCatalog The tool templates
+//
+// Every template goald ships, by name: its title, description, secret slots with suggested secret names, what it adds (tools, env, files and MCP servers with suggested tool modes) and its HTTP test, if any. Values are plain or {{slot}} references to its slots.
+//
+// Corresponds with GET /v1/catalog (the `GetCatalog` operationId).
+func (c *Client) GetCatalog(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCatalogRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetHealth Liveness of goald
 //
 // Corresponds with GET /v1/health (the `GetHealth` operationId).
@@ -10570,6 +10961,23 @@ func (c *Client) DeleteOrg(ctx context.Context, org OrgRef, body DeleteOrgJSONRe
 // Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
 func (c *Client) GetOrg(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetOrgRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetAccess What the organization's agents reach
+//
+// Computed from each factory's current published version, the environment tests and the secrets, over the factories the caller sees that are not archived: every MCP server, and every env variable and file that references a secret. Each row lists the factories and environments that use it with their agents, the secrets it references, and a status: missing (a secret it references does not exist), failed (its last test failed), expired or expiring (a secret's expiry has passed, or is within its reminder days), untested (a remote MCP server never tested), tested, or ok. by groups the rows by what agents reach (MCP servers, env variables, files; the default), by factory or by secret; factory keeps one factory's. reached counts what agents reach and need_attention what is missing, failed, expired or expiring, whatever by is.
+//
+// Corresponds with GET /v1/orgs/{org}/access (the `GetAccess` operationId).
+func (c *Client) GetAccess(ctx context.Context, org OrgRef, params *GetAccessParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAccessRequest(c.Server, org, params)
 	if err != nil {
 		return nil, err
 	}
@@ -11884,6 +12292,44 @@ func (c *Client) ValidateDraftWithBody(ctx context.Context, org OrgRef, factory 
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
 func (c *Client) ValidateDraft(ctx context.Context, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewValidateDraftRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestEnvironmentWithBody Test an environment's MCP servers or a template
+//
+// Tests the environment of the draft, or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
+func (c *Client) TestEnvironmentWithBody(ctx context.Context, org OrgRef, factory FactoryRef, environment string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestEnvironmentRequestWithBody(c.Server, org, factory, environment, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestEnvironment Test an environment's MCP servers or a template
+//
+// Tests the environment of the draft, or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
+func (c *Client) TestEnvironment(ctx context.Context, org OrgRef, factory FactoryRef, environment string, body TestEnvironmentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestEnvironmentRequest(c.Server, org, factory, environment, body)
 	if err != nil {
 		return nil, err
 	}
@@ -14945,6 +15391,33 @@ func NewGetDeviceRequestRequest(server string, userCode string) (*http.Request, 
 	return req, nil
 }
 
+// NewGetCatalogRequest constructs an http.Request for the GetCatalog method
+func NewGetCatalogRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/catalog")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetHealthRequest constructs an http.Request for the GetHealth method
 func NewGetHealthRequest(server string) (*http.Request, error) {
 	var err error
@@ -15204,6 +15677,79 @@ func NewGetOrgRequest(server string, org OrgRef) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAccessRequest constructs an http.Request for the GetAccess method
+func NewGetAccessRequest(server string, org OrgRef, params *GetAccessParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/access", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.By != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "by", *params.By, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Factory != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "factory", *params.Factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -18181,6 +18727,67 @@ func NewValidateDraftRequestWithBody(server string, org OrgRef, factory FactoryR
 	}
 
 	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/validate", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewTestEnvironmentRequest calls the generic TestEnvironment builder with application/json body
+func NewTestEnvironmentRequest(server string, org OrgRef, factory FactoryRef, environment string, body TestEnvironmentJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTestEnvironmentRequestWithBody(server, org, factory, environment, "application/json", bodyReader)
+}
+
+// NewTestEnvironmentRequestWithBody constructs an http.Request for the TestEnvironment method, with any body, and a specified content type
+func NewTestEnvironmentRequestWithBody(server string, org OrgRef, factory FactoryRef, environment string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "environment", environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/environments/%s/test", pathParam0, pathParam1, pathParam2)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -25195,6 +25802,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/auth/device/{user_code} (the `GetDeviceRequest` operationId).
 	GetDeviceRequestWithResponse(ctx context.Context, userCode string, reqEditors ...RequestEditorFn) (*GetDeviceRequestResponse, error)
 
+	// GetCatalogWithResponse The tool templates
+	//
+	// Every template goald ships, by name: its title, description, secret slots with suggested secret names, what it adds (tools, env, files and MCP servers with suggested tool modes) and its HTTP test, if any. Values are plain or {{slot}} references to its slots.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/catalog (the `GetCatalog` operationId).
+	GetCatalogWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogResponse, error)
+
 	// GetHealthWithResponse Liveness of goald
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -25289,6 +25905,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
 	GetOrgWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetOrgResponse, error)
+
+	// GetAccessWithResponse What the organization's agents reach
+	//
+	// Computed from each factory's current published version, the environment tests and the secrets, over the factories the caller sees that are not archived: every MCP server, and every env variable and file that references a secret. Each row lists the factories and environments that use it with their agents, the secrets it references, and a status: missing (a secret it references does not exist), failed (its last test failed), expired or expiring (a secret's expiry has passed, or is within its reminder days), untested (a remote MCP server never tested), tested, or ok. by groups the rows by what agents reach (MCP servers, env variables, files; the default), by factory or by secret; factory keeps one factory's. reached counts what agents reach and need_attention what is missing, failed, expired or expiring, whatever by is.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/access (the `GetAccess` operationId).
+	GetAccessWithResponse(ctx context.Context, org OrgRef, params *GetAccessParams, reqEditors ...RequestEditorFn) (*GetAccessResponse, error)
 
 	// ListAPIKeysWithResponse The organization's API keys
 	//
@@ -25952,6 +26577,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
 	ValidateDraftWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*ValidateDraftResponse, error)
+
+	// TestEnvironmentWithBodyWithResponse Test an environment's MCP servers or a template
+	//
+	// Tests the environment of the draft, or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
+	TestEnvironmentWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, environment string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestEnvironmentResponse, error)
+
+	// TestEnvironmentWithResponse Test an environment's MCP servers or a template
+	//
+	// Tests the environment of the draft, or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
+	TestEnvironmentWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, environment string, body TestEnvironmentJSONRequestBody, reqEditors ...RequestEditorFn) (*TestEnvironmentResponse, error)
 
 	// ListEvalsWithResponse The eval cases of the current version, with their last tries and a summary
 	//
@@ -27527,6 +28170,54 @@ func (r GetDeviceRequestResponse) ContentType() string {
 	return ""
 }
 
+type GetCatalogResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ToolTemplateList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetCatalogResponse) GetJSON200() *ToolTemplateList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetCatalogResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetCatalogResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCatalogResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCatalogResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetCatalogResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetHealthResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -27898,6 +28589,54 @@ func (r GetOrgResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetOrgResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetAccessResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Access
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAccessResponse) GetJSON200() *Access {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetAccessResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAccessResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAccessResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAccessResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAccessResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -30538,6 +31277,54 @@ func (r ValidateDraftResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ValidateDraftResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TestEnvironmentResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EnvironmentTestResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TestEnvironmentResponse) GetJSON200() *EnvironmentTestResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TestEnvironmentResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TestEnvironmentResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TestEnvironmentResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TestEnvironmentResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TestEnvironmentResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -36762,6 +37549,21 @@ func (c *ClientWithResponses) GetDeviceRequestWithResponse(ctx context.Context, 
 	return ParseGetDeviceRequestResponse(rsp)
 }
 
+// GetCatalogWithResponse The tool templates
+//
+// Every template goald ships, by name: its title, description, secret slots with suggested secret names, what it adds (tools, env, files and MCP servers with suggested tool modes) and its HTTP test, if any. Values are plain or {{slot}} references to its slots.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/catalog (the `GetCatalog` operationId).
+func (c *ClientWithResponses) GetCatalogWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogResponse, error) {
+	rsp, err := c.GetCatalog(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCatalogResponse(rsp)
+}
+
 // GetHealthWithResponse Liveness of goald
 //
 // Returns a wrapper object for the known response body format(s).
@@ -36921,6 +37723,21 @@ func (c *ClientWithResponses) GetOrgWithResponse(ctx context.Context, org OrgRef
 		return nil, err
 	}
 	return ParseGetOrgResponse(rsp)
+}
+
+// GetAccessWithResponse What the organization's agents reach
+//
+// Computed from each factory's current published version, the environment tests and the secrets, over the factories the caller sees that are not archived: every MCP server, and every env variable and file that references a secret. Each row lists the factories and environments that use it with their agents, the secrets it references, and a status: missing (a secret it references does not exist), failed (its last test failed), expired or expiring (a secret's expiry has passed, or is within its reminder days), untested (a remote MCP server never tested), tested, or ok. by groups the rows by what agents reach (MCP servers, env variables, files; the default), by factory or by secret; factory keeps one factory's. reached counts what agents reach and need_attention what is missing, failed, expired or expiring, whatever by is.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/access (the `GetAccess` operationId).
+func (c *ClientWithResponses) GetAccessWithResponse(ctx context.Context, org OrgRef, params *GetAccessParams, reqEditors ...RequestEditorFn) (*GetAccessResponse, error) {
+	rsp, err := c.GetAccess(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAccessResponse(rsp)
 }
 
 // ListAPIKeysWithResponse The organization's API keys
@@ -38019,6 +38836,36 @@ func (c *ClientWithResponses) ValidateDraftWithResponse(ctx context.Context, org
 		return nil, err
 	}
 	return ParseValidateDraftResponse(rsp)
+}
+
+// TestEnvironmentWithBodyWithResponse Test an environment's MCP servers or a template
+//
+// Tests the environment of the draft, or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
+func (c *ClientWithResponses) TestEnvironmentWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, environment string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestEnvironmentResponse, error) {
+	rsp, err := c.TestEnvironmentWithBody(ctx, org, factory, environment, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestEnvironmentResponse(rsp)
+}
+
+// TestEnvironmentWithResponse Test an environment's MCP servers or a template
+//
+// Tests the environment of the draft, or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
+func (c *ClientWithResponses) TestEnvironmentWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, environment string, body TestEnvironmentJSONRequestBody, reqEditors ...RequestEditorFn) (*TestEnvironmentResponse, error) {
+	rsp, err := c.TestEnvironment(ctx, org, factory, environment, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestEnvironmentResponse(rsp)
 }
 
 // ListEvalsWithResponse The eval cases of the current version, with their last tries and a summary
@@ -40572,6 +41419,39 @@ func ParseGetDeviceRequestResponse(rsp *http.Response) (*GetDeviceRequestRespons
 	return response, nil
 }
 
+// ParseGetCatalogResponse parses an HTTP response from a GetCatalogWithResponse call
+func ParseGetCatalogResponse(rsp *http.Response) (*GetCatalogResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCatalogResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ToolTemplateList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetHealthResponse parses an HTTP response from a GetHealthWithResponse call
 func ParseGetHealthResponse(rsp *http.Response) (*GetHealthResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -40812,6 +41692,39 @@ func ParseGetOrgResponse(rsp *http.Response) (*GetOrgResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Org
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAccessResponse parses an HTTP response from a GetAccessWithResponse call
+func ParseGetAccessResponse(rsp *http.Response) (*GetAccessResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAccessResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Access
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -42669,6 +43582,39 @@ func ParseValidateDraftResponse(rsp *http.Response) (*ValidateDraftResponse, err
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Validation
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTestEnvironmentResponse parses an HTTP response from a TestEnvironmentWithResponse call
+func ParseTestEnvironmentResponse(rsp *http.Response) (*TestEnvironmentResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TestEnvironmentResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EnvironmentTestResult
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -47058,6 +48004,9 @@ type ServerInterface interface {
 	// GetDeviceRequest A pending CLI sign-in, by the code its terminal shows
 	// (GET /v1/auth/device/{user_code})
 	GetDeviceRequest(w http.ResponseWriter, r *http.Request, userCode string)
+	// GetCatalog The tool templates
+	// (GET /v1/catalog)
+	GetCatalog(w http.ResponseWriter, r *http.Request)
 	// GetHealth Liveness of goald
 	// (GET /v1/health)
 	GetHealth(w http.ResponseWriter, r *http.Request)
@@ -47082,6 +48031,9 @@ type ServerInterface interface {
 	// GetOrg One organization
 	// (GET /v1/orgs/{org})
 	GetOrg(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// GetAccess What the organization's agents reach
+	// (GET /v1/orgs/{org}/access)
+	GetAccess(w http.ResponseWriter, r *http.Request, org OrgRef, params GetAccessParams)
 	// ListAPIKeys The organization's API keys
 	// (GET /v1/orgs/{org}/api-keys)
 	ListAPIKeys(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -47259,6 +48211,9 @@ type ServerInterface interface {
 	// ValidateDraft Validate the draft at its revision, as publish will
 	// (POST /v1/orgs/{org}/factories/{factory}/draft/validate)
 	ValidateDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// TestEnvironment Test an environment's MCP servers or a template
+	// (POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test)
+	TestEnvironment(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, environment string)
 	// ListEvals The eval cases of the current version, with their last tries and a summary
 	// (GET /v1/orgs/{org}/factories/{factory}/evals)
 	ListEvals(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -47694,6 +48649,20 @@ func (siw *ServerInterfaceWrapper) GetDeviceRequest(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// GetCatalog operation middleware
+func (siw *ServerInterfaceWrapper) GetCatalog(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCatalog(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetHealth operation middleware
 func (siw *ServerInterfaceWrapper) GetHealth(w http.ResponseWriter, r *http.Request) {
 
@@ -47821,6 +48790,61 @@ func (siw *ServerInterfaceWrapper) GetOrg(w http.ResponseWriter, r *http.Request
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetOrg(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAccess operation middleware
+func (siw *ServerInterfaceWrapper) GetAccess(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAccessParams
+
+	// ------------- Optional query parameter "by" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "by", r.URL.Query(), &params.By, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "by"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "by", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "factory" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "factory", r.URL.Query(), &params.Factory, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "factory"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAccess(w, r, org, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -50157,6 +51181,50 @@ func (siw *ServerInterfaceWrapper) ValidateDraft(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ValidateDraft(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TestEnvironment operation middleware
+func (siw *ServerInterfaceWrapper) TestEnvironment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "environment" -------------
+	var environment string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "environment", r.PathValue("environment"), &environment, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "environment", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestEnvironment(w, r, org, factory, environment)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -55676,6 +56744,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/health", wrapper.GetHealth)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/auth/config", wrapper.GetAuthConfig)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/auth/device/{user_code}", wrapper.GetDeviceRequest)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/catalog", wrapper.GetCatalog)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/me", wrapper.GetMe)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/me/notifications", wrapper.GetNotificationPreferences)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/me/notifications", wrapper.PutNotificationPreferences)
@@ -55788,6 +56857,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.GetAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.PullAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon/clear", wrapper.ClearAndon)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/environments/{environment}/test", wrapper.TestEnvironment)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks", wrapper.ListWebhookEndpoints)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks", wrapper.CreateWebhookEndpoint)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}", wrapper.DeleteWebhookEndpoint)
@@ -55844,6 +56914,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/credentials/{credential}", wrapper.DeleteCredential)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/credentials/{credential}", wrapper.GetCredential)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/credentials/{credential}", wrapper.PatchCredential)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/access", wrapper.GetAccess)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/secrets", wrapper.ListSecrets)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/secrets", wrapper.CreateSecret)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/secrets/import", wrapper.ImportSecrets)
@@ -55923,6 +56994,44 @@ type GetDeviceRequestdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetDeviceRequestdefaultApplicationProblemPlusJSONResponse) VisitGetDeviceRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCatalogRequestObject struct {
+}
+
+type GetCatalogResponseObject interface {
+	VisitGetCatalogResponse(w http.ResponseWriter) error
+}
+
+type GetCatalog200JSONResponse ToolTemplateList
+
+func (response GetCatalog200JSONResponse) VisitGetCatalogResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCatalogdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetCatalogdefaultApplicationProblemPlusJSONResponse) VisitGetCatalogResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -56215,6 +57324,46 @@ type GetOrgdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetOrgdefaultApplicationProblemPlusJSONResponse) VisitGetOrgResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAccessRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params GetAccessParams
+}
+
+type GetAccessResponseObject interface {
+	VisitGetAccessResponse(w http.ResponseWriter) error
+}
+
+type GetAccess200JSONResponse Access
+
+func (response GetAccess200JSONResponse) VisitGetAccessResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAccessdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetAccessdefaultApplicationProblemPlusJSONResponse) VisitGetAccessResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -58497,6 +59646,48 @@ type ValidateDraftdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ValidateDraftdefaultApplicationProblemPlusJSONResponse) VisitValidateDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestEnvironmentRequestObject struct {
+	Org         OrgRef     `json:"org"`
+	Factory     FactoryRef `json:"factory"`
+	Environment string     `json:"environment"`
+	Body        *TestEnvironmentJSONRequestBody
+}
+
+type TestEnvironmentResponseObject interface {
+	VisitTestEnvironmentResponse(w http.ResponseWriter) error
+}
+
+type TestEnvironment200JSONResponse EnvironmentTestResult
+
+func (response TestEnvironment200JSONResponse) VisitTestEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestEnvironmentdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response TestEnvironmentdefaultApplicationProblemPlusJSONResponse) VisitTestEnvironmentResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -64006,6 +65197,9 @@ type StrictServerInterface interface {
 	// GetDeviceRequest A pending CLI sign-in, by the code its terminal shows
 	// (GET /v1/auth/device/{user_code})
 	GetDeviceRequest(ctx context.Context, request GetDeviceRequestRequestObject) (GetDeviceRequestResponseObject, error)
+	// GetCatalog The tool templates
+	// (GET /v1/catalog)
+	GetCatalog(ctx context.Context, request GetCatalogRequestObject) (GetCatalogResponseObject, error)
 	// GetHealth Liveness of goald
 	// (GET /v1/health)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
@@ -64030,6 +65224,9 @@ type StrictServerInterface interface {
 	// GetOrg One organization
 	// (GET /v1/orgs/{org})
 	GetOrg(ctx context.Context, request GetOrgRequestObject) (GetOrgResponseObject, error)
+	// GetAccess What the organization's agents reach
+	// (GET /v1/orgs/{org}/access)
+	GetAccess(ctx context.Context, request GetAccessRequestObject) (GetAccessResponseObject, error)
 	// ListAPIKeys The organization's API keys
 	// (GET /v1/orgs/{org}/api-keys)
 	ListAPIKeys(ctx context.Context, request ListAPIKeysRequestObject) (ListAPIKeysResponseObject, error)
@@ -64207,6 +65404,9 @@ type StrictServerInterface interface {
 	// ValidateDraft Validate the draft at its revision, as publish will
 	// (POST /v1/orgs/{org}/factories/{factory}/draft/validate)
 	ValidateDraft(ctx context.Context, request ValidateDraftRequestObject) (ValidateDraftResponseObject, error)
+	// TestEnvironment Test an environment's MCP servers or a template
+	// (POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test)
+	TestEnvironment(ctx context.Context, request TestEnvironmentRequestObject) (TestEnvironmentResponseObject, error)
 	// ListEvals The eval cases of the current version, with their last tries and a summary
 	// (GET /v1/orgs/{org}/factories/{factory}/evals)
 	ListEvals(ctx context.Context, request ListEvalsRequestObject) (ListEvalsResponseObject, error)
@@ -64682,6 +65882,30 @@ func (sh *strictHandler) GetDeviceRequest(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// GetCatalog operation middleware
+func (sh *strictHandler) GetCatalog(w http.ResponseWriter, r *http.Request) {
+	var request GetCatalogRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCatalog(ctx, request.(GetCatalogRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCatalog")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCatalogResponseObject); ok {
+		if err := validResponse.VisitGetCatalogResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetHealth operation middleware
 func (sh *strictHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 	var request GetHealthRequestObject
@@ -64892,6 +66116,33 @@ func (sh *strictHandler) GetOrg(w http.ResponseWriter, r *http.Request, org OrgR
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetOrgResponseObject); ok {
 		if err := validResponse.VisitGetOrgResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAccess operation middleware
+func (sh *strictHandler) GetAccess(w http.ResponseWriter, r *http.Request, org OrgRef, params GetAccessParams) {
+	var request GetAccessRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAccess(ctx, request.(GetAccessRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAccess")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAccessResponseObject); ok {
+		if err := validResponse.VisitGetAccessResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -66526,6 +67777,44 @@ func (sh *strictHandler) ValidateDraft(w http.ResponseWriter, r *http.Request, o
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ValidateDraftResponseObject); ok {
 		if err := validResponse.VisitValidateDraftResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestEnvironment operation middleware
+func (sh *strictHandler) TestEnvironment(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, environment string) {
+	var request TestEnvironmentRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Environment = environment
+
+	var body TestEnvironmentJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestEnvironment(ctx, request.(TestEnvironmentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestEnvironment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestEnvironmentResponseObject); ok {
+		if err := validResponse.VisitTestEnvironmentResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

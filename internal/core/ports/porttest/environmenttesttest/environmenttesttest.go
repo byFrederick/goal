@@ -79,7 +79,7 @@ func testInvalid(t *testing.T, h Harness) {
 	ctx := domain.WithOrg(t.Context(), org)
 
 	for _, bad := range []domain.EnvironmentTest{
-		{Factory: f, Environment: "default", Server: "linear", At: at},                     // failed without an error
+		{Factory: f, Environment: "default", Server: "linear", At: at},                       // failed without an error
 		{Factory: f, Environment: "default", Server: "linear", At: at, OK: true, Error: "x"}, // passed with one
 		{Factory: f, Environment: "Default", Server: "linear", At: at, OK: true},
 		{Factory: f, Environment: "default", Server: "linear", OK: true},

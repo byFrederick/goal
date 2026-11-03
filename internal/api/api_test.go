@@ -20,6 +20,7 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
+	"github.com/byFrederick/goal/internal/catalog"
 	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/engine"
@@ -181,8 +182,9 @@ type harness struct {
 	// conns keeps the organizations' connections, sealed under key k1, with goald's platform
 	// kinds. Connection tests dial through egress.PublicDialer, private addresses (the tests'
 	// servers) allowed unless publicOnly is set.
-	conns      *porttest.Connections
-	publicOnly atomic.Bool
+	conns         *porttest.Connections
+	publicOnly    atomic.Bool
+	connTransport *http.Transport
 	// creds keeps the organizations' credentials, sealed under key k1, referred to by conns.
 	creds *porttest.Credentials
 	// secrets keeps the organizations' secrets, sealed under key k1, referred to by conns.
@@ -208,6 +210,11 @@ type harness struct {
 	judgeScores *porttest.JudgeScores
 	// drafts are the factories' draft requests; nothing runs them, so tests finish them.
 	drafts *porttest.DraftRequests
+	// catalog are goald's tool templates; envTests keep the environments' MCP server tests, which
+	// tools answers.
+	catalog  []domain.ToolTemplate
+	envTests *porttest.EnvironmentTests
+	tools    *porttest.ToolLister
 }
 
 // acme's one prompt and its path.
@@ -452,6 +459,17 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.drafts.AddFactory(testOrg, acmeID)
 	h.drafts.AddFactory(testOrg, lineID)
 
+	h.envTests, h.tools = porttest.NewEnvironmentTests(), porttest.NewToolLister()
+	h.envTests.AddFactory(testOrg, acmeID)
+	h.envTests.AddFactory(testOrg, lineID)
+
+	templates, err := catalog.Templates()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.catalog = templates
+
 	e, err := engine.New(engine.Deps{
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock, Intake: h.intake, Audit: tenancy,
@@ -510,6 +528,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		OrgPolicies: porttest.NewOrgPolicies([]string{modelOpus, modelHaiku}, tenancy, h.clock.Now), BoxSizes: testBoxSizes, EgressAddresses: testEgressAddresses,
 		NotificationPreferences: h.notifications,
 		DraftRequests:           h.drafts,
+		Catalog:                 h.catalog, EnvironmentTests: h.envTests, ToolLister: h.tools,
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
@@ -660,6 +679,7 @@ func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 		return egress.PublicDialer{AllowPrivate: !h.publicOnly.Load()}.DialContext(ctx, network, addr)
 	}}
 	t.Cleanup(tr.CloseIdleConnections)
+	h.connTransport = tr
 
 	return tr
 }

@@ -1118,6 +1118,32 @@ formatDefinition     pat-demoted      200                      404 org-not-found
 formatDefinition     pat-removed      401 unauthenticated      401 unauthenticated
 formatDefinition     pat-platform     200                      404 org-not-found
 formatDefinition     pat-deleted-org  401 unauthenticated      401 unauthenticated
+getAccess            anonymous        401 unauthenticated      401 unauthenticated
+getAccess            owner            200                      404 org-not-found
+getAccess            admin            200                      404 org-not-found
+getAccess            viewer           200                      404 org-not-found
+getAccess            approver         200                      404 org-not-found
+getAccess            editor           200                      404 org-not-found
+getAccess            member-no-roles  404 factory-not-found    404 org-not-found
+getAccess            other-org-owner  404 org-not-found        200
+getAccess            platform-admin   404 org-not-found        404 org-not-found
+getAccess            stale-owner      200                      404 org-not-found
+getAccess            key-scoped       403 forbidden            404 org-not-found
+getAccess            key-restricted   404 factory-not-found    404 org-not-found
+getAccess            key-other-org    404 org-not-found        200
+getAccess            key-expired      401 unauthenticated      401 unauthenticated
+getAccess            key-revoked      401 unauthenticated      401 unauthenticated
+getAccess            bearer-owner     200                      404 org-not-found
+getAccess            pat-approver     403 forbidden            404 org-not-found
+getAccess            pat-owner        200                      404 org-not-found
+getAccess            pat-viewer       200                      404 org-not-found
+getAccess            pat-other-org    404 org-not-found        200
+getAccess            pat-expired      401 unauthenticated      401 unauthenticated
+getAccess            pat-revoked      401 unauthenticated      401 unauthenticated
+getAccess            pat-demoted      404 factory-not-found    404 org-not-found
+getAccess            pat-removed      401 unauthenticated      401 unauthenticated
+getAccess            pat-platform     200                      404 org-not-found
+getAccess            pat-deleted-org  401 unauthenticated      401 unauthenticated
 getAgentStats        anonymous        401 unauthenticated      401 unauthenticated
 getAgentStats        owner            200                      404 org-not-found
 getAgentStats        admin            200                      404 org-not-found
@@ -1274,6 +1300,32 @@ getBuilderMeta       pat-demoted      200                      404 org-not-found
 getBuilderMeta       pat-removed      401 unauthenticated      401 unauthenticated
 getBuilderMeta       pat-platform     200                      404 org-not-found
 getBuilderMeta       pat-deleted-org  401 unauthenticated      401 unauthenticated
+getCatalog           anonymous        install: 401 unauthenticated
+getCatalog           owner            install: 200
+getCatalog           admin            install: 200
+getCatalog           viewer           install: 200
+getCatalog           approver         install: 200
+getCatalog           editor           install: 200
+getCatalog           member-no-roles  install: 200
+getCatalog           other-org-owner  install: 200
+getCatalog           platform-admin   install: 200
+getCatalog           stale-owner      install: 200
+getCatalog           key-scoped       install: 200
+getCatalog           key-restricted   install: 200
+getCatalog           key-other-org    install: 200
+getCatalog           key-expired      install: 401 unauthenticated
+getCatalog           key-revoked      install: 401 unauthenticated
+getCatalog           bearer-owner     install: 200
+getCatalog           pat-approver     install: 200
+getCatalog           pat-owner        install: 200
+getCatalog           pat-viewer       install: 200
+getCatalog           pat-other-org    install: 200
+getCatalog           pat-expired      install: 401 unauthenticated
+getCatalog           pat-revoked      install: 401 unauthenticated
+getCatalog           pat-demoted      install: 200
+getCatalog           pat-removed      install: 401 unauthenticated
+getCatalog           pat-platform     install: 200
+getCatalog           pat-deleted-org  install: 401 unauthenticated
 getConnection        anonymous        401 unauthenticated      401 unauthenticated
 getConnection        owner            200                      404 org-not-found
 getConnection        admin            200                      404 org-not-found
@@ -4706,6 +4758,32 @@ testConnection       pat-demoted      403 forbidden            404 org-not-found
 testConnection       pat-removed      401 unauthenticated      401 unauthenticated
 testConnection       pat-platform     403 forbidden            404 org-not-found
 testConnection       pat-deleted-org  401 unauthenticated      401 unauthenticated
+testEnvironment      anonymous        401 unauthenticated      401 unauthenticated
+testEnvironment      owner            200                      404 org-not-found
+testEnvironment      admin            200                      404 org-not-found
+testEnvironment      viewer           403 forbidden            404 org-not-found
+testEnvironment      approver         403 forbidden            404 org-not-found
+testEnvironment      editor           200                      404 org-not-found
+testEnvironment      member-no-roles  404 factory-not-found    404 org-not-found
+testEnvironment      other-org-owner  404 org-not-found        200
+testEnvironment      platform-admin   404 org-not-found        404 org-not-found
+testEnvironment      stale-owner      200                      404 org-not-found
+testEnvironment      key-scoped       403 forbidden            404 org-not-found
+testEnvironment      key-restricted   404 factory-not-found    404 org-not-found
+testEnvironment      key-other-org    404 org-not-found        200
+testEnvironment      key-expired      401 unauthenticated      401 unauthenticated
+testEnvironment      key-revoked      401 unauthenticated      401 unauthenticated
+testEnvironment      bearer-owner     200                      404 org-not-found
+testEnvironment      pat-approver     403 forbidden            404 org-not-found
+testEnvironment      pat-owner        200                      404 org-not-found
+testEnvironment      pat-viewer       403 forbidden            404 org-not-found
+testEnvironment      pat-other-org    404 org-not-found        200
+testEnvironment      pat-expired      401 unauthenticated      401 unauthenticated
+testEnvironment      pat-revoked      401 unauthenticated      401 unauthenticated
+testEnvironment      pat-demoted      404 factory-not-found    404 org-not-found
+testEnvironment      pat-removed      401 unauthenticated      401 unauthenticated
+testEnvironment      pat-platform     200                      404 org-not-found
+testEnvironment      pat-deleted-org  401 unauthenticated      401 unauthenticated
 transferOwnership    anonymous        401 unauthenticated      401 unauthenticated
 transferOwnership    owner            200                      404 org-not-found
 transferOwnership    admin            403 forbidden            404 org-not-found

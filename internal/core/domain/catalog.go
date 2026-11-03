@@ -110,7 +110,9 @@ func Slots(value string) []string {
 func (t ToolTemplate) Check() error {
 	var errs []error
 
-	add := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format+": %w", append(a, ErrInvalid)...)) }
+	add := func(format string, a ...any) {
+		errs = append(errs, fmt.Errorf(format+": %w", append(a, ErrInvalid)...))
+	}
 
 	if !namePattern.MatchString(t.Name) {
 		add("template name %q must be 3 to 40 lowercase letters, digits or dashes", t.Name)
@@ -186,7 +188,9 @@ func (t ToolTemplate) Check() error {
 func (t ToolTemplate) checkMCP(name string, refs func(where, value string)) []error {
 	var errs []error
 
-	add := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format+": %w", append(a, ErrInvalid)...)) }
+	add := func(format string, a ...any) {
+		errs = append(errs, fmt.Errorf(format+": %w", append(a, ErrInvalid)...))
+	}
 	m := t.MCP[name]
 
 	if !namePattern.MatchString(name) {
@@ -225,7 +229,9 @@ func (t ToolTemplate) checkMCP(name string, refs func(where, value string)) []er
 func (t ToolTemplate) checkTest(refs func(where, value string)) []error {
 	var errs []error
 
-	add := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format+": %w", append(a, ErrInvalid)...)) }
+	add := func(format string, a ...any) {
+		errs = append(errs, fmt.Errorf(format+": %w", append(a, ErrInvalid)...))
+	}
 	tt := t.Test
 
 	if !slices.Contains(testMethods, tt.Method) {
