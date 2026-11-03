@@ -3,6 +3,7 @@ import { cp, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { runDefinition } from './definition.js';
+import type { Shell } from './environment.js';
 import type { WorkerEvent } from './events.js';
 import { runJonah } from './jonah.js';
 import { runJudge } from './judge.js';
@@ -94,6 +95,47 @@ const remoteHead = (branch: string): Promise<string | undefined> =>
     });
   });
 
+/**
+ * Runs an environment's setup command with sh -c in its own process group, its output on stderr
+ * (stdout is the event protocol) and passed to onOutput. Past the time limit, or when signal aborts,
+ * the whole group is killed, so nothing the command started outlives it.
+ */
+const shellFor =
+  (signal: AbortSignal): Shell =>
+  (command, opts) =>
+    new Promise((resolve, reject) => {
+      const child = spawn('sh', ['-c', command], { cwd: opts.cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      let timedOut = false;
+      const kill = () => {
+        try {
+          if (child.pid !== undefined) process.kill(-child.pid, 'SIGKILL');
+        } catch {
+          // the group has already exited
+        }
+      };
+      const timer = setTimeout(() => {
+        timedOut = true;
+        kill();
+      }, opts.timeoutMs);
+      signal.addEventListener('abort', kill, { once: true });
+      const pass = (c: Buffer) => {
+        process.stderr.write(c);
+        opts.onOutput(c.toString('utf8'));
+      };
+      child.stdout?.on('data', pass);
+      child.stderr?.on('data', pass);
+      child.once('error', (err) => {
+        clearTimeout(timer);
+        signal.removeEventListener('abort', kill);
+        reject(err);
+      });
+      child.once('close', (code, sig) => {
+        clearTimeout(timer);
+        signal.removeEventListener('abort', kill);
+        resolve({ code: code ?? (sig ? 128 : 1), timedOut });
+      });
+    });
+
 async function runPrepare(): Promise<number> {
   try {
     emit(
@@ -128,7 +170,16 @@ async function runAgent(): Promise<number> {
     if (spec.jonah) return await runJonah(spec, { query, emit, now, env: process.env, abortController });
     const files = await readAgentFiles();
     await installSkills();
-    return await runTask(spec, files, { query, emit, now, env: process.env, abortController, fetch, remoteHead });
+    return await runTask(spec, files, {
+      query,
+      emit,
+      now,
+      env: process.env,
+      abortController,
+      fetch,
+      remoteHead,
+      environment: { home: paths.home, workspace: paths.workspace, shell: shellFor(abortController.signal) },
+    });
   } catch (err) {
     emit(failed(now, `worker setup: ${err instanceof Error ? err.message : String(err)}`));
     return 1;
