@@ -807,8 +807,15 @@ func TestFactory_LineEnvironments(t *testing.T) {
 		t.Errorf("OnSecrets = %v, Refusal = %q; want a line on secrets that runs", l.OnSecrets(), l.Refusal())
 	}
 
+	expectEnvironments(t, l)
+}
+
+// expectEnvironments fails the test unless l has testdata/build's environments and agents'.
+func expectEnvironments(t *testing.T, l domain.Line) {
+	t.Helper()
+
 	def, ok := l.Environment("")
-	if want := map[string]string{"GH_TOKEN": "{{github-token}}", "SENTRY_ORG": "acme"}; !ok || !maps.Equal(def.Env, want) {
+	if want := map[string]string{"GH_TOKEN": "{{github-token}}", "SENTRY_ORG": "acme"}; !ok || !maps.Equal(def.Env, want) { //nolint:gosec // a reference, not a credential
 		t.Errorf("default environment = %+v, %v; want env %v", def, ok, want)
 	}
 
@@ -821,7 +828,7 @@ func TestFactory_LineEnvironments(t *testing.T) {
 		envs[a.Name] = a.Environment
 	}
 
-	if want := map[string]string{"engineer": "", "tester": "browser"}; !maps.Equal(envs, want) {
+	if want := map[string]string{engineer: "", "tester": "browser"}; !maps.Equal(envs, want) {
 		t.Errorf("agents' environments = %v; want %v", envs, want)
 	}
 }

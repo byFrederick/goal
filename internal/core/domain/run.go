@@ -178,12 +178,8 @@ var ErrBadRunRequest = fmt.Errorf("bad run request: %w", ErrInvalid)
 // environment or a connection besides the model's, a jonah bundle without a window that ends
 // after it starts, or a window on another bundle.
 func (r RunRequest) Check() error {
-	if r.OrgID == "" || r.FactoryID == "" || r.Agent == "" || (r.ModelConnection == "") == (r.ModelKey == "") {
-		return fmt.Errorf("%w: it needs an organization, a factory, an agent and either a model connection or a model key", ErrBadRunRequest)
-	}
-
-	if r.ModelKey != "" && (len(r.Connections) > 0 || r.Repository.Connection != "") {
-		return fmt.Errorf("%w: a run on secrets opens no connection", ErrBadRunRequest)
+	if err := r.checkModel(); err != nil {
+		return err
 	}
 
 	if err := r.checkWindow(); err != nil {
@@ -197,6 +193,20 @@ func (r RunRequest) Check() error {
 		return fmt.Errorf("%w: unknown run kind %q", ErrBadRunRequest, r.Kind)
 	case r.Item == "" || r.Station == "":
 		return fmt.Errorf("%w: a station run needs its item and station", ErrBadRunRequest)
+	}
+
+	return nil
+}
+
+// checkModel refuses a request without its organization, factory or agent, without a model
+// connection or a model key or with both, and one on a model key with a connection.
+func (r RunRequest) checkModel() error {
+	if r.OrgID == "" || r.FactoryID == "" || r.Agent == "" || (r.ModelConnection == "") == (r.ModelKey == "") {
+		return fmt.Errorf("%w: it needs an organization, a factory, an agent and either a model connection or a model key", ErrBadRunRequest)
+	}
+
+	if r.ModelKey != "" && (len(r.Connections) > 0 || r.Repository.Connection != "") {
+		return fmt.Errorf("%w: a run on secrets opens no connection", ErrBadRunRequest)
 	}
 
 	return nil

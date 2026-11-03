@@ -98,22 +98,22 @@ func TestRunRequest_Check(t *testing.T) {
 		change func(*RunRequest)
 		ok     bool
 	}{
-		{name: "a model connection", change: func(r *RunRequest) { r.ModelConnection = "claude" }, ok: true},
+		{name: "a model connection", change: func(r *RunRequest) { r.ModelConnection = testModelConn }, ok: true},
 		{name: "a model key", change: func(r *RunRequest) {
-			r.ModelKey, r.Environment = "{{claude-key}}", Environment{Name: DefaultEnvironment}
+			r.ModelKey, r.Environment = testModelKey, Environment{Name: DefaultEnvironment}
 		}, ok: true},
 		{name: "no model", change: func(*RunRequest) {}},
-		{name: "both", change: func(r *RunRequest) { r.ModelKey, r.ModelConnection = "{{claude-key}}", "claude" }},
-		{name: "a key and a connection", change: func(r *RunRequest) { r.ModelKey, r.Connections = "{{claude-key}}", []string{"tracker"} }},
+		{name: "both", change: func(r *RunRequest) { r.ModelKey, r.ModelConnection = testModelKey, testModelConn }},
+		{name: "a key and a connection", change: func(r *RunRequest) { r.ModelKey, r.Connections = testModelKey, []string{"issues"} }},
 		{name: "a key and a repository connection", change: func(r *RunRequest) {
-			r.ModelKey, r.Repository = "{{claude-key}}", Repository{URL: "https://example.com/acme.git", Connection: "code"}
+			r.ModelKey, r.Repository = testModelKey, Repository{URL: "https://example.com/acme.git", Connection: "code"}
 		}},
 		{name: "a Jonah run with an environment", change: func(r *RunRequest) {
 			r.Kind, r.Item, r.Station = RunKindJonah, "", ""
-			r.ModelKey, r.Environment = "{{claude-key}}", Environment{Name: DefaultEnvironment}
+			r.ModelKey, r.Environment = testModelKey, Environment{Name: DefaultEnvironment}
 		}},
 		{name: "a Jonah run on a key", change: func(r *RunRequest) {
-			r.Kind, r.Item, r.Station, r.ModelKey = RunKindJonah, "", "", "{{claude-key}}"
+			r.Kind, r.Item, r.Station, r.ModelKey = RunKindJonah, "", "", testModelKey
 		}, ok: true},
 	}
 

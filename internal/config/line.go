@@ -30,9 +30,7 @@ func (f *Factory) Line() domain.Line {
 		l.Runtime.Repository = domain.Repository{URL: r.URL, Connection: r.Connection, Token: r.Token, Forge: r.Forge}
 	}
 
-	for _, e := range f.environments {
-		l.Environments = append(l.Environments, domain.Environment{Name: e.Name, Env: maps.Clone(e.Spec.Env)})
-	}
+	l.Environments = environments(f.environments)
 
 	for _, c := range s.Connections {
 		if !c.Inline() {
@@ -87,6 +85,16 @@ func (f *Factory) Line() domain.Line {
 	l.Jonah = jonahPolicy(s.Learning, s.Runtime.Model)
 
 	return l
+}
+
+// environments maps the environment files to what the engine gives a run of them.
+func environments(files []Environment) []domain.Environment {
+	var out []domain.Environment
+	for _, e := range files {
+		out = append(out, domain.Environment{Name: e.Name, Env: maps.Clone(e.Spec.Env)})
+	}
+
+	return out
 }
 
 // jonahPolicy maps learning.jonah: a key left out takes domain.DefaultJonahPolicy's value, and an

@@ -20,14 +20,20 @@ const (
 	secDB      = "db-pass"
 	secTickets = "tickets-key"
 
-	apiKeyValue      = "sk-ant-api03-key-for-tests-2223"
-	oauthTokenValue  = "sk-ant-oat01-token-for-tests-2425"
+	apiKeyValue      = "sk-ant-api03-key-for-tests-2223"   //nolint:gosec // a test value
+	oauthTokenValue  = "sk-ant-oat01-token-for-tests-2425" //nolint:gosec // a test value
 	githubTokenValue = "github-token-for-tests-2627"
 	dbPassValue      = "db-pass-for-tests-2829"
 	ticketsKeyValue  = "tickets-key-for-tests-3031"
 
-	envBrowser = "browser"
+	envBrowser     = "browser"
+	envDatabaseURL = "DATABASE_URL"
+	envGHToken     = "GH_TOKEN"
+	envSentryOrg   = "SENTRY_ORG"
 )
+
+// envGatewayURL is the variable every exec gets the gateway's address in.
+const envGatewayURL = "GOAL_GATEWAY_URL"
 
 // secretsLine is a version on secrets: its model key is {{claude-key}}, its default environment
 // gives GH_TOKEN, DATABASE_URL with {{db-pass}} inside it and a plain SENTRY_ORG, and its browser
@@ -41,7 +47,7 @@ func secretsLine() domain.Line {
 	line.Agents = agentConnections(line.Agents, agWorker, connTracker)
 	line.Environments = []domain.Environment{
 		{Name: domain.DefaultEnvironment, Env: map[string]string{
-			"GH_TOKEN": "{{" + secGitHub + "}}", "DATABASE_URL": "postgres://app:{{ " + secDB + " }}@db/app", "SENTRY_ORG": "acme",
+			envGHToken: "{{" + secGitHub + "}}", envDatabaseURL: "postgres://app:{{ " + secDB + " }}@db/app", envSentryOrg: "acme",
 		}},
 		{Name: envBrowser, Env: map[string]string{"TICKETS_KEY": "{{" + secTickets + "}}"}},
 	}
@@ -155,7 +161,7 @@ func TestRunEnv_EnvironmentSecrets(t *testing.T) {
 
 	env := h.oneAgentRun(t, it).Env
 	want := map[string]string{
-		"GH_TOKEN": githubTokenValue, "DATABASE_URL": "postgres://app:" + dbPassValue + "@db/app", "SENTRY_ORG": "acme",
+		envGHToken: githubTokenValue, envDatabaseURL: "postgres://app:" + dbPassValue + "@db/app", envSentryOrg: "acme",
 		domain.EnvAnthropicAPIKey: apiKeyValue,
 	}
 
@@ -206,7 +212,7 @@ func TestRunEnv_NamedEnvironment(t *testing.T) {
 		t.Errorf("the agent's TICKETS_KEY and model key are not the secrets' values")
 	}
 
-	for _, name := range []string{"GH_TOKEN", "DATABASE_URL", "SENTRY_ORG"} {
+	for _, name := range []string{envGHToken, envDatabaseURL, envSentryOrg} {
 		if _, ok := env[name]; ok {
 			t.Errorf("the agent got %s of the default environment", name)
 		}
@@ -230,11 +236,15 @@ func TestRunEnv_RefusesSecretOutsideScope(t *testing.T) {
 		db   []domain.FactoryID
 		want []string
 	}{
-		{name: "a factory outside its scope", line: secretsLine(), db: []domain.FactoryID{otherFactory},
-			want: []string{"environment default", secDB, ports.ErrSecretNotAllowed.Error()}},
+		{
+			name: "a factory outside its scope", line: secretsLine(), db: []domain.FactoryID{otherFactory},
+			want: []string{"environment default", secDB, ports.ErrSecretNotAllowed.Error()},
+		},
 		{name: "a missing secret", line: secretsLine(), want: []string{"environment default", secDB, ports.ErrNotFound.Error()}},
-		{name: "a missing environment", line: withEnvironment(secretsLine(), agWorker, "gpu"), db: []domain.FactoryID{factoryID},
-			want: []string{"agent " + agWorker, "environment gpu"}},
+		{
+			name: "a missing environment", line: withEnvironment(secretsLine(), agWorker, "gpu"), db: []domain.FactoryID{factoryID},
+			want: []string{"agent " + agWorker, "environment gpu"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -334,7 +344,7 @@ func TestRunEnv_PolicyOffKeepsModelKey(t *testing.T) {
 		t.Error("the agent did not get the model key")
 	}
 
-	for _, name := range []string{"GH_TOKEN", "DATABASE_URL", "SENTRY_ORG"} {
+	for _, name := range []string{envGHToken, envDatabaseURL, envSentryOrg} {
 		if _, ok := env[name]; ok {
 			t.Errorf("the agent got %s with Use credentials off", name)
 		}
@@ -351,9 +361,9 @@ func TestRunEnv_ScrubsSecretValues(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t, secretsLine(), func(_ context.Context, run porttest.ExecCall, stdout io.Writer) domain.RunResult {
-		pass := strings.TrimSuffix(strings.TrimPrefix(run.Env["DATABASE_URL"], "postgres://app:"), "@db/app")
+		pass := strings.TrimSuffix(strings.TrimPrefix(run.Env[envDatabaseURL], "postgres://app:"), "@db/app")
 		_, _ = io.WriteString(stdout, `{"type":"message","at":"2026-10-23T09:00:02Z","text":"pass `+pass+
-			` token `+run.Env["GH_TOKEN"]+`"}`+"\n")
+			` token `+run.Env[envGHToken]+`"}`+"\n")
 
 		return domain.RunResult{Status: domain.RunFailed, Error: "gave up: " + pass + " " + run.Env[domain.EnvAnthropicAPIKey]}
 	})
@@ -406,7 +416,7 @@ func TestRunTask_JonahOnSecrets(t *testing.T) {
 	}
 
 	keys := slices.Sorted(maps.Keys(runs[0].Env))
-	if want := []string{domain.EnvAnthropicAPIKey, "GOAL_FEEDBACK", "GOAL_GATEWAY_TOKEN", "GOAL_GATEWAY_URL"}; !slices.Equal(keys, want) {
+	if want := []string{domain.EnvAnthropicAPIKey, "GOAL_FEEDBACK", "GOAL_GATEWAY_TOKEN", envGatewayURL}; !slices.Equal(keys, want) {
 		t.Errorf("the agent's env = %v; want %v", keys, want)
 	}
 
@@ -434,7 +444,7 @@ func TestRunDefinition_ModelKeyOnly(t *testing.T) {
 	}
 
 	keys := slices.Sorted(maps.Keys(runs[0].Env))
-	if want := []string{domain.EnvAnthropicAPIKey, "GOAL_GATEWAY_URL"}; !slices.Equal(keys, want) {
+	if want := []string{domain.EnvAnthropicAPIKey, envGatewayURL}; !slices.Equal(keys, want) {
 		t.Errorf("the box's env = %v; want %v", keys, want)
 	}
 

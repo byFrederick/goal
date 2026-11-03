@@ -40,6 +40,11 @@ func (e *Engine) runEnv(ctx context.Context, req domain.RunRequest, own []string
 		return e.secretEnv(ctx, domain.SecretUse{Factory: req.FactoryID, Agent: req.Agent, Run: run}, req.ModelKey, req.Environment)
 	}
 
+	return e.connectionEnv(ctx, req, own, run)
+}
+
+// connectionEnv is runEnv of a version on connections.
+func (e *Engine) connectionEnv(ctx context.Context, req domain.RunRequest, own []string, run domain.RunID) (runEnv, error) {
 	var names []string
 
 	for _, n := range append([]string{req.ModelConnection, req.Repository.Connection}, own...) {

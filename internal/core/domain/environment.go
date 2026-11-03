@@ -44,8 +44,8 @@ func FillSecrets(value string, values map[string]string) string {
 
 // The variables a run's model key goes in (ADR 0037 decision 7).
 const (
-	EnvClaudeOAuthToken = "CLAUDE_CODE_OAUTH_TOKEN"
-	EnvAnthropicAPIKey  = "ANTHROPIC_API_KEY"
+	EnvClaudeOAuthToken = "CLAUDE_CODE_OAUTH_TOKEN" //nolint:gosec // a variable's name, not a credential
+	EnvAnthropicAPIKey  = "ANTHROPIC_API_KEY"       //nolint:gosec // a variable's name, not a credential
 )
 
 // ModelKeyEnv is the variable a model key's value goes in: CLAUDE_CODE_OAUTH_TOKEN for a Claude

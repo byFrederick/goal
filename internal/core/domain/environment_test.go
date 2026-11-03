@@ -5,6 +5,12 @@ import (
 	"testing"
 )
 
+// A model key reference and a model connection of the domain's tests.
+const (
+	testModelKey  = "{{claude-key}}"
+	testModelConn = "claude"
+)
+
 // SecretNames are a value's {{secret}} references in order, each once, spaces inside the braces
 // allowed; a value without one has none.
 func TestEnvironment_SecretNames(t *testing.T) {
@@ -14,7 +20,7 @@ func TestEnvironment_SecretNames(t *testing.T) {
 		"{{github-token}}":                    {"github-token"},
 		"postgres://app:{{ db-pass }}@db/app": {"db-pass"},
 		"{{a-key}}:{{b-key}}:{{a-key}}":       {"a-key", "b-key"},
-		"acme":                                nil,
+		"plain-value":                         nil,
 		"":                                    nil,
 	}
 
@@ -32,10 +38,10 @@ func TestEnvironment_FillSecrets(t *testing.T) {
 
 	values := map[string]string{"db-pass": "s3cret-pass", "github-token": "ghp-value"}
 
-	tests := map[string]string{
+	tests := map[string]string{ //nolint:gosec // test values
 		"{{github-token}}":                    "ghp-value",
 		"postgres://app:{{ db-pass }}@db/app": "postgres://app:s3cret-pass@db/app",
-		"acme":                                "acme",
+		"plain-value":                         "plain-value",
 	}
 
 	for value, want := range tests {

@@ -40,6 +40,7 @@ func (e *Engine) secretEnv(ctx context.Context, use domain.SecretUse, modelKey s
 	}
 
 	out := runEnv{prepare: map[string]string{}, agent: map[string]string{}, gitHosts: map[string]string{}}
+
 	for _, n := range names {
 		if v := values[n]; v != "" {
 			out.secrets = append(out.secrets, v)
