@@ -58,7 +58,9 @@ func TestAPI_DraftModelKnowledgeEntryObjects(t *testing.T) {
 	}
 
 	s.Basics["title"] = "Acme two"
-	decode[gen.SaveResult](t, h.request(t, http.MethodPut, acmeDraft+"/model/basics", body(t, map[string]any{"value": s.Basics}),
+	decode[gen.SaveResult](t, h.request(t, http.MethodPut, acmeDraft+"/model/basics", body(t, struct {
+		Value map[string]any `json:"value"`
+	}{s.Basics}),
 		quoted(m.Etags.Basics)), http.StatusOK)
 
 	saved, _ := h.model(t)

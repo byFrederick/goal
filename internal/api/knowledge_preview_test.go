@@ -43,7 +43,7 @@ func previewDraft(t *testing.T) *harness {
 		"    - { name: writer, prompt: ./agents/writer.md }\n    - { name: designer, prompt: ./agents/writer.md }\n"+
 			"    - name: checker\n      prompt: ./agents/writer.md\n      builtins: { read: off }\n", 1))
 	decode[gen.SaveResult](t, h.request(t, http.MethodPut, acmeDraft+"/files/memory.yaml", previewMemory,
-		http.Header{"If-None-Match": {"*"}}), http.StatusOK)
+		http.Header{http.CanonicalHeaderKey("if-none-match"): {"*"}}), http.StatusOK)
 
 	return h
 }

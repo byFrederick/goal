@@ -110,6 +110,10 @@ func TestKnowledgeIndex_Section(t *testing.T) {
 func TestKnowledgeIndex_SectionOfAnAgentsRun(t *testing.T) {
 	t.Parallel()
 
+	const agent = "engineer"
+
+	folders := []string{"alerts"}
+
 	line := Line{
 		Knowledge: []KnowledgeEntry{
 			{Name: srcHandbook},
@@ -128,17 +132,17 @@ func TestKnowledgeIndex_SectionOfAnAgentsRun(t *testing.T) {
 			return KnowledgeSnapshot{}, nil, false, nil
 		}
 
-		return KnowledgeSnapshot{ReadWhen: "How we work.", Files: 3}, []string{"alerts"}, true, nil
+		return KnowledgeSnapshot{ReadWhen: "How we work.", Files: 3}, folders, true, nil
 	}
 
-	idx, err := IndexKnowledge(line, AgentSpec{Name: "engineer"}, RuleTarget{Agent: "engineer", Station: stationFix}, true, of)
+	idx, err := IndexKnowledge(line, AgentSpec{Name: agent}, RuleTarget{Agent: agent, Station: stationFix}, true, of)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	want := []IndexedSource{
-		{Name: srcHandbook, ReadWhen: "How we work.", Files: 3, Folders: []string{"alerts"}},
-		{Name: srcRunbooks, ReadWhen: "Before you touch production.", Files: 3, Folders: []string{"alerts"}},
+		{Name: srcHandbook, ReadWhen: "How we work.", Files: 3, Folders: folders},
+		{Name: srcRunbooks, ReadWhen: "Before you touch production.", Files: 3, Folders: folders},
 	}
 	if !slices.EqualFunc(idx.Sources, want, func(a, b IndexedSource) bool {
 		return a.Name == b.Name && a.ReadWhen == b.ReadWhen && a.Files == b.Files && slices.Equal(a.Folders, b.Folders)
@@ -150,7 +154,7 @@ func TestKnowledgeIndex_SectionOfAnAgentsRun(t *testing.T) {
 		t.Errorf("looked up %v, want no lookup of design, which applies to the designer only", looked)
 	}
 
-	none, err := IndexKnowledge(line, AgentSpec{Name: "engineer", ToolsDeny: []string{"Read"}}, RuleTarget{Agent: "engineer"}, true, of)
+	none, err := IndexKnowledge(line, AgentSpec{Name: agent, ToolsDeny: []string{"Read"}}, RuleTarget{Agent: agent}, true, of)
 	if err != nil || none.Section() != "" {
 		t.Errorf("index of an agent that may not read = %q (%v), want nothing", none.Section(), err)
 	}
