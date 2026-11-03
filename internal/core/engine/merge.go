@@ -159,11 +159,12 @@ func (e *Engine) mergeAll(ctx context.Context, l domain.Line, it domain.Item, by
 	return events, nil
 }
 
-// mergeTarget is one pull request to merge, with the connection and code host that serve it.
+// mergeTarget is one pull request to merge, with the code host that serves it and the login
+// (from the connection mergeTargets picked) it is called with.
 type mergeTarget struct {
-	url  string
-	conn domain.ResolvedConnection
-	host ports.CodeHost
+	url   string
+	login domain.CodeHostLogin
+	host  ports.CodeHost
 }
 
 // codeHostConnection is one of a line's connections that can merge: its name, the host of its git
@@ -175,7 +176,7 @@ type codeHostConnection struct {
 
 // mergeTargets picks, for each pull request URL, the first of the line's connections
 // (domain.Line.MergeConnections) whose kind names a code host goald has and whose git login is
-// for the URL's host, then opens the ones it picked for use.
+// for the URL's host, then opens the ones it picked for use and takes each one's code host login.
 func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string, use domain.ConnectionUse) ([]mergeTarget, error) {
 	hosts, err := e.codeHostConnections(ctx, l)
 	if err != nil {
@@ -230,7 +231,12 @@ func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string,
 			return nil, fmt.Errorf("connection %s was not opened", c.name)
 		}
 
-		out = append(out, mergeTarget{url: c.url, conn: resolved[j], host: c.ch})
+		login, err := resolved[j].CodeHostLogin()
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, mergeTarget{url: c.url, login: login, host: c.ch})
 	}
 
 	return out, nil
@@ -283,7 +289,7 @@ func (e *Engine) mergeOne(ctx context.Context, id domain.ItemID, t mergeTarget, 
 
 	// Only the pull request's own branch, never a fork's or the branch it merged into.
 	if pr.SameRepository && pr.HeadBranch != "" && pr.HeadBranch != pr.BaseBranch {
-		if err := t.host.DeleteBranch(ctx, t.conn, t.url, pr.HeadBranch); err != nil {
+		if err := t.host.DeleteBranch(ctx, t.login, t.url, pr.HeadBranch); err != nil {
 			e.log.WarnContext(ctx, "merged, but the head branch was not deleted", slog.String("item", string(id)),
 				slog.String("pull_request", t.url), slog.String("branch", pr.HeadBranch), slog.Any("error", err))
 		} else {
@@ -302,7 +308,7 @@ func (e *Engine) mergeOne(ctx context.Context, id domain.ItemID, t mergeTarget, 
 // *notMergeableYetError: after a clean update the host knows of no conflict, and the port
 // cannot tell required checks that have not run yet on the new head from ones that fail.
 func (e *Engine) merge(ctx context.Context, t mergeTarget, method string, lease *domain.Lease) (ports.PullRequest, error) {
-	pr, err := t.host.PullRequest(ctx, t.conn, t.url)
+	pr, err := t.host.PullRequest(ctx, t.login, t.url)
 	if err != nil {
 		return ports.PullRequest{}, err
 	}
@@ -315,7 +321,7 @@ func (e *Engine) merge(ctx context.Context, t mergeTarget, method string, lease 
 		return ports.PullRequest{}, fmt.Errorf("%s is closed: %w", t.url, ports.ErrNotMergeable)
 	}
 
-	if err := t.host.UpdateBranch(ctx, t.conn, t.url, pr.HeadSHA); err != nil {
+	if err := t.host.UpdateBranch(ctx, t.login, t.url, pr.HeadSHA); err != nil {
 		if mc, ok := errors.AsType[*ports.MergeConflictError](err); ok {
 			return ports.PullRequest{}, &mergeConflictError{url: t.url, base: pr.BaseBranch, files: mc.Files, err: err}
 		}
@@ -337,12 +343,12 @@ func (e *Engine) merge(ctx context.Context, t mergeTarget, method string, lease 
 			t.url, ports.ErrNotMergeable))
 	}
 
-	if _, err := t.host.Merge(ctx, t.conn, t.url, ports.Merge{Method: method, HeadSHA: pr.HeadSHA}); err != nil {
+	if _, err := t.host.Merge(ctx, t.login, t.url, ports.Merge{Method: method, HeadSHA: pr.HeadSHA}); err != nil {
 		return ports.PullRequest{}, yet(t.url, err)
 	}
 
 	// Trust the host's record, not the merge call's answer.
-	if pr, err = t.host.PullRequest(ctx, t.conn, t.url); err != nil {
+	if pr, err = t.host.PullRequest(ctx, t.login, t.url); err != nil {
 		return ports.PullRequest{}, fmt.Errorf("verify the merge of %s: %w", t.url, err)
 	}
 
@@ -362,7 +368,7 @@ const mergePoll = 2 * time.Second
 // is still computing is read again after a growing wait on the engine clock, heartbeating the
 // lease (backoff), until it is known or Config.MergeWait has passed.
 func (e *Engine) settled(ctx context.Context, t mergeTarget, lease *domain.Lease) (ports.PullRequest, error) {
-	pr, err := t.host.PullRequest(ctx, t.conn, t.url)
+	pr, err := t.host.PullRequest(ctx, t.login, t.url)
 
 	for waited, wait := time.Duration(0), mergePoll; err == nil && lease != nil && pr.MergeabilityPending && waited < e.cfg.MergeWait; wait *= 2 {
 		d := min(wait, e.cfg.MergeWait-waited)
@@ -371,7 +377,7 @@ func (e *Engine) settled(ctx context.Context, t mergeTarget, lease *domain.Lease
 		}
 
 		waited += d
-		pr, err = t.host.PullRequest(ctx, t.conn, t.url)
+		pr, err = t.host.PullRequest(ctx, t.login, t.url)
 	}
 
 	if err != nil {
