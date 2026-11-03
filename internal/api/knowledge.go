@@ -541,11 +541,7 @@ func (s *server) searchSources(ctx context.Context, named []string) ([]string, e
 
 // searchable are the knowledge sources a factory's agents may search.
 func searchable(f *config.Factory) []string {
-	if f.Spec.Knowledge == nil {
-		return nil
-	}
-
-	return f.Spec.Knowledge.Sources
+	return f.Spec.Knowledge.Names()
 }
 
 // sourceUsers are the factories goald runs for the organization, by the knowledge sources their

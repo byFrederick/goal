@@ -50,22 +50,6 @@ func (s *Searcher) Search(ctx context.Context, text string, sources []string, li
 	return s.kb.Search(ctx, q)
 }
 
-// SourceNames are the names of the sources of the organization in ctx, which a search may name
-// (authoring.KnowledgeSources: the definitions check holds knowledge.sources to them).
-func (s *Searcher) SourceNames(ctx context.Context) ([]string, error) {
-	sources, err := s.kb.Sources(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	names := make([]string, 0, len(sources))
-	for _, src := range sources {
-		names = append(names, src.Name)
-	}
-
-	return names, nil
-}
-
 // Read returns a document of one of sources with its indexed text, for the organization in ctx.
 // A document of another source is ports.ErrNotFound, as one that does not exist: the caller
 // learns nothing of what it may not search.

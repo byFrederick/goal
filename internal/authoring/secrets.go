@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -26,8 +27,14 @@ const (
 	// a warning when only its name says so. Its fix moves it to a {{secret}} reference.
 	CodePlainKey = "plain-key"
 	// CodeKnowledgeSourceUnknown: the organization has no knowledge source of a name the
-	// definition may search.
+	// definition lists.
 	CodeKnowledgeSourceUnknown = "knowledge-source-unknown"
+	// CodeKnowledgeSecretNotInScope: a listed source reads with a secret whose factory scope
+	// leaves the factory out, so listing it would hand the factory that secret's reach.
+	CodeKnowledgeSecretNotInScope = "knowledge-secret-not-in-scope"
+	// CodeKnowledgeCopiesCheckout: a warning; a listed Repository source reads the factory's own
+	// repository, whose files its runs already have on the item's branch.
+	CodeKnowledgeCopiesCheckout = "knowledge-copies-checkout"
 	// CodeMergeNeedsCodeHost: a station merges, but runtime.repository has no token, so nothing
 	// could merge the item's pull requests.
 	CodeMergeNeedsCodeHost = "merge-needs-code-host"
@@ -43,20 +50,25 @@ var keyPrefixes = []string{"sk-", "ghp_", "github_pat_", "glpat-", "xoxb-", "xox
 // keyNameSuffixes end the names of variables that usually hold a key.
 var keyNameSuffixes = []string{"_TOKEN", "_KEY", "_SECRET", "_PASSWORD"}
 
-// KnowledgeSources names the organization of ctx's knowledge sources (spec 4 §4.8).
+// KnowledgeSources lists the organization of ctx's knowledge sources (ports.Knowledge's Sources).
 type KnowledgeSources interface {
-	SourceNames(ctx context.Context) ([]string, error)
+	Sources(ctx context.Context) ([]domain.KnowledgeSource, error)
 }
+
+// sourceRepositoryKey is the config key of the repository a Repository source, or a synced
+// source read by gitdocs, reads.
+const sourceRepositoryKey = "repository"
 
 // SecretsCheck is the credentials check from ADR 0037 on: every {{secret}} the definition refers
 // to exists (secret-missing) and is open to the factory (secret-not-in-scope); no environment
 // sets a variable the platform keeps (reserved-env) or holds a key as plain text (plain-key);
-// every knowledge source it may search exists (knowledge-source-unknown); and a merge station
-// has a repository token to merge with (merge-needs-code-host). It reads secrets' names and
-// scopes, never a value.
+// every knowledge source it lists exists (knowledge-source-unknown), reads with no secret closed
+// to the factory (knowledge-secret-not-in-scope) and, a warning, does not copy the factory's own
+// repository (knowledge-copies-checkout); and a merge station has a repository token to merge
+// with (merge-needs-code-host). It reads secrets' names and scopes, never a value.
 type SecretsCheck struct {
 	Secrets ports.OrgSecrets
-	// Knowledge names the organization's knowledge sources (goald wires knowledge.Searcher); nil
+	// Knowledge lists the organization's knowledge sources (goald wires the knowledge store); nil
 	// is an organization without any.
 	Knowledge KnowledgeSources
 }
@@ -70,9 +82,9 @@ func (c SecretsCheck) Check(ctx context.Context, f *config.Factory) ([]domain.De
 		return nil, fmt.Errorf("list secrets: %w", err)
 	}
 
-	var sources []string
+	var sources []domain.KnowledgeSource
 	if c.Knowledge != nil {
-		if sources, err = c.Knowledge.SourceNames(ctx); err != nil {
+		if sources, err = c.Knowledge.Sources(ctx); err != nil {
 			return nil, fmt.Errorf("list knowledge sources: %w", err)
 		}
 	}
@@ -179,22 +191,71 @@ func kebab(name string) string {
 	return strings.Trim(strings.ReplaceAll(strings.ToLower(name), "_", "-"), "-")
 }
 
-// knowledge reports the knowledge sources the definition may search that the organization lacks.
-func (r *secretsRun) knowledge(sources []string) {
+// knowledge reports each knowledge source the definition lists that the organization lacks, that
+// reads with a secret not open to the factory, or that reads the factory's own repository.
+func (r *secretsRun) knowledge(sources []domain.KnowledgeSource) {
 	k := r.f.Spec.Knowledge
 	if k == nil {
 		return
 	}
 
-	for i, s := range k.Sources {
-		if slices.Contains(sources, s) {
+	factory := domain.FactoryID(r.f.Metadata.ID)
+
+	for i, name := range k.Names() {
+		p := []string{"spec", "knowledge", "sources", strconv.Itoa(i)}
+		at := r.f.Locate("/" + strings.Join(p, "/"))
+
+		j := slices.IndexFunc(sources, func(s domain.KnowledgeSource) bool { return s.Name == name })
+		if j < 0 {
+			r.add(at, domain.SeverityError, CodeKnowledgeSourceUnknown,
+				"knowledge.sources: the organization has no knowledge source named "+name, config.RemoveFix("Remove "+name, p))
+
 			continue
 		}
 
-		p := []string{"spec", "knowledge", "sources", strconv.Itoa(i)}
-		r.add(r.f.Locate("/"+strings.Join(p, "/")), domain.SeverityError, CodeKnowledgeSourceUnknown,
-			"knowledge.sources: the organization has no knowledge source named "+s, config.RemoveFix("Remove "+s, p))
+		src := sources[j]
+
+		if s, ok := r.secrets[src.Secret]; ok && !s.Scope.Allows(factory) {
+			r.add(at, domain.SeverityError, CodeKnowledgeSecretNotInScope, fmt.Sprintf(
+				"knowledge.sources: the source %s reads with the secret %s, which is not open to this factory; "+
+					"add the factory to the secret's scope on the Secrets page, or remove the source", name, src.Secret))
+		}
+
+		if repo := r.f.Spec.Runtime.Repository; repo != nil && copiesCheckout(src, repo.URL) {
+			r.add(at, domain.SeverityWarning, CodeKnowledgeCopiesCheckout, fmt.Sprintf(
+				"knowledge.sources: the source %s reads runtime.repository, %s, whose files every run already has on the item's branch",
+				name, repo.URL))
+		}
 	}
+}
+
+// copiesCheckout reports whether src reads the repository at checkout: a Repository source, or a
+// synced source that gitdocs reads, until the cut-over converts it (ADR 0038 decision 16), whose
+// repository has the same host and path, whatever their case, a trailing slash or .git.
+func copiesCheckout(src domain.KnowledgeSource, checkout string) bool {
+	if src.Kind != domain.SourceRepository && src.Kind != domain.SourceSynced {
+		return false
+	}
+
+	a, b := repositoryKey(src.Config[sourceRepositoryKey]), repositoryKey(checkout)
+
+	return a != "" && a == b
+}
+
+// repositoryKey is a repository URL as host/owner/repo in lower case, "" for a value that is not
+// an absolute URL.
+func repositoryKey(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" {
+		return ""
+	}
+
+	path := strings.TrimSuffix(strings.Trim(u.Path, "/"), ".git")
+	if path == "" {
+		return ""
+	}
+
+	return strings.ToLower(u.Host + "/" + path)
 }
 
 // merge reports each merge station of a factory whose repository has no token: nothing could

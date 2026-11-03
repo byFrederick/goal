@@ -15,9 +15,19 @@ import (
 )
 
 // sources is the organization's knowledge sources.
-type sources []string
+type sources []domain.KnowledgeSource
 
-func (s sources) SourceNames(context.Context) ([]string, error) { return s, nil }
+func (s sources) Sources(context.Context) ([]domain.KnowledgeSource, error) { return s, nil }
+
+// uploads are upload sources of the names.
+func uploads(names ...string) sources {
+	out := make(sources, 0, len(names))
+	for _, n := range names {
+		out = append(out, domain.KnowledgeSource{Name: n, Kind: domain.SourceUpload})
+	}
+
+	return out
+}
 
 // withEnv is acmeEnvironment with the variables vars, YAML lines below env:.
 func withEnv(vars ...string) string {
@@ -173,7 +183,7 @@ func secretsProblems(t *testing.T, v authoring.Validation) []domain.DefinitionPr
 func TestSecretsCheck_SummarizesWhatExists(t *testing.T) {
 	t.Parallel()
 
-	h := newHarness(t, withKnowledge(sources{"handbook"}))
+	h := newHarness(t, withKnowledge(uploads("handbook")))
 
 	v, err := h.svc.ValidateFiles(h.ctx, acmeFiles(strings.Replace(acmeYAML, "  agents:\n", "  knowledge: { sources: [handbook] }\n  agents:\n", 1)))
 	if err != nil {
@@ -200,6 +210,71 @@ func TestSecretsCheck_FailsWhenKnowledgeFails(t *testing.T) {
 // failingSources cannot list the organization's knowledge sources.
 type failingSources struct{}
 
-func (failingSources) SourceNames(context.Context) ([]string, error) {
+func (failingSources) Sources(context.Context) ([]domain.KnowledgeSource, error) {
 	return nil, errors.New("knowledge unavailable")
+}
+
+// withSources is acmeYAML whose knowledge.sources are the entries, YAML lines below sources:.
+func withSources(entries ...string) string {
+	return strings.Replace(acmeYAML, "  agents:\n", "  knowledge:\n    sources:\n      "+strings.Join(entries, "\n      ")+"\n  agents:\n", 1)
+}
+
+// Each source a factory lists must exist and must not hand the factory a secret's reach outside
+// the secret's scope; a source that copies the factory's own repository is only a warning, since
+// its runs already have those files.
+func TestSecretsCheck_KnowledgeSources(t *testing.T) {
+	t.Parallel()
+
+	org := sources{
+		{Name: "handbook", Kind: domain.SourceUpload},
+		{Name: "scoped", Kind: domain.SourceRepository, Secret: "other-only", Config: map[string]string{"repository": "https://git.example.com/acme/docs"}},
+		{Name: "open", Kind: domain.SourceRepository, Secret: "code-token", Config: map[string]string{"repository": "https://git.example.com/acme/docs"}},
+		{Name: "self", Kind: domain.SourceRepository, Secret: "code-token", Config: map[string]string{"repository": "https://GIT.example.com/Acme/Review/"}},
+		{
+			Name: "self-synced", Kind: domain.SourceSynced, Connection: "code",
+			Config: map[string]string{"repository": "https://git.example.com/acme/review.git", "include": "docs/**"},
+		},
+		{Name: "wiki", Kind: domain.SourceConfluence, Secret: "code-token", Config: map[string]string{"spaces": "ENG"}},
+	}
+
+	tests := []secretsRow{
+		{name: "sources that exist, by name or object", yaml: withSources("- handbook", "- { name: open, appliesTo: { agents: [engineer] }, readWhen: Before a review. }", "- wiki")},
+		{
+			name: "an object entry the organization lacks", yaml: withSources("- handbook", "- { name: ghost, readWhen: Never. }"),
+			code: authoring.CodeKnowledgeSourceUnknown, file: yamlFile, pointer: "/basics/knowledge_sources/1", inPlaces: []string{"ghost"},
+			fixes: []domain.ProblemFix{{Label: "Remove ghost", Section: domain.SectionBasics, Patch: []domain.PatchOp{{Op: "remove", Path: "/knowledge_sources/1"}}}},
+		},
+		{
+			name: "a source whose secret is not open to the factory", yaml: withSources("- handbook", "- scoped"),
+			code: authoring.CodeKnowledgeSecretNotInScope, file: yamlFile, pointer: "/basics/knowledge_sources/1", inPlaces: []string{"scoped", "other-only"},
+		},
+		{
+			name: "a repository source of the factory's own repository", yaml: withSources("- self"),
+			code: authoring.CodeKnowledgeCopiesCheckout, severity: domain.SeverityWarning, file: yamlFile, pointer: "/basics/knowledge_sources/0",
+			inPlaces: []string{"self", "runtime.repository"},
+		},
+		{
+			name: "a synced repository source of the factory's own repository", yaml: withSources("- { name: self-synced, appliesTo: { agents: [engineer] } }"),
+			code: authoring.CodeKnowledgeCopiesCheckout, severity: domain.SeverityWarning, file: yamlFile, pointer: "/basics/knowledge_sources/0",
+			inPlaces: []string{"self-synced"},
+		},
+		{name: "a repository source while the factory has no repository", yaml: strings.Replace(withSources("- self"),
+			"    repository: { url: \"https://git.example.com/acme/review.git\", token: \"{{code-token}}\", forge: github }\n", "", 1)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t, withKnowledge(org))
+			h.secret(t, "other-only", domain.SecretScope{Factories: []domain.FactoryID{"0b6f1c9e-5d0a-4c39-9a51-000000000000"}})
+
+			v, err := h.svc.ValidateFiles(h.ctx, acmeFiles(tt.yaml))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			wantSecretsProblem(t, tt, v)
+		})
+	}
 }
