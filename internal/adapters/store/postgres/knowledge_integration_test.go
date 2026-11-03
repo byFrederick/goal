@@ -29,8 +29,46 @@ func TestKnowledge_Conformance(t *testing.T) {
 			Knowledge: NewKnowledge(d.store), Connections: NewConnections(d.store, testKey(t, "k1")),
 			Secrets: NewSecrets(d.store, testKey(t, "k1")), Audit: d.store,
 			NewOrg: func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, d.store) },
+			Pin:    func(t *testing.T, org domain.OrgID, snap domain.KnowledgeSnapshotID) { t.Helper(); pinSnapshot(t, d, org, snap) },
 		}
 	})
+}
+
+// pinSnapshot gives org a running agent run whose knowledge_pinned event names snap, as the
+// bootstrap superuser with key checks off: the run needs no factory or item for retention.
+func pinSnapshot(t *testing.T, d connectionsDB, org domain.OrgID, snap domain.KnowledgeSnapshotID) {
+	t.Helper()
+
+	data, err := json.Marshal(map[string]any{"snapshots": []map[string]string{{"source": "handbook", "snapshot": string(snap)}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = pgx.BeginFunc(t.Context(), d.admin, func(tx pgx.Tx) error {
+		for _, stmt := range []string{
+			"SET LOCAL session_replication_role = replica",
+			`WITH r AS (
+			   INSERT INTO agent_runs (org_id, factory_id, item_id, station, agent, model, status)
+			   VALUES ($1::uuid, gen_random_uuid(), gen_random_uuid(), 'work', 'worker', 'model-a', 'running')
+			   RETURNING id, factory_id, item_id)
+			 INSERT INTO item_events (org_id, factory_id, item_id, run_id, kind, station, actor, data)
+			 SELECT $1::uuid, r.factory_id, r.item_id, r.id, 'knowledge_pinned', 'work', 'worker', $2::jsonb FROM r`,
+		} {
+			args := []any{string(org), data}
+			if !strings.Contains(stmt, "$1") {
+				args = nil
+			}
+
+			if _, err := tx.Exec(t.Context(), stmt, args...); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("pin snapshot %s: %v", snap, err)
+	}
 }
 
 // knowledgeDoc gives org an upload source "runbooks" with one file whose name is text.
