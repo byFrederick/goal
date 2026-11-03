@@ -1,6 +1,6 @@
 ## When you change
 
-What a synced knowledge source reads with: its secret (`knowledge_sources.secret_id`, 00088; `domain.SyncSpec.Secret`, `domain.SourceReaderKey`), how the ingestor opens it (`internal/knowledge/ingest.go` `secretReader`), or how `gitdocs` and `confluence` read a source on a secret
+What a synced knowledge source reads with: its secret (`knowledge_sources.secret_id`, 00089; `domain.SyncSpec.Secret`, `domain.SourceReaderKey`), how the ingestor opens it (`internal/knowledge/ingest.go` `secretReader`), or how `gitdocs` and `confluence` read a source on a secret
 
 ## Also change
 

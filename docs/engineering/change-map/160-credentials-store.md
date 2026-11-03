@@ -1,6 +1,6 @@
 ## When you change
 
-The credentials store: the adapter (`internal/adapters/store/postgres/credentials.go`), which reads and writes the `secrets` table (00065's `credentials`, renamed by `db/migrations/00085_secrets.sql`) through the secrets store's code, or its own queries over connections' references (`db/queries/credentials.sql`)
+The credentials store: the adapter (`internal/adapters/store/postgres/credentials.go`), which reads and writes the `secrets` table (00065's `credentials`, renamed by `db/migrations/00086_secrets.sql`) through the secrets store's code, or its own queries over connections' references (`db/queries/credentials.sql`)
 
 ## Also change
 

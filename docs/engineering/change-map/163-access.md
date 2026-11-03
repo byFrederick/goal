@@ -1,6 +1,6 @@
 ## When you change
 
-The environment tests or the Access read model: the `environment_tests` table (`db/migrations/00086_environment_tests.sql`), its queries (`db/queries/environment_tests.sql`) and adapter (`internal/adapters/store/postgres/environmenttests.go`), the `EnvironmentTests` or `ToolLister` port (`internal/core/ports/environmenttests.go`), the MCP tool lister (`internal/adapters/toollister/mcp`), or the routes (`internal/api/environmenttest.go`, `internal/api/access.go`)
+The environment tests or the Access read model: the `environment_tests` table (`db/migrations/00087_environment_tests.sql`), its queries (`db/queries/environment_tests.sql`) and adapter (`internal/adapters/store/postgres/environmenttests.go`), the `EnvironmentTests` or `ToolLister` port (`internal/core/ports/environmenttests.go`), the MCP tool lister (`internal/adapters/toollister/mcp`), or the routes (`internal/api/environmenttest.go`, `internal/api/access.go`)
 
 ## Also change
 

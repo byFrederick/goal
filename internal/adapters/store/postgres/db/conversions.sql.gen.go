@@ -60,7 +60,7 @@ type InsertFactoryConversionParams struct {
 	At          time.Time
 }
 
-// Factory conversions (ports.FactoryConversions; migration 00087), under row-level security:
+// Factory conversions (ports.FactoryConversions; migration 00088), under row-level security:
 // every statement sees the transaction's organization only.
 // org_id comes from its default, goal_org(). A factory that has its row already keeps it: no row
 // is inserted, and the caller learns it from the count.

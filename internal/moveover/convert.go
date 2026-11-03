@@ -86,7 +86,7 @@ func refused(rc domain.ResolvedConnection) string {
 
 // Secrets are the secrets the organization's connections become: one per sealed secret field
 // that is set, named by SecretName, open to every factory. A field that refers to a credential
-// is that credential already (migration 00085 made credentials secrets), and a connection
+// is that credential already (migration 00086 made credentials secrets), and a connection
 // refused converts nothing.
 func Secrets(conns []domain.ResolvedConnection) []domain.NewSecret {
 	var out []domain.NewSecret

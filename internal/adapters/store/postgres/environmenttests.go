@@ -13,7 +13,7 @@ import (
 
 var _ ports.EnvironmentTests = (*EnvironmentTests)(nil)
 
-// EnvironmentTests implements ports.EnvironmentTests over 00086's environment_tests, as goal_app
+// EnvironmentTests implements ports.EnvironmentTests over 00087's environment_tests, as goal_app
 // under row-level security: every statement sees the organization in ctx. A test upserts the one
 // row of its factory, environment and server.
 type EnvironmentTests struct {

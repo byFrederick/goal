@@ -13,7 +13,7 @@ import (
 
 var _ ports.Credentials = (*Credentials)(nil)
 
-// Credentials implements ports.Credentials over 00085's secrets, which 00065's credentials became
+// Credentials implements ports.Credentials over 00086's secrets, which 00065's credentials became
 // (ADR 0037): the credentials API keeps its contract until the secrets API replaces it. It reads
 // and writes the table as Secrets does (secretTable), audited as credential.*, and a credential is
 // what domain.Credential.Stored says: an api_key with no agents, since a secret has neither, the

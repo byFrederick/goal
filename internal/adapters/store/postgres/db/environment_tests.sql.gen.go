@@ -66,7 +66,7 @@ type UpsertEnvironmentTestParams struct {
 	Tools       []string
 }
 
-// Environment tests (ports.EnvironmentTests; migration 00086), under row-level security: every
+// Environment tests (ports.EnvironmentTests; migration 00087), under row-level security: every
 // statement sees the transaction's organization only.
 // org_id comes from its default, goal_org(); a factory the organization does not have violates
 // the foreign key.

@@ -1,6 +1,6 @@
 ## When you change
 
-The secrets store: the `secrets` table (`db/migrations/00085_secrets.sql`, which renamed 00065's `credentials`, and the migrations after it), its queries (`db/queries/secrets.sql`) or the adapter (`internal/adapters/store/postgres/secrets.go`)
+The secrets store: the `secrets` table (`db/migrations/00086_secrets.sql`, which renamed 00065's `credentials`, and the migrations after it), its queries (`db/queries/secrets.sql`) or the adapter (`internal/adapters/store/postgres/secrets.go`)
 
 ## Also change
 

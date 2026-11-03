@@ -16,7 +16,7 @@ import (
 
 var _ ports.OrgSecrets = (*Secrets)(nil)
 
-// Secrets implements ports.OrgSecrets over 00085's secrets, as goal_app under row-level security:
+// Secrets implements ports.OrgSecrets over 00086's secrets, as goal_app under row-level security:
 // every statement sees the organization in ctx, and every change and use appends its audit entry
 // in its transaction. Each value is sealed with key under domain.SecretAAD (organization, secret
 // id and key id) and opened only by Resolve; a rename keeps the sealed value, which is bound to

@@ -17,7 +17,7 @@ var _ ports.FactoryConversions = (*FactoryConversions)(nil)
 // conversionLock is the session advisory lock key of the conversion, per schema as Migrate's is.
 const conversionLock = "SELECT pg_try_advisory_lock(hashtext('goal.moveover.' || current_schema()))"
 
-// FactoryConversions implements ports.FactoryConversions over 00087's factory_conversions, as
+// FactoryConversions implements ports.FactoryConversions over 00088's factory_conversions, as
 // goal_app under row-level security: every statement sees the organization in ctx.
 type FactoryConversions struct {
 	s *Store

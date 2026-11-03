@@ -1,4 +1,4 @@
--- Factory conversions (ports.FactoryConversions; migration 00087), under row-level security:
+-- Factory conversions (ports.FactoryConversions; migration 00088), under row-level security:
 -- every statement sees the transaction's organization only.
 
 -- name: InsertFactoryConversion :execrows

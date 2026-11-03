@@ -1,4 +1,4 @@
--- Credentials (00065), now the secrets of 00085: postgres.Credentials reads and writes them with
+-- Credentials (00065), now the secrets of 00086: postgres.Credentials reads and writes them with
 -- secrets.sql's queries. These are the queries only credentials have, over the connections that
 -- refer to a credential as {{name}} (00070's secret_refs), under row-level security.
 

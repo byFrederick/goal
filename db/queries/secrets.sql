@@ -1,4 +1,4 @@
--- Secrets (00085, ADR 0037), under row-level security: every statement sees the transaction's
+-- Secrets (00086, ADR 0037), under row-level security: every statement sees the transaction's
 -- organization only. Who created and last changed a secret are named as their audit entries name
 -- them (a person's name at that moment), as api_keys.sql does; a secret renamed from a credential
 -- keeps its id, so its credential.* entries name them until a secret.* entry does. The credentials

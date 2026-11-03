@@ -41,7 +41,7 @@ func TestSecrets_Conformance(t *testing.T) {
 	})
 }
 
-// Migration 00085 renames credentials to secrets: a credential sealed before it, with a type and
+// Migration 00086 renames credentials to secrets: a credential sealed before it, with a type and
 // an agent list, is a secret after it with the same id, name, scope and value, of source value,
 // and the credentials API reads it as an api_key with no agents. The migration cannot reseal, so
 // this holds only while domain.SecretAAD is domain.CredentialAAD's bytes.
