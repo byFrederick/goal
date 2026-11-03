@@ -123,7 +123,8 @@ func (s *server) RevokeStandingRule(ctx context.Context, req gen.RevokeStandingR
 
 func (s *server) standingRuleOf(r domain.StandingRule) gen.StandingRule {
 	out := gen.StandingRule{
-		Id: string(r.ID), ConnectionId: string(r.ConnectionID), Connection: optional(r.Connection), Tool: r.Tool, Agent: r.Agent,
+		Id: string(r.ID), ConnectionId: optional(string(r.ConnectionID)), Connection: optional(r.Connection),
+		FactoryId: optional(string(r.Factory)), Environment: optional(r.Environment), Server: optional(r.Server), Tool: r.Tool, Agent: r.Agent,
 		CreatedBy: s.actorOut(r.CreatedBy), CreatedAt: r.CreatedAt, ItemId: string(r.ItemID), RevokedAt: r.RevokedAt,
 	}
 
