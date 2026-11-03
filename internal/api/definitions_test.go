@@ -344,7 +344,7 @@ func TestDefinitions_ValidateFiles(t *testing.T) {
 	}
 
 	// A new factory: another name than the organization's.
-	fresh := map[string]string{yamlFile: strings.Replace(acme, "name: acme,", "name: acme-new,", 1), writerFile: writerPrompt}
+	fresh := map[string]string{yamlFile: strings.Replace(acme, "name: acme,", "name: acme-new,", 1), writerFile: writerPrompt, defaultEnvFile: defaultEnv}
 
 	if ok := decode[gen.Validation](t, validate(fresh), http.StatusOK); !ok.Ok || ok.Counts.Stations != 3 || ok.Counts.Agents != 1 || len(ok.Checks) == 0 {
 		t.Errorf("validation %s, want ok with 3 stations and its checks", body(t, ok))
@@ -521,8 +521,8 @@ func TestDefinitions_FileReads(t *testing.T) {
 	h.openDraft(t)
 
 	files := decode[gen.FileList](t, h.request(t, http.MethodGet, acmeDraft+"/files", "", nil), http.StatusOK)
-	if len(files.Files) != 2 || files.Files[0].Path != writerFile || files.Files[0].Size != int64(len(writerPrompt)) {
-		t.Errorf("files %s, want the two files with sizes", body(t, files))
+	if len(files.Files) != 3 || files.Files[0].Path != writerFile || files.Files[0].Size != int64(len(writerPrompt)) {
+		t.Errorf("files %s, want the three files with sizes", body(t, files))
 	}
 
 	// A path's slashes are percent-encoded: it is one segment.
@@ -590,7 +590,7 @@ func TestDefinitions_TreeAndValidation(t *testing.T) {
 
 	// A tree may be larger than other routes' bodies.
 	big := map[string]string{
-		yamlFile: acmeRenamed, writerFile: writerPrompt,
+		yamlFile: acmeRenamed, writerFile: writerPrompt, defaultEnvFile: defaultEnv,
 		"agents/a.md": strings.Repeat("a", 700<<10), "agents/b.md": strings.Repeat("b", 700<<10),
 	}
 	if saved := decode[gen.SaveResult](t, h.request(t, http.MethodPut, acmeDraft+"/tree", tree(big, d.Revision), nil), http.StatusOK); saved.Revision != 2 {
@@ -743,7 +743,7 @@ func TestDefinitions_VersionReads(t *testing.T) {
 	h := newHarness(t)
 
 	v1 := decode[gen.VersionDetail](t, h.request(t, http.MethodGet, acmeFactory+"/versions/1", "", nil), http.StatusOK)
-	if valueOf(v1.Number) != 1 || len(v1.Files) != 2 || v1.Source.Kind != gen.VersionSourceKindCli || !v1.Current {
+	if valueOf(v1.Number) != 1 || len(v1.Files) != 3 || v1.Source.Kind != gen.VersionSourceKindCli || !v1.Current {
 		t.Errorf("v1 %s, want the running version with its two files", body(t, v1))
 	}
 

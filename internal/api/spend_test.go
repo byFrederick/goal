@@ -120,7 +120,8 @@ func budgetLines(s gen.OrgSpend) []string {
 }
 
 // Each window has its bounds, days and totals; budgets are each factory's, acme stopped by its
-// andon, both paid for by claude.
+// andon, line paid for by claude. acme names a model key, a secret, rather than a model
+// connection (ADR 0037), so it lists none.
 func TestGetOrgSpend_Windows(t *testing.T) {
 	t.Parallel()
 
@@ -151,7 +152,7 @@ func TestGetOrgSpend_Windows(t *testing.T) {
 			}
 
 			want := []string{
-				"acme daily=null weekly=null today=1.00 week=1.00 stopped (" + andonReason + ") models [claude (anthropic)]",
+				"acme daily=null weekly=null today=1.00 week=1.00 stopped (" + andonReason + ") models []",
 				"line daily=null weekly=70.00 today=0.00 week=2.00 running () models [claude (anthropic)]",
 			}
 			if lines := budgetLines(got); strings.Join(lines, "\n") != strings.Join(want, "\n") {

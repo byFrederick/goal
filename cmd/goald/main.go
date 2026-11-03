@@ -183,11 +183,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	policies := postgres.NewOrgPolicies(store, modelIDs(s.Models))
 
 	// Definition authoring writes versions to PostgreSQL and file content to the bucket. A
-	// definition's connections and knowledge sources are checked against the organization's, its
-	// models against the organization policy.
+	// definition's secret references and knowledge sources are checked against the organization's
+	// (ADR 0037), its models against the organization policy.
 	authors := authoring.New(authoring.Deps{
 		Store: definitionStore, Loads: store, Templates: objects,
-		Credentials: authoring.ConnectionsCheck{Connections: connections, Knowledge: kb.searcher},
+		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.searcher},
 		Policies:    policies, Clock: clock,
 	})
 
