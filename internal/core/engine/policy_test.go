@@ -232,7 +232,7 @@ func TestEngine_MergePolicyOffLeavesTheMergeToAPerson(t *testing.T) {
 }
 
 // Use credentials off signs no connections into the run's task token, though its agent lists
-// some; attached_only signs the agent's list.
+// some; environment signs the agent's list.
 func TestEngine_UseCredentialsPolicyOffGrantsNoConnections(t *testing.T) {
 	t.Parallel()
 
@@ -241,7 +241,7 @@ func TestEngine_UseCredentialsPolicyOffGrantsNoConnections(t *testing.T) {
 		want    []string
 	}{
 		{domain.ToolOff, nil},
-		{domain.ToolAttachedOnly, []string{connGitHub}},
+		{domain.ToolEnvironment, []string{connGitHub}},
 	}
 
 	for _, tt := range tests {
