@@ -212,12 +212,8 @@ func (s *OrgSecrets) Patch(ctx context.Context, name string, p domain.SecretPatc
 	delete(s.d.rows[org], name)
 	s.d.rows[org][next.Name] = r
 
-	if next.Name != name && s.d.renamed != nil {
-		s.d.renamed(org, name, next.Name)
-	}
-
-	if next.Name != name && s.d.notifyRenamed != nil {
-		s.d.notifyRenamed(org, name, next.Name)
+	if next.Name != name {
+		s.d.renamedLocked(org, name, next.Name)
 	}
 
 	return cloneSecret(r.secret), nil
@@ -316,6 +312,16 @@ func (s *OrgSecrets) Resolve(ctx context.Context, names []string, use domain.Sec
 	}
 
 	return out, nil
+}
+
+// renamedLocked tells the knowledge sources and the notification setting that org's secret from
+// is now to.
+func (d *secretData) renamedLocked(org domain.OrgID, from, to string) {
+	for _, fn := range []func(domain.OrgID, string, string){d.renamed, d.notifyRenamed} {
+		if fn != nil {
+			fn(org, from, to)
+		}
+	}
 }
 
 // rowLocked is org's secret name; ErrNotFound when there is none.
