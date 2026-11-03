@@ -27,7 +27,7 @@ Sources made before this model keep their older kinds, `synced` and `live`, unti
 
 ## Snapshots and limits
 
-A sync reads the source, converts what is not Markdown, and writes a snapshot, one zip of its files, only when something changed. A source syncs every hour or every day, or when someone presses **Sync now**. An upload source changes when its files do. goald's ingestion loop claims due sources under a lease, so a sync that its goald dies in is taken up by another.
+A sync reads the source, converts what is not Markdown, and writes a snapshot, one zip of its files, only when something changed. A source syncs every hour, every day, or only when someone presses **Sync now**. Every source syncs once when it is created. After that, an on-demand source syncs only when someone presses **Sync now**, and between syncs it has no next sync. In the API it has `sync_every_seconds` 0 and `next_sync_at` null. An upload source changes when its files do. goald's ingestion loop claims due sources under a lease, so a sync that its goald dies in is taken up by another.
 
 - A file that fails to fetch or convert keeps its last good version, or stays out, and the snapshot counts it as failed. It doesn't fail the sync.
 - A file that looks like it holds a key stays out.
@@ -60,7 +60,7 @@ goal knowledge add runbooks --kind synced --secret docs-token \
 
 Sources made before secrets read a connection. When goald moves an organization over to secrets, each such source gets the secret made from its connection's token, and the connection's other values go into its config. A source it can't move keeps reading its connection, and goald logs why: for example, when that secret is open to some factories only, since a source syncs only with a secret open to every factory.
 
-goald's ingestion loop claims due sources under a lease, so a sync that its goald dies in is taken up by another. A source can sync on an interval, `--every 1h` for example, or on demand.
+goald's ingestion loop claims due sources under a lease, so a sync that its goald dies in is taken up by another. A source can sync on an interval, `--every 1h` for example, or on demand (see [Snapshots and limits](#snapshots-and-limits)).
 
 ## What runs get
 

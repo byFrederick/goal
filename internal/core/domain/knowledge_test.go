@@ -40,14 +40,17 @@ func TestDocumentType_ByExtensionElseByContent(t *testing.T) {
 func TestNewKnowledgeSource_SyncEveryDefaultOnDemandOrAtLeastTheMinimum(t *testing.T) {
 	t.Parallel()
 
-	every := func(d time.Duration) *time.Duration { return &d }
-
 	for _, tc := range []struct {
 		every *time.Duration
 		ok    bool
 	}{
-		{nil, true}, {every(SyncOnDemand), true}, {every(MinSyncEvery), true}, {every(24 * time.Hour), true},
-		{every(time.Second), false}, {every(MinSyncEvery - time.Second), false}, {every(-time.Hour), false},
+		{nil, true},
+		{new(SyncOnDemand), true},
+		{new(MinSyncEvery), true},
+		{new(24 * time.Hour), true},
+		{new(time.Second), false},
+		{new(MinSyncEvery - time.Second), false},
+		{new(-time.Hour), false},
 	} {
 		n := NewKnowledgeSource{Name: "handbook", Title: "Handbook", Kind: SourceUpload, SyncEvery: tc.every}
 		if err := n.Check(); (err == nil) != tc.ok || (err != nil && !errors.Is(err, ErrInvalid)) {

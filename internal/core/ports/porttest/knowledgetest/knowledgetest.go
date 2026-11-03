@@ -233,7 +233,7 @@ func testSources(f *fixture) {
 
 	synced := f.source(f.org, domain.NewKnowledgeSource{
 		Name: runbooks, Title: "Runbooks", Kind: domain.SourceSynced, Connection: docsConn,
-		Config: map[string]string{"branch": "main"}, SyncEvery: syncEvery(30 * time.Minute),
+		Config: map[string]string{"branch": "main"}, SyncEvery: new(30 * time.Minute),
 	})
 	f.want("synced source", synced, synced.Connection == docsConn, synced.SyncEvery == 30*time.Minute, synced.Config["branch"] == "main")
 
@@ -294,7 +294,7 @@ func testSourceRules(f *fixture) {
 		"cannot sync":        {domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceSynced, Connection: chatConn}, domain.ErrConnectionCannotSync},
 		"unknown connection": {domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceSynced, Connection: "nope"}, ports.ErrNotFound},
 		"too often": {
-			domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceSynced, Connection: docsConn, SyncEvery: syncEvery(time.Minute)},
+			domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceSynced, Connection: docsConn, SyncEvery: new(time.Minute)},
 			domain.ErrInvalid,
 		},
 	} {
@@ -562,7 +562,7 @@ func testClaimSchedule(f *fixture) {
 // Sync now, each sync leaving it with no next sync; an interval makes it due again.
 func testClaimOnDemand(f *fixture) {
 	ctx := f.ctx()
-	created := f.source(f.org, domain.NewKnowledgeSource{Name: handbook, Kind: domain.SourceUpload, SyncEvery: syncEvery(domain.SyncOnDemand)})
+	created := f.source(f.org, domain.NewKnowledgeSource{Name: handbook, Kind: domain.SourceUpload, SyncEvery: new(domain.SyncOnDemand)})
 	f.want("an on-demand source when created", created, created.SyncEvery == domain.SyncOnDemand, created.NextSyncAt != nil)
 
 	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Millisecond)
@@ -602,9 +602,6 @@ func testClaimOnDemand(f *fixture) {
 	f.want("on demand again", got, got.SyncEvery == domain.SyncOnDemand, got.NextSyncAt == nil)
 	f.none("on demand after the patch", t1.Add(48*time.Hour))
 }
-
-// syncEvery is d as a new source's interval.
-func syncEvery(d time.Duration) *time.Duration { return &d }
 
 // testFinishInvalidUTF8: a sync's error is stored as text even when it is not valid UTF-8 (a
 // server's reply cut at a byte; review 4 Go L13), instead of the end failing and the source staying

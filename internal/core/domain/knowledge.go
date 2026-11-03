@@ -58,7 +58,7 @@ const (
 	// source that syncs only when someone presses Sync (ADR 0038 decision 1).
 	SyncOnDemand     time.Duration = 0
 	DefaultSyncEvery               = time.Hour
-	MinSyncEvery     = 15 * time.Minute
+	MinSyncEvery                   = 15 * time.Minute
 	// MaxSourceTitle is a source title's length in characters; MaxSourceConfig its config's
 	// size as JSON.
 	MaxSourceTitle  = 120
