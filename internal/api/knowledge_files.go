@@ -483,7 +483,7 @@ func entryData(ctx context.Context, objects KnowledgeObjects, key string, f *zip
 
 	start := offset + localHeaderSize + int64(binary.LittleEndian.Uint16(header[26:])) + int64(binary.LittleEndian.Uint16(header[28:]))
 
-	raw, err := readRange(ctx, objects, key, start, int64(f.CompressedSize64))
+	raw, err := readRange(ctx, objects, key, start, int64(f.CompressedSize64)) //nolint:gosec // zipEntry bounds it by MaxFileBytes
 	if err != nil {
 		return nil, err
 	}

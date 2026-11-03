@@ -58,9 +58,9 @@ func (g *defGoald) draftFile(t *testing.T, version, path string) string {
 	t.Helper()
 
 	dir := filepath.Join(t.TempDir(), "pulled")
-	g.mustGoal(t, "factory", "pull", "acme", dir, "--version", version)
+	g.mustGoal(t, "factory", "pull", orgAcme, dir, "--version", version)
 
-	raw, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(path)))
+	raw, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(path))) //nolint:gosec // the test's own pulled folder
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestKnowledge_Refusals(t *testing.T) {
 	}
 
 	for _, args := range [][]string{
-		{"add", srcHandbook},
+		{subAdd, srcHandbook},
 		{"check", srcHandbook},
 		{kindUpload, srcHandbook},
 		{"files"},

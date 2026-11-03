@@ -220,7 +220,6 @@ func (r *secretsRun) knowledge(sources []domain.KnowledgeSource) {
 	}
 }
 
-
 // merge reports each merge station of a factory whose repository has no token: nothing could
 // merge the item's pull requests. The fix takes the merge off the station.
 func (r *secretsRun) merge() {

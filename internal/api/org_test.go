@@ -424,9 +424,17 @@ var probes = map[string]probe{
 	"searchKnowledge":             {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/search?q=notes", org: testOrg},
 	"getKnowledgeUsage":           {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/usage?source=notes", org: testOrg},
 	"listKnowledgeDocumentUses":   {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/documents/" + noDocument + "/uses", org: testOrg},
-	"giveKnowledgeVerdict": {
-		method: http.MethodPut, path: "/v1/orgs/acme/knowledge/documents/" + noDocument + "/verdict", org: testOrg, body: `{"verdict":"helped"}`,
+	"listKnowledgeFiles":          {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/sources/notes/files", org: testOrg},
+	"getKnowledgeFile":            {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/sources/notes/files/a.md", org: testOrg},
+	"uploadKnowledgeFiles": {
+		method: http.MethodPost, path: "/v1/orgs/acme/knowledge/sources/notes/uploads", org: testOrg,
+		header: http.Header{"Content-Type": {"multipart/form-data; boundary=x"}},
+		body:   "--x\r\nContent-Disposition: form-data; name=\"files\"; filename=\"db/a.md\"\r\n\r\n# A\r\n--x--\r\n",
 	},
+	"deleteKnowledgeUpload": {method: http.MethodDelete, path: "/v1/orgs/acme/knowledge/sources/notes/uploads?path=a.md", org: testOrg},
+	"checkKnowledgeSource":  {method: http.MethodPost, path: "/v1/orgs/acme/knowledge/check", body: `{"name":"notes","kind":"upload"}`, org: testOrg},
+	"findKnowledgeFiles":    {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/files?find=a", org: testOrg},
+	"listKnowledgeReads":    {method: http.MethodGet, path: "/v1/orgs/acme/knowledge/reads", org: testOrg},
 	"deleteKnowledgeSource": {method: http.MethodDelete, path: "/v1/orgs/acme/knowledge/sources/notes", org: testOrg},
 	// The key's factory passes the resolver; no key has this id.
 	"createAPIKey": {

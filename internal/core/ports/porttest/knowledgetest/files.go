@@ -264,6 +264,8 @@ func testReads(f *fixture) {
 		{Source: src.ID, Path: fileA, Factory: factoryA, Day: time.Date(2026, 11, 3, 23, 30, 0, 0, time.FixedZone("acme", -2*3600)), Reads: 4},
 		{Source: src.ID, Path: fileA, Factory: factoryA, Day: day.Add(23 * time.Hour), Reads: 1, Searches: 2},
 		{Source: src.ID, Path: "b.md", Factory: factoryA, Day: day, Reads: 1},
+		// A search of the whole source counts at its root.
+		{Source: src.ID, Path: domain.KnowledgeSourceRoot, Factory: factoryA, Day: day.Add(30 * time.Hour), Searches: 1},
 	}))
 
 	got, err := f.Knowledge.FileReads(ctx, handbook, day.Add(-24*time.Hour))
@@ -274,6 +276,7 @@ func testReads(f *fixture) {
 		{Source: src.ID, Path: fileA, Factory: factoryA, Day: day, Reads: 3, Searches: 3},
 		{Source: src.ID, Path: fileA, Factory: factoryB, Day: day, Reads: 1},
 		{Source: src.ID, Path: "b.md", Factory: factoryA, Day: day, Reads: 1},
+		{Source: src.ID, Path: domain.KnowledgeSourceRoot, Factory: factoryA, Day: next, Searches: 1},
 		{Source: src.ID, Path: fileA, Factory: factoryA, Day: next, Reads: 4},
 	}
 
@@ -293,6 +296,9 @@ func testReads(f *fixture) {
 
 	err = f.Knowledge.AddReads(ctx, []domain.KnowledgeFileReads{{Source: src.ID, Path: "../a.md", Factory: factoryA, Day: day, Reads: 1}})
 	f.refused("AddReads of a bad path", err, domain.ErrInvalid)
+
+	err = f.Knowledge.AddReads(ctx, []domain.KnowledgeFileReads{{Source: src.ID, Path: domain.KnowledgeSourceRoot, Factory: factoryA, Day: day, Reads: 1}})
+	f.refused("AddReads of a read of the source's root", err, domain.ErrInvalid)
 
 	again, err := f.Knowledge.FileReads(ctx, handbook, day)
 	f.must(err)

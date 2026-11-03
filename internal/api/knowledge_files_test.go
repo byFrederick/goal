@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -110,6 +111,14 @@ func TestKnowledge_FileReadByRange(t *testing.T) {
 	if len(ranges) != 4 || slices.Contains(ranges, -1) {
 		t.Errorf("ranged reads = %v; want four (end record, directory, header, entry), none of the whole zip", ranges)
 	}
+}
+
+// A file the current snapshot lacks, a source with no snapshot and an unknown source are refused;
+// a file is found across every source by path or title.
+func TestKnowledge_FileRefusalsAndFind(t *testing.T) {
+	t.Parallel()
+
+	h := uploadedHandbook(t)
 
 	refused(t, "a path the snapshot lacks", h.request(t, http.MethodGet, handbookPath+"/files/"+url.PathEscape("db/none.md"), "", nil),
 		http.StatusNotFound, "knowledge-file-not-found")
@@ -179,7 +188,8 @@ func TestKnowledge_Reads(t *testing.T) {
 		lines = append(lines, r.Source+" "+r.Path+" "+r.Factory+" "+r.Day.String())
 	}
 
-	if want := []string{"handbook . acme " + today.Format("2006-01-02"), "handbook db/disk.md acme " + today.Format("2006-01-02")}; !slices.Equal(lines, want) {
+	day := " " + acmeSlug + " " + today.Format(time.DateOnly)
+	if want := []string{"handbook ." + day, "handbook db/disk.md" + day}; !slices.Equal(lines, want) {
 		t.Errorf("reads over 7 days = %v; want %v", lines, want)
 	}
 
@@ -205,27 +215,13 @@ func TestKnowledge_Check(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := h.secrets.Create(ctx, domain.NewSecret{
-		Name: "line-token", Value: "test-line", Scope: domain.SecretScope{Factories: []domain.FactoryID{lineID}},
-	}, domain.LocalUser); err != nil {
-		t.Fatal(err)
-	}
-
 	body := `{"name":"guides","kind":"repository","secret":"docs-token","config":{"repository":"https://git.example.com/acme/guides"},` +
-		`"read_when":"Before you touch production.","factories":["acme"]}`
+		`"read_when":"Before you touch production.","factories":["` + acmeSlug + `"]}`
 
 	got := decode[gen.KnowledgeCheck](t, h.request(t, http.MethodPost, knowledgePath+"/check", body, nil), http.StatusOK)
 	if !got.Access.Ok || got.Files != 2 || got.Bytes != nil || len(got.OverLimit) != 0 || len(got.Warnings) != 0 ||
 		got.Limits.Files != domain.MaxSourceFiles || got.Line != "- `/knowledge/guides/`: Before you touch production. 2 files." {
 		t.Errorf("check = %s; want access, 2 files, no warning and the line", asJSON(t, got))
-	}
-
-	narrow := strings.Replace(body, "docs-token", "line-token", 1)
-
-	got = decode[gen.KnowledgeCheck](t, h.request(t, http.MethodPost, knowledgePath+"/check", narrow, nil), http.StatusOK)
-	if got.Access.Ok || len(got.Warnings) != 1 || got.Warnings[0].Code != "knowledge-secret-not-in-scope" || valueOf(got.Warnings[0].Factory) != "acme" ||
-		strings.Contains(asJSON(t, got), "test-line") {
-		t.Errorf("check with a secret open to line only = %s; want no access and acme out of its scope", asJSON(t, got))
 	}
 
 	if _, err := h.kb.Source(ctx, "guides"); err == nil {
@@ -236,6 +232,29 @@ func TestKnowledge_Check(t *testing.T) {
 		http.StatusBadRequest, "")
 	refused(t, "an unknown factory", h.request(t, http.MethodPost, knowledgePath+"/check", `{"name":"guides","kind":"upload","factories":["nope"]}`, nil),
 		http.StatusNotFound, "factory-not-found")
+}
+
+// A Check with a secret a picked factory is outside of warns for that factory, and never answers
+// the secret's value.
+func TestKnowledge_CheckWarnsOfASecretsScope(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	if _, err := h.secrets.Create(inOrg(t), domain.NewSecret{
+		Name: "line-token", Value: "test-line", Scope: domain.SecretScope{Factories: []domain.FactoryID{lineID}},
+	}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	narrow := `{"name":"guides","kind":"repository","secret":"line-token","config":{"repository":"https://git.example.com/acme/guides"},` +
+		`"factories":["` + acmeSlug + `"]}`
+
+	got := decode[gen.KnowledgeCheck](t, h.request(t, http.MethodPost, knowledgePath+"/check", narrow, nil), http.StatusOK)
+	if got.Access.Ok || len(got.Warnings) != 1 || got.Warnings[0].Code != "knowledge-secret-not-in-scope" || valueOf(got.Warnings[0].Factory) != acmeSlug ||
+		strings.Contains(asJSON(t, got), "test-line") {
+		t.Errorf("check with a secret open to line only = %s; want no access and acme out of its scope", asJSON(t, got))
+	}
 }
 
 // knowledge:read lets a member read files and reads; check, uploads and deletion need

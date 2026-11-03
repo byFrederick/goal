@@ -238,7 +238,9 @@ func (t *KnowledgeTally) Reads(ids map[string]KnowledgeSourceID, factory Factory
 		}
 	}
 
-	slices.SortFunc(keys, func(a, b key) int { return cmp.Or(strings.Compare(a.source, b.source), strings.Compare(a.path, b.path)) })
+	slices.SortFunc(keys, func(a, b key) int {
+		return cmp.Or(strings.Compare(a.source, b.source), strings.Compare(a.path, b.path))
+	})
 
 	out := make([]KnowledgeFileReads, 0, len(keys))
 	for _, k := range keys {

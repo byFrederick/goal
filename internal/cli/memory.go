@@ -26,7 +26,7 @@ func memoryCommand(ctx context.Context, out *printer, getenv func(string) string
 		return errUsage
 	}
 
-	handler, ok := map[string]command{"list": memoryList, "add": memoryAdd, "rm": memoryRemove}[args[0]]
+	handler, ok := map[string]command{subList: memoryList, subAdd: memoryAdd, "rm": memoryRemove}[args[0]]
 	if !ok {
 		return errUsage
 	}
@@ -113,7 +113,7 @@ func memoryAdd(ctx context.Context, out *printer, getenv func(string) string, ar
 
 	if *from != "" {
 		items := &yaml.Node{Kind: yaml.SequenceNode, Style: yaml.FlowStyle}
-		for _, f := range strings.Split(*from, ",") {
+		for f := range strings.SplitSeq(*from, ",") {
 			items.Content = append(items.Content, scalar(strings.TrimSpace(f)))
 		}
 

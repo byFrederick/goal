@@ -221,6 +221,12 @@ func TestRunDefinition_KnowledgePinsOfTheRequestsAgent(t *testing.T) {
 	}
 }
 
+// The source and the tool of the reads tests.
+const (
+	kbRunbooks = "runbooks"
+	toolRead   = "Read"
+)
+
 // toolLines writes the worker's tool_use lines for each call, a tool and its path, to stdout.
 func toolLines(t *testing.T, stdout io.Writer, calls ...[2]string) {
 	t.Helper()
@@ -241,11 +247,11 @@ func toolLines(t *testing.T, stdout io.Writer, calls ...[2]string) {
 // the runbooks, then calls that count for nothing (another source, the checkout, a tool other
 // than Read, Grep and Glob).
 var kbReadCalls = [][2]string{
-	{"Read", "/knowledge/runbooks/db/disk.md"},
-	{"Read", "/knowledge/runbooks/db/disk.md"},
+	{toolRead, "/knowledge/runbooks/db/disk.md"},
+	{toolRead, "/knowledge/runbooks/db/disk.md"},
 	{"Grep", "/knowledge/runbooks"},
-	{"Read", "/knowledge/design/a.md"},
-	{"Read", "/workspace/README.md"},
+	{toolRead, "/knowledge/design/a.md"},
+	{toolRead, "/workspace/README.md"},
 	{"Bash", "/knowledge/runbooks/db/disk.md"},
 }
 
@@ -255,7 +261,7 @@ func TestRun_CountsKnowledgeReads(t *testing.T) {
 	t.Parallel()
 
 	line := repoLine()
-	line.Knowledge = []domain.KnowledgeEntry{{Name: "runbooks"}}
+	line.Knowledge = []domain.KnowledgeEntry{{Name: kbRunbooks}}
 
 	var once sync.Once
 
@@ -264,7 +270,7 @@ func TestRun_CountsKnowledgeReads(t *testing.T) {
 		return porttest.Succeed(`{}`)(ctx, c, stdout)
 	})
 	kb := h.knowledgeBase(t)
-	kb.putSnapshot(t, "runbooks", "r1")
+	kb.putSnapshot(t, kbRunbooks, "r1")
 	kb.putSnapshot(t, "design", "d1")
 	h.e = h.engine(t, h.store)
 	it := h.submit(t, domain.NewItem{})
@@ -275,12 +281,12 @@ func TestRun_CountsKnowledgeReads(t *testing.T) {
 		t.Fatalf("item is %s, want done (events %v)", got.State, h.kinds(it.ID))
 	}
 
-	src, err := kb.kb.Source(inOrg(t), "runbooks")
+	src, err := kb.kb.Source(inOrg(t), kbRunbooks)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := kb.kb.FileReads(inOrg(t), "runbooks", t0.AddDate(0, 0, -1))
+	got, err := kb.kb.FileReads(inOrg(t), kbRunbooks, t0.AddDate(0, 0, -1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,14 +319,14 @@ func TestRun_KnowledgeReadsFailureLeavesTheRunAlone(t *testing.T) {
 	t.Parallel()
 
 	line := repoLine()
-	line.Knowledge = []domain.KnowledgeEntry{{Name: "runbooks"}}
+	line.Knowledge = []domain.KnowledgeEntry{{Name: kbRunbooks}}
 
 	h := newHarness(t, line, func(ctx context.Context, c porttest.ExecCall, stdout io.Writer) domain.RunResult {
 		toolLines(t, stdout, kbReadCalls...)
 		return porttest.Succeed(`{}`)(ctx, c, stdout)
 	})
 	kb := h.knowledgeBase(t)
-	kb.putSnapshot(t, "runbooks", "r1")
+	kb.putSnapshot(t, kbRunbooks, "r1")
 	h.knowledgeDeps = failingReads{kb.kb}
 	h.e = h.engine(t, h.store)
 	it := h.submit(t, domain.NewItem{})

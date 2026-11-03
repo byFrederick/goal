@@ -192,12 +192,7 @@ func (e *Engine) agent(ctx context.Context, t runTask, runID domain.RunID, env m
 				e.relay(ctx, t, runID, d, scrub)
 			}
 		default:
-			if ev.Kind == domain.EventToolCall {
-				tool, _ := ev.Data["tool"].(string)
-				p, _ := ev.Data["path"].(string)
-				tally.Add(tool, p)
-			}
-
+			countTouch(tally, *ev)
 			e.relay(ctx, t, runID, *ev, scrub)
 		}
 	})
@@ -235,6 +230,17 @@ func (e *Engine) agent(ctx context.Context, t runTask, runID domain.RunID, env m
 		slog.Int("exit", st.Code), slog.Float64("seconds", e.since(started)))
 
 	return res, lost
+}
+
+// countTouch adds a tool call the agent reported to the run's knowledge tally.
+func countTouch(tally *domain.KnowledgeTally, ev domain.Event) {
+	if ev.Kind != domain.EventToolCall {
+		return
+	}
+
+	tool, _ := ev.Data["tool"].(string)
+	p, _ := ev.Data["path"].(string)
+	tally.Add(tool, p)
 }
 
 // countReadsTimeout bounds counting a run's knowledge reads once the run ended.

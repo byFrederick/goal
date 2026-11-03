@@ -12,6 +12,12 @@ import (
 	"github.com/byFrederick/goal/internal/knowledge"
 )
 
+// The secret the Check tests read with, and its value, which no answer may hold.
+const (
+	checkToken = "docs-token"
+	checkValue = "test-token"
+)
+
 // leakyReader fails every listing with an error that quotes the secret it was given, as a code
 // host's answer might.
 type leakyReader struct{}
@@ -35,7 +41,7 @@ func TestCheck_ListsUnsavedSettings(t *testing.T) {
 	ctx := w.ctx()
 
 	for _, s := range []domain.NewSecret{
-		{Name: "docs-token", Value: "test-token", Scope: domain.SecretScope{All: true}},
+		{Name: checkToken, Value: checkValue, Scope: domain.SecretScope{All: true}},
 		{Name: "narrow-token", Value: "test-narrow", Scope: domain.SecretScope{Factories: []domain.FactoryID{"f1"}}},
 	} {
 		if _, err := w.secrets.Create(ctx, s, admin); err != nil {
@@ -45,10 +51,10 @@ func TestCheck_ListsUnsavedSettings(t *testing.T) {
 
 	w.docs.set(map[string]string{deployMD: shipOnTuesdays, "b.md": "# B"})
 
-	repo := domain.KnowledgeSource{Name: "guides", Kind: domain.SourceRepository, Secret: "docs-token", Config: map[string]string{"repository": "https://git.example.com/acme/guides"}}
+	repo := domain.KnowledgeSource{Name: "guides", Kind: domain.SourceRepository, Secret: checkToken, Config: map[string]string{"repository": "https://git.example.com/acme/guides"}}
 
 	got, err := w.ingestor(nil, nil).Check(ctx, repo)
-	w.want("the check", got, err == nil, got.Error == "", got.Files == 2, w.docs.secret == "test-token")
+	w.want("the check", got, err == nil, got.Error == "", got.Files == 2, w.docs.secret == checkValue)
 	w.want("the sources after", w.snapshots(repoSource), len(w.snapshots(repoSource)) == 0)
 
 	if _, err := w.kb.Source(ctx, "guides"); !errors.Is(err, ports.ErrNotFound) {
@@ -66,7 +72,7 @@ func TestCheck_ListsUnsavedSettings(t *testing.T) {
 	})
 
 	got, err = leaky.Check(ctx, repo)
-	w.want("a listing that fails", got, err == nil, strings.Contains(got.Error, "bad credentials"), !strings.Contains(got.Error, "test-token"))
+	w.want("a listing that fails", got, err == nil, strings.Contains(got.Error, "bad credentials"), !strings.Contains(got.Error, checkValue))
 
 	got, err = w.ingestor(nil, nil).Check(ctx, domain.KnowledgeSource{Name: "drops", Kind: domain.SourceUpload})
 	w.want("an upload source not saved", got, err == nil, got.Error == "", got.Files == 0)

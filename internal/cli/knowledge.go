@@ -3,8 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"flag"
+	"fmt"
 	iofs "io/fs"
 	"maps"
 	"mime/multipart"
@@ -159,7 +159,7 @@ func addSourceFlags(fs *flag.FlagSet) *sourceFlags {
 func (f *sourceFlags) factoryNames() []string {
 	var out []string
 
-	for _, n := range strings.Split(*f.factories, ",") {
+	for n := range strings.SplitSeq(*f.factories, ",") {
 		if n = strings.TrimSpace(n); n != "" {
 			out = append(out, n)
 		}
@@ -184,25 +184,7 @@ func knowledgeAdd(ctx context.Context, out *printer, getenv func(string) string,
 		return err
 	}
 
-	body := gen.NewKnowledgeSource{Name: pos[0], Title: pos[0], Kind: gen.KnowledgeSourceKind(*sf.kind), Config: (*map[string]string)(&sf.config)}
-	if *sf.title != "" {
-		body.Title = *sf.title
-	}
-
-	if *sf.secret != "" {
-		body.Secret = sf.secret
-	}
-
-	if *sf.readWhen != "" {
-		body.ReadWhen = sf.readWhen
-	}
-
-	if *sf.every > 0 {
-		seconds := int(sf.every.Seconds())
-		body.SyncEverySeconds = &seconds
-	}
-
-	res, err := c.CreateKnowledgeSourceWithResponse(ctx, c.org, body)
+	res, err := c.CreateKnowledgeSourceWithResponse(ctx, c.org, sf.newSource(pos[0]))
 	if err != nil {
 		return apiDown(err)
 	}
@@ -213,16 +195,44 @@ func knowledgeAdd(ctx context.Context, out *printer, getenv func(string) string,
 
 	out.printf("✓ added knowledge source %s (%s) to %s\n", res.JSON201.Name, res.JSON201.Kind, c.org)
 
-	for _, f := range sf.factoryNames() {
-		listed, name, err := listInDraft(ctx, c, f, pos[0])
+	return listInDrafts(ctx, out, c, sf.factoryNames(), pos[0])
+}
+
+// newSource is the source named name that the flags describe.
+func (f *sourceFlags) newSource(name string) gen.NewKnowledgeSource {
+	body := gen.NewKnowledgeSource{Name: name, Title: name, Kind: gen.KnowledgeSourceKind(*f.kind), Config: (*map[string]string)(&f.config)}
+	if *f.title != "" {
+		body.Title = *f.title
+	}
+
+	if *f.secret != "" {
+		body.Secret = f.secret
+	}
+
+	if *f.readWhen != "" {
+		body.ReadWhen = f.readWhen
+	}
+
+	if *f.every > 0 {
+		seconds := int(f.every.Seconds())
+		body.SyncEverySeconds = &seconds
+	}
+
+	return body
+}
+
+// listInDrafts lists source in each factory's draft, saying which listed it already.
+func listInDrafts(ctx context.Context, out *printer, c orgClient, factories []string, source string) error {
+	for _, f := range factories {
+		listed, name, err := listInDraft(ctx, c, f, source)
 		if err != nil {
 			return fmt.Errorf("%s: %w", f, err)
 		}
 
 		if listed {
-			out.printf("✓ listed %s in %s's draft; publish it with `goal factory publish %s`\n", pos[0], name, name)
+			out.printf("✓ listed %s in %s's draft; publish it with `goal factory publish %s`\n", source, name, name)
 		} else {
-			out.printf("  %s's draft lists %s already\n", name, pos[0])
+			out.printf("  %s's draft lists %s already\n", name, source)
 		}
 	}
 
@@ -309,11 +319,17 @@ func knowledgeCheck(ctx context.Context, out *printer, getenv func(string) strin
 		return apiDown(err)
 	}
 
-	got := res.JSON200
-	if got == nil {
+	if res.JSON200 == nil {
 		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
 	}
 
+	printCheck(out, res.JSON200)
+
+	return nil
+}
+
+// printCheck prints a Check's answers: access, size, limits, warnings and the agent line.
+func printCheck(out *printer, got *gen.KnowledgeCheck) {
 	if got.Access.Ok {
 		out.printf("✓ access: goald lists %d files of at most %d\n", got.Files, got.Limits.Files)
 	} else {
@@ -338,8 +354,6 @@ func knowledgeCheck(ctx context.Context, out *printer, getenv func(string) strin
 	}
 
 	out.printf("agents will see:\n  %s\n", got.Line)
-
-	return nil
 }
 
 // knowledgeSync makes a source due now.
@@ -389,18 +403,7 @@ func knowledgeFiles(ctx context.Context, out *printer, getenv func(string) strin
 	}
 
 	if len(pos) == 0 {
-		res, err := c.FindKnowledgeFilesWithResponse(ctx, c.org, &gen.FindKnowledgeFilesParams{Find: *find})
-		if err != nil {
-			return apiDown(err)
-		}
-
-		if res.JSON200 == nil {
-			return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
-		}
-
-		printFiles(out, res.JSON200.Files)
-
-		return nil
+		return findFiles(ctx, out, c, *find)
 	}
 
 	params := &gen.ListKnowledgeFilesParams{}
@@ -426,6 +429,22 @@ func knowledgeFiles(ctx context.Context, out *printer, getenv func(string) strin
 
 		params.After = res.JSON200.NextAfter
 	}
+}
+
+// findFiles prints the files of every source whose path or title starts with find.
+func findFiles(ctx context.Context, out *printer, c orgClient, find string) error {
+	res, err := c.FindKnowledgeFilesWithResponse(ctx, c.org, &gen.FindKnowledgeFilesParams{Find: find})
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if res.JSON200 == nil {
+		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	printFiles(out, res.JSON200.Files)
+
+	return nil
 }
 
 // printFiles prints each file as <source>/<path>, its size and its title.

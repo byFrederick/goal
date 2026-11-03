@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -47,7 +48,7 @@ func (in *Ingestor) Check(ctx context.Context, src domain.KnowledgeSource) (doma
 // checkFailed is a Check that could not list its source: err's message, with the opened secret's
 // value cut out, or ctx's own error once it ended for another reason than the check's bound.
 func (in *Ingestor) checkFailed(ctx context.Context, spec domain.SyncSpec, err error) (domain.SourceCheck, error) {
-	if cause := context.Cause(ctx); cause != nil && cause != context.DeadlineExceeded {
+	if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.DeadlineExceeded) {
 		return domain.SourceCheck{}, cause
 	}
 
