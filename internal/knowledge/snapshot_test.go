@@ -340,3 +340,46 @@ func TestSnapshot_AConfluenceSourceReadsWithItsSecret(t *testing.T) {
 	files := w.zipOf(w.snapshots("wiki")[0])
 	w.want("its files", files, len(files) == 1)
 }
+
+// A Confluence page lands at the path of its page tree: its folder, then its title's slug and its
+// id. A page without a folder lands at the top, and one whose folder would not make a file's path
+// (not clean, or too long) lands at the top too.
+func TestSnapshot_ConfluencePagesLandAtTheirTreePaths(t *testing.T) {
+	t.Parallel()
+
+	w := repoWorld(t)
+	ctx := w.ctx()
+
+	if _, err := w.secrets.Create(ctx, domain.NewSecret{Name: "wiki-token", Value: "test-token", Scope: domain.SecretScope{All: true}}, admin); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.kb.DeleteSource(ctx, repoSource, admin, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := w.kb.CreateSource(ctx, domain.NewKnowledgeSource{
+		Name: "wiki", Title: "Wiki", Kind: domain.SourceConfluence, Secret: "wiki-token", Config: map[string]string{"site": "acme.example.com"},
+	}, admin); err != nil {
+		t.Fatal(err)
+	}
+
+	w.docs.set(map[string]string{"11": "# Runbooks", "12": "# Deploy", "13": "# Paging", "15": "# Odd", "16": "# Deep"})
+	w.docs.titles = map[string]string{"11": "Runbooks", "12": "Deploy", "13": "Paging: On-call", "15": "Odd", "16": "Deep"}
+	w.docs.folders = map[string]string{"11": "ENG", "13": "ENG/runbooks", "15": "ENG/../up", "16": "ENG/" + strings.Repeat("a", domain.MaxFilePath)}
+	w.syncDue(w.ingestor(nil))
+
+	got := w.files("wiki")
+	slices.Sort(got)
+
+	want := []string{"ENG/runbooks-11.md", "ENG/runbooks/paging-on-call-13.md", "deep-16.md", "deploy-12.md", "odd-15.md"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("files = %v, want %v", got, want)
+	}
+
+	for _, p := range got {
+		if err := domain.CheckFilePath(p); err != nil {
+			t.Errorf("file %s: %v", p, err)
+		}
+	}
+}

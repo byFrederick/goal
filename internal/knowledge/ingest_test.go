@@ -1,6 +1,7 @@
 package knowledge_test
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"iter"
@@ -58,6 +59,8 @@ type reader struct {
 	secret  string // the value of the secret it was given
 	block   map[string]chan struct{}
 	down    bool // every fetch fails, as a server answering 503
+	// titles and folders, by path, list a document under another title and in a folder.
+	titles, folders map[string]string
 }
 
 func (r *reader) set(docs map[string]string) {
@@ -85,12 +88,13 @@ func (r *reader) List(_ context.Context, s domain.SyncSpec) iter.Seq2[domain.Sou
 		r.secret = s.Secret.Value
 	}
 
-	docs := maps.Clone(r.docs)
+	docs, titles, folders := maps.Clone(r.docs), maps.Clone(r.titles), maps.Clone(r.folders)
 	r.mu.Unlock()
 
 	return func(yield func(domain.SourceItem, error) bool) {
 		for _, p := range slices.Sorted(maps.Keys(docs)) {
-			if !yield(domain.SourceItem{ID: p, Version: string(domain.HashBlob([]byte(docs[p]))), Title: p, URL: "https://git.example.com/" + p}, nil) {
+			item := domain.SourceItem{ID: p, Version: string(domain.HashBlob([]byte(docs[p]))), Title: cmp.Or(titles[p], p), Folder: folders[p], URL: "https://git.example.com/" + p}
+			if !yield(item, nil) {
 				return
 			}
 		}

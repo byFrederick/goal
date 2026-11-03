@@ -14,7 +14,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -359,9 +358,13 @@ func (b *snapshotBuilder) changed(first bool) bool {
 	return b.changes.Added+b.changes.Changed+b.changes.Removed > 0 || (first && b.failed > 0)
 }
 
+// hashChars is the length of the collision suffix's hash, in hex digits.
+const hashChars = 8
+
 // path is item's file path in the snapshot: an upload's file name, a repository file's path, a
-// Confluence page's title and id, as Markdown (.md); another item at the same path gets its
-// id's short hash before the extension.
+// Confluence page's title and id in its folder (the top when the folder would not make a file's
+// path), as Markdown (.md); another item at the same path gets its id's short hash before the
+// extension.
 func (b *snapshotBuilder) path(kind domain.KnowledgeSourceKind, item domain.SourceItem) string {
 	var name string
 
@@ -372,7 +375,12 @@ func (b *snapshotBuilder) path(kind domain.KnowledgeSourceKind, item domain.Sour
 			name = item.Title
 		}
 	case domain.SourceConfluence:
-		name = slug(item.Title) + "-" + item.ID
+		name = domain.Slug(item.Title) + "-" + item.ID
+		// The folder leaves room for the collision suffix, so a page in it stays a file's path.
+		in := path.Join(item.Folder, name)
+		if item.Folder != "" && domain.CheckFilePath(item.Folder) == nil && domain.CheckFilePath(in) == nil && len(markdownName(in))+len("-")+hashChars <= domain.MaxFilePath {
+			name = in
+		}
 	case domain.SourceRepository, domain.SourceSynced, domain.SourceLive:
 		name = item.ID
 	}
@@ -385,7 +393,7 @@ func (b *snapshotBuilder) path(kind domain.KnowledgeSourceKind, item domain.Sour
 	h := sha256.Sum256([]byte(item.ID))
 	ext := path.Ext(p)
 
-	return strings.TrimSuffix(p, ext) + "-" + hex.EncodeToString(h[:4]) + ext
+	return strings.TrimSuffix(p, ext) + "-" + hex.EncodeToString(h[:hashChars/2]) + ext
 }
 
 // copy copies p's entry from the current snapshot's zip as it was stored, with its file, and
@@ -515,33 +523,6 @@ func markdownName(p string) string {
 	}
 
 	return p + ".md"
-}
-
-// slug is a page title as a file name: lower-case letters and digits, the rest dashes; "page"
-// for none.
-func slug(title string) string {
-	var sb strings.Builder
-
-	dash := false
-
-	for _, r := range strings.ToLower(title) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			sb.WriteRune(r)
-
-			dash = false
-		} else if !dash && sb.Len() > 0 {
-			sb.WriteByte('-')
-
-			dash = true
-		}
-	}
-
-	s := strings.TrimSuffix(sb.String(), "-")
-	if s == "" {
-		return "page"
-	}
-
-	return clip(s, 200)
 }
 
 // clip is s cut to at most n characters.
