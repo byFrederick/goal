@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>New knowledge source</title>
+<title>New source: repository</title>
+
 </head>
 <body>
 <x-dc>
@@ -89,92 +90,325 @@ a.card:hover{border-color:var(--rule2)}
 a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important}}
 @media (max-width:760px){.side{width:100%;min-height:0;border-right:0;border-bottom:1px solid var(--rule)}.side .navs,.side .sbot{display:none}.top{padding:8px 16px}.page{padding:16px}}
+.pick{display:grid;grid-template-columns:300px minmax(0,1fr);border:1px solid var(--rule);border-radius:8px;overflow:hidden;min-height:720px}
+@media (max-width:1000px){.pick{grid-template-columns:minmax(0,1fr)}}
+.cat{background:var(--panel);border-right:1px solid var(--rule);padding:12px;display:flex;flex-direction:column;gap:2px}
+.cs{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--rule2);background:var(--bg);color:var(--ink3);margin-bottom:8px;transition:border-color var(--dur-quick) ease,box-shadow var(--dur-quick) ease}
+.cs:focus-within{border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-t)}
+.cs input{border:0;outline:0;background:none;font:inherit;color:var(--ink);width:100%}
+.cl{font-size:12px;font-weight:500;color:var(--ink3);padding:10px 8px 4px}
+.ci{display:flex;align-items:center;gap:10px;min-height:40px;padding:5px 8px;border-radius:6px;text-decoration:none;color:var(--ink);transition:background-color var(--dur-quick) ease}
+.ci:hover{background:var(--hover);color:var(--ink)}
+.ci[aria-current="true"]{background:var(--hover)}
+.ci .t{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.ci .t b{font-weight:500}
+.ci .t span{font-size:12px;color:var(--ink3)}
+.ci .tag{margin-left:auto;font-size:12px;font-weight:500;color:var(--ink3);display:inline-flex;align-items:center;gap:6px}
+.ci .tag .dot{color:var(--grn)}
+.lt{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;flex:none;color:var(--ink2);background:var(--bg);border:1px solid var(--rule);font-size:11.5px;font-weight:600}
+.dt{padding:24px 28px;display:flex;flex-direction:column;gap:20px;min-width:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld > span,.fld > label{font-size:13px;font-weight:500}
+.in{height:32px;border-radius:6px;border:1px solid var(--rule2);padding:0 10px;font:inherit;font-size:14px;color:var(--ink);background:var(--bg);display:flex;align-items:center}
+.radios{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.rad{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:8px;border:1px solid var(--rule2);cursor:pointer;transition:border-color var(--dur-quick) ease,background-color var(--dur-quick) ease}
+.rad:hover{border-color:var(--ink3)}
+.rad.on{border-color:var(--ink)}
+.rad input{margin:3px 0 0;accent-color:var(--ink)}
+.tl{border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.th{display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--panel);font-size:12px;font-weight:500;color:var(--ink2);border-bottom:1px solid var(--rule)}
+.tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:6px 8px 6px 12px;border-top:1px solid var(--rule);font-size:13px}
+.tr:first-of-type{border-top:0}
+.tri{display:inline-flex;padding:2px;border-radius:6px;background:var(--hover);gap:2px}
+.tri button{height:22px;padding:0 8px;border:0;border-radius:4px;background:none;font:inherit;font-size:12px;font-weight:500;color:var(--ink3);cursor:pointer;transition:background-color var(--dur-quick) ease,color var(--dur-quick) ease,box-shadow var(--dur-quick) ease}
+.tri button:hover{color:var(--ink)}
+.tri button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px var(--rule)}
+.tri button.ask[aria-pressed="true"]{color:var(--you-ink)}
+.fct{display:flex;flex-wrap:wrap;gap:8px}
+.fc{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px 0 6px;border-radius:6px;border:1px solid var(--rule2);background:var(--bg);font:inherit;font-size:13px;font-weight:500;color:var(--ink2);cursor:pointer;transition:border-color var(--dur-quick) ease,color var(--dur-quick) ease,transform var(--dur-quick) var(--ease-out)}
+.fc:hover{border-color:var(--ink3)}
+.fc:active{transform:scale(.97)}
+.fc[aria-pressed="true"]{border-color:var(--ink);color:var(--ink)}
+.fc .fb{width:18px;height:18px}
+.ok{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 12px;border-radius:8px;border:1px solid var(--rule);color:var(--ink);font-size:13px}
+.ok > svg{color:var(--grn);flex:none}
+.foot{display:flex;align-items:center;gap:10px;padding-top:16px;border-top:1px solid var(--rule)}
 
-.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+
+/* ADR 0037: secrets, access, environments */
+.lede{font-size:14px;color:var(--ink2);max-width:80ch}
+.ref{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 6px;border-radius:4px;background:var(--pri-t);color:var(--pri-ink);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;white-space:nowrap;vertical-align:middle;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.ref svg{flex:none}
+.kv{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;padding:1px 5px;border-radius:4px;background:var(--hover);color:var(--ink);white-space:nowrap}
 .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px}
-.phd{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
-.phd .t{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
-.ttl{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.sline{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);flex-wrap:wrap}
-.cols{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:20px;align-items:start}
-.stack{display:flex;flex-direction:column;gap:20px;min-width:0}
-.sc{border:1px solid var(--rule);border-radius:8px;background:var(--bg);min-width:0}
-.sc>header{display:flex;align-items:center;gap:10px;min-height:46px;padding:10px 16px;border-bottom:1px solid var(--rule)}
-.sc>header h2{font-size:14px;font-weight:600}
-.sc>header .n{font-size:12px;color:var(--ink3)}
-.sc>header .r{margin-left:auto;display:flex;gap:8px;align-items:center}
-.sc .bd{padding:16px;display:flex;flex-direction:column;gap:14px}
-.fld{display:flex;flex-direction:column;gap:6px;min-width:0}
-.fld>label,.fld .lb{font-size:13px;font-weight:500;color:var(--ink);display:flex;align-items:center;gap:6px}
-.help{font-size:12px;color:var(--ink3);line-height:1.45}
-.in{height:32px;border:1px solid var(--rule2);border-radius:6px;background:var(--bg);padding:0 10px;font:inherit;font-size:14px;color:var(--ink);width:100%;min-width:0}
-.in:hover{border-color:var(--ink3)}
-.in:focus{border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-t);outline:0}
-.in[readonly]{background:var(--panel);color:var(--ink2);border-color:var(--rule)}
-.in::placeholder{color:var(--ink3)}
-.wo{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:400;color:var(--ink3)}
-.rows>li{display:flex;align-items:center;gap:12px;min-height:44px;padding:8px 16px;border-top:1px solid var(--rule);font-size:13px;min-width:0}
-.rows>li:first-child{border-top:0}
-.rows a{color:var(--ink);text-decoration:none;font-weight:500}
-.rows a:hover{color:var(--pri-ink)}
-.st{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2)}
-.st.ok .dot{color:var(--grn)}.st.run .dot{color:var(--pri)}.st.bad{color:var(--red-ink)}.st.bad .dot{color:var(--red)}.st.off .dot{color:var(--rule2)}.st.you .dot{color:var(--you)}
-.call{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;font-size:13px;border:1px solid var(--rule);background:var(--bg);color:var(--ink)}
-.call svg{flex:none;color:var(--ink3)}
-.call.red{background:var(--red-t);border-color:transparent;color:var(--red-ink)}.call.red svg{color:var(--red-ink)}
-.ib2{width:30px;height:30px;flex:none;border:0;border-radius:6px;background:none;color:var(--ink3);display:grid;place-items:center;cursor:pointer;padding:0;transition:background-color var(--dur-quick) ease,color var(--dur-quick) ease}
-.ib2:hover{background:var(--hover);color:var(--ink)}
-.btn.danger{color:var(--red-ink)}
-.btn.danger:hover{border-color:var(--red);color:var(--red-ink)}
-.btn.red{background:var(--red);border-color:var(--red);color:#fff}
-.btn[aria-disabled="true"],.btn:disabled{opacity:.5;cursor:not-allowed}
-.kc{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 6px;border-radius:4px;border:1px solid var(--rule2);border-bottom-width:2px;background:var(--bg);color:var(--ink);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;font-weight:500;line-height:1}
-.tabs{display:flex;gap:4px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
-.tabs a,.tabs button,.tabs span.tb{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 10px;margin-bottom:-1px;border:0;border-bottom:2px solid transparent;background:none;font:inherit;font-size:13px;font-weight:500;color:var(--ink2);text-decoration:none;cursor:pointer;transition:color var(--dur-quick) ease,border-color var(--dur-fast) var(--ease-out)}
-.tabs a:hover,.tabs button:hover{color:var(--ink)}
-.tabs [aria-current="page"],.tabs [aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
-.tabs .c{font-size:12px;color:var(--ink3)}
-.tabs [aria-disabled="true"]{color:var(--ink3);cursor:not-allowed}
-.empty{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:28px 0}
-.empty h2{font-size:14px;font-weight:600}
-.empty p{font-size:13px;color:var(--ink2);max-width:60ch}
-@keyframes pop{from{opacity:0;transform:scale(.97)}}
-@keyframes popd{from{opacity:0;transform:scale(.96)}}
-@keyframes fade{from{opacity:0}}
-.ovl{position:absolute;inset:0;background:rgba(15,15,15,.32);animation:fade var(--dur-fast) ease both;z-index:5}
-.g.dark .ovl{background:rgba(0,0,0,.6)}
-.dlg{position:absolute;left:50%;top:120px;margin-left:-240px;width:480px;z-index:6;background:var(--bg);border-radius:12px;box-shadow:var(--shadow-pop);padding:20px;display:flex;flex-direction:column;gap:16px;transform-origin:center;animation:popd var(--dur-fast) var(--ease-out) both}
-.dlg h2{font-size:16px;font-weight:600;line-height:1.3}
-.dlg .ds{font-size:13px;color:var(--ink2)}
-.dlg .act{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
-.dlg .x{position:absolute;top:14px;right:14px}
-.app{position:relative}
-.wrap{max-width:820px;display:flex;flex-direction:column;gap:20px}
-.kinds{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;border:0;margin:0;padding:0}
-.kinds legend{font-size:14px;font-weight:600;margin-bottom:10px;padding:0}
-.opt{display:flex;align-items:flex-start;gap:10px;padding:14px;border:1px solid var(--rule);border-radius:8px;background:var(--bg);cursor:pointer;transition:border-color var(--dur-quick) ease}
-.opt:hover{border-color:var(--rule2)}
-.opt.on{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
-.opt input{margin:3px 0 0;accent-color:var(--ink)}
-.opt .nm{display:flex;align-items:center;gap:6px;font-weight:500}
-.opt .nm svg{color:var(--ink3)}
-.opt .ds{font-size:12.5px;color:var(--ink2);line-height:1.45;margin-top:4px;display:block}
-.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-.drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:128px;width:100%;padding:20px;border:1px dashed var(--rule2);border-radius:6px;background:none;font:inherit;color:var(--ink);cursor:pointer;text-align:center;transition:background-color var(--dur-quick) ease,border-color var(--dur-quick) ease}
-.drop:hover{background:var(--panel);border-color:var(--ink3)}
+.pc{border:1px solid var(--rule);border-radius:8px;background:var(--bg);min-width:0}
+.pc>header{display:flex;align-items:center;gap:8px;min-height:48px;padding:8px 16px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.pc>header h2,.pc>header h3{font-size:14px;font-weight:600}
+.pc>header .r{margin-left:auto;font-size:12px;color:var(--ink3)}
+.pc>header .hs{font-size:12px;color:var(--ink3)}
+.pb{padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.st2{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink2);white-space:nowrap}
+.st2>i{width:6px;height:6px;border-radius:50%;background:var(--ink3);flex:none}
+.st2.g>i{background:var(--grn)}.st2.r{color:var(--red-ink)}.st2.r>i{background:var(--red)}.st2.o{color:var(--you-ink)}.st2.o>i{background:var(--you)}.st2.b>i{background:var(--pri)}
+.alert{display:flex;align-items:center;gap:12px;padding:12px 12px 12px 16px;border-radius:8px;background:var(--red-t);flex-wrap:wrap}
+.alert>svg{color:var(--red);flex:none}
+.alert>div{flex:1;min-width:200px}
+.alert b{font-weight:600}
+.alert p{font-size:13px;color:var(--ink2)}
+.strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.strip>div{display:flex;flex-direction:column;gap:4px;padding:12px 16px;border-left:1px solid var(--rule);min-width:0}
+.strip>div:first-child{border-left:0;padding-left:0}
+.strip .k{font-size:12px;color:var(--ink3)}
+.strip .v{font-size:20px;font-weight:600;letter-spacing:-.01em;line-height:1.2}
+.strip .s{font-size:12px;color:var(--ink2)}
+.seg2{display:inline-flex;padding:2px;border-radius:7px;background:var(--hover);gap:2px;max-width:100%;overflow-x:auto;scrollbar-width:none}
+.seg2>*{height:28px;padding:0 10px;border:0;border-radius:5px;background:none;font:inherit;font-size:12.5px;font-weight:500;color:var(--ink2);display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex:none;cursor:pointer}
+.seg2>.on{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px var(--rule)}
+.seg2 .k{font-size:12px;color:var(--ink3)}
+.bar2{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hint{font-size:12px;color:var(--ink3)}
+.sel{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;padding:0 6px 0 10px;border-radius:6px;border:1px solid var(--rule2);background:var(--bg);font-size:13.5px;min-width:0}
+.sel>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.sel svg{color:var(--ink3);flex:none}
+.in2{display:flex;align-items:center;min-height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--rule2);background:var(--bg);font-size:13.5px;color:var(--ink);min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.in2.mono{font-size:12.5px}
+.in2 .ph{color:var(--ink3)}
+.wo{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--ink3);font-family:"IBM Plex Sans",system-ui,sans-serif;flex:none;padding-left:8px}
+.lab{font-size:13px;font-weight:500}
+.f2{display:flex;flex-direction:column;gap:6px;min-width:0}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.x{width:32px;height:32px;border-radius:6px;display:grid;place-items:center;color:var(--ink3);border:0;background:none;padding:0;flex:none}
+.addl{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--ink2);min-height:32px;align-self:flex-start;border:0;background:none;padding:0;font-family:inherit}
+.vrow{display:grid;grid-template-columns:minmax(0,220px) 16px minmax(0,1fr) 32px;gap:8px;align-items:center}
+.vrow .eq{color:var(--ink3);text-align:center;font-family:"IBM Plex Mono",ui-monospace,monospace}
+.orow{display:flex;align-items:center;gap:8px;min-width:0}.orow>*:first-child{flex:1;min-width:0}
+.flag{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px 8px 12px;border-radius:6px;background:var(--red-t);font-size:13px}
+.flag>svg{color:var(--red);flex:none}
+.flag>span{flex:1;min-width:180px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tchip{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 4px 0 8px;border-radius:5px;border:1px solid var(--rule2);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;white-space:nowrap}
+.tchip .xx{width:20px;height:20px;display:grid;place-items:center;color:var(--ink3)}
+.tchip .xx svg{width:10px;height:10px}
+.srv{border-top:1px solid var(--rule)}
+.srv:first-child{border-top:0}
+.srv>.hd{display:flex;align-items:center;gap:10px;min-height:56px;padding:8px 16px;flex-wrap:wrap}
+.srv .nm{display:flex;flex-direction:column;line-height:1.35;min-width:0;flex:1}
+.srv .nm b{font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.srv .nm span{font-size:12.5px;color:var(--ink2);display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.srv .nm span .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.srv .nm .mrow2{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;color:var(--ink2)}
+.srv .tg{margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.srv .tools{padding:0 16px 14px 54px;display:flex;flex-direction:column;gap:0}
+.lt{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;flex:none;color:var(--ink2);background:var(--bg);border:1px solid var(--rule);font-size:11.5px;font-weight:600}
+.trow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:center;padding:8px 0;border-top:1px solid var(--rule);font-size:13px}
+.trow:first-child{border-top:0}
+.trow .mono{overflow-wrap:anywhere}
+.trow .sr2{grid-column:1/-1;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink2);flex-wrap:wrap}
+.tgrp{font-size:12px;font-weight:500;color:var(--ink3);padding:10px 0 2px}
+.tri{display:inline-flex;padding:2px;border-radius:6px;background:var(--hover);gap:2px;flex:none}
+.tri button{height:26px;padding:0 9px;border:0;border-radius:4px;background:none;font:inherit;font-size:12px;font-weight:500;color:var(--ink3);cursor:pointer}
+.tri button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px var(--rule)}
+.tri button.ask[aria-pressed="true"]{color:var(--you-ink)}
+.okrow{display:flex;align-items:center;gap:10px;padding:8px 10px 8px 12px;border-radius:6px;border:1px solid var(--rule);font-size:13px;flex-wrap:wrap}
+.okrow>svg{color:var(--grn);flex:none}
+.okrow>span{flex:1;min-width:180px}
+.chk{display:flex;flex-direction:column}
+.chk li{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 16px;border-top:1px solid var(--rule);font-size:13px}
+.chk li:first-child{border-top:0}
+.chk li>svg{flex:none}
+.yml{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;line-height:1.7;background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:8px 0;overflow-x:auto;color:var(--ink);margin:0}
+.yml .l{display:block;white-space:pre;padding:0 14px;min-height:1.7em}
+.yml .l.ad{background:var(--grn-t)}
+.yml .l.ad::before{content:"+";color:var(--grn-ink);display:inline-block;width:14px;margin-left:-14px;margin-right:0}
+.yml .k{color:var(--ink2)}.yml .c{color:var(--ink3)}.yml .s{color:var(--grn-ink)}
+.yml .r{background:var(--pri-t);color:var(--pri-ink);border-radius:3px;padding:0 2px}
+.etabs2{display:flex;align-items:flex-end;gap:2px;border-bottom:1px solid var(--rule);overflow-x:auto;scrollbar-width:none}
+.etabs2>a,.etabs2>button{flex:none;display:inline-flex;flex-direction:column;align-items:flex-start;gap:0;padding:8px 14px 9px;border:0;background:none;border-bottom:2px solid transparent;margin-bottom:-1px;text-decoration:none;color:var(--ink2);font:inherit;cursor:pointer;min-height:44px;justify-content:center}
+.etabs2>a b{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:13px;font-weight:500}
+.etabs2>a span{font-size:12px;color:var(--ink3)}
+.etabs2>a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--ink)}
+.etabs2>button{flex-direction:row;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--ink2)}
+.usedby{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--ink2)}
+.ag{display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:12px;background:var(--hover);font-size:12.5px;color:var(--ink);white-space:nowrap}
+.empty2{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px;color:var(--ink2)}
+.empty2 .addl{margin-left:auto}
+.envgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.cat{background:var(--panel);border-right:1px solid var(--rule);padding:12px;display:flex;flex-direction:column;gap:2px}
+.cs{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--rule2);background:var(--bg);color:var(--ink3);margin-bottom:8px}
+.cs input{border:0;outline:0;background:none;font:inherit;color:var(--ink);width:100%;min-width:0}
+.cl{font-size:12px;font-weight:500;color:var(--ink3);padding:10px 8px 4px}
+.ci{display:flex;align-items:center;gap:10px;min-height:44px;padding:5px 8px;border-radius:6px;text-decoration:none;color:var(--ink)}
+.ci:hover{background:var(--hover);color:var(--ink)}
+.ci[aria-current="true"]{background:var(--hover)}
+.ci .t{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.ci .t b{font-weight:500}
+.ci .t span{font-size:12px;color:var(--ink3)}
+.ci .tag{margin-left:auto;font-size:12px;font-weight:500;color:var(--ink3);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.ci .tag .dot{color:var(--grn)}
+.pick{display:grid;grid-template-columns:300px minmax(0,1fr);border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.dt{padding:24px 28px;display:flex;flex-direction:column;gap:20px;min-width:0}
+.dhd{display:flex;gap:14px;align-items:center}
+.dhd .lt{width:40px;height:40px;border-radius:8px;font-size:13px}
+.dhd h2{font-size:18px;font-weight:600;letter-spacing:-.01em}
+.back{display:none;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--ink2);text-decoration:none;min-height:32px}
+.foot2{display:flex;align-items:center;gap:10px;padding-top:16px;border-top:1px solid var(--rule);flex-wrap:wrap}
+.foot2 .btn{margin-left:auto}
+.tb{width:100%;border-collapse:collapse;font-size:13px}
+.tb th{height:40px;padding:0 16px;font-size:12px;font-weight:500;color:var(--ink3);text-align:left;white-space:nowrap;border-bottom:1px solid var(--rule)}
+.tb td{height:56px;padding:8px 16px;border-top:1px solid var(--rule);vertical-align:middle}
+.tb tbody tr:first-child td{border-top:0}
+.tb .t2{display:flex;flex-direction:column;line-height:1.35;min-width:0}
+.tb .t2 b{font-weight:500}
+.tb .t2 span{font-size:12px;color:var(--ink3)}
+.tb .grp td{height:36px;background:var(--panel);font-size:12px;font-weight:500;color:var(--ink2);padding-top:0;padding-bottom:0}
+.tb a.rowl{color:var(--ink);text-decoration:none}
+.mx th.c,.mx td.c{text-align:center}
+.yes{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ink)}
+.no{color:var(--ink3)}
+.where{display:flex;flex-wrap:wrap;gap:4px}
+.wh{display:inline-flex;align-items:center;height:22px;padding:0 7px;border-radius:4px;border:1px solid var(--rule);font-size:12px;color:var(--ink2);white-space:nowrap}
+.alist{display:none;flex-direction:column}
+.alist>li{display:flex;flex-direction:column;gap:6px;padding:12px 16px;border-top:1px solid var(--rule);min-width:0}
+.alist>li:first-child{border-top:0}
+.alist .r1{display:flex;align-items:center;gap:8px;min-width:0}
+.alist .r1 b{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alist .r1 .st2{margin-left:auto}
+.alist .r2{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--ink2)}
+.alist .gh{padding:8px 16px;background:var(--panel);font-size:12px;font-weight:500;color:var(--ink2);border-top:1px solid var(--rule)}
+.alist .gh:first-child{border-top:0}
+.lay{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:16px;align-items:start}
+.sheet{border:1px solid var(--rule);border-radius:12px;background:var(--bg);box-shadow:var(--shadow-pop);display:flex;flex-direction:column;min-width:0}
+.sheet>header{display:flex;align-items:center;gap:8px;min-height:52px;padding:8px 10px 8px 18px;border-bottom:1px solid var(--rule)}
+.sheet>header h2{font-size:15px;font-weight:600}
+.sheet .bd2{display:flex;flex-direction:column;gap:18px;padding:18px}
+.sheet>footer{display:flex;align-items:center;gap:10px;padding:14px 18px;border-top:1px solid var(--rule);flex-wrap:wrap}
+.sheet>footer .btn{margin-left:auto}
+.sos{display:flex;flex-direction:column;gap:6px}
+.so{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:8px;border:1px solid var(--rule2)}
+.so.on{border-color:var(--ink)}
+.so.off{opacity:.55}
+.so input{margin:3px 0 0;accent-color:var(--ink);flex:none}
+.so .t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.so .t b{font-weight:500;font-size:13.5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.so .t span{font-size:12.5px;color:var(--ink2)}
+.later{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:4px;background:var(--hover);font-size:11px;font-weight:500;color:var(--ink3)}
+.fct{display:flex;flex-wrap:wrap;gap:8px}
+.fc{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px 0 6px;border-radius:6px;border:1px solid var(--rule2);background:var(--bg);font:inherit;font-size:13px;font-weight:500;color:var(--ink2);cursor:pointer}
+.fc[aria-pressed="true"]{border-color:var(--ink);color:var(--ink)}
+.fc .fb{width:18px;height:18px}
+.kvl{display:grid;grid-template-columns:140px minmax(0,1fr);gap:10px 16px;font-size:13px;align-items:baseline}
+.kvl dt{color:var(--ink3)}
+.kvl dd{margin:0;min-width:0}
+.act{display:flex;flex-direction:column}
+.act li{display:flex;align-items:baseline;gap:10px;padding:10px 16px;border-top:1px solid var(--rule);font-size:13px;flex-wrap:wrap}
+.act li:first-child{border-top:0}
+.act li .tm{margin-left:auto;font-size:12px;color:var(--ink3);white-space:nowrap}
+.two2{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px;align-items:start}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.ta{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;line-height:1.7;border:1px solid var(--rule2);border-radius:6px;padding:8px 12px;white-space:pre;overflow-x:auto;color:var(--ink2);min-height:120px}
+@media (max-width:1180px){.lay,.two2{grid-template-columns:minmax(0,1fr)}.envgrid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:1000px){
+ .ed{grid-template-columns:minmax(0,1fr)!important;gap:16px!important}
+ .snav{position:static!important;flex-direction:row!important;overflow-x:auto;scrollbar-width:none;gap:4px!important}
+ .snav a{flex:none}
+ .snav a .s{display:none}
+ .pick{grid-template-columns:minmax(0,1fr)}
+ .pick .cat{display:none}
+ .back{display:inline-flex}
+ .dt{padding:18px}
+ .mxw{display:none}
+ .alist{display:flex}
+ .strip{grid-template-columns:minmax(0,1fr)}
+ .strip>div{border-left:0;padding-left:0;border-top:1px solid var(--rule)}
+ .strip>div:first-child{border-top:0}
+ .vrow{grid-template-columns:minmax(0,1fr) 32px;grid-template-areas:"n x" "v v"}
+ .vrow>.vn{grid-area:n}.vrow>.x{grid-area:x}.vrow>.vv{grid-area:v}.vrow>.eq{display:none}
+ .srv .tools{padding-left:16px}
+ .g2{grid-template-columns:minmax(0,1fr)}
+ .kvl{grid-template-columns:minmax(0,1fr);gap:2px 0}
+ .kvl dd{margin-bottom:8px}
+ .tb.wide th:nth-child(n+3),.tb.wide td:nth-child(n+3){display:none}
+ .dhide{display:none}
+}
+
+/* ADR 0038: knowledge is files */
+.kgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.kgrid .so{min-height:64px}
+.kgrid .so .t b svg{color:var(--ink3)}
+.fcl{display:flex;flex-direction:column}
+.fcl>label{display:flex;align-items:center;gap:10px;min-height:48px;padding:6px 0;border-top:1px solid var(--rule);font-size:13.5px;flex-wrap:wrap}
+.fcl>label:first-child{border-top:0;padding-top:0}
+.fcl input{accent-color:var(--ink);width:16px;height:16px;margin:0;flex:none}
+.fcl .nm{font-weight:500}
+.fcl .wt{margin-left:auto;font-size:12.5px;color:var(--ink3);text-align:right}
+.fcl .wt.on{color:var(--ink2)}
+.drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:112px;padding:16px;border:1px dashed var(--rule2);border-radius:8px;text-align:center;font-size:13px;color:var(--ink2)}
 .drop svg{color:var(--ink3)}
-.up{border:1px solid var(--rule);border-radius:6px}
-.up li{display:grid;grid-template-columns:16px minmax(0,1fr) auto auto 30px;gap:10px;align-items:center;min-height:40px;padding:4px 6px 4px 12px;border-top:1px solid var(--rule);font-size:13px}
-.up li:first-child{border-top:0}
-.up li svg{color:var(--ink3)}
-.up .sz{font-size:12px;color:var(--ink3)}
-.formfoot{display:flex;justify-content:space-between;gap:8px;padding-top:16px;border-top:1px solid var(--rule)}
+.drop b{color:var(--ink);font-weight:600}
+.uf{display:flex;flex-direction:column}
+.uf>div{display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:10px;align-items:center;min-height:44px;padding:6px 0;border-top:1px solid var(--rule);font-size:13px}
+.uf>div:first-child{border-top:0}
+.uf svg{color:var(--ink3)}
+.uf .p{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.uf .w{font-size:12.5px;color:var(--ink2);text-align:right}
+.uf .w.bad{color:var(--red-ink)}
+.meter{height:6px;border-radius:3px;background:var(--hover);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--ink)}
+.say{border:1px solid var(--rule);border-radius:8px;background:var(--panel);padding:12px 14px;font-size:13px;line-height:1.6;color:var(--ink);overflow-wrap:anywhere}
+.say code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px}
+.say .lb{display:block;font-size:12px;color:var(--ink3);margin-bottom:4px}
+.say p+p{margin-top:8px}
+.tree{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;line-height:1.75;background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:10px 14px;margin:0;white-space:pre;overflow-x:auto;color:var(--ink)}
+.tree .c{color:var(--ink3)}
+.ksec{display:flex;flex-direction:column;gap:16px;min-width:0}
+.typ{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 7px;border-radius:4px;border:1px solid var(--rule);font-size:12px;font-weight:500;color:var(--ink2);white-space:nowrap}
+.typ svg{width:12px;height:12px;color:var(--ink3)}
+.kname{display:flex;flex-direction:column;gap:2px;min-width:0}
+.kname b{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:13px;font-weight:500;color:var(--ink)}
+.kname span{font-size:12.5px;color:var(--ink2);line-height:1.4}
+.tb td.n,.tb th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.res{display:flex;flex-direction:column}
+.res>a{display:flex;flex-direction:column;gap:3px;padding:10px 0;border-top:1px solid var(--rule);text-decoration:none;color:var(--ink);min-width:0}
+.res>a:first-child{border-top:0;padding-top:0}
+.res .p{display:flex;align-items:center;gap:8px;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;font-weight:500;min-width:0}
+.res .p span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.res .p em{margin-left:auto;font-style:normal;font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:12px;color:var(--ink3);font-weight:400;white-space:nowrap}
+.res .s{font-size:13px;color:var(--ink2)}
+.res mark{background:var(--yel-t);color:var(--ink);border-radius:3px;padding:0 2px}
+.mr{display:flex;align-items:center;gap:10px;min-height:48px;padding:6px 16px;border-top:1px solid var(--rule);min-width:0}
+.mr:first-child{border-top:0}
+.mr .t{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.mr .t b{font-weight:400;font-size:13.5px;color:var(--ink);line-height:1.45}
+.mr .t span{font-size:12px;color:var(--ink3)}
+.mr .ac{display:flex;gap:2px;flex:none}
+.srow{display:grid;grid-template-columns:minmax(0,1fr) auto 32px;gap:6px 12px;align-items:center;padding:10px 16px;border-top:1px solid var(--rule)}
+.srow:first-of-type{border-top:0}
+.srow .m{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--ink2);justify-content:flex-end}
+.srow .flag{grid-column:1/-1}
+.ktag{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:4px;background:var(--hover);font-size:11px;font-weight:500;color:var(--ink2);white-space:nowrap;vertical-align:middle}
+.files .fr{display:flex;align-items:center;gap:8px;min-width:0}
+.files .fr svg{color:var(--ink3);flex:none}
+.files .fr span{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.files td{height:44px}
+.jf{display:flex;flex-direction:column;gap:8px;padding:12px 16px}
+.jf .r1{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
+.jf .r1 .mono{font-weight:500}
+.jf q{display:block;font-size:13px;color:var(--ink2)}
+.sw{position:relative;width:32px;height:18px;border-radius:9px;background:var(--ink);flex:none}
+.sw::after{content:"";position:absolute;top:2px;left:16px;width:14px;height:14px;border-radius:50%;background:var(--bg)}
+.swrow{display:flex;align-items:flex-start;gap:10px;font-size:13.5px}
+.swrow .t{display:flex;flex-direction:column;gap:2px}
+.swrow .t span{font-size:12.5px;color:var(--ink2)}
+.kfoot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:4px}
+.kfoot .hint{flex:1;min-width:200px}
+@media (max-width:1180px){.kgrid{grid-template-columns:repeat(3,minmax(0,1fr))}.srow{grid-template-columns:minmax(0,1fr) 32px}.srow .m{grid-column:1/2;justify-content:flex-start}.srow .x{grid-row:1;grid-column:2}}
+@media (max-width:1000px){.kgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.fcl .wt{margin-left:26px;text-align:left;width:100%}.srow{grid-template-columns:minmax(0,1fr) 32px}.srow .m{grid-column:1/2;justify-content:flex-start}.srow .x{grid-row:1;grid-column:2}}
 </style>
 </helmet>
-<div class="g app {{theme}}">
+<div class="g app ">
   <nav class="side" aria-label="Goal">
     <div class="srow">
-      <button class="orgb" type="button" aria-haspopup="menu" aria-label="Acme organization, switch organization"><span class="omk" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#EAB308"></circle></svg></span><span style="flex: 1; min-width: 0">Acme</span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m4 5.5 3-3 3 3M4 8.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+      <button class="orgb" type="button" aria-haspopup="menu" aria-label="Goal organization, switch organization"><span class="omk" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#EAB308"></circle></svg></span><span style="flex: 1; min-width: 0">Goal</span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m4 5.5 3-3 3 3M4 8.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
       <button class="ib" type="button" aria-label="Search, Command K"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><circle cx="8" cy="8" r="5.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="m12 12 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button>
       <button class="ib" type="button" aria-label="Collapse sidebar"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><rect x="2.5" y="3" width="13" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"></rect><path d="M7 3v12" stroke="currentColor" stroke-width="1.6"></path></svg></button>
     </div>
@@ -183,10 +417,10 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
       <a class="ni" href="V2-Home.dc.html"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 8.25 9 3.5l6 4.75V15a1 1 0 0 1-1 1h-3.25v-4h-3.5v4H4a1 1 0 0 1-1-1Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>Home</a>
       <a class="ni" href="V2-Needs-You.dc.html"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 10.5h3.75l1 2h3.5l1-2h3.75M4.5 3.5h9l2 7v4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-4Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg>Needs you<span class="cnt">5</span></a>
       <a class="ni" href="V2-Runs.dc.html"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 9.5h3l2-5.5 4 10 2-4.5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Runs</a>
-      <a class="ni" href="V2-Connections.dc.html"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M6.5 2.5v3M11.5 2.5v3M4.5 5.5h9v3a4.5 4.5 0 0 1-9 0ZM9 13v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Connections</a>
-      <a class="ni" href="V2-Credentials.dc.html"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="6" cy="12" r="3.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M8.4 9.6 15 3M12.5 5.5l2 2M10.4 7.6l1.5 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Credentials</a>
+      <a class="ni" href="V2-Access.dc.html"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M6.5 2.5v3M11.5 2.5v3M4.5 5.5h9v3a4.5 4.5 0 0 1-9 0ZM9 13v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Access</a>
+      <a class="ni" href="V2-Secrets.dc.html"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="6" cy="12" r="3.25" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M8.4 9.6 15 3M12.5 5.5l2 2M10.4 7.6l1.5 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Secrets</a>
       <a class="ni on" href="V2-Knowledge.dc.html" aria-current="page"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 4.5C3 3.7 3.7 3 4.5 3H8v12H4.5c-.8 0-1.5-.7-1.5-1.5ZM15 4.5c0-.8-.7-1.5-1.5-1.5H10v12h3.5c.8 0 1.5-.7 1.5-1.5Z" fill="none" stroke="currentColor" stroke-width="1.6"></path></svg>Knowledge</a>
-      <div class="sec"><span>Factories</span><a class="ib" href="V2-New-Factory.dc.html" aria-label="New factory"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></a></div>
+      <div class="sec"><span>Factories</span><a class="ib" href="V2-Start-Template.dc.html" aria-label="New factory"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></a></div>
       <a class="fh" href="V2-Floor.dc.html" aria-expanded="true"><span class="fb" style="background: #2B5BD7" aria-hidden="true">S</span>Software<span class="cnt" style="margin-left: auto">3</span><svg class="chev" style="margin-left: 0" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="m3.5 5.5 3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></a>
       <div class="sub">
         <a href="V2-Floor.dc.html">Floor</a>
@@ -207,42 +441,28 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
     </div>
   </nav>
   <div class="main">
-    <header class="top">
-      <div class="crumb"><a href="V2-Knowledge.dc.html">Knowledge</a><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m4.5 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg><span style="color: var(--ink); font-weight: 600">New source</span></div>
-      <div class="tact"></div>
-    </header>
-    <main class="page">
-      <div class="wrap">
-        <div class="phd"><div class="t"><h1 class="h1">New source</h1><p class="m2">Add text agents can search: files you upload, or a system Goal reaches through one of Acme’s connections.</p></div></div>
-        <section aria-labelledby="ks-kind">
-          <fieldset class="kinds"><legend id="ks-kind">Kind</legend><label class="opt on"><input type="radio" name="kind" value="upload" checked><span><span class="nm"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 12V3M5.5 6.5 9 3l3.5 3.5M3 12.5v1.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Upload</span><span class="ds">Drop files. Text, Markdown, HTML, JSON or YAML, each up to goald’s upload limit (25 MiB by default). Stored in Acme’s bucket and indexed.</span></span></label><label class="opt"><input type="radio" name="kind" value="synced"><span><span class="nm"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 6.5A5.5 5.5 0 0 0 3.2 5M2.5 9.5A5.5 5.5 0 0 0 12.8 11M3 2.5V5.2h2.7M13 13.5v-2.7h-2.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>Synced</span><span class="ds">A connection that can sync: a repository’s docs, or a Confluence space. Goal copies the text on a schedule, indexes it and links back.</span></span></label><label class="opt"><input type="radio" name="kind" value="live"><span><span class="nm"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M9 1.5 3 9h4.5L7 14.5 13 7H8.5Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg>Live</span><span class="ds">A connection that searches by itself, such as a Slack MCP server. Nothing is stored; factories listing it get its tools.</span></span></label></fieldset>
-        </section>
-        <form class="sc" aria-labelledby="ks-up">
-          <header><h2 id="ks-up">Upload</h2></header>
-          <div class="bd" style="gap: 16px">
-            <div class="grid2">
-              <div class="fld"><label for="ks-t">Title</label><input id="ks-t" class="in" value="Runbooks"><span class="help">What people see, such as Infra docs.</span></div>
-              <div class="fld"><label for="ks-n">Name</label><input id="ks-n" class="in mono" value="runbooks"><span class="help">How definitions list it. It never changes.</span></div>
-            </div>
-            <div class="fld">
-              <button class="drop" type="button" aria-describedby="ks-lim"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 12V3M5.5 6.5 9 3l3.5 3.5M3 12.5v1.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font-size: 14px"><b style="font-weight: 500">Drop files here</b> or press Enter to choose them</span><span id="ks-lim" class="help">Text, Markdown, HTML, JSON, YAML, each up to goald’s upload limit (25 MiB by default). PDF and Office files come later.</span></button>
-              <ul class="up" aria-label="Files to upload"><li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.75h5L12.5 5.25v9H4Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path><path d="M9 1.75v3.5h3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg><span class="mono" style="color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap">runbook-deploys.md</span><span class="sz">14 KiB</span><span class="st">Ready to upload</span><button class="ib2" type="button" aria-label="Remove runbook-deploys.md"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button></li><li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.75h5L12.5 5.25v9H4Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path><path d="M9 1.75v3.5h3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg><span class="mono" style="color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap">oncall-escalation.md</span><span class="sz">6.2 KiB</span><span class="st">Ready to upload</span><button class="ib2" type="button" aria-label="Remove oncall-escalation.md"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button></li><li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.75h5L12.5 5.25v9H4Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path><path d="M9 1.75v3.5h3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg><span class="mono" style="color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap">incident-template.yaml</span><span class="sz">2.1 KiB</span><span class="st">Ready to upload</span><button class="ib2" type="button" aria-label="Remove incident-template.yaml"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button></li><li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.75h5L12.5 5.25v9H4Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path><path d="M9 1.75v3.5h3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg><span class="mono" style="color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap">architecture.pdf</span><span class="sz">1.4 MiB</span><span class="st bad">Refused: not text, Markdown, HTML, JSON or YAML. PDF and Office files come later.</span><button class="ib2" type="button" aria-label="Remove architecture.pdf"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button></li></ul>
-              <span class="help">The files go up when you add the source. You can add more on its page later.</span>
-            </div>
-            <div class="formfoot"><a class="btn" href="V2-Knowledge.dc.html">Cancel</a><button class="btn pri" type="submit">Add source</button></div>
-          </div>
-        </form>
-      </div>
-    </main>
+    <header class="top"><div class="crumb"><a href="#">Knowledge</a><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m4.5 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg><span style="color: var(--ink); font-weight: 600">New source</span></div><div class="tact"></div></header>
+
+    <main class="page"><div style="display:flex;flex-direction:column;gap:6px"><h1 class="h1">New source</h1><p class="lede">Point at the documents, say when agents should read them, and pick the factories that read them.</p></div>
+<div class="lay"><div class="ksec"><section class="pc" aria-labelledby="k1"><header><h2 id="k1">Where the files are</h2></header><div class="pb"><div class="kgrid" role="radiogroup" aria-label="Where the files are"><label class="so"><input type="radio" name="kind"><span class="t"><b><svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 12V3M5.5 6.5 9 3l3.5 3.5M3 12.5v1.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>Upload</b><span>Drop files. PDF and Office files become Markdown.</span></span></label><label class="so on"><input type="radio" name="kind" checked><span class="t"><b><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="4.5" cy="3.5" r="1.6" fill="none" stroke="currentColor" stroke-width="1.4"></circle><circle cx="4.5" cy="12.5" r="1.6" fill="none" stroke="currentColor" stroke-width="1.4"></circle><circle cx="11.5" cy="6" r="1.6" fill="none" stroke="currentColor" stroke-width="1.4"></circle><path d="M4.5 5.1v5.8M11.5 7.6c0 2.4-3.5 2-6.4 3.6" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg>Repository</b><span>Folders of a GitHub or GitLab repository.</span></span></label><label class="so"><input type="radio" name="kind"><span class="t"><b><svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2.5h4a1 1 0 0 1 1 1v8a1 1 0 0 0-1-1H2Zm10 0H8a1 1 0 0 0-1 1v8a1 1 0 0 1 1-1h4Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"></path></svg>Confluence</b><span>The pages of one or more spaces.</span></span></label><label class="so off"><input type="radio" name="kind" disabled><span class="t"><b><svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.3"></circle><path d="M1.5 7h11M7 1.5c1.6 1.6 2.3 3.5 2.3 5.5S8.6 10.9 7 12.5M7 1.5C5.4 3.1 4.7 5 4.7 7s.7 3.9 2.3 5.5" fill="none" stroke="currentColor" stroke-width="1.3"></path></svg>Website<span class="later">Later</span></b><span>A docs site, page by page.</span></span></label><label class="so off"><input type="radio" name="kind" disabled><span class="t"><b><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 1.5h4.5l2.5 2.5v8.5h-7Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"></path></svg>Notion<span class="later">Later</span></b><span>Pages shared with Goal.</span></span></label><label class="so off"><input type="radio" name="kind" disabled><span class="t"><b><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M1.5 3.5h4l1.2 1.5h5.8v6.5h-11Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"></path></svg>Google Drive<span class="later">Later</span></b><span>A shared folder.</span></span></label></div></div></section>
+<section class="pc" aria-labelledby="k2"><header><h2 id="k2">Repository</h2></header><div class="pb"><div class="g2"><div class="f2"><label class="lab">Repository URL</label><span class="in2 mono">https://github.com/acme/ops</span><span class=hint>GitHub or GitLab. The URL’s host picks which.</span></div><div class="f2"><label class="lab">Branch</label><span class="in2 mono">main</span></div></div>
+<div class="g2"><div class="f2"><label class="lab">Folders</label><span class="in2 mono">docs/runbooks/**</span><span class=hint>Markdown and text files under these paths.</span></div><div class="f2"><label class="lab">Leave out <span class="m3" style="font-weight:400">optional</span></label><span class="in2 mono">**/drafts/**</span></div></div>
+<div class="g2"><div class="f2"><label class="lab">Secret</label><span class="sel"><span><span class="ref"><svg width="13" height="13" viewBox="0 0 18 18" aria-hidden="true"><circle cx="6" cy="12" r="3.25" fill="none" stroke="currentColor" stroke-width="1.8"></circle><path d="M8.4 9.6 15 3M12.5 5.5l2 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>github-token</span></span><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></span><span class=hint>Read access is enough. None for a public repository.</span></div><div></div></div></div></section>
+<section class="pc" aria-labelledby="k3"><header><h2 id="k3">What it is</h2></header><div class="pb"><div class="g2"><div class="f2"><label class="lab">Name</label><span class="in2 mono">runbooks</span><span class=hint>Its folder in every run: /knowledge/runbooks. It never changes.</span></div><div></div></div>
+<div class="f2"><label class="lab">When should agents read it?</label><span class="in2" style="border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-t)">How to fix what pages us. Read before acting on an alert.</span><span class="hint">Every run’s prompt shows this line, so say when to read it, not only what it is. 56 of 160.</span></div></div></section>
+<section class="pc" aria-labelledby="k4"><header><h2 id="k4">Factories that read it</h2><span class="r">Adds a line to each one’s draft; you publish it there</span></header><div class="pb"><div class="fcl"><label><input type="checkbox" checked><span style="display:inline-flex;gap:4px"><span class="fb" style="background:#0E7C6E" title="SRE" aria-label="SRE">R</span></span><span class="nm">SRE</span><span class="wt on">Into its draft of v15</span></label><label><input type="checkbox"><span style="display:inline-flex;gap:4px"><span class="fb" style="background:#2B5BD7" title="Software" aria-label="Software">S</span></span><span class="nm">Software</span><span class="wt">Not listed</span></label><label><input type="checkbox"><span style="display:inline-flex;gap:4px"><span class="fb" style="background:#B4461A" title="Support" aria-label="Support">P</span></span><span class="nm">Support</span><span class="wt">Not listed</span></label></div></div></section>
+<section class="pc" aria-labelledby="k5"><header><h2 id="k5">Sync</h2></header><div class="pb"><span class="seg2" role="group" aria-label="Sync" style="align-self:flex-start"><button type="button" class=on>Every hour</button><button type="button">Every day</button><button type="button">When I press Sync</button></span></div></section>
+<div class="kfoot"><span class="hint">The same from the CLI: <span class="kv">goal knowledge add</span></span><a class="btn" href="V2-Knowledge.dc.html">Cancel</a><button class="btn pri" type="button">Add source</button></div></div><div class="ksec"><section class="pc" aria-labelledby="kc"><header><h2 id="kc">Check</h2><span class="r"><button class="btn sm" type="button">Check again</button></span></header><ul class="chk"><li><span style="color:var(--grn);display:inline-flex"><svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="m5.8 9.2 2.2 2.2 4.2-4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></span><span>Read <b style="font-weight:500">acme/ops</b> on main with github-token<span class=hint style=display:block>0.9 s</span></span><span></span></li><li><span style="color:var(--grn);display:inline-flex"><svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="m5.8 9.2 2.2 2.2 4.2-4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></span><span><b style="font-weight:500">212 files, 3.1 MB</b> under docs/runbooks<span class=hint style=display:block>4 left out under drafts/</span></span><span></span></li><li><span style="color:var(--grn);display:inline-flex"><svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="m5.8 9.2 2.2 2.2 4.2-4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></span><span>SRE doesn’t check out acme/ops<span class=hint style=display:block>So its runs don’t already have these files</span></span><span></span></li><li><span style="color:var(--grn);display:inline-flex"><svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="m5.8 9.2 2.2 2.2 4.2-4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></span><span>SRE may use github-token<span class=hint style=display:block>The secret’s factories include it</span></span><span></span></li><li><span style="color:var(--grn);display:inline-flex"><svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="m5.8 9.2 2.2 2.2 4.2-4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></span><span>3.1 of 50 MB<span class=hint style=display:block>SRE: 4 of 10 sources</span></span><span></span></li></ul></section>
+<section class="pc" aria-labelledby="ka"><header><h2 id="ka">What agents will see</h2><span class="r">In every run’s prompt</span></header><div class="pb"><div class="say"><code>/knowledge/runbooks</code> — How to fix what pages us. Read before acting on an alert. 212 files: db/, k8s/, network/, storage/.</div></div></section>
+<section class="pc" aria-labelledby="kf"><header><h2 id="kf">First files</h2></header><div class="pb"><pre class="tree">runbooks/
+├── db/disk-full.md
+├── db/grow-volume.md
+├── k8s/crashloop.md
+├── k8s/evictions.md
+└── <span class="c">… 208 more</span></pre></div></section></div></div></main>
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":926}}'>
-class Component extends DCLogic {
-  renderVals() {
-    return { theme: this.props.dark ? 'dark' : '' };
-  }
-}
-</script>
+
 </body>
 </html>

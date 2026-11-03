@@ -1,6 +1,6 @@
 # ADR 0027 — Knowledge use and verdicts
 
-Status: proposed · 2026-10-27 · Builds on [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (the knowledge base and the gateway's knowledge tools), [ADR 0015](0015-overlapping-in-flight-work.md) (decision 6: the generated ADR index) and [ADR 0016](0016-ui-revamp.md) (decision 2: the screens are the contract)
+Status: superseded by [ADR 0038](0038-knowledge-is-files.md) (knowledge uses become reads counted from the trace; verdicts and `knowledge__verdict` go) · proposed 2026-10-27 · Builds on [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (the knowledge base and the gateway's knowledge tools), [ADR 0015](0015-overlapping-in-flight-work.md) (decision 6: the generated ADR index) and [ADR 0016](0016-ui-revamp.md) (decision 2: the screens are the contract)
 
 ## Context
 
