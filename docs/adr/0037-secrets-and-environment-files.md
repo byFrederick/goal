@@ -1,6 +1,6 @@
 # ADR 0037 — Secrets hold the keys, environment files say what agents reach
 
-Status: accepted · 2026-11-02
+Status: accepted · 2026-11-02 · Amended by [ADR 0039](0039-jonah-learns-from-the-line.md) (decision 5: a try's agent gets none of its environment's `env`, `files` or MCP servers)
 
 - **Replaces:**
   - [ADR 0017](0017-credentials.md), credentials.

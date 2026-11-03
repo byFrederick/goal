@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Jonah proposal</title>
+<title>Proposal 12</title>
 
 </head>
 <body>
@@ -90,50 +90,321 @@ a.card:hover{border-color:var(--rule2)}
 a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:0s!important}}
 @media (max-width:760px){.side{width:100%;min-height:0;border-right:0;border-bottom:1px solid var(--rule)}.side .navs,.side .sbot{display:none}.top{padding:8px 16px}.page{padding:16px}}
-.tabs{display:flex;gap:4px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
-.tabs a{display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 10px;color:var(--ink2);text-decoration:none;font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color var(--dur-quick) ease,border-color var(--dur-quick) ease}
-.tabs a:hover{color:var(--ink)}
-.tabs a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--ink);font-weight:600}
-.tabs .k{font-size:12px;color:var(--ink3);font-weight:500}
-.grid2{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:start}
-@media (max-width:1100px){.grid2{grid-template-columns:minmax(0,1fr)}}
-.ch{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
-.ch .h2{flex:1;min-width:0}
-.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
-.tbl th{text-align:left;font-size:12px;font-weight:500;color:var(--ink3);padding:0 14px 8px;border-bottom:1px solid var(--rule);white-space:nowrap}
-.tbl td{padding:10px 14px;border-bottom:1px solid var(--rule);vertical-align:middle}
-.tbl tr:last-child td{border-bottom:0}
-.tbl tbody tr td{transition:background-color var(--dur-quick) ease}
-.tbl tbody tr:hover td{background:var(--panel)}
-.tbl a.nm{color:var(--ink);text-decoration:none;font-weight:500}
-.tbl a.nm:hover{color:var(--pri-ink)}
-.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 16px;font-size:13px;margin:0}
-.kv dt,.kv dd{margin:0;padding:6px 0;border-top:1px solid var(--rule);min-width:0}
-.kv dt:first-of-type,.kv dt:first-of-type+dd{border-top:0}
-.kv dt{color:var(--ink3);white-space:nowrap}
-.sts{display:flex;flex-wrap:wrap;row-gap:16px}
-.st{flex:1 1 180px;min-width:0;padding:0 24px;border-left:1px solid var(--rule);display:flex;flex-direction:column;gap:4px}
-.st:first-child{padding-left:0;border-left:0}
-.st .l{font-size:12px;color:var(--ink3)}
-.st .v{font-size:24px;font-weight:500;line-height:1.15;letter-spacing:-0.01em;display:flex;align-items:baseline;gap:4px}
-.st .u{font-size:13px;color:var(--ink3);font-weight:400}
-.st .mt{font-size:12px;color:var(--ink3)}
-.up{color:var(--grn-ink)}.dn{color:var(--red-ink)}
-.tdot{display:inline-flex;gap:3px}
-.tdot i{width:8px;height:8px;border-radius:2px;display:block;background:var(--grn)}
-.tdot i.f{background:var(--red)}
-.tdot i.n{background:var(--hover)}
-.diff{border:1px solid var(--rule);border-radius:8px;overflow:hidden}
-.dfh{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--rule);font-size:13px}
-.dl0{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;line-height:1.7;display:grid;grid-template-columns:34px 18px minmax(0,1fr)}
-.dl0 span{padding:0 8px;white-space:pre-wrap;overflow-wrap:anywhere}
-.dl0 .n{color:var(--ink3);text-align:right;padding:0 6px;user-select:none}
-.dl0.add{background:var(--grn-t)}.dl0.add .s{color:var(--grn-ink)}
-.dl0.del{background:var(--red-t)}.dl0.del .s{color:var(--red-ink)}
-.dl0.ctx span{color:var(--ink2)}
-.ev{display:grid;grid-template-columns:62px minmax(0,1fr);gap:4px 12px;padding:12px 0;border-top:1px solid var(--rule);font-size:13px}
-.ev q{color:var(--ink2);quotes:"\201C" "\201D"}
+.pick{display:grid;grid-template-columns:300px minmax(0,1fr);border:1px solid var(--rule);border-radius:8px;overflow:hidden;min-height:720px}
+@media (max-width:1000px){.pick{grid-template-columns:minmax(0,1fr)}}
+.cat{background:var(--panel);border-right:1px solid var(--rule);padding:12px;display:flex;flex-direction:column;gap:2px}
+.cs{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--rule2);background:var(--bg);color:var(--ink3);margin-bottom:8px;transition:border-color var(--dur-quick) ease,box-shadow var(--dur-quick) ease}
+.cs:focus-within{border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-t)}
+.cs input{border:0;outline:0;background:none;font:inherit;color:var(--ink);width:100%}
+.cl{font-size:12px;font-weight:500;color:var(--ink3);padding:10px 8px 4px}
+.ci{display:flex;align-items:center;gap:10px;min-height:40px;padding:5px 8px;border-radius:6px;text-decoration:none;color:var(--ink);transition:background-color var(--dur-quick) ease}
+.ci:hover{background:var(--hover);color:var(--ink)}
+.ci[aria-current="true"]{background:var(--hover)}
+.ci .t{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.ci .t b{font-weight:500}
+.ci .t span{font-size:12px;color:var(--ink3)}
+.ci .tag{margin-left:auto;font-size:12px;font-weight:500;color:var(--ink3);display:inline-flex;align-items:center;gap:6px}
+.ci .tag .dot{color:var(--grn)}
+.lt{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;flex:none;color:var(--ink2);background:var(--bg);border:1px solid var(--rule);font-size:11.5px;font-weight:600}
+.dt{padding:24px 28px;display:flex;flex-direction:column;gap:20px;min-width:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld > span,.fld > label{font-size:13px;font-weight:500}
+.in{height:32px;border-radius:6px;border:1px solid var(--rule2);padding:0 10px;font:inherit;font-size:14px;color:var(--ink);background:var(--bg);display:flex;align-items:center}
+.radios{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.rad{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:8px;border:1px solid var(--rule2);cursor:pointer;transition:border-color var(--dur-quick) ease,background-color var(--dur-quick) ease}
+.rad:hover{border-color:var(--ink3)}
+.rad.on{border-color:var(--ink)}
+.rad input{margin:3px 0 0;accent-color:var(--ink)}
+.tl{border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.th{display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--panel);font-size:12px;font-weight:500;color:var(--ink2);border-bottom:1px solid var(--rule)}
+.tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:6px 8px 6px 12px;border-top:1px solid var(--rule);font-size:13px}
+.tr:first-of-type{border-top:0}
+.tri{display:inline-flex;padding:2px;border-radius:6px;background:var(--hover);gap:2px}
+.tri button{height:22px;padding:0 8px;border:0;border-radius:4px;background:none;font:inherit;font-size:12px;font-weight:500;color:var(--ink3);cursor:pointer;transition:background-color var(--dur-quick) ease,color var(--dur-quick) ease,box-shadow var(--dur-quick) ease}
+.tri button:hover{color:var(--ink)}
+.tri button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px var(--rule)}
+.tri button.ask[aria-pressed="true"]{color:var(--you-ink)}
+.fct{display:flex;flex-wrap:wrap;gap:8px}
+.fc{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px 0 6px;border-radius:6px;border:1px solid var(--rule2);background:var(--bg);font:inherit;font-size:13px;font-weight:500;color:var(--ink2);cursor:pointer;transition:border-color var(--dur-quick) ease,color var(--dur-quick) ease,transform var(--dur-quick) var(--ease-out)}
+.fc:hover{border-color:var(--ink3)}
+.fc:active{transform:scale(.97)}
+.fc[aria-pressed="true"]{border-color:var(--ink);color:var(--ink)}
+.fc .fb{width:18px;height:18px}
+.ok{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 12px;border-radius:8px;border:1px solid var(--rule);color:var(--ink);font-size:13px}
+.ok > svg{color:var(--grn);flex:none}
+.foot{display:flex;align-items:center;gap:10px;padding-top:16px;border-top:1px solid var(--rule)}
 
+
+/* ADR 0037: secrets, access, environments */
+.lede{font-size:14px;color:var(--ink2);max-width:80ch}
+.ref{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 6px;border-radius:4px;background:var(--pri-t);color:var(--pri-ink);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;white-space:nowrap;vertical-align:middle;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.ref svg{flex:none}
+.kv{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;padding:1px 5px;border-radius:4px;background:var(--hover);color:var(--ink);white-space:nowrap}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px}
+.pc{border:1px solid var(--rule);border-radius:8px;background:var(--bg);min-width:0}
+.pc>header{display:flex;align-items:center;gap:8px;min-height:48px;padding:8px 16px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.pc>header h2,.pc>header h3{font-size:14px;font-weight:600}
+.pc>header .r{margin-left:auto;font-size:12px;color:var(--ink3)}
+.pc>header .hs{font-size:12px;color:var(--ink3)}
+.pb{padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.st2{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink2);white-space:nowrap}
+.st2>i{width:6px;height:6px;border-radius:50%;background:var(--ink3);flex:none}
+.st2.g>i{background:var(--grn)}.st2.r{color:var(--red-ink)}.st2.r>i{background:var(--red)}.st2.o{color:var(--you-ink)}.st2.o>i{background:var(--you)}.st2.b>i{background:var(--pri)}
+.alert{display:flex;align-items:center;gap:12px;padding:12px 12px 12px 16px;border-radius:8px;background:var(--red-t);flex-wrap:wrap}
+.alert>svg{color:var(--red);flex:none}
+.alert>div{flex:1;min-width:200px}
+.alert b{font-weight:600}
+.alert p{font-size:13px;color:var(--ink2)}
+.strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.strip>div{display:flex;flex-direction:column;gap:4px;padding:12px 16px;border-left:1px solid var(--rule);min-width:0}
+.strip>div:first-child{border-left:0;padding-left:0}
+.strip .k{font-size:12px;color:var(--ink3)}
+.strip .v{font-size:20px;font-weight:600;letter-spacing:-.01em;line-height:1.2}
+.strip .s{font-size:12px;color:var(--ink2)}
+.seg2{display:inline-flex;padding:2px;border-radius:7px;background:var(--hover);gap:2px;max-width:100%;overflow-x:auto;scrollbar-width:none}
+.seg2>*{height:28px;padding:0 10px;border:0;border-radius:5px;background:none;font:inherit;font-size:12.5px;font-weight:500;color:var(--ink2);display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex:none;cursor:pointer}
+.seg2>.on{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px var(--rule)}
+.seg2 .k{font-size:12px;color:var(--ink3)}
+.bar2{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hint{font-size:12px;color:var(--ink3)}
+.sel{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;padding:0 6px 0 10px;border-radius:6px;border:1px solid var(--rule2);background:var(--bg);font-size:13.5px;min-width:0}
+.sel>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.sel svg{color:var(--ink3);flex:none}
+.in2{display:flex;align-items:center;min-height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--rule2);background:var(--bg);font-size:13.5px;color:var(--ink);min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.in2.mono{font-size:12.5px}
+.in2 .ph{color:var(--ink3)}
+.wo{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--ink3);font-family:"IBM Plex Sans",system-ui,sans-serif;flex:none;padding-left:8px}
+.lab{font-size:13px;font-weight:500}
+.f2{display:flex;flex-direction:column;gap:6px;min-width:0}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.x{width:32px;height:32px;border-radius:6px;display:grid;place-items:center;color:var(--ink3);border:0;background:none;padding:0;flex:none}
+.addl{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--ink2);min-height:32px;align-self:flex-start;border:0;background:none;padding:0;font-family:inherit}
+.vrow{display:grid;grid-template-columns:minmax(0,220px) 16px minmax(0,1fr) 32px;gap:8px;align-items:center}
+.vrow .eq{color:var(--ink3);text-align:center;font-family:"IBM Plex Mono",ui-monospace,monospace}
+.orow{display:flex;align-items:center;gap:8px;min-width:0}.orow>*:first-child{flex:1;min-width:0}
+.flag{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px 8px 12px;border-radius:6px;background:var(--red-t);font-size:13px}
+.flag>svg{color:var(--red);flex:none}
+.flag>span{flex:1;min-width:180px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tchip{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 4px 0 8px;border-radius:5px;border:1px solid var(--rule2);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;white-space:nowrap}
+.tchip .xx{width:20px;height:20px;display:grid;place-items:center;color:var(--ink3)}
+.tchip .xx svg{width:10px;height:10px}
+.srv{border-top:1px solid var(--rule)}
+.srv:first-child{border-top:0}
+.srv>.hd{display:flex;align-items:center;gap:10px;min-height:56px;padding:8px 16px;flex-wrap:wrap}
+.srv .nm{display:flex;flex-direction:column;line-height:1.35;min-width:0;flex:1}
+.srv .nm b{font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.srv .nm span{font-size:12.5px;color:var(--ink2);display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.srv .nm span .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.srv .nm .mrow2{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;color:var(--ink2)}
+.srv .tg{margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.srv .tools{padding:0 16px 14px 54px;display:flex;flex-direction:column;gap:0}
+.lt{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;flex:none;color:var(--ink2);background:var(--bg);border:1px solid var(--rule);font-size:11.5px;font-weight:600}
+.trow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:center;padding:8px 0;border-top:1px solid var(--rule);font-size:13px}
+.trow:first-child{border-top:0}
+.trow .mono{overflow-wrap:anywhere}
+.trow .sr2{grid-column:1/-1;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink2);flex-wrap:wrap}
+.tgrp{font-size:12px;font-weight:500;color:var(--ink3);padding:10px 0 2px}
+.tri{display:inline-flex;padding:2px;border-radius:6px;background:var(--hover);gap:2px;flex:none}
+.tri button{height:26px;padding:0 9px;border:0;border-radius:4px;background:none;font:inherit;font-size:12px;font-weight:500;color:var(--ink3);cursor:pointer}
+.tri button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px var(--rule)}
+.tri button.ask[aria-pressed="true"]{color:var(--you-ink)}
+.okrow{display:flex;align-items:center;gap:10px;padding:8px 10px 8px 12px;border-radius:6px;border:1px solid var(--rule);font-size:13px;flex-wrap:wrap}
+.okrow>svg{color:var(--grn);flex:none}
+.okrow>span{flex:1;min-width:180px}
+.chk{display:flex;flex-direction:column}
+.chk li{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 16px;border-top:1px solid var(--rule);font-size:13px}
+.chk li:first-child{border-top:0}
+.chk li>svg{flex:none}
+.yml{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;line-height:1.7;background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:8px 0;overflow-x:auto;color:var(--ink);margin:0}
+.yml .l{display:block;white-space:pre;padding:0 14px;min-height:1.7em}
+.yml .l.ad{background:var(--grn-t)}
+.yml .l.ad::before{content:"+";color:var(--grn-ink);display:inline-block;width:14px;margin-left:-14px;margin-right:0}
+.yml .k{color:var(--ink2)}.yml .c{color:var(--ink3)}.yml .s{color:var(--grn-ink)}
+.yml .r{background:var(--pri-t);color:var(--pri-ink);border-radius:3px;padding:0 2px}
+.etabs2{display:flex;align-items:flex-end;gap:2px;border-bottom:1px solid var(--rule);overflow-x:auto;scrollbar-width:none}
+.etabs2>a,.etabs2>button{flex:none;display:inline-flex;flex-direction:column;align-items:flex-start;gap:0;padding:8px 14px 9px;border:0;background:none;border-bottom:2px solid transparent;margin-bottom:-1px;text-decoration:none;color:var(--ink2);font:inherit;cursor:pointer;min-height:44px;justify-content:center}
+.etabs2>a b{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:13px;font-weight:500}
+.etabs2>a span{font-size:12px;color:var(--ink3)}
+.etabs2>a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--ink)}
+.etabs2>button{flex-direction:row;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--ink2)}
+.usedby{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--ink2)}
+.ag{display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:12px;background:var(--hover);font-size:12.5px;color:var(--ink);white-space:nowrap}
+.empty2{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px;color:var(--ink2)}
+.empty2 .addl{margin-left:auto}
+.envgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.cat{background:var(--panel);border-right:1px solid var(--rule);padding:12px;display:flex;flex-direction:column;gap:2px}
+.cs{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--rule2);background:var(--bg);color:var(--ink3);margin-bottom:8px}
+.cs input{border:0;outline:0;background:none;font:inherit;color:var(--ink);width:100%;min-width:0}
+.cl{font-size:12px;font-weight:500;color:var(--ink3);padding:10px 8px 4px}
+.ci{display:flex;align-items:center;gap:10px;min-height:44px;padding:5px 8px;border-radius:6px;text-decoration:none;color:var(--ink)}
+.ci:hover{background:var(--hover);color:var(--ink)}
+.ci[aria-current="true"]{background:var(--hover)}
+.ci .t{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.ci .t b{font-weight:500}
+.ci .t span{font-size:12px;color:var(--ink3)}
+.ci .tag{margin-left:auto;font-size:12px;font-weight:500;color:var(--ink3);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.ci .tag .dot{color:var(--grn)}
+.pick{display:grid;grid-template-columns:300px minmax(0,1fr);border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.dt{padding:24px 28px;display:flex;flex-direction:column;gap:20px;min-width:0}
+.dhd{display:flex;gap:14px;align-items:center}
+.dhd .lt{width:40px;height:40px;border-radius:8px;font-size:13px}
+.dhd h2{font-size:18px;font-weight:600;letter-spacing:-.01em}
+.back{display:none;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--ink2);text-decoration:none;min-height:32px}
+.foot2{display:flex;align-items:center;gap:10px;padding-top:16px;border-top:1px solid var(--rule);flex-wrap:wrap}
+.foot2 .btn{margin-left:auto}
+.tb{width:100%;border-collapse:collapse;font-size:13px}
+.tb th{height:40px;padding:0 16px;font-size:12px;font-weight:500;color:var(--ink3);text-align:left;white-space:nowrap;border-bottom:1px solid var(--rule)}
+.tb td{height:56px;padding:8px 16px;border-top:1px solid var(--rule);vertical-align:middle}
+.tb tbody tr:first-child td{border-top:0}
+.tb .t2{display:flex;flex-direction:column;line-height:1.35;min-width:0}
+.tb .t2 b{font-weight:500}
+.tb .t2 span{font-size:12px;color:var(--ink3)}
+.tb .grp td{height:36px;background:var(--panel);font-size:12px;font-weight:500;color:var(--ink2);padding-top:0;padding-bottom:0}
+.tb a.rowl{color:var(--ink);text-decoration:none}
+.mx th.c,.mx td.c{text-align:center}
+.yes{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ink)}
+.no{color:var(--ink3)}
+.where{display:flex;flex-wrap:wrap;gap:4px}
+.wh{display:inline-flex;align-items:center;height:22px;padding:0 7px;border-radius:4px;border:1px solid var(--rule);font-size:12px;color:var(--ink2);white-space:nowrap}
+.alist{display:none;flex-direction:column}
+.alist>li{display:flex;flex-direction:column;gap:6px;padding:12px 16px;border-top:1px solid var(--rule);min-width:0}
+.alist>li:first-child{border-top:0}
+.alist .r1{display:flex;align-items:center;gap:8px;min-width:0}
+.alist .r1 b{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alist .r1 .st2{margin-left:auto}
+.alist .r2{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--ink2)}
+.alist .gh{padding:8px 16px;background:var(--panel);font-size:12px;font-weight:500;color:var(--ink2);border-top:1px solid var(--rule)}
+.alist .gh:first-child{border-top:0}
+.lay{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:16px;align-items:start}
+.sheet{border:1px solid var(--rule);border-radius:12px;background:var(--bg);box-shadow:var(--shadow-pop);display:flex;flex-direction:column;min-width:0}
+.sheet>header{display:flex;align-items:center;gap:8px;min-height:52px;padding:8px 10px 8px 18px;border-bottom:1px solid var(--rule)}
+.sheet>header h2{font-size:15px;font-weight:600}
+.sheet .bd2{display:flex;flex-direction:column;gap:18px;padding:18px}
+.sheet>footer{display:flex;align-items:center;gap:10px;padding:14px 18px;border-top:1px solid var(--rule);flex-wrap:wrap}
+.sheet>footer .btn{margin-left:auto}
+.sos{display:flex;flex-direction:column;gap:6px}
+.so{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:8px;border:1px solid var(--rule2)}
+.so.on{border-color:var(--ink)}
+.so.off{opacity:.55}
+.so input{margin:3px 0 0;accent-color:var(--ink);flex:none}
+.so .t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.so .t b{font-weight:500;font-size:13.5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.so .t span{font-size:12.5px;color:var(--ink2)}
+.later{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:4px;background:var(--hover);font-size:11px;font-weight:500;color:var(--ink3)}
+.fct{display:flex;flex-wrap:wrap;gap:8px}
+.fc{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px 0 6px;border-radius:6px;border:1px solid var(--rule2);background:var(--bg);font:inherit;font-size:13px;font-weight:500;color:var(--ink2);cursor:pointer}
+.fc[aria-pressed="true"]{border-color:var(--ink);color:var(--ink)}
+.fc .fb{width:18px;height:18px}
+.kvl{display:grid;grid-template-columns:140px minmax(0,1fr);gap:10px 16px;font-size:13px;align-items:baseline}
+.kvl dt{color:var(--ink3)}
+.kvl dd{margin:0;min-width:0}
+.act{display:flex;flex-direction:column}
+.act li{display:flex;align-items:baseline;gap:10px;padding:10px 16px;border-top:1px solid var(--rule);font-size:13px;flex-wrap:wrap}
+.act li:first-child{border-top:0}
+.act li .tm{margin-left:auto;font-size:12px;color:var(--ink3);white-space:nowrap}
+.two2{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px;align-items:start}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.ta{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;line-height:1.7;border:1px solid var(--rule2);border-radius:6px;padding:8px 12px;white-space:pre;overflow-x:auto;color:var(--ink2);min-height:120px}
+@media (max-width:1180px){.lay,.two2{grid-template-columns:minmax(0,1fr)}.envgrid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:1000px){
+ .ed{grid-template-columns:minmax(0,1fr)!important;gap:16px!important}
+ .snav{position:static!important;flex-direction:row!important;overflow-x:auto;scrollbar-width:none;gap:4px!important}
+ .snav a{flex:none}
+ .snav a .s{display:none}
+ .pick{grid-template-columns:minmax(0,1fr)}
+ .pick .cat{display:none}
+ .back{display:inline-flex}
+ .dt{padding:18px}
+ .mxw{display:none}
+ .alist{display:flex}
+ .strip{grid-template-columns:minmax(0,1fr)}
+ .strip>div{border-left:0;padding-left:0;border-top:1px solid var(--rule)}
+ .strip>div:first-child{border-top:0}
+ .vrow{grid-template-columns:minmax(0,1fr) 32px;grid-template-areas:"n x" "v v"}
+ .vrow>.vn{grid-area:n}.vrow>.x{grid-area:x}.vrow>.vv{grid-area:v}.vrow>.eq{display:none}
+ .srv .tools{padding-left:16px}
+ .g2{grid-template-columns:minmax(0,1fr)}
+ .kvl{grid-template-columns:minmax(0,1fr);gap:2px 0}
+ .kvl dd{margin-bottom:8px}
+ .tb.wide th:nth-child(n+3),.tb.wide td:nth-child(n+3){display:none}
+ .dhide{display:none}
+}
+
+/* ADR 0039: Jonah learns from the line */
+.jtabs{display:flex;gap:4px;border-bottom:1px solid var(--rule);overflow-x:auto;scrollbar-width:none}
+.jtabs::-webkit-scrollbar{display:none}
+.jtabs a{flex:none;height:38px;padding:0 10px;display:inline-flex;align-items:center;gap:6px;font-size:13.5px;color:var(--ink2);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px}
+.jtabs a[aria-current]{color:var(--ink);font-weight:500;border-bottom-color:var(--ink)}
+.jtabs a span{font-size:12px;color:var(--ink3)}
+.vd{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:4px;font-size:12px;font-weight:500;white-space:nowrap}
+.vd.g{background:var(--grn-t);color:var(--grn-ink)}.vd.r{background:var(--red-t);color:var(--red-ink)}.vd.n{background:var(--hover);color:var(--ink2)}
+.pcd{display:flex;flex-direction:column;gap:10px;padding:16px;border-top:1px solid var(--rule)}
+.pcd:first-of-type{border-top:0}
+.pcd .tg{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pcd .tg .when{margin-left:auto;font-size:12px;color:var(--ink3)}
+.pcd h3{font-size:15px;font-weight:600}
+.pcd .mt{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:13px;color:var(--ink2)}
+.pcd .mt b{font-weight:600;color:var(--ink)}
+.pcd .pf{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--ink3)}
+.pcd .pf .btn{margin-left:auto}
+.typ{display:inline-flex;align-items:center;height:20px;padding:0 6px;border-radius:4px;border:1px solid var(--rule);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;color:var(--ink2);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.wrow{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.3fr) auto;gap:6px 16px;align-items:center;padding:12px 16px;border-top:1px solid var(--rule);font-size:13px}
+.wrow:first-of-type{border-top:0}
+.wrow .t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.wrow .t b{font-weight:500}
+.wrow .t span{font-size:12px;color:var(--ink3)}
+.wrow .v{display:flex;align-items:center;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.wrow.two{grid-template-columns:minmax(0,1fr) auto}
+.df{border:1px solid var(--rule);border-radius:8px;overflow:hidden;min-width:0}
+.df>header{display:flex;align-items:center;gap:8px;min-height:38px;padding:0 12px;border-bottom:1px solid var(--rule);background:var(--panel)}
+.df>header .p{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.df>header .s{margin-left:auto;font-size:12px;color:var(--ink3);white-space:nowrap}
+.df .bd{padding:6px 0}
+.df .r{display:grid;grid-template-columns:34px 16px minmax(0,1fr);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;line-height:1.65;padding:1px 12px 1px 0}
+.df .r .n{color:var(--ink3);text-align:right;padding-right:8px}
+.df .r .g{color:var(--ink3)}
+.df .r.a{background:var(--grn-t)}.df .r.a .g{color:var(--grn-ink)}
+.df .r.d{background:var(--red-t)}.df .r.d .g{color:var(--red-ink)}
+.evl{display:flex;flex-direction:column}
+.evl .er{display:grid;grid-template-columns:56px minmax(0,1fr) auto;gap:4px 12px;align-items:baseline;padding:10px 16px;border-top:1px solid var(--rule);font-size:13px}
+.evl .er:first-child{border-top:0}
+.evl .er .k{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;color:var(--ink2)}
+.evl .er .w{font-size:12px;color:var(--ink3);white-space:nowrap}
+.evl .er b{font-weight:500}
+.evl .er q{quotes:none;display:block;color:var(--ink2);margin-top:2px}
+.trl{display:flex;flex-direction:column}
+.trl .tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;padding:9px 16px;border-top:1px solid var(--rule);font-size:13px}
+.trl .tr:first-child{border-top:0}
+.trl .tr .k{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trl .tr .k .mono{color:var(--ink2);margin-right:6px}
+.trl .tr .w{grid-column:1/-1;font-size:12px;color:var(--ink3)}
+.trl .sb{padding:10px 16px 6px;font-size:12px;font-weight:500;color:var(--ink3);border-top:1px solid var(--rule);background:var(--panel)}
+.cl3{display:grid;place-items:center;height:30px;border-radius:5px;font-size:12.5px;font-weight:500;font-variant-numeric:tabular-nums}
+.cl3.c3{background:var(--grn-t);color:var(--grn-ink)}.cl3.c2{background:var(--hover);color:var(--ink)}.cl3.c1,.cl3.c0{background:var(--red-t);color:var(--red-ink)}
+.pgr{width:100%;border-collapse:separate;border-spacing:6px;font-size:12.5px;table-layout:fixed}
+.pgr th{font-size:12px;font-weight:500;color:var(--ink3);text-align:center;padding:0 0 2px}
+.pgr th:first-child,.pgr td:first-child{text-align:left;width:46%}
+.pgr td:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pgr td:first-child .mono{color:var(--ink2)}
+.num{font-variant-numeric:tabular-nums}
+.ii{position:relative;display:inline-flex;vertical-align:middle;flex:none}
+.ii>button{position:relative;width:20px;height:20px;display:grid;place-items:center;border:0;background:none;color:var(--ink3);border-radius:4px;cursor:help;padding:0}
+.ii>button::after{content:"";position:absolute;inset:-12px}
+.ii>button:hover,.ii>button:focus-visible{color:var(--ink)}
+.ii>button svg{width:14px;height:14px}
+.ii [role=tooltip]{position:absolute;z-index:5;left:-8px;top:calc(100% + 6px);width:max-content;max-width:min(280px,70vw);padding:8px 10px;border-radius:8px;background:var(--bg);box-shadow:var(--shadow-pop);font-size:12.5px;font-weight:400;line-height:1.45;color:var(--ink2);text-align:left;white-space:normal;opacity:0;visibility:hidden;transform:scale(.98);transform-origin:top left;transition:opacity 150ms ease-out,transform 150ms ease-out,visibility 0s 150ms;pointer-events:none}
+.ii.rt [role=tooltip]{left:auto;right:-8px;transform-origin:top right}
+.ii:hover [role=tooltip],.ii:focus-within [role=tooltip]{opacity:1;visibility:visible;transform:none;transition-delay:80ms,80ms,0s}
+@media (prefers-reduced-motion:reduce){.ii [role=tooltip]{transition:none}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.jgrid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);gap:16px;align-items:start}
+.skip{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:8px;background:var(--hover);font-size:13px;color:var(--ink2)}
+.skip svg{flex:none;margin-top:2px;color:var(--ink3)}
+.skip b{color:var(--ink);font-weight:500}
+@media (max-width:1180px){.jgrid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:1000px){.wrow{grid-template-columns:minmax(0,1fr) auto}.wrow>.t:nth-child(2){grid-column:1/2;grid-row:2}.wrow .v{grid-column:2;grid-row:1/3}
+.evl .er{grid-template-columns:48px minmax(0,1fr)}.evl .er .w{grid-column:2}}
 </style>
 </helmet>
 <div class="g app ">
@@ -159,7 +430,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
         <a href="V2-Items.dc.html">Items</a>
         <a href="V2-Agents.dc.html">Agents</a>
         <a href="V2-Intake.dc.html">Intake</a>
-        <a class="on" href="V2-Jonah.dc.html" aria-current="page">Jonah<span class="cnt n" style="height: 18px; font-size: 11px">2</span></a>
+        <a href="V2-Jonah.dc.html">Jonah<span class="cnt n" style="height: 18px; font-size: 11px">2</span></a>
         <a href="V2-Definition.dc.html">Definition</a>
         <a href="V2-Factory-Settings.dc.html">Settings</a>
       </div>
@@ -172,86 +443,29 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
     </div>
   </nav>
   <div class="main">
+    <header class="top"><div class="crumb"><span class="fb" style="background: #2B5BD7; width: 20px; height: 20px; font-size: 11px" aria-hidden="true">S</span><a href="#">Software</a><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m4.5 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg><a href="#">Jonah</a><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m4.5 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg><span style="color: var(--ink); font-weight: 600">Proposal 12</span></div><div class="tact"><a class="btn" href="#">Edit</a><a class="btn" href="#">Reject with a reason</a><a class="btn pri" href="#">Approve and publish v41</a></div></header>
 
-    <header class="top">
-      <div class="crumb"><span class="fb" style="background: #2B5BD7; width: 20px; height: 20px; font-size: 11px" aria-hidden="true">S</span><a href="V2-Floor.dc.html">Software</a><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m4.5 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg><a href="V2-Jonah.dc.html">Jonah</a><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m4.5 2.5 3.5 3.5-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg><span style="color: var(--ink); font-weight: 600">Proposal 7</span></div>
-      <div class="tact">
-        <button class="btn" type="button">Edit</button>
-        <button class="btn warn" type="button">Reject with a reason</button>
-        <button class="btn pri" type="button">Approve and publish v22</button>
-      </div>
-    </header>
-
-    <main class="page">
-      <div style="display: flex; flex-direction: column; gap: 10px">
-        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap"><span class="chip you"><span class="dot"></span>Waiting for your review</span><span class="sm m3">Proposed by Jonah 2 h ago, after 4 runs review sent back</span></div>
-        <h1 class="h1">Ask frontend-engineer for a screenshot of every UI change</h1>
-      </div>
-      <nav class="tabs" aria-label="Jonah"><a href="V2-Jonah.dc.html">Overview</a><a href="V2-Proposal.dc.html" aria-current="page">Proposals<span class="k">2</span></a><a href="V2-Judges.dc.html">Judges<span class="k">4</span></a><a href="V2-Evals.dc.html">Evals<span class="k">5</span></a><a href="V2-Bake-off.dc.html">Bake-offs<span class="k">1</span></a></nav>
-
-      <div class="sts" aria-label="Expected effect">
-        <div class="st"><span class="l">Sent back, frontend lane</span><span class="v">about 10<span class="u">%</span></span><span class="mt">Now 18%, <span class="up">−8 pts</span>; estimated from the 4 runs</span></div>
-        <div class="st"><span class="l">New eval case, 5 tries</span><span class="v">5<span class="u">of 5</span></span><span class="mt">Now 3 of 5, <span class="up">+2</span>; other cases unchanged, 5 of 5</span></div>
-        <div class="st"><span class="l">Cost per item</span><span class="v">+$0.04</span><span class="mt">Screenshots add about 2 turns</span></div>
-      </div>
-
-      <div class="grid2">
-        <div style="display: flex; flex-direction: column; gap: 18px; min-width: 0">
-          <section aria-labelledby="ch-h" style="display: flex; flex-direction: column; gap: 12px">
-            <div class="ch" style="margin-bottom: 0"><h2 id="ch-h" class="h2">Changes to the definition</h2><span class="sm m3">2 files, v21 to v22</span></div>
-            <div class="diff">
-              <div class="dfh"><span class="code" style="font-weight: 500">agents/frontend-engineer.md</span><span class="m3" style="margin-left: auto"><span style="color: var(--grn-ink)">+2</span></span></div>
-              <div class="dl0 ctx"><span class="n">41</span><span class="s"></span><span>## Before you open a pull request</span></div>
-              <div class="dl0 ctx"><span class="n">42</span><span class="s"></span><span></span></div>
-              <div class="dl0 ctx"><span class="n">43</span><span class="s"></span><span>Run task check:changed and fix what fails.</span></div>
-              <div class="dl0 add"><span class="n">44</span><span class="s">+</span><span>For every change under apps/web, attach a screenshot of each changed screen,</span></div>
-              <div class="dl0 add"><span class="n">45</span><span class="s">+</span><span>in the light and the dark theme, to the pull request description.</span></div>
-              <div class="dl0 ctx"><span class="n">46</span><span class="s"></span><span>Then open the pull request with gh pr create.</span></div>
-            </div>
-            <div class="diff">
-              <div class="dfh"><span class="code" style="font-weight: 500">rules/evidence.md</span><span class="m3" style="margin-left: auto"><span style="color: var(--grn-ink)">+1</span></span></div>
-              <div class="dl0 ctx"><span class="n">12</span><span class="s"></span><span>- Tests: the command you ran and its result.</span></div>
-              <div class="dl0 add"><span class="n">13</span><span class="s">+</span><span>- UI changes: a screenshot per changed screen, light and dark.</span></div>
-              <div class="dl0 ctx"><span class="n">14</span><span class="s"></span><span>- Migrations: proof they apply from zero.</span></div>
-            </div>
-          </section>
-
-          <section class="card" aria-labelledby="ev-h" style="padding-bottom: 6px">
-            <div class="ch"><h2 id="ev-h" class="h2">Why: 4 runs review sent back</h2></div>
-            <div class="ev"><a class="chip" href="V2-Item.dc.html" style="justify-self: start">#149</a><span><b style="font-weight: 600">Empty state for Intake</b><q style="display: block; margin-top: 2px">No screenshot, so I can't check the empty state against the design.</q></span></div>
-            <div class="ev"><a class="chip" href="V2-Item.dc.html" style="justify-self: start">#138</a><span><b style="font-weight: 600">Andon dialog copy and focus order</b><q style="display: block; margin-top: 2px">Show the dialog in both themes; the focus ring is not visible in the description.</q></span></div>
-            <div class="ev"><a class="chip" href="V2-Item.dc.html" style="justify-self: start">#131</a><span><b style="font-weight: 600">Org switcher hover states</b><q style="display: block; margin-top: 2px">Criterion 3 says it works in dark mode; there is no evidence of that.</q></span></div>
-            <div class="ev"><a class="chip" href="V2-Item.dc.html" style="justify-self: start">#127</a><span><b style="font-weight: 600">Board card spacing</b><q style="display: block; margin-top: 2px">Attach a screenshot of the board after the change.</q></span></div>
-          </section>
-        </div>
-
-        <aside style="display: flex; flex-direction: column; gap: 14px; min-width: 0">
-          <section class="card" aria-labelledby="d-h" style="gap: 12px">
-            <h2 id="d-h" class="h2">Details</h2>
-            <dl class="kv">
-              <dt>Affects</dt><dd>frontend-engineer, and the evidence rule for every agent</dd>
-              <dt>Found by</dt><dd>The judge <a href="V2-Judge.dc.html" style="text-decoration: none; font-weight: 500">Review reason actionable</a> and sent-back reasons</dd>
-              <dt>Tested on</dt><dd>6 eval cases, 5 tries each, $1.80</dd>
-              <dt>Publishes</dt><dd>v22; runs in progress keep v21</dd>
-              <dt>Reviewers</dt><dd>Owners and admins</dd>
-            </dl>
-          </section>
-          <section class="card" aria-labelledby="e-h" style="gap: 10px">
-            <h2 id="e-h" class="h2">Eval results</h2>
-            <table class="tbl" style="font-size: 13px">
-              <thead><tr><th scope="col" style="padding-left: 0">Case</th><th scope="col">v21</th><th scope="col">v22</th></tr></thead>
-              <tbody>
-                <tr><td style="padding-left: 0" class="code">frontend-attaches-screenshots</td><td><span class="tdot" aria-label="3 of 5"><i></i><i></i><i></i><i class="f"></i><i class="f"></i></span></td><td><span class="tdot" aria-label="5 of 5"><i></i><i></i><i></i><i></i><i></i></span></td></tr>
-                <tr><td style="padding-left: 0" class="m2">5 existing cases</td><td>5 of 5</td><td>5 of 5</td></tr>
-              </tbody>
-            </table>
-            <span class="xs m3">The new case comes with the proposal; it replays #149.</span>
-          </section>
-        </aside>
-      </div>
-
-    </main>
+    <main class="page"><div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="st2 o"><i aria-hidden="true"></i>Waiting for your review</span><span class="hint">Jonah, 3 h ago</span></div>
+<h1 class="h1">Engineers name the proof of each acceptance criterion</h1></div>
+<nav class="jtabs" aria-label="Jonah"><a href="V2-Jonah.dc.html">Overview</a><a href="V2-Proposal.dc.html" aria-current="page">Proposals <span>14</span></a><a href="V2-Tests.dc.html">Tests <span>4</span></a></nav>
+<div class="strip">
+<div><span class="k">Sent back for a criterion, frontend</span><span class="v num">about 15%</span><span class="s">Now 30%, Jonah’s estimate</span></div>
+<div><span class="k">Tried on past items</span><span class="v num">4 of 5 fixed</span><span class="s">2 kept tests pass</span></div>
+<div><span class="k">Cost per item</span><span class="v num">+$0.06</span><span class="s">About 2 more turns</span></div></div>
+<div class="jgrid">
+<div class="col">
+<section class="pc" aria-labelledby="c-h"><header><h2 id="c-h">Changes to the definition</h2><span class="r">2 files, v40 to v41</span></header><div class="pb">
+<div class="df"><header><span class="p">rules/delivery.md</span><span class="s">+2</span></header><div class="bd"><div class="r "><span class="n">7</span><span class="g"></span><span>Keep the pull request a draft while you work and mark it ready only when the spec’s verification passes after your last push.</span></div><div class="r a"><span class="n">8</span><span class="g">+</span><span>Before you deliver, go through the acceptance criteria one by one and name what proves each: a file and line, a test or a command.</span></div><div class="r a"><span class="n">9</span><span class="g">+</span><span>A criterion you can’t point to isn’t met: keep working, or return it with met: false and what blocks it.</span></div><div class="r "><span class="n">10</span><span class="g"></span><span>One item, one pull request, within the item’s scope.</span></div></div></div>
+<div class="df"><header><span class="p">agents/frontend-engineer.md</span><span class="s">−1</span></header><div class="bd"><div class="r "><span class="n">11</span><span class="g"></span><span>Reuse packages/ui components before writing new ones.</span></div><div class="r d"><span class="n">12</span><span class="g">−</span><span>Finish every acceptance criterion before you deliver. A spec that names several screens means all of them.</span></div><div class="r "><span class="n">13</span><span class="g"></span><span>Before you deliver, run typecheck, lint and test after your last edit.</span></div></div></div></div></section>
+<section class="pc" aria-labelledby="y-h"><header><h2 id="y-h">Why</h2><span class="r">5 of 53 items</span></header><div class="evl"><div class="er"><span class="k">#511</span><span><b>Board Done cards overflow their column</b><q>“Acceptance criterion 4 is not met. The Took track must be wide enough for the longest value.”</q></span><span class="w">review</span></div><div class="er"><span class="k">#508</span><span><b>Item tabs before the side cards</b><q>“The first acceptance criterion and brief problem (1) are only partly fixed.”</q></span><span class="w">review</span></div><div class="er"><span class="k">#505</span><span><b>Board: one box per column</b><q>“Acceptance criterion 2 says the zone labels must shrink to the track. They still don’t.”</q></span><span class="w">review</span></div><div class="er"><span class="k">#502</span><span><b>Last tablet details on Definition and Board</b><q>“The top-bar change can push the actions past the right gutter, which the first criterion forbids.”</q></span><span class="w">review</span></div><div class="er"><span class="k">#382</span><span><b>Restyle the Definition form</b><q>“Acceptance criterion 1 is not met, and the build output says so itself (met: false).”</q></span><span class="w">review</span></div></div></section>
 </div>
+<div class="col">
+<section class="pc" aria-labelledby="t-h"><header><h2 id="t-h">Tried on past items</h2><span class="ii rt"><button type="button" aria-label="How tries are graded" aria-describedby="tip3"><svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M9 8v4.5M9 5.6v.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg></button><span role="tooltip" id="tip3">Build reran each item from its recorded start with v41 and only the model key, one try each. Its checks grade first, then a grader reads why the item went back. The grader called all 5 originals not fixed and their accepted versions fixed.</span></span><span class="r">41 min, $8.40</span></header><div class="trl"><div class="tr"><span class="k"><span class="mono">#511</span>Board Done cards overflow</span><span class="vd g">Fixed</span></div><div class="tr"><span class="k"><span class="mono">#508</span>Item tabs first</span><span class="vd g">Fixed</span></div><div class="tr"><span class="k"><span class="mono">#505</span>One box per column</span><span class="vd r">Not fixed</span><span class="w">Zone labels still overflow the track at 768.</span></div><div class="tr"><span class="k"><span class="mono">#502</span>Tablet details</span><span class="vd g">Fixed</span></div><div class="tr"><span class="k"><span class="mono">#382</span>Definition form</span><span class="vd g">Fixed</span></div><div class="sb">Kept regression tests of build</div><div class="tr"><span class="k"><span class="mono">#418</span>Needs you header in the top bar</span><span class="vd g">Passed</span></div><div class="tr"><span class="k"><span class="mono">#493</span>Phone fixes on three screens</span><span class="vd g">Passed</span></div></div>
+<div class="pb" style="border-top:1px solid var(--rule)">
+<div class="chips"><a class="btn sm" href="#">Try twice more, about $17</a></div></div></section>
+<section class="pc" aria-labelledby="d-h"><header><h2 id="d-h">Details</h2></header><div class="pb"><dl class="kvl"><dt>Affects</dt><dd>Backend, frontend and infra engineers</dd><dt>Found in</dt><dd>66 review send-backs on 53 items, 7 days</dd><dt>Publishes</dt><dd>v41; running items keep v40</dd><dt>Watched</dt><dd>Criterion send-backs, frontend, now 30%</dd><dt>Undo</dt><dd>Undo this change, any time</dd><dt>Reviewers</dt><dd>Owners and admins</dd></dl></div></section>
+</div></div></main>
+  </div>
 </div>
 </x-dc>
 

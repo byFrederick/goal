@@ -1,6 +1,6 @@
 # ADR 0002 — Jonah: evaluation and self-remediation
 
-Status: accepted as amended for phase 5 (2026-10-24; [amendment](#amendment--phase-5-the-minimal-loop)) · Amended 2026-10-27 by [ADR 0025](0025-judges-and-evals-as-the-screens-show-them.md) ([amendment](#amendment--2026-10-27-judges-and-evals-as-the-screens-show-them)) · Amended 2026-10-28 by [ADR 0034](0034-jonah-proposals.md) (proposals from reviews of sent-back runs, approved by publishing; [amendment line](#amendment--phase-5-the-minimal-loop)) · first proposed 2026-10-23 · amended by [ADR 0005](0005-factory-definitions-in-object-storage.md) (definitions and visible cases live in the bucket) · Plan: [docs/history/jonah/README.md](../history/jonah/README.md)
+Status: accepted as amended for phase 5 (2026-10-24; [amendment](#amendment--phase-5-the-minimal-loop)) · Amended 2026-10-27 by [ADR 0025](0025-judges-and-evals-as-the-screens-show-them.md) ([amendment](#amendment--2026-10-27-judges-and-evals-as-the-screens-show-them)) · Amended 2026-10-28 by [ADR 0034](0034-jonah-proposals.md) (proposals from reviews of sent-back runs, approved by publishing; [amendment line](#amendment--phase-5-the-minimal-loop)) · Amended 2026-11-03 by [ADR 0039](0039-jonah-learns-from-the-line.md) (judges and hand-written eval cases go; past items are the tests) · first proposed 2026-10-23 · amended by [ADR 0005](0005-factory-definitions-in-object-storage.md) (definitions and visible cases live in the bucket) · Plan: [docs/history/jonah/README.md](../history/jonah/README.md)
 
 ## Context
 
