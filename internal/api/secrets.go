@@ -210,7 +210,8 @@ func (s *server) PatchSecret(ctx context.Context, req gen.PatchSecretRequestObje
 	return gen.PatchSecret200JSONResponse(out), nil
 }
 
-// ReplaceSecretValue replaces a secret's value for the runs that start afterwards.
+// ReplaceSecretValue replaces a secret's value for the runs that start afterwards, then re-tests
+// the remote MCP servers whose headers name it; a server that fails its test never fails the replace.
 func (s *server) ReplaceSecretValue(ctx context.Context, req gen.ReplaceSecretValueRequestObject) (gen.ReplaceSecretValueResponseObject, error) {
 	by, ok := domain.ActorFrom(ctx)
 	if !ok {
@@ -228,6 +229,8 @@ func (s *server) ReplaceSecretValue(ctx context.Context, req gen.ReplaceSecretVa
 	if err != nil {
 		return nil, secretError(err)
 	}
+
+	s.retestSecretUsers(ctx, sec.Name)
 
 	out, err := s.secretOut(ctx, sec)
 	if err != nil {

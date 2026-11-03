@@ -65,6 +65,7 @@ func TestEnvironmentSchema(t *testing.T) {
 			env:  replaced(fullEnvironment, "      url: https://mcp.linear.app/mcp\n", "      url: https://mcp.linear.app/mcp\n      env: {A: b}\n"),
 			code: codeSchemaInvalid,
 		},
+		{name: "a server name that is not a slug", env: replaced(fullEnvironment, "    playwright:\n", "    play_wright: #here\n"), code: codeSchemaInvalid},
 	}
 
 	for _, tt := range tests {
@@ -74,6 +75,7 @@ func TestEnvironmentSchema(t *testing.T) {
 			f, problems := Check(checkTree(baseFactory, map[string]string{defaultEnvFile: tt.env}))
 
 			if tt.code == "" {
+				problems = withoutImageWarning(problems)
 				if len(problems) > 0 {
 					t.Fatalf("problems = %+v, want none", problems)
 				}
@@ -87,6 +89,42 @@ func TestEnvironmentSchema(t *testing.T) {
 
 			wantSchemaProblem(t, problems, tt.code, markedLine(tt.env))
 		})
+	}
+}
+
+// withoutImageWarning is problems without the image warning, which fullEnvironment's image
+// gets and TestCheck_EnvironmentImageWarns covers.
+func withoutImageWarning(problems []domain.DefinitionProblem) []domain.DefinitionProblem {
+	return slices.DeleteFunc(slices.Clone(problems), func(p domain.DefinitionProblem) bool {
+		return p.Code == codeEnvironmentImage && p.Severity == domain.SeverityWarning
+	})
+}
+
+// An environment's image publishes with a warning at spec.image: a box on Cloudflare runs only
+// the control Worker's own images, so a run there would fail on it. Without an image, no warning.
+func TestCheck_EnvironmentImageWarns(t *testing.T) {
+	t.Parallel()
+
+	withImage := baseEnvironment + "  image: ghcr.io/acme/box:2026.11 #here\n"
+
+	f, problems := Check(checkTree(baseFactory, map[string]string{defaultEnvFile: withImage}))
+	if len(problems) != 1 {
+		t.Fatalf("problems = %+v, want the image warning only", problems)
+	}
+
+	p := problems[0]
+	if p.Code != codeEnvironmentImage || p.Blocking() || p.File != defaultEnvFile || p.Line != markedLine(withImage) ||
+		p.Pointer != "/environments/default/image" || !strings.Contains(p.Message, "a box on Cloudflare runs only the Worker's own images") {
+		t.Errorf("problem = %+v; want a warning at %s line %d that a box on Cloudflare runs only the Worker's own images",
+			p, defaultEnvFile, markedLine(withImage))
+	}
+
+	if envs := f.Environments(); len(envs) != 1 || envs[0].Spec.Image != "ghcr.io/acme/box:2026.11" {
+		t.Errorf("environments = %+v, want default with its image", envs)
+	}
+
+	if _, problems := Check(checkTree(baseFactory, nil)); len(problems) != 0 {
+		t.Errorf("problems without an image = %+v, want none", problems)
 	}
 }
 
@@ -106,7 +144,7 @@ func wantSchemaProblem(t *testing.T, problems []domain.DefinitionProblem, code s
 	}
 
 	if line > 0 && p.Line != line {
-		t.Errorf("problem line = %d, want %d", p.Line, line)
+		t.Errorf("problem line = %d, want %d: %+v", p.Line, line, p)
 	}
 }
 
@@ -198,6 +236,8 @@ func runEnvRows(t *testing.T, rows []envRow) {
 
 			_, problems := Check(checkTree(tt.doc, tt.files))
 			if tt.code == "" {
+				problems = withoutImageWarning(problems)
+
 				if len(problems) > 0 {
 					t.Fatalf("problems = %+v, want none", problems)
 				}
@@ -304,7 +344,7 @@ func TestFactory_SecretRefs(t *testing.T) {
 	doc := edited(runtimeModel, runtimeModel+`    repository: { url: "https://github.com/acme/app", token: "{{gh-token}}" }`+"\n")
 
 	f, problems := Check(checkTree(doc, map[string]string{defaultEnvFile: fullEnvironment}))
-	if len(problems) > 0 {
+	if problems = withoutImageWarning(problems); len(problems) > 0 {
 		t.Fatalf("problems = %+v, want none", problems)
 	}
 

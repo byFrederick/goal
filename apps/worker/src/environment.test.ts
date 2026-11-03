@@ -60,6 +60,7 @@ describe('applyEnvironment', () => {
       env: { GOAL_FILE_1: 'level: info\n', GOAL_FILE_2: 'apiVersion: v1\n' },
       home,
       workspace: '/workspace',
+      marker: join(home, 'setup.done'),
       shell,
     });
 
@@ -77,6 +78,60 @@ describe('applyEnvironment', () => {
       { command: 'make tools', cwd: '/workspace', timeoutMs: setupTimeoutMs, present: [true, true] },
     ]);
     expect(setupTimeoutMs).toBe(30 * 60 * 1000);
+    expect(await readFile(join(home, 'setup.done'), 'utf8')).not.toContain('level: info');
+  });
+
+  it('runs setup once per box: a run that finds the marker writes the files again and runs no command', async () => {
+    const npmrc = join(home, '.npmrc');
+    const marker = join(home, 'goal/environment-setup.done');
+    const environment = environmentOf({
+      files: [{ path: '~/.npmrc', env: 'GOAL_FILE_1' }],
+      setup: ['pnpm install', 'make tools'],
+    });
+    const markerAt: boolean[] = [];
+    const { shell, calls } = recordingShell([], () => ({ code: 0, timedOut: false }));
+    const watching: Shell = async (command, opts) => {
+      markerAt.push(
+        await stat(marker).then(
+          () => true,
+          () => false,
+        ),
+      );
+      return shell(command, opts);
+    };
+    const deps = (value: string) => ({
+      env: { GOAL_FILE_1: value },
+      home,
+      workspace: '/workspace',
+      marker,
+      shell: watching,
+    });
+
+    await applyEnvironment(environment, deps('first'));
+    expect(calls.map((c) => c.command)).toEqual(['pnpm install', 'make tools']);
+    expect(markerAt).toEqual([false, false]);
+    expect(await readFile(marker, 'utf8')).not.toContain('first');
+
+    await applyEnvironment(environment, deps('second'));
+    expect(calls.map((c) => c.command)).toEqual(['pnpm install', 'make tools']);
+    expect(await readFile(npmrc, 'utf8')).toBe('second');
+  });
+
+  it('writes no marker when setup fails, so the next run in the box runs setup again', async () => {
+    const marker = join(home, 'setup.done');
+    let code = 1;
+    const { shell, calls } = recordingShell([], () => ({ code, timedOut: false }));
+    const deps = { env: {}, home, workspace: '/workspace', marker, shell };
+
+    await expect(applyEnvironment(environmentOf({ setup: ['make deps'] }), deps)).rejects.toThrow(
+      'environment setup: `make deps` exited 1',
+    );
+    await expect(stat(marker)).rejects.toThrow();
+
+    code = 0;
+    await applyEnvironment(environmentOf({ setup: ['make deps'] }), deps);
+    expect(calls.map((c) => c.command)).toEqual(['make deps', 'make deps']);
+    await stat(marker);
   });
 
   it('makes an existing file 0600 too', async () => {
@@ -88,6 +143,7 @@ describe('applyEnvironment', () => {
       env: { GOAL_FILE_1: 'new' },
       home,
       workspace: '/workspace',
+      marker: join(home, 'setup.done'),
       shell,
     });
 
@@ -103,6 +159,7 @@ describe('applyEnvironment', () => {
         env: {},
         home,
         workspace: '/workspace',
+        marker: join(home, 'setup.done'),
         shell,
       }),
     ).rejects.toThrow('environment file ~/.npmrc: its variable GOAL_FILE_1 is not set');
@@ -124,6 +181,7 @@ describe('applyEnvironment', () => {
       env: {},
       home,
       workspace: '/workspace',
+      marker: join(home, 'setup.done'),
       shell,
     }).catch((e: unknown) => e as Error);
 
@@ -144,7 +202,13 @@ describe('applyEnvironment', () => {
     });
 
     await expect(
-      applyEnvironment(environmentOf({ setup: ['sleep 9999'] }), { env: {}, home, workspace: '/workspace', shell }),
+      applyEnvironment(environmentOf({ setup: ['sleep 9999'] }), {
+        env: {},
+        home,
+        workspace: '/workspace',
+        marker: join(home, 'setup.done'),
+        shell,
+      }),
     ).rejects.toThrow('environment setup: `sleep 9999` ran past 30 minutes; its last 1 lines:\nstill installing');
   });
 });
