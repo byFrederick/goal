@@ -23,7 +23,6 @@ const (
 
 	trackerKeyValue = "tracker-key-value-for-tests-1819"
 	deployKeyValue  = "deploy-key-value-for-tests-2021"
-	envDeployKey    = "DEPLOY_KEY"
 )
 
 // addCredential creates credential n in the test organization.
@@ -178,102 +177,22 @@ func TestRunEnv_RefusesCredentialOutsideFactory(t *testing.T) {
 	}
 }
 
-// A credential whose agent list names the run's agent for the run's factory reaches the agent's
-// env as its CredentialEnvName, and no other exec's. Another agent, or another factory, gets
-// nothing; a variable a connection of the run sets refuses the run.
-func TestRunEnv_GivesListedAgentItsCredential(t *testing.T) {
-	t.Parallel()
+// A credential's agent list no longer reaches a run: credentials live in the secrets table, which
+// has none (ADR 0037 decision 18). Environment files grant a secret to an agent at run start in
+// its place (software#518), with that change's tests.
 
-	tests := []struct {
-		name string
-		cred domain.NewCredential
-		// want is the agent's value of the credential's variable, "" for none.
-		want string
-		// blocked, when set, is what the reason the run is refused with holds.
-		blocked []string
-	}{
-		{
-			name: "a listed agent", want: deployKeyValue,
-			cred: domain.NewCredential{
-				Name: credDeploy, Scope: domain.CredentialScope{All: true}, Value: deployKeyValue,
-				Agents: map[domain.FactoryID][]string{factoryID: {agWorker}},
-			},
-		},
-		{
-			name: "an agent that is not listed",
-			cred: domain.NewCredential{
-				Name: credDeploy, Scope: domain.CredentialScope{All: true}, Value: deployKeyValue,
-				Agents: map[domain.FactoryID][]string{factoryID: {agReviewer}},
-			},
-		},
-		{
-			name: "a factory outside its scope",
-			cred: domain.NewCredential{
-				Name: credDeploy, Scope: domain.CredentialScope{Factories: []domain.FactoryID{otherFactory}}, Value: deployKeyValue,
-				Agents: map[domain.FactoryID][]string{otherFactory: {agWorker}},
-			},
-		},
-		{
-			name:    "a variable a connection sets",
-			blocked: []string{"credential tracker-token", "connection " + connTracker, envTrackerToken},
-			cred: domain.NewCredential{
-				Name: "tracker-token", Scope: domain.CredentialScope{All: true}, Value: deployKeyValue,
-				Agents: map[domain.FactoryID][]string{factoryID: {agWorker}},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			line := connLine()
-			line.Stations[1].Checks = []string{makeTest}
-			h := newHarness(t, line, porttest.Succeed(`{}`))
-			h.addCredential(t, tt.cred)
-			it := h.submit(t, domain.NewItem{})
-
-			h.step(t)
-
-			if tt.blocked != nil {
-				h.expectRefused(t, it.ID, tt.blocked, deployKeyValue, trackerToken)
-				return
-			}
-
-			prepares, runs, checks := h.worker.Prepares(), h.worker.Runs(), h.worker.Checks()
-			if len(prepares) != 1 || len(runs) != 1 || len(checks) != 1 {
-				t.Fatalf("%d prepares, %d agent runs and %d checks; want one of each", len(prepares), len(runs), len(checks))
-			}
-
-			if got := runs[0].Env[envDeployKey]; got != tt.want {
-				t.Errorf("agent's %s is %q, want %q", envDeployKey, got, tt.want)
-			}
-
-			for name, env := range map[string]map[string]string{"prepare": prepares[0].Env, "check": checks[0].Env} {
-				if _, ok := env[envDeployKey]; ok {
-					t.Errorf("%s got %s", name, envDeployKey)
-				}
-			}
-		})
-	}
-}
-
-// Every value a run opens, through a connection's reference or for its agent directly, is
-// scrubbed from what the run reports: its events, its error and goald's logs.
+// Every value a run opens through a connection's reference is scrubbed from what the run reports:
+// its events, its error and goald's logs.
 func TestRunEnv_ScrubsCredentialValues(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t, refLine(), func(_ context.Context, run porttest.ExecCall, stdout io.Writer) domain.RunResult {
-		_, _ = io.WriteString(stdout, `{"type":"message","at":"2026-10-23T09:00:02Z","text":"keys `+
-			run.Env[envTrackerToken]+` and `+run.Env[envDeployKey]+`"}`+"\n")
+		_, _ = io.WriteString(stdout, `{"type":"message","at":"2026-10-23T09:00:02Z","text":"key `+
+			run.Env[envTrackerToken]+`"}`+"\n")
 
-		return domain.RunResult{Status: domain.RunFailed, Error: "gave up: " + run.Env[envTrackerToken] + " and " + run.Env[envDeployKey]}
+		return domain.RunResult{Status: domain.RunFailed, Error: "gave up: " + run.Env[envTrackerToken]}
 	})
 	h.addCredential(t, trackerKey(factoryID))
-	h.addCredential(t, domain.NewCredential{
-		Name: credDeploy, Scope: domain.CredentialScope{All: true}, Value: deployKeyValue,
-		Agents: map[domain.FactoryID][]string{factoryID: {agWorker}},
-	})
 	h.addRefConnection(t)
 	it := h.submit(t, domain.NewItem{})
 
@@ -284,8 +203,8 @@ func TestRunEnv_ScrubsCredentialValues(t *testing.T) {
 		t.Fatalf("%d runs, want 1", len(runs))
 	}
 
-	if got := runs[0].Result.Error; got != "gave up: [redacted] and [redacted]" {
-		t.Errorf("run error %q, want both credential values redacted", got)
+	if got := runs[0].Result.Error; got != "gave up: [redacted]" {
+		t.Errorf("run error %q, want the credential's value redacted", got)
 	}
 
 	reported := []string{h.logs.String()}
@@ -294,10 +213,8 @@ func TestRunEnv_ScrubsCredentialValues(t *testing.T) {
 	}
 
 	for _, r := range reported {
-		for _, secret := range []string{trackerKeyValue, deployKeyValue} {
-			if strings.Contains(r, secret) {
-				t.Errorf("a credential's value reached what the run reports:\n%s", r)
-			}
+		if strings.Contains(r, trackerKeyValue) {
+			t.Errorf("a credential's value reached what the run reports:\n%s", r)
 		}
 	}
 }
