@@ -16,6 +16,9 @@ const (
 	toolCloseIssue       = "close_issue"
 	toolEditIssue        = "edit_issue"
 	toolLabelIssue       = "label_issue"
+	toolDeleteRepo       = "delete_repo"
+	globCreate           = "create_*"
+	globDelete           = "delete_*"
 )
 
 // requested is a tool_approval_requested event as the engine writes it; input is its data as the
@@ -173,20 +176,20 @@ func TestEffectiveToolModes(t *testing.T) {
 	revokedAt, revoker := qt0, LocalUser
 	modes := map[string]ConnectionToolMode{
 		"read_issue": ToolModeAllow, toolCreateComment: ToolModeAsk, toolCloseIssue: ToolModeAsk,
-		"delete_repo": ToolModeOff, toolEditIssue: ToolModeAsk, toolLabelIssue: ToolModeAsk,
+		toolDeleteRepo: ToolModeOff, toolEditIssue: ToolModeAsk, toolLabelIssue: ToolModeAsk,
 	}
 	rules := []StandingRule{
 		{ConnectionID: conn, Tool: toolCreateComment, Agent: roleArchitect},                                          // active: allow
 		{ConnectionID: conn, Tool: toolCloseIssue, Agent: roleArchitect, RevokedAt: &revokedAt, RevokedBy: &revoker}, // revoked
 		{ConnectionID: conn, Tool: toolEditIssue, Agent: "reviewer"},                                                 // another role
 		{ConnectionID: other, Tool: toolLabelIssue, Agent: roleArchitect},                                            // another connection
-		{ConnectionID: conn, Tool: "delete_repo", Agent: roleArchitect},                                              // never lifts off
+		{ConnectionID: conn, Tool: toolDeleteRepo, Agent: roleArchitect},                                             // never lifts off
 	}
 
 	got := EffectiveToolModes(modes, rules, conn, roleArchitect)
 	want := RunToolModes{
 		Modes: map[string]ConnectionToolMode{
-			toolCloseIssue: ToolModeAsk, "delete_repo": ToolModeOff, toolEditIssue: ToolModeAsk, toolLabelIssue: ToolModeAsk,
+			toolCloseIssue: ToolModeAsk, toolDeleteRepo: ToolModeOff, toolEditIssue: ToolModeAsk, toolLabelIssue: ToolModeAsk,
 		},
 		AlwaysAllowOffered: []string{toolCloseIssue, toolEditIssue, toolLabelIssue},
 	}
@@ -227,7 +230,7 @@ func TestServerToolModes(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		file  map[string]string
+		file  map[string]ConnectionToolMode
 		cap   map[string]ConnectionToolMode
 		rules []StandingRule
 		// want is each tool's mode as the worker resolves it: the first entry it matches.
@@ -242,23 +245,26 @@ func TestServerToolModes(t *testing.T) {
 		},
 		{
 			name: "the most specific pattern comes first",
-			file: map[string]string{"*": "ask", "delete_*": "off", "delete_branch": "allow", "*_issue": "allow", "create_*": "ask"},
+			file: map[string]ConnectionToolMode{"*": ToolModeAsk, globDelete: ToolModeOff, "delete_branch": ToolModeAllow, "*_issue": ToolModeAllow, globCreate: ToolModeAsk},
 			want: map[string]ConnectionToolMode{
-				"delete_branch": ToolModeAllow, "delete_repo": ToolModeOff, "read_issue": ToolModeAllow,
+				"delete_branch": ToolModeAllow, toolDeleteRepo: ToolModeOff, "read_issue": ToolModeAllow,
 				"create_issue": ToolModeAsk, "push": ToolModeAsk,
 			},
 			list: []ToolModeEntry{
-				{"delete_branch", ToolModeAllow}, {"create_*", ToolModeAsk}, {"delete_*", ToolModeOff},
-				{"*_issue", ToolModeAllow}, {"*", ToolModeAsk},
+				{"delete_branch", ToolModeAllow},
+				{globCreate, ToolModeAsk},
+				{globDelete, ToolModeOff},
+				{"*_issue", ToolModeAllow},
+				{"*", ToolModeAsk},
 			},
 		},
 		{
 			name: "an active rule lifts an ask of its own factory, environment, server and role, never off",
-			file: map[string]string{toolCreateComment: "ask", "close_*": "ask", "delete_*": "off", toolEditIssue: "ask", "label_*": "ask"},
+			file: map[string]ConnectionToolMode{toolCreateComment: ToolModeAsk, "close_*": ToolModeAsk, globDelete: ToolModeOff, toolEditIssue: ToolModeAsk, "label_*": ToolModeAsk},
 			rules: []StandingRule{
 				rule(toolCreateComment), // an exact ask
 				rule(toolCloseIssue),    // an ask from a glob
-				rule("delete_repo"),     // off stays off
+				rule(toolDeleteRepo),    // off stays off
 				other(toolEditIssue, func(r *StandingRule) { r.RevokedAt, r.RevokedBy = &revokedAt, &revoker }),
 				other(toolEditIssue, func(r *StandingRule) { r.Agent = "reviewer" }),
 				other(toolEditIssue, func(r *StandingRule) { r.Server = "acme-docs" }),
@@ -267,27 +273,27 @@ func TestServerToolModes(t *testing.T) {
 				{ConnectionID: "c-1", Connection: server, Tool: toolLabelIssue, Agent: roleArchitect},
 			},
 			want: map[string]ConnectionToolMode{
-				toolCreateComment: ToolModeAllow, toolCloseIssue: ToolModeAllow, "close_pr": ToolModeAsk, "delete_repo": ToolModeOff,
-				toolEditIssue: ToolModeAsk, toolLabelIssue: ToolModeAsk, "read": ToolModeAllow,
+				toolCreateComment: ToolModeAllow, toolCloseIssue: ToolModeAllow, "close_pr": ToolModeAsk, toolDeleteRepo: ToolModeOff,
+				toolEditIssue: ToolModeAsk, toolLabelIssue: ToolModeAsk, "get_doc": ToolModeAllow,
 			},
 		},
 		{
 			name: "a cap makes a mode stricter, never looser",
-			file: map[string]string{"create_*": "allow", "delete_*": "off", "read": "allow"},
-			cap:  map[string]ConnectionToolMode{"*": ToolModeAsk, "delete_*": ToolModeAllow},
+			file: map[string]ConnectionToolMode{globCreate: ToolModeAllow, globDelete: ToolModeOff, "get_doc": ToolModeAllow},
+			cap:  map[string]ConnectionToolMode{"*": ToolModeAsk, globDelete: ToolModeAllow},
 			want: map[string]ConnectionToolMode{
-				"create_issue": ToolModeAsk, "delete_repo": ToolModeOff, "read": ToolModeAsk, "push": ToolModeAsk,
+				"create_issue": ToolModeAsk, toolDeleteRepo: ToolModeOff, "get_doc": ToolModeAsk, "push": ToolModeAsk,
 			},
 		},
 		{
 			name: "a cap glob that overlaps a file glob",
-			file: map[string]string{"create_*": "allow", "*": "allow"},
+			file: map[string]ConnectionToolMode{globCreate: ToolModeAllow, "*": ToolModeAllow},
 			cap:  map[string]ConnectionToolMode{"*_repo": ToolModeOff, "x*": ToolModeAsk},
 			want: map[string]ConnectionToolMode{"create_repo": ToolModeOff, "push_repo": ToolModeOff, "xray": ToolModeAsk, "push": ToolModeAllow},
 		},
 		{
 			name:  "a lifted ask under a cap of ask stays ask",
-			file:  map[string]string{toolCreateComment: "ask", toolCloseIssue: "ask"},
+			file:  map[string]ConnectionToolMode{toolCreateComment: ToolModeAsk, toolCloseIssue: ToolModeAsk},
 			cap:   map[string]ConnectionToolMode{toolCreateComment: ToolModeAsk},
 			rules: []StandingRule{rule(toolCreateComment), rule(toolCloseIssue)},
 			want:  map[string]ConnectionToolMode{toolCreateComment: ToolModeAsk, toolCloseIssue: ToolModeAllow},

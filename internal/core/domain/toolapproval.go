@@ -268,43 +268,22 @@ type ToolModeEntry struct {
 // tools a glob's entry covers can resolve to different caps, its entry takes the strictest of them,
 // so the list is never looser than the cap. Every ask in the list offers Always allow.
 func ServerToolModes(
-	file map[string]string, limit map[string]ConnectionToolMode, rules []StandingRule, factory FactoryID, environment, server, agent string,
+	file, limit map[string]ConnectionToolMode, rules []StandingRule, factory FactoryID, environment, server, agent string,
 ) []ToolModeEntry {
-	modes := make(map[string]ConnectionToolMode, len(file))
-	for p, m := range file {
-		modes[p] = ConnectionToolMode(m)
-	}
-
 	lifted := map[string]bool{}
 
 	for _, r := range rules {
 		if r.Active() && r.ConnectionID == "" && r.Factory == factory && r.Environment == environment && r.Server == server &&
-			r.Agent == agent && resolveToolMode(modes, r.Tool) == ToolModeAsk {
+			r.Agent == agent && resolveToolMode(file, r.Tool) == ToolModeAsk {
 			lifted[r.Tool] = true
 		}
 	}
 
-	patterns := slices.Collect(maps.Keys(modes))
-	for p := range limit {
-		if _, ok := modes[p]; !ok {
-			patterns = append(patterns, p)
-		}
-	}
-
-	for tool := range lifted {
-		if _, ok := modes[tool]; !ok {
-			if _, ok := limit[tool]; !ok {
-				patterns = append(patterns, tool)
-			}
-		}
-	}
-
-	slices.SortFunc(patterns, compareToolPatterns)
-
+	patterns := toolPatterns(file, limit, slices.Collect(maps.Keys(lifted)))
 	out := make([]ToolModeEntry, 0, len(patterns))
 
 	for i, p := range patterns {
-		mode := modeFor(modes, patterns[i+1:], p)
+		mode := modeFor(file, patterns[i+1:], p)
 		if lifted[p] {
 			mode = ToolModeAllow
 		}
@@ -313,6 +292,21 @@ func ServerToolModes(
 	}
 
 	return out
+}
+
+// toolPatterns are the patterns of file and limit and the exact names lifted, each once, most
+// specific first.
+func toolPatterns(file, limit map[string]ConnectionToolMode, lifted []string) []string {
+	patterns := slices.Collect(maps.Keys(file))
+	for _, p := range append(slices.Collect(maps.Keys(limit)), lifted...) {
+		if !slices.Contains(patterns, p) {
+			patterns = append(patterns, p)
+		}
+	}
+
+	slices.SortFunc(patterns, compareToolPatterns)
+
+	return patterns
 }
 
 // modeFor is the mode modes give the tools whose first entry is p, the patterns after p being
@@ -375,6 +369,8 @@ func toolModeRank(m ConnectionToolMode) int {
 		return 0
 	case ToolModeAsk:
 		return 1
+	case ToolModeOff:
+		return 2
 	default:
 		return 2
 	}
@@ -393,35 +389,45 @@ func stricterMode(a, b ConnectionToolMode) ConnectionToolMode {
 // literal characters, and counts a character class as matching any character, so it may say true
 // where no name matches both, never false where one does.
 func toolGlobsOverlap(a, b string) bool {
-	x, y := globTokens(a), globTokens(b)
-	seen := map[[2]int]bool{}
+	o := globOverlap{x: globTokens(a), y: globTokens(b), seen: map[[2]int]bool{}}
+	return o.from(0, 0)
+}
 
-	var overlap func(i, j int) bool
+// globOverlap is toolGlobsOverlap's search over two globs' tokens, remembering each pair of
+// positions it has decided.
+type globOverlap struct {
+	x, y []string
+	seen map[[2]int]bool
+}
 
-	overlap = func(i, j int) bool {
-		if done, ok := seen[[2]int{i, j}]; ok {
-			return done
-		}
-
-		var r bool
-
-		switch {
-		case i < len(x) && x[i] == "*":
-			r = overlap(i+1, j) || (j < len(y) && overlap(i, j+1))
-		case j < len(y) && y[j] == "*":
-			r = overlap(i, j+1) || (i < len(x) && overlap(i+1, j))
-		case i == len(x) || j == len(y):
-			r = i == len(x) && j == len(y)
-		default:
-			r = globCharsOverlap(x[i], y[j]) && overlap(i+1, j+1)
-		}
-
-		seen[[2]int{i, j}] = r
-
-		return r
+// from reports whether a name may match x from token i and y from token j.
+func (o globOverlap) from(i, j int) bool {
+	key := [2]int{i, j}
+	if done, ok := o.seen[key]; ok {
+		return done
 	}
 
-	return overlap(0, 0)
+	r := o.step(i, j)
+	o.seen[key] = r
+
+	return r
+}
+
+// step decides from(i, j) by the tokens at i and j: a * matches nothing or one more character of
+// the other glob.
+func (o globOverlap) step(i, j int) bool {
+	xEnd, yEnd := i == len(o.x), j == len(o.y)
+
+	switch {
+	case !xEnd && o.x[i] == "*":
+		return o.from(i+1, j) || (!yEnd && o.from(i, j+1))
+	case !yEnd && o.y[j] == "*":
+		return o.from(i, j+1) || (!xEnd && o.from(i+1, j))
+	case xEnd || yEnd:
+		return xEnd && yEnd
+	}
+
+	return globCharsOverlap(o.x[i], o.y[j]) && o.from(i+1, j+1)
 }
 
 // globTokens splits a glob into tokens: "*", "?", a character class "[…]" or one literal

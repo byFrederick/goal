@@ -706,8 +706,9 @@ func (g *Gateway) addEnvironment(ctx context.Context, c domain.TaskClaims, line 
 
 	for _, name := range slices.Sorted(maps.Keys(env.MCP)) {
 		s := env.MCP[name].Rendered()
+		file := s.ToolModes()
 
-		active, err := rules.of(ctx, g.connections, slices.Contains(slices.Collect(maps.Values(s.Tools)), string(domain.ToolModeAsk)))
+		active, err := rules.of(ctx, g.connections, slices.Contains(slices.Collect(maps.Values(file)), domain.ToolModeAsk))
 		if err != nil {
 			return err
 		}
@@ -715,7 +716,7 @@ func (g *Gateway) addEnvironment(ctx context.Context, c domain.TaskClaims, line 
 		// ADR 0037 decision 12 caps the file's modes by the organization policy, which has no MCP cap
 		// yet: the cap is empty.
 		modes := []bundleToolMode{}
-		for _, m := range domain.ServerToolModes(s.Tools, nil, active, c.FactoryID, env.Name, name, agent.Name) {
+		for _, m := range domain.ServerToolModes(file, nil, active, c.FactoryID, env.Name, name, agent.Name) {
 			modes = append(modes, bundleToolMode{Tool: m.Tool, Mode: m.Mode})
 		}
 

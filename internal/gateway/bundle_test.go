@@ -1454,15 +1454,18 @@ func TestServeRun_PublicRepositoryWithoutToken(t *testing.T) {
 	}
 }
 
-// environmentBundle serves the bundle of a run on secrets whose agent gets environment build,
-// environments/build.yaml being env, with the token granting connTracker.
+// envCI is the environment file environmentBundle gives the agent.
+const envCI = "ci-box"
+
+// environmentBundle serves the bundle of a run on secrets whose agent gets environment ci-box,
+// environments/ci-box.yaml being env, with the token granting connTracker.
 func environmentBundle(t *testing.T, env string, rules ...domain.NewServerStandingRule) (runBundle, []byte) {
 	t.Helper()
 
 	yaml := strings.Replace(secretsBundleYAML("https://github.com/acme/api.git", ""),
-		"{ name: engineer, prompt: ./agents/engineer.md }", "{ name: engineer, prompt: ./agents/engineer.md, environment: build }", 1)
+		"{ name: engineer, prompt: ./agents/engineer.md }", "{ name: engineer, prompt: ./agents/engineer.md, environment: ci-box }", 1)
 	files := maps.Clone(secretsBundleFiles)
-	files["environments/build.yaml"] = "apiVersion: goal/v1\nkind: Environment\nspec:\n" + env
+	files["environments/ci-box.yaml"] = "apiVersion: goal/v1\nkind: Environment\nspec:\n" + env
 
 	h := newHarnessWith(t, Config{}, harnessDeps{yaml: yaml, files: files})
 	it := h.submit(t, factoryID, "Add a health endpoint", "")
@@ -1488,8 +1491,8 @@ func environmentBundle(t *testing.T, env string, rules ...domain.NewServerStandi
 		t.Fatal(err)
 	}
 
-	if got.Spec.Environment == nil || got.Spec.Environment.Name != "build" {
-		t.Fatalf("environment %+v; want build's", got.Spec.Environment)
+	if got.Spec.Environment == nil || got.Spec.Environment.Name != envCI {
+		t.Fatalf("environment %+v; want ci-box's", got.Spec.Environment)
 	}
 
 	return got, body
@@ -1503,7 +1506,7 @@ func TestBundle_EnvironmentServersOnSecrets(t *testing.T) {
 	got, body := environmentBundle(t, `  mcp:
     playwright:
       command: [npx, "@playwright/mcp@0.0.41"]
-      env: {PW_TOKEN: "{{pw-token}}", PW_MODE: headless}
+      env: {PW_LOGIN: "{{pw-login}}", PW_MODE: headless}
     linear:
       url: https://mcp.linear.example.com/mcp
       headers: {Authorization: "Bearer {{linear-key}}", X-Org: acme}
@@ -1517,7 +1520,7 @@ func TestBundle_EnvironmentServersOnSecrets(t *testing.T) {
 		},
 		{
 			Name: "playwright", Command: []string{"npx", "@playwright/mcp@0.0.41"},
-			Env: map[string]string{"PW_TOKEN": "${GOAL_SECRET_PW_TOKEN}", "PW_MODE": "headless"}, ToolModes: []bundleToolMode{},
+			Env: map[string]string{"PW_LOGIN": "${GOAL_SECRET_PW_LOGIN}", "PW_MODE": "headless"}, ToolModes: []bundleToolMode{}, //nolint:gosec // a variable's name, not a credential
 		},
 	}
 	if !reflect.DeepEqual(got.Spec.Environment.MCPServers, want) {
@@ -1541,7 +1544,7 @@ func TestBundle_EnvironmentToolModesWithStandingRule(t *testing.T) {
 	t.Parallel()
 
 	rule := func(tool, agent string) domain.NewServerStandingRule {
-		return domain.NewServerStandingRule{Factory: factoryID, Environment: "build", Server: "linear", Tool: tool, Agent: agent}
+		return domain.NewServerStandingRule{Factory: factoryID, Environment: envCI, Server: "linear", Tool: tool, Agent: agent}
 	}
 	got, _ := environmentBundle(t, `  mcp:
     linear:
@@ -1579,7 +1582,7 @@ func TestBundle_EnvironmentToolsSetupAndFiles(t *testing.T) {
 
 	e := got.Spec.Environment
 	want := bundleEnvironment{
-		Name: "build", MCPServers: []bundleMCPServer{}, Setup: []string{"pnpm install --frozen-lockfile", "make generate"},
+		Name: envCI, MCPServers: []bundleMCPServer{}, Setup: []string{"pnpm install --frozen-lockfile", "make generate"},
 		Files: []bundleFile{{Path: "/etc/acme.conf", Env: "GOAL_FILE_1"}, {Path: "~/.npmrc", Env: "GOAL_FILE_2"}},
 		Env:   []string{"GH_TOKEN", "SENTRY_ORG"}, CLIs: []string{"node", "go", "npm:@acme/cli", "gh"},
 	}

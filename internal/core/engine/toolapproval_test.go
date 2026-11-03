@@ -527,7 +527,7 @@ func (h *harness) expectServerRule(t *testing.T, item domain.ItemID, env string)
 		t.Fatalf("standing rules %+v; want one rule keyed by the factory, environment %s and server %s", rules, env, connTracker)
 	}
 
-	file := map[string]string{askTool: string(domain.ToolModeAsk), offTool: string(domain.ToolModeOff)}
+	file := map[string]domain.ConnectionToolMode{askTool: domain.ToolModeAsk, offTool: domain.ToolModeOff}
 	wantModes := []domain.ToolModeEntry{{Tool: askTool, Mode: domain.ToolModeAllow}, {Tool: offTool, Mode: domain.ToolModeOff}}
 
 	if got := domain.ServerToolModes(file, nil, rules, factoryID, env, connTracker, agWorker); !reflect.DeepEqual(got, wantModes) {

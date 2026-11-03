@@ -60,7 +60,7 @@ goald creates one sandbox per run (`ports.Sandboxes`) and execs, in order:
 }
 ```
 
-`git_credentials` are the git logins of the repository's connection and of the agent's own connections (one per host, user and variable); `tools` are the definition's `runtime.tools`, then the CLI tools of the agent's connections. `internal/gateway/testdata/run-bundle.json` is a real one; the Go and the Vitest tests both read it. Then, in order:
+`git_credentials` are the git logins of the repository's connection and of the agent's own connections (one per host, user and variable); `tools` are the definition's `runtime.tools`, then the CLI tools of the agent's connections; on a version on secrets they are the agent's environment file's `tools`, in file order. `internal/gateway/testdata/run-bundle.json` is a real one; the Go and the Vitest tests both read it. Then, in order:
 
 1. Each file under `/goal` at its path (relative, no `.` or `..`).
 2. Each of the run's factory rules (`rules`, below) written to `$CLAUDE_CONFIG_DIR/rules/<name>.md`, the user-level rules of the box, created when there are rules; never under `/workspace`, so no commit can carry one.
@@ -110,6 +110,33 @@ After a rebase the local branch has diverged from `origin/<branch>`, so the agen
 ```
 
 `connections` are the agent's organization connections its token grants (the model and repository connections are not among them unless the agent names them): the names of the variables each sets in `goal-agent run`'s env, never a value, its MCP server and its kind's docs, `tool_modes`, the tools of its MCP server that ask first (`ask`) or are refused (`off`) for this run's agent, a tool not in the map being allowed, and `always_allow_offered`, the asking tools, sorted, a person may answer with Always allow ([ADR 0031](../../docs/adr/0031-tool-calls-ask-first-and-standing-rules.md) decision 3; goald's gateway already applied the organization's standing rules). A run reports a call that asks first with `POST /run/tool-approval {connection, tool, input}` on goald's gateway (`new URL('/run/tool-approval', gateway_url)`, `Authorization: Bearer $GOAL_GATEWAY_TOKEN`): 202 means the call waits for a person and the run has ended; 413 (an input over 16 KiB as canonical JSON) and 409 (the item already waits for a person, or its run has ended) mean the call is denied; 400 is a malformed report. `granted_calls` are the calls a person approved for this run (decision 5), each allowed once when its connection, tool and input match, the input compared as canonical JSON; `[]` when there are none. A goald from before tool modes sends none of the three. `rules` are the factory rules that apply to the run ([ADR 0014](../../docs/adr/0014-factory-rules.md)), from the definition version it started on: each rule's name, the sha256 of its rule file, its `paths` (omitted when it has none) and `content`, the markdown file to write to the agent's rules; prepare writes each to `$CLAUDE_CONFIG_DIR/rules/<name>.md` (step 2). `base_conflicts` (only after a conflict in prepare's step 4) names the files that conflict with the branch's base, and `base_branch` (only then, and only when the bundle's `repository.base` was set) names that base; without it the base is the default branch.
+
+On a version on secrets ([ADR 0037](../../docs/adr/0037-secrets-and-environment-files.md)) `connections` is `[]` and spec.json has `environment`, the agent's environment file; a version on connections has no `environment` key. It never holds a value: `goal-agent run`'s env already has the file's `env` values, each file's content in `GOAL_FILE_<n>` and each MCP secret in `GOAL_SECRET_<NAME>`.
+
+```json
+"environment": {
+  "name": "default",
+  "mcp_servers": [
+    { "name": "linear", "url": "https://mcp.linear.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${GOAL_SECRET_LINEAR_KEY}" },
+      "tool_modes": [ { "tool": "create_comment", "mode": "allow" }, { "tool": "delete_*", "mode": "off" }, { "tool": "*", "mode": "ask" } ] },
+    { "name": "playwright", "command": ["npx", "@playwright/mcp@0.0.41"], "env": { "PW_TOKEN": "${GOAL_SECRET_PW_TOKEN}" },
+      "tool_modes": [] }
+  ],
+  "setup": ["pnpm install --frozen-lockfile"],
+  "files": [ { "path": "~/.kube/config", "env": "GOAL_FILE_1" } ],
+  "env": ["GH_TOKEN", "SENTRY_ORG"],
+  "clis": ["go", "node", "gh"]
+}
+```
+
+- `mcp_servers` are the file's `mcp` servers, sorted by name: a remote one with `url` and `headers`, a stdio one with `command` and `env`, each secret written as `${GOAL_SECRET_<NAME>}` for Claude Code to expand in the box.
+- `tool_modes` are a server's tool modes for this run's agent, most specific first. A call's mode is the first entry whose `tool` matches the tool's name as Go's `path.Match` does; a tool no entry matches is `allow`. goald's gateway already applied the organization's standing rules, and every `ask` may be answered with Always allow, so a server has no `always_allow_offered`.
+- `setup` are the commands to run after the clone and the tools, in file order.
+- `files` are the files to write, sorted by path, each from the variable `env` names.
+- `env` are the names of the file's variables, sorted, and `clis` the names of its `tools` without their versions, in file order: with the `files` paths and the server names, what the agent is told it has.
+
+This worker does not read `environment` yet: it installs `tools` but writes no file, runs no setup and starts no server from it.
 
 ### Definition mode
 

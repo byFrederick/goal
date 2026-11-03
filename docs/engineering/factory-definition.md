@@ -160,7 +160,13 @@ An environment file, `environments/<name>.yaml`, says what an agent's box instal
 - The box takes the file's `size` (medium when omitted) and its `image` (Goal's agent image when omitted). The Docker and Cloudflare sandboxes fail the run with an error that names an image they cannot run.
 - The organization policy's Use credentials `off` drops `env`, `files` and `mcp`; the model key and the repository still reach the run.
 
-The run bundle does not carry the file paths, the MCP servers, `tools` or `setup` yet, so the worker writes no file and starts no MCP server from them.
+**In the run bundle** the gateway describes the agent's file, never a value (`internal/gateway/bundle.go`, decisions 5, 8 and 11; the fields are in [the worker's README](../../apps/worker/README.md#specjson)). The bundle's `tools` are the file's `tools`, and `spec.environment` carries the MCP servers with their secrets as `${GOAL_SECRET_<NAME>}`, `setup` in order, each file path with its `GOAL_FILE_<n>`, and the names of `env` and of the tools. A version on secrets gets no connection in the bundle. Each server's tool modes come from `domain.ServerToolModes`, as a list the worker matches first to last:
+
+- The file's `tools` patterns, most specific first: an exact name, then globs with more characters other than `*`, a tie going to the pattern that sorts first.
+- An active standing rule for the factory, environment, server, tool and agent role lifts a tool that resolves to `ask` to `allow`, as its own exact entry. Nothing lifts `off`.
+- A cap of the organization policy makes a mode stricter, never looser. The policy has no MCP cap yet, so the gateway passes none (decision 12).
+
+The task token does not carry the policy's Use credentials, so with it `off` the bundle still names the file's servers, files and variables, whose values the box does not get. The worker does not read `spec.environment` yet, so it writes no file, runs no setup and starts no MCP server from it.
 
 ```yaml
 apiVersion: goal/v1
