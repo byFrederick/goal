@@ -32,8 +32,9 @@ const (
 	cannotMerge = "Branch cannot be merged"
 )
 
-// connection is a connection of the platform's gitlab kind with values (token and host).
-func connection(t *testing.T, values map[string]string) domain.ResolvedConnection {
+// connection is the code host login of a connection of the platform's gitlab kind with values
+// (token and host).
+func connection(t *testing.T, values map[string]string) domain.CodeHostLogin {
 	t.Helper()
 
 	kinds, err := connkind.Platform()
@@ -46,11 +47,18 @@ func connection(t *testing.T, values map[string]string) domain.ResolvedConnectio
 		t.Fatal("the platform has no gitlab kind")
 	}
 
-	return domain.ResolvedConnection{Connection: domain.Connection{Name: "gitlab", Kind: "gitlab"}, Kind: kinds[i], Values: values}
+	rc := domain.ResolvedConnection{Connection: domain.Connection{Name: "gitlab", Kind: "gitlab"}, Kind: kinds[i], Values: values}
+
+	login, err := rc.CodeHostLogin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return login
 }
 
-// dotComConn is a gitlab.com connection with the token.
-func dotComConn(t *testing.T) domain.ResolvedConnection {
+// dotComConn is a gitlab.com login with the token.
+func dotComConn(t *testing.T) domain.CodeHostLogin {
 	t.Helper()
 
 	return connection(t, map[string]string{fieldToken: token})
@@ -245,7 +253,7 @@ func TestPullRequest_OnlyOnTheConnectionsHost(t *testing.T) {
 	selfManaged := connection(t, map[string]string{fieldToken: token, "host": "gitlab.example.com"})
 
 	for _, tt := range []struct {
-		conn domain.ResolvedConnection
+		conn domain.CodeHostLogin
 		url  string
 	}{
 		{dotComConn(t), "https://gitlab.example.com/acme/web/-/merge_requests/3"},

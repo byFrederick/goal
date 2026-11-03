@@ -13,20 +13,9 @@ import (
 
 const goMod = "go.mod"
 
-// githubConn is a connection whose git login is on github.com.
-func githubConn() domain.ResolvedConnection {
-	return domain.ResolvedConnection{
-		Connection: domain.Connection{Name: "github", Kind: "github"},
-		Kind: domain.ConnectionKind{Name: "github", Spec: domain.KindSpec{
-			Fields: []domain.KindField{
-				{Name: "token", Secret: true, Required: true},
-				{Name: "host", Default: "github.com"},
-			},
-			Env: map[string]string{"GH_TOKEN": "{{token}}"},
-			Git: &domain.KindGit{Host: "{{host}}", Username: "x-access-token", PasswordEnv: "GH_TOKEN"},
-		}},
-		Values: map[string]string{"token": "test-token"},
-	}
+// githubConn is a code host login on github.com.
+func githubConn() domain.CodeHostLogin {
+	return domain.CodeHostLogin{Name: "github", Host: "github.com", Token: "test-token"}
 }
 
 // The fake must update branches by the adapters' rules, or tests built on it prove nothing.
@@ -182,7 +171,7 @@ func TestCodeHost_BranchHeadAndCompare(t *testing.T) {
 	checkCompareCap(t, h, conn)
 }
 
-func checkBranchHeads(t *testing.T, h *porttest.CodeHost, conn domain.ResolvedConnection, repo string) {
+func checkBranchHeads(t *testing.T, h *porttest.CodeHost, conn domain.CodeHostLogin, repo string) {
 	t.Helper()
 
 	for _, tt := range []struct{ branch, want string }{{"", "c3"}, {"goal/7-add-x", "f1"}} {
@@ -200,7 +189,7 @@ func checkBranchHeads(t *testing.T, h *porttest.CodeHost, conn domain.ResolvedCo
 	}
 }
 
-func checkCompare(t *testing.T, h *porttest.CodeHost, conn domain.ResolvedConnection, repo string) {
+func checkCompare(t *testing.T, h *porttest.CodeHost, conn domain.CodeHostLogin, repo string) {
 	t.Helper()
 
 	got, err := h.Compare(t.Context(), conn, repo, "c1", "c3")
@@ -229,7 +218,7 @@ func checkCompare(t *testing.T, h *porttest.CodeHost, conn domain.ResolvedConnec
 }
 
 // checkCompareCap checks that past the cap Compare returns the oldest MaxCompareCommits, truncated.
-func checkCompareCap(t *testing.T, h *porttest.CodeHost, conn domain.ResolvedConnection) {
+func checkCompareCap(t *testing.T, h *porttest.CodeHost, conn domain.CodeHostLogin) {
 	t.Helper()
 
 	const long = "https://github.com/acme/long"
