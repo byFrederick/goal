@@ -14,7 +14,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | Name | Class | Required | Meaning |
 | --- | --- | --- | --- |
 | `AWS_REGION` | config | no | The object storage bucket's region (auto on R2). |
-| `CLAUDE_CODE_OAUTH_TOKEN` | secret | no | Retired: goal connection import-env turns it into the claude connection once; goald ignores it and warns while it is set. |
+| `CLAUDE_CODE_OAUTH_TOKEN` | secret | no | Retired: a factory's model key, a secret, replaces it; goald ignores it and warns while it is set. |
 | `GOAL_AGENT_EGRESS` | config | no | Retired: compose's goal-egress service replaced it; goald ignores it and warns while it is set. |
 | `GOAL_AGENT_IMAGE` | config | no | The image every run's sandbox runs (goal-agent); a factory's runtime.image is ignored. |
 | `GOAL_ALLOW_PRIVATE_UPSTREAMS` | config | no | true lets connection tests and the embeddings API reach this machine's and the LAN's servers; refused unless goald listens on loopback. |
@@ -39,8 +39,8 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_GATEWAY_LISTEN` | config | no | The gateway's own listener, serving only /mcp and /run; required when GOAL_LISTEN is off loopback. |
 | `GOAL_GATEWAY_URL` | config | yes | The MCP gateway's URL: for goald it defaults from the listeners; the worker needs it to fetch its run's bundle. |
 | `GOAL_GITHUB_API_URL` | config | no | Retired: a github connection's host gives its API; goald ignores it and warns while it is set. |
-| `GOAL_GITHUB_TOKEN` | secret | no | Retired: goal connection import-env turns it into the github connection once; goald ignores it and warns while it is set. |
-| `GOAL_GITHUB_WEB_URL` | config | no | Retired: the GitHub Enterprise origin goal connection import-env gives the github connection; goald ignores it and warns while it is set. |
+| `GOAL_GITHUB_TOKEN` | secret | no | Retired: a factory's repository.token, a secret, replaces it; goald ignores it and warns while it is set. |
+| `GOAL_GITHUB_WEB_URL` | config | no | Retired: the repository's URL gives its host; goald ignores it and warns while it is set. |
 | `GOAL_JONAH_REVIEW_EVERY` | config | no | How often goald queues Jonah threshold reviews and runs the queued reviews. 1m when unset. |
 | `GOAL_JONAH_REVIEW_LEASE_MARGIN` | config | no | How long a Jonah review's lease lasts beyond its run's time limit; a review whose goald died is taken again once the lease ends. 5m when unset. |
 | `GOAL_JONAH_REVIEW_TIMEOUT` | config | no | The time limit of one Jonah review run. 30m when unset. |
@@ -87,12 +87,10 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 
 | Name | Class | Required | Meaning |
 | --- | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | secret | no | An Anthropic API key that goal connection import-env turns into the claude connection, once, when upgrading from before connections. |
 | `AWS_REGION` | config | no | The object storage bucket's region (auto on R2). |
 | `BETTER_AUTH_SECRET` | secret | no | The auth service's secret for session signing and token encryption; it or BETTER_AUTH_SECRETS is required under sign-in. |
 | `BETTER_AUTH_SECRETS` | secret | no | Versioned auth service secrets, newest first (2:<new>,1:<old>), used instead of BETTER_AUTH_SECRET to rotate it. |
 | `BROWSER` | config | no | The program, with its arguments, that goal login opens the sign-in page with instead of the system's URL opener. |
-| `CLAUDE_CODE_OAUTH_TOKEN` | secret | no | Retired: goal connection import-env turns it into the claude connection once; goald ignores it and warns while it is set. |
 | `GOAL_API_KEY` | secret | no | An API key (goal_sk_) or personal token (goal_pat_) the CLI acts with instead of a goal login session. |
 | `GOAL_API_URL` | config | no | Where the goal CLI finds goald. |
 | `GOAL_AUTH` | config | no | session (the default) turns sign-in on; none makes every request the single local user, on loopback only. |
@@ -106,8 +104,6 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_GATEWAY_KEY` | secret | yes | Signs the per-task MCP gateway tokens; at least 32 bytes, and it never reaches a task. |
 | `GOAL_GATEWAY_LISTEN` | config | no | The gateway's own listener, serving only /mcp and /run; required when GOAL_LISTEN is off loopback. |
 | `GOAL_GATEWAY_URL` | config | yes | The MCP gateway's URL: for goald it defaults from the listeners; the worker needs it to fetch its run's bundle. |
-| `GOAL_GITHUB_TOKEN` | secret | no | Retired: goal connection import-env turns it into the github connection once; goald ignores it and warns while it is set. |
-| `GOAL_GITHUB_WEB_URL` | config | no | Retired: the GitHub Enterprise origin goal connection import-env gives the github connection; goald ignores it and warns while it is set. |
 | `GOAL_LISTEN` | config | no | goald's address for the API, the UI and, without GOAL_GATEWAY_LISTEN, the gateway. |
 | `GOAL_LOG_FORMAT` | config | no | goald's log format: json or text. |
 | `GOAL_MASTER_KEYS` | secret | no | The keys that seal connections' credentials in PostgreSQL, <id>:<base64 of 32 bytes>, comma-separated, the first active. |

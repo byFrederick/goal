@@ -20,11 +20,14 @@ type Knowledge interface {
 	Source(ctx context.Context, name string) (domain.KnowledgeSource, error)
 	// CreateSource creates a source, due to sync at once (knowledge_source.created). Its rules
 	// are NewKnowledgeSource.Check's (domain.ErrInvalid); ErrNameTaken for a name in use,
-	// ErrNotFound for an unknown connection, domain.ErrConnectionCannotSync for a synced source
-	// whose connection's kind cannot sync.
+	// ErrNotFound for an unknown connection or secret, domain.ErrConnectionCannotSync for a synced
+	// source whose connection's kind cannot sync. A source refers to its secret by id: renaming
+	// the secret keeps it, and the secret cannot be deleted while a source reads with it
+	// (OrgSecrets.Delete: ErrConflict naming the sources).
 	CreateSource(ctx context.Context, s domain.NewKnowledgeSource, by domain.Actor) (domain.KnowledgeSource, error)
-	// UpdateSource changes a source's title, config or schedule (knowledge_source.updated).
-	// ErrNotFound when there is none.
+	// UpdateSource changes a source's title, config, schedule or secret (knowledge_source.updated),
+	// with KnowledgeSourcePatch.Check's and CheckOn's rules (domain.ErrInvalid). ErrNotFound when
+	// there is no such source or secret.
 	UpdateSource(ctx context.Context, name string, p domain.KnowledgeSourcePatch, by domain.Actor) (domain.KnowledgeSource, error)
 	// DeleteSource deletes a source with its documents and chunks (knowledge_source.deleted) and
 	// calls drop, before the deletion commits, with the uploads' content hashes no document of

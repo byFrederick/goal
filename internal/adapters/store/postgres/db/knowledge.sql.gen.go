@@ -183,10 +183,10 @@ func (q *Queries) InsertKnowledgeChunks(ctx context.Context, arg InsertKnowledge
 }
 
 const insertKnowledgeSource = `-- name: InsertKnowledgeSource :exec
-INSERT INTO knowledge_sources (id, name, title, kind, connection_id, config, sync_every, next_sync_at, created_by)
-VALUES ($1, $2, $3, $4, $5, $6,
-        make_interval(secs => $7::bigint),
-        CASE WHEN $4::text = 'live' THEN NULL ELSE now() END, $8)
+INSERT INTO knowledge_sources (id, name, title, kind, connection_id, secret_id, config, sync_every, next_sync_at, created_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7,
+        make_interval(secs => $8::bigint),
+        CASE WHEN $4::text = 'live' THEN NULL ELSE now() END, $9)
 `
 
 type InsertKnowledgeSourceParams struct {
@@ -195,6 +195,7 @@ type InsertKnowledgeSourceParams struct {
 	Title            string
 	Kind             string
 	ConnectionID     *uuid.UUID
+	SecretID         *uuid.UUID
 	Config           []byte
 	SyncEverySeconds int64
 	CreatedBy        string
@@ -208,6 +209,7 @@ func (q *Queries) InsertKnowledgeSource(ctx context.Context, arg InsertKnowledge
 		arg.Title,
 		arg.Kind,
 		arg.ConnectionID,
+		arg.SecretID,
 		arg.Config,
 		arg.SyncEverySeconds,
 		arg.CreatedBy,
@@ -514,6 +516,18 @@ func (q *Queries) KnowledgeRunVerdicts(ctx context.Context, runID *uuid.UUID) ([
 	return items, nil
 }
 
+const knowledgeSecret = `-- name: KnowledgeSecret :one
+SELECT id FROM secrets WHERE name = $1
+`
+
+// The id of a secret a source may read with.
+func (q *Queries) KnowledgeSecret(ctx context.Context, name string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, knowledgeSecret, name)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const knowledgeSourceKind = `-- name: KnowledgeSourceKind :one
 SELECT kind FROM knowledge_sources WHERE id = $1
 `
@@ -599,12 +613,13 @@ func (q *Queries) KnowledgeSourceUsage(ctx context.Context, arg KnowledgeSourceU
 
 const knowledgeSources = `-- name: KnowledgeSources :many
 
-SELECT s.id, s.name, s.title, s.kind, c.name AS connection, s.config,
+SELECT s.id, s.name, s.title, s.kind, c.name AS connection, sc.name AS secret, s.config,
        extract(epoch FROM s.sync_every)::bigint AS sync_every_seconds, s.next_sync_at, s.lease_until, s.status,
        s.last_synced_at, s.last_error, s.embed_model, s.created_by, s.created_at, s.updated_at,
        (SELECT count(*) FROM knowledge_documents d WHERE d.org_id = s.org_id AND d.source_id = s.id) AS documents
 FROM knowledge_sources s
 LEFT JOIN connections c ON c.org_id = s.org_id AND c.id = s.connection_id
+LEFT JOIN secrets sc ON sc.org_id = s.org_id AND sc.id = s.secret_id
 WHERE ($1::text IS NULL OR s.name = $1::text)
   AND ($2::uuid IS NULL OR s.id = $2::uuid)
 ORDER BY s.name
@@ -621,6 +636,7 @@ type KnowledgeSourcesRow struct {
 	Title            string
 	Kind             string
 	Connection       *string
+	Secret           *string
 	Config           []byte
 	SyncEverySeconds int64
 	NextSyncAt       *time.Time
@@ -653,6 +669,7 @@ func (q *Queries) KnowledgeSources(ctx context.Context, arg KnowledgeSourcesPara
 			&i.Title,
 			&i.Kind,
 			&i.Connection,
+			&i.Secret,
 			&i.Config,
 			&i.SyncEverySeconds,
 			&i.NextSyncAt,
@@ -936,6 +953,33 @@ func (q *Queries) SearchKnowledge(ctx context.Context, arg SearchKnowledgeParams
 	return items, nil
 }
 
+const secretKnowledgeSources = `-- name: SecretKnowledgeSources :many
+SELECT s.name FROM knowledge_sources s JOIN secrets sc ON sc.org_id = s.org_id AND sc.id = s.secret_id
+WHERE sc.name = $1
+ORDER BY s.name
+`
+
+// The sources that read with secret name, by name: a secret's deletion is refused while one does.
+func (q *Queries) SecretKnowledgeSources(ctx context.Context, name string) ([]string, error) {
+	rows, err := q.db.Query(ctx, secretKnowledgeSources, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		items = append(items, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setSearchScan = `-- name: SetSearchScan :exec
 SELECT set_config('hnsw.iterative_scan', 'relaxed_order', true), set_config('hnsw.ef_search', '100', true)
 `
@@ -1019,16 +1063,18 @@ func (q *Queries) UnheldBlobs(ctx context.Context, blobs []string) ([]string, er
 const updateKnowledgeSource = `-- name: UpdateKnowledgeSource :one
 UPDATE knowledge_sources
 SET title = coalesce($1::text, title), config = coalesce($2::jsonb, config),
-    sync_every = CASE WHEN $3::bigint IS NULL THEN sync_every
-                      ELSE make_interval(secs => $3::bigint) END,
+    secret_id = coalesce($3::uuid, secret_id),
+    sync_every = CASE WHEN $4::bigint IS NULL THEN sync_every
+                      ELSE make_interval(secs => $4::bigint) END,
     updated_at = now()
-WHERE name = $4
+WHERE name = $5
 RETURNING id
 `
 
 type UpdateKnowledgeSourceParams struct {
 	Title            *string
 	Config           []byte
+	SecretID         *uuid.UUID
 	SyncEverySeconds *int64
 	Name             string
 }
@@ -1037,6 +1083,7 @@ func (q *Queries) UpdateKnowledgeSource(ctx context.Context, arg UpdateKnowledge
 	row := q.db.QueryRow(ctx, updateKnowledgeSource,
 		arg.Title,
 		arg.Config,
+		arg.SecretID,
 		arg.SyncEverySeconds,
 		arg.Name,
 	)

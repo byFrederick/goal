@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Accept invitation</title>
+
 </head>
 <body>
 <x-dc>
@@ -166,7 +167,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 .two{display:flex;gap:8px}.two .btn{flex:1;justify-content:center;height:40px;font-size:14px}
 </style>
 </helmet>
-<div class="g {{theme}}">
+<div class="g ">
 <div class="stage">
   <div class="brand"><span class="omk" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="#EAB308"></circle></svg></span>Goal</div>
   <main class="cards">
@@ -197,12 +198,6 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":800}}'>
-class Component extends DCLogic {
-  renderVals() {
-    return { theme: this.props.dark ? 'dark' : '' };
-  }
-}
-</script>
+
 </body>
 </html>

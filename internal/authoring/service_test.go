@@ -10,14 +10,13 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/authoring"
-	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
 // acmeYAML is a small valid definition: a queue, an agent station, a human station and done,
-// on the organization's connections claude and code.
+// on the organization's secrets claude-key and code-token.
 const acmeYAML = `# Acme review line: a fixture for authoring tests.
 apiVersion: goal/v1
 kind: Factory
@@ -27,8 +26,8 @@ metadata:
   title: Acme review
 spec:
   runtime:
-    modelConnection: claude
-    repository: { url: "https://git.example.com/acme/review.git", connection: code }
+    modelKey: "{{claude-key}}"
+    repository: { url: "https://git.example.com/acme/review.git", token: "{{code-token}}", forge: github }
   agents:
     # The one engineer.
     - name: engineer
@@ -43,20 +42,18 @@ spec:
 
 const enginePrompt = "You build what the item asks for.\n"
 
-// The platform's GitHub kind, and the host of the acme repository the connection code signs in to.
-const (
-	kindGitHub = "github"
-	gitHost    = "git.example.com"
-)
-
 // Paths of the fixture's files.
 const (
 	yamlFile   = "factory.yaml"
 	promptFile = "agents/engineer.md"
+	envFile    = "environments/default.yaml"
 )
 
+// acmeEnvironment is the fixture's default environment.
+const acmeEnvironment = "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n"
+
 func acmeFiles(yaml string) map[string][]byte {
-	return map[string][]byte{yamlFile: []byte(yaml), promptFile: []byte(enginePrompt)}
+	return map[string][]byte{yamlFile: []byte(yaml), promptFile: []byte(enginePrompt), envFile: []byte(acmeEnvironment)}
 }
 
 type harness struct {
@@ -65,7 +62,7 @@ type harness struct {
 	items   *porttest.Store
 	objects *porttest.ObjectStore
 	clock   *porttest.Clock
-	conns   *porttest.Connections
+	secrets *porttest.OrgSecrets
 	ctx     context.Context //nolint:containedctx // the test's request context, built once per harness
 }
 
@@ -75,10 +72,10 @@ func withStore(wrap func(ports.DefinitionStore) ports.DefinitionStore) option {
 	return func(d *authoring.Deps) { d.Store = wrap(d.Store) }
 }
 
-// withConnectionsCheck changes the harness's connections check.
-func withConnectionsCheck(change func(*authoring.ConnectionsCheck)) option {
+// withSecretsCheck changes the harness's secrets check.
+func withSecretsCheck(change func(*authoring.SecretsCheck)) option {
 	return func(d *authoring.Deps) {
-		if c, ok := d.Credentials.(authoring.ConnectionsCheck); ok {
+		if c, ok := d.Credentials.(authoring.SecretsCheck); ok {
 			change(&c)
 			d.Credentials = c
 		}
@@ -87,13 +84,11 @@ func withConnectionsCheck(change func(*authoring.ConnectionsCheck)) option {
 
 // withKnowledge gives the organization knowledge sources.
 func withKnowledge(k authoring.KnowledgeSources) option {
-	return withConnectionsCheck(func(c *authoring.ConnectionsCheck) { c.Knowledge = k })
+	return withSecretsCheck(func(c *authoring.SecretsCheck) { c.Knowledge = k })
 }
 
-// newHarness is authoring in one organization with the platform's connection kinds and the
-// connections claude (a model), code (git on git.example.com), github (git on github.com) and
-// docs (an MCP server), whose definitions may still hold the env: references of the interim
-// rule.
+// newHarness is authoring in one organization with the secrets claude-key and code-token, open
+// to every factory.
 func newHarness(t *testing.T, opts ...option) *harness {
 	t.Helper()
 
@@ -108,34 +103,20 @@ func newHarness(t *testing.T, opts ...option) *harness {
 		items:   porttest.NewStore(),
 		objects: porttest.NewObjectStore(),
 		clock:   porttest.NewClock(time.Date(2026, 10, 9, 14, 32, 0, 0, time.UTC)),
-		conns:   porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy),
+		secrets: porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
 		ctx:     domain.WithActor(domain.WithOrg(t.Context(), o.ID), domain.LocalUser),
 	}
 	h.store = porttest.NewDefinitions(porttest.DefinitionsDeps{Objects: h.objects, Items: h.items, Now: h.clock.Now})
 
-	kinds, err := connkind.Platform()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := h.conns.SyncPlatformKinds(h.ctx, kinds); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, c := range []domain.NewConnection{
-		{Name: "claude", Kind: "anthropic", Secrets: map[string]string{"key": "sk-ant-secret"}},
-		{Name: "code", Kind: kindGitHub, Fields: map[string]string{"host": gitHost, "api_url": "https://" + gitHost + "/api/v3"}, Secrets: map[string]string{"token": "a-token"}},
-		{Name: kindGitHub, Kind: kindGitHub, Secrets: map[string]string{"token": "a-token"}},
-		{Name: "docs", Kind: "mcp-server", Fields: map[string]string{"url": "https://docs.example.com/mcp"}},
-	} {
-		h.connection(t, c)
+	for _, name := range []string{"claude-key", "code-token"} {
+		h.secret(t, name, domain.SecretScope{All: true})
 	}
 
 	var ids atomic.Int64
 
 	d := authoring.Deps{
 		Store: h.store, Loads: h.items, Templates: h.objects, Clock: h.clock,
-		Credentials: authoring.ConnectionsCheck{Connections: h.conns},
+		Credentials: authoring.SecretsCheck{Secrets: h.secrets},
 		NewID:       func() string { return fmt.Sprintf("0b6f1c9e-0000-7000-8000-%012d", ids.Add(1)) },
 	}
 	for _, o := range opts {
@@ -161,12 +142,13 @@ func (h *harness) imported(t *testing.T, files map[string][]byte) domain.Factory
 	return c.Factory.ID
 }
 
-// connection creates one of the organization's connections.
-func (h *harness) connection(t *testing.T, c domain.NewConnection) {
+// secret creates one of the organization's secrets, open to scope.
+func (h *harness) secret(t *testing.T, name string, scope domain.SecretScope) {
 	t.Helper()
 
-	if _, err := h.conns.Create(h.ctx, c, domain.LocalUser); err != nil {
-		t.Fatalf("create connection %s: %v", c.Name, err)
+	n := domain.NewSecret{Name: name, Source: domain.SecretSourceValue, Scope: scope, Value: "test-value-" + name}
+	if _, err := h.secrets.Create(h.ctx, n, domain.LocalUser); err != nil {
+		t.Fatalf("create secret %s: %v", name, err)
 	}
 }
 

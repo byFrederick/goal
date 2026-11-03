@@ -33,6 +33,8 @@ const auditKind = "kind"
 type Knowledge struct {
 	conns *Connections
 	audit ports.Audit
+	// secrets are the ones sources read with, once ReadSecrets set them; until then any name is one.
+	secrets *OrgSecrets
 
 	mu      sync.Mutex
 	orgs    map[domain.OrgID]*knowledgeOrg
@@ -86,6 +88,60 @@ func NewKnowledge(conns *Connections, audit ports.Audit) *Knowledge {
 	conns.d.mu.Unlock()
 
 	return k
+}
+
+// ReadSecrets makes secrets the ones sources read with, as the database's foreign key does: a
+// source names an existing secret, follows its renames, and the secret cannot be deleted while a
+// source reads with it.
+func (k *Knowledge) ReadSecrets(secrets *OrgSecrets) {
+	k.mu.Lock()
+	k.secrets = secrets
+	k.mu.Unlock()
+
+	secrets.d.mu.Lock()
+	defer secrets.d.mu.Unlock()
+
+	secrets.d.readBy = func(org domain.OrgID, name string) []string {
+		k.mu.Lock()
+		defer k.mu.Unlock()
+
+		var out []string
+
+		for _, n := range slices.Sorted(maps.Keys(k.org(org).sources)) {
+			if k.org(org).sources[n].src.Secret == name {
+				out = append(out, n)
+			}
+		}
+
+		return out
+	}
+	secrets.d.renamed = func(org domain.OrgID, from, to string) {
+		k.mu.Lock()
+		defer k.mu.Unlock()
+
+		for _, s := range k.org(org).sources {
+			if s.src.Secret == from {
+				s.src.Secret = to
+			}
+		}
+	}
+}
+
+// secret refuses a secret name that is none of ReadSecrets' (ErrNotFound). k.mu is not held.
+func (k *Knowledge) secret(ctx context.Context, name string) error {
+	k.mu.Lock()
+	secrets := k.secrets
+	k.mu.Unlock()
+
+	if name == "" || secrets == nil {
+		return nil
+	}
+
+	if _, err := secrets.Get(ctx, name); err != nil {
+		return fmt.Errorf("secret %q: %w", name, err)
+	}
+
+	return nil
 }
 
 // readsConnection reports whether one of org's sources reads the connection id.
@@ -184,6 +240,10 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 		return domain.KnowledgeSource{}, fmt.Errorf("create knowledge source: %w", err)
 	}
 
+	if err := k.secret(ctx, n.Secret); err != nil {
+		return domain.KnowledgeSource{}, fmt.Errorf("create knowledge source: %w", err)
+	}
+
 	var out domain.KnowledgeSource
 
 	err = k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
@@ -193,7 +253,7 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 
 		now := time.Now().UTC()
 		s := domain.KnowledgeSource{
-			ID: domain.KnowledgeSourceID(newV7()), Name: n.Name, Title: n.Title, Kind: n.Kind, Connection: n.Connection,
+			ID: domain.KnowledgeSourceID(newV7()), Name: n.Name, Title: n.Title, Kind: n.Kind, Connection: n.Connection, Secret: n.Secret,
 			Config: maps.Clone(n.Config), SyncEvery: cmp.Or(n.SyncEvery, domain.DefaultSyncEvery), Status: domain.SyncIdle,
 			CreatedBy: by, CreatedAt: now, UpdatedAt: now,
 		}
@@ -207,7 +267,7 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 		}
 
 		if err := k.audit.Append(ctx, sourceEntry(by, domain.AuditKnowledgeSourceCreated, s.ID,
-			map[string]any{auditName: n.Name, auditKind: string(n.Kind), "connection": n.Connection})); err != nil {
+			sourceAudit(n))); err != nil {
 			return err
 		}
 
@@ -225,7 +285,7 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 
 // connection is the connection a new source reads ("" for uploads), checked as the database does.
 func (k *Knowledge) connection(ctx context.Context, n domain.NewKnowledgeSource) (domain.ConnectionID, error) {
-	if n.Kind == domain.SourceUpload {
+	if n.Connection == "" {
 		return "", nil
 	}
 
@@ -252,12 +312,22 @@ func (k *Knowledge) UpdateSource(ctx context.Context, name string, p domain.Know
 		return domain.KnowledgeSource{}, fmt.Errorf("update knowledge source: %w", err)
 	}
 
+	if p.Secret != nil {
+		if err := k.secret(ctx, *p.Secret); err != nil {
+			return domain.KnowledgeSource{}, fmt.Errorf("update knowledge source: %w", err)
+		}
+	}
+
 	var out domain.KnowledgeSource
 
 	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
 		s, ok := o.sources[name]
 		if !ok {
 			return fmt.Errorf("knowledge source %q: %w", name, ports.ErrNotFound)
+		}
+
+		if err := p.CheckOn(s.src); err != nil {
+			return err
 		}
 
 		if err := k.audit.Append(ctx, sourceEntry(by, domain.AuditKnowledgeSourceUpdated, s.src.ID, map[string]any{auditName: name})); err != nil {
@@ -276,6 +346,10 @@ func (k *Knowledge) UpdateSource(ctx context.Context, name string, p domain.Know
 			s.src.SyncEvery = *p.SyncEvery
 		}
 
+		if p.Secret != nil {
+			s.src.Secret = *p.Secret
+		}
+
 		s.src.UpdatedAt = time.Now().UTC()
 		out = o.view(s)
 
@@ -283,6 +357,16 @@ func (k *Knowledge) UpdateSource(ctx context.Context, name string, p domain.Know
 	})
 
 	return out, err
+}
+
+// sourceAudit is the data of a new source's created entry: its name, kind and what it reads.
+func sourceAudit(n domain.NewKnowledgeSource) map[string]any {
+	out := map[string]any{auditName: n.Name, auditKind: string(n.Kind), "connection": n.Connection}
+	if n.Secret != "" {
+		out["secret"] = n.Secret
+	}
+
+	return out
 }
 
 // DeleteSource implements ports.Knowledge; drop runs before anything changes, so its error

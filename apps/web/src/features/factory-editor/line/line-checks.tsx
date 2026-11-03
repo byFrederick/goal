@@ -57,7 +57,7 @@ export function LineChecks() {
       rows.push({
         key: `merge-${s.id}`,
         tone: 'info',
-        text: `${stationLabel(s)} is a merge step, so ${who} ${builders.length === 1 ? 'needs' : 'need'} pull request access. You’ll set that in Connections.`,
+        text: `${stationLabel(s)} is a merge step, so ${who} ${builders.length === 1 ? 'needs' : 'need'} pull request access. You’ll set that in its environment.`,
       });
     }
   }

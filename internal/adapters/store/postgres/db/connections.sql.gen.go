@@ -80,7 +80,7 @@ const connectionKeyIDs = `-- name: ConnectionKeyIDs :one
 SELECT goal_connection_key_ids()::text[] AS key_ids
 `
 
-// The master key ids of every organization's sealed connections.
+// The master key ids of every organization's sealed secrets, connections and webhook endpoints.
 func (q *Queries) ConnectionKeyIDs(ctx context.Context) ([]string, error) {
 	row := q.db.QueryRow(ctx, connectionKeyIDs)
 	var key_ids []string
@@ -501,12 +501,13 @@ func (q *Queries) SealedConnections(ctx context.Context, names []string) ([]Seal
 }
 
 const shareReferencedCredentials = `-- name: ShareReferencedCredentials :exec
-SELECT id FROM credentials WHERE name = ANY ($1::text[]) ORDER BY id FOR KEY SHARE
+SELECT id FROM secrets WHERE name = ANY ($1::text[]) ORDER BY id FOR KEY SHARE
 `
 
-// Locks the credentials a connection's write refers to (ADR 0017 decision 8) against their
-// deletion until it commits: a credential's delete locks it FOR UPDATE and then counts its users.
-// A name that is no credential locks nothing; a reference may name one that does not exist yet.
+// Locks the secrets (credentials until ADR 0037) a connection's write refers to (ADR 0017 decision
+// 8) against their deletion until it commits: a secret's delete locks it FOR UPDATE and then
+// counts its users. A name that is no secret locks nothing; a reference may name one that does not
+// exist yet.
 func (q *Queries) ShareReferencedCredentials(ctx context.Context, names []string) error {
 	_, err := q.db.Exec(ctx, shareReferencedCredentials, names)
 	return err

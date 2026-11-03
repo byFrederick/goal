@@ -193,7 +193,7 @@ describe('step 7, invite people', () => {
     await screen.findByRole('heading', { level: 1, name: 'Invite people' });
 
     expect(screen.getByText('Everything, including billing')).toBeTruthy();
-    expect(screen.getByText('Factories, people and connections')).toBeTruthy();
+    expect(screen.getByText('Factories, people and secrets')).toBeTruthy();
     expect(screen.getByText('Definitions, items and approvals')).toBeTruthy();
     expect(screen.getByText('Sees everything, changes nothing')).toBeTruthy();
 

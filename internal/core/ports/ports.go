@@ -869,6 +869,25 @@ type CodeHost interface {
 	// RepositoryList.Truncated set when there are more. An unknown owner is an error wrapping
 	// ErrNotFound; a host that cannot list them, one wrapping errors.ErrUnsupported. It only reads.
 	Repositories(ctx context.Context, c domain.ResolvedConnection, owner string) (RepositoryList, error)
+
+	// RepositoryAccess reports what token can do in the repository at repo
+	// (https://<host>/<owner>/<repo>, optionally ending in .git), without a connection: whether it
+	// can read the repository and whether it can push to it, each with a one-line reason from the
+	// host. The token is sent only to repo's host. A refusal the host answers (an unknown
+	// repository, a bad token, no push) is in the result; err is a repo that is not a repository
+	// URL (wrapping domain.ErrInvalid), or a host that gave no answer it could read. It only reads.
+	RepositoryAccess(ctx context.Context, repo, token string) (RepositoryAccess, error)
+}
+
+// RepositoryAccess is what CodeHost.RepositoryAccess found a token can do in a repository.
+type RepositoryAccess struct {
+	Read, Push AccessCheck
+}
+
+// AccessCheck is one check of RepositoryAccess: whether it passed, and the host's one-line reason.
+type AccessCheck struct {
+	OK     bool
+	Reason string
 }
 
 // MaxCompareCommits bounds the commits one CodeHost.Compare returns.

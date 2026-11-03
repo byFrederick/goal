@@ -11,7 +11,7 @@ import { NotAvailable } from '../../../ui/not-available';
 import { Skeleton, SkeletonRows } from '../../../ui/skeleton';
 import { placeSearch, problemPlace } from '../frame/state';
 import { SectionLink } from '../search-link';
-import { type EditorSection, sectionInfo } from '../sections';
+import { type EditorSection, routeSection, sectionInfo } from '../sections';
 
 const linkClass = 'underline underline-offset-3 transition-colors duration-(--duration-quick)';
 
@@ -29,7 +29,11 @@ function FixLink({
 }) {
   const place = problemPlace(problem, model);
   return (
-    <SectionLink section={place.section as EditorSection} patch={placeSearch(place)} className={className}>
+    <SectionLink
+      section={routeSection(place.section as EditorSection)}
+      patch={placeSearch(place)}
+      className={className}
+    >
       {children}
     </SectionLink>
   );

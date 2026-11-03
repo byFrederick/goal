@@ -187,8 +187,8 @@ func TestSettings_TheCutoverIgnoresTheEnvironmentCredentials(t *testing.T) {
 	}
 
 	want := map[string]string{
-		"GOAL_TASK_ENV": "runtime.modelConnection", "CLAUDE_CODE_OAUTH_TOKEN": "goal connection import-env",
-		"GOAL_GITHUB_TOKEN": "github connection", "GOAL_GITHUB_API_URL": "host gives its API", "GOAL_GITHUB_WEB_URL": "host",
+		"GOAL_TASK_ENV": "runtime.modelKey", "CLAUDE_CODE_OAUTH_TOKEN": "goal secret create",
+		"GOAL_GITHUB_TOKEN": "runtime.repository.token", "GOAL_GITHUB_API_URL": "host gives its API", "GOAL_GITHUB_WEB_URL": "host",
 	}
 
 	if got := ignored(s); len(got) != len(want) {

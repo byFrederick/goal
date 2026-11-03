@@ -159,18 +159,26 @@ test.describe('every phone control has a 44 px hit area at 390 px', () => {
     ['Items Board', '/o/acme/f/goal/items', (p) => p.getByRole('link', { name: 'Board', exact: true }).first()],
     ['Items List', '/o/acme/f/goal/items', (p) => p.getByRole('button', { name: 'List', exact: true })],
     ['Runs filter', '/o/acme/runs', (p) => p.getByRole('button', { name: /^Failed/ }).first()],
-    [
-      'Connections row title',
-      '/o/acme/connections',
-      (p) => p.locator('a[href^="/o/acme/connections/"]:not([href$="/new"]):visible').first(),
-    ],
+    ['Access row title', '/o/acme/access', (p) => p.locator('a[href*="/definition/basics"]:visible').first()],
     ['Knowledge document title', '/o/acme/knowledge/goal-docs', (p) => p.locator('a[href*="document="]').first()],
     [
       'Knowledge document open at source',
       '/o/acme/knowledge/goal-docs',
       (p) => p.getByRole('link', { name: /^Open .* at its source$/ }).first(),
     ],
-    ['Credential Show the value', '/o/acme/credentials/new', (p) => p.getByRole('button', { name: 'Show the value' })],
+    ['Secret Show the value', '/o/acme/secrets?new=true', (p) => p.getByRole('button', { name: 'Show the value' })],
+    ['Secrets New', '/o/acme/secrets', (p) => p.getByRole('banner').getByRole('button', { name: /New/ })],
+    [
+      'Secrets row',
+      '/o/acme/secrets',
+      (p) => p.locator('a[href^="/o/acme/secrets/"]:not([href$="/import"]):visible').first(),
+    ],
+    [
+      'Secret Replace value',
+      '/o/acme/secrets/github-token',
+      (p) => p.getByRole('region', { name: 'Value' }).getByRole('button', { name: 'Replace value' }),
+    ],
+    ['Secret Delete', '/o/acme/secrets/github-token', (p) => p.getByRole('button', { name: 'Delete secret' })],
     [
       'New trigger source choice',
       '/o/acme/f/software/intake/new',

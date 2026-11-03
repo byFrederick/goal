@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -17,7 +18,7 @@ var defaultIntegration = domain.IntegrationPolicy{Mode: domain.IntegrationModeTr
 func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 	t.Parallel()
 
-	f, err := LoadDir("testdata/support")
+	f, err := LoadDir("testdata/.support")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +47,7 @@ func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 		t.Errorf("expedite target = %v, want 1h", got)
 	}
 
-	plain, err := LoadDir("testdata/line")
+	plain, err := LoadDir("testdata/.line")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +243,7 @@ func TestLine_PurposeFallsBackToDescription(t *testing.T) {
 func TestLine_CarriesTheVersionsRules(t *testing.T) {
 	t.Parallel()
 
-	f, err := LoadDir("testdata/line")
+	f, err := LoadDir("testdata/.line")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +399,7 @@ func TestLoad_RefusesTargetsThatAreNotPositive(t *testing.T) {
 func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 	t.Parallel()
 
-	f, err := LoadDir("testdata/line")
+	f, err := LoadDir("testdata/.line")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -645,7 +646,7 @@ const workIncident = "incident"
 func TestLine_Triggers(t *testing.T) {
 	t.Parallel()
 
-	f, err := LoadDir("testdata/support")
+	f, err := LoadDir("testdata/.support")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -779,5 +780,55 @@ func TestLoad_RefusesBadJonahPolicy(t *testing.T) {
 		}) {
 			t.Errorf("jonah %s: problems %+v, want a blocking schema problem in section files at %s:%d", jonah, problems, FileName, line)
 		}
+	}
+}
+
+// A version on secrets carries its environment files' env, each agent's environment, the model key
+// and the repository's token into the line (ADR 0037 decisions 5, 7 and 12).
+func TestFactory_LineEnvironments(t *testing.T) {
+	t.Parallel()
+
+	f, err := LoadDir("testdata/build")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	l := f.Line()
+
+	if l.Runtime.ModelKey != "{{claude-key}}" || l.Runtime.ModelConnection != "" {
+		t.Errorf("runtime = %+v; want the model key and no model connection", l.Runtime)
+	}
+
+	if r := l.Runtime.Repository; r.Token != "{{github-token}}" || r.Forge != "" || r.Connection != "" {
+		t.Errorf("repository = %+v; want its token", r)
+	}
+
+	if !l.OnSecrets() || l.Refusal() != "" {
+		t.Errorf("OnSecrets = %v, Refusal = %q; want a line on secrets that runs", l.OnSecrets(), l.Refusal())
+	}
+
+	expectEnvironments(t, l)
+}
+
+// expectEnvironments fails the test unless l has testdata/build's environments and agents'.
+func expectEnvironments(t *testing.T, l domain.Line) {
+	t.Helper()
+
+	def, ok := l.Environment("")
+	if want := map[string]string{"GH_TOKEN": "{{github-token}}", "SENTRY_ORG": "acme"}; !ok || !maps.Equal(def.Env, want) { //nolint:gosec // a reference, not a credential
+		t.Errorf("default environment = %+v, %v; want env %v", def, ok, want)
+	}
+
+	if b, ok := l.Environment("browser"); !ok || len(b.Env) != 0 {
+		t.Errorf("browser environment = %+v, %v; want one without env", b, ok)
+	}
+
+	envs := map[string]string{}
+	for _, a := range l.Agents {
+		envs[a.Name] = a.Environment
+	}
+
+	if want := map[string]string{engineer: "", "tester": "browser"}; !maps.Equal(envs, want) {
+		t.Errorf("agents' environments = %v; want %v", envs, want)
 	}
 }

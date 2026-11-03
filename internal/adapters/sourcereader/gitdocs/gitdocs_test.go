@@ -748,3 +748,39 @@ func (w *world) documents() map[string]domain.KnowledgeDocument {
 
 	return out
 }
+
+// A source on a secret reads with the secret's value as the token, on the code host its config
+// names (code_host) or, without one, the one its repository's host is: github.com or gitlab.com.
+// Another host without code_host is refused before anything is sent.
+func TestReader_ReadsWithASecret(t *testing.T) {
+	t.Parallel()
+
+	for _, kind := range hosts {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+
+			h := newCodeHost(t, docs)
+			r := gitdocs.New(gitdocs.Config{Transport: h.transport(true)})
+
+			spec := domain.SyncSpec{
+				Source: domain.KnowledgeSource{Name: "runbooks", Kind: domain.SourceSynced, Secret: "docs-token", Config: map[string]string{
+					domain.SourceReaderKey: "gitdocs", "code_host": kind, cfgRepository: h.repository(),
+				}},
+				Secret: &domain.ResolvedSecret{Secret: domain.Secret{Name: "docs-token"}, Value: token},
+			}
+
+			if got := list(t, r, spec); len(got) != 4 {
+				t.Errorf("listed %d files; want the 4 Markdown files", len(got))
+			}
+
+			spec.Source.Config = map[string]string{domain.SourceReaderKey: "gitdocs", cfgRepository: h.repository()}
+			if err := listErr(t, r, spec); !errors.Is(err, domain.ErrInvalid) {
+				t.Errorf("a host that names no code host: err = %v; want domain.ErrInvalid", err)
+			}
+
+			if n := len(h.fetched()); n != 0 {
+				t.Errorf("fetched %d files raw; want none while listing", n)
+			}
+		})
+	}
+}

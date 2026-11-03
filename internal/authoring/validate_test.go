@@ -30,7 +30,7 @@ func checkResult(v authoring.Validation, id string) (authoring.CheckResult, bool
 
 // legacyYAML is acmeYAML as published before connections: its repository signs in with an env:
 // reference, a form connections replaced.
-var legacyYAML = strings.Replace(acmeYAML, "connection: code }", "token: env:ACME_GIT_TOKEN }", 1)
+var legacyYAML = strings.Replace(acmeYAML, `token: "{{code-token}}", forge: github }`, "token: env:ACME_GIT_TOKEN, forge: github }", 1)
 
 // Since the cutover a form connections replaced is an error: such a draft does not publish, and
 // the problem carries the fix that takes it out.
@@ -66,7 +66,7 @@ func TestValidate_ListsEveryCheckThatRan(t *testing.T) {
 	}
 
 	want := []string{
-		"yaml", "schema", "line", "references", "tools", "contracts", "removed", "availability", "name", "connections",
+		"yaml", "schema", "line", "references", "tools", "contracts", "removed", "moved", "environments", "availability", "name", "secrets",
 	}
 	if !slices.Equal(checkIDs(v), want) || !v.OK {
 		t.Errorf("checks = %v (ok %v, problems %v), want %v", checkIDs(v), v.OK, codes(v.Problems), want)

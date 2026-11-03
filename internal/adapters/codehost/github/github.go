@@ -866,3 +866,55 @@ func messageOf(raw []byte) (string, error) {
 
 	return problem.Message, err
 }
+
+// RepositoryAccess implements ports.CodeHost with GET /repos/{owner}/{repo}: a repository GitHub
+// shows the token can be read, and it can be pushed to when the answer's permissions.push is
+// true. For a fine-grained token that is the token's own grant; for a classic one it is the
+// account's role, which a token without the repo scope cannot use, so push ok can be optimistic.
+// A refusal (401, 403, 404) is a failed read with GitHub's message; a 5xx or no answer is an error.
+func (cl *Client) RepositoryAccess(ctx context.Context, repoURL, token string) (ports.RepositoryAccess, error) {
+	u, err := url.Parse(repoURL)
+	if err != nil {
+		return ports.RepositoryAccess{}, fmt.Errorf("repository %q: %w", repoURL, domain.ErrInvalid)
+	}
+
+	m := repoPath.FindStringSubmatch(u.Path)
+	if u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || m == nil {
+		return ports.RepositoryAccess{}, fmt.Errorf("%q is not a repository URL such as https://github.com/acme/app: %w", repoURL, domain.ErrInvalid)
+	}
+
+	p := pull{api: cl.apiFor(strings.ToLower(u.Host)), token: token, owner: m[1], repo: m[2]}
+	full := p.owner + "/" + p.repo
+
+	var repo struct {
+		Permissions struct {
+			Pull bool `json:"pull"`
+			Push bool `json:"push"`
+		} `json:"permissions"`
+	}
+
+	status, msg, _, err := cl.exchange(ctx, p, http.MethodGet, p.repoPath(""), nil, &repo, maxBodyBytes)
+
+	switch {
+	case err != nil:
+		return ports.RepositoryAccess{}, fmt.Errorf("repository access of %s: %w", full, err)
+	case status >= http.StatusInternalServerError:
+		return ports.RepositoryAccess{}, fmt.Errorf("repository access of %s: GitHub answered %d %s", full, status, msg)
+	case status != http.StatusOK:
+		return ports.RepositoryAccess{
+			Read: ports.AccessCheck{Reason: strings.TrimSpace(fmt.Sprintf("GitHub answered %d: %s", status, msg))},
+			Push: ports.AccessCheck{Reason: "not checked: the token cannot read " + full},
+		}, nil
+	}
+
+	out := ports.RepositoryAccess{
+		Read: ports.AccessCheck{OK: true, Reason: "GitHub shows " + full + " to the token"},
+		Push: ports.AccessCheck{OK: repo.Permissions.Push, Reason: "GitHub grants the token push to " + full},
+	}
+
+	if !repo.Permissions.Push {
+		out.Push.Reason = "GitHub grants the token no push to " + full + " (permissions.push is false)"
+	}
+
+	return out, nil
+}

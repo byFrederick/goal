@@ -70,6 +70,7 @@ func TestCatalogTemplates_PushAndList(t *testing.T) {
 	writeFiles(t, dir, map[string]string{
 		"template.yaml": "title: Acme review\nsummary: Write, then approve\n", "factory/factory.yaml": template,
 		"factory/agents/writer.md": "# writer\n", "factory/.DS_Store": "junk",
+		"factory/" + envPath: workingCopy()[envPath],
 	})
 
 	catalog := authoring.NewTemplateCatalog(porttest.NewObjectStore(), porttest.NewClock(time.Now()))
@@ -82,7 +83,7 @@ func TestCatalogTemplates_PushAndList(t *testing.T) {
 	}
 
 	if err := pushTemplate(t.Context(), &printer{w: &buf}, catalog, dir, up, "goal-test"); err != nil ||
-		!strings.Contains(buf.String(), "✓ added acme-review v1 (2 files) to s3://goal-test/catalog/templates/acme-review/1/") {
+		!strings.Contains(buf.String(), "✓ added acme-review v1 (3 files) to s3://goal-test/catalog/templates/acme-review/1/") {
 		t.Fatalf("push = %v\n%s", err, buf.String())
 	}
 

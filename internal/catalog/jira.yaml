@@ -1,0 +1,14 @@
+apiVersion: goal/v1
+kind: Template
+metadata:
+  name: jira
+  title: Jira
+  description: A Jira Cloud site with an Atlassian account's API token.
+spec:
+  secrets:
+    - {slot: token, title: API token, description: "The API token of the account in JIRA_EMAIL.", suggest: jira-token}
+  env:
+    JIRA_URL: "https://acme.atlassian.net"
+    JIRA_EMAIL: "agent@example.com"
+    JIRA_API_TOKEN: "{{token}}"
+  test: {method: GET, url: "${JIRA_URL}/rest/api/3/myself", basic: {username: "${JIRA_EMAIL}", password: "{{token}}"}, expect: 200}

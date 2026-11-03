@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -86,7 +88,11 @@ func knowledgeSources(ctx context.Context, out *printer, getenv func(string) str
 // sourceLine is one source as goal knowledge sources prints it.
 func sourceLine(s gen.KnowledgeSource, now time.Time) string {
 	kind := string(s.Kind)
-	if s.Connection != nil {
+
+	switch {
+	case s.Secret != nil:
+		kind += " (secret " + *s.Secret + ")"
+	case s.Connection != nil:
 		kind += " (" + *s.Connection + ")"
 	}
 
@@ -118,16 +124,19 @@ func nextSync(at *time.Time) string {
 	return at.Local().Format(time.DateTime)
 }
 
-// knowledgeAdd adds a source: an upload source, or a synced or live one reading a connection.
+// knowledgeAdd adds a source: an upload source, a synced one reading with a secret, or a live one
+// reading a connection.
 func knowledgeAdd(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs := newFlags("knowledge add")
 	orgFlag := addOrgFlag(fs)
 	kind := fs.String("kind", "", "upload, synced or live")
 	title := fs.String("title", "", "what people call it (default: its name)")
-	connection := fs.String("connection", "", "the connection a synced or live source reads")
+	secret := fs.String("secret", "", "the secret a synced source reads with")
+	connection := fs.String("connection", "", "the connection a live source reads")
 	every := fs.Duration("every", 0, "how often it syncs, at least 15m (default 1h)")
 	config := valuesFlag{}
-	fs.Var(config, "config", "what a synced source reads: <key>=<value>, such as repository=…, paths=docs/**/*.md or space=ENG (repeatable)")
+	fs.Var(config, "config", "what a synced source reads: <key>=<value>, such as reader=gitdocs, repository=…, include=docs/**/*.md, "+
+		"or reader=confluence, site=…, email=…, spaces=ENG (repeatable)")
 
 	pos, err := parseInterspersed(fs, args)
 	if err != nil || len(pos) != 1 || *kind == "" {
@@ -142,6 +151,10 @@ func knowledgeAdd(ctx context.Context, out *printer, getenv func(string) string,
 	body := gen.NewKnowledgeSource{Name: pos[0], Title: pos[0], Kind: gen.KnowledgeSourceKind(*kind), Config: (*map[string]string)(&config)}
 	if *title != "" {
 		body.Title = *title
+	}
+
+	if *secret != "" {
+		body.Secret = secret
 	}
 
 	if *connection != "" {
@@ -676,6 +689,22 @@ func knowledgeVerdict(ctx context.Context, out *printer, getenv func(string) str
 	}
 
 	out.printf("%s\n", line)
+
+	return nil
+}
+
+// valuesFlag collects repeated k=v flags.
+type valuesFlag map[string]string
+
+func (v valuesFlag) String() string { return strings.Join(slices.Sorted(maps.Keys(v)), ",") }
+
+func (v valuesFlag) Set(s string) error {
+	k, val, ok := strings.Cut(s, "=")
+	if !ok || strings.TrimSpace(k) == "" {
+		return fmt.Errorf("%q is not <field>=<value>", s)
+	}
+
+	v[strings.TrimSpace(k)] = val
 
 	return nil
 }

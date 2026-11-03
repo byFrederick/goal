@@ -1,6 +1,6 @@
 # ADR 0017 — Credentials: organization-owned sealed secrets, scoped to factories and agents, that connections refer to as {{name}}
 
-Status: accepted · 2026-10-27 · Builds on [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (sealed connection secrets under the platform master key, and why the Cloudflare Secrets Store was not used; this ADR extends its decision 5, see its [amendment](0008-portable-runs-connections-and-knowledge.md#amendment--2026-10-27-connection-secret-fields-may-refer-to-a-credential)) and [ADR 0016](0016-ui-revamp.md) (the `credentials` and `credential-new` screens are binding)
+Status: superseded by [ADR 0037](0037-secrets-and-environment-files.md) (credentials become secrets; their agent lists and the screens it names are gone) · accepted 2026-10-27 · Builds on [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (sealed connection secrets under the platform master key, and why the Cloudflare Secrets Store was not used; this ADR extends its decision 5, see its [amendment](0008-portable-runs-connections-and-knowledge.md#amendment--2026-10-27-connection-secret-fields-may-refer-to-a-credential)) and [ADR 0016](0016-ui-revamp.md) (the `credentials` and `credential-new` screens are binding)
 
 ## Context
 

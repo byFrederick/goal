@@ -78,7 +78,7 @@ export function viewTileText(section: Exclude<Section, 'review'>, model: Model):
     case 'agents':
       return plural(model.agents.agents?.length ?? 0, 'agent');
     case 'connections':
-      return plural(model.connections.length, 'connection');
+      return plural(model.connections.length, 'tool');
   }
 }
 

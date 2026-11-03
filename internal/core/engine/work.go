@@ -48,6 +48,9 @@ type claimed struct {
 	item    domain.Item
 	lease   domain.Lease
 	agent   domain.AgentSpec
+	// env is the agent's environment on a version on secrets (ADR 0037 decision 10); zero on
+	// connections.
+	env domain.Environment
 	// What the organization policy decided at run start (ADR 0024), the same for each of the
 	// claim's runs: the model, the commands and tools added to the agent's deny rules, how long
 	// one run may take, how long the box may live (0: no policy limit) and whether an approving
@@ -224,7 +227,11 @@ func (e *Engine) backoff(ctx context.Context, lease domain.Lease, d time.Duratio
 // be decided) or waits for a person (the policy refuses its model).
 func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) bool {
 	var err error
-	if c.agent, err = agentFor(c.line, c.station, c.item.Lane); err != nil {
+	if c.agent, err = agentFor(c.line, c.station, c.item.Lane); err == nil {
+		c.env, err = agentEnvironment(c.line, c.agent)
+	}
+
+	if err != nil {
 		e.block(ctx, log, *c, err.Error())
 		return false
 	}
@@ -261,7 +268,8 @@ func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) boo
 //     item waits there for a person's merge (noMerge); review_approval is the version's say.
 //   - Use credentials, off: the agent's connections list is emptied, so neither its env nor its
 //     task token gets any of them; the runtime's model and repository connections still reach
-//     the run, which cannot start without them. attached_only is the agent's list.
+//     the run, which cannot start without them. attached_only is the agent's list. On secrets
+//     the agent's environment env is emptied, and the model key still reaches the run.
 //   - Write outside the item's branch is not applied: comments, issues, tickets and messages go
 //     through connections' CLIs and MCP servers, and no engine or gateway step can ask a person
 //     for one, refuse it or allow it.
@@ -295,7 +303,7 @@ func (e *Engine) applyPolicy(ctx context.Context, c *claimed) (string, error) {
 	c.noMerge = p.MergePullRequest == domain.ToolOff
 
 	if p.UseCredentials == domain.ToolOff {
-		c.agent.Connections = nil
+		c.agent.Connections, c.env.Env = nil, nil
 	}
 
 	if p.BoxTimeLimitMinutes > 0 {
@@ -441,16 +449,24 @@ func (e *Engine) runOnce(ctx context.Context, c claimed, b *box, feedback string
 	return res, chk, err
 }
 
-// request is the claim's next run as a RunRequest, with brief added to its bundle's brief.
+// request is the claim's next run as a RunRequest, with brief added to its bundle's brief. A
+// version on secrets gives the run its model key and the agent's environment and no connection.
 func (c claimed) request(brief string) domain.RunRequest {
 	rt := c.line.Runtime
 
-	return domain.RunRequest{
+	r := domain.RunRequest{
 		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, Version: c.line.VersionID, Kind: domain.RunKindStation,
 		Station: c.station.ID, Item: c.item.ID, Agent: c.agent.Name, Model: c.model, Brief: brief,
 		Repository: rt.Repository, Branch: c.branch, Base: c.base, ModelConnection: rt.ModelConnection,
 		Connections: c.agent.Connections, DeniedCommands: c.deny, Size: rt.Size, Timeout: c.timeout, BoxLimit: c.boxLimit, Lease: &c.lease,
 	}
+
+	if c.line.OnSecrets() {
+		r.ModelConnection, r.Connections, r.Repository.Connection = "", nil, ""
+		r.ModelKey, r.Environment = rt.ModelKey, c.env
+	}
+
+	return r
 }
 
 // exitTimedOut is the exit code a check reports when it ran out of time, as timeout(1) does.
@@ -806,6 +822,22 @@ func (e *Engine) transition(ctx context.Context, log *slog.Logger, t ports.Trans
 	default:
 		log.InfoContext(ctx, "item moved", slog.String("to_station", t.To.Station), slog.String("to_state", string(t.To.State)))
 	}
+}
+
+// agentEnvironment is the environment a's box gets on a version on secrets: its own, or the
+// default; zero on connections. It fails when the version has no file for it.
+func agentEnvironment(l domain.Line, a domain.AgentSpec) (domain.Environment, error) {
+	if !l.OnSecrets() {
+		return domain.Environment{}, nil
+	}
+
+	env, ok := l.Environment(a.Environment)
+	if !ok {
+		return domain.Environment{}, fmt.Errorf("agent %s gets environment %s, which version %d has no environments/%s.yaml for",
+			a.Name, cmp.Or(a.Environment, domain.DefaultEnvironment), l.Number, cmp.Or(a.Environment, domain.DefaultEnvironment))
+	}
+
+	return env, nil
 }
 
 func agentSpec(l domain.Line, name string) (domain.AgentSpec, error) {

@@ -16,8 +16,8 @@ export interface SectionViewProps {
 // Sections with heavy editors load on first use, outside the initial bundle (D §10.9's budget);
 // a chunk that fails to arrive is asked for again (shared/lazy.ts).
 const AgentsSection = lazyRetrying(() => import('./agents/agents-section').then((m) => m.AgentsSection));
-const ConnectionsSection = lazyRetrying(() =>
-  import('./connections/connections-section').then((m) => m.ConnectionsSection),
+const EnvironmentsSection = lazyRetrying(() =>
+  import('./environments/environments-section').then((m) => m.EnvironmentsSection),
 );
 const ReviewSection = lazyRetrying(() => import('./review/review-section').then((m) => m.ReviewSection));
 const VersionsSection = lazyRetrying(() => import('./versions/versions-section').then((m) => m.VersionsSection));
@@ -26,7 +26,7 @@ export const sectionViews: Record<EditorSection, ComponentType<SectionViewProps>
   basics: BasicsSection,
   line: LineSection,
   agents: AgentsSection,
-  connections: ConnectionsSection,
+  environments: EnvironmentsSection,
   review: ReviewSection,
   versions: VersionsSection,
 };

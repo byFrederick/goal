@@ -208,8 +208,8 @@ type removedSetting struct {
 const (
 	insteadEgress    = "compose's goal-egress service, one policy for every box (ADR 0009's phase 4 amendment)"
 	insteadSandbox   = "nothing: a run's sandbox holds its workspace"
-	insteadModel     = "the factory's runtime.modelConnection, an organization connection (goal connection import-env creates one)"
-	insteadGitHubKey = "a github connection, named by the factory's runtime.repository.connection and connections (goal connection import-env creates it)"
+	insteadModel     = "the factory's runtime.modelKey, an organization secret (goal secret create)"
+	insteadGitHubKey = "a secret, named by the factory's runtime.repository.token (goal secret create)"
 )
 
 // removedSettings are the settings of earlier releases goald ignores, warning at start while one
@@ -229,7 +229,7 @@ var removedSettings = []removedSetting{
 	{"GOAL_TASK_ENV", insteadModel},
 	{"CLAUDE_CODE_OAUTH_TOKEN", insteadModel + "; runs no longer get it from goald's environment"},
 	{"GOAL_GITHUB_TOKEN", insteadGitHubKey},
-	{"GOAL_GITHUB_WEB_URL", "the github connection's host (goal connection import-env reads it)"},
+	{"GOAL_GITHUB_WEB_URL", "the host of the factory's runtime.repository.url"},
 	{"GOAL_GITHUB_API_URL", "nothing: a github connection's host gives its API; goal catalog skills sync reads GOAL_SKILLS_GITHUB_API_URL"},
 }
 

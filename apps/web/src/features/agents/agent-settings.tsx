@@ -13,8 +13,12 @@ import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
+import { Select } from '../../ui/select';
+import { Skeleton } from '../../ui/skeleton';
 import { setAgentField } from '../factory-editor/draft/ops';
 import { useDraftSession, useSection } from '../factory-editor/draft/use-draft';
+import { defaultEnvironment } from '../factory-editor/environments/env-file';
+import { useAgentEnvironments, useEnvironmentNames } from '../factory-editor/environments/use-environments';
 
 const none = '—';
 
@@ -65,6 +69,31 @@ function ResetModel({ agent, fallback }: { agent: string; fallback: string | und
     >
       {label}
     </button>
+  );
+}
+
+/** The environment file the agent's box gets, picked from the definition's environments; it writes factory.yaml's draft. */
+function EnvironmentPick({ agent }: { agent: string }) {
+  const factory = useFactory();
+  const { byAgent, ready, change } = useAgentEnvironments();
+  const { names } = useEnvironmentNames();
+  const current = byAgent[agent] ?? defaultEnvironment;
+  const options = (names.includes(current) ? names : [...names, current]).map((n) => ({ value: n, label: n }));
+  const canEdit = holds(factory, 'definition:edit');
+  return (
+    <Skeleton ready={ready} placeholder={<span className="block h-8 w-40 rounded-control bg-hover" />}>
+      <span className="flex flex-wrap items-center gap-2">
+        <Select
+          aria-label={`Environment of ${agent}`}
+          options={options}
+          value={current}
+          onValueChange={(value) => change(agent, value)}
+          disabled={!canEdit}
+          className="w-40 max-md:min-h-11"
+        />
+        <Origin own={current !== defaultEnvironment} />
+      </span>
+    </Skeleton>
   );
 }
 
@@ -160,16 +189,8 @@ export function AgentSettings({ agent }: { agent: string }) {
               <span className="text-body text-muted">None</span>
             )}
           </Setting>
-          <Setting label="Connections">
-            {found.connections?.length ? (
-              <span className="flex flex-wrap gap-2">
-                {found.connections.map((c) => (
-                  <Chip key={c}>{c}</Chip>
-                ))}
-              </span>
-            ) : (
-              <span className="text-body text-muted">None</span>
-            )}
+          <Setting label="Environment">
+            <EnvironmentPick agent={agent} />
           </Setting>
           <Setting label="Tools">
             <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">

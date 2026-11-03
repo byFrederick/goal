@@ -1,19 +1,10 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { credentialsQuery, factoriesQuery } from '../api/queries';
-import { pageTitle } from '../app/route-focus';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { PendingScreen } from '../app/states';
-import { CredentialsPage } from '../features/credentials/credentials-page';
-import { type CredentialsSearch, credentialsSearch } from '../features/credentials/search';
 
-// The organization's credentials (ADR 0017, canvas "Credentials"): ?type= (a type's tab) and ?q=
-// (the search text) filter the list. The list loads with the page; the factories name the scopes.
+// Credentials became Secrets (ADR 0037): the old list's address opens the new one.
 export const Route = createFileRoute('/o/$org/_org/credentials/')({
   pendingComponent: PendingScreen,
-  validateSearch: (search: Record<string, unknown>): CredentialsSearch => credentialsSearch(search),
-  loader: ({ context: { queryClient, org } }) => {
-    void queryClient.prefetchQuery(credentialsQuery(org.id));
-    void queryClient.prefetchQuery(factoriesQuery(org.id));
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: '/o/$org/secrets', params: { org: params.org }, replace: true });
   },
-  head: ({ match: { context } }) => pageTitle('Credentials', context.org.name),
-  component: CredentialsPage,
 });

@@ -14,6 +14,10 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('../../../shared/factory', () => ({ useFactoryParams: () => ({ org: 'acme', factory: 'f' }) }));
 vi.mock('../draft/use-draft', () => ({ useModel: () => ({ line: {}, agents: {}, connections: [], basics: {} }) }));
 
+vi.mock('../environments/use-environments', () => ({
+  useEnvironmentNames: () => ({ names: ['default', 'deploy'], ready: true }),
+}));
+
 Element.prototype.scrollIntoView = () => {};
 afterEach(cleanup);
 
@@ -40,7 +44,8 @@ describe('the section nav', () => {
     const current = nav.querySelectorAll('a[aria-current="location"]');
     expect(current).toHaveLength(1);
     expect(current[0]?.textContent).toContain('Basics');
-    const connections = screen.getByRole('link', { name: /^Connections/ });
+    const connections = screen.getByRole('link', { name: /^Environments/ });
+    expect(connections.textContent).toContain('default, deploy');
     expect(connections.textContent).toContain('1 change');
     expect(connections.textContent).toContain('1 problem');
   });
