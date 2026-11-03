@@ -304,7 +304,7 @@ func toolPatterns(file, limit map[string]ConnectionToolMode, lifted []string) []
 		}
 	}
 
-	slices.SortFunc(patterns, compareToolPatterns)
+	slices.SortFunc(patterns, CompareToolPatterns)
 
 	return patterns
 }
@@ -317,7 +317,7 @@ func modeFor(modes map[string]ConnectionToolMode, later []string, p string) Conn
 		return m
 	}
 
-	if !isToolGlob(p) {
+	if !IsToolGlob(p) {
 		return resolveToolMode(modes, p)
 	}
 
@@ -335,7 +335,7 @@ func modeFor(modes map[string]ConnectionToolMode, later []string, p string) Conn
 // resolveToolMode is tool's mode in modes: its most specific matching pattern's, and allow when
 // none matches.
 func resolveToolMode(modes map[string]ConnectionToolMode, tool string) ConnectionToolMode {
-	patterns := slices.SortedFunc(maps.Keys(modes), compareToolPatterns)
+	patterns := slices.SortedFunc(maps.Keys(modes), CompareToolPatterns)
 	for _, p := range patterns {
 		if ok, err := path.Match(p, tool); err == nil && ok {
 			return modes[p]
@@ -345,10 +345,11 @@ func resolveToolMode(modes map[string]ConnectionToolMode, tool string) Connectio
 	return ToolModeAllow
 }
 
-// compareToolPatterns orders tool patterns most specific first: exact names, then globs by their
-// count of characters other than *, more first, then by the patterns themselves.
-func compareToolPatterns(a, b string) int {
-	if ga, gb := isToolGlob(a), isToolGlob(b); ga != gb {
+// CompareToolPatterns orders tool patterns most specific first, as ServerToolModes does: exact
+// names, then globs by their count of characters other than *, more first, then by the patterns
+// themselves.
+func CompareToolPatterns(a, b string) int {
+	if ga, gb := IsToolGlob(a), IsToolGlob(b); ga != gb {
 		if ga {
 			return 1
 		}
@@ -359,8 +360,8 @@ func compareToolPatterns(a, b string) int {
 	return cmp.Or(cmp.Compare(len(b)-strings.Count(b, "*"), len(a)-strings.Count(a, "*")), strings.Compare(a, b))
 }
 
-// isToolGlob reports whether p holds a character path.Match reads as more than itself.
-func isToolGlob(p string) bool { return strings.ContainsAny(p, `*?[\`) }
+// IsToolGlob reports whether tool pattern p holds a character path.Match reads as more than itself.
+func IsToolGlob(p string) bool { return strings.ContainsAny(p, `*?[\`) }
 
 // toolModeRank orders modes by strictness; anything but allow and ask counts as off.
 func toolModeRank(m ConnectionToolMode) int {

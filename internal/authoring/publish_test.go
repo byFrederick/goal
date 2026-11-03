@@ -1,6 +1,7 @@
 package authoring_test
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/authoring"
+	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
@@ -449,6 +451,63 @@ func TestPublish_RulesFiles(t *testing.T) {
 // withPolicies checks definitions against the organization policy p.
 func withPolicies(p ports.OrgPolicies) option {
 	return func(d *authoring.Deps) { d.Policies = p }
+}
+
+// cappedPolicies are the organization's default policy with mcp as its MCP tool mode cap.
+type cappedPolicies struct {
+	*porttest.OrgPolicies
+	mcp map[string]domain.ConnectionToolMode
+}
+
+func (c cappedPolicies) Get(ctx context.Context) (domain.OrgPolicy, error) {
+	p, err := c.OrgPolicies.Get(ctx)
+	p.MCPToolModes = c.mcp
+
+	return p, err
+}
+
+// ADR 0037 decisions 8 and 12: a tool mode the organization's MCP tool mode cap makes stricter is
+// a policy warning at that tool, naming the file's mode and the effective one, and the version
+// still publishes, since the cap applies in every run anyway.
+func TestPublish_WarnsWhereThePolicyCapsAToolMode(t *testing.T) {
+	t.Parallel()
+
+	policies := cappedPolicies{
+		OrgPolicies: porttest.NewOrgPolicies([]string{"claude-sonnet-5-5"}, nil, time.Now),
+		mcp:         map[string]domain.ConnectionToolMode{"*": domain.ToolModeAsk},
+	}
+	h := newHarness(t, withPolicies(policies))
+
+	files := acmeFiles(acmeYAML)
+	files[envFile] = []byte(acmeEnvironment + "  mcp:\n    linear:\n      url: https://mcp.linear.example.com/mcp\n" +
+		"      tools: {create_comment: allow, delete_issue: off}\n")
+	f := h.imported(t, files)
+
+	val, err := h.svc.ValidateDraft(h.ctx, f, authoring.ValidateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var capped []domain.DefinitionProblem
+
+	for _, p := range val.Problems {
+		if p.Code == config.CodeMCPToolModeCapped {
+			capped = append(capped, p)
+		}
+	}
+
+	if !val.OK || len(capped) != 1 {
+		t.Fatalf("validation = ok %v, problems %+v; want ok with one mcp-tool-mode-capped", val.OK, val.Problems)
+	}
+
+	if p := capped[0]; p.Check != config.CheckPolicy || p.Severity != domain.SeverityWarning || p.File != envFile ||
+		p.Pointer != "/environments/default/mcp/linear/tools/create_comment" || !strings.Contains(p.Message, "allow") || !strings.Contains(p.Message, "ask") {
+		t.Errorf("problem %+v; want a policy warning at create_comment naming allow and ask", p)
+	}
+
+	if _, err := h.svc.Publish(h.ctx, f, h.publishRequest(t, f)); err != nil {
+		t.Errorf("publish with a capped tool mode = %v", err)
+	}
 }
 
 // A version that names a model the organization policy does not allow is refused, with a
