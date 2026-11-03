@@ -5,7 +5,7 @@ sidebar:
   order: 21
 ---
 
-A skill is a folder of instructions that an agent loads when it needs them. A rule is guidance that is always on for the runs it targets. A standing rule is a permission that a person grants with "Always allow", so an agent can call one connection tool without asking. Goal uses "rule" only for the first kind, and "standing rule" only for the third.
+A skill is a folder of instructions that an agent loads when it needs them. A rule is guidance that is always on for the runs it targets. A standing rule is a permission that a person grants with "Always allow", so an agent can call one MCP tool without asking. Goal uses "rule" only for the first kind, and "standing rule" only for the third.
 
 ## Skills
 
@@ -31,7 +31,7 @@ The worker writes the rules a run gets into the agent's user-level configuration
 
 ## Tools that ask first
 
-An agent's connection tools can be `allow`, `ask` or `off` (the modes are set on the connection, see [connections](../connections/)). The strictest of the connection's mode, the factory's `toolRule` and the agent's own tool lists wins. An `ask` call does not run. The run ends, and the item waits for a person:
+An agent's MCP server tools can be `allow`, `ask` or `off` (the modes are set in the agent's environment file, see [access and secrets](../access-and-secrets/)). The strictest of the environment's mode, the factory's `toolRule` and the agent's own tool lists wins. An `ask` call does not run. The run ends, and the item waits for a person:
 
 1. The person sees the call, with its input and the agent's role, and chooses Approve or Deny. Deny can carry a note that the next run reads.
 2. Approve runs the call once, in the next run. Deny sends the item back with the denial in its brief.
@@ -41,9 +41,9 @@ The built-in tools do not ask first. `builtins` set to `ask` is served as `off` 
 
 ## Standing rules
 
-A standing rule lets one agent role call one tool of one organization connection without asking. It is created only by Always allow on a tool approval, and it covers the role, the connection and the tool name. It applies in every factory that uses that connection, until someone revokes it. Deleting the connection revokes its standing rules.
+A standing rule lets one agent role call one tool of one MCP server without asking. It is created only by Always allow on a tool approval, and it covers the role, the server and the tool name. It lasts until someone revokes it.
 
-Approving with Always allow needs the permission to decide on the item and the permission to manage connections. A standing rule never turns a call that the factory's definition marks `approval: required` into an automatic one.
+Approving with Always allow needs the permission to decide on the item and the permission to manage secrets and access. A standing rule never turns a call that the factory's definition marks `approval: required` into an automatic one.
 
 - `goal standing-rules list` shows the organization's rules, and `--revoked` adds the revoked ones.
 - `goal standing-rules revoke <rule>` makes the agent ask again for that tool.
@@ -51,7 +51,7 @@ Approving with Always allow needs the permission to decide on the item and the p
 ## Where you meet them
 
 - Skills and rules are files in the factory definition. The builder edits them.
-- Tool approvals appear with the item that waits for them, and the connection's page shows how many are open.
+- Tool approvals appear with the item that waits for them, and the Access page shows the tools they concern.
 - `goal catalog skills` and `goal standing-rules` are the CLI commands. The [reference](../../reference/) lists their flags.
 
 The decision behind tool approvals and standing rules is ADR 0031, `docs/adr/0031-tool-calls-ask-first-and-standing-rules.md` in the repository.
