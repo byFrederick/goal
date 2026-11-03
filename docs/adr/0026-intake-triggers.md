@@ -1,6 +1,6 @@
 # ADR 0026 — Intake triggers
 
-Status: accepted · 2026-10-27 · Builds on [ADR 0005](0005-factory-definitions-in-object-storage.md) (triggers are part of the factory definition), [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (sealed secrets, and Hyperdrive drops advisory locks) and [ADR 0016](0016-ui-revamp.md) (the Intake screens are the contract, and controls for features not built yet)
+Status: accepted · 2026-10-27 · Amended by [ADR 0040](0040-one-door-for-every-source.md) (a working receiver with GitHub and Standard Webhooks signatures, any GitHub event, endpoint secrets in Secrets, one transaction per firing and `perHour`; decision 3's `X-Goal-Signature` and decision 6's list are replaced) · Builds on [ADR 0005](0005-factory-definitions-in-object-storage.md) (triggers are part of the factory definition), [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (sealed secrets, and Hyperdrive drops advisory locks) and [ADR 0016](0016-ui-revamp.md) (the Intake screens are the contract, and controls for features not built yet)
 
 ## Context
 

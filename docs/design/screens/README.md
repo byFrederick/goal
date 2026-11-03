@@ -34,10 +34,10 @@ How to use them:
 | `repository`: a repository URL and a token, tested for clone and push, saved as a secret (no app to install) | step 2 | new ([ADR 0037](../../adr/0037-secrets-and-environment-files.md) decision 7; replaces the GitHub app flow) | |
 | `template`, `line` | steps 3 and 4 | restyle of the new-factory wizard (`/o/$org/new/$step`) | quality-first or cost-first model preset |
 | `budget` | step 5 | new (budgets exist in the definition) | |
-| `triggers` | step 6 | new feature (needs Intake triggers) | |
+| `triggers`: the template's disabled triggers to turn on, the GitHub webhook to set up, and `goal run` ([ADR 0040](../../adr/0040-one-door-for-every-source.md)) | step 6 | new feature (needs Intake triggers) | |
 | `invite` | step 7 | new (invitations exist) | |
 | `first-item` | step 8 | new (a ready-made first item) | |
-| `ready`: the new factory's Floor with a setup checklist | `/o/$org/f/$factory` | new | |
+| `ready`: the new factory's Floor with a setup checklist, and `goal run` as a way in | `/o/$org/f/$factory` | new | |
 
 ## Daily work (`daily-work/`)
 
@@ -45,22 +45,25 @@ How to use them:
 |---|---|---|---|
 | `home`: every factory as a mini line, needs you, spend | `/o/$org` | restyle of the factories home | |
 | `floor`: the line with the andon strip, four flow figures in a stat strip, needs you, where work waits, throughput, activity | `/o/$org/f/$factory` | restyle |  |
-| `board`: columns with WIP meters, expedite lane, Ready and In progress, assembly lines | `…/board` | restyle | |
+| `board`: columns with WIP meters, expedite lane, Ready and In progress, assembly lines; items that haven't started grouped under Later in the first column ([ADR 0040](../../adr/0040-one-door-for-every-source.md)) | `…/board` | restyle | Later |
 | `item`: stepper, the agent's question with quick answers, run timeline, note composer, details, cost, overlaps, rules | `…/items/$ref` | restyle | |
+| `item-follow-ups`: a finished part's Follow-ups card (notes delivered, items filed when the work lands, those for the architect) with Drop, Notes from other items, and Came from ([ADR 0040](../../adr/0040-one-door-for-every-source.md)) | `…/items/$ref` | new feature | Follow-ups, notes from other items |
+| `item-later`: an item that hasn't started, with Start now and Change ([ADR 0040](../../adr/0040-one-door-for-every-source.md)) | `…/items/$ref` | new feature | Start times |
+| `new-item`: New item with Start: Now, Later or After items ([ADR 0040](../../adr/0040-one-door-for-every-source.md)) | dialog from New item | restyle | Later, After items |
 | `trace`: the item's Trace tab, every run's steps on a time axis with the selected step's detail (ADR 0019 decision 2; Watch live opens it on the running run) | `…/items/$ref?tab=trace` | new view of data the item page loads | |
 | `teardown` (+ `teardown-768`, `teardown-dark`, `teardown-loading`, `teardown-empty`, `teardown-error`): the item's Teardown tab, lead time, cost, rework and human touches against the target and budget; time by station; runs; why it went back; human touches (ADR 0019 decision 3); Keep as a test, for a station it passed the first time ([ADR 0039](../../adr/0039-jonah-learns-from-the-line.md), decision 12) | `…/items/$ref?tab=teardown` | built (`teardown-tab.tsx`, from `getItemTeardown`) | Keep as a test |
-| `items`: saved views, filters, grouped by assembly, bulk actions | `…/items` | restyle |  |
-| `needs-you`: list across factories by type, detail with Approve, Deny, "Edit, then approve" | `/o/$org/needs-you` (new page; replaces the inbox drawer) | new | Always allow |
+| `items`: saved views, filters, grouped by assembly, bulk actions; "Starts …" for items that haven't started ([ADR 0040](../../adr/0040-one-door-for-every-source.md)) | `…/items` | restyle |  |
+| `needs-you`: list across factories by type, detail with Approve, Deny, "Edit, then approve"; a paused triage item from untrusted work ([ADR 0040](../../adr/0040-one-door-for-every-source.md)) | `/o/$org/needs-you` (new page; replaces the inbox drawer) | new | Always allow |
 | `runs`: every run across factories | `/o/$org/runs` | new (runs exist in the API) | |
 
 ## Intake (`intake/`)
 
 | Screen | Route | Status | Not built yet |
 |---|---|---|---|
-| `intake`: where items came from, triggers table, suggested triggers | `…/intake` | new feature (triggers) | |
-| `intake-new`: choose a source and event | `…/intake/new` | new feature | Slack, Linear, Jira, Sentry sources |
-| `trigger`: When, Only if, Create, Limits, recent events, the YAML | `…/intake/$trigger` | new feature | |
-| `webhooks`: endpoints, signing secret, deliveries | `…/intake/webhooks` | new feature | Send a sample delivery (no API) |
+| `intake` (+ `intake-768`): Coming up, Where items came from by origin, Follow-ups to triage, and Triggers with the definition's disabled ones as suggestions ([ADR 0040](../../adr/0040-one-door-for-every-source.md)) | `…/intake` | new feature (triggers) | Coming up, origins, follow-ups |
+| `intake-new`: choose a source and any GitHub event; suggestions from the definition; Continue opens a draft ([ADR 0040](../../adr/0040-one-door-for-every-source.md)) | `…/intake/new` | new feature | Slack, Linear, Jira, Sentry sources |
+| `trigger`: When (any GitHub event, with the filters it supports), Only if, Create (with Merge without a person), Limits (per day and per hour), recent events, the YAML; no model check ([ADR 0040](../../adr/0040-one-door-for-every-source.md)) | `…/intake/$trigger` | new feature | Try with a delivery |
+| `webhooks`: each endpoint's address, its secret by name, the events to send, GitHub's ping, the setup steps and the delivery log ([ADR 0040](../../adr/0040-one-door-for-every-source.md)) | `…/intake/webhooks` | new feature | `POST /hooks/{endpoint id}` |
 
 ## Build a factory (`build/`)
 
@@ -117,7 +120,7 @@ How to use them:
 
 ## Mobile (`mobile/`)
 
-`sign-in`, `drawer`, `needs-you`, `approve`, `floor`, `board`, `item`, `intake`, `teardown` (+ its loading, empty and error states; the item tabs scroll sideways and Runs becomes a list), for ADR 0037 `access`, `secrets`, `secret-new`, `environments` and `add-tool`, and for ADR 0038 `knowledge`, `knowledge-source`, `knowledge-new` (an upload) and `memory` (the definition's Knowledge section), and for ADR 0039 `jonah` and `proposal` (with Approve): the phone layouts at 390px. Every other screen follows MASTER.md's phone rules: a top bar with the Goal mark, a drawer, a bottom tab bar, one column, and tables that scroll in their own box.
+`sign-in`, `drawer`, `needs-you`, `approve`, `floor`, `board`, `item`, `intake`, `teardown` (+ its loading, empty and error states; the item tabs scroll sideways and Runs becomes a list), for ADR 0037 `access`, `secrets`, `secret-new`, `environments` and `add-tool`, and for ADR 0038 `knowledge`, `knowledge-source`, `knowledge-new` (an upload) and `memory` (the definition's Knowledge section), and for ADR 0039 `jonah` and `proposal` (with Approve), and for ADR 0040 `new-item` and `item-follow-ups`: the phone layouts at 390px. Every other screen follows MASTER.md's phone rules: a top bar with the Goal mark, a drawer, a bottom tab bar, one column, and tables that scroll in their own box.
 
 ## Added in v3: live pages that had no design
 

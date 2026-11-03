@@ -1,0 +1,377 @@
+# ADR 0040 — One door for every source: start times, follow-ups that say where they go, webhooks that work
+
+Status: proposed · 2026-11-03
+
+- **Replaces:**
+  - [ADR 0028](0028-trigger-try-and-model-check.md), decisions 3–7: the model check in Only if goes (decision 18). Decisions 1 and 2, one evaluation function and Try as a dry run, stay; Try now covers webhook deliveries too.
+  - [ADR 0026](0026-intake-triggers.md), decision 3's `X-Goal-Signature` scheme and decision 6's list of what is not built.
+- **Amends:**
+  - [ADR 0026](0026-intake-triggers.md), intake triggers: what a trigger matches and checks, where an endpoint's secret lives, and how a firing is written (decisions 12–18).
+  - [ADR 0012](0012-assemblies-and-parts.md): parts are filed through the same door as every other item (decisions 1 and 2).
+  - [ADR 0015](0015-overlapping-in-flight-work.md): people and follow-ups can set `after` when they file an item, and an item held by `after` waits at the first station (decisions 3 and 4).
+  - [ADR 0032](0032-self-serve-onboarding.md): the onboarding Intake step offers the definition's disabled triggers, not a list in the web code (decision 17).
+  - [ADR 0037](0037-secrets-and-environment-files.md), decision 19 step 5: webhook endpoints name a secret, and a secret used by an endpoint keeps its previous value for a day after a change (decision 15).
+  - [ADR 0039](0039-jonah-learns-from-the-line.md): an item's evidence file says where the item came from (decision 2), notes from other items are not a person's touch (decision 7), and removed keys only warn (decision 18).
+
+## Context
+
+Intake is every way work reaches a factory. The owner asked for the same pass on it as on access (ADR 0037), knowledge (ADR 0038) and Jonah (ADR 0039), plus one new ability: an agent working on an item can schedule a later item, such as "review the alert thresholds in 7 days", and the item is taken at that time. The map of origin/main and the live software factory on 2026-11-03 showed this:
+
+- **Two ways in work.** People submit items (the CLI, the API, New item, onboarding), and schedule triggers fire. Plans add parts. In the software factory, people filed 160 items, all from the CLI, and plans made 377 parts. No trigger exists.
+- **Webhooks are drawn, not built.** `board.triggers` accepts `webhook.*` and `github.*` events, endpoints can be created and rotated, and the Webhooks screen shows a curl to `/hooks/{id}`. But no route serves `POST /hooks/{endpoint}` (it falls to the SPA handler in `cmd/goald/main.go`), nothing checks a signature, and `Engine.Intake` is called only by tests. No GitHub, Cloudflare or other event can start work.
+- **The model check skips every event.** `only.modelAgrees` passes the schema and the trigger form offers it, but goald builds the engine without `ports.ModelCheck` and no adapter exists, so each such event is skipped as "Model check failed". Try works only on schedule firings.
+- **Nothing starts later.** Items have no start time. The inbox (`kind: queue`) moves every waiting item to the next station on each 5-second tick. 16 briefs say "don't start before" in words.
+- **Follow-ups are written and lost.** Engineers put work they notice in the change contract's `followups`, as `rules/delivery.md` asks. Agents wrote 1,629 in 468 builds, 3.4 per item. No Go or TypeScript reads them, and a rerun of the station overwrites the output that holds them. About 70% are new work, 12% are for later or after another item lands, 11% are notes for another item and 7% ask a person to check something. software#513's 11 parts wrote 52.
+- **Agents cannot file items.** They hold no Goal token and no `goal` CLI. An output changes the line only through `plan` (a fixed field), `after` and `paths` (fields the definition maps) and `violations`.
+- **Where an item came from is barely kept.** `work_items.source` is the type of credential that submitted it, parts have none, and the `created` event's actor is always the engine. Intake counts only items with a source: 22 of the newest 500.
+- **Smaller faults.**
+  - A trigger firing takes two transactions, so a failure between them can make a second item.
+  - A trigger-made title carries event text unquoted, against ADR 0026 decision 5.
+  - A schedule missed by more than 5 minutes leaves no trace.
+  - The live definition still carries `board.intake`, which nothing reads, and the editor shows it as the inbox's source.
+  - The web's suggested triggers name stations, agents, a work type and the `software` group, against AGENTS.md rule 1.
+  - The Floor and two other screens tell people to run `goal item create`, which is not a command.
+  - There are two cron parsers and three lists of sources.
+
+What the leading tools settled on ([research/agent-intake](../../../research/agent-intake/README.md), kept outside the repository):
+
+- An automation is a trigger, a prompt, limits and a run history. Event-driven runs are capped per hour: Devin 50, Factory 10, Claude 100.
+- A one-off is a start time on the work, not a schedule: Devin's Run once, Claude's one-time tasks. A Postgres row with a poller does it; Cloudflare Queues cap delays at 24 hours.
+- Agent-made work is typed output that another job applies, with caps: GitHub's safe outputs file at most one issue a run and dedupe by title. Claude Code allows 50 scheduled tasks a session.
+- Webhooks are verified before parsing (GitHub's `X-Hub-Signature-256`, Standard Webhooks' signed id and timestamp with a 5-minute tolerance) and deduped by delivery id. Text from outside is labelled untrusted, and a person approves what it leads to.
+
+The owner chose option C of three on 2026-11-03: one door for every source, start times, follow-ups that say where they go, and webhooks that work. Option A (finish everything as drawn, model check included) and option B (cut webhooks, the model check and Try) were rejected; see Rejected alternatives. An adversarial review against the code found 22 problems in the first draft, 4 of them breaking; every one is folded in below.
+
+## Decision
+
+### The door
+
+1. **Every item is filed through one function.** `domain.File` turns a request into a checked `NewItem`, the same way for every origin: a person (the API, the CLI, New item, onboarding), a plan (parts, ADR 0012), a trigger (schedules and webhooks) and a follow-up (decisions 5–10). It checks:
+   - the type, against the line's work types, which `domain.Line` now carries;
+   - the lane;
+   - for a trigger, the station;
+   - the start (decision 3), the origin and generation (decision 2), and whether the item is untrusted (decision 20).
+
+   One store helper writes a filed item: the row, the `created` event with the real actor, an `item.filed` audit entry and its `after` edges. `CreateItem` and the part inserts of `Assemble` and `AddPart` use it. So do the new one-transaction store methods: a firing with its item and counter, a delivery's evaluation, and filing follow-ups. A firing takes `pg_advisory_xact_lock` on the factory and trigger, so `perDay`, `perHour` and `dedupe` hold across goald instances.
+
+2. **Every item records where it came from and who filed it.**
+   - `origin`: `person` (the default), `plan`, `trigger` or `follow-up`.
+   - `via`, for a person: `web`, `cli` or `api`.
+   - `created_by`: the actor (a user, an API key, an agent's run, or the engine for a schedule).
+   - `trigger`: the trigger's name (exists).
+   - `generation`: 0 for people's and triggers' items; a part takes its assembly's; an item filed from follow-ups is one more than the highest of its sources.
+   - `untrusted`: true when the item, or an item it came from, was made from a webhook delivery (decision 20).
+
+   A part's assembly is its `parent_id`, and a follow-up item's sources are its `follow_ups` rows, so neither needs another column. Jonah's evidence file for an item gains one line naming its origin (ADR 0039, decision 1). `source` stays for one release while old instances still write it (decision 23).
+
+### Start times
+
+3. **An item can start later: at a time, after other items, or both.** A start has up to three parts:
+   - `at`: a time. The item may start then, not before.
+   - `in`: a wait, such as `36h`, `7d` or `2w`. It becomes `at` when the item is filed: now plus the wait, or, for a follow-up, the moment the work lands plus the wait (decision 8).
+   - `after`: items that must be done first. Each becomes a linked edge (ADR 0015). At filing, a ref that is already done is met and left out (unlike a spec output's `after`, which refuses it); a cancelled or unknown one is refused.
+
+   The item may start when its `at` has passed and its `after` items are done. Only `start_at` is stored; `after` is the edges. A start is at most 365 days ahead. People set it from New item (Now, Later, After items), `goal run --at <time> --in <wait> --after <ref>` (which then doesn't follow the item, as `--detach`) and `POST …/items` (`start: {at, in, after}`). A time without a zone takes the person's.
+
+4. **Items that haven't started wait at the first station.**
+   - **Release:** a queue station's release gets its own query, which takes only items with no open need and no `start_at` in the future, in SQL before the 100-item limit. `Waiting` stays as it is, because the overlap hold reads it to find stale edges (ADR 0015, software#133).
+   - **Claims:** `LockNextWaitingItem` also skips an item whose `start_at` is after the claim's now, for items a trigger places at a later station.
+   - **After a restart** nothing is lost, because both checks run on every tick.
+   - **Lead time** counts from `started_at`, when the item leaves the first station (or from creation for an item filed at a later station), so a planned wait doesn't count against the line's target.
+   - **What a person can do:** Start now (clears `start_at`; the item is released on the next tick), Change, or cancel.
+   - **Held items move:** an item held by `after` alone now waits at the first station too, instead of at the next one.
+
+### Follow-ups
+
+5. **A follow-up says where it goes.** The definition names the output field that holds follow-ups: `board.flow.outputs.followUps: followups`, next to `outputs.close` (decision 11). `dependencies.after` and `dependencies.paths` stay where they are. Any station's contract may have the field.
+   - **Shape:** a contract declares it as a plain array whose entries are strings or objects (no `$ref`, no item limit, no required inner fields), so a follow-up can never fail its run's checks.
+   - **Reading:** goald reads entries leniently, the first 10.
+   - **A string** is a follow-up with only text, as today.
+   - **An object** has:
+     - `text` (required): what and why.
+     - `for`: an open item of the same factory, `<factory>#<number>`. The follow-up becomes a note there.
+     - `start`: `{at, in, after}` as in decision 3, with `title` (required with `start`) and optionally `type` and `lane`. The follow-up becomes its own item, starting then.
+     - Neither: the follow-up goes to the architect (decision 9).
+   - **Both `for` and `start`:** it goes by `start`.
+   - **One that can't go where it says** goes to triage, with the reason: a ref in another factory, an item that is done, an unknown type, a start more than 365 days ahead, or an entry that isn't a string or an object with text.
+
+6. **Follow-ups are kept from every accepted run.** `finish` writes each run's follow-ups to `follow_ups` in the transaction that accepts the output, so a rerun no longer erases them. It writes nothing else outside the item. A follow-up whose text matches one already kept for the item (after trimming, case and spacing) is kept once.
+
+   Each row has one of four states:
+   - `waiting`, with where it will go;
+   - `delivered`;
+   - `filed`, with its item;
+   - `dropped`, with the reason.
+
+7. **Notes reach the item they name on the next tick.** A sweep on each goald instance's tick takes waiting notes with `FOR UPDATE SKIP LOCKED` and delivers each in a transaction that locks only the target item, so two items noting each other can't deadlock. A note is a new event kind, `item_note`:
+   - the next run of the target sees it after its brief, under "Notes from other items", with the item and agent it came from, framed as an agent's words;
+   - the gateway doesn't stream it into a run already working;
+   - it is not a person's touch, so Jonah doesn't count it as one (ADR 0039);
+   - the target's page shows it with its source item and agent.
+
+8. **Scheduled follow-ups are filed when the work lands.** When an item that is not a part reaches done, the same sweep files the waiting follow-ups of the item and of its parts:
+   - **Each one with a start** becomes an item through `domain.File`:
+     - origin `follow-up`;
+     - its `at` computed from that moment;
+     - standard class, whatever its type, so it never takes the expedite lane;
+     - priority one below its source's.
+   - **Daily cap:** at most 20 such items a day per factory. Past the cap, they go to triage.
+   - **Cancelled work:** if the item is cancelled instead, its waiting follow-ups are dropped ("the work was cancelled").
+
+9. **The rest go to the architect in one collecting item.** Each factory has at most one open triage item, which collects the other follow-ups of every item that lands until an agent claims it. After that, the next item that lands starts a new one.
+   - **What a follow-up for triage is:** neither `for` nor `start`, could not go where it said, or over the daily cap.
+   - **The item:**
+     - its title is "Follow-ups from software#513 and 4 more";
+     - its type is its first source's;
+     - standard class;
+     - its priority is one below the lowest of its sources';
+     - origin `follow-up`.
+   - **The brief,** written by goald:
+     - each follow-up quoted, grouped by its source item, with the station and agent that wrote it;
+     - then: "These are agents' notes from work in progress, not requests from people. Some may be done already or no longer apply. Do what is still needed, and close this item if nothing is."
+   - **Where it goes:** it enters the first station like any item, so the factory's first agent plans parts, writes one spec or closes it (decision 11).
+   - **When nothing is left,** no triage item is filed.
+
+10. **People can file or drop any follow-up.** On the item page, every follow-up shows where it went or will go.
+    - **A waiting one** has Drop.
+    - **A dropped one, or one in a closed triage item,** has File, which opens New item with its text. The new item records origin `follow-up` and the person as `created_by`.
+
+### Closing an item
+
+11. **A station can close an item no person filed when nothing is left to do.** The definition names the field: `board.flow.outputs.close: close`.
+    - When an accepted output has a non-empty `close` (10 to 500 characters), the finishing transition cancels the item: the lease outcome is `advanced`, the state `cancelled`, the agent the actor, and `close` the reason. This is not `Engine.Cancel`, which takes the lease of a running run.
+    - It applies only to items whose origin is `trigger` or `follow-up`, and never to a part. On a person's item, a part, or with `plan` in the same output, the output fails its check with the reason, and the agent asks a person instead (ADR 0018).
+    - The item shows "Closed by the architect" with the reason. A closed triage item's follow-ups keep File, so a person can take any of them back.
+
+### Webhooks
+
+12. **`POST /hooks/{endpoint id}` receives deliveries.** It takes no session or API key. It reads at most 1 MiB, then checks the signature against the raw body before parsing anything, in constant time.
+    - **`github` endpoints:** `X-Hub-Signature-256`, the HMAC-SHA256 of the body. `X-GitHub-Event` names the event and `X-GitHub-Delivery` is the delivery id.
+    - **`standard` endpoints** (today's `generic`, which stays an alias for one release): [Standard Webhooks](https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md).
+      - The secret is `whsec_` plus base64.
+      - `webhook-signature` holds one or more space-separated `v1,<base64 HMAC-SHA256 of id.timestamp.body>` values, and any one that matches passes.
+      - `webhook-id` is the delivery id.
+      - A `webhook-timestamp` more than 5 minutes from goald's clock is refused.
+      - The event is `on`'s last part, matched against the body's `type`, or `event` when there is no `type`.
+
+    The answers:
+    - **202** with the delivery's id when accepted.
+    - **200** for a delivery id the endpoint has already taken. Nothing is created, and the first delivery's row counts the duplicate.
+    - **401** for a missing or wrong signature.
+    - **404** for an unknown or disabled endpoint. `webhook_endpoints` gains `enabled`.
+    - **413** over 1 MiB.
+    - **429** with `Retry-After` past 30 refused deliveries a minute per endpoint, and past 60 requests a minute per address for unknown endpoints, counted in each instance's memory.
+
+    Signed deliveries are never rate-limited, because GitHub doesn't resend a refused one. The items they create are limited instead (decision 14).
+
+    What is kept:
+    - A delivery's body is kept only when an enabled trigger of the endpoint can match its event; otherwise only its metadata.
+    - Refused deliveries keep metadata only.
+    - Delivery ids go into a ledger without bodies, kept for a year, so a captured GitHub delivery, which carries no signed timestamp, can't be replayed after the 30 days that deliveries are kept.
+
+13. **Deliveries are evaluated by a loop on every instance, not in the request.**
+    - **Receiving:** the receiver stores an accepted delivery as pending and answers.
+    - **Evaluating:** each goald instance's loop claims pending deliveries with `FOR UPDATE SKIP LOCKED`. It evaluates each against the factory's triggers in one transaction with its firings and items (decision 1's helper), so instances share the work and a crash loses nothing.
+    - **Failing:** a delivery that fails is retried with backoff and marked `failed` after five attempts, with the error, as the notification outbox does.
+    - **GitHub's ping,** sent when a repository webhook is added, is accepted and shown on the endpoint as "Received GitHub's ping".
+    - **Each delivery shows what it led to:** created item N, skipped with the reason, no trigger matched, duplicate, or failed.
+    - **Grants:** the app's role gains UPDATE on `webhook_deliveries`, for the pending state, and DELETE on `trigger_firings`, for pruning.
+
+14. **A trigger matches any event of its source.**
+    - **GitHub events:** `on: github.<event>` takes any `X-GitHub-Event` value: `check_run`, `workflow_run`, `issues`, `pull_request`, `push` and the rest.
+      - A table kept as data maps each event to the normalized fields it supplies, as dot paths into its payload, such as `check_run`'s `name`, `conclusion`, `branch`, `repo` and `sender`.
+      - `filter` gains `action` and `conclusion` next to `branch`, `repo`, `label`, `paths`, `authors` and `skipBots`.
+      - Config and Try refuse a filter the event can't supply, for example "pull_request carries no changed paths", instead of never firing.
+      - The two keys of today, `github.check_run.failed` and `github.issues.labeled`, stay as shorthands.
+    - **Standard webhooks:** `on: webhook.<endpoint>[.<event>]` matches that endpoint's deliveries. `filter.match` matches payload fields by dot path, each against a value or a list of values, and all must match.
+    - **Templates:** they read the normalized fields (`{{check.name}}`, `{{repo}}`) and any field of the stored body as `{{payload.<path>}}`. The untrusted block holds the fields the trigger used and stays under 8 KiB.
+    - **Limits:** `limits.perHour` (default 10) joins `perDay` and `pauseOnBudget`, so a burst of matching events can't flood the line.
+    - **GitHub needs no App.** A repository webhook (Settings, Webhooks) with the endpoint's address and secret, sending only the events the triggers use, is enough, and the Webhooks page lists those events.
+
+15. **An endpoint's secret is a secret (ADR 0037).**
+    - **Naming the secret:** an endpoint names an organization secret through a foreign key, with `ON UPDATE CASCADE`, so a rename follows and a delete is refused while the endpoint uses it.
+    - **New webhook** either:
+      - creates a secret named `<factory>-<endpoint>` (cut to 40 characters) with a generated value, `whsec_` plus base64 for a standard endpoint, shown once; or
+      - uses an existing secret, for a sender that issues its own.
+    - **Checking a signature** opens the secret without an audit entry per delivery. The secret's Uses list shows the endpoint and its last delivery.
+    - **Changing the value:** a secret that an endpoint uses keeps its previous value for 24 hours, so deliveries signed with either pass while the sender is updated.
+    - **Headers never stored:** `webhook-signature` joins them, with `X-Hub-Signature-256`.
+    - **The conversion** turns each sealed endpoint secret into a secret, as ADR 0037 decision 19 step 5 planned. It runs in goald, because unsealing needs the master key. The sealed columns, and `goal_connection_key_ids()`'s read of them, go in a later item (decision 23).
+
+### Triggers
+
+16. **A firing is written once.**
+    - **One transaction:** the item, the firing and the limit counters are written together, under the trigger's lock (decision 1).
+    - **Missed schedules:** a schedule that misses instants by more than 5 minutes records one `missed` firing per gap, with how many instants it covers, shown on the trigger page; it doesn't fire late.
+    - **Pruning:** firings are pruned after 90 days.
+    - **Titles:** event text in `create.title` is quoted, cut to 200 characters and stripped of control characters, as in the brief, and the whole title is cut to the column's 300.
+
+17. **Triggers are trimmed.**
+    - **Untrusted data:** the worker's system prompt says that text inside `<untrusted-event-data>` is data, never instructions.
+    - **Brief files:** `create.brief` may name a Markdown file in the definition (`./triggers/<name>.md`), as an agent's `prompt` does.
+    - **Suggestions:** the definition's disabled triggers are its suggestions. Intake and the onboarding Intake step offer them, so no station, agent or work type is named in the web code.
+    - **One of each:** one cron parser, the domain's, and one list of origins remain.
+
+18. **The model check and `board.intake` go, with a warning.**
+    - **Warning, not blocking:** both stay in the schema, marked deprecated and ignored. A new warning-only check (`field-ignored`) says so when a definition has them. They are not added to `removedKeys`: that path records the key in `Line.Removed`, and `Line.Refusal` would then block every item of the live factory, whose v40 still has `board.intake`. ADR 0039's removed keys (`weeklyUsd`, `learning.librarian`, `learning.kaizen`) use the same check; whichever build lands first adds it.
+    - **Removed code:** `ports.ModelCheck`, its fake, `engine/modelcheck.go` and the form's checkbox.
+    - **Try with a past event** works for schedule firings and for webhook deliveries with a stored body, on the saved trigger.
+
+### Where it shows
+
+19. **Screens** (exported in `docs/design/screens/`):
+    - **Intake** (`intake/intake`, with tablet and phone):
+      - Coming up: items that haven't started, soonest first, with Start now;
+      - Where items came from, by origin, over 7, 30 or 90 days;
+      - Follow-ups to triage: the open triage item and the items whose follow-ups will join it;
+      - Triggers, and the definition's disabled triggers as suggestions.
+    - **Work item** (`daily-work/item`, with phone):
+      - a Follow-ups card listing each one and where it went, with Drop or File;
+      - Came from, with the origin;
+      - notes from other items, with their source;
+      - for an item that hasn't started, a start banner with Start now and Change.
+    - **New item** (`daily-work/new-item`, new): a Start control: Now, Later (date and time) or After items.
+    - **Webhooks** (`intake/webhooks`):
+      - each endpoint's address and secret by name;
+      - the events to send, and GitHub's ping;
+      - the delivery log: Accepted, with what it led to, Duplicate, Refused and Failed.
+    - **Trigger** (`intake/trigger`):
+      - any GitHub event, with the filters that event supports;
+      - payload matches, `perHour`, and Try with a delivery;
+      - no model check.
+    - **New trigger** (`intake/intake-new`): Continue opens the new trigger in a draft. Today it goes to a route that doesn't exist.
+    - **Onboarding Intake step** (`get-started/triggers`) and **Ready**: the definition's disabled triggers, and `goal run` in place of `goal item create`.
+    - **Board, Items and Floor:**
+      - the inbox column groups items that haven't started under Later;
+      - Items labels them "Starts …";
+      - the Floor's ways-in card says `goal run`.
+    - **Needs you:** a paused triage item from untrusted work (decision 20) shows like any paused item.
+
+### Safety
+
+20. **Untrusted work and limits.**
+    - **Untrusted items:** an item made from a webhook delivery is untrusted, and so are its parts and the items filed from its follow-ups.
+      - **A person merges its work:** an approved merge waits for a person, through the existing no-merge path. A definition editor can mark a trigger `create.trusted: true` for a sender whose text they trust, such as their own CI.
+      - **Its follow-ups wait:** they are never delivered or filed on their own. They go to a triage item of their own, filed paused with the reason "Its follow-ups come from work that read outside text. Check them, then resume." It comes to Needs you.
+    - **Follow-ups:**
+      - 10 a run;
+      - a start at most 365 days ahead;
+      - 20 follow-up items a day per factory, then triage;
+      - three deep: the follow-ups of an item at generation 3 stay on it, shown with File, and are never filed;
+      - deduped by text within an item, and by title against open items filed from the same source.
+    - **Webhooks:** the limits of decisions 12 and 14.
+    - **Close:** only the item the run works on, never a part or a person's item.
+    - **Budget:** follow-up and triage items spend like any other item, and the weekly budget and `onExhausted` apply as today.
+
+### API, CLI and data
+
+21. **API, CLI and data.**
+    - **API:** every backend change is additive until the cleanup (decision 23).
+      - `POST …/items` takes `start`.
+      - Items answer with `origin`, `start` and `follow_ups`.
+      - `PUT /items/{item}/start` changes a start, and `DELETE` clears it (Start now).
+      - `POST /items/{item}/follow-ups/{id}/file` files a follow-up, and `…/drop` drops it.
+      - `GET …/intake?window=30d` answers `origins` (beside the old `sources`), the items that haven't started, the triage item and its waiting follow-ups, and the triggers. It reads day counts, not whole deliveries.
+      - Webhook endpoints take `secret` (a name), accept `kind: generic` as `standard`, and can be deleted.
+      - `POST /hooks/{endpoint id}` is new.
+    - **CLI:**
+      - `goal run --at --in --after`;
+      - `goal start <ref> --at|--in|--now`;
+      - `goal intake`, with what's coming;
+      - `goal webhooks create --kind github|standard --secret <name>`, keeping `--kind generic` as an alias;
+      - `goal webhooks deliveries` and `goal webhooks delete`.
+    - **Data:**
+      - `work_items` gains `origin` (default `person`), `via`, `created_by`, `generation`, `untrusted`, `start_at` and `started_at`.
+      - `follow_ups` is new, with row-level security on `org_id`.
+      - `webhook_deliveries` gains `delivery_id` (unique per endpoint), `event`, `state` (pending, done or failed), `attempts` and `duplicates`.
+      - `webhook_delivery_ids` is the year-long ledger.
+      - `webhook_endpoints` gains `secret_id` and `enabled`; `kind` becomes `standard` or `github`.
+      - `trigger_firings` gains `missed`, with its count.
+
+### In the definition
+
+22. **The software factory's next version,** published by a person once the build is deployed:
+    - maps `board.flow.outputs.followUps: followups` and `board.flow.outputs.close: close`;
+    - gives the change contract a lenient `followups` (strings or objects), and the spec contract `close`;
+    - updates `rules/delivery.md` and the engineer prompts: "A follow-up says where it goes: `for` an open item of this factory, a `start` for later work, or neither, for the architect";
+    - drops `board.intake`.
+
+    A factory that maps neither field keeps today's behaviour, and its follow-ups stay text on the item.
+
+### Moving over
+
+23. **Expand first, then contract after a deploy.**
+    - **The migration:**
+      - backfills `origin` and `via` from `source`;
+      - gives `plan` to every item with a parent, and `person` to the rest, including the 138 older items with no source;
+      - leaves `created_by` empty for old items;
+      - sets `started_at` from each item's first span.
+    - **Old instances** keep running during a deploy: `origin` has a default, `source` stays, and `generic` stays accepted.
+    - **Endpoint secrets** are converted in goald (decision 15).
+    - **The 1,629 follow-ups** already written stay as text in their outputs. The item page shows them with File, and nothing files them.
+    - **After the assembly is deployed,** one more item does the contract step. It drops `source`, the `generic` alias, the old `sources` answer and the sealed endpoint columns, and rewrites `goal_connection_key_ids()`.
+
+## Rejected alternatives
+
+- **Filing every follow-up as its own item.** At today's rate it adds 3.4 items for every item built, about 230 a day against 75 finished. The inbox would grow faster than the line drains, and follow-ups of follow-ups could loop.
+- **Finishing everything as drawn** (option A):
+  - The model check calls a model on every matching event and needs an adapter, a cost table and the key ADR 0037 added.
+  - It keeps two hard-coded GitHub events and Goal's own signature scheme.
+  - Agents get a second list for scheduled work, while follow-ups stay unread.
+- **Cutting webhooks** (option B). It removes about 4,000 lines, but then a failing check on main, a failed deploy or a labelled issue can't start work. The receiver is small next to what's already built.
+- **A gateway tool to file items mid-run.** It writes before the output is accepted, files again on every rerun, and needs its own limits. An output field is applied once, when the output passes its checks, as GitHub's safe outputs are.
+- **A wait counted from when `after` items finish** (`start_in`). Nothing runs when an item becomes done, so every path that closes an item would need a hook. `in` is turned into `at` at filing instead, and `after` stays an edge.
+- **A table of future items, apart from items.** An item with a start already has a ref, shows on the board, takes links and can be cancelled.
+- **Cloudflare Queues or Workflows as timers.** Queues delay at most 24 hours, and Workflows add a second store for state that Postgres already holds.
+- **One triage item per landed item.** That was the first draft. One collecting item per factory keeps the same context grouped by source, makes far fewer runs when the line is busy, and still runs promptly when it's idle.
+- **An agent closing any item.** A person's request could be dropped for good by a steered agent, and nobody would be told. Agents close only items no person filed, and otherwise ask.
+- **Publishing a follow-up schema for contracts to reference.** Contracts compile without a loader and are handed whole to the model, so a `$ref` would block every build, and a strict shape would fail runs over a note.
+- **A GitHub App.** The owner ruled it out, and repository webhooks are enough.
+
+## Consequences
+
+- The software factory gets about one triage item at a time instead of losing 230 follow-ups a day. Its architect plans what's needed, writes one spec, or closes the item.
+- Agents learn one more field shape, and the delivery rule and engineer prompts change with it.
+- Intake counts every item, so its numbers stop disagreeing with the API contract.
+- Lead time stops counting the planned wait before an item leaves the first station.
+- A webhook needs a person to add it in GitHub or the sender. Goal lists the events to send and confirms GitHub's ping.
+- Work started by a webhook is merged by a person unless its trigger is marked trusted.
+- Items held by `after` wait at the first station, which changes where ADR 0015's held items show on the board.
+- Gone: the model check, `board.intake`, Goal's own signature header, the second cron parser and the dead tallies. New: the receiver, `follow_ups`, the start, the origin, the close outcome and the delivery ledger.
+
+## The build plan
+
+- **One assembly:** each row is one pull request, in merge order.
+- **The design branch:** `design/intake` holds this ADR, the exported screens and the screens index. It sits on `design/jonah` and is merged first, after ADR 0039's design branch.
+- **When rows start:**
+  - Row 1 needs `design/jonah` on main (software#537, part 1).
+  - Rows 2–8 change `finish`, `work_items`, the tick and the store's item inserts, which ADR 0038's and ADR 0039's builds also change. So the assembly waits for software#525 and software#537.
+- **The API stays additive.** `task check` regenerates the clients in every row, so no backend row renames or removes a field the web still reads. Renames land in the cleanup item after the deploy.
+- **Shared files:**
+  - Rows 2–5 all change `work_items`, `check`, `finish` and `ports.Transition`, so they run in order.
+  - Row 6 builds the one-transaction firing that row 8 reuses.
+- **UI rows** follow [MASTER.md](../design/MASTER.md) v3 and [MOTION.md](../design/MOTION.md). They match their screens at 1440, 1280, 1024, 768 and 390 pixels, in light and dark:
+  - nothing past the viewport edge;
+  - no clipped or spilling text;
+  - 44 px tap targets on phones;
+  - explanations behind an ⓘ tooltip, not in sentences on the page.
+
+| # | Pull request | Lane | What it changes | Merges after |
+|---|---|---|---|---|
+| 1 | **Design docs.** Merge `design/intake`. | docs | This ADR, the ADR index, the status lines of ADRs 0012, 0015, 0026, 0028, 0032, 0037 and 0039, and `docs/design/screens/**` with its README | — |
+| 2 | **One door and origins.** Decisions 1 and 2. | backend | `domain.File` and the line's work types; the store helper used by `CreateItem`, `Assemble` and `AddPart`; `origin`, `via`, `created_by`, `generation` and `untrusted` with their backfill; the `created` event's actor and `item.filed`; the evidence line for ADR 0039 | 1 |
+| 3 | **Start times.** Decisions 3 and 4. | backend | `start_at` and `started_at`; the release query and the claim filter; `after` at filing; lead time from `started_at`; Start now and Change; `start` in the API; `goal run --at --in --after` and `goal start` | 2 |
+| 4 | **Follow-ups.** Decisions 5–10. | backend | `board.flow.outputs.followUps`; `follow_ups`, written in `finish`; the sweep that delivers `item_note`s and files scheduled follow-ups and the collecting triage item; the gateway, brief and evidence handling of `item_note`; the daily cap, generations and dedupe; File and Drop | 3 |
+| 5 | **Close.** Decision 11. | backend | `board.flow.outputs.close`, the cancel in the finishing transition, and the refusals for people's items, parts and `plan` with `close` | 4 |
+| 6 | **The receiver.** Decisions 12–14 and 16's one-transaction firing. | backend | `POST /hooks/{endpoint id}`; GitHub and Standard Webhooks signatures; `enabled`; the refusal and address limits; the delivery ledger; pending deliveries on every instance's loop, with attempts; the GitHub event table, filter checks, `filter.match`, `{{payload.…}}` and `perHour`; the ping; untrusted items with no-merge and `create.trusted` | 2 |
+| 7 | **Endpoint secrets.** Decision 15. | backend | The endpoint's secret by foreign key; New webhook creating or naming a secret; the previous value kept 24 hours; opening without an audit entry; `webhook-signature` never stored; the conversion in goald | 6 |
+| 8 | **Triggers trimmed.** Decisions 16–18. | backend | Missed gaps, pruning and their grants; quoted titles; the worker's note on untrusted data; brief files; disabled triggers as suggestions; the `field-ignored` warning for `only.modelAgrees` and `board.intake`; the model check's removal; Try for deliveries; one cron parser and one origin list | 7 |
+| 9 | **Intake and item API.** Decision 21. | backend | `GET …/intake` with the window, `origins`, what's coming and the triage item, from day counts; the item's `origin`, `start` and `follow_ups`; `openapi.yaml` and the generated clients | 5, 8 |
+| 10 | **Intake and item pages.** Decision 19. | frontend | Intake (Coming up, Where items came from, Follow-ups to triage, Triggers), the item's Follow-ups card, Came from, notes from other items and start banner, New item's Start, the board's Later group, Items' starts, the Floor card | 9 |
+| 11 | **Webhooks and trigger pages.** Decision 19. | frontend | Webhooks (the secret by name, the events, the ping, the delivery log), Trigger (events, filters, payload matches, `perHour`, Try with a delivery, no model check), the New trigger flow, suggestions on Intake and in onboarding, `goal run` on Ready | 7, 9 |
+| 12 | **Tablet and phone.** Decision 19. | frontend | The tablet and phone layouts of Intake, the item's follow-ups and New item's Start | 10, 11 |
+| 13 | **Docs.** | docs | The docs site's guides to submitting items and intake, the glossary (Origin, Start, Follow-up, Triage item, Delivery), `factory-definition.md`, `architecture.md` and the change maps | 12 |
+
+**Not parts of the assembly:**
+- The cleanup of decision 23 is filed as its own item once the assembly is deployed.
+- The software factory's definition change of decision 22 is published by a person after the deploy.
