@@ -19,8 +19,11 @@ const (
 	SectionLine        = "line"
 	SectionAgents      = "agents"
 	SectionConnections = "connections"
-	SectionReview      = "review"
-	SectionFiles       = "files"
+	// SectionEnvironments holds the environment files (ADR 0037): a problem's Pointer there is
+	// /environments/<name>/<keys below spec>.
+	SectionEnvironments = "environments"
+	SectionReview       = "review"
+	SectionFiles        = "files"
 )
 
 // DefinitionProblem is one validation finding, located for both views of a definition: the

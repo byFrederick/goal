@@ -19,3 +19,9 @@ var ConnectionKind []byte
 //
 //go:embed evals.schema.json
 var Evals []byte
+
+// Environment is environment.schema.json, the contract for a definition's environment files
+// (environments/<name>.yaml, ADR 0037).
+//
+//go:embed environment.schema.json
+var Environment []byte

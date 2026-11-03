@@ -44,7 +44,7 @@ const acme = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + acmeID + `, name: acme, title: Acme }
 spec:
-  runtime: { modelConnection: claude }
+  runtime: { modelKey: "{{claude-key}}" }
   agents:
     - { name: writer, prompt: ./agents/writer.md }
   board:
@@ -110,6 +110,12 @@ spec:
 `
 
 const lineID = "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a10"
+
+// defaultEnvFile and defaultEnv are acme's default environment (ADR 0037).
+const (
+	defaultEnvFile = "environments/default.yaml"
+	defaultEnv     = "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n"
+)
 
 // typeFeature is acme's first work type.
 const typeFeature = "feature"
@@ -213,7 +219,7 @@ const (
 
 // The two factories' files.
 var (
-	acmeFiles = map[string]string{yamlFile: acme, writerFile: writerPrompt}
+	acmeFiles = map[string]string{yamlFile: acme, writerFile: writerPrompt, defaultEnvFile: defaultEnv}
 	lineFiles = map[string]string{
 		yamlFile: line, "agents/backend.md": "# backend\n", "agents/frontend.md": "# frontend\n",
 		"contracts/change.schema.json": `{"type": "object"}`,
@@ -238,7 +244,12 @@ func (h *harness) publishImport(t *testing.T, authors *authoring.Service, files 
 		t.Fatal(err)
 	}
 
-	if _, err := authors.Publish(ctx, c.Factory.ID, authoring.PublishRequest{Revision: c.Draft.Revision}); err != nil {
+	// The fixtures are versions published before ADR 0037, which run on the old path: they are
+	// published in the store, since publish refuses the keys the ADR moved (moved-to-environment).
+	if _, err := h.defs.Publish(ctx, ports.Publish{
+		Factory: c.Factory.ID, DraftRevision: c.Draft.Revision, Name: c.Factory.Name, Title: c.Factory.Title,
+		Start: true, By: domain.LocalUser, At: h.clock.Now(),
+	}); err != nil {
 		t.Fatal(err)
 	}
 }

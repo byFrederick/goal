@@ -350,7 +350,7 @@ func TestVersion_FilesAndCompare(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if detail.Number != 3 || !detail.Current || len(detail.Files) != 2 {
+	if detail.Number != 3 || !detail.Current || len(detail.Files) != 3 {
 		t.Errorf("current = v%d, running %v, %d files", detail.Number, detail.Current, len(detail.Files))
 	}
 

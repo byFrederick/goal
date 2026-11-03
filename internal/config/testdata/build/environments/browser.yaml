@@ -1,0 +1,14 @@
+apiVersion: goal/v1
+kind: Environment
+metadata: { name: browser }
+spec:
+  size: large
+  tools: [node@22]
+  mcp:
+    playwright:
+      command: [npx, "@playwright/mcp@0.0.41"]
+      tools: { "browser_*": allow, browser_install: off }
+    tickets:
+      url: https://tickets.example.com/mcp
+      headers: { Authorization: "Bearer {{tickets-key}}" }
+      tools: { create_comment: ask }

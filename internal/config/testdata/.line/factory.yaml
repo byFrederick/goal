@@ -1,6 +1,9 @@
 # Test fixture for config.Line: a small line exercising every station kind, a route, a gate,
-# an expedite lane and factory rules. Self-contained: tests never read factory definitions from
-# outside testdata.
+# an expedite lane and factory rules. It stands for a version published before ADR 0037: its
+# connections, model connection, size and tools are the keys that moved to environment files, so
+# Check refuses them while Load runs it on the old path. The folder is hidden so task validate,
+# which checks the valid fixtures, leaves it out. Self-contained: tests never read factory
+# definitions from outside testdata.
 apiVersion: goal/v1
 kind: Factory
 metadata:

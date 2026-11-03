@@ -72,7 +72,12 @@ spec:
 		t.Fatal(err)
 	}
 
-	v, err := svc.Publish(ctx, lineID, authoring.PublishRequest{Revision: rev, ExpectedCurrent: rec.Current.ID})
+	// line is a version published before ADR 0037, whose runs take the old path: its cases are
+	// published in the store, since publish refuses the keys the ADR moved.
+	v, err := h.defs.Publish(inOrg(t), ports.Publish{
+		Factory: lineID, DraftRevision: rev, ExpectedCurrent: rec.Current.ID, Name: rec.Name, Title: rec.Title,
+		Start: true, By: domain.LocalUser, At: h.clock.Now(),
+	})
 	if err != nil {
 		t.Fatalf("publish the cases: %v", err)
 	}
