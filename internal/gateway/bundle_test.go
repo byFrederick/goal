@@ -1462,12 +1462,35 @@ const envCI = "ci-box"
 func environmentBundle(t *testing.T, env string, rules ...domain.NewServerStandingRule) (runBundle, []byte) {
 	t.Helper()
 
+	return cappedEnvironmentBundle(t, env, nil, rules...)
+}
+
+// serverLinear is the environment MCP server of the tool-mode tests.
+const serverLinear = "linear"
+
+// cappedEnvironmentBundle is environmentBundle with mcpCap as the organization policy's MCP tool
+// mode cap.
+func cappedEnvironmentBundle(
+	t *testing.T, env string, mcpCap map[string]domain.ConnectionToolMode, rules ...domain.NewServerStandingRule,
+) (runBundle, []byte) {
+	t.Helper()
+
+	return environmentBundleOf(t, env, mcpCap, func(*domain.TaskClaims) {}, rules...)
+}
+
+// environmentBundleOf is cappedEnvironmentBundle with the token's claims changed by claim.
+func environmentBundleOf(
+	t *testing.T, env string, mcpCap map[string]domain.ConnectionToolMode, claim func(*domain.TaskClaims),
+	rules ...domain.NewServerStandingRule,
+) (runBundle, []byte) {
+	t.Helper()
+
 	yaml := strings.Replace(secretsBundleYAML("https://github.com/acme/api.git", ""),
 		"{ name: engineer, prompt: ./agents/engineer.md }", "{ name: engineer, prompt: ./agents/engineer.md, environment: ci-box }", 1)
 	files := maps.Clone(secretsBundleFiles)
 	files["environments/ci-box.yaml"] = "apiVersion: goal/v1\nkind: Environment\nspec:\n" + env
 
-	h := newHarnessWith(t, Config{}, harnessDeps{yaml: yaml, files: files})
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: yaml, files: files, mcpCap: mcpCap})
 	it := h.submit(t, factoryID, "Add a health endpoint", "")
 	ctx := domain.WithOrg(t.Context(), h.org)
 
@@ -1480,6 +1503,7 @@ func environmentBundle(t *testing.T, env string, rules ...domain.NewServerStandi
 
 	c := h.claims()
 	c.ItemID, c.Connections = it.ID, []string{connTracker, connDocs}
+	claim(&c)
 
 	status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
 	if status != http.StatusOK {
@@ -1514,7 +1538,7 @@ func TestBundle_EnvironmentServersOnSecrets(t *testing.T) {
 
 	want := []bundleMCPServer{
 		{
-			Name: "linear", URL: "https://mcp.linear.example.com/mcp",
+			Name: serverLinear, URL: "https://mcp.linear.example.com/mcp",
 			Headers:   map[string]string{"Authorization": "Bearer ${GOAL_SECRET_LINEAR_KEY}", "X-Org": "acme"},
 			ToolModes: []bundleToolMode{},
 		},
@@ -1544,7 +1568,7 @@ func TestBundle_EnvironmentToolModesWithStandingRule(t *testing.T) {
 	t.Parallel()
 
 	rule := func(tool, agent string) domain.NewServerStandingRule {
-		return domain.NewServerStandingRule{Factory: factoryID, Environment: envCI, Server: "linear", Tool: tool, Agent: agent}
+		return domain.NewServerStandingRule{Factory: factoryID, Environment: envCI, Server: serverLinear, Tool: tool, Agent: agent}
 	}
 	got, _ := environmentBundle(t, `  mcp:
     linear:
@@ -1552,11 +1576,36 @@ func TestBundle_EnvironmentToolModesWithStandingRule(t *testing.T) {
       tools: {create_comment: ask, "delete_*": off, "close_*": ask}
 `,
 		rule("create_comment", agentEngineer), rule("delete_issue", agentEngineer), rule("close_issue", "reviewer"),
-		domain.NewServerStandingRule{Factory: factoryID, Environment: domain.DefaultEnvironment, Server: "linear", Tool: "close_pr", Agent: agentEngineer},
+		domain.NewServerStandingRule{Factory: factoryID, Environment: domain.DefaultEnvironment, Server: serverLinear, Tool: "close_pr", Agent: agentEngineer},
 	)
 
 	want := []bundleToolMode{
 		{Tool: "create_comment", Mode: domain.ToolModeAllow}, {Tool: "delete_*", Mode: domain.ToolModeOff}, {Tool: "close_*", Mode: domain.ToolModeAsk},
+	}
+	if servers := got.Spec.Environment.MCPServers; len(servers) != 1 || !reflect.DeepEqual(servers[0].ToolModes, want) {
+		t.Errorf("mcp_servers %+v; want linear with tool_modes %+v", servers, want)
+	}
+}
+
+// ADR 0037 decisions 8 and 12: the organization policy's MCP tool mode cap applies to the file's
+// modes, the stricter winning: allow under an ask cap is ask, off stays off, and a standing rule
+// does not lift an ask the cap keeps.
+func TestBundle_EnvironmentToolModesUnderThePolicyCap(t *testing.T) {
+	t.Parallel()
+
+	got, _ := cappedEnvironmentBundle(t, `  mcp:
+    linear:
+      url: https://mcp.linear.example.com/mcp
+      tools: {create_issue: allow, create_comment: ask, "delete_*": off}
+`, map[string]domain.ConnectionToolMode{"*": domain.ToolModeAsk},
+		domain.NewServerStandingRule{Factory: factoryID, Environment: envCI, Server: serverLinear, Tool: "create_comment", Agent: agentEngineer},
+	)
+
+	want := []bundleToolMode{
+		{Tool: "create_comment", Mode: domain.ToolModeAsk},
+		{Tool: "create_issue", Mode: domain.ToolModeAsk},
+		{Tool: "delete_*", Mode: domain.ToolModeOff},
+		{Tool: "*", Mode: domain.ToolModeAsk},
 	}
 	if servers := got.Spec.Environment.MCPServers; len(servers) != 1 || !reflect.DeepEqual(servers[0].ToolModes, want) {
 		t.Errorf("mcp_servers %+v; want linear with tool_modes %+v", servers, want)
@@ -1593,5 +1642,43 @@ func TestBundle_EnvironmentToolsSetupAndFiles(t *testing.T) {
 
 	if strings.Contains(string(body), "acme-sentry-org") {
 		t.Errorf("the bundle holds an env value:\n%s", body)
+	}
+}
+
+// ADR 0037 decision 12: with Use secrets off the token says NoEnvironment, and the bundle keeps
+// the environment's name, setup and tools but gives no variable, file or MCP server, with a secret
+// or without.
+func TestBundle_EnvironmentNoEnvironmentDropsEnvFilesAndMCP(t *testing.T) {
+	t.Parallel()
+
+	got, body := environmentBundleOf(t, `  tools: [node@22, gh]
+  setup: [pnpm install --frozen-lockfile]
+  env: {SENTRY_ORG: acme-sentry-org, GH_TOKEN: "{{github-token}}"}
+  files:
+    ~/.npmrc: "{{npmrc}}"
+  mcp:
+    linear:
+      url: https://mcp.linear.example.com/mcp
+      headers: {Authorization: "Bearer {{linear-key}}"}
+    playwright:
+      command: [npx, "@playwright/mcp@0.0.41"]
+`, nil, func(c *domain.TaskClaims) { c.NoEnvironment = true })
+
+	if want := []string{"node@22", "gh"}; !slices.Equal(got.Tools, want) {
+		t.Errorf("tools %v; want %v", got.Tools, want)
+	}
+
+	want := bundleEnvironment{
+		Name: envCI, MCPServers: []bundleMCPServer{}, Setup: []string{"pnpm install --frozen-lockfile"},
+		Files: []bundleFile{}, Env: []string{}, CLIs: []string{"node", "gh"},
+	}
+	if !reflect.DeepEqual(*got.Spec.Environment, want) {
+		t.Errorf("environment %+v; want %+v", *got.Spec.Environment, want)
+	}
+
+	for _, name := range []string{"GOAL_FILE_", "GOAL_SECRET_", "SENTRY_ORG", "GH_TOKEN", "mcp.linear.example.com", "@playwright/mcp"} {
+		if strings.Contains(string(body), name) {
+			t.Errorf("the bundle holds %q:\n%s", name, body)
+		}
 	}
 }

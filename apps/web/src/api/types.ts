@@ -224,6 +224,8 @@ type Schemas = components['schemas'];
 // The secret shapes (ADR 0037), read from the generated schema. A value is in NewSecret, SecretValue and
 // SecretImport only, which go out; no answer carries one.
 export type Secret = Schemas['Secret'];
+/** A standing rule (Always allow): one agent role, one tool; keyed by server for a factory on secrets (ADR 0037 decision 8). */
+export type StandingRule = Schemas['StandingRule'];
 // The Access read model (ADR 0037 decision 14): what every factory's agents reach.
 export type Access = Schemas['Access'];
 export type AccessGroup = Schemas['AccessGroup'];

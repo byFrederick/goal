@@ -72,7 +72,24 @@ func (s *server) PutOrgPolicy(ctx context.Context, req gen.PutOrgPolicyRequestOb
 		return nil, fmt.Errorf("%w: If-Match %q is not a policy revision", errInvalid, tag)
 	}
 
-	p := policyIn(*req.Body)
+	// Normalized saves the deprecated use_credentials attached_only as environment.
+	p := policyIn(*req.Body).Normalized()
+	// A cap that is no tool name or glob to allow, ask or off is a malformed body (400), not a
+	// domain refusal, so the domain error is not wrapped.
+	if err := domain.CheckMCPToolCap(p.MCPToolModes); err != nil {
+		return nil, fmt.Errorf("%w: %s", errInvalid, err.Error())
+	}
+
+	// PUT replaces the policy, but a client that predates the cap sends none: keep the stored one.
+	if req.Body.McpToolModes == nil {
+		stored, err := s.policies.Get(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("read the organization policy: %w", err)
+		}
+
+		p.MCPToolModes = stored.MCPToolModes
+	}
+
 	if err := s.checkPolicy(ctx, p); err != nil {
 		return nil, err
 	}
@@ -109,12 +126,21 @@ func (s *server) checkPolicy(ctx context.Context, p domain.OrgPolicy) error {
 	return nil
 }
 
+// policyIn is b as a policy; a b without mcp_tool_modes has no cap.
 func policyIn(b gen.OrgPolicyInput) domain.OrgPolicy {
+	modes := map[string]domain.ConnectionToolMode{}
+
+	if b.McpToolModes != nil {
+		for tool, m := range *b.McpToolModes {
+			modes[tool] = domain.ConnectionToolMode(m)
+		}
+	}
+
 	return domain.OrgPolicy{
 		AllowedModels: b.AllowedModels, DefaultModel: b.DefaultModel, DeniedCommands: b.DeniedCommands,
 		WriteOutsideBranch: domain.ToolSetting(b.Tools.WriteOutsideBranch), MergePullRequest: domain.ToolSetting(b.Tools.MergePullRequest),
 		ReadWeb: domain.ToolSetting(b.Tools.ReadWeb), UseCredentials: domain.ToolSetting(b.Tools.UseCredentials),
-		BoxTimeLimitMinutes: b.BoxTimeLimitMinutes,
+		MCPToolModes: modes, BoxTimeLimitMinutes: b.BoxTimeLimitMinutes,
 	}
 }
 
@@ -123,6 +149,11 @@ func revisionTag(p domain.OrgPolicy) string { return quote(strconv.FormatInt(p.R
 // policyView is p with the facts beside it: the install's models and who uses each, the box sizes
 // and who uses each, and the egress addresses.
 func (s *server) policyView(ctx context.Context, p domain.OrgPolicy) gen.OrgPolicyView {
+	modes := make(map[string]gen.ConnectionToolMode, len(p.MCPToolModes))
+	for tool, m := range p.MCPToolModes {
+		modes[tool] = gen.ConnectionToolMode(m)
+	}
+
 	out := gen.OrgPolicyView{
 		Policy: gen.OrgPolicyInput{
 			AllowedModels: nonNil(p.AllowedModels), DefaultModel: p.DefaultModel, DeniedCommands: nonNil(p.DeniedCommands),
@@ -130,6 +161,7 @@ func (s *server) policyView(ctx context.Context, p domain.OrgPolicy) gen.OrgPoli
 				WriteOutsideBranch: gen.ToolPolicyWriteOutsideBranch(p.WriteOutsideBranch), MergePullRequest: gen.ToolPolicyMergePullRequest(p.MergePullRequest),
 				ReadWeb: gen.ToolPolicyReadWeb(p.ReadWeb), UseCredentials: gen.ToolPolicyUseCredentials(p.UseCredentials),
 			},
+			McpToolModes:        &modes,
 			BoxTimeLimitMinutes: p.BoxTimeLimitMinutes,
 		},
 		Revision:        p.Revision,

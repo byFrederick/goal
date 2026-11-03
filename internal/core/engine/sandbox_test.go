@@ -266,7 +266,7 @@ func TestRun_RefusesAVersionThatDoesNotRunOnConnections(t *testing.T) {
 			}
 
 			reason, _ := h.eventsOf(it.ID, domain.EventBlocked)[0].Data["reason"].(string)
-			if !strings.Contains(reason, tt.want) || !strings.Contains(reason, "publish a version with connections (spec 4 §4.4)") {
+			if !strings.Contains(reason, tt.want) || !strings.Contains(reason, "publish a version on environment files and secrets (ADR 0037)") {
 				t.Errorf("blocked reason %q; want it to name %q and the fix", reason, tt.want)
 			}
 

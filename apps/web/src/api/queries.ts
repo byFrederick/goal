@@ -54,6 +54,7 @@ import {
   listOrgs,
   listProposals,
   listSavedViews,
+  listStandingRules,
   type RunsFilter,
 } from './client';
 import {
@@ -188,6 +189,8 @@ export const keys = {
   /** The organization's secrets (ADR 0037): the list, one secret, and the audit entries about it. A connection's change also moves them. */
   /** What the organization's agents reach (ADR 0037): the read model, by view. A secret's or a factory's change moves it. */
   access: (org: string, by: string) => ['org', org, 'access', by] as const,
+  /** The organization's active standing rules (Always allow). */
+  standingRules: (org: string) => ['org', org, 'standing-rules'] as const,
   secrets: (org: string) => ['org', org, 'secrets'] as const,
   secret: (org: string, name: string) => ['org', org, 'secrets', name] as const,
   secretActivity: (org: string, id: string) => ['org', org, 'secrets', 'activity', id] as const,
@@ -1029,4 +1032,12 @@ export const catalogQuery = () =>
     queryKey: ['catalog'] as const,
     queryFn: ({ signal }) => getCatalog(signal),
     staleTime: 5 * 60_000,
+  });
+
+/** The organization's active standing rules (connection:read); the Environments form picks the ones of its servers. */
+export const standingRulesQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.standingRules(org),
+    queryFn: ({ signal }) => listStandingRules(org, signal),
+    staleTime: 30_000,
   });

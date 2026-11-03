@@ -257,7 +257,7 @@ type QueueNotificationsParams struct {
 // holding one of factory_roles on factory (members come from goal_members, since goal_app cannot
 // read schema auth), never the actor (an Actor ref; ” excludes nobody). A person without a saved
 // preference for the event has the defaults, which Go passes (domain.DefaultNotificationPreferences).
-// Slack is on only while the organization's notification setting names a secret (00092; ADR 0037,
+// Slack is on only while the organization's notification setting names a secret (00094; ADR 0037,
 // decision 14).
 func (q *Queries) QueueNotifications(ctx context.Context, arg QueueNotificationsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, queueNotifications,

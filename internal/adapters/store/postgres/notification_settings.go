@@ -15,7 +15,7 @@ import (
 
 var _ ports.NotificationSettings = (*NotificationSettings)(nil)
 
-// NotificationSettings implements ports.NotificationSettings over 00092's
+// NotificationSettings implements ports.NotificationSettings over 00094's
 // org_notification_settings, as goal_app under row-level security: every statement sees the
 // organization in ctx. The Slack secret is stored by id and read by name, so a rename keeps it;
 // an organization without a row has Slack off. A change appends its audit entry in the same

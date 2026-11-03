@@ -243,6 +243,7 @@ export type SignupDomainInput = Schemas["SignupDomainInput"];
 export type AgentHit = Schemas["AgentHit"];
 export type FactoryHit = Schemas["FactoryHit"];
 export type ConnectionHit = Schemas["ConnectionHit"];
+export type SecretHit = Schemas["SecretHit"];
 export type FactoryAttention = Schemas["FactoryAttention"];
 export type FactoryOverviewList = Schemas["FactoryOverviewList"];
 export type FactoryOverview = Schemas["FactoryOverview"];

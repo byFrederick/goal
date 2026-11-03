@@ -659,6 +659,64 @@ describe('the environment on a version on secrets', () => {
     expect(gw.requests).toHaveLength(1);
   });
 
+  describe("the agent's tool rules for an environment server", () => {
+    const withGithub = (modes: { tool: string; mode: string }[], extra: Partial<TaskSpec>) =>
+      ({
+        environment: {
+          ...environment,
+          mcp_servers: [
+            ...environment.mcp_servers,
+            { name: 'github', url: 'https://mcp.github.example.com/mcp', tool_modes: modes },
+          ],
+        },
+        ...extra,
+      }) as unknown as Partial<TaskSpec>;
+
+    it('allows only the tools an allow list matches, without a request', async () => {
+      const gw = gatewayAnswering(202);
+      const check = { canUseTool: permission(gw, withGithub([], { tools_allow: ['Read', 'github__get_*'] })) };
+
+      expect(await decide(check, 'mcp__github__get_issue')).toBe('allow');
+      expect(await verdictOf(check, 'mcp__github__merge_pull_request')).toEqual({
+        behavior: 'deny',
+        message: "The agent's tool rules do not let it call github__merge_pull_request.",
+      });
+      expect(await decide(check, 'mcp__linear__create_comment')).toBe('allow');
+      expect(gw.requests).toEqual([]);
+    });
+
+    it('lets a deny pattern win over an allow mode, and denies an ask tool before it asks', async () => {
+      const gw = gatewayAnswering(202);
+      const modes = [
+        { tool: 'merge_*', mode: 'allow' },
+        { tool: 'push_*', mode: 'ask' },
+      ];
+      const check = {
+        canUseTool: permission(gw, withGithub(modes, { tools_deny: ['github__merge_*', 'github__push_*'] })),
+      };
+
+      expect(await decide(check, 'mcp__github__merge_pull_request')).toBe('deny');
+      expect(await decide(check, 'mcp__github__push_files')).toBe('deny');
+      expect(await decide(check, 'mcp__github__get_issue')).toBe('allow');
+      expect(gw.requests).toEqual([]);
+    });
+
+    it("denies the server's every tool for a malformed deny pattern", async () => {
+      const check = { canUseTool: permission(gatewayAnswering(202), withGithub([], { tools_deny: ['github__[get'] })) };
+
+      expect(await decide(check, 'mcp__github__get_issue')).toBe('deny');
+      expect(await decide(check, 'mcp__linear__create_comment')).toBe('allow');
+    });
+
+    it('takes the rules of a server whose name holds an underscore', async () => {
+      const check = {
+        canUseTool: permission(gatewayAnswering(202), { tools_deny: ['play_wright__browser_*'] }),
+      };
+
+      expect(await decide(check, 'mcp__play_wright__browser_click')).toBe('deny');
+    });
+  });
+
   it('denies a server the environment does not have', async () => {
     expect(await decide({ canUseTool: permission(gatewayAnswering(202)) }, 'mcp__github__get_issue')).toBe('deny');
   });

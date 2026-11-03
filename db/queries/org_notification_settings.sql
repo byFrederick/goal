@@ -1,4 +1,4 @@
--- The organization's notification settings (00092), under row-level security: every statement
+-- The organization's notification settings (00094), under row-level security: every statement
 -- sees the transaction's organization only. The Slack secret is read by its name, which follows a
 -- rename.
 

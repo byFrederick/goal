@@ -123,7 +123,8 @@ function mcpServers(spec: TaskSpec, gatewayToken: string | undefined): Record<st
  * ("Read", "Bash(npm test*)"): their tool names are the only built-in tools available, and the
  * rules themselves are pre-approved. Deny rules always win. Rules for connection tools
  * ("github__get_*": a connection, two underscores, a tool pattern) are left out: the gateway
- * enforces them for its tools and connectionPermission for the connections' own servers.
+ * enforces them for its tools and connectionPermission for the connections' and the environment's
+ * own servers.
  */
 export function toolPolicy(
   spec: Pick<TaskSpec, 'tools_allow' | 'tools_deny' | 'skills'>,
@@ -155,7 +156,8 @@ function isConnectionRule(rule: string): boolean {
  * and one whose mode is ask is not run: it waits for a person (askFirst), unless a grant the run
  * carries allows that exact call once. A built-in write Claude Code escalates is decided by
  * guidanceWrite. A tool of one of the environment's MCP servers (mcp__<server>__<tool>, ADR 0037
- * decision 8) takes the mode of the server's first tool_modes entry that matches it, allow when none
+ * decision 8) is first decided by the agent's rules for the server, exactly as a connection's tool;
+ * then it takes the mode of the server's first tool_modes entry that matches it, allow when none
  * does: allow runs, off is denied and ask goes to askFirst with the server as its connection. Every
  * other call is denied, as Claude Code's dontAsk mode would.
  */
@@ -169,6 +171,12 @@ export function connectionPermission(
     list
       .filter(isConnectionRule)
       .flatMap((rule) => (rule.startsWith(`${conn}__`) ? [rule.slice(conn.length + 2)] : []));
+  // Deny wins, a malformed deny pattern denies the server's every tool, and allow rules restrict.
+  const allowedByRules = (conn: string, tool: string) => {
+    const allow = rules(spec.tools_allow, conn);
+    if (rules(spec.tools_deny, conn).some((p) => matches(p, tool) ?? true)) return false;
+    return allow.length === 0 || allow.some((p) => matches(p, tool) ?? false);
+  };
   // Each grant allows one call, so it is taken out of this list when it matches (ADR 0031 decision 5).
   const grants = (spec.granted_calls ?? []).map((g) => ({ ...g, key: canonicalJSON(g.input) }));
   const granted = (conn: string, tool: string, input: unknown) => {
@@ -190,6 +198,9 @@ export function connectionPermission(
     const server = envServers.find((s) => toolName.startsWith(`mcp__${s.name}__`));
     if (server) {
       const tool = toolName.slice(`mcp__${server.name}__`.length);
+      if (!allowedByRules(server.name, tool)) {
+        return { behavior: 'deny', message: `The agent's tool rules do not let it call ${server.name}__${tool}.` };
+      }
       const mode = serverToolMode(server, tool);
       if (mode === 'off') {
         return {
@@ -204,10 +215,8 @@ export function connectionPermission(
     if (!servers.has(conn))
       return { behavior: 'deny', message: `${toolName} is not allowed by the agent's tool rules.` };
 
-    const allow = rules(spec.tools_allow, conn);
-    const denied = rules(spec.tools_deny, conn).some((p) => matches(p, tool) ?? true);
     const mode = spec.connections.find((c) => c.name === conn)?.tool_modes?.[tool];
-    if (denied || mode === 'off' || (allow.length > 0 && !allow.some((p) => matches(p, tool) ?? false))) {
+    if (!allowedByRules(conn, tool) || mode === 'off') {
       return { behavior: 'deny', message: `The agent's tool rules do not let it call ${conn}__${tool}.` };
     }
     if (mode === 'ask' && !granted(conn, tool, input)) return askFirst(spec, reach, conn, tool, input);

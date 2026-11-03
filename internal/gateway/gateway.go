@@ -141,6 +141,12 @@ type Connections interface {
 	StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error)
 }
 
+// Policies reads the organization policy of the organization in ctx, whose MCP tool mode cap the
+// run bundle applies; ports.OrgPolicies satisfies it.
+type Policies interface {
+	Get(ctx context.Context) (domain.OrgPolicy, error)
+}
+
 // Deps are the gateway's collaborators. Logger may be nil (logs discarded).
 type Deps struct {
 	Definitions Definitions
@@ -154,6 +160,8 @@ type Deps struct {
 	// Knowledge serves Goal's knowledge tools to runs whose factory lists knowledge sources; nil
 	// serves none.
 	Knowledge Knowledge
+	// Policies cap the tool modes of the run bundle's environment MCP servers.
+	Policies Policies
 	// Questions takes the questions agents ask with question__ask, which every run is served.
 	Questions Questions
 	// ToolApprovals take the Ask-first tool calls runs report at POST /run/tool-approval.
@@ -201,6 +209,7 @@ type Gateway struct {
 	defs        Definitions
 	items       Items
 	connections Connections
+	policies    Policies
 	events      Events
 	clock       ports.Clock
 	log         *slog.Logger
@@ -217,9 +226,9 @@ type Gateway struct {
 
 // New returns a gateway; goald mounts it at its MCP path.
 func New(d Deps, cfg Config) (*Gateway, error) {
-	if d.Definitions == nil || d.Items == nil || d.Connections == nil || d.Events == nil || d.Clock == nil || d.Questions == nil ||
-		d.ToolApprovals == nil {
-		return nil, errors.New("gateway: Definitions, Items, Connections, Events, Clock, Questions and ToolApprovals are required")
+	if d.Definitions == nil || d.Items == nil || d.Connections == nil || d.Policies == nil || d.Events == nil || d.Clock == nil ||
+		d.Questions == nil || d.ToolApprovals == nil {
+		return nil, errors.New("gateway: Definitions, Items, Connections, Policies, Events, Clock, Questions and ToolApprovals are required")
 	}
 
 	if len(cfg.Key) == 0 {
@@ -229,7 +238,7 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 	cfg.MaxRequestBytes = cmp.Or(cfg.MaxRequestBytes, defaultMaxRequestBytes)
 
 	g := &Gateway{
-		defs: d.Definitions, items: d.Items, connections: d.Connections, events: d.Events, clock: d.Clock, log: d.Logger,
+		defs: d.Definitions, items: d.Items, connections: d.Connections, policies: d.Policies, events: d.Events, clock: d.Clock, log: d.Logger,
 		knowledge: d.Knowledge, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah, cfg: cfg,
 	}
 	if g.log == nil {

@@ -6,7 +6,7 @@
 -- name: DigestRecipients :many
 -- The members of the transaction's organization with the digest on for email or Slack (their
 -- saved choice, else the defaults Go passes), with their time zone (UTC without a saved one) and
--- whether the organization's notification setting names a Slack secret (00092; ADR 0037,
+-- whether the organization's notification setting names a Slack secret (00094; ADR 0037,
 -- decision 14).
 WITH members AS (
   SELECT DISTINCT (m ->> 'user_id')::uuid AS user_id FROM jsonb_array_elements(goal_members()) AS m

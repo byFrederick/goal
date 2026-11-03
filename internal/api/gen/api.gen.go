@@ -1917,6 +1917,7 @@ func (e ToolPolicyReadWeb) Valid() bool {
 // Defines values for ToolPolicyUseCredentials.
 const (
 	ToolPolicyUseCredentialsAttachedOnly ToolPolicyUseCredentials = "attached_only"
+	ToolPolicyUseCredentialsEnvironment  ToolPolicyUseCredentials = "environment"
 	ToolPolicyUseCredentialsOff          ToolPolicyUseCredentials = "off"
 )
 
@@ -1924,6 +1925,8 @@ const (
 func (e ToolPolicyUseCredentials) Valid() bool {
 	switch e {
 	case ToolPolicyUseCredentialsAttachedOnly:
+		return true
+	case ToolPolicyUseCredentialsEnvironment:
 		return true
 	case ToolPolicyUseCredentialsOff:
 		return true
@@ -5787,6 +5790,9 @@ type OrgPolicyInput struct {
 	// DeniedCommands Claude Code Bash permission patterns no agent may run, such as Bash(terraform apply:*)
 	DeniedCommands []string `json:"denied_commands"`
 
+	// McpToolModes The organization's cap on MCP tool modes (ADR 0037 decision 12): a tool name or glob (* and ?), 1 to 128 letters, digits, underscores, dots, dashes, * or ?, mapped to allow, ask or off. Where a tool's mode and the cap disagree, the stricter wins (off, then ask, then allow). Empty means no cap. A save that omits it keeps the stored cap; a mode or pattern that is not valid is 400.
+	McpToolModes *map[string]ConnectionToolMode `json:"mcp_tool_modes,omitempty"`
+
 	// Tools The tool policy defaults (ADR 0024 decision 2)
 	Tools ToolPolicy `json:"tools"`
 }
@@ -5862,6 +5868,9 @@ type OrgSearch struct {
 	Connections []ConnectionHit `json:"connections"`
 	Factories   []FactoryHit    `json:"factories"`
 	Items       []SearchItem    `json:"items"`
+
+	// Secrets Empty unless the caller holds secret:read
+	Secrets []SecretHit `json:"secrets"`
 }
 
 // OrgSettings defines model for OrgSettings.
@@ -6617,6 +6626,18 @@ type SecretExpiry struct {
 	RemindDays *int       `json:"remind_days,omitempty"`
 }
 
+// SecretHit A secret whose name matched, never its value
+type SecretHit struct {
+	// ExpiresAt When the value expires
+	ExpiresAt *time.Time `json:"expires_at"`
+
+	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+	Name SecretName `json:"name"`
+
+	// Scope The factories whose runs may open it; neither all nor any listed reaches no run
+	Scope SecretScope `json:"scope"`
+}
+
 // SecretImport defines model for SecretImport.
 type SecretImport struct {
 	// DryRun Answer what the import would do and store nothing
@@ -6856,7 +6877,7 @@ type SpendBudget struct {
 	DailyUsd *float64   `json:"daily_usd"`
 	Factory  FactoryHit `json:"factory"`
 
-	// ModelConnections The organization's connections that give the factory's runs their model (runtime.modelConnection), for "Who pays for models"; empty when it names none
+	// ModelConnections What gives the factory's runs their model, for "Who pays for models": the organization's connection runtime.modelConnection names, with its kind, and on secrets the organization's secret runtime.modelKey names, by name with kind "secret" and never its value (ADR 0037 decision 7); empty when it names neither
 	ModelConnections []ConnectionHit `json:"model_connections"`
 
 	// Reason The open andon pull's reason when stopped, the spend against the cap when over_budget, else null
@@ -7253,7 +7274,9 @@ type ToolPolicy struct {
 	MergePullRequest ToolPolicyMergePullRequest `json:"merge_pull_request"`
 
 	// ReadWeb Search, fetch and documentation tools
-	ReadWeb        ToolPolicyReadWeb        `json:"read_web"`
+	ReadWeb ToolPolicyReadWeb `json:"read_web"`
+
+	// UseCredentials Use secrets: environment gives an agent what its environment names; off gives it no env, files or MCP servers. attached_only is a deprecated alias for environment: a save stores it as environment, and every read returns environment.
 	UseCredentials ToolPolicyUseCredentials `json:"use_credentials"`
 
 	// WriteOutsideBranch Comments, issues, tickets and messages outside the item's branch
@@ -7266,7 +7289,7 @@ type ToolPolicyMergePullRequest string
 // ToolPolicyReadWeb Search, fetch and documentation tools
 type ToolPolicyReadWeb string
 
-// ToolPolicyUseCredentials defines model for ToolPolicy.UseCredentials.
+// ToolPolicyUseCredentials Use secrets: environment gives an agent what its environment names; off gives it no env, files or MCP servers. attached_only is a deprecated alias for environment: a save stores it as environment, and every read returns environment.
 type ToolPolicyUseCredentials string
 
 // ToolPolicyWriteOutsideBranch Comments, issues, tickets and messages outside the item's branch
@@ -10528,7 +10551,7 @@ type ClientInterface interface {
 
 	// PutOrgPolicyWithBody Replace the organization's policy
 	//
-	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -10537,7 +10560,7 @@ type ClientInterface interface {
 
 	// PutOrgPolicy Replace the organization's policy
 	//
-	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -14815,7 +14838,7 @@ func (c *Client) GetOrgPolicy(ctx context.Context, org OrgRef, reqEditors ...Req
 
 // PutOrgPolicyWithBody Replace the organization's policy
 //
-// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
 //
 // Takes any type of body and a specified content type.
 //
@@ -14834,7 +14857,7 @@ func (c *Client) PutOrgPolicyWithBody(ctx context.Context, org OrgRef, params *P
 
 // PutOrgPolicy Replace the organization's policy
 //
-// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -28211,7 +28234,7 @@ type ClientWithResponsesInterface interface {
 
 	// PutOrgPolicyWithBodyWithResponse Replace the organization's policy
 	//
-	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -28220,7 +28243,7 @@ type ClientWithResponsesInterface interface {
 
 	// PutOrgPolicyWithResponse Replace the organization's policy
 	//
-	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -41518,7 +41541,7 @@ func (c *ClientWithResponses) GetOrgPolicyWithResponse(ctx context.Context, org 
 
 // PutOrgPolicyWithBodyWithResponse Replace the organization's policy
 //
-// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -41533,7 +41556,7 @@ func (c *ClientWithResponses) PutOrgPolicyWithBodyWithResponse(ctx context.Conte
 
 // PutOrgPolicyWithResponse Replace the organization's policy
 //
-// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //

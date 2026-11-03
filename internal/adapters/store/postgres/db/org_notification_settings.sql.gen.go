@@ -30,7 +30,7 @@ FROM org_notification_settings n
 LEFT JOIN secrets s ON s.org_id = n.org_id AND s.id = n.slack_secret_id
 `
 
-// The organization's notification settings (00092), under row-level security: every statement
+// The organization's notification settings (00094), under row-level security: every statement
 // sees the transaction's organization only. The Slack secret is read by its name, which follows a
 // rename.
 // The organization's settings; no row when it never saved any. slack_secret is ” when Slack is off.
