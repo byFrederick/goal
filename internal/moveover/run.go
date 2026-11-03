@@ -2,6 +2,7 @@ package moveover
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -109,7 +110,7 @@ func (m *Mover) Org(ctx context.Context) (Tally, error) {
 		return t, err
 	}
 
-	if t.Secrets, err = m.secrets(ctx, conns); err != nil {
+	if conns, t.Secrets, err = m.secrets(ctx, conns); err != nil {
 		return t, err
 	}
 
@@ -200,29 +201,105 @@ func (m *Mover) opened(ctx context.Context) ([]domain.ResolvedConnection, error)
 	return out, nil
 }
 
-// secrets creates the secrets conns become, skipping each that exists by name, and counts the
-// ones it created.
-func (m *Mover) secrets(ctx context.Context, conns []domain.ResolvedConnection) (int, error) {
+// secrets creates the secrets conns become and counts the ones it created. A secret that has the
+// name already, is open to every factory and holds the connection's value is the connection's
+// secret: it is reused. Any other keeps its name, and the connection's secret takes the first
+// free name with a numeric suffix (github-2, then github-3), recorded in the returned connections'
+// SecretRefs (cloned, never stored), so every name the conversion writes (SecretName) is the
+// new one. Each rename that creates a secret is logged (secret renamed), naming the connection
+// and both names, never a value; a second run finds its own suffixed secret and creates nothing.
+func (m *Mover) secrets(ctx context.Context, conns []domain.ResolvedConnection) ([]domain.ResolvedConnection, int, error) {
+	out := slices.Clone(conns)
 	n := 0
 
-	for _, s := range Secrets(conns) {
-		_, err := m.d.Secrets.Get(ctx, s.Name)
+	for _, s := range movedSecrets(conns) {
+		name, created, err := m.place(ctx, s.secret)
+		if err != nil {
+			return nil, n, err
+		}
 
-		switch {
-		case err == nil:
+		if created {
+			n++
+		}
+
+		if name == s.secret.Name {
 			continue
-		case !errors.Is(err, ports.ErrNotFound):
-			return n, fmt.Errorf("read secret %s: %w", s.Name, err)
 		}
 
-		if _, err := m.d.Secrets.Create(ctx, s, Actor); err != nil && !errors.Is(err, ports.ErrNameTaken) {
-			return n, fmt.Errorf("create secret %s: %w", s.Name, err)
+		rc := &out[s.conn]
+
+		if created {
+			m.d.Logger.WarnContext(ctx, "secret renamed", slog.String("connection", rc.Connection.Name), slog.String("field", s.field),
+				slog.String("from", s.secret.Name), slog.String("to", name),
+				slog.String("reason", "a secret named "+s.secret.Name+" holds another value or is open to some factories only"))
 		}
 
-		n++
+		refs := maps.Clone(rc.Connection.SecretRefs)
+		if refs == nil {
+			refs = map[string]string{}
+		}
+
+		refs[s.field] = name
+		rc.Connection.SecretRefs = refs
 	}
 
-	return n, nil
+	return out, n, nil
+}
+
+// maxTries bounds the names place tries for one secret.
+const maxTries = 100
+
+// place is the name of the secret s becomes, and whether it created it: the first of s's names
+// (suffixed) that is free, where it creates s, or that holds s's value open to every factory.
+func (m *Mover) place(ctx context.Context, s domain.NewSecret) (string, bool, error) {
+	for i := 1; i <= maxTries; i++ {
+		name := suffixed(s.Name, i)
+
+		same, err := m.holds(ctx, name, s.Value)
+
+		switch {
+		case errors.Is(err, ports.ErrNotFound):
+			next := s
+			next.Name = name
+
+			if _, err := m.d.Secrets.Create(ctx, next, Actor); errors.Is(err, ports.ErrNameTaken) {
+				continue
+			} else if err != nil {
+				return "", false, fmt.Errorf("create secret %s: %w", name, err)
+			}
+
+			return name, true, nil
+		case err != nil:
+			return "", false, err
+		case same:
+			return name, false, nil
+		}
+	}
+
+	return "", false, fmt.Errorf("secret %s: no free name among %d tries", s.Name, maxTries)
+}
+
+// holds reports whether secret name is open to every factory and holds value; ports.ErrNotFound
+// when there is no such secret. A secret with another scope is not opened: the conversion makes
+// every secret open to all, so it is not one of its own.
+func (m *Mover) holds(ctx context.Context, name, value string) (bool, error) {
+	sec, err := m.d.Secrets.Get(ctx, name)
+
+	switch {
+	case errors.Is(err, ports.ErrNotFound):
+		return false, err
+	case err != nil:
+		return false, fmt.Errorf("read secret %s: %w", name, err)
+	case !sec.Scope.All:
+		return false, nil
+	}
+
+	opened, err := m.d.Secrets.Resolve(ctx, []string{name}, domain.SecretUse{})
+	if err != nil {
+		return false, fmt.Errorf("open secret %s: %w", name, err)
+	}
+
+	return len(opened) == 1 && subtle.ConstantTimeCompare([]byte(opened[0].Value), []byte(value)) == 1, nil
 }
 
 // sources points each synced knowledge source that reads a connection and no secret at the
@@ -266,7 +343,8 @@ func (m *Mover) sources(ctx context.Context, conns []domain.ResolvedConnection) 
 	return n, nil
 }
 
-// sourcePatch is what points src at its connection's secret, or why it cannot ("" when it can).
+// sourcePatch is what points src at its connection's secret, or why it cannot ("" when it can):
+// among the reasons, a secret open to some factories only, which the ingestor cannot read with.
 func (m *Mover) sourcePatch(ctx context.Context, src domain.KnowledgeSource, conns []domain.ResolvedConnection) (domain.KnowledgeSourcePatch, string, error) {
 	i := slices.IndexFunc(conns, func(rc domain.ResolvedConnection) bool { return rc.Connection.Name == src.Connection })
 	if i < 0 {
@@ -286,13 +364,16 @@ func (m *Mover) sourcePatch(ctx context.Context, src domain.KnowledgeSource, con
 
 	name := SecretName(rc.Connection, rc.Kind, field)
 
-	_, err := m.d.Secrets.Get(ctx, name)
+	sec, err := m.d.Secrets.Get(ctx, name)
 
 	switch {
 	case errors.Is(err, ports.ErrNotFound):
 		return domain.KnowledgeSourcePatch{}, "there is no secret " + name, nil
 	case err != nil:
 		return domain.KnowledgeSourcePatch{}, "", fmt.Errorf("read secret %s: %w", name, err)
+	case !sec.Scope.All:
+		// The ingestor opens a source's secret for no factory (ErrSecretNotAllowed).
+		return domain.KnowledgeSourcePatch{}, "secret " + name + " is open to some factories only; a knowledge source reads with a secret open to all", nil
 	}
 
 	config := maps.Clone(src.Config)
