@@ -78,8 +78,23 @@ type Run struct {
 	Agent               string
 	Model               string
 	Result              RunResult
-	StartedAt           time.Time
-	EndedAt             time.Time
+	// Input is what the run was given, as RecordRunInput stored it; empty for runs from before
+	// run records (00085).
+	Input     RunInput
+	StartedAt time.Time
+	EndedAt   time.Time
+}
+
+// RunInput is what a run was given, for a later try to rerun it (ADR 0039, decision 8). Empty
+// fields are unknown: a retry in its claim's box has no heads, and a run without a repository none.
+type RunInput struct {
+	// Brief is the brief the agent was given: the bundle's brief (the item's work) and the run's
+	// feedback (its notes, answers and rejections), joined as the worker's prompt joins them.
+	Brief string
+	// BranchHead and BaseHead are the item branch's and its base's commits when prepare checked
+	// the branch out, before it brought the branch up to date with the base.
+	BranchHead string
+	BaseHead   string
 }
 
 // ListedRun is a run with the number and title of the item it worked, as the organization's run
@@ -114,6 +129,9 @@ type RunResult struct {
 	SessionID    string
 	// Error explains a failed or cancelled run.
 	Error string
+	// PushedHead is the item branch's commit on the remote when the agent ended, as the worker
+	// read it; empty without a repository or when it could not be read.
+	PushedHead string
 }
 
 // RunRequest is one agent run for engine.RunTask: what it records, which sandbox it opens, what

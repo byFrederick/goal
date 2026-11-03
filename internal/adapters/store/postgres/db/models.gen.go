@@ -29,6 +29,11 @@ type AgentRun struct {
 	OrgID               uuid.UUID
 	DefinitionVersionID *uuid.UUID
 	Kind                string
+	Brief               *string
+	Output              []byte
+	BranchHead          *string
+	BaseHead            *string
+	PushedHead          *string
 }
 
 type AndonPull struct {
