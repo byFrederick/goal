@@ -305,7 +305,7 @@ func (k *Knowledge) ConvertSource(ctx context.Context, name string, kind domain.
 		}
 
 		if err := sourceAudit(ctx, q, by, domain.AuditKnowledgeSourceUpdated, locked.ID,
-			map[string]any{auditName: name, "kind": string(kind)}); err != nil {
+			map[string]any{auditName: name, auditKind: string(kind)}); err != nil {
 			return err
 		}
 

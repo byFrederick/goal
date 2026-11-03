@@ -190,6 +190,49 @@ func TestRun_KnowledgePinsTheNewestSnapshotOfWhatApplies(t *testing.T) {
 	}
 }
 
+// A factory that lists a synced source moving over converts into a repository source (ADR 0038
+// decision 16) still claims and runs: the next claim gets no pin for it, since it has no snapshot
+// yet, and the claim after its first sync pins that snapshot.
+func TestRun_KnowledgeOfAConvertedSource(t *testing.T) {
+	t.Parallel()
+
+	line := repoLine()
+	line.Knowledge = []domain.KnowledgeEntry{{Name: kbHandbook}}
+
+	h := newHarness(t, line, porttest.Succeed(`{}`))
+	kb := h.knowledgeBase(t)
+
+	if _, err := kb.kb.CreateSource(inOrg(t), domain.NewKnowledgeSource{
+		Name: kbHandbook, Title: kbHandbook, Kind: domain.SourceSynced, Secret: "docs-token",
+		Config: map[string]string{domain.SourceReaderKey: "gitdocs", "repository": "https://git.example.com/acme/docs"},
+	}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := kb.kb.ConvertSource(inOrg(t), kbHandbook, domain.SourceRepository, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	h.e = h.engine(t, h.store)
+
+	for i, want := range [][]domain.KnowledgePin{nil, {{Source: kbHandbook, Snapshot: "h1"}}} {
+		if i == 1 {
+			kb.putSnapshot(t, kbHandbook, "h1")
+		}
+
+		it := h.submit(t, domain.NewItem{})
+		h.step(t)
+
+		if got := h.item(t, it.ID); got.State != domain.StateDone {
+			t.Fatalf("item %d is %s, want done (events %v)", i+1, got.State, h.kinds(it.ID))
+		}
+
+		if got := h.pinsOf(t, i); !reflect.DeepEqual(got, want) {
+			t.Errorf("run %d's pins = %+v, want %+v", i+1, got, want)
+		}
+	}
+}
+
 // A draft request's box pins the snapshots of the sources that apply to the agent it is about, so
 // its bundle's Knowledge section is the one that agent's runs see.
 func TestRunDefinition_KnowledgePinsOfTheRequestsAgent(t *testing.T) {

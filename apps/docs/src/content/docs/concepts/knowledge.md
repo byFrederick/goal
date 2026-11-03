@@ -33,6 +33,8 @@ goal knowledge add runbooks --kind synced --secret docs-token \
 
 Sources made before secrets read a connection. When goald moves an organization over to secrets, each such source gets the secret made from its connection's token, and the connection's other values go into its config. A source it can't move keeps reading its connection, and goald logs why.
 
+When you upgrade to knowledge as files, goald converts each source once, at its start. A synced source that reads with a secret becomes a `repository` source (the `gitdocs` reader) or a `confluence` source. It keeps its name, its secret and its config, without `reader`. Live sources are deleted: give their MCP servers to agents in the factory's environment files instead. Uploads keep their originals. Every source then syncs once, and runs read its files from the next claim on. A factory keeps listing a converted source by its name, so no definition changes. A factory that listed a live source gets a `knowledge-source-unknown` error at its next publish, with a fix that removes the line. A synced source that goald can't convert stays as it is, and goald logs why (`knowledge source not converted`).
+
 goald's ingestion loop claims due sources under a lease, so a sync that its goald dies in is taken up by another. A source can sync on an interval, `--every 1h` for example, or on demand.
 
 ## How documents are indexed

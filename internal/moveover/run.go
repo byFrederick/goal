@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -137,40 +138,51 @@ func (m *Mover) knowledge(ctx context.Context, t *Tally) error {
 	now := m.d.Clock.Now()
 
 	for _, src := range list {
-		switch src.Kind {
-		case domain.SourceLive:
-			if err := m.d.Knowledge.DeleteSource(ctx, src.Name, Actor, nil); err != nil {
-				return fmt.Errorf("delete live knowledge source %s: %w", src.Name, err)
-			}
-
-			t.Live++
-
-			continue
-		case domain.SourceSynced:
-			if kind, err := src.ConvertsTo(); err == nil {
-				if _, err := m.d.Knowledge.ConvertSource(ctx, src.Name, kind, Actor); err != nil {
-					return fmt.Errorf("convert knowledge source %s: %w", src.Name, err)
-				}
-
-				t.Kinds++
-
-				continue
-			}
-
-			m.d.Logger.WarnContext(ctx, "knowledge source not converted", slog.String("source", src.Name), slog.String("reason", notConverted(src)))
+		if err := m.moveSource(ctx, src, now, t); err != nil {
+			return err
 		}
-
-		due := src.NextSyncAt != nil && !src.NextSyncAt.After(now)
-		if src.CurrentSnapshot != "" || due || src.Status == domain.SyncSyncing {
-			continue
-		}
-
-		if err := m.d.Knowledge.SyncNow(ctx, src.Name); err != nil {
-			return fmt.Errorf("make knowledge source %s due: %w", src.Name, err)
-		}
-
-		t.Due++
 	}
+
+	return nil
+}
+
+// moveSource converts, deletes or makes due one source, counting it in t.
+func (m *Mover) moveSource(ctx context.Context, src domain.KnowledgeSource, now time.Time, t *Tally) error {
+	switch src.Kind {
+	case domain.SourceLive:
+		if err := m.d.Knowledge.DeleteSource(ctx, src.Name, Actor, nil); err != nil {
+			return fmt.Errorf("delete live knowledge source %s: %w", src.Name, err)
+		}
+
+		t.Live++
+
+		return nil
+	case domain.SourceSynced:
+		if kind, err := src.ConvertsTo(); err == nil {
+			if _, err := m.d.Knowledge.ConvertSource(ctx, src.Name, kind, Actor); err != nil {
+				return fmt.Errorf("convert knowledge source %s: %w", src.Name, err)
+			}
+
+			t.Kinds++
+
+			return nil
+		}
+
+		m.d.Logger.WarnContext(ctx, "knowledge source not converted", slog.String("source", src.Name), slog.String("reason", notConverted(src)))
+	case domain.SourceUpload, domain.SourceRepository, domain.SourceConfluence:
+		// Already of ADR 0038's kinds: due once below when it has no snapshot.
+	}
+
+	due := src.NextSyncAt != nil && !src.NextSyncAt.After(now)
+	if src.CurrentSnapshot != "" || due || src.Status == domain.SyncSyncing {
+		return nil
+	}
+
+	if err := m.d.Knowledge.SyncNow(ctx, src.Name); err != nil {
+		return fmt.Errorf("make knowledge source %s due: %w", src.Name, err)
+	}
+
+	t.Due++
 
 	return nil
 }

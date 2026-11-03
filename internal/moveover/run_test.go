@@ -517,6 +517,9 @@ spec:
   sync: gitdocs
 `
 
+// srcSelf is a synced source of the production factory's own repository, as goal-docs is.
+const srcSelf = "self"
+
 // Moving over points each synced source still on a connection at the secret its connection's
 // token became, then converts each synced source on a secret into its kind (ADR 0038 decision
 // 16): docs, on gitdocs, a repository source and wiki a Confluence source, each with the same
@@ -534,7 +537,7 @@ func TestRun_ConvertsKnowledgeSources(t *testing.T) {
 	ctx := w.ctx(t)
 	for _, n := range []domain.NewKnowledgeSource{
 		{Name: "chat", Title: "Chat", Kind: domain.SourceLive, Connection: connContext7},
-		{Name: "self", Title: "Self", Kind: domain.SourceSynced, Connection: connGitHub, Config: map[string]string{"repository": "https://github.com/acme/app"}},
+		{Name: srcSelf, Title: "Self", Kind: domain.SourceSynced, Connection: connGitHub, Config: map[string]string{domain.SourceRepositoryKey: "https://github.com/acme/app"}},
 	} {
 		if _, err := w.kb.CreateSource(ctx, n, person); err != nil {
 			t.Fatalf("source %s: %v", n.Name, err)
@@ -552,7 +555,7 @@ func TestRun_ConvertsKnowledgeSources(t *testing.T) {
 	w.checkCopiesCheckout(t)
 
 	got := map[string]domain.KnowledgeSource{}
-	for _, name := range []string{"docs", connWiki, "paired", "notes", "self"} {
+	for _, name := range []string{"docs", connWiki, "paired", "notes", srcSelf} {
 		got[name] = w.source(t, name)
 	}
 
@@ -600,9 +603,9 @@ func (w *world) checkConverted(t *testing.T, notes domain.KnowledgeSource) {
 		secret string
 		config map[string]string
 	}{
-		"docs":   {domain.SourceRepository, "", connGitHub, map[string]string{"repository": "https://github.com/acme/docs", "code_host": "github"}},
+		"docs":   {domain.SourceRepository, "", connGitHub, map[string]string{domain.SourceRepositoryKey: "https://github.com/acme/docs", "code_host": "github"}},
 		connWiki: {domain.SourceConfluence, "", connWiki, map[string]string{"spaces": "ENG", "site": "acme.atlassian.net", "email": "ada@example.com"}},
-		"self":   {domain.SourceRepository, "", connGitHub, map[string]string{"repository": "https://github.com/acme/app", "code_host": "github"}},
+		srcSelf:  {domain.SourceRepository, "", connGitHub, map[string]string{domain.SourceRepositoryKey: "https://github.com/acme/app", "code_host": "github"}},
 		"paired": {domain.SourceSynced, "pair", "", map[string]string{}},
 		"notes":  {domain.SourceUpload, "", "", map[string]string{}},
 	}
@@ -622,6 +625,14 @@ func (w *world) checkConverted(t *testing.T, notes domain.KnowledgeSource) {
 	if after := w.source(t, "notes"); !after.UpdatedAt.Equal(notes.UpdatedAt) {
 		t.Error("the upload source changed")
 	}
+
+	w.checkLiveDeleted(t)
+}
+
+// checkLiveDeleted checks that the live source chat is gone, deleted by Goal, and that the first
+// run's line counts its work.
+func (w *world) checkLiveDeleted(t *testing.T) {
+	t.Helper()
 
 	if _, err := w.kb.Source(w.ctx(t), "chat"); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("the live source: %v; want it deleted", err)
@@ -648,7 +659,7 @@ func (w *world) checkCopiesCheckout(t *testing.T) {
 	}
 
 	f := factoryOf(t, w.tree(t, v))
-	if f.Spec.Knowledge == nil || !slices.Equal(f.Spec.Knowledge.Names(), []string{"self"}) {
+	if f.Spec.Knowledge == nil || !slices.Equal(f.Spec.Knowledge.Names(), []string{srcSelf}) {
 		t.Fatalf("the factory's knowledge %+v; want self still listed", f.Spec.Knowledge)
 	}
 
