@@ -101,15 +101,17 @@ func TestLine_MergeConnections(t *testing.T) {
 func TestRepository_CodeHost(t *testing.T) {
 	t.Parallel()
 
+	const forgeGitHub, forgeGitLab = "github", "gitlab"
+
 	tests := []struct {
 		repo                Repository
 		wantHost, wantForge string
 	}{
-		{repo: Repository{URL: "https://github.com/acme/app.git"}, wantHost: "github.com", wantForge: "github"},
-		{repo: Repository{URL: "https://GitLab.com/acme/web.git"}, wantHost: "gitlab.com", wantForge: "gitlab"},
+		{repo: Repository{URL: "https://github.com/acme/app.git"}, wantHost: hostGitHub, wantForge: forgeGitHub},
+		{repo: Repository{URL: "https://GitLab.com/acme/web.git"}, wantHost: "gitlab.com", wantForge: forgeGitLab},
 		{repo: Repository{URL: "https://git.example.com/acme/app.git"}, wantHost: "git.example.com"},
-		{repo: Repository{URL: "https://git.example.com:8443/acme/app.git", Forge: "gitlab"}, wantHost: "git.example.com:8443", wantForge: "gitlab"},
-		{repo: Repository{URL: "https://github.com/acme/app.git", Forge: "gitlab"}, wantHost: "github.com", wantForge: "gitlab"},
+		{repo: Repository{URL: "https://git.example.com:8443/acme/app.git", Forge: forgeGitLab}, wantHost: "git.example.com:8443", wantForge: forgeGitLab},
+		{repo: Repository{URL: "https://github.com/acme/app.git", Forge: forgeGitLab}, wantHost: hostGitHub, wantForge: forgeGitLab},
 		{repo: Repository{}},
 	}
 
@@ -119,7 +121,7 @@ func TestRepository_CodeHost(t *testing.T) {
 		}
 	}
 
-	if KnownForge("GITHUB.COM") != "github" || KnownForge("git.example.com") != "" {
+	if KnownForge("GITHUB.COM") != forgeGitHub || KnownForge("git.example.com") != "" {
 		t.Error("KnownForge does not name github.com's adapter alone")
 	}
 }

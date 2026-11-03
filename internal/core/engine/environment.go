@@ -52,16 +52,7 @@ func (e *Engine) secretEnv(
 		}
 	}
 
-	where := "runtime.modelKey"
-	if len(tokenNames) > 0 {
-		where += ", " + repositoryLogin
-	}
-
-	if env.Name != "" {
-		where += " and environment " + env.Name
-	}
-
-	values, err := e.openSecrets(ctx, names, use, env.Name, where)
+	values, err := e.openSecrets(ctx, names, use, env.Name, runSecretsWhere(len(tokenNames) > 0, env.Name))
 	if err != nil {
 		return runEnv{}, err
 	}
@@ -93,6 +84,21 @@ func (e *Engine) secretEnv(
 	}
 
 	return out, nil
+}
+
+// runSecretsWhere names the keys a run's secrets were named in, for openSecrets's error: the
+// model key, the repository token when repo, and the environment env, if any.
+func runSecretsWhere(repo bool, env string) string {
+	where := "runtime.modelKey"
+	if repo {
+		where += ", " + repositoryLogin
+	}
+
+	if env != "" {
+		where += " and environment " + env
+	}
+
+	return where
 }
 
 // openSecrets opens names for use, by name; none opens nothing. env is the environment the run
