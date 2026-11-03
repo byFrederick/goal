@@ -1,12 +1,12 @@
 // Search from the sidebar (MASTER.md "The shell", shell.jpg s2): the top row becomes an input, and the
-// sidebar's body becomes the results, grouped as Items, Pages, Agents, Connections, Factories and, last,
-// Actions. The organization's items, agents, connections and factories come from searchOrg (one read per
+// sidebar's body becomes the results, grouped as Items, Pages, Agents, Secrets, Factories and, last,
+// Actions. The organization's items, agents, secrets and factories come from searchOrg (one read per
 // pause in typing); the pages are matched here from the screens registry (ADR 0016, decision 4). The actions
 // are New item (for any query), Pause or Resume the line for the open factory, and Approve for each item
 // waiting on the caller; each shows only when the caller holds its permission (holds, as the pages decide).
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { Bot, Check, Pause, Play, Plug, Plus, Search, X } from 'lucide-react';
+import { Bot, Check, KeyRound, Pause, Play, Plus, Search, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { factoriesQuery, searchQuery } from '../api/queries';
@@ -31,6 +31,7 @@ import {
   membersScreen,
   type OrgScreen,
   screensFor,
+  secretsScreen,
   settingsScreen,
 } from './screens';
 
@@ -191,7 +192,7 @@ export function SidebarSearch({
     // The organization's pages, then the open factory's. Its Settings is named for what it is; its
     // other pages carry the factory's own title.
     const orgPages = screensFor(
-      [homeScreen, membersScreen, apiKeysScreen, accessScreen, knowledgeScreen, settingsScreen],
+      [homeScreen, membersScreen, apiKeysScreen, accessScreen, secretsScreen, knowledgeScreen, settingsScreen],
       can,
     ).map((screen: OrgScreen) => ({
       screen,
@@ -241,17 +242,16 @@ export function SidebarSearch({
         go(() => navigate({ to: '/o/$org/f/$factory', params: { org: org.slug, factory: hit.factory_name } })),
     }));
 
-    const connections: Row[] = found.connections.map((hit) => ({
-      key: `connection-${hit.name}`,
-      label: `${hit.name}, ${humanize(hit.kind)}`,
+    const secrets: Row[] = found.secrets.map((hit) => ({
+      key: `secret-${hit.name}`,
+      label: hit.name,
       content: (
         <>
-          <Plug {...iconProps} />
+          <KeyRound {...iconProps} />
           <span className="min-w-0 flex-1 truncate">{hit.name}</span>
-          <span className="flex-none text-meta text-muted">{humanize(hit.kind)}</span>
         </>
       ),
-      open: () => go(() => navigate({ to: '/o/$org/access', params: { org: org.slug }, search: { q: hit.name } })),
+      open: () => go(() => navigate({ to: '/o/$org/secrets/$secret', params: { org: org.slug, secret: hit.name } })),
     }));
 
     const factoryRows: Row[] = found.factories.map((hit) => ({
@@ -331,7 +331,7 @@ export function SidebarSearch({
       { key: 'items', label: 'Items', rows: items },
       { key: 'pages', label: 'Pages', rows: pages },
       { key: 'agents', label: 'Agents', rows: agents },
-      { key: 'connections', label: 'Connections', rows: connections },
+      { key: 'secrets', label: 'Secrets', rows: secrets },
       { key: 'factories', label: 'Factories', rows: factoryRows },
       { key: 'actions', label: 'Actions', rows: actions },
     ].filter((group) => group.rows.length > 0);

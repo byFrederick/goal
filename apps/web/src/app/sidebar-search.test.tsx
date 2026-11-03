@@ -97,7 +97,7 @@ const item = (number: number, title: string, station: string, factoryName = 'goa
   station,
 });
 
-/** What the service answers for "spend" in acme: the three spend items, an agent, a connection and a factory. */
+/** What the service answers for "spend" in acme: the three spend items, an agent, a secret and a factory. */
 const spend: OrgSearch = {
   items: [
     item(147, "Show this week's spend", 'build'),
@@ -107,7 +107,7 @@ const spend: OrgSearch = {
   agents: [{ name: 'builder', stations: ['build'], factory_id: 'goal-id', factory_name: 'goal' }],
   factories: [],
   connections: [{ name: 'acme-spend-warehouse', kind: 'github' }],
-  secrets: [],
+  secrets: [{ name: 'ACME_SPEND_TOKEN', scope: { all_factories: true, factories: [] }, expires_at: null }],
 };
 
 const empty: OrgSearch = { items: [], agents: [], factories: [], connections: [], secrets: [] };
@@ -116,11 +116,13 @@ interface Setup {
   path?: string;
   /** The organization's factories, with the permissions a test grants (the default: `factories`). */
   list?: Factory[];
+  /** The organization permissions the caller holds (the default: none). */
+  can?: string[];
 }
 
 /** The sidebar under the organization's route; the item, the Floor and the other pages are plain placeholders. */
-function renderSidebar({ path = '/o/acme', list = factories }: Setup = {}) {
-  const org: Org = { ...summary, created_at: '2026-09-01T00:00:00Z', can: [] } as Org;
+function renderSidebar({ path = '/o/acme', list = factories, can = [] }: Setup = {}) {
+  const org: Org = { ...summary, created_at: '2026-09-01T00:00:00Z', can } as Org;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   client.setQueryData(orgQuery(org.id).queryKey, org);
   client.setQueryData(factoriesQuery(org.id).queryKey, list);
@@ -292,7 +294,7 @@ describe('search from the sidebar', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/goal/items/147'));
   });
 
-  it('groups results as Items, Pages, Agents, Connections and Factories, and leaves out an empty group', async () => {
+  it('groups results as Items, Pages, Agents, Secrets and Factories, and leaves out an empty group', async () => {
     vi.mocked(searchOrg).mockResolvedValue({ ...spend, factories: [{ id: 'sre-id', name: 'sre', title: 'SRE' }] });
     renderSidebar();
     await nav();
@@ -300,7 +302,7 @@ describe('search from the sidebar', () => {
     await type('spend');
 
     const headings = screen.getAllByRole('group').map((g) => g.querySelector('legend')?.textContent);
-    expect(headings).toEqual(['Items', 'Agents', 'Connections', 'Factories']);
+    expect(headings).toEqual(['Items', 'Agents', 'Secrets', 'Factories']);
     expect(screen.queryByRole('group', { name: 'Pages' })).toBeNull();
 
     const items = within(screen.getByRole('group', { name: 'Items' })).getAllByRole('option');
@@ -313,7 +315,8 @@ describe('search from the sidebar', () => {
     expect(items[0]?.textContent).toMatch(/^G#147/);
     expect(items[0]?.textContent).toContain('Build');
     expect(screen.getByRole('option', { name: 'builder, goal' }).textContent).toContain('goal');
-    expect(screen.getByRole('option', { name: /acme-spend-warehouse/ })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'ACME_SPEND_TOKEN' })).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Connections' })).toBeNull();
     expect(screen.getByRole('option', { name: 'SRE' })).toBeTruthy();
   });
 
@@ -330,6 +333,43 @@ describe('search from the sidebar', () => {
 
     fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search' }), { key: 'Enter' });
     await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/members'));
+  });
+
+  it('opens a secret on its own page', async () => {
+    vi.mocked(searchOrg).mockResolvedValue(spend);
+    const { router } = renderSidebar();
+    await nav();
+    pressCommandK();
+    await type('spend');
+
+    fireEvent.mouseDown(screen.getByRole('option', { name: 'ACME_SPEND_TOKEN' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/secrets/ACME_SPEND_TOKEN'));
+  });
+
+  it('lists Access for a caller who holds access:read and Secrets for one who holds secret:read', async () => {
+    vi.mocked(searchOrg).mockResolvedValue(empty);
+    renderSidebar({ can: ['access:read', 'secret:read'] });
+    await nav();
+    pressCommandK();
+
+    await type('acc');
+    expect(
+      within(screen.getByRole('group', { name: 'Pages' })).getByRole('option', { name: 'Access' }).textContent,
+    ).toContain('Organization');
+    await type('sec');
+    expect(within(screen.getByRole('group', { name: 'Pages' })).getByRole('option', { name: 'Secrets' })).toBeTruthy();
+  });
+
+  it('lists neither page for a caller without the permissions', async () => {
+    vi.mocked(searchOrg).mockResolvedValue(empty);
+    renderSidebar();
+    await nav();
+    pressCommandK();
+
+    await type('acc');
+    expect(screen.queryByRole('option', { name: 'Access' })).toBeNull();
+    await type('sec');
+    expect(screen.queryByRole('option', { name: 'Secrets' })).toBeNull();
   });
 
   it("shows the open factory's Settings as Settings, and its other pages by the factory's title", async () => {
