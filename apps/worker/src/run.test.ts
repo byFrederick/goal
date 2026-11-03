@@ -628,7 +628,7 @@ describe('runTask environment', () => {
     const { code, events, calls } = await run([success], {
       spec: withEnvironment(['pnpm install']),
       env: { ...env, GOAL_FILE_1: 'registry=https://npm.example.com/' },
-      environment: { home, workspace: '/workspace', shell },
+      environment: { home, workspace: '/workspace', marker: join(home, 'goal/environment-setup.done'), shell },
     });
 
     expect(code).toBe(0);
@@ -648,7 +648,7 @@ describe('runTask environment', () => {
     const { code, events, calls } = await run([success], {
       spec: withEnvironment(['make deps']),
       env: { ...env, GOAL_FILE_1: 'x' },
-      environment: { home, workspace: '/workspace', shell },
+      environment: { home, workspace: '/workspace', marker: join(home, 'goal/environment-setup.done'), shell },
     });
 
     expect(code).toBe(1);
@@ -660,6 +660,60 @@ describe('runTask environment', () => {
     expect(error).toMatch(/^environment setup: `make deps` exited 2; its last 50 lines:\nline 11\n/);
     expect(error).toMatch(/line 60$/);
     expect(error).not.toContain('line 10\n');
+  });
+
+  it('writes the files again but runs no setup on a second run in the same box', async () => {
+    home = await mkdtemp(join(tmpdir(), 'goal-run-home-'));
+    const ran: string[] = [];
+    const shell: Shell = async (command) => {
+      ran.push(command);
+      return { code: 0, timedOut: false };
+    };
+    const marker = join(home, 'goal/environment-setup.done');
+    const box = (value: string) => ({
+      spec: withEnvironment(['pnpm install', 'make tools']),
+      env: { ...env, GOAL_FILE_1: value },
+      environment: { home, workspace: '/workspace', marker, shell },
+    });
+
+    const first = await run([success], box('registry=https://npm.example.com/'));
+    expect(first.code).toBe(0);
+    expect(ran).toEqual(['pnpm install', 'make tools']);
+    expect(await readFile(marker, 'utf8')).not.toContain('npm.example.com');
+
+    const second = await run([success], box('registry=https://npm2.example.com/'));
+    expect(second.code).toBe(0);
+    expect(ran).toEqual(['pnpm install', 'make tools']);
+    expect(await readFile(join(home, '.npmrc'), 'utf8')).toBe('registry=https://npm2.example.com/');
+    expect(second.calls).toHaveLength(1);
+    expect(second.events.at(-1)).toMatchObject({ type: 'finished', status: 'succeeded' });
+  });
+
+  it('runs setup again on the next run in the box after a failed setup', async () => {
+    home = await mkdtemp(join(tmpdir(), 'goal-run-home-'));
+    let code = 2;
+    const ran: string[] = [];
+    const shell: Shell = async (command) => {
+      ran.push(command);
+      return { code, timedOut: false };
+    };
+    const box = {
+      spec: withEnvironment(['make deps']),
+      env: { ...env, GOAL_FILE_1: 'x' },
+      environment: { home, workspace: '/workspace', marker: join(home, 'goal/environment-setup.done'), shell },
+    };
+
+    const first = await run([success], box);
+    expect(first.code).toBe(1);
+    expect(first.calls).toEqual([]);
+    const finished = first.events.at(-1);
+    expect(finished?.type === 'finished' ? finished.error : '').toBe('environment setup: `make deps` exited 2');
+
+    code = 0;
+    const second = await run([success], box);
+    expect(second.code).toBe(0);
+    expect(ran).toEqual(['make deps', 'make deps']);
+    expect(second.calls).toHaveLength(1);
   });
 
   it('runs a spec without an environment as before, with no shell', async () => {

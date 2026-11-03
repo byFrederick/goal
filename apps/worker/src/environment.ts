@@ -1,4 +1,4 @@
-import { chmod, mkdir, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { Environment } from './spec.js';
 
@@ -24,6 +24,11 @@ export interface EnvironmentDeps {
   home: string;
   /** Where setup commands run. */
   workspace: string;
+  /**
+   * A box-local file written once every setup command succeeded; while it exists a later run in
+   * the same box skips setup. It holds no file content or env value.
+   */
+  marker: string;
   shell: Shell;
 }
 
@@ -32,6 +37,10 @@ export interface EnvironmentDeps {
  * file written from its variable at its path, ~/ expanded, with mode 0600, all of them before the
  * first setup command; then each setup command in order, each with a 30-minute limit. A failure
  * throws an error that names the command and holds its last 50 lines of output.
+ *
+ * Files are written at every run, so a value replaced between attempts reaches the box. Setup runs
+ * once per box: after its last command succeeds the marker is written, and a run that finds the
+ * marker skips setup. A failed setup writes no marker, so the next attempt runs it again.
  */
 export async function applyEnvironment(environment: Environment, deps: EnvironmentDeps): Promise<void> {
   for (const file of environment.files) {
@@ -43,6 +52,8 @@ export async function applyEnvironment(environment: Environment, deps: Environme
     // writeFile's mode applies only to a new file; an existing one keeps its own.
     await chmod(path, 0o600);
   }
+
+  if (await exists(deps.marker)) return;
 
   for (const command of environment.setup) {
     const tail = new Tail(setupTailLines);
@@ -58,6 +69,16 @@ export async function applyEnvironment(environment: Environment, deps: Environme
       throw new Error(`environment setup: \`${command}\` ${why}${last}`);
     }
   }
+
+  await mkdir(dirname(deps.marker), { recursive: true });
+  await writeFile(deps.marker, 'setup done\n');
+}
+
+async function exists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
 }
 
 /** The last n lines of a stream of chunks, holding no more than those lines and the one being written. */
