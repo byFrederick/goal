@@ -19,6 +19,9 @@ import (
 type runEnv struct {
 	// prepare is goal-agent prepare's: the password variable of the repository's git login.
 	prepare map[string]string
+	// repositoryLogin is whether prepare got the repository token (secretEnv), which signs git in
+	// to the repository's host for the agent's push too.
+	repositoryLogin bool
 	// agent is goal-agent run's: the model connection's env and the env of the agent's
 	// connections.
 	agent map[string]string
@@ -34,10 +37,16 @@ type runEnv struct {
 // the port. A Jonah run (ADR 0017 decision 1) gets only the model connection's env, so after
 // resolving it keeps only the credentials the model connection refers to. The line runs
 // (domain.Line.Refusal), so it has a model connection. A request with a model key is of a version
-// on secrets, which opens no connection or credential (secretEnv).
+// on secrets, which opens no connection or credential (secretEnv); of its runs only a station's
+// opens the repository token, since a Jonah review clones nothing.
 func (e *Engine) runEnv(ctx context.Context, req domain.RunRequest, own []string, run domain.RunID) (runEnv, error) {
 	if req.ModelKey != "" {
-		return e.secretEnv(ctx, domain.SecretUse{Factory: req.FactoryID, Agent: req.Agent, Run: run}, req.ModelKey, req.Environment)
+		repo := req.Repository
+		if req.Kind == domain.RunKindJonah {
+			repo = domain.Repository{}
+		}
+
+		return e.secretEnv(ctx, domain.SecretUse{Factory: req.FactoryID, Agent: req.Agent, Run: run}, req.ModelKey, req.Environment, repo)
 	}
 
 	return e.connectionEnv(ctx, req, own, run)
@@ -357,9 +366,14 @@ func addEnv(env, setBy map[string]string, rc runConnection) error {
 	return nil
 }
 
-// pushNote tells the agent whether git can push to the repository's host: with one of its own
-// connections that signs git in there, or not at all.
+// pushNote tells the agent whether git can push to the repository's host: with the repository
+// token on a version on secrets, with one of its own connections that signs git in there, or not
+// at all.
 func (env runEnv) pushNote(host string) string {
+	if env.repositoryLogin {
+		return "Git signs in to " + host + " with the repository token."
+	}
+
 	for _, n := range slices.Sorted(maps.Keys(env.gitHosts)) {
 		if strings.EqualFold(env.gitHosts[n], host) {
 			return fmt.Sprintf("Git signs in to %s with your connection `%s`.", host, n)
