@@ -486,9 +486,9 @@ func TestSuffixed_StaysAValidName(t *testing.T) {
 		n    int
 		want string
 	}{
-		{"github", 1, "github"},
-		{"github", 2, "github-2"},
-		{"github", 3, "github-3"},
+		{connGitHub, 1, connGitHub},
+		{connGitHub, 2, connGitHub + "-2"},
+		{connGitHub, 3, connGitHub + "-3"},
 		{long, 2, strings.Repeat("a", 37) + "-2"},
 		{strings.Repeat("a", 40), 12, strings.Repeat("a", 37) + "-12"},
 	} {

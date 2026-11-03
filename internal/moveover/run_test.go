@@ -1092,9 +1092,11 @@ func TestRun_SourceOnScopedSecretNotMoved(t *testing.T) {
 
 	w := newWorld(t)
 	ctx := w.ctx(t)
-	w.addSecret(t, "shared-docs", "shared-docs-value-for-tests", factoryUUID)
+	scoped := "shared-docs"
+	w.addSecret(t, scoped, "shared-docs-value-for-tests", factoryUUID)
 
-	if _, err := w.conns.Create(ctx, domain.NewConnection{Name: "docs-host", Kind: connGitHub, Secrets: map[string]string{fieldToken: "{{shared-docs}}"}}, domain.LocalUser); err != nil {
+	refs := map[string]string{fieldToken: "{{" + scoped + "}}"}
+	if _, err := w.conns.Create(ctx, domain.NewConnection{Name: "docs-host", Kind: connGitHub, Secrets: refs}, domain.LocalUser); err != nil {
 		t.Fatal(err)
 	}
 
