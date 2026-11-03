@@ -164,7 +164,9 @@ An environment file, `environments/<name>.yaml`, says what an agent's box instal
 
 - The file's `tools` patterns, most specific first: an exact name, then globs with more characters other than `*`, a tie going to the pattern that sorts first.
 - An active standing rule for the factory, environment, server, tool and agent role lifts a tool that resolves to `ask` to `allow`, as its own exact entry. Nothing lifts `off`.
-- A cap of the organization policy makes a mode stricter, never looser. The policy stores its cap (`domain.OrgPolicy.MCPToolModes`, a tool name or glob to `allow`, `ask` or `off`, empty for none), but the gateway does not apply it yet and passes none (decision 12).
+- The organization policy's cap (`domain.OrgPolicy.MCPToolModes`, a tool name or glob to `allow`, `ask` or `off`, empty for none) makes a mode stricter, never looser: the gateway reads the policy once per bundle and each entry takes the stricter of its mode and the cap's, after any standing rule, so a rule never lifts an `ask` the cap keeps (decisions 8 and 12).
+
+**At publish** the policy check reports each `mcp.<server>.tools` entry the cap makes stricter (`config.MCPCapProblems`, called from authoring's `ownChecks` next to `ModelProblems`): a warning, `mcp-tool-mode-capped`, at that entry, naming the server, the tool, the file's mode and the effective one. An exact tool name in the cap that one of the file's globs covers is reported at that glob. It does not block publishing, since the cap applies to every run anyway. A tool the file does not list gets no warning.
 
 The task token does not carry the policy's Use credentials, so with it `off` the bundle still names the file's servers, files and variables, whose values the box does not get. `goal-agent run` applies `spec.environment` (`apps/worker/src/environment.ts`): it writes the files at every run and runs setup once per box, again after a failed setup and again in a new box ([the worker's README](../../apps/worker/README.md#specjson)).
 
