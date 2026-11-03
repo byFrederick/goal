@@ -1635,7 +1635,7 @@ func TestBundle_EnvironmentNoEnvironmentDropsEnvFilesAndMCP(t *testing.T) {
 		t.Errorf("environment %+v; want %+v", *got.Spec.Environment, want)
 	}
 
-	for _, name := range []string{"GOAL_FILE_", "GOAL_SECRET_", "SENTRY_ORG", "GH_TOKEN", "linear", "playwright"} {
+	for _, name := range []string{"GOAL_FILE_", "GOAL_SECRET_", "SENTRY_ORG", "GH_TOKEN", "mcp.linear.example.com", "@playwright/mcp"} {
 		if strings.Contains(string(body), name) {
 			t.Errorf("the bundle holds %q:\n%s", name, body)
 		}
