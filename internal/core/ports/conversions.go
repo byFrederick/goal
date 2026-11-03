@@ -24,12 +24,13 @@ type FactoryConversion struct {
 func (c FactoryConversion) Refused() bool { return c.To == "" }
 
 // FactoryConversions keep each factory's conversion, for the organization in ctx: one per
-// factory, kept for good, so the conversion runs once.
+// factory. A refusal is replaced by the next try's result; a conversion is kept for good, so a
+// factory converts once.
 type FactoryConversions interface {
-	// Record keeps c as its factory's conversion and reports whether it did: false, changing
-	// nothing, when the factory has one already. A converted c has no problems, a refused one at
-	// least one (domain.ErrInvalid otherwise); ErrNotFound for a factory or version the
-	// organization does not have.
+	// Record keeps c as its factory's conversion and reports whether it did: it replaces a
+	// refusal, and is false, changing nothing, when the factory is converted already. A converted
+	// c has no problems, a refused one at least one (domain.ErrInvalid otherwise); ErrNotFound for
+	// a factory or version the organization does not have.
 	Record(ctx context.Context, c FactoryConversion) (bool, error)
 	// List is the organization's conversions, by factory.
 	List(ctx context.Context) ([]FactoryConversion, error)
