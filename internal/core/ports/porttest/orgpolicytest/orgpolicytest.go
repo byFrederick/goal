@@ -7,6 +7,7 @@ package orgpolicytest
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"testing"
 
@@ -107,6 +108,7 @@ func narrowed() domain.OrgPolicy {
 		AllowedModels: []string{"claude-sonnet-5-5", "claude-haiku-5-5"}, DefaultModel: "claude-haiku-5-5",
 		DeniedCommands:     []string{"Bash(terraform apply:*)", "Bash(git push --force:*)"},
 		WriteOutsideBranch: domain.ToolOff, MergePullRequest: domain.ToolOff, ReadWeb: domain.ToolAsk, UseCredentials: domain.ToolOff,
+		MCPToolModes:        map[string]domain.ConnectionToolMode{"*": domain.ToolModeAsk, "delete_*": domain.ToolModeOff},
 		BoxTimeLimitMinutes: 45,
 	}
 }
@@ -118,7 +120,7 @@ func (f *fixture) samePolicy(what string, got, want domain.OrgPolicy) {
 	if !slices.Equal(got.AllowedModels, want.AllowedModels) || got.DefaultModel != want.DefaultModel ||
 		!slices.Equal(got.DeniedCommands, want.DeniedCommands) || got.WriteOutsideBranch != want.WriteOutsideBranch ||
 		got.MergePullRequest != want.MergePullRequest || got.ReadWeb != want.ReadWeb || got.UseCredentials != want.UseCredentials ||
-		got.BoxTimeLimitMinutes != want.BoxTimeLimitMinutes {
+		!maps.Equal(got.MCPToolModes, want.MCPToolModes) || got.BoxTimeLimitMinutes != want.BoxTimeLimitMinutes {
 		f.t.Errorf("%s = %+v; want %+v", what, got, want)
 	}
 }
@@ -134,7 +136,12 @@ func (f *fixture) isDefault(what string, got domain.OrgPolicy) {
 }
 
 func testDefault(f *fixture) {
-	f.isDefault("Get with nothing saved", f.get(f.org))
+	got := f.get(f.org)
+	f.isDefault("Get with nothing saved", got)
+
+	if len(got.MCPToolModes) != 0 {
+		f.t.Errorf("Get with nothing saved: MCP tool mode cap %v; want none", got.MCPToolModes)
+	}
 }
 
 func testRoundTrip(f *fixture) {
@@ -154,14 +161,14 @@ func testRoundTrip(f *fixture) {
 		f.t.Errorf("Get after Put: revision %d by %q; want 1 by %s", got.Revision, got.UpdatedBy.Ref(), admin.Ref())
 	}
 
-	// A save with no denied commands reads back as none, and the next revision is 2.
-	want.DeniedCommands = nil
+	// A save with no denied commands and no cap reads back as none, and the next revision is 2.
+	want.DeniedCommands, want.MCPToolModes = nil, nil
 	if second := f.put(want, 1); second.Revision != 2 {
 		f.t.Errorf("second Put revision %d; want 2", second.Revision)
 	}
 
-	if got := f.get(f.org); got.Revision != 2 || len(got.DeniedCommands) != 0 {
-		f.t.Errorf("Get after the second Put: revision %d, denied %v; want 2 and none", got.Revision, got.DeniedCommands)
+	if got := f.get(f.org); got.Revision != 2 || len(got.DeniedCommands) != 0 || len(got.MCPToolModes) != 0 {
+		f.t.Errorf("Get after the second Put: revision %d, denied %v, cap %v; want 2 and none", got.Revision, got.DeniedCommands, got.MCPToolModes)
 	}
 }
 
@@ -209,6 +216,13 @@ func testInvalid(f *fixture) {
 
 	if _, err := f.p.Put(f.in(f.org), bad, 0, admin); !errors.Is(err, domain.ErrInvalid) {
 		f.t.Errorf("Put of a 0 time limit = %v; want ErrInvalid", err)
+	}
+
+	bad = narrowed()
+	bad.MCPToolModes = map[string]domain.ConnectionToolMode{"*": "maybe"}
+
+	if _, err := f.p.Put(f.in(f.org), bad, 0, admin); !errors.Is(err, domain.ErrInvalid) {
+		f.t.Errorf("Put of an unknown MCP tool mode = %v; want ErrInvalid", err)
 	}
 
 	f.isDefault("Get after the invalid Puts", f.get(f.org))

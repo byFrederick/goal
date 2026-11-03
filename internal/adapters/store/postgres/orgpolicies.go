@@ -2,8 +2,10 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"time"
@@ -46,10 +48,15 @@ func (o *OrgPolicies) Get(ctx context.Context) (domain.OrgPolicy, error) {
 		return domain.OrgPolicy{}, fmt.Errorf("get the organization policy: %w", err)
 	}
 
+	modes := map[string]domain.ConnectionToolMode{}
+	if err := json.Unmarshal(r.McpToolModes, &modes); err != nil {
+		return domain.OrgPolicy{}, fmt.Errorf("get the organization policy: MCP tool modes: %w", err)
+	}
+
 	return domain.OrgPolicy{
 		AllowedModels: r.AllowedModels, DefaultModel: r.DefaultModel, DeniedCommands: r.DeniedCommands,
 		WriteOutsideBranch: domain.ToolSetting(r.WriteOutsideBranch), MergePullRequest: domain.ToolSetting(r.MergePullRequest),
-		ReadWeb: domain.ToolSetting(r.ReadWeb), UseCredentials: domain.ToolSetting(r.UseCredentials),
+		ReadWeb: domain.ToolSetting(r.ReadWeb), UseCredentials: domain.ToolSetting(r.UseCredentials), MCPToolModes: modes,
 		BoxTimeLimitMinutes: int(r.BoxTimeLimitMinutes), Revision: r.Revision,
 		UpdatedBy: namedActor(r.UpdatedBy, r.UpdatedByName), UpdatedAt: r.UpdatedAt.UTC(),
 	}, nil
@@ -79,10 +86,20 @@ func (o *OrgPolicies) Put(ctx context.Context, p domain.OrgPolicy, revision int6
 		out.DeniedCommands = []string{} // the column is NOT NULL
 	}
 
-	err := o.s.inTx(ctx, func(q *db.Queries) error {
+	out.MCPToolModes = maps.Clone(p.MCPToolModes)
+	if out.MCPToolModes == nil {
+		out.MCPToolModes = map[string]domain.ConnectionToolMode{} // no cap, stored as {}
+	}
+
+	modes, err := json.Marshal(out.MCPToolModes)
+	if err != nil {
+		return domain.OrgPolicy{}, fmt.Errorf("save the organization policy: MCP tool modes: %w", err)
+	}
+
+	err = o.s.inTx(ctx, func(q *db.Queries) error {
 		var err error
 
-		out.Revision, out.UpdatedAt, err = savePolicy(ctx, q, out, minutes, revision, by)
+		out.Revision, out.UpdatedAt, err = savePolicy(ctx, q, out, modes, minutes, revision, by)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("the organization policy is no longer at revision %d: %w", revision, ports.ErrConflict)
 		}
@@ -107,15 +124,16 @@ func (o *OrgPolicies) Put(ctx context.Context, p domain.OrgPolicy, revision int6
 
 // savePolicy inserts the organization's first policy when revision is 0 and otherwise updates
 // the one at revision, returning the new revision and time; pgx.ErrNoRows when the stored
-// revision is another.
-func savePolicy(ctx context.Context, q *db.Queries, p domain.OrgPolicy, minutes int32, revision int64,
+// revision is another. modes is p.MCPToolModes as JSON.
+func savePolicy(ctx context.Context, q *db.Queries, p domain.OrgPolicy, modes []byte, minutes int32, revision int64,
 	by domain.Actor,
 ) (int64, time.Time, error) {
 	if revision == 0 {
 		r, err := q.InsertOrgPolicy(ctx, db.InsertOrgPolicyParams{
 			AllowedModels: p.AllowedModels, DefaultModel: p.DefaultModel, DeniedCommands: p.DeniedCommands,
 			WriteOutsideBranch: string(p.WriteOutsideBranch), MergePullRequest: string(p.MergePullRequest),
-			ReadWeb: string(p.ReadWeb), UseCredentials: string(p.UseCredentials), BoxTimeLimitMinutes: minutes, UpdatedBy: by.Ref(),
+			ReadWeb: string(p.ReadWeb), UseCredentials: string(p.UseCredentials), McpToolModes: modes, BoxTimeLimitMinutes: minutes,
+			UpdatedBy: by.Ref(),
 		})
 
 		return r.Revision, r.UpdatedAt, err
@@ -124,8 +142,8 @@ func savePolicy(ctx context.Context, q *db.Queries, p domain.OrgPolicy, minutes 
 	r, err := q.UpdateOrgPolicy(ctx, db.UpdateOrgPolicyParams{
 		AllowedModels: p.AllowedModels, DefaultModel: p.DefaultModel, DeniedCommands: p.DeniedCommands,
 		WriteOutsideBranch: string(p.WriteOutsideBranch), MergePullRequest: string(p.MergePullRequest),
-		ReadWeb: string(p.ReadWeb), UseCredentials: string(p.UseCredentials), BoxTimeLimitMinutes: minutes, UpdatedBy: by.Ref(),
-		Revision: revision,
+		ReadWeb: string(p.ReadWeb), UseCredentials: string(p.UseCredentials), McpToolModes: modes, BoxTimeLimitMinutes: minutes,
+		UpdatedBy: by.Ref(), Revision: revision,
 	})
 
 	return r.Revision, r.UpdatedAt, err

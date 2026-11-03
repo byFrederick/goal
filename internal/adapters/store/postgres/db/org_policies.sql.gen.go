@@ -12,10 +12,10 @@ import (
 
 const insertOrgPolicy = `-- name: InsertOrgPolicy :one
 INSERT INTO org_policies (allowed_models, default_model, denied_commands, write_outside_branch, merge_pull_request,
-                          read_web, use_credentials, box_time_limit_minutes, updated_by)
+                          read_web, use_credentials, mcp_tool_modes, box_time_limit_minutes, updated_by)
 VALUES ($1, $2, $3, $4,
         $5, $6, $7, $8,
-        $9)
+        $9, $10)
 ON CONFLICT (org_id) DO NOTHING
 RETURNING revision, updated_at
 `
@@ -28,6 +28,7 @@ type InsertOrgPolicyParams struct {
 	MergePullRequest    string
 	ReadWeb             string
 	UseCredentials      string
+	McpToolModes        []byte
 	BoxTimeLimitMinutes int32
 	UpdatedBy           string
 }
@@ -47,6 +48,7 @@ func (q *Queries) InsertOrgPolicy(ctx context.Context, arg InsertOrgPolicyParams
 		arg.MergePullRequest,
 		arg.ReadWeb,
 		arg.UseCredentials,
+		arg.McpToolModes,
 		arg.BoxTimeLimitMinutes,
 		arg.UpdatedBy,
 	)
@@ -58,7 +60,7 @@ func (q *Queries) InsertOrgPolicy(ctx context.Context, arg InsertOrgPolicyParams
 const orgPolicy = `-- name: OrgPolicy :one
 
 SELECT p.allowed_models, p.default_model, p.denied_commands, p.write_outside_branch, p.merge_pull_request, p.read_web,
-       p.use_credentials, p.box_time_limit_minutes, p.revision, p.updated_by, p.updated_at,
+       p.use_credentials, p.mcp_tool_modes, p.box_time_limit_minutes, p.revision, p.updated_by, p.updated_at,
        coalesce((SELECT a.actor_name FROM audit_log a
                  WHERE a.target_kind = 'org_policy' AND a.target_id = p.org_id::text AND a.action = 'org_policy.updated'
                  ORDER BY a.id DESC LIMIT 1), '')::text AS updated_by_name
@@ -73,6 +75,7 @@ type OrgPolicyRow struct {
 	MergePullRequest    string
 	ReadWeb             string
 	UseCredentials      string
+	McpToolModes        []byte
 	BoxTimeLimitMinutes int32
 	Revision            int64
 	UpdatedBy           string
@@ -94,6 +97,7 @@ func (q *Queries) OrgPolicy(ctx context.Context) (OrgPolicyRow, error) {
 		&i.MergePullRequest,
 		&i.ReadWeb,
 		&i.UseCredentials,
+		&i.McpToolModes,
 		&i.BoxTimeLimitMinutes,
 		&i.Revision,
 		&i.UpdatedBy,
@@ -108,9 +112,10 @@ UPDATE org_policies
 SET allowed_models = $1, default_model = $2,
     denied_commands = $3, write_outside_branch = $4,
     merge_pull_request = $5, read_web = $6,
-    use_credentials = $7, box_time_limit_minutes = $8,
-    revision = revision + 1, updated_by = $9, updated_at = now()
-WHERE revision = $10
+    use_credentials = $7, mcp_tool_modes = $8,
+    box_time_limit_minutes = $9,
+    revision = revision + 1, updated_by = $10, updated_at = now()
+WHERE revision = $11
 RETURNING revision, updated_at
 `
 
@@ -122,6 +127,7 @@ type UpdateOrgPolicyParams struct {
 	MergePullRequest    string
 	ReadWeb             string
 	UseCredentials      string
+	McpToolModes        []byte
 	BoxTimeLimitMinutes int32
 	UpdatedBy           string
 	Revision            int64
@@ -142,6 +148,7 @@ func (q *Queries) UpdateOrgPolicy(ctx context.Context, arg UpdateOrgPolicyParams
 		arg.MergePullRequest,
 		arg.ReadWeb,
 		arg.UseCredentials,
+		arg.McpToolModes,
 		arg.BoxTimeLimitMinutes,
 		arg.UpdatedBy,
 		arg.Revision,

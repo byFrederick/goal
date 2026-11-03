@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -22,6 +23,7 @@ func TestOrgPolicy_Validate(t *testing.T) {
 			p.DeniedCommands = []string{"Bash(terraform apply:*)", "Bash(git push --force:*)"}
 			p.WriteOutsideBranch, p.MergePullRequest, p.ReadWeb, p.UseCredentials = ToolOff, ToolOff, ToolAsk, ToolOff
 			p.BoxTimeLimitMinutes = 30
+			p.MCPToolModes = map[string]ConnectionToolMode{"*": ToolModeAsk, "delete_*": ToolModeOff, "get?.v2": ToolModeAllow}
 		}, true},
 		{"no allowed models", func(p *OrgPolicy) { p.AllowedModels = nil }, false},
 		{"a default outside the allowed models", func(p *OrgPolicy) { p.DefaultModel = "claude-other-1" }, false},
@@ -37,6 +39,15 @@ func TestOrgPolicy_Validate(t *testing.T) {
 		{"a blank denied command", func(p *OrgPolicy) { p.DeniedCommands = []string{"Bash(rm -rf:*)", "  "} }, false},
 		{"a time limit of 0", func(p *OrgPolicy) { p.BoxTimeLimitMinutes = 0 }, false},
 		{"a negative time limit", func(p *OrgPolicy) { p.BoxTimeLimitMinutes = -5 }, false},
+		{"an unknown MCP tool mode", func(p *OrgPolicy) { p.MCPToolModes = map[string]ConnectionToolMode{"*": "maybe"} }, false},
+		{"an empty MCP tool mode", func(p *OrgPolicy) { p.MCPToolModes = map[string]ConnectionToolMode{"*": ""} }, false},
+		{"an empty MCP tool pattern", func(p *OrgPolicy) { p.MCPToolModes = map[string]ConnectionToolMode{"": ToolModeAsk} }, false},
+		{"an MCP tool pattern with a space", func(p *OrgPolicy) {
+			p.MCPToolModes = map[string]ConnectionToolMode{"delete *": ToolModeOff}
+		}, false},
+		{"an MCP tool pattern over 128 characters", func(p *OrgPolicy) {
+			p.MCPToolModes = map[string]ConnectionToolMode{strings.Repeat("a", 129): ToolModeOff}
+		}, false},
 	}
 
 	for _, tc := range tests {
@@ -69,6 +80,10 @@ func TestDefaultOrgPolicy(t *testing.T) {
 
 	if len(p.DeniedCommands) != 0 {
 		t.Errorf("denied commands %v; want none", p.DeniedCommands)
+	}
+
+	if len(p.MCPToolModes) != 0 {
+		t.Errorf("MCP tool mode cap %v; want none", p.MCPToolModes)
 	}
 
 	if p.WriteOutsideBranch != ToolAsk || p.MergePullRequest != ToolReviewApproval || p.ReadWeb != ToolAllowed ||
