@@ -4,6 +4,7 @@ package api
 
 // permissionRules is every permission of contracts/api/permissions.yaml, by name.
 var permissionRules = map[string]rule{
+	"access:read":           {level: "org", orgRoles: []string{"owner", "admin", "member"}, keys: true, pat: true},
 	"andon:manage":          {level: "factory", factoryRole: "approver", keys: true, pat: true},
 	"api_key:manage":        {level: "org", orgRoles: []string{"owner", "admin"}, fresh: true},
 	"api_key:read":          {level: "org", orgRoles: []string{"owner", "admin"}},
@@ -93,12 +94,14 @@ var operationScopes = map[string]string{
 	"exportRuns":                  "org:read",
 	"exportSpend":                 "org:read",
 	"formatDefinition":            "org:read",
+	"getAccess":                   "access:read",
 	"getAgentStats":               "factory:read",
 	"getAndon":                    "factory:read",
 	"getAuthConfig":               "public",
 	"getBakeOff":                  "factory:read",
 	"getBoard":                    "factory:read",
 	"getBuilderMeta":              "org:read",
+	"getCatalog":                  "authenticated",
 	"getConnection":               "connection:read",
 	"getConstraintReport":         "factory:read",
 	"getCredential":               "secret:read",
@@ -231,6 +234,7 @@ var operationScopes = map[string]string{
 	"submitItem":                  "item:create",
 	"syncKnowledgeSource":         "knowledge:manage",
 	"testConnection":              "connection:manage",
+	"testEnvironment":             "definition:edit",
 	"transferOwnership":           "org:transfer",
 	"tryIntakeTrigger":            "trigger:try",
 	"tryJudge":                    "definition:publish",

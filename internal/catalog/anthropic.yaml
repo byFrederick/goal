@@ -1,0 +1,12 @@
+apiVersion: goal/v1
+kind: Template
+metadata:
+  name: anthropic
+  title: Anthropic API
+  description: An Anthropic API key for agents that call the API themselves; the factory's own model key is runtime.modelKey.
+spec:
+  secrets:
+    - {slot: key, title: API key, suggest: anthropic-key}
+  env:
+    ANTHROPIC_API_KEY: "{{key}}"
+  test: {method: GET, url: "https://api.anthropic.com/v1/models", headers: {x-api-key: "{{key}}", anthropic-version: "2023-06-01"}, expect: 200}

@@ -48,9 +48,11 @@ import (
 	"github.com/byFrederick/goal/internal/adapters/sourcereader/confluence"
 	"github.com/byFrederick/goal/internal/adapters/sourcereader/gitdocs"
 	"github.com/byFrederick/goal/internal/adapters/store/postgres"
+	toollister "github.com/byFrederick/goal/internal/adapters/toollister/mcp"
 	"github.com/byFrederick/goal/internal/api"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
+	"github.com/byFrederick/goal/internal/catalog"
 	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/engine"
@@ -248,8 +250,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	// Platform admins, the security log and the sign-in clean-up: install-level, in no organization.
 	platform := postgres.NewPlatform(store)
-	// The docs site at /docs, from GOAL_DOCS_DIR; none without it.
-	site, siteErr := docsSite(s.DocsDir)
+	// The docs site at /docs, from GOAL_DOCS_DIR (none without it), and Add a tool's templates.
+	site, templates, siteErr := ownContent(s.DocsDir)
 
 	apiHandler, err := api.New(api.Deps{
 		Engine: eng, Items: store, Factories: defs, Definitions: authors, Versions: definitionStore, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
@@ -257,7 +259,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 			Mode: api.AuthMode(s.Auth), EmailCodes: s.EmailCodes, Google: s.Google, SecureCookies: s.strictTransport(),
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
-		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store),
+		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), ToolLister: toollister.New(connectionTransport(s.AllowPrivateUpstreams)),
 		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
@@ -486,6 +488,15 @@ func sandboxes(ctx context.Context, s settings, log *slog.Logger) (runBoxes, err
 	return runBoxes{
 		sandboxes: docker.NewSandboxes(dockerClient, s.SandboxNetwork, log), gateway: gw, close: func() { _ = dockerClient.Close() },
 	}, nil
+}
+
+// ownContent is what goald serves from its own files: the docs site (docsSite) and the tool
+// templates it ships (catalog.Templates, ADR 0037 decision 15).
+func ownContent(docsDir string) (http.Handler, []domain.ToolTemplate, error) {
+	site, siteErr := docsSite(docsDir)
+	templates, catalogErr := catalog.Templates()
+
+	return site, templates, errors.Join(siteErr, catalogErr)
 }
 
 // docsSite serves the docs build in GOAL_DOCS_DIR at /docs (api.Docs); nil without one.

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"testing/fstest"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"go.yaml.in/yaml/v3"
@@ -109,6 +110,33 @@ func (e Environment) ReplaceFix(label string, path []string, v any) domain.Probl
 	return domain.ProblemFix{
 		Label: label, Section: domain.SectionEnvironments,
 		Patch: []domain.PatchOp{{Op: domain.PatchReplace, Path: e.sectionPath(path), Value: value}},
+	}
+}
+
+// ParseEnvironment reads one environment file, environments/<name>.yaml, as a definition's check
+// does: an error wrapping domain.ErrInvalid lists every problem of a file that does not parse or
+// satisfy environment.schema.json, or that writes a {{secret}} reference badly.
+func ParseEnvironment(name string, raw []byte) (Environment, error) {
+	p := path.Join(EnvironmentsDir, name+".yaml")
+	c := &checker{f: &Factory{files: fstest.MapFS{p: {Data: raw}}}}
+
+	e, ok := c.environment(p, name)
+
+	var msgs []string
+
+	for _, pr := range c.problems {
+		if pr.Severity == domain.SeverityError {
+			msgs = append(msgs, pr.Message)
+		}
+	}
+
+	switch {
+	case len(msgs) > 0:
+		return Environment{}, fmt.Errorf("%s: %w", strings.Join(msgs, "; "), domain.ErrInvalid)
+	case !ok:
+		return Environment{}, fmt.Errorf("%s does not parse: %w", p, domain.ErrInvalid)
+	default:
+		return e, nil
 	}
 }
 

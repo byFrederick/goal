@@ -166,6 +166,16 @@ const usage = `usage:
                                                   unless --on-conflict replace); prints each name as new
                                                   or exists (--dry-run) or what was done with it
   goal credential ...                             moved to goal secret; prints where and exits 2
+  goal env test <factory> [<env>] [--server <name>] [--version draft|current|N]
+                                                  call tools/list on the environment's remote MCP
+                                                  servers (default: default) from goald, with their
+                                                  secrets opened there; the draft, or the current
+                                                  version while no draft is open (exit 1 when one fails)
+  goal access [--factory <f>] [--group reach|factory|secret]
+                                                  what agents reach: each MCP server, and each variable
+                                                  and file with a secret, with its factories and
+                                                  environments, secrets and status (tested, failed,
+                                                  untested, expiring, expired, missing, ok)
   goal knowledge sources [--factory F]            the knowledge base's sources: kind, status, documents,
                                                   last and next sync, the factories that search them
   goal knowledge add <name> --kind upload|synced|live [--connection C] [--config k=v]... [--title T] [--every 1h]
@@ -308,7 +318,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, secret, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one
+Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, secret, env, access, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
@@ -393,7 +403,7 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 	if handler, ok := map[string]command{
 		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbLane: laneItem, verbPause: pauseItem, verbCancel: cancelItem, verbDeny: denyItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
-		"connection": connectionCommand, "secret": secretCommand, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "search": search, "runs": runs, "eval": evalCommand, "bake-off": bakeOffCommand, "spend": spend,
+		"connection": connectionCommand, "secret": secretCommand, "env": envCommand, "access": access, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "search": search, "runs": runs, "eval": evalCommand, "bake-off": bakeOffCommand, "spend": spend,
 		"judge": judgeCommand, "jonah": jonahCommand, "triggers": triggersCommand, "webhooks": webhooksCommand, cmdStandingRules: standingRulesCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)

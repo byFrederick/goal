@@ -61,6 +61,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The tool templates
+         * @description Every template goald ships, by name: its title, description, secret slots with suggested secret names, what it adds (tools, env, files and MCP servers with suggested tool modes) and its HTTP test, if any. Values are plain or {{slot}} references to its slots.
+         */
+        get: operations["getCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me": {
         parameters: {
             query?: never;
@@ -2334,6 +2354,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/environments/{environment}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The environment's name, its file environments/<name>.yaml */
+                environment: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test an environment's MCP servers or a template
+         * @description Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+         */
+        post: operations["testEnvironment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/webhooks": {
         parameters: {
             query?: never;
@@ -3490,6 +3537,29 @@ export interface paths {
         patch: operations["patchCredential"];
         trace?: never;
     };
+    "/v1/orgs/{org}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * What the organization's agents reach
+         * @description Computed from each factory's current published version, the environment tests and the secrets, over the factories the caller sees that are not archived: every MCP server, and every env variable and file that references a secret. Each row lists the factories and environments that use it with their agents, the secrets it references, and a status: missing (a secret it references does not exist), failed (its last test failed), expired or expiring (a secret's expiry has passed, or is within its reminder days), untested (a remote MCP server never tested), tested, or ok. by groups the rows by what agents reach (MCP servers, env variables, files; the default), by factory or by secret; factory keeps one factory's. reached counts what agents reach and need_attention what is missing, failed, expired or expiring, whatever by is.
+         */
+        get: operations["getAccess"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/secrets": {
         parameters: {
             query?: never;
@@ -3874,7 +3944,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422). */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422). */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -7882,6 +7952,185 @@ export interface components {
             /** @description The factory, knowledge source, webhook or connection that uses it; slack: the organization's Slack setting */
             name: string;
         };
+        ToolTemplateList: {
+            templates: components["schemas"]["ToolTemplate"][];
+        };
+        /** @description A tool template (ADR 0037 decision 15) */
+        ToolTemplate: {
+            name: string;
+            title: string;
+            /** @description One line */
+            description: string;
+            /** @description Its secret slots, in order */
+            secrets: components["schemas"]["TemplateSecret"][];
+            adds: components["schemas"]["TemplateAdds"];
+            test: components["schemas"]["TemplateTest"] | null;
+        };
+        TemplateSecret: {
+            /** @description The {{slot}} its values refer to */
+            slot: string;
+            title: string;
+            description: string;
+            /** @description The name a new secret for it is suggested to have */
+            suggest: string;
+        };
+        /** @description What the template writes into an environment file */
+        TemplateAdds: {
+            /** @description mise tool specs */
+            tools: string[];
+            env: {
+                [key: string]: string;
+            };
+            /** @description By absolute or ~/ path */
+            files: {
+                [key: string]: string;
+            };
+            mcp: {
+                [key: string]: components["schemas"]["TemplateMCP"];
+            };
+        };
+        /** @description A remote (url, headers) or stdio (command, env) MCP server, with suggested tool modes */
+        TemplateMCP: {
+            url?: string;
+            headers?: {
+                [key: string]: string;
+            };
+            command?: string[];
+            env?: {
+                [key: string]: string;
+            };
+            tools: {
+                [key: string]: "allow" | "ask" | "off";
+            };
+        };
+        /** @description An HTTP test request; its values may hold {{slot}} and ${VAR} of the template's plain env values */
+        TemplateTest: {
+            method: string;
+            url: string;
+            headers: {
+                [key: string]: string;
+            };
+            basic?: {
+                username: string;
+                password: string;
+            };
+            /** @description The status that passes */
+            expect: number;
+        };
+        EnvironmentTestRequest: {
+            /** @description draft (the default while one is open), current (the default otherwise) or a version number */
+            version?: string;
+            /** @description Only this MCP server */
+            server?: string;
+            template?: components["schemas"]["EnvironmentTestTemplate"];
+        };
+        EnvironmentTestTemplate: {
+            name: string;
+            /** @description The secret each slot takes, by slot */
+            secrets: {
+                [key: string]: components["schemas"]["SecretName"];
+            };
+            /** @description The template's plain env values to use instead of its own, by name */
+            env?: {
+                [key: string]: string;
+            };
+        };
+        EnvironmentTestResult: {
+            environment: string;
+            /** @description The version tested: draft or its number */
+            version: string;
+            servers: components["schemas"]["ServerTest"][];
+            template?: components["schemas"]["TemplateTestResult"];
+        };
+        ServerTest: {
+            server: string;
+            /** @description False for a stdio server, which goald does not start */
+            tested: boolean;
+            ok: boolean;
+            /** @description The tool names tools/list answered */
+            tools: string[];
+            /** @description Why it failed */
+            error?: string;
+            /** Format: date-time */
+            at?: string;
+        };
+        TemplateTestResult: {
+            name: string;
+            ok: boolean;
+            /** @description The status the test request got */
+            status?: number;
+            /** @description Why it failed */
+            error?: string;
+            /** Format: date-time */
+            at: string;
+        };
+        Access: {
+            /** @enum {string} */
+            by: "reach" | "factory" | "secret";
+            /** @description What agents reach */
+            reached: number;
+            /** @description Of those, the missing, failed, expired or expiring */
+            need_attention: number;
+            groups: components["schemas"]["AccessGroup"][];
+        };
+        /** @description One group: a kind (mcp, env, file), a factory's id or a secret's name, by by */
+        AccessGroup: {
+            key: string;
+            title: string;
+            rows: components["schemas"]["AccessRow"][];
+        };
+        AccessRow: {
+            /** @enum {string} */
+            kind: "mcp" | "env" | "file";
+            /** @description The MCP server */
+            name: string;
+            uses: components["schemas"]["AccessUse"][];
+            /** @description The secrets it references */
+            secrets: string[];
+            status: components["schemas"]["AccessStatus"];
+            /**
+             * Format: date-time
+             * @description Its latest test
+             */
+            tested_at?: string;
+            /** @description Why its latest failed test failed */
+            test_error?: string;
+            /**
+             * Format: date-time
+             * @description When a run last opened one of its secrets
+             */
+            last_used_at?: string;
+            /**
+             * Format: date-time
+             * @description The soonest expiry of its secrets
+             */
+            expires_at?: string;
+        };
+        /**
+         * @description The worst of its uses' statuses, in this order
+         * @enum {string}
+         */
+        AccessStatus: "missing" | "failed" | "expired" | "expiring" | "untested" | "tested" | "ok";
+        AccessUse: {
+            factory: components["schemas"]["AccessFactory"];
+            environment: string;
+            /** @description The agents on the environment */
+            agents: string[];
+            status: components["schemas"]["AccessStatus"];
+            test?: components["schemas"]["AccessTest"];
+        };
+        AccessFactory: {
+            id: string;
+            name: string;
+        };
+        AccessTest: {
+            /** Format: date-time */
+            at: string;
+            ok: boolean;
+            error?: string;
+            /** @description How many tools it listed */
+            tools: number;
+        };
         SecretList: {
             secrets: components["schemas"]["Secret"][];
         };
@@ -8389,6 +8638,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeviceRequest"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The templates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolTemplateList"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -11558,6 +11828,38 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    testEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The environment's name, its file environments/<name>.yaml */
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EnvironmentTestRequest"];
+            };
+        };
+        responses: {
+            /** @description The results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvironmentTestResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     listWebhookEndpoints: {
         parameters: {
             query?: never;
@@ -13145,6 +13447,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Credential"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAccess: {
+        parameters: {
+            query?: {
+                by?: "reach" | "factory" | "secret";
+                /** @description Only this factory's, by metadata.id or metadata.name */
+                factory?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The read model */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Access"];
                 };
             };
             default: components["responses"]["Problem"];

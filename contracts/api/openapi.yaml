@@ -68,6 +68,17 @@ tags:
       platform's master key and never readable back. Members, keys and personal tokens read names,
       metadata and where each secret is used (secret:read); owners and admins create, change,
       replace, delete and import them, after a recent sign-in (secret:manage).
+  - name: catalog
+    description: >-
+      The tool templates goald ships (ADR 0037 decision 15), the catalog of Add a tool: what one
+      MCP server, command-line tool or API adds to an environment file, its secret slots and its
+      optional HTTP test. Any signed-in caller reads them.
+  - name: access
+    description: >-
+      What the organization's agents reach (ADR 0037 decisions 9 and 16): tests of an
+      environment's remote MCP servers and of a template, which open secrets inside goald and
+      never answer a value, and the Access read model over every factory's published
+      environments, their tests and their secrets.
   - name: knowledge
     description: >-
       The organization's knowledge base (spec 4 §4.8): sources of uploaded files, of connections
@@ -180,6 +191,23 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DeviceRequest" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/catalog:
+    get:
+      operationId: getCatalog
+      x-goal-scope: authenticated
+      tags: [catalog]
+      summary: The tool templates
+      description: >-
+        Every template goald ships, by name: its title, description, secret slots with suggested
+        secret names, what it adds (tools, env, files and MCP servers with suggested tool modes)
+        and its HTTP test, if any. Values are plain or {{slot}} references to its slots.
+      responses:
+        "200":
+          description: The templates
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ToolTemplateList" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/me:
     get:
@@ -2802,6 +2830,43 @@ paths:
               schema: { $ref: "#/components/schemas/AndonPull" }
         "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/environments/{environment}/test:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - name: environment
+        in: path
+        required: true
+        description: The environment's name, its file environments/<name>.yaml
+        schema: { type: string }
+    post:
+      operationId: testEnvironment
+      x-goal-scope: definition:edit
+      tags: [access]
+      summary: Test an environment's MCP servers or a template
+      description: >-
+        Tests the environment of the draft (of the current version while no draft is open), or of
+        the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list,
+        its headers' {{secret}} references opened inside goald for the factory (audited as
+        secret.used without a run), through public addresses only, following no redirect, within
+        10 seconds; stdio servers answer tested false. With template, the template's remote MCP
+        servers and HTTP test run instead, with the secrets the body puts in its slots and its
+        plain env values changed by env. Each server's result is kept per factory, environment
+        and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an
+        error; its error is scrubbed of every value the test opened. 404 environment-not-found,
+        environment-server-not-found or template-not-found; 400 environment-test-invalid for a
+        template slot without a secret; 503 secrets-unavailable while goald has no master key.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EnvironmentTestRequest" }
+      responses:
+        "200":
+          description: The results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnvironmentTestResult" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/webhooks:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -4197,6 +4262,40 @@ paths:
         "204":
           description: Deleted
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/access:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: getAccess
+      x-goal-scope: access:read
+      tags: [access]
+      summary: What the organization's agents reach
+      description: >-
+        Computed from each factory's current published version, the environment tests and the
+        secrets, over the factories the caller sees that are not archived: every MCP server, and
+        every env variable and file that references a secret. Each row lists the factories and
+        environments that use it with their agents, the secrets it references, and a status:
+        missing (a secret it references does not exist), failed (its last test failed), expired
+        or expiring (a secret's expiry has passed, or is within its reminder days), untested (a
+        remote MCP server never tested), tested, or ok. by groups the rows by what agents reach
+        (MCP servers, env variables, files; the default), by factory or by secret; factory keeps
+        one factory's. reached counts what agents reach and need_attention what is missing,
+        failed, expired or expiring, whatever by is.
+      parameters:
+        - name: by
+          in: query
+          schema: { type: string, enum: [reach, factory, secret], default: reach }
+        - name: factory
+          in: query
+          description: Only this factory's, by metadata.id or metadata.name
+          schema: { type: string }
+      responses:
+        "200":
+          description: The read model
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Access" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/secrets:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -4921,6 +5020,9 @@ components:
             Secrets (ADR 0037): secret-not-found (404), secret-invalid (400),
             secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use),
             secrets-unavailable (503: goald has no master key).
+            Environment tests (ADR 0037 decision 9): environment-not-found,
+            environment-server-not-found and template-not-found (404), environment-test-invalid
+            (400).
             Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found
             (404), connection-cannot-sync (400), knowledge-source-name-taken,
             knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413),
@@ -9632,6 +9734,181 @@ components:
             What uses it: a factory's published definition, a knowledge source, a webhook, the
             organization's Slack setting, or a connection that refers to it as {{name}}
         name: { type: string, description: "The factory, knowledge source, webhook or connection that uses it; slack: the organization's Slack setting" }
+    ToolTemplateList:
+      type: object
+      required: [templates]
+      properties:
+        templates:
+          type: array
+          items: { $ref: "#/components/schemas/ToolTemplate" }
+    ToolTemplate:
+      type: object
+      description: A tool template (ADR 0037 decision 15)
+      required: [name, title, description, secrets, adds, test]
+      properties:
+        name: { type: string }
+        title: { type: string }
+        description: { type: string, description: One line }
+        secrets:
+          type: array
+          description: Its secret slots, in order
+          items: { $ref: "#/components/schemas/TemplateSecret" }
+        adds: { $ref: "#/components/schemas/TemplateAdds" }
+        test:
+          allOf: [{ $ref: "#/components/schemas/TemplateTest" }]
+          nullable: true
+    TemplateSecret:
+      type: object
+      required: [slot, title, description, suggest]
+      properties:
+        slot: { type: string, description: "The {{slot}} its values refer to" }
+        title: { type: string }
+        description: { type: string }
+        suggest: { type: string, description: The name a new secret for it is suggested to have }
+    TemplateAdds:
+      type: object
+      description: What the template writes into an environment file
+      required: [tools, env, files, mcp]
+      properties:
+        tools: { type: array, items: { type: string }, description: mise tool specs }
+        env: { type: object, additionalProperties: { type: string } }
+        files: { type: object, additionalProperties: { type: string }, description: By absolute or ~/ path }
+        mcp: { type: object, additionalProperties: { $ref: "#/components/schemas/TemplateMCP" } }
+    TemplateMCP:
+      type: object
+      description: A remote (url, headers) or stdio (command, env) MCP server, with suggested tool modes
+      required: [tools]
+      properties:
+        url: { type: string }
+        headers: { type: object, additionalProperties: { type: string } }
+        command: { type: array, items: { type: string } }
+        env: { type: object, additionalProperties: { type: string } }
+        tools: { type: object, additionalProperties: { type: string, enum: [allow, ask, off] } }
+    TemplateTest:
+      type: object
+      description: "An HTTP test request; its values may hold {{slot}} and ${VAR} of the template's plain env values"
+      required: [method, url, headers, expect]
+      properties:
+        method: { type: string }
+        url: { type: string }
+        headers: { type: object, additionalProperties: { type: string } }
+        basic:
+          type: object
+          required: [username, password]
+          properties:
+            username: { type: string }
+            password: { type: string }
+        expect: { type: integer, description: The status that passes }
+    EnvironmentTestRequest:
+      type: object
+      properties:
+        version: { type: string, description: "draft (the default while one is open), current (the default otherwise) or a version number" }
+        server: { type: string, description: Only this MCP server }
+        template: { $ref: "#/components/schemas/EnvironmentTestTemplate" }
+    EnvironmentTestTemplate:
+      type: object
+      required: [name, secrets]
+      properties:
+        name: { type: string }
+        secrets:
+          type: object
+          description: The secret each slot takes, by slot
+          additionalProperties: { $ref: "#/components/schemas/SecretName" }
+        env:
+          type: object
+          description: The template's plain env values to use instead of its own, by name
+          additionalProperties: { type: string }
+    EnvironmentTestResult:
+      type: object
+      required: [environment, version, servers]
+      properties:
+        environment: { type: string }
+        version: { type: string, description: "The version tested: draft or its number" }
+        servers:
+          type: array
+          items: { $ref: "#/components/schemas/ServerTest" }
+        template: { $ref: "#/components/schemas/TemplateTestResult" }
+    ServerTest:
+      type: object
+      required: [server, tested, ok, tools]
+      properties:
+        server: { type: string }
+        tested: { type: boolean, description: "False for a stdio server, which goald does not start" }
+        ok: { type: boolean }
+        tools: { type: array, items: { type: string }, description: The tool names tools/list answered, sorted }
+        error: { type: string, description: Why it failed, without a secret value }
+        at: { type: string, format: date-time }
+    TemplateTestResult:
+      type: object
+      required: [name, ok, at]
+      properties:
+        name: { type: string }
+        ok: { type: boolean }
+        status: { type: integer, description: The status the test request got }
+        error: { type: string, description: Why it failed, without a secret value }
+        at: { type: string, format: date-time }
+    Access:
+      type: object
+      required: [by, reached, need_attention, groups]
+      properties:
+        by: { type: string, enum: [reach, factory, secret] }
+        reached: { type: integer, description: What agents reach, counted by kind and name }
+        need_attention: { type: integer, description: "Of those, the missing, failed, expired or expiring" }
+        groups:
+          type: array
+          items: { $ref: "#/components/schemas/AccessGroup" }
+    AccessGroup:
+      type: object
+      description: "One group: a kind (mcp, env, file), a factory's id or a secret's name, by by"
+      required: [key, title, rows]
+      properties:
+        key: { type: string }
+        title: { type: string }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/AccessRow" }
+    AccessRow:
+      type: object
+      required: [kind, name, uses, secrets, status]
+      properties:
+        kind: { type: string, enum: [mcp, env, file] }
+        name: { type: string, description: The MCP server, the variable or the file path }
+        uses:
+          type: array
+          items: { $ref: "#/components/schemas/AccessUse" }
+        secrets: { type: array, items: { type: string }, description: The secrets it references, by name }
+        status: { $ref: "#/components/schemas/AccessStatus" }
+        tested_at: { type: string, format: date-time, description: Its latest test }
+        test_error: { type: string, description: Why its latest failed test failed }
+        last_used_at: { type: string, format: date-time, description: When a run last opened one of its secrets }
+        expires_at: { type: string, format: date-time, description: The soonest expiry of its secrets }
+    AccessStatus:
+      type: string
+      description: The worst of its uses' statuses, in this order
+      enum: [missing, failed, expired, expiring, untested, tested, ok]
+    AccessUse:
+      type: object
+      required: [factory, environment, agents, status]
+      properties:
+        factory: { $ref: "#/components/schemas/AccessFactory" }
+        environment: { type: string }
+        agents: { type: array, items: { type: string }, description: The agents on the environment }
+        status: { $ref: "#/components/schemas/AccessStatus" }
+        test: { $ref: "#/components/schemas/AccessTest" }
+    AccessFactory:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+    AccessTest:
+      type: object
+      required: [at, ok, tools]
+      properties:
+        at: { type: string, format: date-time }
+        ok: { type: boolean }
+        error: { type: string }
+        tools: { type: integer, description: How many tools it listed }
     SecretList:
       type: object
       required: [secrets]

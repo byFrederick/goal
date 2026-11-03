@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
 	"slices"
 	"strings"
@@ -338,5 +339,30 @@ func TestFactory_SecretRefs(t *testing.T) {
 		{Op: domain.PatchReplace, Path: "/default/env/SENTRY_ORG", Value: json.RawMessage(`"{{sentry-org}}"`)},
 	}}); !reflect.DeepEqual(fix, want) || !strings.HasPrefix(env.Locate("spec", "env", "SENTRY_ORG").Pointer, "/environments/default/env/") {
 		t.Errorf("fix = %+v, want %+v", fix, want)
+	}
+}
+
+// ParseEnvironment reads one environment file whole, and refuses one that breaks the schema or
+// writes a reference badly.
+func TestParseEnvironment(t *testing.T) {
+	t.Parallel()
+
+	e, err := ParseEnvironment("default", []byte(fullEnvironment))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if e.Name != "default" || e.Spec.MCP["linear"].URL == "" || e.File() != "environments/default.yaml" {
+		t.Errorf("ParseEnvironment = %+v", e)
+	}
+
+	for _, bad := range []string{
+		"apiVersion: goal/v1\nkind: Environment\nspec: {size: huge}\n",
+		"apiVersion: goal/v1\nkind: Environment\nspec: {env: {A: \"{{Bad Name}}\"}}\n",
+		"{",
+	} {
+		if _, err := ParseEnvironment("default", []byte(bad)); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("ParseEnvironment(%q) = %v; want ErrInvalid", bad, err)
+		}
 	}
 }
