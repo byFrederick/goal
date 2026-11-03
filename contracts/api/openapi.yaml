@@ -1346,6 +1346,49 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/DraftModel" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: getDraftKnowledgePreview
+      x-goal-scope: factory:read
+      tags: [definitions]
+      summary: The Knowledge prompt section one agent gets from the draft
+      description: >-
+        "What agents see" in the editor: the section goald builds for a run of agent, from the same
+        code as a run's. It lists the draft's sources that apply to the agent (with station and
+        lane and work_type, as a run's appliesTo is matched), each with its entry's readWhen or its
+        snapshot's, its file count and top folders, names those with no snapshot as not synced yet,
+        and gives memory.yaml's facts. It reads each source's current snapshot, while a run reads
+        the snapshot its claim pinned, so a run started earlier may see another. 404 agent-not-found
+        for an agent the draft does not declare, 409 yaml-invalid while factory.yaml does not parse
+        or satisfy the schema, 404 no-draft.
+      parameters:
+        - name: agent
+          in: query
+          required: true
+          description: The agent's name, as the draft declares it
+          schema: { type: string }
+        - name: station
+          in: query
+          description: The station of the run, for sources whose appliesTo names stations
+          schema: { type: string }
+        - name: lane
+          in: query
+          description: The lane of the run, for sources whose appliesTo names lanes
+          schema: { type: string }
+        - name: work_type
+          in: query
+          description: The work type of the run, for sources whose appliesTo names work types
+          schema: { type: string }
+      responses:
+        "200":
+          description: The agent's Knowledge section
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgePreview" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/draft/model/{section}:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -9039,6 +9082,30 @@ components:
         requests:
           type: array
           items: { $ref: "#/components/schemas/DraftRequest" }
+    KnowledgeSourceEntry:
+      type: object
+      description: One knowledge.sources entry written as a mapping (ADR 0038 decision 5)
+      required: [name]
+      properties:
+        name: { type: string, description: The knowledge source's name, its folder under /knowledge }
+        appliesTo:
+          type: object
+          description: The runs that read the source, matched as a rule's scope; every run when absent
+          properties:
+            agents: { type: array, items: { type: string } }
+            stations: { type: array, items: { type: string } }
+            lanes: { type: array, items: { type: string } }
+            workTypes: { type: array, items: { type: string } }
+        readWhen: { type: string, description: "When to read it, in this factory's words; the snapshot's own line when absent" }
+    KnowledgePreview:
+      type: object
+      required: [section]
+      properties:
+        section:
+          type: string
+          description: >-
+            The Knowledge prompt section the agent's runs get from the draft, as Markdown; "" when
+            there is nothing to say or the agent may not read files
     DraftModel:
       type: object
       required: [revision, model, etags, edited, ranges]
@@ -9386,8 +9453,14 @@ components:
               additionalProperties: {}
             knowledge_sources:
               type: array
-              description: knowledge.sources, the organization's knowledge sources the factory may search
-              items: { type: string }
+              description: >-
+                knowledge.sources, the organization's knowledge sources the factory's runs read, in
+                the definition's order: a name, or an entry with its own appliesTo and readWhen,
+                each kept as factory.yaml writes it
+              items:
+                oneOf:
+                  - { type: string }
+                  - { $ref: "#/components/schemas/KnowledgeSourceEntry" }
             runner: { type: string, description: "Removed in phase 4 (field-removed); present while factory.yaml has it, so its quick fix can remove it" }
             image: { type: string, description: Removed in phase 4 (field-removed), as runner }
             auth: { type: string, description: Removed in phase 4 (field-removed), as runner }

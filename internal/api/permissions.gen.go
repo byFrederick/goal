@@ -110,6 +110,7 @@ var operationScopes = map[string]string{
 	"getDeviceRequest":            "device:read",
 	"getDraft":                    "factory:read",
 	"getDraftFile":                "factory:read",
+	"getDraftKnowledgePreview":    "factory:read",
 	"getDraftModel":               "factory:read",
 	"getDraftRequest":             "factory:read",
 	"getEvalRun":                  "factory:read",

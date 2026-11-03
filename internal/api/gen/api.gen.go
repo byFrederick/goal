@@ -5149,6 +5149,12 @@ type KnowledgeLimits struct {
 	Files     int   `json:"files"`
 }
 
+// KnowledgePreview defines model for KnowledgePreview.
+type KnowledgePreview struct {
+	// Section The Knowledge prompt section the agent's runs get from the draft, as Markdown; "" when there is nothing to say or the agent may not read files
+	Section string `json:"section"`
+}
+
 // KnowledgeReadCount defines model for KnowledgeReadCount.
 type KnowledgeReadCount struct {
 	// Day The UTC day
@@ -5248,6 +5254,23 @@ type KnowledgeSource struct {
 
 // KnowledgeSourceStatus syncing while a goald holds it; failed after a sync that stopped (last_error says why)
 type KnowledgeSourceStatus string
+
+// KnowledgeSourceEntry One knowledge.sources entry written as a mapping (ADR 0038 decision 5)
+type KnowledgeSourceEntry struct {
+	// AppliesTo The runs that read the source, matched as a rule's scope; every run when absent
+	AppliesTo *struct {
+		Agents    *[]string `json:"agents,omitempty"`
+		Lanes     *[]string `json:"lanes,omitempty"`
+		Stations  *[]string `json:"stations,omitempty"`
+		WorkTypes *[]string `json:"workTypes,omitempty"`
+	} `json:"appliesTo,omitempty"`
+
+	// Name The knowledge source's name
+	Name string `json:"name"`
+
+	// ReadWhen When to read it, in this factory's words; the snapshot's own line when absent
+	ReadWhen *string `json:"readWhen,omitempty"`
+}
 
 // KnowledgeSourceKind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over
 type KnowledgeSourceKind string
@@ -8129,6 +8152,21 @@ type PutDraftFileParams struct {
 	IfNoneMatch *IfNoneMatch `json:"If-None-Match,omitempty"`
 }
 
+// GetDraftKnowledgePreviewParams defines parameters for GetDraftKnowledgePreview.
+type GetDraftKnowledgePreviewParams struct {
+	// Agent The agent's name, as the draft declares it
+	Agent string `form:"agent" json:"agent"`
+
+	// Station The station of the run, for sources whose appliesTo names stations
+	Station *string `form:"station,omitempty" json:"station,omitempty"`
+
+	// Lane The lane of the run, for sources whose appliesTo names lanes
+	Lane *string `form:"lane,omitempty" json:"lane,omitempty"`
+
+	// WorkType The work type of the run, for sources whose appliesTo names work types
+	WorkType *string `form:"work_type,omitempty" json:"work_type,omitempty"`
+}
+
 // SaveDraftSectionParams defines parameters for SaveDraftSection.
 type SaveDraftSectionParams struct {
 	// IfMatch The entity tag the write is based on, quoted ("<etag>"); writes without it are 428
@@ -9534,6 +9572,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `PutDraftFile` operationId).
 	PutDraftFileWithBody(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, params *PutDraftFileParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDraftKnowledgePreview The Knowledge prompt section one agent gets from the draft
+	//
+	// "What agents see" in the editor: the section goald builds for a run of agent, from the same code as a run's. It lists the draft's sources that apply to the agent (with station and lane and work_type, as a run's appliesTo is matched), each with its entry's readWhen or its snapshot's, its file count and top folders, names those with no snapshot as not synced yet, and gives memory.yaml's facts. It reads each source's current snapshot, while a run reads the snapshot its claim pinned, so a run started earlier may see another. 404 agent-not-found for an agent the draft does not declare, 409 yaml-invalid while factory.yaml does not parse or satisfy the schema, 404 no-draft.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview (the `GetDraftKnowledgePreview` operationId).
+	GetDraftKnowledgePreview(ctx context.Context, org OrgRef, factory FactoryRef, params *GetDraftKnowledgePreviewParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetDraftModel The draft's factory model for the Visual editor
 	//
@@ -12343,6 +12388,23 @@ func (c *Client) GetDraftFile(ctx context.Context, org OrgRef, factory FactoryRe
 // Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `PutDraftFile` operationId).
 func (c *Client) PutDraftFileWithBody(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, params *PutDraftFileParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutDraftFileRequestWithBody(c.Server, org, factory, path, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetDraftKnowledgePreview The Knowledge prompt section one agent gets from the draft
+//
+// "What agents see" in the editor: the section goald builds for a run of agent, from the same code as a run's. It lists the draft's sources that apply to the agent (with station and lane and work_type, as a run's appliesTo is matched), each with its entry's readWhen or its snapshot's, its file count and top folders, names those with no snapshot as not synced yet, and gives memory.yaml's facts. It reads each source's current snapshot, while a run reads the snapshot its claim pinned, so a run started earlier may see another. 404 agent-not-found for an agent the draft does not declare, 409 yaml-invalid while factory.yaml does not parse or satisfy the schema, 404 no-draft.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview (the `GetDraftKnowledgePreview` operationId).
+func (c *Client) GetDraftKnowledgePreview(ctx context.Context, org OrgRef, factory FactoryRef, params *GetDraftKnowledgePreviewParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDraftKnowledgePreviewRequest(c.Server, org, factory, params)
 	if err != nil {
 		return nil, err
 	}
@@ -18688,6 +18750,106 @@ func NewPutDraftFileRequestWithBody(server string, org OrgRef, factory FactoryRe
 			req.Header.Set("If-None-Match", headerParam1)
 		}
 
+	}
+
+	return req, nil
+}
+
+// NewGetDraftKnowledgePreviewRequest constructs an http.Request for the GetDraftKnowledgePreview method
+func NewGetDraftKnowledgePreviewRequest(server string, org OrgRef, factory FactoryRef, params *GetDraftKnowledgePreviewParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/knowledge-preview", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "agent", params.Agent, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Station != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "station", *params.Station, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Lane != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "lane", *params.Lane, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.WorkType != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "work_type", *params.WorkType, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -27344,6 +27506,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `PutDraftFile` operationId).
 	PutDraftFileWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, params *PutDraftFileParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutDraftFileResponse, error)
 
+	// GetDraftKnowledgePreviewWithResponse The Knowledge prompt section one agent gets from the draft
+	//
+	// "What agents see" in the editor: the section goald builds for a run of agent, from the same code as a run's. It lists the draft's sources that apply to the agent (with station and lane and work_type, as a run's appliesTo is matched), each with its entry's readWhen or its snapshot's, its file count and top folders, names those with no snapshot as not synced yet, and gives memory.yaml's facts. It reads each source's current snapshot, while a run reads the snapshot its claim pinned, so a run started earlier may see another. 404 agent-not-found for an agent the draft does not declare, 409 yaml-invalid while factory.yaml does not parse or satisfy the schema, 404 no-draft.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview (the `GetDraftKnowledgePreview` operationId).
+	GetDraftKnowledgePreviewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetDraftKnowledgePreviewParams, reqEditors ...RequestEditorFn) (*GetDraftKnowledgePreviewResponse, error)
+
 	// GetDraftModelWithResponse The draft's factory model for the Visual editor
 	//
 	// The model, each section's concurrency token, the fields the draft changed against its base (Edited · Undo) and where each model pointer is in factory.yaml. 409 yaml-invalid (with parse_error) while factory.yaml does not parse: Visual is read-only until it is fixed in YAML mode.
@@ -31818,6 +31989,54 @@ func (r PutDraftFileResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PutDraftFileResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetDraftKnowledgePreviewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *KnowledgePreview
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetDraftKnowledgePreviewResponse) GetJSON200() *KnowledgePreview {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetDraftKnowledgePreviewResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetDraftKnowledgePreviewResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDraftKnowledgePreviewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDraftKnowledgePreviewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDraftKnowledgePreviewResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -39908,6 +40127,21 @@ func (c *ClientWithResponses) PutDraftFileWithBodyWithResponse(ctx context.Conte
 	return ParsePutDraftFileResponse(rsp)
 }
 
+// GetDraftKnowledgePreviewWithResponse The Knowledge prompt section one agent gets from the draft
+//
+// "What agents see" in the editor: the section goald builds for a run of agent, from the same code as a run's. It lists the draft's sources that apply to the agent (with station and lane and work_type, as a run's appliesTo is matched), each with its entry's readWhen or its snapshot's, its file count and top folders, names those with no snapshot as not synced yet, and gives memory.yaml's facts. It reads each source's current snapshot, while a run reads the snapshot its claim pinned, so a run started earlier may see another. 404 agent-not-found for an agent the draft does not declare, 409 yaml-invalid while factory.yaml does not parse or satisfy the schema, 404 no-draft.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview (the `GetDraftKnowledgePreview` operationId).
+func (c *ClientWithResponses) GetDraftKnowledgePreviewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetDraftKnowledgePreviewParams, reqEditors ...RequestEditorFn) (*GetDraftKnowledgePreviewResponse, error) {
+	rsp, err := c.GetDraftKnowledgePreview(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDraftKnowledgePreviewResponse(rsp)
+}
+
 // GetDraftModelWithResponse The draft's factory model for the Visual editor
 //
 // The model, each section's concurrency token, the fields the draft changed against its base (Edited · Undo) and where each model pointer is in factory.yaml. 409 yaml-invalid (with parse_error) while factory.yaml does not parse: Visual is read-only until it is fixed in YAML mode.
@@ -44700,6 +44934,39 @@ func ParsePutDraftFileResponse(rsp *http.Response) (*PutDraftFileResponse, error
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest SaveResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetDraftKnowledgePreviewResponse parses an HTTP response from a GetDraftKnowledgePreviewWithResponse call
+func ParseGetDraftKnowledgePreviewResponse(rsp *http.Response) (*GetDraftKnowledgePreviewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDraftKnowledgePreviewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest KnowledgePreview
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -49819,6 +50086,9 @@ type ServerInterface interface {
 	// PutDraftFile Write one file of the draft exactly as sent (YAML mode)
 	// (PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path})
 	PutDraftFile(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, path FilePath, params PutDraftFileParams)
+	// GetDraftKnowledgePreview The Knowledge prompt section one agent gets from the draft
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview)
+	GetDraftKnowledgePreview(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetDraftKnowledgePreviewParams)
 	// GetDraftModel The draft's factory model for the Visual editor
 	// (GET /v1/orgs/{org}/factories/{factory}/draft/model)
 	GetDraftModel(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -52431,6 +52701,96 @@ func (siw *ServerInterfaceWrapper) PutDraftFile(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PutDraftFile(w, r, org, factory, path, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDraftKnowledgePreview operation middleware
+func (siw *ServerInterfaceWrapper) GetDraftKnowledgePreview(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetDraftKnowledgePreviewParams
+
+	// ------------- Required query parameter "agent" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "agent", r.URL.Query(), &params.Agent, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "agent"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agent", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "station" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "station", r.URL.Query(), &params.Station, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "station"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "station", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "lane" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "lane", r.URL.Query(), &params.Lane, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "lane"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lane", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "work_type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "work_type", r.URL.Query(), &params.WorkType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "work_type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "work_type", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDraftKnowledgePreview(w, r, org, factory, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -58786,6 +59146,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft", wrapper.GetDraft)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft", wrapper.OpenDraft)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/model", wrapper.GetDraftModel)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/knowledge-preview", wrapper.GetDraftKnowledgePreview)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/model/{section}", wrapper.SaveDraftSection)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/model/{section}/revert", wrapper.RevertDraftSection)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/files", wrapper.ListDraftFiles)
@@ -61271,6 +61632,47 @@ type PutDraftFiledefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PutDraftFiledefaultApplicationProblemPlusJSONResponse) VisitPutDraftFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDraftKnowledgePreviewRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Params  GetDraftKnowledgePreviewParams
+}
+
+type GetDraftKnowledgePreviewResponseObject interface {
+	VisitGetDraftKnowledgePreviewResponse(w http.ResponseWriter) error
+}
+
+type GetDraftKnowledgePreview200JSONResponse KnowledgePreview
+
+func (response GetDraftKnowledgePreview200JSONResponse) VisitGetDraftKnowledgePreviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDraftKnowledgePreviewdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetDraftKnowledgePreviewdefaultApplicationProblemPlusJSONResponse) VisitGetDraftKnowledgePreviewResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -67657,6 +68059,9 @@ type StrictServerInterface interface {
 	// PutDraftFile Write one file of the draft exactly as sent (YAML mode)
 	// (PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path})
 	PutDraftFile(ctx context.Context, request PutDraftFileRequestObject) (PutDraftFileResponseObject, error)
+	// GetDraftKnowledgePreview The Knowledge prompt section one agent gets from the draft
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview)
+	GetDraftKnowledgePreview(ctx context.Context, request GetDraftKnowledgePreviewRequestObject) (GetDraftKnowledgePreviewResponseObject, error)
 	// GetDraftModel The draft's factory model for the Visual editor
 	// (GET /v1/orgs/{org}/factories/{factory}/draft/model)
 	GetDraftModel(ctx context.Context, request GetDraftModelRequestObject) (GetDraftModelResponseObject, error)
@@ -69784,6 +70189,34 @@ func (sh *strictHandler) PutDraftFile(w http.ResponseWriter, r *http.Request, or
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PutDraftFileResponseObject); ok {
 		if err := validResponse.VisitPutDraftFileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetDraftKnowledgePreview operation middleware
+func (sh *strictHandler) GetDraftKnowledgePreview(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetDraftKnowledgePreviewParams) {
+	var request GetDraftKnowledgePreviewRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetDraftKnowledgePreview(ctx, request.(GetDraftKnowledgePreviewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetDraftKnowledgePreview")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetDraftKnowledgePreviewResponseObject); ok {
+		if err := validResponse.VisitGetDraftKnowledgePreviewResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
