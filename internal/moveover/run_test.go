@@ -512,9 +512,11 @@ func (w *world) oneRun(t *testing.T, line domain.Line) map[string]string {
 		t.Fatal("the run did not finish")
 	}
 
+	// The first station's run comes first. When it finishes before the tick's claim loop reaches
+	// the next agent station, the same tick claims the item there too, so later runs may follow.
 	runs := worker.Runs()
-	if len(runs) != 1 {
-		t.Fatalf("%d agent runs; want 1:\n%s", len(runs), logs.String())
+	if len(runs) == 0 {
+		t.Fatalf("no agent run; want the first station's:\n%s", logs.String())
 	}
 
 	return runs[0].Env
@@ -778,5 +780,478 @@ func (w *world) addSources(t *testing.T) {
 		if _, err := w.kb.CreateSource(ctx, n, person); err != nil {
 			t.Fatalf("source %s: %v", n.Name, err)
 		}
+	}
+}
+
+// A converted version whose repository token can read and push, and whose remote MCP servers
+// answer tools/list, is published once, as Goal, after both were tested with the converted
+// secrets' values.
+func TestRun_PublishesWhenChecksPass(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	v1 := w.publishOld(t, factoryUUID, "acme-software", files(productionFactory))
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	v2 := w.checkPublished(t)
+
+	if c := w.conversion(t, factoryUUID); c.Refused() || c.From != v1.ID || c.To != v2.ID {
+		t.Errorf("conversion %+v; want v1 to v2", c)
+	}
+
+	if got := w.hosts.AccessTokens(); !slices.Equal(got, []string{githubValue}) {
+		t.Errorf("RepositoryAccess was given %d tokens; want the github secret's value once", len(got))
+	}
+
+	called := w.tools.Called()
+	if len(called) == 0 || !slices.ContainsFunc(called, func(e ports.MCPEndpoint) bool {
+		return e.URL == context7URL && e.Headers[envContext7] == ctx7Value
+	}) {
+		t.Errorf("tools/list was not asked of context7 with its key's value: %d calls", len(called))
+	}
+}
+
+// A converted version whose token can read but not push is not published: the factory keeps its
+// version, and its refusal names the repository and the missing push with the host's reason,
+// scrubbed of the token.
+func TestRun_TokenWithoutPushNotPublished(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	v1 := w.publishOld(t, factoryUUID, "acme-software", files(productionFactory))
+	w.hosts.SetAccess(repoURL, githubValue, ports.RepositoryAccess{
+		Read: ports.AccessCheck{OK: true, Reason: "can read"},
+		Push: ports.AccessCheck{Reason: "token " + githubValue + " has\nno write access"},
+	})
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	w.checkKept(t, v1)
+
+	c := w.conversion(t, factoryUUID)
+	if !c.Refused() || len(c.Problems) != 1 || !strings.Contains(c.Problems[0], repoURL) || !strings.Contains(c.Problems[0], "push") ||
+		!strings.Contains(c.Problems[0], "token [secret] has no write access") {
+		t.Errorf("refusal %+v; want one problem naming %s, the push and the host's scrubbed reason", c, repoURL)
+	}
+
+	w.checkNoValue(t, c)
+}
+
+// A remote MCP server whose tools/list fails keeps the version from publishing; the refusal
+// names the environment file, the server and its error, scrubbed of the key.
+func TestRun_MCPServerFailureBlocksPublish(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	v1 := w.publishOld(t, factoryUUID, "acme-software", files(productionFactory))
+	w.tools.Fail(context7URL, errors.New("401 Unauthorized: bad key "+ctx7Value))
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	w.checkKept(t, v1)
+
+	c := w.conversion(t, factoryUUID)
+	if !c.Refused() || !slices.ContainsFunc(c.Problems, func(p string) bool {
+		return strings.Contains(p, defaultFile) && strings.Contains(p, connContext7) && strings.Contains(p, "401 Unauthorized: bad key [secret]")
+	}) {
+		t.Errorf("refusal %+v; want a problem naming %s, context7 and its scrubbed error", c, defaultFile)
+	}
+
+	w.checkNoValue(t, c)
+}
+
+// After a refusal, fixing its cause and running again publishes exactly once and replaces the
+// refusal with the conversion; a third run changes nothing.
+func TestRun_RetriesAfterFix(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	v1 := w.publishOld(t, factoryUUID, "acme-software", files(productionFactory))
+	w.hosts.SetAccess(repoURL, githubValue, ports.RepositoryAccess{Read: ports.AccessCheck{OK: true}, Push: ports.AccessCheck{Reason: "no write access"}})
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	w.checkKept(t, v1)
+
+	w.hosts.SetAccess(repoURL, githubValue, canPush)
+
+	for range 2 {
+		if err := w.mover.Run(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	v2 := w.checkPublished(t)
+
+	if c := w.conversion(t, factoryUUID); c.Refused() || c.To != v2.ID || len(c.Problems) != 0 {
+		t.Errorf("conversion %+v; want the refusal replaced by v1 to v2", c)
+	}
+
+	if !strings.Contains(w.logs.String(), `"converted":1,"refused":0`) {
+		t.Errorf("no run counted the conversion:\n%s", w.logs.String())
+	}
+}
+
+// conversion is factory id's one conversion.
+func (w *world) conversion(t *testing.T, id domain.FactoryID) ports.FactoryConversion {
+	t.Helper()
+
+	convs, err := w.conversions.List(w.ctx(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	i := slices.IndexFunc(convs, func(c ports.FactoryConversion) bool { return c.Factory == id })
+	if i < 0 {
+		t.Fatalf("no conversion of %s in %+v", id, convs)
+	}
+
+	return convs[i]
+}
+
+// checkKept checks the production factory is still at v1, with no draft of Goal's left.
+func (w *world) checkKept(t *testing.T, v1 domain.DefinitionVersion) {
+	t.Helper()
+
+	if r := w.record(t, factoryUUID); r.Current == nil || r.Current.ID != v1.ID || r.LastVersionNumber != 1 || r.Draft != nil {
+		t.Errorf("factory at %+v (draft %+v); want its v1 and no draft", r.Current, r.Draft)
+	}
+}
+
+// checkNoValue checks no secret's value is in c's problems or the logs.
+func (w *world) checkNoValue(t *testing.T, c ports.FactoryConversion) {
+	t.Helper()
+
+	all := strings.Join(c.Problems, "\n") + w.logs.String()
+
+	if slices.ContainsFunc([]string{githubValue, cfValue, ctx7Value, oauthValue}, func(v string) bool { return strings.Contains(all, v) }) {
+		t.Error("a secret's value reached a problem or the logs")
+	}
+}
+
+// approvedOn is the item the seeded standing rules were approved on; ruleAgent is the production
+// factory's agent role they let.
+const (
+	approvedOn = domain.ItemID("0b6f1c9e-0000-7000-8000-0000000000bb")
+	ruleAgent  = "engineer"
+)
+
+// A converted factory gets a copy of each active connection's rule on every environment whose
+// file has a server named after the connection, made by Goal with the rule's item; the rules
+// stay, a revoked rule, a connection with no server and a refused factory get no copy, and a
+// second run copies nothing.
+func TestRun_ReKeysStandingRulesOnce(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	w.publishOld(t, factoryUUID, "acme-software", files(productionFactory))
+	w.publishOld(t, refusedUUID, "acme-cloud",
+		files(strings.NewReplacer(factoryUUID, refusedUUID, "acme-software", "acme-cloud", "[github, cloudflare, context7]", "[github, aws-prod]").Replace(productionFactory)))
+
+	ctx := w.ctx(t)
+	for _, n := range []domain.NewStandingRule{
+		{Connection: connContext7, Tool: "resolve-library-id", Agent: ruleAgent, Item: approvedOn},
+		{Connection: connGitHub, Tool: "create_pull_request", Agent: "reviewer", Item: approvedOn},
+		{Connection: connCloudflare, Tool: "list_zones", Agent: ruleAgent, Item: approvedOn}, // no server
+		{Connection: connGitHub, Tool: "merge_pull_request", Agent: ruleAgent, Item: approvedOn},
+	} {
+		if _, err := w.conns.CreateStandingRule(ctx, n, person); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	w.revokeRule(t, "merge_pull_request")
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{
+		"default context7 resolve-library-id engineer",
+		"default github create_pull_request reviewer",
+		"reviewer github create_pull_request reviewer",
+	}
+	if got := w.serverRules(t); !slices.Equal(got, want) {
+		t.Errorf("server rules after the conversion = %v; want %v", got, want)
+	}
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := w.serverRules(t); !slices.Equal(got, want) {
+		t.Errorf("server rules after a second run = %v; want %v unchanged", got, want)
+	}
+
+	all, err := w.conns.StandingRules(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if byConn := slices.DeleteFunc(all, func(r domain.StandingRule) bool { return r.ConnectionID == "" }); len(byConn) != 3 {
+		t.Errorf("active connection rules after the conversion = %+v; want the three kept", byConn)
+	}
+}
+
+// revokeRule revokes the active connection rule for tool.
+func (w *world) revokeRule(t *testing.T, tool string) {
+	t.Helper()
+
+	rules, err := w.conns.StandingRules(w.ctx(t), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	i := slices.IndexFunc(rules, func(r domain.StandingRule) bool { return r.Tool == tool })
+	if i < 0 {
+		t.Fatalf("no rule for %s", tool)
+	}
+
+	if _, err := w.conns.RevokeStandingRule(w.ctx(t), rules[i].ID, person); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// serverRules are the active rules keyed by server, as "<environment> <server> <tool> <agent>",
+// sorted, failing the test unless each is the production factory's, made by Goal on approvedOn.
+func (w *world) serverRules(t *testing.T) []string {
+	t.Helper()
+
+	rules, err := w.conns.StandingRules(w.ctx(t), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out []string
+
+	for _, r := range rules {
+		if r.ConnectionID != "" {
+			continue
+		}
+
+		if r.Factory != factoryUUID || r.CreatedBy.Ref() != moveover.Actor.Ref() || r.ItemID != approvedOn {
+			t.Errorf("server rule %+v; want the production factory's, by Goal, on %s", r, approvedOn)
+		}
+
+		out = append(out, strings.Join([]string{r.Environment, r.Server, r.Tool, r.Agent}, " "))
+	}
+
+	slices.Sort(out)
+
+	return out
+}
+
+// otherValue is the value of a secret a person made, unrelated to any connection.
+const otherValue = "unrelated-value-for-tests"
+
+// addSecret creates secret name with value, open to every factory or, when factories are given,
+// to those only.
+func (w *world) addSecret(t *testing.T, name, value string, factories ...domain.FactoryID) {
+	t.Helper()
+
+	scope := domain.SecretScope{All: len(factories) == 0, Factories: factories}
+	if _, err := w.secrets.Create(w.ctx(t), domain.NewSecret{Name: name, Value: value, Scope: scope}, person); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// secretValue is secret name's value and whether it is open to every factory.
+func (w *world) secretValue(t *testing.T, name string) (string, bool) {
+	t.Helper()
+
+	s, err := w.secrets.Get(w.ctx(t), name)
+	if err != nil {
+		t.Fatalf("secret %s: %v", name, err)
+	}
+
+	if !s.Scope.All {
+		return "", false
+	}
+
+	opened, err := w.secrets.Resolve(w.ctx(t), []string{name}, domain.SecretUse{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return opened[0].Value, true
+}
+
+// githubNamed checks that the production factory's conversion, its environment file and the
+// docs source all name secret want for the github connection.
+func (w *world) githubNamed(t *testing.T, want string) {
+	t.Helper()
+
+	c := w.conversion(t, factoryUUID)
+	if c.Refused() || c.Names[connGitHub][fieldToken] != want {
+		t.Errorf("conversion %+v; want github's token as %s", c, want)
+	}
+
+	env := string(w.tree(t, w.checkPublished(t))[defaultFile])
+	if !strings.Contains(env, "{{"+want+"}}") || want != connGitHub && strings.Contains(env, "{{github}}") {
+		t.Errorf("environments/default.yaml does not refer to {{%s}} only:\n%s", want, env)
+	}
+
+	if src := w.source(t, "docs"); src.Secret != want {
+		t.Errorf("source docs reads secret %q; want %s", src.Secret, want)
+	}
+}
+
+// A secret that has the connection's name, is open to every factory and holds its value is the
+// connection's secret: the conversion creates none and everything names it.
+func TestRun_SecretCollisionSameValueReused(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	w.addSecret(t, connGitHub, githubValue)
+	w.publishOld(t, factoryUUID, "acme-software", files(productionFactory))
+	w.addSources(t)
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	w.githubNamed(t, connGitHub)
+
+	if _, err := w.secrets.Get(w.ctx(t), "github-2"); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("secret github-2: %v; want none", err)
+	}
+
+	if logs := w.logs.String(); strings.Contains(logs, `"msg":"secret renamed"`) {
+		t.Errorf("a rename was logged:\n%s", logs)
+	}
+}
+
+// A secret that has the connection's name and holds another value keeps it: the connection's
+// secret becomes github-2, open to every factory, and everything the conversion writes names it.
+// The rename is logged once, without either value; a second run changes nothing.
+func TestRun_SecretCollisionRenamed(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	w.addSecret(t, connGitHub, otherValue)
+	w.publishOld(t, factoryUUID, "acme-software", files(productionFactory))
+	w.addSources(t)
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	if v, all := w.secretValue(t, "github-2"); v != githubValue || !all {
+		t.Errorf("secret github-2 open to all %v, holds the connection's value %v; want both", all, v == githubValue)
+	}
+
+	if v, _ := w.secretValue(t, connGitHub); v != otherValue {
+		t.Error("the person's secret github changed")
+	}
+
+	w.githubNamed(t, "github-2")
+
+	logs := w.logs.String()
+	if n := strings.Count(logs, `"msg":"secret renamed"`); n != 1 ||
+		!strings.Contains(logs, `"connection":"github","field":"token","from":"github","to":"github-2"`) {
+		t.Errorf("%d secret renamed lines; want one naming github and github-2:\n%s", n, logs)
+	}
+
+	for _, v := range []string{githubValue, otherValue} {
+		if strings.Contains(logs, v) {
+			t.Error("a secret's value reached the logs")
+		}
+	}
+}
+
+// A second run finds its own github-2, creates nothing, logs no rename and moves no source.
+func TestRun_SecretCollisionIdempotent(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	w.addSecret(t, connGitHub, otherValue)
+	w.publishOld(t, factoryUUID, "acme-software", files(productionFactory))
+	w.addSources(t)
+
+	for range 2 {
+		if err := w.mover.Run(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	logs := w.logs.String()
+	if n := strings.Count(logs, `"msg":"secret renamed"`); n != 1 || !strings.Contains(logs, `"converted":0,"refused":0,"secrets":0,"sources":0`) {
+		t.Errorf("%d renames, or the second run did work:\n%s", n, logs)
+	}
+
+	if _, err := w.secrets.Get(w.ctx(t), "github-3"); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("secret github-3: %v; want none", err)
+	}
+
+	w.githubNamed(t, "github-2")
+}
+
+// When github and github-2 are both taken, by another value or a secret open to some factories
+// only, the connection's secret is github-3.
+func TestRun_SecretCollisionNextFreeName(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	w.addSecret(t, connGitHub, githubValue, factoryUUID)
+	w.addSecret(t, "github-2", otherValue)
+	w.publishOld(t, factoryUUID, "acme-software", files(productionFactory))
+	w.addSources(t)
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	if v, all := w.secretValue(t, "github-3"); v != githubValue || !all {
+		t.Errorf("secret github-3 open to all %v, holds the connection's value %v; want both", all, v == githubValue)
+	}
+
+	w.githubNamed(t, "github-3")
+}
+
+// A source whose connection refers to a secret open to some factories only stays on its
+// connection, logged with the reason: the ingestor reads only with a secret open to all.
+func TestRun_SourceOnScopedSecretNotMoved(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	ctx := w.ctx(t)
+	scoped := "shared-docs"
+	w.addSecret(t, scoped, "shared-docs-value-for-tests", factoryUUID)
+
+	refs := map[string]string{fieldToken: "{{" + scoped + "}}"}
+	if _, err := w.conns.Create(ctx, domain.NewConnection{Name: "docs-host", Kind: connGitHub, Secrets: refs}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	n := domain.NewKnowledgeSource{Name: "scoped", Title: "Scoped", Kind: domain.SourceSynced, Connection: "docs-host", Config: map[string]string{"repository": "https://github.com/acme/docs"}}
+	if _, err := w.kb.CreateSource(ctx, n, person); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	if src := w.source(t, "scoped"); src.Secret != "" || src.Connection != "docs-host" {
+		t.Errorf("source scoped = secret %q, connection %q; want it kept on docs-host", src.Secret, src.Connection)
+	}
+
+	logs := w.logs.String()
+	if !strings.Contains(logs, `"msg":"knowledge source not moved over","source":"scoped","connection":"docs-host",`+
+		`"reason":"secret shared-docs is open to some factories only; a knowledge source reads with a secret open to all"`) {
+		t.Errorf("the logs do not give the scoped source's reason:\n%s", logs)
+	}
+
+	if strings.Contains(logs, "shared-docs-value-for-tests") {
+		t.Error("a secret's value reached the logs")
 	}
 }

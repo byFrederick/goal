@@ -209,7 +209,7 @@ func TestLoad_RemovedFormsAreErrorsAndTheirVersionsDoNotRun(t *testing.T) {
 
 	line := loaded.Line()
 	if len(line.Removed) != 9 || !slices.Contains(line.Removed, "spec.runtime.repository.token (env-reference-removed)") ||
-		!strings.Contains(line.Refusal(), "publish a version with connections") {
+		!strings.Contains(line.Refusal(), "publish a version on environment files and secrets (ADR 0037)") {
 		t.Errorf("line removed %q, refusal %q; want the nine forms named and the fix", line.Removed, line.Refusal())
 	}
 }

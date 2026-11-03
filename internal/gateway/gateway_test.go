@@ -184,6 +184,23 @@ type harnessDeps struct {
 	noJonah bool
 	// knowledge gives the gateway a knowledge base and a bucket, h.kb and h.objects (knowledge_test.go).
 	knowledge bool
+	// mcpCap is the organization policy's MCP tool mode cap (none when nil).
+	mcpCap map[string]domain.ConnectionToolMode
+}
+
+// cappedPolicies are the organization's default policy with mcp as its MCP tool mode cap.
+type cappedPolicies struct {
+	*porttest.OrgPolicies
+	mcp map[string]domain.ConnectionToolMode
+}
+
+func (c cappedPolicies) Get(ctx context.Context) (domain.OrgPolicy, error) {
+	p, err := c.OrgPolicies.Get(ctx)
+	if c.mcp != nil {
+		p.MCPToolModes = c.mcp
+	}
+
+	return p, err
 }
 
 // withSchema is definitions whose agents with a contract get schema as their output schema.
@@ -279,6 +296,7 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		Clock:         h.clock,
 		Questions:     h.questions,
 		ToolApprovals: h.approvals,
+		Policies:      cappedPolicies{OrgPolicies: porttest.NewOrgPolicies(nil, nil, h.clock.Now), mcp: d.mcpCap},
 		DraftRequests: h.requests,
 		Drafts:        h.drafts,
 		Jonah:         jonah,
@@ -581,5 +599,22 @@ func TestGateway_RejectsRequestsWithoutAValidToken(t *testing.T) {
 				t.Fatalf("body = %q, want no detail", s)
 			}
 		})
+	}
+}
+
+// The run bundle applies the organization policy's MCP tool mode cap, so the gateway needs one.
+func TestNew_RequiresPolicies(t *testing.T) {
+	t.Parallel()
+
+	clock := porttest.NewClock(time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC))
+	store := porttest.NewStore()
+	_, conns, _ := newConnections(t, clock)
+
+	_, err := New(Deps{
+		Definitions: definitions{}, Items: store, Connections: conns, Events: store, Clock: clock,
+		Questions: &fakeQuestions{}, ToolApprovals: &fakeToolApprovals{},
+	}, Config{Key: []byte("gateway-test-key")})
+	if err == nil || !strings.Contains(err.Error(), "Policies") {
+		t.Errorf("New without Policies = %v; want an error naming Policies", err)
 	}
 }

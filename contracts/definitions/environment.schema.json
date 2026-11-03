@@ -49,8 +49,8 @@
         },
         "mcp": {
           "type": "object",
-          "description": "MCP servers the agent gets, by name: each is remote (url, optional headers) or stdio (command, optional env), never both.",
-          "propertyNames": { "pattern": "^[a-z][a-z0-9_-]{0,39}$" },
+          "description": "MCP servers the agent gets, by name (a slug, as environment tests and standing rules name it): each is remote (url, optional headers) or stdio (command, optional env), never both.",
+          "propertyNames": { "$ref": "#/$defs/slug" },
           "additionalProperties": { "$ref": "#/$defs/mcpServer" }
         }
       }

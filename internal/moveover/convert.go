@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing/fstest"
 
@@ -91,7 +92,25 @@ func refused(rc domain.ResolvedConnection) string {
 func Secrets(conns []domain.ResolvedConnection) []domain.NewSecret {
 	var out []domain.NewSecret
 
-	for _, rc := range conns {
+	for _, s := range movedSecrets(conns) {
+		out = append(out, s.secret)
+	}
+
+	return out
+}
+
+// movedSecret is one secret Secrets returns, with the connection (its index in conns) and the
+// field it comes from.
+type movedSecret struct {
+	conn   int
+	field  string
+	secret domain.NewSecret
+}
+
+func movedSecrets(conns []domain.ResolvedConnection) []movedSecret {
+	var out []movedSecret
+
+	for i, rc := range conns {
 		if refused(rc) != "" {
 			continue
 		}
@@ -101,15 +120,35 @@ func Secrets(conns []domain.ResolvedConnection) []domain.NewSecret {
 				continue
 			}
 
-			out = append(out, domain.NewSecret{
+			out = append(out, movedSecret{conn: i, field: f, secret: domain.NewSecret{
 				Name: SecretName(rc.Connection, rc.Kind, f), Value: rc.Values[f], Scope: domain.SecretScope{All: true},
 				Description: fmt.Sprintf("Moved from connection %s, field %s (ADR 0037).", rc.Connection.Name, f),
-			})
+			}})
 		}
 	}
 
 	return out
 }
+
+// suffixed is the n-th name the conversion tries for a secret named base: base itself first,
+// then base-2, base-3 and on, base trimmed (and of a trailing dash) so the name stays a valid
+// secret name's 40 characters at most.
+func suffixed(base string, n int) string {
+	if n <= 1 {
+		return base
+	}
+
+	suffix := "-" + strconv.Itoa(n)
+
+	if len(base)+len(suffix) > maxSecretName {
+		base = strings.TrimRight(base[:maxSecretName-len(suffix)], "-")
+	}
+
+	return base + suffix
+}
+
+// maxSecretName is how long a secret name may be (domain.CheckSecretName).
+const maxSecretName = 40
 
 // Result is a converted version.
 type Result struct {
