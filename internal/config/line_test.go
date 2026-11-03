@@ -832,6 +832,7 @@ func expectEnvironments(t *testing.T, l domain.Line) {
 	}
 
 	b, _ := l.Environment("browser")
+
 	wantBrowser := domain.Environment{
 		Name: "browser", Size: domain.SandboxLarge, Tools: []string{"node@22"},
 		MCP: map[string]domain.MCPServer{

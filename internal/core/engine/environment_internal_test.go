@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -46,7 +47,7 @@ func TestRunEnv_MCPHeaderRendersSecretVariable(t *testing.T) {
 		Files: map[string]string{"~/.npmrc": "{{npm-config}}"},
 		MCP: map[string]domain.MCPServer{
 			"tickets": {URL: "https://tickets.example.com/mcp", Headers: map[string]string{"Authorization": "Bearer {{tickets-key}}"}},
-			"github":  {Command: []string{"github-mcp"}, Env: map[string]string{"GITHUB_TOKEN": "{{github-token}}"}},
+			"github":  {Command: []string{"github-mcp"}, Env: map[string]string{"GITHUB_TOKEN": "{{github-token}}"}}, //nolint:gosec // a reference
 		},
 	}
 
@@ -71,11 +72,10 @@ func TestRunEnv_MCPHeaderRendersSecretVariable(t *testing.T) {
 		t.Errorf("files %v; want ~/.npmrc in GOAL_FILE_1 with its secret's value", got.files)
 	}
 
-	for name, s := range got.mcp {
-		for _, v := range []string{ticketsValue, ghValue, npmValue} {
-			if strings.Contains(s.Headers["Authorization"]+s.Env["GITHUB_TOKEN"]+s.URL, v) {
-				t.Errorf("rendered MCP server %s holds a secret's value", name)
-			}
+	rendered := fmt.Sprint(got.mcp)
+	for _, v := range []string{ticketsValue, ghValue, npmValue} {
+		if strings.Contains(rendered, v) {
+			t.Errorf("the rendered MCP servers %s hold a secret's value", rendered)
 		}
 	}
 }

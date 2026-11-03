@@ -239,9 +239,9 @@ func TestRunEnv_RefusesSecretOutsideScope(t *testing.T) {
 	}{
 		{
 			name: "a factory outside its scope", line: secretsLine(), db: []domain.FactoryID{otherFactory},
-			want: []string{"environment default", secDB, ports.ErrSecretNotAllowed.Error()},
+			want: []string{inDefault, secDB, ports.ErrSecretNotAllowed.Error()},
 		},
-		{name: "a missing secret", line: secretsLine(), want: []string{"environment default", secDB, ports.ErrNotFound.Error()}},
+		{name: "a missing secret", line: secretsLine(), want: []string{inDefault, secDB, ports.ErrNotFound.Error()}},
 		{
 			name: "a missing environment", line: withEnvironment(secretsLine(), agWorker, "gpu"), db: []domain.FactoryID{factoryID},
 			want: []string{"agent " + agWorker, "environment gpu"},
@@ -249,11 +249,11 @@ func TestRunEnv_RefusesSecretOutsideScope(t *testing.T) {
 		{
 			name: "a file's secret outside its scope", line: fullLine(), db: []domain.FactoryID{factoryID},
 			npm: []domain.FactoryID{otherFactory}, tickets: true,
-			want: []string{"environment default", secNPM, ports.ErrSecretNotAllowed.Error()},
+			want: []string{inDefault, secNPM, ports.ErrSecretNotAllowed.Error()},
 		},
 		{
 			name: "a header's missing secret", line: fullLine(), db: []domain.FactoryID{factoryID}, npm: []domain.FactoryID{factoryID},
-			want: []string{"environment default", secTickets, ports.ErrNotFound.Error()},
+			want: []string{inDefault, secTickets, ports.ErrNotFound.Error()},
 		},
 	}
 
@@ -484,10 +484,13 @@ func TestRunDefinition_ModelKeyOnly(t *testing.T) {
 // values.
 const (
 	secNPM       = "npm-config"
-	npmrcValue   = "//npm.example.com/:_authToken=npm-token-for-tests-3233" //nolint:gosec // a test value
+	npmrcValue   = "//npm.example.com/:_authToken=npm-token-for-tests-3233"
 	envTicketsMC = "GOAL_SECRET_TICKETS_KEY"
 	envGitHubMC  = "GOAL_SECRET_GITHUB_TOKEN"
 )
+
+// inDefault is what a blocked reason names a secret of the default environment with.
+const inDefault = "environment " + domain.DefaultEnvironment
 
 // fullLine is secretsLine whose default environment also writes two files, ~/.npmrc from
 // {{npm-config}} and /etc/app/db.pass from {{db-pass}}, which env refers to too, and gives a
@@ -523,14 +526,16 @@ func TestRunTask_EnvironmentSizeAndImage(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		size        domain.SandboxSize
-		image       string
-		wantSize    domain.SandboxSize
-		wantImage   string
+		name      string
+		size      domain.SandboxSize
+		image     string
+		wantSize  domain.SandboxSize
+		wantImage string
 	}{
-		{name: "a large environment with its own image", size: domain.SandboxLarge, image: "ghcr.io/acme/box:1",
-			wantSize: domain.SandboxLarge, wantImage: "ghcr.io/acme/box:1"},
+		{
+			name: "a large environment with its own image", size: domain.SandboxLarge, image: "ghcr.io/acme/box:1",
+			wantSize: domain.SandboxLarge, wantImage: "ghcr.io/acme/box:1",
+		},
 		{name: "an environment that names neither", wantSize: domain.SandboxMedium, wantImage: agentImage},
 	}
 

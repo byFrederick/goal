@@ -44,7 +44,7 @@ type MCPServer struct {
 // (ReservedRunEnv reserves GOAL_*, so an environment's env cannot set them).
 const (
 	envFilePrefix   = "GOAL_FILE_"
-	envSecretPrefix = "GOAL_SECRET_" //nolint:gosec // a variable's prefix, not a credential
+	envSecretPrefix = "GOAL_SECRET_"
 )
 
 // FileEnv maps each of files' paths to the variable its content goes in: GOAL_FILE_1, GOAL_FILE_2…

@@ -114,13 +114,13 @@ func TestEnvironment_RenderedMCPServer(t *testing.T) {
 
 	s := MCPServer{
 		URL:     "https://tickets.example.com/mcp",
-		Headers: map[string]string{"Authorization": "Bearer {{ tickets-key }}", "X-Org": "acme"},
-		Env:     map[string]string{"TOKEN": "{{db-pass}}:{{tickets-key}}"},
+		Headers: map[string]string{"Authorization": "Bearer {{ tickets-key }}", "X-Org": "example"},
+		Env:     map[string]string{"TOKEN": "{{db-pass}}:{{tickets-key}}"}, //nolint:gosec // references, not credentials
 		Tools:   map[string]string{"create_comment": "ask"},
 	}
 
 	got := s.Rendered()
-	if want := map[string]string{"Authorization": "Bearer ${GOAL_SECRET_TICKETS_KEY}", "X-Org": "acme"}; !maps.Equal(got.Headers, want) {
+	if want := map[string]string{"Authorization": "Bearer ${GOAL_SECRET_TICKETS_KEY}", "X-Org": "example"}; !maps.Equal(got.Headers, want) {
 		t.Errorf("headers = %v; want %v", got.Headers, want)
 	}
 

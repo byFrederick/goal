@@ -29,35 +29,7 @@ var errNoOrgSecrets = errors.New("this goald has no secrets store")
 func (e *Engine) secretEnv(ctx context.Context, use domain.SecretUse, modelKey string, env domain.Environment) (runEnv, error) {
 	vars := slices.Sorted(maps.Keys(env.Env))
 	files := domain.FileEnv(env.Files)
-	servers := slices.Sorted(maps.Keys(env.MCP))
-	names := domain.SecretNames(modelKey)
-	add := func(ns []string) {
-		for _, n := range ns {
-			if !slices.Contains(names, n) {
-				names = append(names, n)
-			}
-		}
-	}
-
-	for _, v := range vars {
-		add(domain.SecretNames(env.Env[v]))
-	}
-
-	for _, p := range slices.Sorted(maps.Keys(env.Files)) {
-		add(domain.SecretNames(env.Files[p]))
-	}
-
-	var mcpSecrets []string
-
-	for _, s := range servers {
-		for _, n := range env.MCP[s].SecretNames() {
-			if !slices.Contains(mcpSecrets, n) {
-				mcpSecrets = append(mcpSecrets, n)
-			}
-		}
-	}
-
-	add(mcpSecrets)
+	names, mcpSecrets := secretNames(modelKey, env)
 
 	values, err := e.openSecrets(ctx, names, use, env.Name)
 	if err != nil {
@@ -95,16 +67,44 @@ func (e *Engine) secretEnv(ctx context.Context, use domain.SecretUse, modelKey s
 		out.files = files
 	}
 
-	if len(servers) > 0 {
-		out.mcp = make(map[string]domain.MCPServer, len(servers))
-		for _, s := range servers {
-			out.mcp[s] = env.MCP[s].Rendered()
+	if len(env.MCP) > 0 {
+		out.mcp = make(map[string]domain.MCPServer, len(env.MCP))
+		for name, s := range env.MCP {
+			out.mcp[name] = s.Rendered()
 		}
 	}
 
 	out.agent[keyEnv] = key
 
 	return out, nil
+}
+
+// secretNames are the secrets a run on modelKey and env opens, each once: modelKey's, then env's,
+// files' and the MCP servers', each in sorted key order; mcp are the MCP servers' alone.
+func secretNames(modelKey string, env domain.Environment) (names, mcp []string) {
+	add := func(to *[]string, ns []string) {
+		for _, n := range ns {
+			if !slices.Contains(*to, n) {
+				*to = append(*to, n)
+			}
+		}
+	}
+
+	add(&names, domain.SecretNames(modelKey))
+
+	for _, m := range []map[string]string{env.Env, env.Files} {
+		for _, k := range slices.Sorted(maps.Keys(m)) {
+			add(&names, domain.SecretNames(m[k]))
+		}
+	}
+
+	for _, s := range slices.Sorted(maps.Keys(env.MCP)) {
+		add(&mcp, env.MCP[s].SecretNames())
+	}
+
+	add(&names, mcp)
+
+	return names, mcp
 }
 
 // openSecrets opens names for use's run, by name; none opens nothing. Its error names the
