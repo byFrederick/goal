@@ -178,7 +178,12 @@ async function runAgent(): Promise<number> {
       abortController,
       fetch,
       remoteHead,
-      environment: { home: paths.home, workspace: paths.workspace, shell: shellFor(abortController.signal) },
+      environment: {
+        home: paths.home,
+        workspace: paths.workspace,
+        marker: join(paths.goal, 'environment-setup.done'),
+        shell: shellFor(abortController.signal),
+      },
     });
   } catch (err) {
     emit(failed(now, `worker setup: ${err instanceof Error ? err.message : String(err)}`));

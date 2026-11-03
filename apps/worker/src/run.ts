@@ -28,8 +28,9 @@ export interface RunDeps {
  * Runs one task and emits its events, ending with exactly one finished event. It returns the
  * process exit code: 0 when the agent produced a result (succeeded or not), 1 when it crashed.
  *
- * On a spec with an environment (ADR 0037) its files and setup are applied first; a failure there
- * ends the run with a failed event before the agent is queried.
+ * On a spec with an environment (ADR 0037) its files are written first and its setup runs, once per
+ * box (applyEnvironment's marker); a failure there ends the run with a failed event before the
+ * agent is queried.
  *
  * The agent's input is a stream: the task's prompt first, then each note left on the item while
  * it works. The stream ends at the result, so the query ends with it.
