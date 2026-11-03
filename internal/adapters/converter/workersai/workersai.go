@@ -114,6 +114,37 @@ func (c *Client) Convert(ctx context.Context, name, mediaType string, body []byt
 		return nil, fmt.Errorf("workersai: %q is not a type Workers AI converts: %w", mediaType, domain.ErrUnsupportedDocument)
 	}
 
+	req, err := c.request(ctx, name, mediaType, body)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		// The URL error names the endpoint, never the key or the file.
+		if uerr, ok := errors.AsType[*url.Error](err); ok {
+			err = uerr.Err
+		}
+
+		return nil, fmt.Errorf("workersai: convert %s: %w", name, err)
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("workersai: read the answer: %w", err)
+	}
+
+	if len(raw) > maxBodyBytes {
+		return nil, fmt.Errorf("workersai: the answer for %s is over %d bytes", name, maxBodyBytes)
+	}
+
+	return markdownOf(resp.StatusCode, raw, name)
+}
+
+// request is the multipart POST of one file.
+func (c *Client) request(ctx context.Context, name, mediaType string, body []byte) (*http.Request, error) {
 	var buf bytes.Buffer
 
 	w := multipart.NewWriter(&buf)
@@ -146,40 +177,23 @@ func (c *Client) Convert(ctx context.Context, name, mediaType string, body []byt
 		req.Header.Set("Authorization", "Bearer "+c.key)
 	}
 
-	resp, err := c.http.Do(req)
-	if err != nil {
-		// The URL error names the endpoint, never the key or the file.
-		var uerr *url.Error
-		if errors.As(err, &uerr) {
-			err = uerr.Err
-		}
+	return req, nil
+}
 
-		return nil, fmt.Errorf("workersai: convert %s: %w", name, err)
-	}
-
-	defer func() { _ = resp.Body.Close() }()
-
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("workersai: read the answer: %w", err)
-	}
-
-	if len(raw) > maxBodyBytes {
-		return nil, fmt.Errorf("workersai: the answer for %s is over %d bytes", name, maxBodyBytes)
-	}
-
+// markdownOf is the Markdown of the one file an answer holds, or why there is none.
+func markdownOf(status int, raw []byte, name string) ([]byte, error) {
 	var out answer
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, fmt.Errorf("workersai: status %d with an answer that is not JSON", resp.StatusCode)
+		return nil, fmt.Errorf("workersai: status %d with an answer that is not JSON", status)
 	}
 
-	if resp.StatusCode != http.StatusOK || !out.Success {
+	if status != http.StatusOK || !out.Success {
 		msg := "no reason given"
 		if len(out.Errors) > 0 && out.Errors[0].Message != "" {
 			msg = out.Errors[0].Message
 		}
 
-		return nil, fmt.Errorf("workersai: status %d: %s", resp.StatusCode, msg)
+		return nil, fmt.Errorf("workersai: status %d: %s", status, msg)
 	}
 
 	if len(out.Result) != 1 {

@@ -457,9 +457,14 @@ func TestIngestor_UploadsIndexedFromTheBucket(t *testing.T) {
 	w.clock.Advance(time.Hour + time.Minute)
 	w.syncDue(w.ingestor(nil))
 
-	if got := w.documents("handbook")["leave.md"]; got.ID != d.ID || got.IndexedAt == nil || !got.IndexedAt.Equal(*docs["leave.md"].IndexedAt) {
-		t.Errorf("leave.md after a sync with no change = %+v", got)
+	if got := w.documents("handbook")["leave.md"]; !sameIndexing(got, docs["leave.md"]) {
+		t.Errorf("leave.md after a sync with no change = %+v, want %+v", got, docs["leave.md"])
 	}
+}
+
+// sameIndexing is whether two reads of a document are of one indexing: its id and its indexed time.
+func sameIndexing(a, b domain.KnowledgeDocument) bool {
+	return a.ID == b.ID && a.IndexedAt != nil && b.IndexedAt != nil && a.IndexedAt.Equal(*b.IndexedAt)
 }
 
 func TestUploads_StoredOnceAndDeletedWithTheLastHolder(t *testing.T) {

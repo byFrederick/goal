@@ -81,8 +81,7 @@ func TestSettings_JonahReviews(t *testing.T) {
 	}
 }
 
-// Without GOAL_EMBED_URL the knowledge base searches by keywords; with it the model defaults to
-// Workers AI's bge-m3, and two workers sync.
+// Without GOAL_WORKERS_AI_URL goald converts no PDF or Office file, and with it goald does; two workers sync.
 func TestSettings_Knowledge(t *testing.T) {
 	t.Parallel()
 

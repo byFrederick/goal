@@ -271,5 +271,5 @@ func TestPublish_EvalGateSkipsAMemoryOnlyVersion(t *testing.T) {
 	}
 
 	_, err = g.svc.Publish(g.ctx, f, g.publishRequest(t, f))
-	refused(t, err, authoring.CodeEvalsPending)
+	_ = refused(t, err, authoring.CodeEvalsPending)
 }

@@ -137,6 +137,11 @@ func (s *Service) evalGate(ctx context.Context, f domain.FactoryID, d domain.Def
 		return nil
 	}
 
+	return s.gateRun(ctx, f, c, by)
+}
+
+// gateRun applies the gate to content c: the newest run of its every case decides.
+func (s *Service) gateRun(ctx context.Context, f domain.FactoryID, c EvalContent, by domain.Actor) error {
 	run, err := s.evals.Runs.LatestRunForContent(ctx, f, c.SHA256)
 
 	switch {
