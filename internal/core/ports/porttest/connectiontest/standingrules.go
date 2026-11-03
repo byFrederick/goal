@@ -258,3 +258,102 @@ func testStandingRulesIsolation(f *fixture) {
 
 	f.expect(f.rules(acme, false)[0].Active(), "acme's rule changed through labs")
 }
+
+// ruleFactory is the factory the server-keyed rules are for; no factory of that id need exist.
+const ruleFactory = domain.FactoryID("00000000-0000-7000-8000-0000000000f1")
+
+// serverRule is a rule for agent to call tool of server in ruleFactory's environment env.
+func serverRule(env, server, tool, agent string) domain.NewServerStandingRule {
+	return domain.NewServerStandingRule{Factory: ruleFactory, Environment: env, Server: server, Tool: tool, Agent: agent, Item: approvedOn}
+}
+
+// serverRuleOf creates n, failing on an error.
+func (f *fixture) serverRuleOf(org domain.OrgID, n domain.NewServerStandingRule, by domain.Actor) domain.StandingRule {
+	f.t.Helper()
+
+	got, err := f.c.CreateServerStandingRule(f.in(org), n, by)
+	if err != nil {
+		f.t.Fatalf("CreateServerStandingRule %+v: %v", n, err)
+	}
+
+	return got
+}
+
+func testCreateServerStandingRule(f *fixture) {
+	acme := f.NewOrg(f.t)
+	ctx := f.in(acme)
+	f.docs(acme)
+	byConn := f.rule(acme, connDocs, toolComment, architect, admin)
+
+	r := f.serverRuleOf(acme, serverRule(domain.DefaultEnvironment, connDocs, toolComment, architect), admin)
+	f.expect(r.ID != "" && r.ID != byConn.ID && r.ConnectionID == "" && r.Connection == "" && r.Factory == ruleFactory &&
+		r.Environment == domain.DefaultEnvironment && r.Server == connDocs && isNewRule(r, toolComment, architect),
+		"CreateServerStandingRule = %+v; want a new active rule keyed by server, apart from the connection's", r)
+
+	created := f.audit(acme, domain.AuditStandingRuleCreated)
+	f.expect(len(created) == 2, "standing_rule.created entries = %d; want the connection's and the server's", len(created))
+
+	i := slices.IndexFunc(created, func(e domain.AuditEntry) bool { return e.TargetID == string(r.ID) })
+	f.expect(i >= 0 && created[i].Actor.ID == admin.ID && created[i].Data["factory_id"] == string(ruleFactory) &&
+		created[i].Data["environment"] == domain.DefaultEnvironment && created[i].Data["server"] == connDocs &&
+		created[i].Data["tool"] == toolComment && created[i].Data["agent"] == architect,
+		"the server rule's standing_rule.created = %+v", created)
+
+	again := f.serverRuleOf(acme, serverRule(domain.DefaultEnvironment, connDocs, toolComment, architect), editor)
+	f.expect(again.ID == r.ID && again.CreatedBy.ID == admin.ID, "CreateServerStandingRule of an active key = %+v; want the rule %s", again, r.ID)
+	f.expect(len(f.audit(acme, domain.AuditStandingRuleCreated)) == 2, "a create of an active key was audited")
+
+	for name, n := range map[string]domain.NewServerStandingRule{
+		"another environment": serverRule("backend", connDocs, toolComment, architect),
+		"another server":      serverRule(domain.DefaultEnvironment, connGit, toolComment, architect),
+		"another agent":       serverRule(domain.DefaultEnvironment, connDocs, toolComment, reviewer),
+	} {
+		other := f.serverRuleOf(acme, n, admin)
+		f.expect(other.ID != r.ID, "a rule for %s is the same rule", name)
+	}
+
+	bad := serverRule("Default", connDocs, toolComment, architect)
+	_, err := f.c.CreateServerStandingRule(ctx, bad, admin)
+	f.refused("CreateServerStandingRule of a malformed environment", err, domain.ErrInvalid)
+
+	all := f.rules(acme, false)
+	f.expect(len(all) == 5 && all[0].ID == byConn.ID && all[1].ID == r.ID && all[1].Server == connDocs && all[1].Factory == ruleFactory,
+		"StandingRules = %+v; want the connection's rule, then the four server rules", all)
+
+	if err := f.c.Delete(ctx, connDocs, editor); err != nil {
+		f.t.Fatal(err)
+	}
+
+	active := f.rules(acme, false)
+	f.expect(len(active) == 4 && !slices.ContainsFunc(active, func(x domain.StandingRule) bool { return x.ID == byConn.ID }),
+		"active rules after the connection's delete = %+v; want the server rules kept", active)
+}
+
+func testRevokeServerStandingRule(f *fixture) {
+	acme, labs := f.NewOrg(f.t), f.NewOrg(f.t)
+	ctx := f.in(acme)
+	r := f.serverRuleOf(acme, serverRule(domain.DefaultEnvironment, connDocs, toolComment, architect), admin)
+
+	_, err := f.c.RevokeStandingRule(f.in(labs), r.ID, admin)
+	f.refused("another org's RevokeStandingRule", err, ports.ErrNotFound)
+	f.expect(len(f.rules(labs, true)) == 0, "another org's StandingRules = %+v; want nothing", f.rules(labs, true))
+
+	got, err := f.c.RevokeStandingRule(ctx, r.ID, editor)
+	if err != nil {
+		f.t.Fatalf("RevokeStandingRule: %v", err)
+	}
+
+	f.expect(got.ID == r.ID && !got.Active() && got.RevokedBy != nil && got.RevokedBy.ID == editor.ID && got.Server == connDocs &&
+		got.Environment == domain.DefaultEnvironment && got.Factory == ruleFactory && got.ConnectionID == "",
+		"RevokeStandingRule = %+v; want the server rule revoked by the editor", got)
+
+	e := f.one(acme, domain.AuditStandingRuleRevoked)
+	f.expect(e.TargetID == string(r.ID) && e.Actor.ID == editor.ID && e.Data["server"] == connDocs && e.Data["factory_id"] == string(ruleFactory),
+		"standing_rule.revoked = %+v", e)
+
+	_, err = f.c.RevokeStandingRule(ctx, r.ID, editor)
+	f.refused("RevokeStandingRule again", err, ports.ErrConflict)
+
+	renewed := f.serverRuleOf(acme, serverRule(domain.DefaultEnvironment, connDocs, toolComment, architect), admin)
+	f.expect(renewed.ID != r.ID && renewed.Active(), "a rule for a revoked rule's key = %+v; want a new active one", renewed)
+}

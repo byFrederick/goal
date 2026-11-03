@@ -238,6 +238,28 @@ type RunToolModes struct {
 // organization's mode, so each offers Always allow. The definition's per-tool rule has no input
 // here: no definition can carry one today.
 func EffectiveToolModes(modes map[string]ConnectionToolMode, rules []StandingRule, connection ConnectionID, agent string) RunToolModes {
+	return effectiveToolModes(modes, rules, func(r StandingRule, tool string) bool {
+		return r.ConnectionID == connection && r.Tool == tool && r.Agent == agent
+	})
+}
+
+// EffectiveServerToolModes combines the modes of one MCP server's tools in an environment file
+// (mcp.<server>.tools, ADR 0037 decision 8) with the organization's standing rules for agent, the
+// agent's role: an active rule for (factory, environment, server, tool, agent) turns an ask into
+// allow, and nothing turns off into anything. A rule keyed by a connection lifts nothing here.
+// Every ask that remains offers Always allow.
+func EffectiveServerToolModes(modes map[string]ConnectionToolMode, rules []StandingRule, factory FactoryID, environment, server,
+	agent string,
+) RunToolModes {
+	return effectiveToolModes(modes, rules, func(r StandingRule, tool string) bool {
+		return r.ConnectionID == "" && r.Factory == factory && r.Environment == environment && r.Server == server &&
+			r.Tool == tool && r.Agent == agent
+	})
+}
+
+// effectiveToolModes are modes with each ask that an active rule of rules matches (lifts) turned
+// into allow.
+func effectiveToolModes(modes map[string]ConnectionToolMode, rules []StandingRule, lifts func(r StandingRule, tool string) bool) RunToolModes {
 	out := RunToolModes{Modes: map[string]ConnectionToolMode{}, AlwaysAllowOffered: []string{}}
 
 	for _, tool := range slices.Sorted(maps.Keys(modes)) {
@@ -245,9 +267,7 @@ func EffectiveToolModes(modes map[string]ConnectionToolMode, rules []StandingRul
 		case ToolModeOff:
 			out.Modes[tool] = ToolModeOff
 		case ToolModeAsk:
-			if slices.ContainsFunc(rules, func(r StandingRule) bool {
-				return r.Active() && r.ConnectionID == connection && r.Tool == tool && r.Agent == agent
-			}) {
+			if slices.ContainsFunc(rules, func(r StandingRule) bool { return r.Active() && lifts(r, tool) }) {
 				continue
 			}
 

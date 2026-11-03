@@ -198,3 +198,55 @@ func TestEffectiveToolModes(t *testing.T) {
 		t.Errorf("EffectiveToolModes without modes = %+v; want every tool allowed", none)
 	}
 }
+
+func TestEffectiveServerToolModes(t *testing.T) {
+	t.Parallel()
+
+	const (
+		factory, otherFactory FactoryID = "f-1", "f-2"
+		server                          = "acme-git"
+		env                             = DefaultEnvironment
+	)
+
+	revokedAt, revoker := qt0, LocalUser
+	modes := map[string]ConnectionToolMode{
+		"read_issue": ToolModeAllow, toolCreateComment: ToolModeAsk, toolCloseIssue: ToolModeAsk, "delete_repo": ToolModeOff,
+		toolEditIssue: ToolModeAsk, toolLabelIssue: ToolModeAsk, "merge_pr": ToolModeAsk, "push": ToolModeAsk, "fork": ToolModeAsk,
+	}
+	key := func(tool, agent string) StandingRule {
+		return StandingRule{Factory: factory, Environment: env, Server: server, Tool: tool, Agent: agent}
+	}
+	other := func(change func(*StandingRule)) StandingRule {
+		r := key(toolLabelIssue, roleArchitect)
+		change(&r)
+
+		return r
+	}
+	rules := []StandingRule{
+		key(toolCreateComment, roleArchitect), // active: allow
+		{Factory: factory, Environment: env, Server: server, Tool: toolCloseIssue, Agent: roleArchitect, RevokedAt: &revokedAt, RevokedBy: &revoker},
+		key(toolEditIssue, "reviewer"),                                                    // another role
+		other(func(r *StandingRule) { r.Server = "acme-docs" }),                           // another server
+		key("delete_repo", roleArchitect),                                                 // never lifts off
+		{ConnectionID: "c-1", Connection: server, Tool: "merge_pr", Agent: roleArchitect}, // a connection's rule
+		other(func(r *StandingRule) { r.Tool, r.Environment = "push", "backend" }),        // another environment
+		other(func(r *StandingRule) { r.Tool, r.Factory = "fork", otherFactory }),         // another factory
+	}
+
+	got := EffectiveServerToolModes(modes, rules, factory, env, server, roleArchitect)
+	want := RunToolModes{
+		Modes: map[string]ConnectionToolMode{
+			toolCloseIssue: ToolModeAsk, "delete_repo": ToolModeOff, toolEditIssue: ToolModeAsk, "fork": ToolModeAsk,
+			toolLabelIssue: ToolModeAsk, "merge_pr": ToolModeAsk, "push": ToolModeAsk,
+		},
+		AlwaysAllowOffered: []string{toolCloseIssue, toolEditIssue, "fork", toolLabelIssue, "merge_pr", "push"},
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("EffectiveServerToolModes = %+v; want %+v", got, want)
+	}
+
+	if none := EffectiveServerToolModes(nil, nil, factory, env, server, roleArchitect); len(none.Modes) != 0 || len(none.AlwaysAllowOffered) != 0 {
+		t.Errorf("EffectiveServerToolModes without modes = %+v; want every tool allowed", none)
+	}
+}

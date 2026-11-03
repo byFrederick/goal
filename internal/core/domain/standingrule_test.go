@@ -90,3 +90,34 @@ func TestNewStandingRule_ActiveUntilRevoked(t *testing.T) {
 		t.Errorf("a revoked rule is still active")
 	}
 }
+
+func TestNewServerStandingRule_Check(t *testing.T) {
+	t.Parallel()
+
+	valid := NewServerStandingRule{
+		Factory: "00000000-0000-7000-8000-0000000000f1", Environment: DefaultEnvironment, Server: "acme-git", Tool: toolCreateComment,
+		Agent: "architect", Item: "00000000-0000-7000-8000-0000000000aa",
+	}
+	if err := valid.Check(); err != nil {
+		t.Fatalf("Check(%+v) = %v; want nil", valid, err)
+	}
+
+	for name, change := range map[string]func(*NewServerStandingRule){
+		"no factory":              func(n *NewServerStandingRule) { n.Factory = "" },
+		"a factory that is no id": func(n *NewServerStandingRule) { n.Factory = "acme" },
+		"no environment":          func(n *NewServerStandingRule) { n.Environment = "" },
+		"a malformed environment": func(n *NewServerStandingRule) { n.Environment = "Default" },
+		"no server":               func(n *NewServerStandingRule) { n.Server = "" },
+		"a malformed server":      func(n *NewServerStandingRule) { n.Server = "acme git" },
+		"an empty tool":           func(n *NewServerStandingRule) { n.Tool = "" },
+		"an agent in capitals":    func(n *NewServerStandingRule) { n.Agent = "Architect" },
+		"an item that is no id":   func(n *NewServerStandingRule) { n.Item = "item-1" },
+	} {
+		n := valid
+		change(&n)
+
+		if err := n.Check(); !errors.Is(err, ErrInvalid) {
+			t.Errorf("Check with %s = %v; want ErrInvalid", name, err)
+		}
+	}
+}
