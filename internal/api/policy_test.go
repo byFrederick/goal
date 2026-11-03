@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -225,5 +226,95 @@ func unchanged(t *testing.T, h *harness) {
 
 	if res := h.request(t, http.MethodGet, policyPath, "", nil); res.header.Get("ETag") != `"0"` {
 		t.Errorf("ETag after the refusal = %q; want \"0\": a refusal saves nothing", res.header.Get("ETag"))
+	}
+}
+
+// policyWithCap is policyBody with an MCP tool mode cap: every tool at least ask, delete_* off.
+const policyWithCap = `{"allowed_models":["claude-opus-5-5","claude-haiku-5-5"],"default_model":"claude-haiku-5-5",
+"denied_commands":["Bash(terraform apply:*)"],
+"tools":{"write_outside_branch":"off","merge_pull_request":"review_approval","read_web":"ask","use_credentials":"attached_only"},
+"mcp_tool_modes":{"*":"ask","delete_*":"off"},"box_time_limit_minutes":90}`
+
+var wantCap = map[string]gen.ConnectionToolMode{"*": gen.ConnectionToolModeAsk, "delete_*": gen.ConnectionToolModeOff}
+
+// readCap is the stored policy's MCP tool mode cap, failing when GET leaves it out.
+func readCap(t *testing.T, h *harness) map[string]gen.ConnectionToolMode {
+	t.Helper()
+
+	read := decode[gen.OrgPolicyView](t, h.request(t, http.MethodGet, policyPath, "", nil), http.StatusOK)
+	if read.Policy.McpToolModes == nil {
+		t.Fatalf("GET policy has no mcp_tool_modes; want the cap, {} when none")
+	}
+
+	return *read.Policy.McpToolModes
+}
+
+// The MCP tool mode cap a save sends is what the save answers and GET reads back; the default
+// policy reads as no cap.
+func TestPutOrgPolicy_MCPToolModesRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	if got := readCap(t, h); len(got) != 0 {
+		t.Errorf("default policy cap %v; want none", got)
+	}
+
+	saved := decode[gen.OrgPolicyView](t, h.request(t, http.MethodPut, policyPath, policyWithCap, quoted("0")), http.StatusOK)
+	if saved.Policy.McpToolModes == nil || !maps.Equal(*saved.Policy.McpToolModes, wantCap) {
+		t.Errorf("save answered cap %v; want %v", saved.Policy.McpToolModes, wantCap)
+	}
+
+	if got := readCap(t, h); !maps.Equal(got, wantCap) {
+		t.Errorf("GET after the save: cap %v; want %v", got, wantCap)
+	}
+
+	// An explicit empty cap clears it.
+	clear := strings.Replace(policyWithCap, `{"*":"ask","delete_*":"off"}`, `{}`, 1)
+	decode[gen.OrgPolicyView](t, h.request(t, http.MethodPut, policyPath, clear, quoted("1")), http.StatusOK)
+
+	if got := readCap(t, h); len(got) != 0 {
+		t.Errorf("GET after saving {}: cap %v; want none", got)
+	}
+}
+
+// PUT replaces the policy, but clients that predate the cap send none: a body without
+// mcp_tool_modes keeps the stored cap instead of clearing it.
+func TestPutOrgPolicy_OmittedMCPToolModesKeepsStored(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	decode[gen.OrgPolicyView](t, h.request(t, http.MethodPut, policyPath, policyWithCap, quoted("0")), http.StatusOK)
+
+	saved := decode[gen.OrgPolicyView](t, h.request(t, http.MethodPut, policyPath, policyBody, quoted("1")), http.StatusOK)
+	if saved.Revision != 2 || saved.Policy.McpToolModes == nil || !maps.Equal(*saved.Policy.McpToolModes, wantCap) {
+		t.Errorf("save without the cap answered revision %d cap %v; want 2 and %v", saved.Revision, saved.Policy.McpToolModes, wantCap)
+	}
+
+	if got := readCap(t, h); !maps.Equal(got, wantCap) {
+		t.Errorf("GET after a save without the cap: %v; want %v kept", got, wantCap)
+	}
+}
+
+// A cap mode other than allow, ask or off, or a pattern that is no tool name or glob, is a 400
+// problem and saves nothing.
+func TestPutOrgPolicy_InvalidMCPToolModeIsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"an unknown mode":        `{"*":"maybe"}`,
+		"an empty mode":          `{"*":""}`,
+		"a pattern with a space": `{"delete *":"off"}`,
+		"an empty pattern":       `{"":"off"}`,
+	}
+
+	for name, modes := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t)
+			body := strings.Replace(policyWithCap, `{"*":"ask","delete_*":"off"}`, modes, 1)
+			refused(t, name, h.request(t, http.MethodPut, policyPath, body, quoted("0")), http.StatusBadRequest, "")
+			unchanged(t, h)
+		})
 	}
 }

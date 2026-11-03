@@ -124,19 +124,29 @@ func (p OrgPolicy) Validate() error {
 		checkToolSetting("read the web and docs", p.ReadWeb, ReadWebSettings),
 		checkToolSetting("use credentials", p.UseCredentials, UseCredentialsSettings))
 
-	for _, pattern := range slices.Sorted(maps.Keys(p.MCPToolModes)) {
+	errs = append(errs, CheckMCPToolCap(p.MCPToolModes))
+
+	if p.BoxTimeLimitMinutes <= 0 {
+		errs = append(errs, fmt.Errorf("the box time limit is a positive number of minutes, not %d: %w", p.BoxTimeLimitMinutes, ErrInvalid))
+	}
+
+	return errors.Join(errs...)
+}
+
+// CheckMCPToolCap enforces an MCP tool mode cap: each pattern 1 to MaxToolName letters, digits,
+// underscores, dots, dashes, * or ?, each mode allow, ask or off. The error wraps ErrInvalid.
+func CheckMCPToolCap(modes map[string]ConnectionToolMode) error {
+	var errs []error
+
+	for _, pattern := range slices.Sorted(maps.Keys(modes)) {
 		if !mcpToolPattern.MatchString(pattern) {
 			errs = append(errs, fmt.Errorf("MCP tool pattern %q must be 1 to %d letters, digits, underscores, dots, dashes, * or ?: %w",
 				pattern, MaxToolName, ErrInvalid))
 		}
 
-		if _, err := ParseConnectionToolMode(string(p.MCPToolModes[pattern])); err != nil {
+		if _, err := ParseConnectionToolMode(string(modes[pattern])); err != nil {
 			errs = append(errs, fmt.Errorf("MCP tool pattern %q: %w", pattern, err))
 		}
-	}
-
-	if p.BoxTimeLimitMinutes <= 0 {
-		errs = append(errs, fmt.Errorf("the box time limit is a positive number of minutes, not %d: %w", p.BoxTimeLimitMinutes, ErrInvalid))
 	}
 
 	return errors.Join(errs...)

@@ -547,7 +547,9 @@ paths:
         precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that
         is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models,
         a tool setting the default does not take, a blank denied command or a box time limit that
-        is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+        is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow,
+        ask or off, or a pattern that is not a tool name or glob, is 400; a body without
+        mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
       parameters:
         - $ref: "#/components/parameters/IfMatch"
       requestBody:
@@ -5865,6 +5867,15 @@ components:
           description: Claude Code Bash permission patterns no agent may run, such as Bash(terraform apply:*)
           items: { type: string }
         tools: { $ref: "#/components/schemas/ToolPolicy" }
+        mcp_tool_modes:
+          type: object
+          description: >-
+            The organization's cap on MCP tool modes (ADR 0037 decision 12): a tool name or glob
+            (* and ?), 1 to 128 letters, digits, underscores, dots, dashes, * or ?, mapped to
+            allow, ask or off. Where a tool's mode and the cap disagree, the stricter wins (off,
+            then ask, then allow). Empty means no cap. A save that omits it keeps the stored cap;
+            a mode or pattern that is not valid is 400.
+          additionalProperties: { $ref: "#/components/schemas/ConnectionToolMode" }
         box_time_limit_minutes:
           type: integer
           minimum: 1
