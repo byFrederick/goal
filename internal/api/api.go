@@ -193,7 +193,8 @@ type Deps struct {
 	// {{name}}.
 	Credentials ports.Credentials
 	// OrgSecrets are the organization's secrets (ADR 0037), the only place a value lives. What uses
-	// one is read through Credentials.UsedBy until definitions and the rest refer to secrets.
+	// one is read from the factories' current versions, the knowledge sources and, for connections,
+	// Credentials.UsedBy.
 	OrgSecrets ports.OrgSecrets
 	// Catalog are the tool templates goald ships (catalog.Templates), served on /v1/catalog;
 	// EnvironmentTests keep the latest test of each environment's MCP servers, which ToolLister
