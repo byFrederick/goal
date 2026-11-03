@@ -3,6 +3,7 @@ package moveover_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"maps"
@@ -130,7 +131,7 @@ func newWorld(t *testing.T) *world {
 	}
 
 	authors := authoring.New(authoring.Deps{
-		Store: w.defs, Templates: porttest.NewObjectStore(), Credentials: authoring.SecretsCheck{Secrets: w.secrets}, Clock: w.clock,
+		Store: w.defs, Templates: porttest.NewObjectStore(), Credentials: authoring.SecretsCheck{Secrets: w.secrets, Knowledge: w.kb}, Clock: w.clock,
 	})
 
 	w.mover = moveover.New(moveover.Deps{
@@ -517,37 +518,49 @@ spec:
 `
 
 // Moving over points each synced source still on a connection at the secret its connection's
-// token became, with the reader and the connection's other values in its config; a second run
-// changes nothing, and a source it cannot map is logged once, naming it and never a value.
-func TestRun_PointsKnowledgeSourcesAtSecrets(t *testing.T) {
+// token became, then converts each synced source on a secret into its kind (ADR 0038 decision
+// 16): docs, on gitdocs, a repository source and wiki a Confluence source, each with the same
+// secret and config but the reader. The live source is deleted, the upload stays as it is and
+// every source without a snapshot is due. A source it cannot map or convert is logged once a run,
+// naming it and never a value. No definition changes: a factory that lists a converted source of
+// its own repository keeps it and the knowledge-copies-checkout warning, as goal-docs does. A
+// second run changes nothing.
+func TestRun_ConvertsKnowledgeSources(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld(t)
 	w.addSources(t)
 
+	ctx := w.ctx(t)
+	for _, n := range []domain.NewKnowledgeSource{
+		{Name: "chat", Title: "Chat", Kind: domain.SourceLive, Connection: connContext7},
+		{Name: "self", Title: "Self", Kind: domain.SourceSynced, Connection: connGitHub, Config: map[string]string{"repository": "https://github.com/acme/app"}},
+	} {
+		if _, err := w.kb.CreateSource(ctx, n, person); err != nil {
+			t.Fatalf("source %s: %v", n.Name, err)
+		}
+	}
+
+	w.publishOld(t, factoryUUID, "acme-software", files(strings.Replace(productionFactory, "  agents:\n", "  knowledge:\n    sources: [self]\n  agents:\n", 1)))
+	notes := w.source(t, "notes")
+
 	if err := w.mover.Run(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 
-	want := map[string]struct {
-		secret string
-		config map[string]string
-	}{
-		"docs":   {connGitHub, map[string]string{"repository": "https://github.com/acme/docs", domain.SourceReaderKey: "gitdocs", "code_host": "github"}},
-		connWiki: {connWiki, map[string]string{"spaces": "ENG", domain.SourceReaderKey: "confluence", "site": "acme.atlassian.net", "email": "ada@example.com"}},
-		"paired": {"", nil},
-		"notes":  {"", map[string]string{}},
-	}
+	w.checkConverted(t, notes)
+	w.checkCopiesCheckout(t)
 
 	got := map[string]domain.KnowledgeSource{}
+	for _, name := range []string{"docs", connWiki, "paired", "notes", "self"} {
+		got[name] = w.source(t, name)
+	}
 
-	for name, wt := range want {
-		src := w.source(t, name)
-		got[name] = src
+	audit := w.auditCount(t)
 
-		if src.Secret != wt.secret || (wt.config != nil && !maps.Equal(src.Config, wt.config)) {
-			t.Errorf("source %s = secret %q, config %v; want %q, %v", name, src.Secret, src.Config, wt.secret, wt.config)
-		}
+	// Again, once the first run's due times are past: nothing changes.
+	if d := time.Since(t0); d > 0 {
+		w.clock.Advance(d + time.Minute)
 	}
 
 	if err := w.mover.Run(t.Context()); err != nil {
@@ -555,12 +568,112 @@ func TestRun_PointsKnowledgeSourcesAtSecrets(t *testing.T) {
 	}
 
 	for name, before := range got {
-		if after := w.source(t, name); !after.UpdatedAt.Equal(before.UpdatedAt) {
+		if after := w.source(t, name); !after.UpdatedAt.Equal(before.UpdatedAt) || after.Kind != before.Kind {
 			t.Errorf("source %s changed on the second run", name)
 		}
 	}
 
+	if n := w.auditCount(t); n != audit {
+		t.Errorf("the second run audited %d entries; want none", n-audit)
+	}
+
+	if logs := w.logs.String(); !strings.Contains(logs, `"sources":0,"kinds":0,"live":0,"due":0`) {
+		t.Errorf("the second run's moved over line counts work:\n%s", logs)
+	}
+
+	if r := w.record(t, factoryUUID); r.LastVersionNumber != 2 {
+		t.Errorf("the factory is at version %d after the second run; want 2, the connections conversion's", r.LastVersionNumber)
+	}
+
 	w.unmappedLogged(t)
+}
+
+// checkConverted checks the sources after the first run: docs and self repository sources and
+// wiki a Confluence one off their connections, chat deleted by Goal, notes, the upload, as it was
+// and paired on its connection; every source is due.
+func (w *world) checkConverted(t *testing.T, notes domain.KnowledgeSource) {
+	t.Helper()
+
+	want := map[string]struct {
+		kind   domain.KnowledgeSourceKind
+		conn   string
+		secret string
+		config map[string]string
+	}{
+		"docs":   {domain.SourceRepository, "", connGitHub, map[string]string{"repository": "https://github.com/acme/docs", "code_host": "github"}},
+		connWiki: {domain.SourceConfluence, "", connWiki, map[string]string{"spaces": "ENG", "site": "acme.atlassian.net", "email": "ada@example.com"}},
+		"self":   {domain.SourceRepository, "", connGitHub, map[string]string{"repository": "https://github.com/acme/app", "code_host": "github"}},
+		"paired": {domain.SourceSynced, "pair", "", map[string]string{}},
+		"notes":  {domain.SourceUpload, "", "", map[string]string{}},
+	}
+
+	for name, wt := range want {
+		src := w.source(t, name)
+		if src.Kind != wt.kind || src.Connection != wt.conn || src.Secret != wt.secret || !maps.Equal(src.Config, wt.config) {
+			t.Errorf("source %s = %s on connection %q, secret %q, config %v; want %s, %q, %q, %v",
+				name, src.Kind, src.Connection, src.Secret, src.Config, wt.kind, wt.conn, wt.secret, wt.config)
+		}
+
+		if src.NextSyncAt == nil || src.NextSyncAt.After(time.Now()) {
+			t.Errorf("source %s is due at %v; want now, to sync once", name, src.NextSyncAt)
+		}
+	}
+
+	if after := w.source(t, "notes"); !after.UpdatedAt.Equal(notes.UpdatedAt) {
+		t.Error("the upload source changed")
+	}
+
+	if _, err := w.kb.Source(w.ctx(t), "chat"); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("the live source: %v; want it deleted", err)
+	}
+
+	deleted, err := w.tenancy.AuditLog(w.ctx(t), ports.AuditQuery{Action: domain.AuditKnowledgeSourceDeleted, Limit: 10})
+	if err != nil || len(deleted) != 1 || deleted[0].Actor != moveover.Actor || deleted[0].Data["name"] != "chat" {
+		t.Errorf("deleted entries %+v (%v); want chat's, by Goal", deleted, err)
+	}
+
+	if logs := w.logs.String(); !strings.Contains(logs, `"kinds":3,"live":1,"due":2`) {
+		t.Errorf("the moved over line does not count three conversions, one deletion and two sources made due:\n%s", logs)
+	}
+}
+
+// checkCopiesCheckout checks that the factory's current version still lists self, now a
+// repository source of the factory's own repository, and that its check warns of it.
+func (w *world) checkCopiesCheckout(t *testing.T) {
+	t.Helper()
+
+	v, err := w.defs.Version(w.ctx(t), w.record(t, factoryUUID).Current.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f := factoryOf(t, w.tree(t, v))
+	if f.Spec.Knowledge == nil || !slices.Equal(f.Spec.Knowledge.Names(), []string{"self"}) {
+		t.Fatalf("the factory's knowledge %+v; want self still listed", f.Spec.Knowledge)
+	}
+
+	problems, err := authoring.SecretsCheck{Secrets: w.secrets, Knowledge: w.kb}.Check(w.ctx(t), f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool {
+		return p.Code == authoring.CodeKnowledgeCopiesCheckout && p.Severity == domain.SeverityWarning
+	}) {
+		t.Errorf("problems %+v; want the knowledge-copies-checkout warning", problems)
+	}
+}
+
+// auditCount is how many audit entries the organization has.
+func (w *world) auditCount(t *testing.T) int {
+	t.Helper()
+
+	entries, err := w.tenancy.AuditLog(w.ctx(t), ports.AuditQuery{Limit: 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return len(entries)
 }
 
 // source is the knowledge source name.
@@ -575,13 +688,20 @@ func (w *world) source(t *testing.T, name string) domain.KnowledgeSource {
 	return src
 }
 
-// unmappedLogged checks that two runs logged paired once each, and no value.
+// unmappedLogged checks that two runs logged paired once each as not moved over and once each as
+// not converted, with a reason, and no value.
 func (w *world) unmappedLogged(t *testing.T) {
 	t.Helper()
 
 	logs := w.logs.String()
-	if n := strings.Count(logs, `"msg":"knowledge source not moved over"`); n != 2 || !strings.Contains(logs, `"source":"paired"`) {
-		t.Errorf("logs hold %d lines for an unmapped source; want one a run, naming paired:\n%s", n, logs)
+	for _, msg := range []string{"knowledge source not moved over", "knowledge source not converted"} {
+		if n := strings.Count(logs, `"msg":"`+msg+`","source":"paired"`); n != 2 {
+			t.Errorf("logs hold %d %s lines for paired; want one a run:\n%s", n, msg, logs)
+		}
+	}
+
+	if !strings.Contains(logs, `"reason":"it reads its connection and no secret`) {
+		t.Errorf("the not converted line gives no reason:\n%s", logs)
 	}
 
 	for _, v := range []string{githubValue, "confluence-token-for-tests", "pair-id-for-tests", "pair-secret-for-tests"} {
