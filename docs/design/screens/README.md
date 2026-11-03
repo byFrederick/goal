@@ -71,18 +71,19 @@ How to use them:
 | `definition`: files, tabs, YAML editor, problems, outline, draft banner | `…/definition` | restyle (Monaco and the sections exist) | quick fixes |
 | `definition-publish`: changes by section, checks, versions | `…/definition/publish` | restyle | evals before publish |
 | `factory-settings`: repository and its token, model key, environments, notifications | `…/settings` | restyle | per-factory roles |
-| `definition-environments` (+ `definition-environments-768`, the deploy environment): Form view, Environments section. A tab per environment and who uses it; the box (size, image, setup), command-line tools, variables (plain or a secret), files, AWS, MCP servers with tool modes, standing rules and tests; checks, including a key pasted in plain text | `…/definition/environments` | new feature ([ADR 0037](../../adr/0037-secrets-and-environment-files.md)) | Sign in and 1Password sources |
+| `definition-environments` (+ `definition-environments-768`, the deploy environment): Form view, Environments section. A tab per environment and who uses it; the box (size, image, setup), command-line tools, variables (plain or a secret), files, MCP servers with tool modes, standing rules and tests; checks, including a key pasted in plain text | `…/definition/environments` | new feature ([ADR 0037](../../adr/0037-secrets-and-environment-files.md)) | Sign in and 1Password sources |
 | `definition-environment-yaml`: the same environment as `environments/default.yaml` in the YAML view, with the plain-key problem | `…/definition` | new feature (ADR 0037 decision 5) | |
 | `add-tool` (+ `add-tool-768`): the catalog of MCP servers, CLIs and APIs; pick or create the secret in place, the server's answer, what agents may do, and the lines added to the draft | `…/definition/add-tool` | new feature (ADR 0037 decision 15) | |
 | `add-tool-custom`: Custom, a command-line tool with a variable and a file | `…/definition/add-tool?custom` | new feature (ADR 0037 decision 15) | |
+| `definition-knowledge` (+ `definition-knowledge-768`): Form view, Knowledge section. The sources the factory reads, each with who reads it (every agent or its `appliesTo`), its own `readWhen` and its size, and the `knowledge-copies-checkout` warning; factory memory (`memory.yaml`: add, edit, remove into the draft); what agents see, the prompt section as one agent gets it | `…/definition/knowledge` | new feature ([ADR 0038](../../adr/0038-knowledge-is-files.md) decisions 5, 6 and 8) | |
 
 ## Jonah (`jonah/`)
 
-Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jonah-evals.md)): `jonah` (overview), `proposal`, `judges`, `judge`, `evals`, `bake-off`, under `…/jonah/…`.
+Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jonah-evals.md)): `jonah` (overview), `proposal`, `proposal-memory` (a factory memory proposal: the `memory.yaml` diff, each fact's evidence, the eval gate skipped; [ADR 0038](../../adr/0038-knowledge-is-files.md) decision 11), `judges`, `judge`, `evals`, `bake-off`, under `…/jonah/…`.
 
 ## Access, secrets and knowledge (`connections/`)
 
-[ADR 0037](../../adr/0037-secrets-and-environment-files.md) replaced the connection and credential screens with these.
+[ADR 0037](../../adr/0037-secrets-and-environment-files.md) replaced the connection and credential screens with these, and [ADR 0038](../../adr/0038-knowledge-is-files.md) the knowledge screens.
 
 | Screen | Route | Status | Not built yet |
 |---|---|---|---|
@@ -90,7 +91,11 @@ Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jona
 | `secrets` (+ `secrets-768`): every secret with where it is used, its factories, expiry and last use; New secret in a side sheet (name, where the value comes from, value, factories, expiry and reminder) | `/o/$org/secrets` (replaces `/credentials`) | new feature (credentials exist; ADR 0037 decisions 1 to 4) | Sign in and 1Password sources |
 | `secret`: where it is used, activity, Replace value, settings, Delete (disabled while used) | `/o/$org/secrets/$secret` | new feature | |
 | `secrets-import`: paste a .env or YAML, the dry run with Replace or Skip, factories to open them to | `/o/$org/secrets/import` | new feature (the import API exists for credentials) | |
-| `knowledge` | `/o/$org/knowledge` | restyle |  |
+| `knowledge` (+ `knowledge-768`, a list): the sources with their read-when line, kind, the factories that list them, sync, size and reads; Find a file; Most read; the alert for a failing source | `/o/$org/knowledge` | new feature (ADR 0038 decisions 1 and 12) | Website, Notion and Google Drive kinds |
+| `knowledge-new` (+ `knowledge-new-768`): Add a source, a repository: the kind, its settings, the name and read-when line, the factories whose drafts get the line, sync; the Check panel, what agents will see, the first files | `/o/$org/knowledge/new` | new feature (ADR 0038 decisions 2, 5 and 12) | |
+| `knowledge-new-confluence`: the same for Confluence: site, account email, API token, spaces, only the pages under one page | `/o/$org/knowledge/new` | new feature | Attachments |
+| `knowledge-new-upload`: the same for an upload: files and folders, PDF and Office become Markdown, a file left out | `/o/$org/knowledge/new` | new feature | |
+| `knowledge-source`: its files with their reads, the latest sync, settings, the line agents see, who reads it, Add to a factory | `/o/$org/knowledge/$source` | new feature | |
 
 ## Organization (`organization/`)
 
@@ -104,7 +109,7 @@ Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jona
 
 ## Mobile (`mobile/`)
 
-`sign-in`, `drawer`, `needs-you`, `approve`, `floor`, `board`, `item`, `intake`, `teardown` (+ its loading, empty and error states; the item tabs scroll sideways and Runs becomes a list), and for ADR 0037 `access`, `secrets`, `secret-new`, `environments` and `add-tool`: the phone layouts at 390px. Every other screen follows MASTER.md's phone rules: a top bar with the Goal mark, a drawer, a bottom tab bar, one column, and tables that scroll in their own box.
+`sign-in`, `drawer`, `needs-you`, `approve`, `floor`, `board`, `item`, `intake`, `teardown` (+ its loading, empty and error states; the item tabs scroll sideways and Runs becomes a list), for ADR 0037 `access`, `secrets`, `secret-new`, `environments` and `add-tool`, and for ADR 0038 `knowledge`, `knowledge-source`, `knowledge-new` (an upload) and `memory` (the definition's Knowledge section): the phone layouts at 390px. Every other screen follows MASTER.md's phone rules: a top bar with the Goal mark, a drawer, a bottom tab bar, one column, and tables that scroll in their own box.
 
 ## Added in v3: live pages that had no design
 
@@ -115,7 +120,6 @@ Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jona
 | `build/new-factory` | `/o/$org/new/start`: template, clone, import | restyle | |
 | `build/definition-form` | `…/definition/$section` in Form view, with the unsaved-changes dialog | restyle | |
 | `jonah/bake-offs` | `…/jonah/bake-offs` empty state | restyle | |
-| `connections/knowledge-source`, `connections/knowledge-new` | `/o/$org/knowledge/$source`, `…/knowledge/new` | restyle (a synced source reads with a secret, ADR 0037) | |
 | `account/shortcuts` | the `?` keyboard-shortcuts dialog | new | |
 | `account/states` | Pending (skeleton), Error, Not found; archived and view-only banners (`app/states.tsx`) | restyle | |
 | `account/no-org` | `/` with no organization, and Create organization | restyle | |
