@@ -21,7 +21,7 @@ import (
 var _ ports.Knowledge = (*Knowledge)(nil)
 
 // Knowledge implements ports.Knowledge over 00054's knowledge_sources, knowledge_documents and
-// knowledge_chunks and 00090's knowledge_snapshots, knowledge_files and knowledge_reads, as goal_app under row-level security: every statement sees the organization
+// knowledge_chunks and 00092's knowledge_snapshots, knowledge_files and knowledge_reads, as goal_app under row-level security: every statement sees the organization
 // in ctx only (a claim alone reads across organizations, through 00055's definer), and every
 // change people make appends its audit entry in its transaction. A search is one statement: the
 // nearest chunks by cosine distance (exact over small sources, else pgvector's HNSW index on
