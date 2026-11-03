@@ -202,8 +202,8 @@ func TestGetOrgSpend_ModelKeyPays(t *testing.T) {
 		}
 
 		for _, l := range budgetLines(got) {
-			if strings.HasPrefix(l, "acme ") {
-				return l[strings.Index(l, "models "):]
+			if _, models, ok := strings.Cut(l, ") models "); ok && strings.HasPrefix(l, "acme ") {
+				return "models " + models
 			}
 		}
 

@@ -200,6 +200,7 @@ func alternatives(e *jsonschema.ValidationError) leaf {
 // they carry no place of their own; failedRules places it at the key.
 func propertyNameLeaf(e *jsonschema.ValidationError, name string) leaf {
 	var msgs []string
+
 	for _, c := range e.Causes {
 		for _, l := range leaves(c) {
 			msgs = append(msgs, l.message)
