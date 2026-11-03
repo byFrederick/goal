@@ -1,7 +1,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { existsSync, readdirSync } from 'node:fs';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -34,7 +34,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'goal-prepare-'));
   home = join(root, 'home');
   await mkdir(home);
-  dirs = { goal: join(root, 'goal'), workspace: join(root, 'workspace'), claude: join(home, '.claude') };
+  dirs = { goal: join(root, 'goal'), workspace: join(root, 'workspace'), claude: join(home, '.claude'), home };
 });
 
 afterEach(async () => {
@@ -118,6 +118,24 @@ function recorder(mise = 0) {
     });
   };
   return { exec, calls };
+}
+
+/**
+ * What `git credential fill` answers for https://<host> in the test's git environment, which holds
+ * no password variable; empty when nothing signs in (no prompt, since GIT_TERMINAL_PROMPT is 0).
+ */
+function fill(host: string, cwd?: string): string {
+  try {
+    return execFileSync('git', ['credential', 'fill'], {
+      cwd,
+      env: { ...gitEnv(), GIT_ASKPASS: '' },
+      input: `protocol=https\nhost=${host}\n\n`,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+  } catch {
+    return '';
+  }
 }
 
 /** Runs git for real (isolated) and returns its stdout. */
@@ -468,6 +486,34 @@ describe('prepare', () => {
       expect(git(dirs.workspace, 'rev-parse', 'HEAD')).toBe(main);
     });
 
+    it("pushes a missing base with the repository token's stored login", async () => {
+      const url = await origin();
+      const login = {
+        host: 'github.com',
+        username: 'x-access-token',
+        password_env: 'GOAL_REPOSITORY_TOKEN',
+        store: true,
+      };
+      const { fake } = gatewayServing({
+        spec,
+        files: {},
+        repository: { url, branch: 'goal/24-first', base },
+        git_credentials: [login],
+      });
+      const { exec: real } = recorder();
+      // What git would sign in with when the push asks for the host's login, in the push's own
+      // environment: gitEnv, which has no GOAL_REPOSITORY_TOKEN.
+      let answer = '';
+      const exec: Exec = (command, args, opts) => {
+        if (args[0] === 'push') answer = fill('github.com', opts?.cwd);
+        return real(command, args, opts);
+      };
+
+      await prepare(depsWith(fake, exec, { GOAL_REPOSITORY_TOKEN: 'acme-s3cr3t' }));
+
+      expect(answer).toContain('username=x-access-token\npassword=acme-s3cr3t\n');
+    });
+
     it('uses the base branch another run pushed first', async () => {
       const url = await origin();
       const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch: 'goal/25-second', base } });
@@ -590,6 +636,38 @@ describe('prepare', () => {
     );
     expect(ask('get', {})).toBe('');
     expect(ask('store', { GOAL_REPOSITORY_TOKEN: 'acme-s3cr3t' })).toBe('');
+  });
+
+  it("keeps a stored login in git's credential store under the home, outside the workspace", async () => {
+    const login = { host: 'gitlab.com', username: 'oauth2', password_env: 'GOAL_REPOSITORY_TOKEN', store: true };
+    const { fake } = gatewayServing({ spec, files: {}, git_credentials: [login] });
+
+    await prepare(depsWith(fake, recorder().exec, { GOAL_REPOSITORY_TOKEN: 'acme-s3cr3t/+' }));
+
+    // A later git command, the agent's push, runs without the variable and still signs in.
+    expect(fill('gitlab.com')).toContain('username=oauth2\npassword=acme-s3cr3t/+\n');
+    const helper = execFileSync('git', ['config', '--global', '--get', 'credential.https://gitlab.com.helper'], {
+      env: gitEnv(),
+      encoding: 'utf8',
+    });
+    expect(helper).not.toContain('s3cr3t');
+    const store = join(home, '.git-credentials');
+    expect((await stat(store)).mode & 0o777).toBe(0o600);
+    expect(existsSync(dirs.workspace) ? readdirSync(dirs.workspace) : []).toEqual([]);
+  });
+
+  it('stores nothing for a stored login whose variable is unset', async () => {
+    const login = {
+      host: 'github.com',
+      username: 'x-access-token',
+      password_env: 'GOAL_REPOSITORY_TOKEN',
+      store: true,
+    };
+    const { fake } = gatewayServing({ spec, files: {}, git_credentials: [login] });
+
+    await prepare(depsWith(fake, recorder().exec));
+
+    expect(fill('github.com')).not.toContain('password=');
   });
 
   it('fails when the gateway refuses the bundle', async () => {
