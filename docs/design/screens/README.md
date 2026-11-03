@@ -31,8 +31,9 @@ How to use them:
 |---|---|---|---|
 | `sign-up`, `code` | `/sign-in`, `/sign-in/code` | restyle; sign-up is the same flow for a new address | GitHub sign-in (its button is disabled) |
 | `org` | onboarding step 1 | new (create organization exists for platform admins) | |
+| `template` | step 2, before Code ([ADR 0041](../../adr/0041-code-and-github-without-an-app.md)) | restyle of the new-factory wizard (`/o/$org/new/$step`) | |
 | `repository`: Code as a choice of no code, read only, or read and write; then a whole organization or some repositories (one or more) and a token, tested for what the choice needs; one form for every case, saved as a secret open to the new factory (no app to install) ([ADR 0041](../../adr/0041-code-and-github-without-an-app.md)) | step 3, after the factory | new ([ADR 0037](../../adr/0037-secrets-and-environment-files.md) decision 7; [ADR 0041](../../adr/0041-code-and-github-without-an-app.md) decision 9) | |
-| `template`, `line` | steps 2 and 4 (the template comes before Code, [ADR 0041](../../adr/0041-code-and-github-without-an-app.md)) | restyle of the new-factory wizard (`/o/$org/new/$step`) | quality-first or cost-first model preset |
+| `line`: the stations scroll sideways, so a line of any length fits | step 4 | restyle of the new-factory wizard (`/o/$org/new/$step`) | quality-first or cost-first model preset |
 | `budget` | step 5 | new (budgets exist in the definition) | |
 | `triggers`: the template's disabled triggers to turn on, the GitHub webhook to set up, and `goal run` ([ADR 0040](../../adr/0040-one-door-for-every-source.md)) | step 6 | new feature (needs Intake triggers) | |
 | `invite` | step 7 | new (invitations exist) | |
