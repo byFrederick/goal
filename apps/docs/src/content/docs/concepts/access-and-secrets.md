@@ -16,7 +16,7 @@ A secret is an organization's named value. It has:
 - an optional description, an optional expiry and a reminder of 1 to 90 days before it;
 - a scope: all factories, including ones created later, or a list of factories.
 
-The Secrets page lists them with where each is used, when it was last used and what expires soon. **New secret** opens a side sheet, and **Import** reads a `.env` or YAML file and checks it before anything is saved. A secret's page shows its scope, its expiry and its uses, and has Replace value and Delete. Delete is disabled, with the reason, while a published definition, a knowledge source, a webhook or the organization's Slack setting uses the secret. Changing a secret needs an owner or admin who has signed in within the last 10 minutes. Everyone in the organization can read the list, never a value.
+The Secrets page lists them with where each is used, when it was last used and what expires soon. **New secret** opens a side sheet, and **Import** reads a `.env` or YAML file and checks it before anything is saved. A secret's page shows its scope, its expiry and its uses, and has Replace value and Delete. Delete is disabled, with the reason, while something uses the secret: a factory's current published version that refers to it as its repository token, its model key, a trigger's model-agrees key or from an environment file, a knowledge source that reads with it, or a connection that refers to it. An archived factory doesn't count. Changing a secret needs an owner or admin who has signed in within the last 10 minutes. Everyone in the organization can read the list, never a value.
 
 Values come in only by pasting them, through standard input or from an import file, never on the command line, and no command prints one.
 
