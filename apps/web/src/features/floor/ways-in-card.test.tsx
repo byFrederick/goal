@@ -115,9 +115,7 @@ describe('WaysInCard', () => {
     renderWays();
 
     expect(await screen.findByText('@software')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Connect' }).getAttribute('href')).toBe(
-      '/o/acme/secrets?new=true',
-    );
+    expect(screen.getByRole('link', { name: 'Connect' }).getAttribute('href')).toBe('/o/acme/secrets?new=true');
   });
 
   it('offers no Connect once Slack is connected', async () => {

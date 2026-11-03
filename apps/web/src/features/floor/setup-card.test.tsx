@@ -138,9 +138,7 @@ describe('SetupCard', () => {
     expect(screen.getByRole('img', { name: '5 of 9 done' })).toBeTruthy();
 
     expect(screen.getByRole('link', { name: 'Invite' }).getAttribute('href')).toBe('/o/acme/members');
-    expect(screen.getByRole('link', { name: 'Connect' }).getAttribute('href')).toBe(
-      '/o/acme/secrets?new=true',
-    );
+    expect(screen.getByRole('link', { name: 'Connect' }).getAttribute('href')).toBe('/o/acme/secrets?new=true');
     expect(screen.getByRole('link', { name: 'Add' }).getAttribute('href')).toBe('/o/acme/knowledge/new');
   });
 

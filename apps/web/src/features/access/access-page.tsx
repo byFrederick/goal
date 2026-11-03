@@ -64,7 +64,9 @@ function Keys({ row }: { row: AccessRow }) {
           className="inline-flex h-5.5 max-w-full items-center gap-1 rounded-chip bg-run-tint px-2 font-mono text-meta text-run-ink"
         >
           <KeyRound size={12} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
-          <span className="min-w-0 truncate">{name}</span>
+          <span title={name} className="min-w-0 truncate">
+            {name}
+          </span>
         </span>
       ))}
     </span>

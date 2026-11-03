@@ -168,9 +168,7 @@ describe('the Code step', () => {
 
     expect(await screen.findByText('Connected as acme')).toBeTruthy();
     expect(screen.getByText('Connected')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Switch account' }).getAttribute('href')).toBe(
-      '/o/acme/access?q=github',
-    );
+    expect(screen.getByRole('link', { name: 'Switch account' }).getAttribute('href')).toBe('/o/acme/access?q=github');
   });
 
   it('links a person with no GitHub connection to add a key', async () => {
