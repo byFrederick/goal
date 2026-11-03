@@ -44,16 +44,24 @@ func TestLine_Refusal(t *testing.T) {
 		line Line
 		want []string // in the reason; none for a line that runs
 	}{
-		{name: "on connections", line: Line{Runtime: Runtime{ModelConnection: "claude"}}},
+		{name: "on connections", line: Line{Runtime: Runtime{ModelConnection: testModelConn}}},
 		{
 			name: "a removed form", line: Line{
-				Number: 3, Runtime: Runtime{ModelConnection: "claude"}, Removed: []string{"spec.runtime.repository.token (env-reference-removed)"},
+				Number: 3, Runtime: Runtime{ModelConnection: testModelConn}, Removed: []string{"spec.runtime.repository.token (env-reference-removed)"},
 			},
 			want: []string{"version 3", "spec.runtime.repository.token (env-reference-removed)", "publish a version with connections (spec 4 §4.4)"},
 		},
 		{
 			name: "no model connection", line: Line{Number: 2},
-			want: []string{"version 2", "runtime.modelConnection", "publish a version with connections (spec 4 §4.4)"},
+			want: []string{"version 2", "runtime.modelConnection", "runtime.modelKey"},
+		},
+		{name: "on secrets", line: Line{Runtime: Runtime{ModelKey: testModelKey}, Environments: []Environment{{Name: DefaultEnvironment}}}},
+		{name: "a model key without environments", line: Line{Runtime: Runtime{ModelKey: testModelKey}}},
+		{
+			name: "environments without a model key", line: Line{
+				Number: 4, Runtime: Runtime{ModelConnection: testModelConn}, Environments: []Environment{{Name: DefaultEnvironment}},
+			},
+			want: []string{"version 4", "runtime.modelKey"},
 		},
 	}
 
