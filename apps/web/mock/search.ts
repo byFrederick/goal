@@ -2,12 +2,14 @@
 // ranked as goald ranks it, an exact match first, then a prefix, then the rest of a substring match,
 // up to limit results each. An item matches by its title, or by its exact number with or without the
 // "#". Pages are not here: the shell matches them from the screens registry.
-import type { AgentHit, ConnectionHit, FactoryHit, OrgSearch, SearchItem } from '@goal/api-client';
+import type { AgentHit, ConnectionHit, FactoryHit, OrgSearch, SearchItem, SecretHit } from '@goal/api-client';
 
 export interface SearchSource {
   items: SearchItem[];
   agents: AgentHit[];
   connections: ConnectionHit[];
+  /** By name, so equal ranks keep goald's order. */
+  secrets: SecretHit[];
   factories: FactoryHit[];
 }
 
@@ -50,5 +52,6 @@ export function search(source: SearchSource, q: string, limit: number): OrgSearc
     agents: top(source.agents, limit, (agent) => rank(agent.name, needle)),
     factories: top(source.factories, limit, (factory) => bestRank([factory.name, factory.title], needle)),
     connections: top(source.connections, limit, (connection) => rank(connection.name, needle)),
+    secrets: top(source.secrets, limit, (secret) => rank(secret.name, needle)),
   };
 }

@@ -56,6 +56,7 @@ When Goal moves a factory over to secrets, it copies each active connection rule
 
 Approving with Always allow needs the permission to decide on the item and the permission to manage secrets and access. A standing rule never turns a call that the factory's definition marks `approval: required` into an automatic one.
 
+- In a factory on secrets, the rules of a server show under its tools in the environment's MCP card (Definition, Environments). A person with the permission to manage secrets and access can revoke them there, after signing in again if their last sign-in is older than 10 minutes.
 - `goal standing-rules list` shows the organization's rules, and `--revoked` adds the revoked ones.
 - `goal standing-rules revoke <rule>` makes the agent ask again for that tool.
 

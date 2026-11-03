@@ -10,7 +10,10 @@ import { BoxCard, FilesCard, ToolsCard, VariablesCard } from './box-cards';
 import { readEnv } from './env-file';
 import { McpCard } from './mcp-card';
 
-vi.mock('../../../shared/org', () => ({ useOrg: () => ({ id: 'o1', slug: 'acme', name: 'Acme' }) }));
+vi.mock('../../../shared/org', () => ({
+  useOrg: () => ({ id: 'o1', slug: 'acme', name: 'Acme' }),
+  useOrgHolds: () => true,
+}));
 vi.mock('../../../shared/factory', () => ({
   useFactoryParams: () => ({ org: 'acme', factory: 'goal' }),
   useFactory: () => ({ id: 'f1', name: 'goal' }),
@@ -86,6 +89,7 @@ function Harness({ results = {}, readOnly = false }: { results?: Record<string, 
 
 function renderHarness(props: Parameters<typeof Harness>[0] = {}) {
   const client = new QueryClient();
+  client.setQueryData(keys.standingRules('o1'), []);
   client.setQueryData(keys.secrets('o1'), [{ name: 'github-token' }, { name: 'linear-key' }]);
   return render(
     <QueryClientProvider client={client}>

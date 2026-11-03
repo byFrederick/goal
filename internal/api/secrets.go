@@ -443,16 +443,21 @@ func (s *server) secretOut(ctx context.Context, sec domain.Secret) (gen.Secret, 
 
 	out := gen.Secret{
 		Id: string(sec.ID), Name: sec.Name, Source: gen.SecretSource(sec.Source), Description: sec.Description,
-		Scope:     gen.SecretScope{AllFactories: sec.Scope.All, Factories: make([]string, 0, len(sec.Scope.Factories))},
-		ExpiresAt: sec.ExpiresAt, RemindDays: sec.RemindDays, LastUsedAt: sec.LastUsedAt, Uses: uses,
+		Scope: secretScopeOut(sec.Scope), ExpiresAt: sec.ExpiresAt, RemindDays: sec.RemindDays, LastUsedAt: sec.LastUsedAt, Uses: uses,
 		CreatedBy: s.actorOut(sec.CreatedBy), CreatedAt: sec.CreatedAt, UpdatedBy: s.actorOut(sec.UpdatedBy), UpdatedAt: sec.UpdatedAt,
 	}
 
-	for _, f := range sec.Scope.Factories {
-		out.Scope.Factories = append(out.Scope.Factories, string(f))
+	return out, nil
+}
+
+// secretScopeOut is a secret's scope as the contract has it, factories never nil.
+func secretScopeOut(sc domain.SecretScope) gen.SecretScope {
+	out := gen.SecretScope{AllFactories: sc.All, Factories: make([]string, 0, len(sc.Factories))}
+	for _, f := range sc.Factories {
+		out.Factories = append(out.Factories, string(f))
 	}
 
-	return out, nil
+	return out
 }
 
 // secretScopeIn is a request's scope; absent, none.

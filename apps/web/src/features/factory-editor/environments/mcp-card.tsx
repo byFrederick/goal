@@ -13,6 +13,7 @@ import { cn } from '../../../ui/cn';
 import { Disclosure } from '../../../ui/disclosure';
 import { type EnvSpec, type McpServer, modeOf, removeServer, secretsIn, setToolModes, type ToolMode } from './env-file';
 import { Card, Initials, ModeControl, rowPad, secretMark } from './parts';
+import { RuleList, RulesPlaceholder, useServerRules } from './standing-rules';
 
 export type ToolGroup = 'Read' | 'Change' | 'Delete';
 
@@ -125,6 +126,7 @@ export function McpCard({
             <li key={name} className="border-b border-line last:border-b-0">
               <ServerRow
                 name={name}
+                environment={environment}
                 server={server}
                 test={results[name]}
                 testing={testing === name || testing === ''}
@@ -157,6 +159,7 @@ export function McpCard({
 
 function ServerRow({
   name,
+  environment,
   server,
   test,
   testing,
@@ -165,6 +168,7 @@ function ServerRow({
   testServer,
 }: {
   name: string;
+  environment: string;
   server: McpServer;
   test: ServerTest | undefined;
   testing: boolean;
@@ -174,6 +178,10 @@ function ServerRow({
 }) {
   const tools = useMemo(() => knownTools(server, test), [server, test]);
   const groups = groupTools(tools);
+  const { rules, loading } = useServerRules(environment, name);
+  // A rule's tool sits under its group; one the server no longer lists goes after the last group, never hidden.
+  const listed = new Set(tools);
+  const orphans = rules.filter((r) => !listed.has(r.tool));
   const secrets = [...new Set([...Object.values(server.headers), ...Object.values(server.env)].flatMap(secretsIn))];
   const counts = countsText(server, tools);
   return (
@@ -211,34 +219,43 @@ function ServerRow({
     >
       <div className={cn('flex flex-col gap-3 pb-4 pl-[3.25rem] pr-4 md:pr-5 max-md:pl-4')}>
         {groups.length === 0 ? (
-          <p className="m-0 text-secondary text-muted">
-            {test && !test.ok
-              ? 'Fix the answer above, then test again to list its tools.'
-              : 'Test the server to list its tools and set each one.'}
-          </p>
+          <>
+            <p className="m-0 text-secondary text-muted">
+              {test && !test.ok
+                ? 'Fix the answer above, then test again to list its tools.'
+                : 'Test the server to list its tools and set each one.'}
+            </p>
+            <RuleList rules={rules} />
+          </>
         ) : (
           <ul className="m-0 flex list-none flex-col p-0">
             {groups.map(({ group, tools: list }) => (
-              <li
-                key={group}
-                className="flex flex-col gap-2 border-b border-line py-3 last:border-b-0 md:flex-row md:items-center md:justify-between md:gap-4"
-              >
-                <span className="min-w-0 text-secondary">
-                  <span className="font-control">{group}</span>{' '}
-                  <span className="text-muted">
-                    {plural(list.length, 'tool')}: <span className="font-mono">{namesText(list)}</span>
+              <li key={group} className="flex flex-col gap-2 border-b border-line py-3 last:border-b-0">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-4">
+                  <span className="min-w-0 text-secondary">
+                    <span className="font-control">{group}</span>{' '}
+                    <span className="text-muted">
+                      {plural(list.length, 'tool')}: <span className="font-mono">{namesText(list)}</span>
+                    </span>
                   </span>
-                </span>
-                <ModeControl
-                  label={`${group} tools of ${name}`}
-                  value={groupMode(server, list)}
-                  readOnly={readOnly}
-                  onChange={(mode) => change((t) => setToolModes(t, name, list, mode))}
-                />
+                  <ModeControl
+                    label={`${group} tools of ${name}`}
+                    value={groupMode(server, list)}
+                    readOnly={readOnly}
+                    onChange={(mode) => change((t) => setToolModes(t, name, list, mode))}
+                  />
+                </div>
+                <RuleList rules={rules.filter((r) => list.includes(r.tool))} />
               </li>
             ))}
+            {orphans.length > 0 ? (
+              <li className="border-b border-line py-3 last:border-b-0">
+                <RuleList rules={orphans} />
+              </li>
+            ) : null}
           </ul>
         )}
+        {loading ? <RulesPlaceholder /> : null}
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="white" size="sm" onClick={testServer} disabled={testing} aria-label={`Test ${name}`}>
             {test ? 'Test again' : 'Test'}
