@@ -46,7 +46,7 @@ export function Preview({ environment, adds }: { environment: string; adds: Temp
     <div className="flex min-w-0 flex-col gap-2">
       <h3 className="m-0 text-body font-control">Adds to {envPath(environment)}</h3>
       {lines.length === 0 ? (
-        <p className="m-0 rounded-control border border-line bg-shell px-3 py-2.5 text-secondary text-muted">
+        <p className="m-0 rounded-control border border-line bg-shell px-3 py-3 text-secondary text-muted">
           Nothing yet. Fill in the fields above.
         </p>
       ) : (
@@ -181,7 +181,7 @@ export function ServerModes({
     onChange(next);
   };
   const row =
-    'flex flex-col gap-2 border-b border-line px-3 py-2.5 last:border-b-0 md:flex-row md:items-center md:justify-between md:gap-4';
+    'flex flex-col gap-2 border-b border-line px-3 py-3 last:border-b-0 md:flex-row md:items-center md:justify-between md:gap-4';
   return (
     <div className="flex flex-col gap-2">
       <h3 className="m-0 text-body font-control">What agents may do</h3>
@@ -215,7 +215,7 @@ export function ServerModes({
           </li>
         ))}
         {rows?.length === 0 ? (
-          <li className="px-3 py-2.5 text-secondary text-muted">
+          <li className="px-3 py-3 text-secondary text-muted">
             Test the server to see its tools. Until then every tool is allowed.
           </li>
         ) : null}
@@ -289,7 +289,7 @@ export function SlotSecret({
 /** A panel's header: the tool's mark, name and one line. */
 export function PanelHeader({ mark, title, description }: { mark: string; title: string; description: string }) {
   return (
-    <header className="flex items-start gap-3.5">
+    <header className="flex items-start gap-4">
       <span
         aria-hidden="true"
         className={cn(

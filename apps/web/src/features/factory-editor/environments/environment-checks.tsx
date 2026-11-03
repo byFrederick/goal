@@ -100,10 +100,10 @@ export function InlineProblems({
       {problems.map((p) => (
         <li
           key={`${p.pointer}${p.message}`}
-          className="flex flex-col gap-2 rounded-control bg-rework-tint px-3 py-2.5 text-secondary text-rework-ink md:flex-row md:items-center md:justify-between"
+          className="flex flex-col gap-2 rounded-control bg-rework-tint px-3 py-3 text-secondary text-rework-ink md:flex-row md:items-center md:justify-between"
         >
           <span className="flex items-start gap-2">
-            <TriangleAlert size={14} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0" />
+            <TriangleAlert size={14} strokeWidth={1.75} aria-hidden="true" className="mt-1 shrink-0" />
             <span>{p.message}</span>
           </span>
           <FixButtons fixes={p.fixes} apply={apply} disabled={readOnly} />
@@ -130,10 +130,8 @@ function Row({ icon, children, action }: { icon: ReactNode; children: ReactNode;
   );
 }
 
-const bad = (
-  <TriangleAlert size={16} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0 text-rework-ink" />
-);
-const good = <Check size={16} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0 text-ok-ink" />;
+const bad = <TriangleAlert size={16} strokeWidth={1.75} aria-hidden="true" className="mt-1 shrink-0 text-rework-ink" />;
+const good = <Check size={16} strokeWidth={1.75} aria-hidden="true" className="mt-1 shrink-0 text-ok-ink" />;
 
 export function ChecksCard({
   environment,

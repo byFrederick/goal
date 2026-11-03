@@ -153,9 +153,9 @@ export function TemplatePanel({
                 }
               >
                 {ok ? (
-                  <Check size={16} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0 text-ok-ink" />
+                  <Check size={16} strokeWidth={1.75} aria-hidden="true" className="mt-1 shrink-0 text-ok-ink" />
                 ) : (
-                  <TriangleAlert size={16} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0" />
+                  <TriangleAlert size={16} strokeWidth={1.75} aria-hidden="true" className="mt-1 shrink-0" />
                 )}
                 <span>
                   <span className="font-control">

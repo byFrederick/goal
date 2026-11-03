@@ -44,11 +44,15 @@ function Row({
       >
         <Initials name={mark} />
         <span className="flex min-w-0 flex-1 flex-col leading-tight">
-          <span className="truncate font-control">{title}</span>
-          <span className="truncate text-secondary text-muted">{description}</span>
+          <span className="truncate font-control" title={title}>
+            {title}
+          </span>
+          <span className="truncate text-secondary text-muted" title={description}>
+            {description}
+          </span>
         </span>
         {note ? (
-          <span className="flex shrink-0 items-center gap-1.5 text-secondary text-ink-soft">
+          <span className="flex shrink-0 items-center gap-2 text-secondary text-ink-soft">
             <span aria-hidden="true" className="size-1.5 rounded-full bg-ok" />
             {note}
           </span>

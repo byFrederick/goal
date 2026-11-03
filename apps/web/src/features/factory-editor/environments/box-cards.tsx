@@ -148,11 +148,11 @@ export function ToolsCard({ spec, change, readOnly }: CardProps) {
           {spec.tools.map((tool) => (
             <li
               key={tool}
-              className="flex items-center gap-1 rounded-control border border-rule bg-card pl-2.5 font-mono text-secondary max-md:min-h-11"
+              className="flex items-center gap-1 rounded-control border border-rule bg-card pl-3 font-mono text-secondary max-md:min-h-11"
             >
               {tool}
               {readOnly ? (
-                <span className="pr-2.5" />
+                <span className="pr-3" />
               ) : (
                 <button
                   type="button"
@@ -259,7 +259,7 @@ function EntryRows({ kind, spec, change, readOnly, newSecret }: CardProps & { ki
                     <button
                       type="button"
                       onClick={() => set(name, '')}
-                      className="press inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-control px-2 text-secondary text-ink hover:text-link md:min-h-8"
+                      className="press inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-control px-2 text-secondary text-ink hover:text-link md:min-h-8"
                     >
                       {secretMark}Use a secret
                     </button>

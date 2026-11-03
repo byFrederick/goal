@@ -65,7 +65,7 @@ export function knownTools(server: McpServer, test: ServerTest | undefined): str
 function StatusLine({ test, testing }: { test: ServerTest | undefined; testing: boolean }) {
   if (testing) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-secondary text-muted">
+      <span className="inline-flex items-center gap-2 text-secondary text-muted">
         <Loader2 size={13} aria-hidden="true" className="animate-spin" />
         Testing…
       </span>
@@ -76,7 +76,7 @@ function StatusLine({ test, testing }: { test: ServerTest | undefined; testing: 
   return (
     <span
       role="status"
-      className={cn('inline-flex items-center gap-1.5 text-secondary', test.ok ? 'text-ink-soft' : 'text-rework-ink')}
+      className={cn('inline-flex items-center gap-2 text-secondary', test.ok ? 'text-ink-soft' : 'text-rework-ink')}
     >
       <span aria-hidden="true" className={cn('size-1.5 rounded-full', test.ok ? 'bg-ok' : 'bg-rework')} />
       {test.ok ? `${test.tools.length} found` : `Failed: ${test.error ?? 'no answer'}`}
@@ -182,15 +182,19 @@ function ServerRow({
       summary={
         <span className="flex min-w-0 flex-1 items-start gap-3 md:items-center">
           <Initials name={name} />
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5 md:flex-row md:items-center md:justify-between md:gap-4">
-            <span className="flex min-w-0 flex-col gap-0.5">
-              <span className="truncate font-control">{name}</span>
-              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-secondary text-muted">
-                <span className="truncate font-mono">{endpointText(server)}</span>
+          <span className="flex min-w-0 flex-1 flex-col gap-1 md:flex-row md:items-center md:justify-between md:gap-4">
+            <span className="flex min-w-0 flex-col gap-1">
+              <span className="truncate font-control" title={name}>
+                {name}
+              </span>
+              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-secondary text-muted">
+                <span className="truncate font-mono" title={endpointText(server)}>
+                  {endpointText(server)}
+                </span>
                 {secrets.map((s) => (
                   <span
                     key={s}
-                    className="inline-flex items-center gap-1 rounded-chip bg-hover px-1.5 font-mono text-meta text-ink"
+                    className="inline-flex items-center gap-1 rounded-chip bg-hover px-2 font-mono text-meta text-ink"
                   >
                     {secretMark}
                     {s}
@@ -217,7 +221,7 @@ function ServerRow({
             {groups.map(({ group, tools: list }) => (
               <li
                 key={group}
-                className="flex flex-col gap-2 border-b border-line py-2.5 last:border-b-0 md:flex-row md:items-center md:justify-between md:gap-4"
+                className="flex flex-col gap-2 border-b border-line py-3 last:border-b-0 md:flex-row md:items-center md:justify-between md:gap-4"
               >
                 <span className="min-w-0 text-secondary">
                   <span className="font-control">{group}</span>{' '}

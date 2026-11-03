@@ -39,7 +39,7 @@ export function Card({
     <section aria-labelledby={id} className={cn(cardClass, className)}>
       <div
         className={cn(
-          'flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-line py-3.5',
+          'flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-line py-4',
           rowPad,
         )}
       >

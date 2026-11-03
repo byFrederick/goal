@@ -202,7 +202,7 @@ function EnvironmentView({ name, agents }: { name: string; agents: string[] }) {
           ) : (
             <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
               {agents.map((a) => (
-                <li key={a} className="rounded-chip bg-hover px-2.5 py-0.5 text-ink">
+                <li key={a} className="rounded-chip bg-hover px-3 py-1 text-ink">
                   {a}
                 </li>
               ))}
