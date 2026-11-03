@@ -293,7 +293,7 @@ func moveOver(ctx context.Context, store *postgres.Store, connections *postgres.
 	clock ports.Clock, log *slog.Logger,
 ) {
 	err := moveover.New(moveover.Deps{
-		Orgs: store, Connections: connections, Secrets: secrets, Knowledge: postgres.NewKnowledge(store), Definitions: definitions,
+		Orgs: store, Connections: connections, Secrets: secrets, Settings: postgres.NewNotificationSettings(store), Knowledge: postgres.NewKnowledge(store), Definitions: definitions,
 		Publisher: authors, Conversions: postgres.NewFactoryConversions(store), CodeHosts: hosts, Tools: tools, Clock: clock, Logger: log,
 	}).Run(ctx)
 	if err != nil {
