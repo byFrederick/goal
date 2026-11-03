@@ -235,6 +235,7 @@ var operationScopes = map[string]string{
 	"syncKnowledgeSource":         "knowledge:manage",
 	"testConnection":              "connection:manage",
 	"testEnvironment":             "definition:edit",
+	"testRepository":              "factory:create",
 	"transferOwnership":           "org:transfer",
 	"tryIntakeTrigger":            "trigger:try",
 	"tryJudge":                    "definition:publish",

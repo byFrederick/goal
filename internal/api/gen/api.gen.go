@@ -5050,10 +5050,10 @@ type KnowledgeSearchResult struct {
 
 // KnowledgeSource One source of the organization's knowledge base (spec 4 §4.8)
 type KnowledgeSource struct {
-	// Config What its reader reads (a repository, a branch and path globs; a Confluence space)
+	// Config What its reader reads (a repository, a branch and path globs; a Confluence space). A synced source on a secret also names its reader (reader: gitdocs or confluence) and, for confluence, the site and the account's email.
 	Config map[string]string `json:"config"`
 
-	// Connection The connection a synced or live source reads; absent for an upload source
+	// Connection The connection a live source reads, or a synced one not yet on a secret; absent for an upload source
 	Connection *string   `json:"connection,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
 
@@ -5075,6 +5075,9 @@ type KnowledgeSource struct {
 
 	// NextSyncAt When it is due next; null for a live source
 	NextSyncAt *time.Time `json:"next_sync_at"`
+
+	// Secret The secret a synced source reads with, opened at each sync; absent for an upload or live source and a synced one still on its connection
+	Secret *string `json:"secret,omitempty"`
 
 	// Status syncing while a goald holds it; failed after a sync that stopped (last_error says why)
 	Status KnowledgeSourceStatus `json:"status"`
@@ -5105,9 +5108,12 @@ type KnowledgeSourceName = string
 // KnowledgeSourcePatch defines model for KnowledgeSourcePatch.
 type KnowledgeSourcePatch struct {
 	// Config Replaces the config
-	Config           *map[string]string `json:"config,omitempty"`
-	SyncEverySeconds *int               `json:"sync_every_seconds,omitempty"`
-	Title            *string            `json:"title,omitempty"`
+	Config *map[string]string `json:"config,omitempty"`
+
+	// Secret A synced source's new secret: it reads with it from its next sync
+	Secret           *SecretName `json:"secret,omitempty"`
+	SyncEverySeconds *int        `json:"sync_every_seconds,omitempty"`
+	Title            *string     `json:"title,omitempty"`
 }
 
 // KnowledgeSourceUsers What uses a source, so it cannot be deleted meanwhile
@@ -5532,14 +5538,18 @@ type NewItem struct {
 
 // NewKnowledgeSource defines model for NewKnowledgeSource.
 type NewKnowledgeSource struct {
+	// Config What its reader reads. A synced source names its reader (reader: gitdocs or confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or on the host code_host names: github or gitlab), branch, include and exclude; confluence reads site, email and spaces.
 	Config *map[string]string `json:"config,omitempty"`
 
-	// Connection The connection a synced or live source reads
+	// Connection The connection a live source reads
 	Connection *string             `json:"connection,omitempty"`
 	Kind       KnowledgeSourceKind `json:"kind"`
 
 	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
 	Name KnowledgeSourceName `json:"name"`
+
+	// Secret The secret a synced source reads with: the code host's token for gitdocs, the API token for confluence. It must be open to all factories.
+	Secret *SecretName `json:"secret,omitempty"`
 
 	// SyncEverySeconds How often it syncs (default 3600)
 	SyncEverySeconds *int   `json:"sync_every_seconds,omitempty"`
@@ -6279,6 +6289,14 @@ type Repository struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// RepositoryCheck defines model for RepositoryCheck.
+type RepositoryCheck struct {
+	Ok bool `json:"ok"`
+
+	// Reason The host's one-line reason
+	Reason string `json:"reason"`
+}
+
 // RepositoryList What a code host connection reaches (GET …/connections/{connection}/repositories)
 type RepositoryList struct {
 	// Login The account the connection's credential signs in as
@@ -6305,6 +6323,24 @@ type RepositoryOwner struct {
 
 // RepositoryOwnerKind defines model for RepositoryOwner.Kind.
 type RepositoryOwnerKind string
+
+// RepositoryTestRequest defines model for RepositoryTestRequest.
+type RepositoryTestRequest struct {
+	// Secret 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+	Secret SecretName `json:"secret"`
+
+	// Url The repository's https URL, such as https://github.com/acme/app
+	Url string `json:"url"`
+}
+
+// RepositoryTestResult defines model for RepositoryTestResult.
+type RepositoryTestResult struct {
+	Push RepositoryCheck `json:"push"`
+	Read RepositoryCheck `json:"read"`
+
+	// Tested false when the host gave no answer within 10 seconds: read and push then say couldn't test
+	Tested bool `json:"tested"`
+}
 
 // RestoreRequest defines model for RestoreRequest.
 type RestoreRequest struct {
@@ -8372,6 +8408,9 @@ type CreatePersonalTokenJSONRequestBody = NewPersonalToken
 // PutOrgPolicyJSONRequestBody defines body for PutOrgPolicy for application/json ContentType.
 type PutOrgPolicyJSONRequestBody = OrgPolicyInput
 
+// TestRepositoryJSONRequestBody defines body for TestRepository for application/json ContentType.
+type TestRepositoryJSONRequestBody = RepositoryTestRequest
+
 // CreateSecretJSONRequestBody defines body for CreateSecret for application/json ContentType.
 type CreateSecretJSONRequestBody = NewSecret
 
@@ -10268,7 +10307,7 @@ type ClientInterface interface {
 
 	// CreateKnowledgeSourceWithBody Add a source to the knowledge base
 	//
-	// An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+	// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -10277,7 +10316,7 @@ type ClientInterface interface {
 
 	// CreateKnowledgeSource Add a source to the knowledge base
 	//
-	// An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+	// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -10300,7 +10339,7 @@ type ClientInterface interface {
 
 	// UpdateKnowledgeSourceWithBody Change a source's title, config or schedule
 	//
-	// config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+	// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -10309,7 +10348,7 @@ type ClientInterface interface {
 
 	// UpdateKnowledgeSource Change a source's title, config or schedule
 	//
-	// config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+	// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -10460,6 +10499,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
 	PutOrgPolicy(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, body PutOrgPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestRepositoryWithBody Test a token's read and push access to a repository
+	//
+	// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
+	TestRepositoryWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestRepository Test a token's read and push access to a repository
+	//
+	// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
+	TestRepository(ctx context.Context, org OrgRef, body TestRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListRuns The organization's agent runs across the factories the caller sees, newest first
 	//
@@ -14264,7 +14321,7 @@ func (c *Client) ListKnowledgeSources(ctx context.Context, org OrgRef, params *L
 
 // CreateKnowledgeSourceWithBody Add a source to the knowledge base
 //
-// An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 //
 // Takes any type of body and a specified content type.
 //
@@ -14283,7 +14340,7 @@ func (c *Client) CreateKnowledgeSourceWithBody(ctx context.Context, org OrgRef, 
 
 // CreateKnowledgeSource Add a source to the knowledge base
 //
-// An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -14336,7 +14393,7 @@ func (c *Client) GetKnowledgeSource(ctx context.Context, org OrgRef, source Sour
 
 // UpdateKnowledgeSourceWithBody Change a source's title, config or schedule
 //
-// config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
 //
 // Takes any type of body and a specified content type.
 //
@@ -14355,7 +14412,7 @@ func (c *Client) UpdateKnowledgeSourceWithBody(ctx context.Context, org OrgRef, 
 
 // UpdateKnowledgeSource Change a source's title, config or schedule
 //
-// config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -14697,6 +14754,44 @@ func (c *Client) PutOrgPolicyWithBody(ctx context.Context, org OrgRef, params *P
 // Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
 func (c *Client) PutOrgPolicy(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, body PutOrgPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutOrgPolicyRequest(c.Server, org, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestRepositoryWithBody Test a token's read and push access to a repository
+//
+// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
+func (c *Client) TestRepositoryWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestRepositoryRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestRepository Test a token's read and push access to a repository
+//
+// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
+func (c *Client) TestRepository(ctx context.Context, org OrgRef, body TestRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestRepositoryRequest(c.Server, org, body)
 	if err != nil {
 		return nil, err
 	}
@@ -24269,6 +24364,53 @@ func NewPutOrgPolicyRequestWithBody(server string, org OrgRef, params *PutOrgPol
 	return req, nil
 }
 
+// NewTestRepositoryRequest calls the generic TestRepository builder with application/json body
+func NewTestRepositoryRequest(server string, org OrgRef, body TestRepositoryJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTestRepositoryRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewTestRepositoryRequestWithBody constructs an http.Request for the TestRepository method, with any body, and a specified content type
+func NewTestRepositoryRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/repositories/test", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewListRunsRequest constructs an http.Request for the ListRuns method
 func NewListRunsRequest(server string, org OrgRef, params *ListRunsParams) (*http.Request, error) {
 	var err error
@@ -27556,7 +27698,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateKnowledgeSourceWithBodyWithResponse Add a source to the knowledge base
 	//
-	// An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+	// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -27565,7 +27707,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateKnowledgeSourceWithResponse Add a source to the knowledge base
 	//
-	// An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+	// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -27592,7 +27734,7 @@ type ClientWithResponsesInterface interface {
 
 	// UpdateKnowledgeSourceWithBodyWithResponse Change a source's title, config or schedule
 	//
-	// config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+	// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -27601,7 +27743,7 @@ type ClientWithResponsesInterface interface {
 
 	// UpdateKnowledgeSourceWithResponse Change a source's title, config or schedule
 	//
-	// config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+	// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -27776,6 +27918,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
 	PutOrgPolicyWithResponse(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, body PutOrgPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*PutOrgPolicyResponse, error)
+
+	// TestRepositoryWithBodyWithResponse Test a token's read and push access to a repository
+	//
+	// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
+	TestRepositoryWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestRepositoryResponse, error)
+
+	// TestRepositoryWithResponse Test a token's read and push access to a repository
+	//
+	// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
+	TestRepositoryWithResponse(ctx context.Context, org OrgRef, body TestRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*TestRepositoryResponse, error)
 
 	// ListRunsWithResponse The organization's agent runs across the factories the caller sees, newest first
 	//
@@ -36197,6 +36357,54 @@ func (r PutOrgPolicyResponse) ContentType() string {
 	return ""
 }
 
+type TestRepositoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RepositoryTestResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TestRepositoryResponse) GetJSON200() *RepositoryTestResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TestRepositoryResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TestRepositoryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TestRepositoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TestRepositoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TestRepositoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListRunsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -40470,7 +40678,7 @@ func (c *ClientWithResponses) ListKnowledgeSourcesWithResponse(ctx context.Conte
 
 // CreateKnowledgeSourceWithBodyWithResponse Add a source to the knowledge base
 //
-// An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -40485,7 +40693,7 @@ func (c *ClientWithResponses) CreateKnowledgeSourceWithBodyWithResponse(ctx cont
 
 // CreateKnowledgeSourceWithResponse Add a source to the knowledge base
 //
-// An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -40530,7 +40738,7 @@ func (c *ClientWithResponses) GetKnowledgeSourceWithResponse(ctx context.Context
 
 // UpdateKnowledgeSourceWithBodyWithResponse Change a source's title, config or schedule
 //
-// config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -40545,7 +40753,7 @@ func (c *ClientWithResponses) UpdateKnowledgeSourceWithBodyWithResponse(ctx cont
 
 // UpdateKnowledgeSourceWithResponse Change a source's title, config or schedule
 //
-// config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -40839,6 +41047,36 @@ func (c *ClientWithResponses) PutOrgPolicyWithResponse(ctx context.Context, org 
 		return nil, err
 	}
 	return ParsePutOrgPolicyResponse(rsp)
+}
+
+// TestRepositoryWithBodyWithResponse Test a token's read and push access to a repository
+//
+// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
+func (c *ClientWithResponses) TestRepositoryWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestRepositoryResponse, error) {
+	rsp, err := c.TestRepositoryWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestRepositoryResponse(rsp)
+}
+
+// TestRepositoryWithResponse Test a token's read and push access to a repository
+//
+// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
+func (c *ClientWithResponses) TestRepositoryWithResponse(ctx context.Context, org OrgRef, body TestRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*TestRepositoryResponse, error) {
+	rsp, err := c.TestRepository(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestRepositoryResponse(rsp)
 }
 
 // ListRunsWithResponse The organization's agent runs across the factories the caller sees, newest first
@@ -47073,6 +47311,39 @@ func ParsePutOrgPolicyResponse(rsp *http.Response) (*PutOrgPolicyResponse, error
 	return response, nil
 }
 
+// ParseTestRepositoryResponse parses an HTTP response from a TestRepositoryWithResponse call
+func ParseTestRepositoryResponse(rsp *http.Response) (*TestRepositoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TestRepositoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RepositoryTestResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListRunsResponse parses an HTTP response from a ListRunsWithResponse call
 func ParseListRunsResponse(rsp *http.Response) (*ListRunsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -48529,6 +48800,9 @@ type ServerInterface interface {
 	// PutOrgPolicy Replace the organization's policy
 	// (PUT /v1/orgs/{org}/policy)
 	PutOrgPolicy(w http.ResponseWriter, r *http.Request, org OrgRef, params PutOrgPolicyParams)
+	// TestRepository Test a token's read and push access to a repository
+	// (POST /v1/orgs/{org}/repositories/test)
+	TestRepository(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// ListRuns The organization's agent runs across the factories the caller sees, newest first
 	// (GET /v1/orgs/{org}/runs)
 	ListRuns(w http.ResponseWriter, r *http.Request, org OrgRef, params ListRunsParams)
@@ -55556,6 +55830,32 @@ func (siw *ServerInterfaceWrapper) PutOrgPolicy(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// TestRepository operation middleware
+func (siw *ServerInterfaceWrapper) TestRepository(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestRepository(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListRuns operation middleware
 func (siw *ServerInterfaceWrapper) ListRuns(w http.ResponseWriter, r *http.Request) {
 
@@ -56873,6 +57173,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.PullAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon/clear", wrapper.ClearAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/environments/{environment}/test", wrapper.TestEnvironment)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/repositories/test", wrapper.TestRepository)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks", wrapper.ListWebhookEndpoints)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks", wrapper.CreateWebhookEndpoint)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}", wrapper.DeleteWebhookEndpoint)
@@ -64007,6 +64308,46 @@ func (response PutOrgPolicydefaultApplicationProblemPlusJSONResponse) VisitPutOr
 	return err
 }
 
+type TestRepositoryRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *TestRepositoryJSONRequestBody
+}
+
+type TestRepositoryResponseObject interface {
+	VisitTestRepositoryResponse(w http.ResponseWriter) error
+}
+
+type TestRepository200JSONResponse RepositoryTestResult
+
+func (response TestRepository200JSONResponse) VisitTestRepositoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestRepositorydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response TestRepositorydefaultApplicationProblemPlusJSONResponse) VisitTestRepositoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListRunsRequestObject struct {
 	Org    OrgRef `json:"org"`
 	Params ListRunsParams
@@ -65722,6 +66063,9 @@ type StrictServerInterface interface {
 	// PutOrgPolicy Replace the organization's policy
 	// (PUT /v1/orgs/{org}/policy)
 	PutOrgPolicy(ctx context.Context, request PutOrgPolicyRequestObject) (PutOrgPolicyResponseObject, error)
+	// TestRepository Test a token's read and push access to a repository
+	// (POST /v1/orgs/{org}/repositories/test)
+	TestRepository(ctx context.Context, request TestRepositoryRequestObject) (TestRepositoryResponseObject, error)
 	// ListRuns The organization's agent runs across the factories the caller sees, newest first
 	// (GET /v1/orgs/{org}/runs)
 	ListRuns(ctx context.Context, request ListRunsRequestObject) (ListRunsResponseObject, error)
@@ -70805,6 +71149,39 @@ func (sh *strictHandler) PutOrgPolicy(w http.ResponseWriter, r *http.Request, or
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PutOrgPolicyResponseObject); ok {
 		if err := validResponse.VisitPutOrgPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestRepository operation middleware
+func (sh *strictHandler) TestRepository(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request TestRepositoryRequestObject
+
+	request.Org = org
+
+	var body TestRepositoryJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestRepository(ctx, request.(TestRepositoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestRepository")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestRepositoryResponseObject); ok {
+		if err := validResponse.VisitTestRepositoryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

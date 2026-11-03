@@ -27,6 +27,9 @@ var (
 	errSecretNotFound = errors.New("secret not found")
 	errSecretTaken    = errors.New("secret name taken")
 	errSecretInvalid  = errors.New("secret invalid")
+	// errSecretNotAllowed is a secret opened without a factory, such as a repository test's or a
+	// knowledge source's, that is open to some factories only.
+	errSecretNotAllowed = errors.New("secret not open to all factories")
 	// errSecretsUnavailable is a value to seal while goald has no master key.
 	errSecretsUnavailable = errors.New("secrets unavailable")
 )
@@ -72,6 +75,7 @@ func secretProblem(err error) (gen.Problem, bool) {
 		{errSecretNotFound, http.StatusNotFound, "secret-not-found"},
 		{errSecretTaken, http.StatusConflict, "secret-name-taken"},
 		{errSecretInvalid, http.StatusBadRequest, "secret-invalid"},
+		{errSecretNotAllowed, http.StatusBadRequest, "secret-not-allowed"},
 	}
 
 	for _, a := range answers {
@@ -96,6 +100,8 @@ func secretError(err error) error {
 		return fmt.Errorf("%w: %w", errSecretNotFound, err)
 	case errors.Is(err, ports.ErrNameTaken):
 		return fmt.Errorf("%w: %w", errSecretTaken, err)
+	case errors.Is(err, ports.ErrSecretNotAllowed):
+		return fmt.Errorf("%w: %w", errSecretNotAllowed, err)
 	case errors.Is(err, ports.ErrNoMasterKey):
 		return fmt.Errorf("%w: %w", errSecretsUnavailable, err)
 	case errors.Is(err, domain.ErrInvalid):

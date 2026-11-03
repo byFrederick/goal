@@ -187,6 +187,8 @@ type Deps struct {
 	// as the engine has them; they list what a connection reaches. Without one, no kind is a code
 	// host here.
 	CodeHosts map[string]ports.CodeHost
+	// RepositoryTestTimeout bounds a repository test's call to its code host; 0 is 10 seconds.
+	RepositoryTestTimeout time.Duration
 	// Credentials are the organization's credentials (ADR 0017), which connections refer to as
 	// {{name}}.
 	Credentials ports.Credentials
@@ -311,6 +313,7 @@ func New(d Deps) (http.Handler, error) {
 		engine: d.Engine, items: d.Items, factories: d.Factories, defs: d.Definitions, versions: d.Versions, orgs: d.Orgs, audit: d.Audit,
 		retention: d.OrgRetention, authz: d.Authorizer, auth: d.Auth, identity: d.Identity, access: d.Access, platform: d.Platform, feed: d.Feed,
 		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, secrets: d.OrgSecrets, catalog: slices.Clone(d.Catalog), envTests: d.EnvironmentTests, tools: d.ToolLister, conversions: d.Conversions, intake: d.Intake, draftRequests: d.DraftRequests, parseKind: d.ParseKind, codehosts: d.CodeHosts,
+		repoTestTimeout:  cmp.Or(d.RepositoryTestTimeout, connectionTestTimeout),
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes,
 		policies: d.OrgPolicies, notifications: d.NotificationPreferences, boxSizes: slices.Clone(d.BoxSizes), egress: slices.Clone(d.EgressAddresses),
@@ -433,6 +436,8 @@ type server struct {
 	connectionClient *http.Client
 	// codehosts list what code host connections reach.
 	codehosts map[string]ports.CodeHost
+	// repoTestTimeout bounds a repository test's call to its code host.
+	repoTestTimeout time.Duration
 	// credentials serve the credential routes.
 	credentials ports.Credentials
 	// secrets serve the secret routes.
@@ -709,7 +714,7 @@ func problemOf(err error) gen.Problem {
 	// definitions' (all wrap ports.ErrNameTaken); the secrets' and the credentials' before the
 	// connections' (all wrap ports.ErrNoMasterKey).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, exportProblem, policyProblem, notificationProblem, signupDomainProblem, edgeProblem, partProblem, secretProblem, environmentTestProblem, credentialProblem, webhookProblem, viewProblem, connectionProblem, knowledgeProblem, judgeProblem, evalProblem, jonahProblem, definitionProblem,
+		fixedProblem, exportProblem, policyProblem, notificationProblem, signupDomainProblem, edgeProblem, partProblem, secretProblem, environmentTestProblem, repositoryTestProblem, credentialProblem, webhookProblem, viewProblem, connectionProblem, knowledgeProblem, judgeProblem, evalProblem, jonahProblem, definitionProblem,
 		controlProblem, questionProblem, toolApprovalProblem, agentProblem, draftRequestProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {

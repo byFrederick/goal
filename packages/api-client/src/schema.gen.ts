@@ -2381,6 +2381,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/repositories/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test a token's read and push access to a repository
+         * @description Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+         */
+        post: operations["testRepository"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/webhooks": {
         parameters: {
             query?: never;
@@ -3686,7 +3709,7 @@ export interface paths {
         put?: never;
         /**
          * Add a source to the knowledge base
-         * @description An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+         * @description An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
          */
         post: operations["createKnowledgeSource"];
         delete?: never;
@@ -3723,7 +3746,7 @@ export interface paths {
         head?: never;
         /**
          * Change a source's title, config or schedule
-         * @description config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+         * @description config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
          */
         patch: operations["updateKnowledgeSource"];
         trace?: never;
@@ -8044,6 +8067,22 @@ export interface components {
                 [key: string]: string;
             };
         };
+        RepositoryTestRequest: {
+            /** @description The repository's https URL, such as https://github.com/acme/app */
+            url: string;
+            secret: components["schemas"]["SecretName"];
+        };
+        RepositoryTestResult: {
+            /** @description false when the host gave no answer within 10 seconds: read and push then say couldn't test */
+            tested: boolean;
+            read: components["schemas"]["RepositoryCheck"];
+            push: components["schemas"]["RepositoryCheck"];
+        };
+        RepositoryCheck: {
+            ok: boolean;
+            /** @description The host's one-line reason */
+            reason: string;
+        };
         EnvironmentTestResult: {
             environment: string;
             /** @description The version tested: draft or its number */
@@ -8282,9 +8321,11 @@ export interface components {
             name: components["schemas"]["KnowledgeSourceName"];
             title: string;
             kind: components["schemas"]["KnowledgeSourceKind"];
-            /** @description The connection a synced or live source reads; absent for an upload source */
+            /** @description The connection a live source reads, or a synced one not yet on a secret; absent for an upload source */
             connection?: string;
-            /** @description What its reader reads (a repository, a branch and path globs; a Confluence space) */
+            /** @description The secret a synced source reads with, opened at each sync; absent for an upload or live source and a synced one still on its connection */
+            secret?: string;
+            /** @description What its reader reads (a repository, a branch and path globs; a Confluence space). A synced source on a secret also names its reader (reader: gitdocs or confluence) and, for confluence, the site and the account's email. */
             config: {
                 [key: string]: string;
             };
@@ -8325,8 +8366,11 @@ export interface components {
             name: components["schemas"]["KnowledgeSourceName"];
             title: string;
             kind: components["schemas"]["KnowledgeSourceKind"];
-            /** @description The connection a synced or live source reads */
+            /** @description The connection a live source reads */
             connection?: string;
+            /** @description The secret a synced source reads with: the code host's token for gitdocs, the API token for confluence. It must be open to all factories. */
+            secret?: components["schemas"]["SecretName"];
+            /** @description What its reader reads. A synced source names its reader (reader: gitdocs or confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or on the host code_host names: github or gitlab), branch, include and exclude; confluence reads site, email and spaces. */
             config?: {
                 [key: string]: string;
             };
@@ -8335,6 +8379,8 @@ export interface components {
         };
         KnowledgeSourcePatch: {
             title?: string;
+            /** @description A synced source's new secret: it reads with it from its next sync */
+            secret?: components["schemas"]["SecretName"];
             /** @description Replaces the config */
             config?: {
                 [key: string]: string;
@@ -11864,6 +11910,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EnvironmentTestResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    testRepository: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RepositoryTestRequest"];
+            };
+        };
+        responses: {
+            /** @description The results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepositoryTestResult"];
                 };
             };
             default: components["responses"]["Problem"];
