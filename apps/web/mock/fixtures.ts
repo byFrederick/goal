@@ -275,7 +275,7 @@ const runsPage: Record<'software' | 'sre' | 'support', Seed[]> = {
       body: 'The lease expiry test fails about one run in five.',
       station: 'build',
       state: 'in_progress',
-      createdMin: 30,
+      createdMin: 23,
       updatedMin: 0,
       steps: [
         { move: 'build' },

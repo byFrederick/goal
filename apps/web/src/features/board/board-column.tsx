@@ -108,16 +108,16 @@ function ColumnHeader({
             Constraint
           </span>
         ) : null}
-        <span className="ml-auto whitespace-nowrap text-secondary font-medium text-muted tabular-nums">
+        <span className="ml-auto shrink-0 whitespace-nowrap text-secondary font-medium text-muted tabular-nums">
           {columnCount(station)}
         </span>
       </div>
       <WipMeter station={station} />
-      <div className="flex items-baseline justify-between gap-2 text-meta text-muted">
-        <span className="min-w-0 truncate" title={left}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-meta text-muted">
+        <span className="min-w-0 max-w-full truncate" title={left}>
           {left}
         </span>
-        <span className="shrink-0 whitespace-nowrap tabular-nums">{right}</span>
+        <span className="min-w-0 max-w-full whitespace-nowrap tabular-nums">{right}</span>
       </div>
     </header>
   );
@@ -203,7 +203,7 @@ export function StationColumn({
   return (
     <DropColumn
       station={station}
-      className={cn('min-w-0', inBoard !== undefined ? 'grid grid-rows-subgrid' : 'flex flex-col gap-2')}
+      className={cn('min-w-0', inBoard !== undefined ? 'grid grid-cols-1 grid-rows-subgrid' : 'flex flex-col gap-2')}
       {...(inBoard !== undefined
         ? { style: { gridColumn: inBoard, gridRow: `1 / span ${showExpedite ? 3 : 2}` } }
         : {})}
