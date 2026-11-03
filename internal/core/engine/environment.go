@@ -22,9 +22,27 @@ var errNoOrgSecrets = errors.New("this goald has no secrets store")
 // key's value as domain.ModelKeyEnv names it; every value opened joins the run's secrets, so it
 // is scrubbed. A failure names the secret and the environment, never a value. env is zero for a
 // run that gets the model key alone (a Jonah run, a definition run, Use credentials off).
-func (e *Engine) secretEnv(ctx context.Context, use domain.SecretUse, modelKey string, env domain.Environment) (runEnv, error) {
+//
+// repo's token, when it has a URL and one, is opened in the same call and goes to prepare alone,
+// as domain.RepositoryTokenEnv: it signs git in for the clone, the base branch's push and, from
+// the login prepare keeps, the agent's own push, but it is not in the agent's env unless env names
+// the secret too. repo is zero for a run that clones nothing.
+func (e *Engine) secretEnv(
+	ctx context.Context, use domain.SecretUse, modelKey string, env domain.Environment, repo domain.Repository,
+) (runEnv, error) {
 	vars := slices.Sorted(maps.Keys(env.Env))
 	names := domain.SecretNames(modelKey)
+
+	var tokenNames []string
+	if repo.URL != "" {
+		tokenNames = domain.SecretNames(repo.Token)
+	}
+
+	for _, n := range tokenNames {
+		if !slices.Contains(names, n) {
+			names = append(names, n)
+		}
+	}
 
 	for _, v := range vars {
 		for _, n := range domain.SecretNames(env.Env[v]) {
@@ -34,7 +52,7 @@ func (e *Engine) secretEnv(ctx context.Context, use domain.SecretUse, modelKey s
 		}
 	}
 
-	values, err := e.openSecrets(ctx, names, use, env.Name)
+	values, err := e.openSecrets(ctx, names, use, env.Name, len(tokenNames) > 0)
 	if err != nil {
 		return runEnv{}, err
 	}
@@ -60,19 +78,29 @@ func (e *Engine) secretEnv(ctx context.Context, use domain.SecretUse, modelKey s
 
 	out.agent[keyEnv] = key
 
+	if len(tokenNames) > 0 {
+		out.prepare[domain.RepositoryTokenEnv] = domain.FillSecrets(repo.Token, values)
+		out.repositoryLogin = true
+	}
+
 	return out, nil
 }
 
 // openSecrets opens names for use's run, by name; none opens nothing. Its error names the
-// environment the run gets, if any, and wraps the port's, which names the secret.
-func (e *Engine) openSecrets(ctx context.Context, names []string, use domain.SecretUse, env string) (map[string]string, error) {
+// environment the run gets, if any, and runtime.repository.token when repo, and wraps the port's,
+// which names the secret.
+func (e *Engine) openSecrets(ctx context.Context, names []string, use domain.SecretUse, env string, repo bool) (map[string]string, error) {
 	if len(names) == 0 {
 		return nil, nil
 	}
 
 	where := "runtime.modelKey"
+	if repo {
+		where += ", runtime.repository.token"
+	}
+
 	if env != "" {
-		where = "runtime.modelKey and environment " + env
+		where += " and environment " + env
 	}
 
 	if e.orgSecrets == nil {

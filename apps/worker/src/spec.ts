@@ -13,6 +13,8 @@ export const paths = {
   workspace: '/workspace',
   /** Claude Code's config dir for this run, in the sandbox's throwaway home; never the host's. */
   claudeConfig: '/home/node/.claude',
+  /** The sandbox's throwaway home, where git's global config and credential store go. */
+  home: '/home/node',
 } as const;
 
 /** A variable name; never an option or a shell word. */
@@ -238,11 +240,16 @@ const bundlePath = relativePath
   .refine((p) => p !== 'spec.json', 'spec.json is the spec')
   .refine((p) => p !== 'definition.json', 'definition.json is the definition baseline');
 
-/** A git login for https://<host>: the user name and the variable that holds the password. */
+/**
+ * A git login for https://<host>: the user name and the variable that holds the password. With
+ * store (the repository token's login, ADR 0037 decision 7), prepare keeps it in git's credential
+ * store, so git commands after prepare sign in without the variable.
+ */
 export const GitCredential = z.object({
   host: z.string().regex(/^[A-Za-z0-9.-]+(:\d{1,5})?$/),
   username: z.string().regex(/^[A-Za-z0-9._@+-]+$/),
   password_env: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+  store: z.boolean().optional(),
 });
 export type GitCredential = z.infer<typeof GitCredential>;
 

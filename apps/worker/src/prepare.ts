@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { gitWithRetry } from './retry.js';
 import { Bundle, type GitCredential } from './spec.js';
@@ -23,8 +23,11 @@ export interface PrepareDeps {
   output: Output;
   env: NodeJS.ProcessEnv;
   now: () => Date;
-  /** Where the bundle's files go (/goal), the repository is cloned (/workspace) and Claude Code's config dir (claude). */
-  dirs: { goal: string; workspace: string; claude: string };
+  /**
+   * Where the bundle's files go (/goal), the repository is cloned (/workspace), Claude Code's config
+   * dir (claude) and the box's home, where git's credential store goes.
+   */
+  dirs: { goal: string; workspace: string; claude: string; home: string };
   /** The wait between attempts of a network git step; setTimeout when absent. */
   sleep?: (ms: number) => Promise<void>;
   /** Where a retry is logged; stderr when absent. */
@@ -68,7 +71,8 @@ type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
 /**
  * goal-agent prepare: fetches the run bundle from the gateway with the run's task token and
  * sets the sandbox up for `goal-agent run`. It writes /goal (spec.json and the agent's files),
- * configures a git credential helper per bundle credential, clones the repository into
+ * configures a git credential helper per bundle credential (a stored one in git's credential store
+ * under the box's home: storeCredentials), clones the repository into
  * /workspace on the item's branch (the remote one when it exists, otherwise new from the base: the
  * bundle's repository.base, created from the default branch when missing, or the default branch),
  * brings an existing branch up to date with that base (fresh_base: rebase or merge; a conflict is
@@ -96,14 +100,19 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
     await put(join(deps.dirs.claude, 'rules', `${rule.name}.md`), rule.content);
   }
   // Definition mode has no repository: nothing signs git in.
-  for (const c of bundle.definition ? [] : bundle.git_credentials) {
+  const credentials = bundle.definition ? [] : bundle.git_credentials;
+  const store = await storeCredentials(
+    deps,
+    credentials.filter((c) => c.store),
+  );
+  for (const c of credentials) {
     // --add: two connections may sign git in to one host; git asks each helper until one answers.
     await must(deps, 'git', [
       'config',
       '--global',
       '--add',
       `credential.https://${c.host}.helper`,
-      credentialHelper(c),
+      c.store ? `store --file '${store}'` : credentialHelper(c),
     ]);
   }
 
@@ -241,6 +250,27 @@ async function freshen(deps: PrepareDeps, ws: string, mode: FreshBase, onto?: st
 export function credentialHelper(c: GitCredential): string {
   const v = c.password_env;
   return `!f() { if [ "$1" = get ] && [ -n "$${v}" ]; then printf 'username=%s\\npassword=%s\\n' '${c.username}' "$${v}"; fi; }; f`;
+}
+
+/**
+ * Saves the stored logins (the repository token's, ADR 0037 decision 7) in git's credential store,
+ * <home>/.git-credentials with mode 0600, outside /workspace and /goal, so the clone, the base's push
+ * and the agent's own push sign in after prepare, when the agent's env has no password variable.
+ * A login whose variable is unset or empty is left out, so git fails without a prompt. The box is
+ * thrown away after its run, and the file with it. Returns the file's path.
+ */
+async function storeCredentials(deps: PrepareDeps, stored: GitCredential[]): Promise<string> {
+  const file = join(deps.dirs.home, '.git-credentials');
+  const lines = stored.flatMap((c) => {
+    const password = deps.env[c.password_env];
+    if (!password) return [];
+    return [`https://${encodeURIComponent(c.username)}:${encodeURIComponent(password)}@${c.host}\n`];
+  });
+  if (lines.length === 0) return file;
+  await mkdir(deps.dirs.home, { recursive: true });
+  await writeFile(file, lines.join(''), { mode: 0o600 });
+  await chmod(file, 0o600);
+  return file;
 }
 
 async function fetchBundle(deps: PrepareDeps, url: URL, token: string): Promise<Bundle> {

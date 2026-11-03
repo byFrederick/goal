@@ -16,7 +16,7 @@ A secret is an organization's named value. It has:
 - an optional description, an optional expiry and a reminder of 1 to 90 days before it;
 - a scope: all factories, including ones created later, or a list of factories.
 
-The Secrets page lists them with where each is used, when it was last used and what expires soon. **New secret** opens a side sheet, and **Import** reads a `.env` or YAML file and checks it before anything is saved. A secret's page shows its scope, its expiry and its uses, and has Replace value and Delete. Delete is disabled, with the reason, while a published definition, a knowledge source, a webhook or the organization's Slack setting uses the secret. Changing a secret needs an owner or admin who has signed in within the last 10 minutes. Everyone in the organization can read the list, never a value.
+The Secrets page lists them with where each is used, when it was last used and what expires soon. **New secret** opens a side sheet, and **Import** reads a `.env` or YAML file and checks it before anything is saved. A secret's page shows its scope, its expiry and its uses, and has Replace value and Delete. Delete is disabled, with the reason, while something uses the secret: a factory's current published version that refers to it as its repository token, its model key, a trigger's model-agrees key or from an environment file, a knowledge source that reads with it, or a connection that refers to it. An archived factory doesn't count. Changing a secret needs an owner or admin who has signed in within the last 10 minutes. Everyone in the organization can read the list, never a value.
 
 Values come in only by pasting them, through standard input or from an import file, never on the command line, and no command prints one.
 
@@ -56,6 +56,8 @@ Two secrets are named in the factory's runtime, not in an environment file:
 - `runtime.modelKey` is the secret that gives every run its model. A value that starts with `sk-ant-oat` is a Claude subscription token and a run gets it as `CLAUDE_CODE_OAUTH_TOKEN`. Any other value is an Anthropic API key and becomes `ANTHROPIC_API_KEY`.
 
 Neither reaches the agent's environment unless an environment file names it, for example as `GH_TOKEN` for `gh`. Both are set on the factory's Settings page (see [Factory settings](../../guides/factory-settings/)).
+
+The repository token signs git in to the repository's host for three things: the clone, the push of a new base branch (an assembly's integration branch), and the agent's own `git push`. Git signs in as `x-access-token` on GitHub and as `oauth2` on GitLab, with the token as the password. Goal keeps the token in git's credential store inside the run's box, outside the workspace, so the agent's push works without the token in its environment. The box and its store are thrown away after the run. The agent's prompt says that git signs in with the repository token. A public repository needs no token: it clones without a login.
 
 ## What a run receives
 
