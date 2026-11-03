@@ -14,7 +14,7 @@ import (
 var _ ports.FactoryConversions = (*FactoryConversions)(nil)
 
 // FactoryConversions keeps factory conversions in memory with the database's rules: one per
-// factory, kept, organizations apart. It knows only the factories AddFactory registered; its lock
+// factory, a refusal replaced and a conversion kept, organizations apart. It knows only the factories AddFactory registered; its lock
 // is one mutex, held by one WithLock at a time.
 type FactoryConversions struct {
 	mu        sync.Mutex
@@ -54,7 +54,7 @@ func (f *FactoryConversions) Record(ctx context.Context, c ports.FactoryConversi
 		return false, fmt.Errorf("record conversion of factory %s: %w", c.Factory, ports.ErrNotFound)
 	}
 
-	if _, ok := f.rows[org][c.Factory]; ok {
+	if old, ok := f.rows[org][c.Factory]; ok && !old.Refused() {
 		return false, nil
 	}
 
