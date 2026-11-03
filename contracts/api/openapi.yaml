@@ -9953,7 +9953,7 @@ components:
           items: { $ref: "#/components/schemas/AccessGroup" }
     AccessGroup:
       type: object
-      description: "One group: a kind (mcp, env, file), a factory's id or a secret's name, by by"
+      description: "One group: a kind (mcp, env, file, slack), a factory's id or a secret's name, by by. The organization-wide slack row has no factory, so no factory group holds it"
       required: [key, title, rows]
       properties:
         key: { type: string }
@@ -9963,10 +9963,15 @@ components:
           items: { $ref: "#/components/schemas/AccessRow" }
     AccessRow:
       type: object
+      description: >-
+        What agents reach under one kind and name. A factory row (mcp, env, file) lists the
+        environments that use it; the organization-wide slack row, "Slack notifications", holds
+        the secret of the organization's Slack notifications and has no factory uses, so its uses
+        are empty and its status comes from that secret alone.
       required: [kind, name, uses, secrets, status]
       properties:
-        kind: { type: string, enum: [mcp, env, file] }
-        name: { type: string, description: The MCP server, the variable or the file path }
+        kind: { type: string, enum: [mcp, env, file, slack] }
+        name: { type: string, description: "The MCP server, the variable, the file path, or Slack notifications" }
         uses:
           type: array
           items: { $ref: "#/components/schemas/AccessUse" }

@@ -78,6 +78,8 @@ An agent holds the secrets of its environment for the whole run, and it has netw
 
 Access is read only. It shows every factory's environments, the tools each reaches, the secret each uses, the last test and what is about to expire. Switch the view between By what they reach, By factory and By secret. A row opens the environment in the factory's definition, where you change it. It is the page to answer "what can this agent reach?" and "where does this key go?".
 
+Access also shows the secret the organization's Slack notifications use, when they use one. It is one row, Slack notifications, with no factory: it appears under By what they reach and under its secret in By secret, never under By factory or when Access shows one factory. Its status comes from the secret alone: missing when the secret is gone, expired or expiring by the secret's expiry and reminder, otherwise ok.
+
 ## From the command line
 
 - `goal secret list`, `show`, `create`, `replace`, `delete` and `import` manage the organization's secrets. A value comes only from stdin or the import file and is never shown. `goal credential` and `goal connection` moved: each prints where its commands went and exits 2.

@@ -227,6 +227,10 @@ type Deps struct {
 	// NotificationPreferences keeps each signed-in person's own notification preferences
 	// (ADR 0023, decision 1), served on /v1/me/notifications.
 	NotificationPreferences ports.NotificationPreferences
+	// NotificationSettings are the organization's notification settings (ADR 0037 decision 14):
+	// Access shows the secret of its Slack notifications as an organization-wide row. Nil shows
+	// none.
+	NotificationSettings ports.NotificationSettings
 	// ExportMaxRows caps a CSV export (ADR 0020, decision 3); 0 is 100000.
 	ExportMaxRows int
 	// Judges serve Jonah's judges routes (judges.go). Optional: while it is nil those routes
@@ -313,7 +317,7 @@ func New(d Deps) (http.Handler, error) {
 	s := &server{
 		engine: d.Engine, items: d.Items, factories: d.Factories, defs: d.Definitions, versions: d.Versions, orgs: d.Orgs, audit: d.Audit,
 		retention: d.OrgRetention, authz: d.Authorizer, auth: d.Auth, identity: d.Identity, access: d.Access, platform: d.Platform, feed: d.Feed,
-		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, secrets: d.OrgSecrets, catalog: slices.Clone(d.Catalog), envTests: d.EnvironmentTests, tools: d.ToolLister, conversions: d.Conversions, intake: d.Intake, draftRequests: d.DraftRequests, parseKind: d.ParseKind, codehosts: d.CodeHosts,
+		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, secrets: d.OrgSecrets, notifySettings: d.NotificationSettings, catalog: slices.Clone(d.Catalog), envTests: d.EnvironmentTests, tools: d.ToolLister, conversions: d.Conversions, intake: d.Intake, draftRequests: d.DraftRequests, parseKind: d.ParseKind, codehosts: d.CodeHosts,
 		repoTestTimeout:  cmp.Or(d.RepositoryTestTimeout, connectionTestTimeout),
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes,
@@ -443,6 +447,8 @@ type server struct {
 	credentials ports.Credentials
 	// secrets serve the secret routes.
 	secrets ports.OrgSecrets
+	// notifySettings name the secret of the organization's Slack notifications, for Access.
+	notifySettings ports.NotificationSettings
 	// catalog serves /v1/catalog; envTests and tools the environment tests and the Access read
 	// model.
 	catalog  []domain.ToolTemplate
