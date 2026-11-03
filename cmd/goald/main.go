@@ -357,7 +357,9 @@ type knowledgeBase struct {
 
 // openKnowledge wires the knowledge base: uploads of at most GOAL_UPLOAD_MAX_BYTES each, read
 // from the bucket; embeddings from GOAL_EMBED_URL's model or, without one, keyword search only;
-// GOAL_KB_WORKERS workers syncing due sources. A synced source is read with its secret by the
+// GOAL_KB_WORKERS workers syncing due sources. Upload, repository and Confluence sources sync
+// into zip snapshots in the bucket, written first in the system's temporary directory; with no
+// conversion service, what is neither text nor HTML is refused. A synced source is read with its secret by the
 // reader its config names, or by its connection kind's sync reader while it is still on a
 // connection, through the public-only transport: gitdocs (GitHub and GitLab repositories) or
 // confluence (the spaces of a Confluence Cloud site).
@@ -394,7 +396,7 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 		kb: kb, uploads: uploads, searcher: knowledge.NewSearcher(kb, embedder, log),
 		ingestor: knowledge.NewIngestor(knowledge.IngestorConfig{
 			Knowledge: kb, Connections: connections, Secrets: secrets, Uploads: uploads,
-			Readers: readers, Embedder: embedder, Clock: clock, Log: log, Workers: s.KBWorkers,
+			Readers: readers, Objects: objects, Embedder: embedder, Clock: clock, Log: log, Workers: s.KBWorkers,
 		}),
 	}
 }

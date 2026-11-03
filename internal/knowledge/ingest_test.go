@@ -24,11 +24,13 @@ var admin = domain.Actor{Kind: domain.ActorUser, ID: "00000000-0000-7000-8000-00
 
 // Names the tests use.
 const (
-	embedModel = "acme-embed-1"
-	deployMD   = "docs/deploy.md"
-	oncallMD   = "docs/oncall.md"
-	newMD      = "docs/new.md"
-	slowMD     = "docs/slow.md"
+	embedModel     = "acme-embed-1"
+	deployMD       = "docs/deploy.md"
+	oncallMD       = "docs/oncall.md"
+	newMD          = "docs/new.md"
+	slowMD         = "docs/slow.md"
+	shipOnTuesdays = "# Deploy\n\nShip on Tuesdays."
+	newPage        = "# New\n\nA new page."
 	// gitdocsSync is the test kind's sync adapter.
 	gitdocsSync = "gitdocs"
 )
@@ -230,8 +232,8 @@ func (w *world) ingestor(e ports.Embedder, kb ports.Knowledge) *knowledge.Ingest
 	}
 
 	return knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: kb, Connections: w.conns, Secrets: w.secrets, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: w.docs},
-		Embedder: e, Clock: w.clock,
+		Knowledge: kb, Connections: w.conns, Secrets: w.secrets, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: w.docs, "confluence": w.docs},
+		Objects: w.objects, Embedder: e, Clock: w.clock, TempDir: w.t.TempDir(),
 	})
 }
 
@@ -316,7 +318,7 @@ func TestIngestor_SyncsIncrementallyAndDeletesWhatGoes(t *testing.T) {
 
 	// An hour on: oncall.md changed, deploy.md did not, a page is new and none went yet.
 	oncall = "# On call\n\nPage the primary only."
-	w.docs.set(map[string]string{deployMD: deploy, oncallMD: oncall, newMD: "# New\n\nA new page."})
+	w.docs.set(map[string]string{deployMD: deploy, oncallMD: oncall, newMD: newPage})
 	w.clock.Advance(time.Hour + time.Minute)
 
 	n = w.syncDue(in)
@@ -326,7 +328,7 @@ func TestIngestor_SyncsIncrementallyAndDeletesWhatGoes(t *testing.T) {
 	w.want("fetched (only what changed)", fetched, slices.Equal(fetched, []string{newMD, oncallMD}))
 
 	// Then deploy.md goes from the repository.
-	w.docs.set(map[string]string{oncallMD: oncall, newMD: "# New\n\nA new page."})
+	w.docs.set(map[string]string{oncallMD: oncall, newMD: newPage})
 	w.clock.Advance(time.Hour + time.Minute)
 	w.syncDue(in)
 
@@ -414,7 +416,7 @@ func TestIngestor_ATooLongIDIsLeftOut(t *testing.T) {
 
 	w := newWorld(t)
 	long := "docs/" + strings.Repeat("日", 700) + ".md"
-	w.docs.set(map[string]string{deployMD: "# Deploy\n\nShip on Tuesdays.", long: "# Long\n\nA page."})
+	w.docs.set(map[string]string{deployMD: shipOnTuesdays, long: "# Long\n\nA page."})
 
 	w.syncDue(w.ingestor(w.embed, nil))
 
@@ -434,7 +436,7 @@ func TestIngestor_AFailedFetchKeepsWhatWasIndexed(t *testing.T) {
 	in := w.ingestor(w.embed, nil)
 	w.syncDue(in)
 
-	w.docs.set(map[string]string{deployMD: "# Deploy\n\nShip on Fridays.", newMD: "# New\n\nA new page."})
+	w.docs.set(map[string]string{deployMD: "# Deploy\n\nShip on Fridays.", newMD: newPage})
 	w.docs.mu.Lock()
 	w.docs.down = true
 	w.docs.mu.Unlock()
@@ -728,7 +730,7 @@ func TestIngestor_ATakenOverSyncRecordsNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	docs := map[string]string{deployMD: "# Deploy\n\nShip on Tuesdays.", slowMD: "# Slow\n\nA slow page."}
+	docs := map[string]string{deployMD: shipOnTuesdays, slowMD: "# Slow\n\nA slow page."}
 	w.docs.set(docs)
 
 	release := make(chan struct{})
@@ -874,7 +876,7 @@ func TestIngest_SyncOpensTheSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w.docs.set(map[string]string{deployMD: "# Deploy\n\nShip on Tuesdays."})
+	w.docs.set(map[string]string{deployMD: shipOnTuesdays})
 	w.syncDue(w.ingestor(nil, nil))
 
 	w.want("the reader's secret (opened at sync time)", w.docs.secret == replaced, w.docs.secret == replaced)

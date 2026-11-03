@@ -43,10 +43,6 @@ const (
 // FixMoveToSecrets is the label of plain-key's fix.
 const FixMoveToSecrets = "Move to Secrets"
 
-// keyPrefixes start the values of tokens and keys that are never a plain setting: Anthropic and
-// OpenAI keys, GitHub classic and fine-grained tokens, GitLab tokens and Slack bot and user tokens.
-var keyPrefixes = []string{"sk-", "ghp_", "github_pat_", "glpat-", "xoxb-", "xoxp-"}
-
 // keyNameSuffixes end the names of variables that usually hold a key.
 var keyNameSuffixes = []string{"_TOKEN", "_KEY", "_SECRET", "_PASSWORD"}
 
@@ -170,7 +166,7 @@ func plainKey(name, value string) (domain.ProblemSeverity, string) {
 		return "", ""
 	}
 
-	for _, p := range keyPrefixes {
+	for _, p := range domain.KeyPrefixes {
 		if strings.HasPrefix(strings.TrimSpace(value), p) {
 			return domain.SeverityError, fmt.Sprintf("the value starts with %s, as a key does, and is written in plain text", p)
 		}
