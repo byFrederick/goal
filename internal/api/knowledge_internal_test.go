@@ -20,6 +20,7 @@ import (
 const (
 	factoryBuilder = "builder"
 	kbHandbook     = "handbook"
+	kbArchive      = "archive"
 )
 
 // A source a factory's published version lists, as a name or an entry, is listed as used by it,
@@ -39,7 +40,7 @@ func TestKnowledge_DeleteRefusedWhileAPublishedVersionListsIt(t *testing.T) {
 		authz: AllowAll{}, clock: porttest.NewClock(mxNow),
 	}
 
-	for _, n := range []string{kbHandbook, "archive"} {
+	for _, n := range []string{kbHandbook, kbArchive} {
 		if _, err := kb.CreateSource(ctx, domain.NewKnowledgeSource{Name: n, Title: n, Kind: domain.SourceUpload}, domain.LocalUser); err != nil {
 			t.Fatal(err)
 		}
@@ -57,7 +58,7 @@ func TestKnowledge_DeleteRefusedWhileAPublishedVersionListsIt(t *testing.T) {
 		t.Errorf("delete of a source in use = %v (%d %s); want 409 knowledge-source-in-use", err, p.Status, deref(p.Code))
 	}
 
-	if _, err := s.DeleteKnowledgeSource(ctx, gen.DeleteKnowledgeSourceRequestObject{Source: "archive"}); err != nil {
+	if _, err := s.DeleteKnowledgeSource(ctx, gen.DeleteKnowledgeSourceRequestObject{Source: kbArchive}); err != nil {
 		t.Errorf("delete of a source no factory searches = %v", err)
 	}
 }
@@ -132,7 +133,7 @@ func TestKnowledge_SourceReaders(t *testing.T) {
 	f.Metadata.ID, f.Metadata.Name = string(mxF), factoryBuilder
 	f.Spec.Knowledge = &config.Knowledge{Sources: []config.KnowledgeSource{
 		{Name: kbHandbook, AppliesTo: domain.RuleScope{Agents: []string{"reviewer"}, Lanes: []string{"fix"}}},
-		{Name: "archive"},
+		{Name: kbArchive},
 	}}
 
 	s := &server{
@@ -140,7 +141,7 @@ func TestKnowledge_SourceReaders(t *testing.T) {
 		authz: AllowAll{}, clock: porttest.NewClock(mxNow),
 	}
 
-	for _, n := range []string{kbHandbook, "archive"} {
+	for _, n := range []string{kbHandbook, kbArchive} {
 		if _, err := kb.CreateSource(ctx, domain.NewKnowledgeSource{Name: n, Title: n, Kind: domain.SourceUpload}, domain.LocalUser); err != nil {
 			t.Fatal(err)
 		}
@@ -158,19 +159,26 @@ func TestKnowledge_SourceReaders(t *testing.T) {
 		byName[src.Name] = src
 	}
 
-	scoped := byName[kbHandbook].UsedBy.Readers
-	if len(scoped) != 1 || scoped[0].Name != factoryBuilder || !slices.Equal(scoped[0].Agents, []string{"reviewer"}) ||
-		!slices.Equal(scoped[0].Lanes, []string{"fix"}) || scoped[0].Stations == nil || len(scoped[0].Stations) != 0 {
-		t.Errorf("handbook readers = %+v; want builder scoped to the reviewer agent and the fix lane", scoped)
-	}
-
-	plain := byName["archive"].UsedBy.Readers
-	if len(plain) != 1 || len(plain[0].Agents)+len(plain[0].Stations)+len(plain[0].Lanes)+len(plain[0].WorkTypes) != 0 {
-		t.Errorf("archive readers = %+v; want builder with an empty scope", plain)
-	}
+	checkReaders(t, byName[kbHandbook].UsedBy.Readers, []string{"reviewer"}, []string{"fix"})
+	checkReaders(t, byName[kbArchive].UsedBy.Readers, nil, nil)
 
 	one, err := s.GetKnowledgeSource(ctx, gen.GetKnowledgeSourceRequestObject{Source: kbHandbook})
 	if g, ok := one.(gen.GetKnowledgeSource200JSONResponse); err != nil || !ok || len(g.UsedBy.Readers) != 1 {
 		t.Errorf("get = %+v, %v; want the same reader", one, err)
+	}
+}
+
+// checkReaders checks that readers is the builder factory alone, scoped to agents and lanes, with
+// the other lists empty and not null.
+func checkReaders(t *testing.T, readers []gen.KnowledgeSourceReader, agents, lanes []string) {
+	t.Helper()
+
+	if len(readers) != 1 || readers[0].Name != factoryBuilder {
+		t.Fatalf("readers = %+v; want builder alone", readers)
+	}
+
+	r := readers[0]
+	if !slices.Equal(r.Agents, agents) || !slices.Equal(r.Lanes, lanes) || r.Stations == nil || len(r.Stations) != 0 || r.WorkTypes == nil || len(r.WorkTypes) != 0 {
+		t.Errorf("reader = %+v; want agents %v, lanes %v, no stations or work types", r, agents, lanes)
 	}
 }
