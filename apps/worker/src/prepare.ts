@@ -1,8 +1,12 @@
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import { chmod, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import type { ReadableStream } from 'node:stream/web';
 import { gitWithRetry } from './retry.js';
-import { Bundle, type GitCredential } from './spec.js';
+import { Bundle, type GitCredential, type Knowledge } from './spec.js';
 
 /**
  * One command prepare runs; the result is its exit code. Its output goes to stderr, never stdout.
@@ -23,8 +27,11 @@ export interface PrepareDeps {
   output: Output;
   env: NodeJS.ProcessEnv;
   now: () => Date;
-  /** Where the bundle's files go (/goal), the repository is cloned (/workspace) and Claude Code's config dir (claude). */
-  dirs: { goal: string; workspace: string; claude: string };
+  /**
+   * Where the bundle's files go (/goal), the repository is cloned (/workspace), Claude Code's config
+   * dir (claude) the box's home, where git's credential store goes, and the run's knowledge is unpacked (/knowledge).
+   */
+  dirs: { goal: string; workspace: string; claude: string; home: string; knowledge: string };
   /** The wait between attempts of a network git step; setTimeout when absent. */
   sleep?: (ms: number) => Promise<void>;
   /** Where a retry is logged; stderr when absent. */
@@ -43,6 +50,13 @@ export interface Prepared {
   branch?: string;
   /** Whether that branch already existed on the remote: earlier runs of the item pushed it. */
   branch_existed?: boolean;
+  /**
+   * The branch's commit right after checkout, before it was brought up to date with its base;
+   * absent without a repository or when git cannot name it.
+   */
+  branch_head?: string;
+  /** The base's commit the branch would be brought up to date with (origin/<base>, or origin/HEAD); absent likewise. */
+  base_head?: string;
   /** How the existing branch was brought up to date with its base; absent for a new one. */
   fresh_base?: FreshBase;
   /** The files that conflicted doing so, sorted; the rebase or merge was aborted. */
@@ -54,6 +68,8 @@ export interface Prepared {
   tools: number;
   /** Definition mode: how many of the draft's files were written into the workspace. */
   definition_files?: number;
+  /** How many knowledge snapshots were unpacked under /knowledge; absent for none. */
+  knowledge?: number;
 }
 
 type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
@@ -61,7 +77,8 @@ type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
 /**
  * goal-agent prepare: fetches the run bundle from the gateway with the run's task token and
  * sets the sandbox up for `goal-agent run`. It writes /goal (spec.json and the agent's files),
- * configures a git credential helper per bundle credential, clones the repository into
+ * configures a git credential helper per bundle credential (a stored one in git's credential store
+ * under the box's home: storeCredentials), clones the repository into
  * /workspace on the item's branch (the remote one when it exists, otherwise new from the base: the
  * bundle's repository.base, created from the default branch when missing, or the default branch),
  * brings an existing branch up to date with that base (fresh_base: rebase or merge; a conflict is
@@ -70,6 +87,9 @@ type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
  * go to the user-level rules in the config dir, never into /workspace, so they cannot be committed.
  * In definition mode (the bundle's definition, ADR 0021) /workspace gets the factory's draft files
  * instead, /goal/definition.json their starting sha256, and no git command runs.
+ * While the repository clones, prepare downloads the run's knowledge snapshots (spec.knowledge,
+ * ADR 0038) in parallel and unpacks each into /knowledge/<source>/, files 0444 and folders 0555,
+ * replacing an earlier unpack; a snapshot that does not download or unpack fails the run.
  * The clone is partial (--filter=blob:none: history without file contents, fetched when checked
  * out). The network git steps (the clone, and the base branch's push and fetch) run with a time limit
  * per attempt (GOAL_GIT_ATTEMPT_TIMEOUT seconds, 300 by default); an attempt cut off at it or failed
@@ -79,7 +99,11 @@ type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
 export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   const started = deps.now();
   const gateway = required(deps.env, 'GOAL_GATEWAY_URL');
-  const bundle = await fetchBundle(deps, new URL('/run', gateway), required(deps.env, 'GOAL_GATEWAY_TOKEN'));
+  const token = required(deps.env, 'GOAL_GATEWAY_TOKEN');
+  const bundle = await fetchBundle(deps, new URL('/run', gateway), token);
+  // It runs beside the clone; the handler keeps a failure from going unhandled until it is awaited.
+  const knowledge = unpackKnowledge(deps, gateway, token, bundle.spec.knowledge?.snapshots ?? []);
+  knowledge.catch(() => undefined);
 
   for (const [path, content] of Object.entries(bundle.files)) {
     await put(join(deps.dirs.goal, path), Buffer.from(content, 'base64'));
@@ -89,14 +113,19 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
     await put(join(deps.dirs.claude, 'rules', `${rule.name}.md`), rule.content);
   }
   // Definition mode has no repository: nothing signs git in.
-  for (const c of bundle.definition ? [] : bundle.git_credentials) {
+  const credentials = bundle.definition ? [] : bundle.git_credentials;
+  const store = await storeCredentials(
+    deps,
+    credentials.filter((c) => c.store),
+  );
+  for (const c of credentials) {
     // --add: two connections may sign git in to one host; git asks each helper until one answers.
     await must(deps, 'git', [
       'config',
       '--global',
       '--add',
       `credential.https://${c.host}.helper`,
-      credentialHelper(c),
+      c.store ? `store --file '${store}'` : credentialHelper(c),
     ]);
   }
 
@@ -126,6 +155,11 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
     const start = base ? [`origin/${base}`] : [];
     const branch = existed ? ['-B', repo.branch, `origin/${repo.branch}`] : ['-b', repo.branch, ...start];
     await must(deps, 'git', ['checkout', '--quiet', ...branch], ws);
+    // The heads before the rebase or merge, for a later try to start where this run did (ADR 0039).
+    const branchHead = await commitOf(deps, ws, 'HEAD');
+    const baseHead = await commitOf(deps, ws, start[0] ?? 'origin/HEAD');
+    if (branchHead) out.branch_head = branchHead;
+    if (baseHead) out.base_head = baseHead;
     if (existed) {
       out.fresh_base = repo.fresh_base ?? 'rebase';
       const conflicts = await freshen(deps, ws, out.fresh_base, base);
@@ -139,12 +173,15 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
     out.branch = repo.branch;
     out.branch_existed = existed;
   }
+  const unpacked = await knowledge;
+  if (unpacked > 0) out.knowledge = unpacked;
 
   const spec = {
     ...bundle.spec,
     gateway_url: gateway,
     ...(out.conflicts ? { base_conflicts: out.conflicts } : {}),
     ...(baseBranch ? { base_branch: baseBranch } : {}),
+    ...(out.branch ? { branch: out.branch } : {}),
   };
   await put(join(deps.dirs.goal, 'spec.json'), JSON.stringify(spec));
 
@@ -157,6 +194,97 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   out.at = done.toISOString();
   out.seconds = Math.round((done.getTime() - started.getTime()) / 100) / 10;
   return out;
+}
+
+/**
+ * Downloads snapshots in parallel and unpacks each into dirs.knowledge/<source>/; it returns how
+ * many. It fails with the first failure once every one has settled, so none still writes after.
+ */
+async function unpackKnowledge(
+  deps: PrepareDeps,
+  gateway: string,
+  token: string,
+  snapshots: Knowledge['snapshots'],
+): Promise<number> {
+  const results = await Promise.allSettled(snapshots.map((s) => unpackSnapshot(deps, gateway, token, s)));
+  const failed = results.find((r) => r.status === 'rejected');
+  if (failed) throw failed.reason;
+  return snapshots.length;
+}
+
+/**
+ * Downloads one snapshot's zip to a file beside its folder, replaces the folder with the zip's
+ * files and makes them read-only. Its URL resolves against the gateway's, and only a request to the
+ * gateway carries the task token.
+ */
+async function unpackSnapshot(
+  deps: PrepareDeps,
+  gateway: string,
+  token: string,
+  s: Knowledge['snapshots'][number],
+): Promise<void> {
+  const url = new URL(s.url, gateway);
+  const headers: Record<string, string> =
+    url.origin === new URL(gateway).origin ? { Authorization: `Bearer ${token}` } : {};
+  const res = await deps.fetch(url, { headers });
+  if (!res.ok || !res.body) {
+    const why = (await res.text()).trim().slice(0, 200);
+    throw new Error(`knowledge ${s.source}: GET ${url.pathname}: ${res.status}${why ? ` ${why}` : ''}`);
+  }
+  const dest = join(deps.dirs.knowledge, s.source);
+  const zip = join(deps.dirs.knowledge, `.${s.source}.zip`);
+  await mkdir(deps.dirs.knowledge, { recursive: true });
+  try {
+    await pipeline(Readable.fromWeb(res.body as ReadableStream<Uint8Array>), createWriteStream(zip));
+    await removeTree(dest);
+    await mkdir(dest);
+    const code = await deps.exec('unzip', ['-q', '-o', zip, '-d', dest]);
+    if (code !== 0) throw new Error(`knowledge ${s.source}: unzip exited ${code}`);
+  } finally {
+    await rm(zip, { force: true });
+  }
+  await readOnly(dest);
+}
+
+/** Makes the files under dir 0444 and its folders, dir included, 0555; a link is left as it is. */
+async function readOnly(dir: string): Promise<void> {
+  for (const e of await readdir(dir, { withFileTypes: true })) {
+    const path = join(dir, e.name);
+    if (e.isDirectory()) await readOnly(path);
+    else if (e.isFile()) await chmod(path, 0o444);
+  }
+  await chmod(dir, 0o555);
+}
+
+/** Removes dir, an earlier read-only unpack included: its folders are made writable first. */
+async function removeTree(dir: string): Promise<void> {
+  const writable = async (d: string): Promise<void> => {
+    await chmod(d, 0o755);
+    for (const e of await readdir(d, { withFileTypes: true })) {
+      if (e.isDirectory()) await writable(join(d, e.name));
+    }
+  };
+  try {
+    await writable(dir);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
+  await rm(dir, { recursive: true, force: true });
+}
+
+/** The commit ref names in ws, or undefined when git cannot name one (an empty repository). */
+async function commitOf(deps: PrepareDeps, ws: string, ref: string): Promise<string | undefined> {
+  try {
+    const sha = (await deps.output('git', ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { cwd: ws })).trim();
+    return isCommitId(sha) ? sha : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Whether s is a full git commit id: 40 (SHA-1) or 64 (SHA-256) lowercase hex digits. */
+export function isCommitId(s: string): boolean {
+  return /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(s);
 }
 
 async function hasRemote(deps: PrepareDeps, ws: string, branch: string): Promise<boolean> {
@@ -213,6 +341,27 @@ async function freshen(deps: PrepareDeps, ws: string, mode: FreshBase, onto?: st
 export function credentialHelper(c: GitCredential): string {
   const v = c.password_env;
   return `!f() { if [ "$1" = get ] && [ -n "$${v}" ]; then printf 'username=%s\\npassword=%s\\n' '${c.username}' "$${v}"; fi; }; f`;
+}
+
+/**
+ * Saves the stored logins (the repository token's, ADR 0037 decision 7) in git's credential store,
+ * <home>/.git-credentials with mode 0600, outside /workspace and /goal, so the clone, the base's push
+ * and the agent's own push sign in after prepare, when the agent's env has no password variable.
+ * A login whose variable is unset or empty is left out, so git fails without a prompt. The box is
+ * thrown away after its run, and the file with it. Returns the file's path.
+ */
+async function storeCredentials(deps: PrepareDeps, stored: GitCredential[]): Promise<string> {
+  const file = join(deps.dirs.home, '.git-credentials');
+  const lines = stored.flatMap((c) => {
+    const password = deps.env[c.password_env];
+    if (!password) return [];
+    return [`https://${encodeURIComponent(c.username)}:${encodeURIComponent(password)}@${c.host}\n`];
+  });
+  if (lines.length === 0) return file;
+  await mkdir(deps.dirs.home, { recursive: true });
+  await writeFile(file, lines.join(''), { mode: 0o600 });
+  await chmod(file, 0o600);
+  return file;
 }
 
 async function fetchBundle(deps: PrepareDeps, url: URL, token: string): Promise<Bundle> {

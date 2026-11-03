@@ -152,6 +152,8 @@ function Crumb({ entry, station }: { entry: InboxEntry; station: string }) {
 }
 
 function kindTitle(entry: InboxEntry): string {
+  if (entry.kind === 'knowledge_source' && entry.knowledge_source)
+    return `${entry.knowledge_source.source} does not sync`;
   if (entry.kind === 'andon') return 'Line stopped';
   if (entry.kind === 'rework_warning' && entry.rework) {
     return `${humanize(entry.rework.station)} sent back ${entry.rework.rejected} of the last ${entry.rework.verdicts}`;
@@ -165,6 +167,9 @@ function alertSummary(entry: InboxEntry, station: string): string {
     return entry.blocked?.reason ?? (entry.blocked?.paused ? 'A person paused it.' : 'It is blocked.');
   }
   if (entry.kind === 'rework_warning') return `Rework is rising at ${station || 'its gate'}.`;
+  if (entry.kind === 'knowledge_source' && entry.knowledge_source) {
+    return `The last ${entry.knowledge_source.failed_syncs} syncs of ${entry.knowledge_source.source} failed.`;
+  }
   return 'It waits in the expedite lane.';
 }
 
@@ -210,7 +215,7 @@ function Brief({ entry }: { entry: InboxEntry }) {
   );
 }
 
-/** The tool call an Approval asks to make: its input as canonical JSON, then its tool and connection. */
+/** The tool call an Approval asks to make: its input as canonical JSON, then its tool and server. */
 function ToolCall({ call }: { call: ToolApproval }) {
   return (
     <>
@@ -226,7 +231,7 @@ function ToolCall({ call }: { call: ToolApproval }) {
         <Fact label="Tool">
           <span className="font-mono">{call.tool}</span>
         </Fact>
-        <Fact label="Connection">{call.connection}</Fact>
+        <Fact label="Server">{call.connection}</Fact>
       </dl>
     </>
   );
@@ -297,6 +302,7 @@ function ActionBar({
 
 /** An Alert's facts: the andon pull, the rework tally, or why the item is blocked. */
 function AlertFacts({ entry, station }: { entry: InboxEntry; station: string }) {
+  const org = useOrg();
   if (entry.kind === 'andon' && entry.andon) {
     return (
       <section
@@ -323,6 +329,26 @@ function AlertFacts({ entry, station }: { entry: InboxEntry; station: string }) 
         <p className="m-0 text-secondary text-muted">
           The andon policy pulls the cord at {formatPercent(r.threshold)} rework. The most frequent reason:{' '}
           {r.top_reason ? humanize(r.top_reason) : 'none given'}.
+        </p>
+      </section>
+    );
+  }
+  if (entry.kind === 'knowledge_source' && entry.knowledge_source) {
+    const k = entry.knowledge_source;
+    return (
+      <section
+        aria-label="Why the source does not sync"
+        className="flex flex-col gap-2 rounded-card border border-line bg-card p-4 md:p-5"
+      >
+        <p className="m-0 text-body text-ink">
+          The last {k.failed_syncs} syncs of {k.source} failed, so {entry.factory.title ?? entry.factory.name} reads the
+          files from before.
+        </p>
+        <p className="m-0 text-secondary text-muted">{k.error || 'No reason was recorded.'}</p>
+        <p className="m-0 text-secondary">
+          <Link to="/o/$org/knowledge/$source" params={{ org: org.slug, source: k.source }}>
+            Open {k.source}
+          </Link>
         </p>
       </section>
     );

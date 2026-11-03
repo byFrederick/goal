@@ -60,13 +60,31 @@ tags:
       The organization's credentials (ADR 0017): named secrets sealed under the platform's master
       key, never readable back, that connections refer to as {{name}} and listed agents get as env.
       Members read names and metadata; owners and admins create, change, replace, delete and
-      import them, after a recent sign-in.
+      import them, after a recent sign-in. Deprecated: the secrets API replaces these routes (ADR
+      0037), and they go away when the web moves to it. They need secret:read and secret:manage.
+  - name: secrets
+    description: >-
+      The organization's secrets (ADR 0037): the only place a value lives, sealed under the
+      platform's master key and never readable back. Members, keys and personal tokens read names,
+      metadata and where each secret is used (secret:read); owners and admins create, change,
+      replace, delete and import them, after a recent sign-in (secret:manage).
+  - name: catalog
+    description: >-
+      The tool templates goald ships (ADR 0037 decision 15), the catalog of Add a tool: what one
+      MCP server, command-line tool or API adds to an environment file, its secret slots and its
+      optional HTTP test. Any signed-in caller reads them.
+  - name: access
+    description: >-
+      What the organization's agents reach (ADR 0037 decisions 9 and 16): tests of an
+      environment's remote MCP servers and of a template, which open secrets inside goald and
+      never answer a value, and the Access read model over every factory's published
+      environments, their tests and their secrets.
   - name: knowledge
     description: >-
-      The organization's knowledge base (spec 4 §4.8): sources of uploaded files, of connections
-      synced into it and of connections searched live, their documents, and the search agents
-      run through the gateway's knowledge__search. Members and keys read and search it; owners,
-      admins and keys add, sync and delete sources and documents.
+      The organization's knowledge as files (ADR 0038): sources of uploaded files, of a repository
+      or of Confluence, kept in sync as snapshots, the files of their current snapshot and how
+      often agents read them. Members and keys read it; owners, admins and keys add, sync and
+      delete sources and uploads.
   - name: intake
     description: >-
       Where a factory's items come from (ADR 0026): the sources of its newest items and its
@@ -173,6 +191,23 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DeviceRequest" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/catalog:
+    get:
+      operationId: getCatalog
+      x-goal-scope: authenticated
+      tags: [catalog]
+      summary: The tool templates
+      description: >-
+        Every template goald ships, by name: its title, description, secret slots with suggested
+        secret names, what it adds (tools, env, files and MCP servers with suggested tool modes)
+        and its HTTP test, if any. Values are plain or {{slot}} references to its slots.
+      responses:
+        "200":
+          description: The templates
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ToolTemplateList" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/me:
     get:
@@ -476,6 +511,75 @@ paths:
       responses:
         "204": { description: Cleared }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/settings/notifications:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: getNotificationSettings
+      x-goal-scope: org:read
+      tags: [orgs]
+      summary: The organization's notification settings
+      description: >-
+        The secret whose Slack bot token sends the organization's Slack notifications (ADR 0037),
+        by name; null while Slack is off. Never the token itself.
+      responses:
+        "200":
+          description: The settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationSettings" }
+        default: { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: setNotificationSettings
+      x-goal-scope: org:manage
+      tags: [orgs]
+      summary: Choose the secret that sends the organization's Slack notifications
+      description: >-
+        Sets slack_secret, or turns Slack off with null. Notifications open the secret without a
+        factory, so it must be open to all factories. Audited as org.notifications_updated with
+        the secret's name; saving what is already saved changes nothing. A name that is no secret
+        is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and
+        nothing is saved. While the setting names a secret, deleting that secret is 409
+        secret-in-use with a slack use.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NotificationSettings" }
+      responses:
+        "200":
+          description: The settings after the change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationSettings" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/settings/notifications/test:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    post:
+      operationId: testNotificationSettings
+      x-goal-scope: org:manage
+      tags: [orgs]
+      summary: Test a Slack bot token without saving it
+      description: >-
+        Opens the named secret inside goald without a factory (audited as secret.used), so it
+        must be open to all factories, and asks Slack (auth.test) whether its token works. Without
+        a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token
+        that fails is an answer, not an error: ok false with a fixed error code. No answer, error
+        or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret
+        limited to some factories; 503 secrets-unavailable while goald has no master key.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NotificationTestRequest" }
+      responses:
+        "200":
+          description: The result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationTestResult" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/policy:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -512,7 +616,9 @@ paths:
         precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that
         is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models,
         a tool setting the default does not take, a blank denied command or a box time limit that
-        is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+        is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow,
+        ask or off, or a pattern that is not a tool name or glob, is 400; a body without
+        mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
       parameters:
         - $ref: "#/components/parameters/IfMatch"
       requestBody:
@@ -1310,6 +1416,49 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DraftModel" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: getDraftKnowledgePreview
+      x-goal-scope: factory:read
+      tags: [definitions]
+      summary: The Knowledge prompt section one agent gets from the draft
+      description: >-
+        "What agents see" in the editor: the section goald builds for a run of agent, from the same
+        code as a run's. It lists the draft's sources that apply to the agent (with station and
+        lane and work_type, as a run's appliesTo is matched), each with its entry's readWhen or its
+        snapshot's, its file count and top folders, names those with no snapshot as not synced yet,
+        and gives memory.yaml's facts. It reads each source's current snapshot, while a run reads
+        the snapshot its claim pinned, so a run started earlier may see another. 404 agent-not-found
+        for an agent the draft does not declare, 409 yaml-invalid while factory.yaml does not parse
+        or satisfy the schema, 404 no-draft.
+      parameters:
+        - name: agent
+          in: query
+          required: true
+          description: The agent's name, as the draft declares it
+          schema: { type: string }
+        - name: station
+          in: query
+          description: The station of the run, for sources whose appliesTo names stations
+          schema: { type: string }
+        - name: lane
+          in: query
+          description: The lane of the run, for sources whose appliesTo names lanes
+          schema: { type: string }
+        - name: work_type
+          in: query
+          description: The work type of the run, for sources whose appliesTo names work types
+          schema: { type: string }
+      responses:
+        "200":
+          description: The agent's Knowledge section
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgePreview" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/draft/model/{section}:
     parameters:
@@ -2795,6 +2944,77 @@ paths:
               schema: { $ref: "#/components/schemas/AndonPull" }
         "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/environments/{environment}/test:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - name: environment
+        in: path
+        required: true
+        description: The environment's name, its file environments/<name>.yaml
+        schema: { type: string }
+    post:
+      operationId: testEnvironment
+      x-goal-scope: definition:edit
+      tags: [access]
+      summary: Test an environment's MCP servers or a template
+      description: >-
+        Tests the environment of the draft (of the current version while no draft is open), or of
+        the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list,
+        its headers' {{secret}} references opened inside goald for the factory (audited as
+        secret.used without a run), through public addresses only, following no redirect, within
+        10 seconds; stdio servers answer tested false. With template, the template's remote MCP
+        servers and HTTP test run instead, with the secrets the body puts in its slots and its
+        plain env values changed by env. Each server's result is kept per factory, environment
+        and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an
+        error; its error is scrubbed of every value the test opened. 404 environment-not-found,
+        environment-server-not-found or template-not-found; 400 environment-test-invalid for a
+        template slot without a secret; 503 secrets-unavailable while goald has no master key.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EnvironmentTestRequest" }
+      responses:
+        "200":
+          description: The results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnvironmentTestResult" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/repositories/test:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    post:
+      operationId: testRepository
+      x-goal-scope: factory:create
+      tags: [access]
+      summary: Test a token's read and push access to a repository
+      description: >-
+        Tests, before any factory exists, whether the token in the named secret can read the
+        repository at url and push to it, through the code host's API (github.com: GET
+        /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its
+        access level, Developer or more pushes), never git. The secret is opened inside goald
+        without a factory (audited as secret.used), so it must be open to all factories. Each
+        check answers ok with a one-line reason from the host; a check that fails is an answer,
+        not an error. For a classic GitHub token, permissions.push reflects the account's role,
+        not the token's scopes, so push ok can be optimistic; a fine-grained token answers its
+        own grant. A host that gives no answer within 10 seconds answers tested false with
+        "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found;
+        400 repository-host-unknown for a host other than github.com and gitlab.com,
+        repository-url-invalid for a URL that names no repository, and secret-not-allowed for a
+        secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RepositoryTestRequest" }
+      responses:
+        "200":
+          description: The results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RepositoryTestResult" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/webhooks:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -3400,29 +3620,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Run" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/runs/{run}/knowledge:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - name: run
-        in: path
-        required: true
-        description: The run's id
-        schema: { type: string }
-    get:
-      operationId: listRunKnowledge
-      x-goal-scope: factory:read
-      tags: [knowledge]
-      summary: The knowledge documents a run used, with the verdicts given on them for it
-      description: >-
-        Its uses by time, document and kind, and the verdicts agents and people gave for the run
-        (ADR 0027). 404 for a run of another organization.
-      responses:
-        "200":
-          description: The run's knowledge
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/RunKnowledge" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/approve:
     parameters:
@@ -4061,7 +4258,8 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: listCredentials
-      x-goal-scope: credential:read
+      x-goal-scope: secret:read
+      deprecated: true
       tags: [credentials]
       summary: The organization's credentials
       description: >-
@@ -4077,7 +4275,8 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     post:
       operationId: createCredential
-      x-goal-scope: credential:manage
+      x-goal-scope: secret:manage
+      deprecated: true
       tags: [credentials]
       summary: Create a credential
       description: >-
@@ -4104,7 +4303,8 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     post:
       operationId: importCredentials
-      x-goal-scope: credential:manage
+      x-goal-scope: secret:manage
+      deprecated: true
       tags: [credentials]
       summary: Import credentials from a .env or YAML text
       description: >-
@@ -4136,7 +4336,8 @@ paths:
       - $ref: "#/components/parameters/CredentialRef"
     get:
       operationId: getCredential
-      x-goal-scope: credential:read
+      x-goal-scope: secret:read
+      deprecated: true
       tags: [credentials]
       summary: One credential, never its value
       responses:
@@ -4148,7 +4349,8 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     patch:
       operationId: patchCredential
-      x-goal-scope: credential:manage
+      x-goal-scope: secret:manage
+      deprecated: true
       tags: [credentials]
       summary: Change a credential's metadata, or replace its value
       description: >-
@@ -4173,7 +4375,8 @@ paths:
         default: { $ref: "#/components/responses/Problem" }
     delete:
       operationId: deleteCredential
-      x-goal-scope: credential:manage
+      x-goal-scope: secret:manage
+      deprecated: true
       tags: [credentials]
       summary: Delete a credential
       description: >-
@@ -4183,6 +4386,191 @@ paths:
       responses:
         "204":
           description: Deleted
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/access:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: getAccess
+      x-goal-scope: access:read
+      tags: [access]
+      summary: What the organization's agents reach
+      description: >-
+        Computed from each factory's current published version, the environment tests and the
+        secrets, over the factories the caller sees that are not archived: every MCP server, and
+        every env variable and file that references a secret. Each row lists the factories and
+        environments that use it with their agents, the secrets it references, and a status:
+        missing (a secret it references does not exist), failed (its last test failed), expired
+        or expiring (a secret's expiry has passed, or is within its reminder days), untested (a
+        remote MCP server never tested), tested, or ok. by groups the rows by what agents reach
+        (MCP servers, env variables, files; the default), by factory or by secret; factory keeps
+        one factory's. reached counts what agents reach and need_attention what is missing,
+        failed, expired or expiring, whatever by is.
+      parameters:
+        - name: by
+          in: query
+          schema: { type: string, enum: [reach, factory, secret], default: reach }
+        - name: factory
+          in: query
+          description: Only this factory's, by metadata.id or metadata.name
+          schema: { type: string }
+      responses:
+        "200":
+          description: The read model
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Access" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/secrets:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listSecrets
+      x-goal-scope: secret:read
+      tags: [secrets]
+      summary: The organization's secrets
+      description: >-
+        By name, each with its source, description, factory scope, expiry, reminder, last use and
+        what uses it. Never a value.
+      responses:
+        "200":
+          description: The secrets
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecretList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createSecret
+      x-goal-scope: secret:manage
+      tags: [secrets]
+      summary: Create a secret
+      description: >-
+        A named secret with its value, sealed under the platform's master key and never returned
+        (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a
+        name that is not a secret name, a missing or oversized value, a description over 500
+        characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all
+        factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no
+        master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewSecret" }
+      responses:
+        "201":
+          description: The secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Secret" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/secrets/import:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    post:
+      operationId: importSecrets
+      x-goal-scope: secret:manage
+      tags: [secrets]
+      summary: Import secrets from a .env or YAML text
+      description: >-
+        env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is
+        sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked
+        before anything is written: 400 secret-invalid for an unknown format, text that does not
+        parse, an empty import, or a name that is not a secret name or whose env variable is
+        reserved. A dry run answers each name as new or existing, with what uses the existing one,
+        and stores nothing. A real run creates each new name open to no factory, and replaces
+        (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the
+        default) each existing one. A real run is not one transaction: should a write fail, the
+        names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs
+        a sign-in from the last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SecretImport" }
+      responses:
+        "200":
+          description: What the import does, or did
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecretImportResult" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/secrets/{secret}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/SecretRef"
+    get:
+      operationId: getSecret
+      x-goal-scope: secret:read
+      tags: [secrets]
+      summary: One secret, never its value
+      description: 404 secret-not-found.
+      responses:
+        "200":
+          description: The secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Secret" }
+        default: { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: patchSecret
+      x-goal-scope: secret:manage
+      tags: [secrets]
+      summary: Change a secret's description, scope, expiry or reminder
+      description: >-
+        Each property present replaces its own: scope replaces the factory scope, expiry replaces
+        the expiry and the reminder together (an empty expiry clears both). The value changes only
+        through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes
+        nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SecretPatch" }
+      responses:
+        "200":
+          description: The secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Secret" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteSecret
+      x-goal-scope: secret:manage
+      tags: [secrets]
+      summary: Delete a secret
+      description: >-
+        409 secret-in-use, deleting nothing, while something uses it: the problem's uses names each
+        use. 404 secret-not-found. Needs a sign-in from the last 10 minutes. Audited as
+        secret.deleted.
+      responses:
+        "204":
+          description: Deleted
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/secrets/{secret}/value:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/SecretRef"
+    put:
+      operationId: replaceSecretValue
+      x-goal-scope: secret:manage
+      tags: [secrets]
+      summary: Replace a secret's value
+      description: >-
+        Runs that start afterwards get the new value; nothing else changes, and the answer holds no
+        value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized
+        value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a
+        sign-in from the last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SecretValue" }
+      responses:
+        "200":
+          description: The secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Secret" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/knowledge/sources:
     parameters:
@@ -4213,13 +4601,14 @@ paths:
       tags: [knowledge]
       summary: Add a source to the knowledge base
       description: >-
-        An upload source holds files people upload; a synced source reads a connection whose kind
-        syncs (its config names what: a repository, a branch and paths, a Confluence space); a
-        live source is a connection whose own tools search, which nothing indexes. Due to sync at
-        once. 400 for a broken rule (a name, a title, a connection on an upload source or none on
-        another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a
-        connection whose kind cannot sync, 404 connection-not-found, 409
-        knowledge-source-name-taken. Audited as knowledge_source.created.
+        An upload source holds files people upload; a synced source reads with a secret, its
+        config naming its reader and what it reads (a repository, a branch and paths; Confluence
+        spaces); a live source is a connection whose own tools search, which nothing indexes. Due
+        to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an
+        upload source, a synced source without a secret or reader or with a connection, a live
+        source without a connection, a schedule under 15 minutes), 404 secret-not-found or
+        connection-not-found, 409 knowledge-source-name-taken. Audited as
+        knowledge_source.created.
       requestBody:
         required: true
         content:
@@ -4255,8 +4644,10 @@ paths:
       tags: [knowledge]
       summary: Change a source's title, config or schedule
       description: >-
-        config, when present, replaces the source's config. The name, kind and connection never
-        change. Audited as knowledge_source.updated.
+        config, when present, replaces the source's config. secret, when present, is a synced
+        source's new secret, which moves a source still on its connection over to it (400 for
+        another kind, 404 secret-not-found). The name, kind and connection never change. Audited
+        as knowledge_source.updated.
       requestBody:
         required: true
         content:
@@ -4273,9 +4664,9 @@ paths:
       operationId: deleteKnowledgeSource
       x-goal-scope: knowledge:manage
       tags: [knowledge]
-      summary: Delete a source with its documents
+      summary: Delete a source with its snapshots and uploads
       description: >-
-        Its documents, their chunks and the uploaded files no other document holds go with it. 409
+        Its snapshots and the uploaded files no other upload holds go with it. 409
         knowledge-source-in-use, naming them, while a factory's current version may search it.
         Audited as knowledge_source.deleted.
       responses:
@@ -4298,45 +4689,80 @@ paths:
         "202":
           description: The source is due
         default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/knowledge/sources/{source}/documents:
+  /v1/orgs/{org}/knowledge/sources/{source}/files:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
       - $ref: "#/components/parameters/SourceRef"
     get:
-      operationId: listKnowledgeDocuments
+      operationId: listKnowledgeFiles
       x-goal-scope: knowledge:read
       tags: [knowledge]
-      summary: One page of a source's documents
+      summary: One page of a source's current files
       description: >-
-        In id order, after the document id after; next_after, when set, is the after of the next
-        page. 404 knowledge-source-not-found.
+        The files of the source's current snapshot (ADR 0038 decision 3), in path order, after the
+        path after; next_after, when set, is the after of the next page. With find, only those
+        whose path, or title in any case, starts with it. None before the first snapshot. 404
+        knowledge-source-not-found.
       parameters:
+        - name: find
+          in: query
+          description: Only the files whose path, or title in any case, starts with this
+          schema: { type: string, maxLength: 1024 }
         - name: after
           in: query
-          description: The last document id of the previous page
+          description: The last path of the previous page
           schema: { type: string }
         - name: limit
           in: query
-          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
       responses:
         "200":
           description: The page
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/KnowledgeDocumentPage" }
+              schema: { $ref: "#/components/schemas/KnowledgeFilePage" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/sources/{source}/files/{path}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/SourceRef"
+      - $ref: "#/components/parameters/KnowledgeFilePath"
+    get:
+      operationId: getKnowledgeFile
+      x-goal-scope: knowledge:read
+      tags: [knowledge]
+      summary: One file's Markdown
+      description: >-
+        The file as runs read it under /knowledge/<source>/, from the source's current snapshot.
+        goald reads it from the snapshot's zip by range (the end record, the central directory,
+        then the one entry), never the whole zip. 404 knowledge-source-not-found, 404
+        knowledge-file-not-found for a path the snapshot does not hold or a source with no snapshot
+        yet.
+      responses:
+        "200":
+          description: The file's Markdown
+          content:
+            text/markdown:
+              schema: { type: string }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/sources/{source}/uploads:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/SourceRef"
     post:
-      operationId: uploadKnowledgeDocuments
+      operationId: uploadKnowledgeFiles
       x-goal-scope: knowledge:manage
       tags: [knowledge]
       summary: Upload files to an upload source
       description: >-
-        Each part named files is one document, titled by its file name: text, Markdown, HTML, JSON
-        or YAML of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most
-        that and 1 MiB more. They are pending until the next sync indexes them, which the upload
-        makes due; the same content uploaded again is the document it already is. Every file is
-        checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409
-        not-an-upload-source. Audited as knowledge_document.uploaded.
+        Each part named files is one file at the path its file name gives, which may hold folders
+        (runbooks/db/disk.md); a path that is not relative and clean is 400. Text, Markdown, HTML,
+        JSON, YAML, PDF or an Office file (the last two are converted when goald has a conversion
+        service, else left out of the snapshot and listed) of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at
+        most that and 1 MiB more. The upload makes the source due, and its next sync writes the
+        snapshot that holds them. Every file is checked before any is stored: 413
+        upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as
+        knowledge_document.uploaded.
       requestBody:
         required: true
         content:
@@ -4350,183 +4776,111 @@ paths:
                   items: { type: string, format: binary }
       responses:
         "202":
-          description: The documents, pending
+          description: The files, stored until the next sync takes them
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/KnowledgeDocumentList" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/knowledge/documents/{document}:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/DocumentRef"
-    get:
-      operationId: getKnowledgeDocument
-      x-goal-scope: knowledge:read
-      tags: [knowledge]
-      summary: A document with its indexed text
-      description: The text is its chunks joined in order, empty until it is indexed. 404 knowledge-document-not-found.
-      responses:
-        "200":
-          description: The document
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/KnowledgeDocumentText" }
+              schema: { $ref: "#/components/schemas/KnowledgeUploadList" }
         default: { $ref: "#/components/responses/Problem" }
     delete:
-      operationId: deleteKnowledgeDocument
+      operationId: deleteKnowledgeUpload
       x-goal-scope: knowledge:manage
       tags: [knowledge]
-      summary: Delete an uploaded document
+      summary: Delete an uploaded file
       description: >-
-        With its chunks, and its file when no other document holds the same content. 409
-        not-an-upload-source for a synced document, which its next sync would bring back. Audited
-        as knowledge_document.deleted.
+        The upload at path, with its stored file when no other upload holds the same content; the
+        next sync, which the deletion makes due, leaves it out of the snapshot. 404
+        knowledge-file-not-found, 409 not-an-upload-source. Audited as knowledge_document.deleted.
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: The upload's path in the source
+          schema: { type: string, minLength: 1, maxLength: 1024 }
       responses:
         "204":
           description: Deleted
         default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/knowledge/documents/{document}/content:
+  /v1/orgs/{org}/knowledge/check:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/DocumentRef"
-    get:
-      operationId: getKnowledgeDocumentContent
-      x-goal-scope: knowledge:read
+    post:
+      operationId: checkKnowledgeSource
+      x-goal-scope: knowledge:manage
       tags: [knowledge]
-      summary: The uploaded original of a document
+      summary: Check a source's settings before saving them
       description: >-
-        As uploaded, as an attachment that browsers download and never render (threat row 11). 409
-        not-an-upload-source for a synced document, whose original stays at its source (url).
-      responses:
-        "200":
-          description: The file
-          headers:
-            Content-Disposition:
-              required: true
-              schema: { type: string }
-            X-Content-Type-Options:
-              required: true
-              schema: { type: string }
-          content:
-            application/octet-stream:
-              schema: { type: string, format: binary }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/knowledge/documents/{document}/uses:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/DocumentRef"
-    get:
-      operationId: listKnowledgeDocumentUses
-      x-goal-scope: knowledge:read
-      tags: [knowledge]
-      summary: One page of the runs that used a document
-      description: >-
-        Newest first use first (ADR 0027), after the run id after; next_after, when set, is the
-        after of the next page. Each names its run, item and factory, so a client links to them;
-        a run of a factory the caller may not see is left out. 404 knowledge-document-not-found.
-      parameters:
-        - name: after
-          in: query
-          description: The last run id of the previous page
-          schema: { type: string }
-        - name: limit
-          in: query
-          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
-      responses:
-        "200":
-          description: The page
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/KnowledgeDocumentUsePage" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/knowledge/documents/{document}/verdict:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/DocumentRef"
-    put:
-      operationId: giveKnowledgeVerdict
-      x-goal-scope: knowledge:verdict
-      tags: [knowledge]
-      summary: Say whether a document helped or misled
-      description: >-
-        The caller's verdict on the document, of a run of the organization when run_id is set
-        (ADR 0027, decision 2). There is one per person, document and run, so a second replaces
-        the first. 404 knowledge-document-not-found, 404 run-not-found, 422
-        knowledge-document-not-used for a run with no use of the document. Audited as
-        knowledge_verdict.given, without the note; sends the stream event knowledge.
+        The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether
+        goald can read the source with them (listing it as a sync would, with the secret opened in
+        goald and never returned), how many files it lists and, when known, their size against the
+        limits, a warning for each picked factory the source does not suit, and the line agents
+        will see. Nothing is stored. 400 for settings a source may not have, 404
+        factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/KnowledgeVerdictInput" }
+            schema: { $ref: "#/components/schemas/KnowledgeCheckInput" }
       responses:
         "200":
-          description: The verdict as stored
+          description: The answers
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/KnowledgeVerdict" }
+              schema: { $ref: "#/components/schemas/KnowledgeCheck" }
         default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/knowledge/usage:
+  /v1/orgs/{org}/knowledge/files:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
     get:
-      operationId: getKnowledgeUsage
+      operationId: findKnowledgeFiles
       x-goal-scope: knowledge:read
       tags: [knowledge]
-      summary: Where a source's documents were used
+      summary: Find a file across every source
       description: >-
-        Per document of the source with a use or a verdict in the last days days (ADR 0027,
-        decision 3): the distinct runs that used it and the verdicts given, agents' and people's
-        apart; at most 500, the most used first, then by id. 404 knowledge-source-not-found.
+        The current files of every source whose path, or title in any case, starts with find, by
+        source name then path, at most limit.
+      parameters:
+        - name: find
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 1024 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        "200":
+          description: The files found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeFileList" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/reads:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listKnowledgeReads
+      x-goal-scope: knowledge:read
+      tags: [knowledge]
+      summary: How often runs read and searched the sources' files
+      description: >-
+        The daily rollup of runs' reads and searches under /knowledge (ADR 0038 decision 10), of one
+        source or every one, over the last days days counting today (UTC): one row per source,
+        path, factory and day, by day, source, path and factory. A search of a whole source counts
+        at the path ".". Factories the caller may not see are left out. 404
+        knowledge-source-not-found.
       parameters:
         - name: source
           in: query
-          required: true
-          description: The source's name
+          description: Only this source's reads
           schema: { type: string }
         - name: days
           in: query
           schema: { type: integer, minimum: 1, maximum: 90, default: 7 }
       responses:
         "200":
-          description: The usage
+          description: The counts
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/KnowledgeUsage" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/knowledge/search:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-    get:
-      operationId: searchKnowledge
-      x-goal-scope: knowledge:read
-      tags: [knowledge]
-      summary: Search the knowledge base as agents do
-      description: >-
-        What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an
-        embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or
-        the named ones (404 knowledge-source-not-found for a name the organization has not).
-      parameters:
-        - name: q
-          in: query
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 1000 }
-        - name: source
-          in: query
-          description: Only these sources (repeatable)
-          explode: true
-          schema:
-            type: array
-            items: { type: string }
-        - name: limit
-          in: query
-          schema: { type: integer, minimum: 1, maximum: 20, default: 8 }
-      responses:
-        "200":
-          description: The hits, best first
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/KnowledgeSearchResult" }
+              schema: { $ref: "#/components/schemas/KnowledgeReadList" }
         default: { $ref: "#/components/responses/Problem" }
 components:
   parameters:
@@ -4566,11 +4920,25 @@ components:
       required: true
       description: The credential's name
       schema: { type: string }
+    SecretRef:
+      name: secret
+      in: path
+      required: true
+      description: The secret's name
+      schema: { type: string }
     SourceRef:
       name: source
       in: path
       required: true
       description: The knowledge source's name
+      schema: { type: string }
+    KnowledgeFilePath:
+      name: path
+      in: path
+      required: true
+      description: >-
+        A file's path in its source's folder, as in db/disk.md; percent-encode its slashes as %2F so
+        it is one path segment
       schema: { type: string }
     DocumentRef:
       name: document
@@ -4748,11 +5116,16 @@ components:
             Credentials (ADR 0017): credential-not-found (404), credential-invalid (400),
             credential-name-taken and credential-in-use (409, naming the connections),
             credentials-unavailable (503: goald has no master key).
-            Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found
+            Secrets (ADR 0037): secret-not-found (404), secret-invalid (400),
+            secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use),
+            secrets-unavailable (503: goald has no master key).
+            Environment tests (ADR 0037 decision 9): environment-not-found,
+            environment-server-not-found and template-not-found (404), environment-test-invalid
+            (400).
+            Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found
             (404), connection-cannot-sync (400), knowledge-source-name-taken,
             knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413),
-            unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run
-            has no use of the document).
+            unsupported-document-type (415).
             Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found
             (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409),
             and a publish's evals-pending (its eval run is queued or running, or it started one)
@@ -4789,6 +5162,10 @@ components:
         estimate:
           allOf: [{ $ref: "#/components/schemas/EvalEstimate" }]
           description: learning-budget-exhausted only, the estimate of the bake-off it refused
+        uses:
+          type: array
+          description: secret-in-use only, what uses the secret
+          items: { $ref: "#/components/schemas/SecretUse" }
     EvalList:
       type: object
       required: [summary, cases]
@@ -5549,6 +5926,15 @@ components:
           description: Claude Code Bash permission patterns no agent may run, such as Bash(terraform apply:*)
           items: { type: string }
         tools: { $ref: "#/components/schemas/ToolPolicy" }
+        mcp_tool_modes:
+          type: object
+          description: >-
+            The organization's cap on MCP tool modes (ADR 0037 decision 12): a tool name or glob
+            (* and ?), 1 to 128 letters, digits, underscores, dots, dashes, * or ?, mapped to
+            allow, ask or off. Where a tool's mode and the cap disagree, the stricter wins (off,
+            then ask, then allow). Empty means no cap. A save that omits it keeps the stored cap;
+            a mode or pattern that is not valid is 400.
+          additionalProperties: { $ref: "#/components/schemas/ConnectionToolMode" }
         box_time_limit_minutes:
           type: integer
           minimum: 1
@@ -5571,7 +5957,11 @@ components:
           description: Search, fetch and documentation tools
         use_credentials:
           type: string
-          enum: ["off", attached_only]
+          enum: ["off", environment, attached_only]
+          description: >-
+            Use secrets: environment gives an agent what its environment names; off gives it no
+            env, files or MCP servers. attached_only is a deprecated alias for environment: a save
+            stores it as environment, and every read returns environment.
     OrgPolicyView:
       type: object
       required: [policy, revision, models, box_sizes, egress_addresses]
@@ -5928,13 +6318,27 @@ components:
     StandingRule:
       type: object
       description: >-
-        Lets one agent role call one tool of one organization connection without asking, in every
-        factory of the organization (ADR 0031 decision 7)
-      required: [id, connection_id, connection, tool, agent, created_by, created_at, item_id, revoked_by, revoked_at]
+        Lets one agent role call one tool without asking (ADR 0031 decision 7). A rule is keyed by
+        an organization connection, for every factory of the organization (connection_id set), or,
+        for a factory on secrets, by one MCP server of one environment of one factory (factory_id,
+        environment and server set, connection_id null; ADR 0037 decision 8)
+      required: [id, connection_id, connection, factory_id, environment, server, tool, agent, created_by, created_at, item_id, revoked_by, revoked_at]
       properties:
         id: { type: string }
-        connection_id: { type: string }
-        connection: { type: string, nullable: true, description: The connection's name; null once the connection is deleted }
+        connection_id: { type: string, nullable: true, description: The connection the rule is keyed by; null for a rule keyed by server }
+        connection:
+          type: string
+          nullable: true
+          description: The connection's name; null once the connection is deleted, and for a rule keyed by server
+        factory_id: { type: string, nullable: true, description: The factory of a rule keyed by server; null for a connection's rule }
+        environment:
+          type: string
+          nullable: true
+          description: "The environment file's name of a rule keyed by server, as in default; null for a connection's rule"
+        server:
+          type: string
+          nullable: true
+          description: "The MCP server's name in the environment file (mcp.<server>) of a rule keyed by server; null for a connection's rule"
         tool: { type: string }
         agent: { type: string, description: "The agent's role, its name in the definition, as in architect" }
         created_by: { $ref: "#/components/schemas/Actor" }
@@ -7831,7 +8235,7 @@ components:
     OrgSearch:
       type: object
       description: What a search found in the organization, by group, each best first
-      required: [items, agents, factories, connections]
+      required: [items, agents, factories, connections, secrets]
       properties:
         items:
           type: array
@@ -7846,6 +8250,10 @@ components:
           type: array
           description: Empty unless the caller holds connection:read
           items: { $ref: "#/components/schemas/ConnectionHit" }
+        secrets:
+          type: array
+          description: Empty unless the caller holds secret:read
+          items: { $ref: "#/components/schemas/SecretHit" }
     SearchItem:
       type: object
       required: [id, number, factory_id, factory_name, title, state, station]
@@ -7882,6 +8290,14 @@ components:
       properties:
         name: { type: string }
         kind: { type: string }
+    SecretHit:
+      type: object
+      description: A secret whose name matched, never its value
+      required: [name, scope, expires_at]
+      properties:
+        name: { $ref: "#/components/schemas/SecretName" }
+        scope: { $ref: "#/components/schemas/SecretScope" }
+        expires_at: { type: string, format: date-time, nullable: true, description: When the value expires }
     SpendWindow:
       type: string
       enum: [week, month, 90d]
@@ -8018,8 +8434,10 @@ components:
         model_connections:
           type: array
           description: >-
-            The organization's connections that give the factory's runs their model
-            (runtime.modelConnection), for "Who pays for models"; empty when it names none
+            What gives the factory's runs their model, for "Who pays for models": the
+            organization's connection runtime.modelConnection names, with its kind, and on
+            secrets the organization's secret runtime.modelKey names, by name with kind
+            "secret" and never its value (ADR 0037 decision 7); empty when it names neither
           items: { $ref: "#/components/schemas/ConnectionHit" }
     SpendBudgetState:
       type: string
@@ -8136,8 +8554,12 @@ components:
       type: string
       description: >-
         What waits; later phases add kinds, which clients that do not know them show as a generic
-        row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny
-      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite]
+        row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny.
+        conversion: a factory Goal could not move from connections to secrets and environment files
+        (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and
+        publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038
+        decision 3), once for each factory that lists it
+      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite, conversion, knowledge_source]
     InboxEntry:
       type: object
       required: [id, kind, factory, since, item, station, action, approval, blocked, andon, rework]
@@ -8146,7 +8568,7 @@ components:
           type: string
           description: >-
             "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>,
-            andon:<pull id>, rework_warning:<factory id>:<gate station>
+            andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>
         kind: { $ref: "#/components/schemas/InboxEntryKind" }
         factory:
           type: object
@@ -8160,7 +8582,7 @@ components:
           format: date-time
           description: >-
             Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation
-            (expedite), the pull (andon), now (rework_warning)
+            (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion)
         item:
           description: The item it is about, or null for an entry that is about no item
           nullable: true
@@ -8202,6 +8624,40 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/ReworkWarning"
+        conversion:
+          description: Why Goal could not convert the factory; absent or null for other kinds
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/InboxConversion"
+        knowledge_source:
+          description: Why the knowledge source does not sync; absent or null for other kinds
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/InboxKnowledgeSource"
+    InboxKnowledgeSource:
+      type: object
+      description: A knowledge source whose last syncs failed, shown under each factory that lists it.
+      required: [source, error, failed_syncs]
+      properties:
+        source: { type: string, description: The source's name }
+        error: { type: string, description: What the last sync said }
+        failed_syncs: { type: integer, description: How many syncs failed in a row }
+    InboxConversion:
+      type: object
+      description: >-
+        A factory Goal could not move from connections to secrets and environment files. It runs
+        on its version, on connections, until a version on secrets is published.
+      required: [reason, problems]
+      properties:
+        reason:
+          type: string
+          description: Every problem in one sentence each, for a row that shows one line
+        problems:
+          type: array
+          description: >-
+            What to fix, one entry each, such as "connection aws-prod uses the aws kind, which Goal no
+            longer converts: remove it from the factory"
+          items: { type: string }
     ApprovalBrief:
       type: object
       description: >-
@@ -8526,6 +8982,30 @@ components:
         requests:
           type: array
           items: { $ref: "#/components/schemas/DraftRequest" }
+    KnowledgeSourceEntry:
+      type: object
+      description: One knowledge.sources entry written as a mapping (ADR 0038 decision 5)
+      required: [name]
+      properties:
+        name: { type: string, description: The knowledge source's name, its folder under /knowledge }
+        appliesTo:
+          type: object
+          description: The runs that read the source, matched as a rule's scope; every run when absent
+          properties:
+            agents: { type: array, items: { type: string } }
+            stations: { type: array, items: { type: string } }
+            lanes: { type: array, items: { type: string } }
+            workTypes: { type: array, items: { type: string } }
+        readWhen: { type: string, description: "When to read it, in this factory's words; the snapshot's own line when absent" }
+    KnowledgePreview:
+      type: object
+      required: [section]
+      properties:
+        section:
+          type: string
+          description: >-
+            The Knowledge prompt section the agent's runs get from the draft, as Markdown; "" when
+            there is nothing to say or the agent may not read files
     DraftModel:
       type: object
       required: [revision, model, etags, edited, ranges]
@@ -8873,8 +9353,14 @@ components:
               additionalProperties: {}
             knowledge_sources:
               type: array
-              description: knowledge.sources, the organization's knowledge sources the factory may search
-              items: { type: string }
+              description: >-
+                knowledge.sources, the organization's knowledge sources the factory's runs read, in
+                the definition's order: a name, or an entry with its own appliesTo and readWhen,
+                each kept as factory.yaml writes it
+              items:
+                oneOf:
+                  - { type: string }
+                  - { $ref: "#/components/schemas/KnowledgeSourceEntry" }
             runner: { type: string, description: "Removed in phase 4 (field-removed); present while factory.yaml has it, so its quick fix can remove it" }
             image: { type: string, description: Removed in phase 4 (field-removed), as runner }
             auth: { type: string, description: Removed in phase 4 (field-removed), as runner }
@@ -9421,6 +9907,368 @@ components:
           type: string
           enum: [created, replaced, skipped]
           description: A real run only, what it did
+    SecretName:
+      type: string
+      description: >-
+        3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the
+        organization
+      pattern: "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
+    SecretSource:
+      type: string
+      description: "Where the value comes from. value: pasted or imported, and the run gets it as it is"
+      enum: [value]
+      x-enum-varnames: [SecretSourceValue]
+    SecretScope:
+      type: object
+      description: The factories whose runs may open it; neither all nor any listed reaches no run
+      required: [all_factories, factories]
+      properties:
+        all_factories: { type: boolean, description: Every factory, ones created later included }
+        factories:
+          type: array
+          description: The factories' metadata.id, when not all_factories
+          items: { type: string }
+    SecretUse:
+      type: object
+      description: One thing that uses a secret; while one does, it cannot be deleted
+      required: [kind, name]
+      properties:
+        kind:
+          type: string
+          enum: [definition, knowledge_source, webhook, slack, connection]
+          x-enum-varnames: [SecretUseDefinition, SecretUseKnowledgeSource, SecretUseWebhook, SecretUseSlack, SecretUseConnection]
+          description: >-
+            What uses it: a factory's published definition, a knowledge source, a webhook, the
+            organization's Slack setting, or a connection that refers to it as {{name}}
+        name: { type: string, description: "The factory, knowledge source, webhook or connection that uses it; slack: the organization's Slack setting" }
+    ToolTemplateList:
+      type: object
+      required: [templates]
+      properties:
+        templates:
+          type: array
+          items: { $ref: "#/components/schemas/ToolTemplate" }
+    ToolTemplate:
+      type: object
+      description: A tool template (ADR 0037 decision 15)
+      required: [name, title, description, secrets, adds, test]
+      properties:
+        name: { type: string }
+        title: { type: string }
+        description: { type: string, description: One line }
+        secrets:
+          type: array
+          description: Its secret slots, in order
+          items: { $ref: "#/components/schemas/TemplateSecret" }
+        adds: { $ref: "#/components/schemas/TemplateAdds" }
+        test:
+          allOf: [{ $ref: "#/components/schemas/TemplateTest" }]
+          nullable: true
+    TemplateSecret:
+      type: object
+      required: [slot, title, description, suggest]
+      properties:
+        slot: { type: string, description: "The {{slot}} its values refer to" }
+        title: { type: string }
+        description: { type: string }
+        suggest: { type: string, description: The name a new secret for it is suggested to have }
+    TemplateAdds:
+      type: object
+      description: What the template writes into an environment file
+      required: [tools, env, files, mcp]
+      properties:
+        tools: { type: array, items: { type: string }, description: mise tool specs }
+        env: { type: object, additionalProperties: { type: string } }
+        files: { type: object, additionalProperties: { type: string }, description: By absolute or ~/ path }
+        mcp: { type: object, additionalProperties: { $ref: "#/components/schemas/TemplateMCP" } }
+    TemplateMCP:
+      type: object
+      description: A remote (url, headers) or stdio (command, env) MCP server, with suggested tool modes
+      required: [tools]
+      properties:
+        url: { type: string }
+        headers: { type: object, additionalProperties: { type: string } }
+        command: { type: array, items: { type: string } }
+        env: { type: object, additionalProperties: { type: string } }
+        tools: { type: object, additionalProperties: { type: string, enum: [allow, ask, off] } }
+    TemplateTest:
+      type: object
+      description: "An HTTP test request; its values may hold {{slot}} and ${VAR} of the template's plain env values"
+      required: [method, url, headers, expect]
+      properties:
+        method: { type: string }
+        url: { type: string }
+        headers: { type: object, additionalProperties: { type: string } }
+        basic:
+          type: object
+          required: [username, password]
+          properties:
+            username: { type: string }
+            password: { type: string }
+        expect: { type: integer, description: The status that passes }
+    EnvironmentTestRequest:
+      type: object
+      properties:
+        version: { type: string, description: "draft (the default while one is open), current (the default otherwise) or a version number" }
+        server: { type: string, description: Only this MCP server }
+        template: { $ref: "#/components/schemas/EnvironmentTestTemplate" }
+    EnvironmentTestTemplate:
+      type: object
+      required: [name, secrets]
+      properties:
+        name: { type: string }
+        secrets:
+          type: object
+          description: The secret each slot takes, by slot
+          additionalProperties: { $ref: "#/components/schemas/SecretName" }
+        env:
+          type: object
+          description: The template's plain env values to use instead of its own, by name
+          additionalProperties: { type: string }
+    RepositoryTestRequest:
+      type: object
+      required: [url, secret]
+      properties:
+        url: { type: string, description: "The repository's https URL, such as https://github.com/acme/app" }
+        secret: { $ref: "#/components/schemas/SecretName" }
+    RepositoryTestResult:
+      type: object
+      required: [tested, read, push]
+      properties:
+        tested: { type: boolean, description: "false when the host gave no answer within 10 seconds: read and push then say couldn't test" }
+        read: { $ref: "#/components/schemas/RepositoryCheck" }
+        push: { $ref: "#/components/schemas/RepositoryCheck" }
+    NotificationSettings:
+      type: object
+      required: [slack_secret]
+      properties:
+        slack_secret:
+          type: string
+          nullable: true
+          pattern: "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
+          description: >-
+            The name of the secret holding the Slack bot token that sends the organization's Slack
+            notifications, slack-bot by convention; null while Slack is off
+    NotificationTestRequest:
+      type: object
+      properties:
+        slack_secret:
+          allOf: [{ $ref: "#/components/schemas/SecretName" }]
+          description: The secret to test; absent, the saved setting's
+    NotificationTestResult:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean, description: Whether Slack accepted the token }
+        workspace: { type: string, description: "The Slack workspace the token belongs to, when ok" }
+        error:
+          type: string
+          description: >-
+            Why it failed, when not ok, as a fixed code: slack-not-set (no secret given and none
+            saved), slack-token-invalid (Slack refused the token) or slack-token-unavailable
+            (Slack could not be reached or asked to wait). Never the token or Slack's reply.
+    RepositoryCheck:
+      type: object
+      required: [ok, reason]
+      properties:
+        ok: { type: boolean }
+        reason: { type: string, description: The host's one-line reason }
+    EnvironmentTestResult:
+      type: object
+      required: [environment, version, servers]
+      properties:
+        environment: { type: string }
+        version: { type: string, description: "The version tested: draft or its number" }
+        servers:
+          type: array
+          items: { $ref: "#/components/schemas/ServerTest" }
+        template: { $ref: "#/components/schemas/TemplateTestResult" }
+    ServerTest:
+      type: object
+      required: [server, tested, ok, tools]
+      properties:
+        server: { type: string }
+        tested: { type: boolean, description: "False for a stdio server, which goald does not start" }
+        ok: { type: boolean }
+        tools: { type: array, items: { type: string }, description: The tool names tools/list answered, sorted }
+        error: { type: string, description: Why it failed, without a secret value }
+        at: { type: string, format: date-time }
+    TemplateTestResult:
+      type: object
+      required: [name, ok, at]
+      properties:
+        name: { type: string }
+        ok: { type: boolean }
+        status: { type: integer, description: The status the test request got }
+        error: { type: string, description: Why it failed, without a secret value }
+        at: { type: string, format: date-time }
+    Access:
+      type: object
+      required: [by, reached, need_attention, groups]
+      properties:
+        by: { type: string, enum: [reach, factory, secret] }
+        reached: { type: integer, description: What agents reach, counted by kind and name }
+        need_attention: { type: integer, description: "Of those, the missing, failed, expired or expiring" }
+        groups:
+          type: array
+          items: { $ref: "#/components/schemas/AccessGroup" }
+    AccessGroup:
+      type: object
+      description: "One group: a kind (mcp, env, file, slack), a factory's id or a secret's name, by by. The organization-wide slack row has no factory, so no factory group holds it"
+      required: [key, title, rows]
+      properties:
+        key: { type: string }
+        title: { type: string }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/AccessRow" }
+    AccessRow:
+      type: object
+      description: >-
+        What agents reach under one kind and name. A factory row (mcp, env, file) lists the
+        environments that use it; the organization-wide slack row, "Slack notifications", holds
+        the secret of the organization's Slack notifications and has no factory uses, so its uses
+        are empty and its status comes from that secret alone.
+      required: [kind, name, uses, secrets, status]
+      properties:
+        kind: { type: string, enum: [mcp, env, file, slack] }
+        name: { type: string, description: "The MCP server, the variable, the file path, or Slack notifications" }
+        uses:
+          type: array
+          items: { $ref: "#/components/schemas/AccessUse" }
+        secrets: { type: array, items: { type: string }, description: The secrets it references, by name }
+        status: { $ref: "#/components/schemas/AccessStatus" }
+        tested_at: { type: string, format: date-time, description: Its latest test }
+        test_error: { type: string, description: Why its latest failed test failed }
+        last_used_at: { type: string, format: date-time, description: When a run last opened one of its secrets }
+        expires_at: { type: string, format: date-time, description: The soonest expiry of its secrets }
+    AccessStatus:
+      type: string
+      description: The worst of its uses' statuses, in this order
+      enum: [missing, failed, expired, expiring, untested, tested, ok]
+    AccessUse:
+      type: object
+      required: [factory, environment, agents, status]
+      properties:
+        factory: { $ref: "#/components/schemas/AccessFactory" }
+        environment: { type: string }
+        agents: { type: array, items: { type: string }, description: The agents on the environment }
+        status: { $ref: "#/components/schemas/AccessStatus" }
+        test: { $ref: "#/components/schemas/AccessTest" }
+    AccessFactory:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+    AccessTest:
+      type: object
+      required: [at, ok, tools]
+      properties:
+        at: { type: string, format: date-time }
+        ok: { type: boolean }
+        error: { type: string }
+        tools: { type: integer, description: How many tools it listed }
+    SecretList:
+      type: object
+      required: [secrets]
+      properties:
+        secrets:
+          type: array
+          items: { $ref: "#/components/schemas/Secret" }
+    Secret:
+      type: object
+      description: An organization's secret (ADR 0037), never its value
+      required: [id, name, source, description, scope, expires_at, remind_days, last_used_at, uses, created_by, created_at, updated_by, updated_at]
+      properties:
+        id: { type: string }
+        name: { $ref: "#/components/schemas/SecretName" }
+        source: { $ref: "#/components/schemas/SecretSource" }
+        description: { type: string }
+        scope: { $ref: "#/components/schemas/SecretScope" }
+        expires_at: { type: string, format: date-time, nullable: true, description: When the value expires }
+        remind_days: { type: integer, description: "Days before expires_at a reminder is due; 0: none" }
+        last_used_at: { type: string, format: date-time, nullable: true, description: When a run last opened it }
+        uses:
+          type: array
+          description: What uses it, by kind then name
+          items: { $ref: "#/components/schemas/SecretUse" }
+        created_by: { $ref: "#/components/schemas/Actor" }
+        created_at: { type: string, format: date-time }
+        updated_by: { $ref: "#/components/schemas/Actor" }
+        updated_at: { type: string, format: date-time }
+    NewSecret:
+      type: object
+      required: [name, value]
+      properties:
+        name: { $ref: "#/components/schemas/SecretName" }
+        description: { type: string, maxLength: 500 }
+        scope: { $ref: "#/components/schemas/SecretScope" }
+        expires_at: { type: string, format: date-time }
+        remind_days: { type: integer, minimum: 0, maximum: 90 }
+        value:
+          type: string
+          writeOnly: true
+          maxLength: 65536
+          description: The value; sealed and never answered
+    SecretPatch:
+      type: object
+      properties:
+        description: { type: string, maxLength: 500 }
+        scope: { $ref: "#/components/schemas/SecretScope" }
+        expiry: { $ref: "#/components/schemas/SecretExpiry" }
+    SecretExpiry:
+      type: object
+      description: An expiry and its reminder; without expires_at, neither
+      properties:
+        expires_at: { type: string, format: date-time }
+        remind_days: { type: integer, minimum: 0, maximum: 90 }
+    SecretValue:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: string
+          writeOnly: true
+          maxLength: 65536
+          description: The new value; sealed and never answered
+    SecretImport:
+      type: object
+      required: [format, text]
+      properties:
+        format: { type: string, enum: [env, yaml] }
+        text:
+          type: string
+          writeOnly: true
+          description: The .env or YAML text; its values are sealed and never answered
+        on_conflict:
+          type: string
+          enum: [replace, skip]
+          description: What a real run does with a name that exists; skip when absent
+        dry_run: { type: boolean, description: Answer what the import would do and store nothing }
+    SecretImportResult:
+      type: object
+      required: [dry_run, secrets]
+      properties:
+        dry_run: { type: boolean }
+        secrets:
+          type: array
+          description: Each name of the import, in its order
+          items: { $ref: "#/components/schemas/SecretImportOutcome" }
+    SecretImportOutcome:
+      type: object
+      required: [name, exists, uses]
+      properties:
+        name: { type: string }
+        exists: { type: boolean, description: A secret had the name before the import }
+        uses:
+          type: array
+          description: What uses the existing one
+          items: { $ref: "#/components/schemas/SecretUse" }
+        outcome:
+          type: string
+          enum: [created, replaced, skipped]
+          description: A real run only, what it did
     ConnectionTestResult:
       type: object
       required: [ok, at]
@@ -9486,17 +10334,22 @@ components:
     KnowledgeSource:
       type: object
       description: One source of the organization's knowledge base (spec 4 §4.8)
-      required: [id, name, title, kind, config, sync_every_seconds, status, last_synced_at, next_sync_at, documents, used_by, created_by, created_at, updated_at]
+      required: [id, name, title, kind, config, read_when, sync_every_seconds, status, last_synced_at, next_sync_at, latest_snapshot, used_by, created_by, created_at, updated_at]
       properties:
         id: { type: string }
         name: { $ref: "#/components/schemas/KnowledgeSourceName" }
         title: { type: string }
         kind: { $ref: "#/components/schemas/KnowledgeSourceKind" }
-        connection: { type: string, description: "The connection a synced or live source reads; absent for an upload source" }
+        connection: { type: string, description: "The connection a live source reads, or a synced one not yet on a secret; absent for an upload source" }
+        secret: { type: string, description: "The secret a synced source reads with, opened at each sync; absent for an upload or live source and a synced one still on its connection" }
         config:
           type: object
-          description: What its reader reads (a repository, a branch and path globs; a Confluence space)
+          description: >-
+            What its reader reads (a repository, a branch and path globs; a Confluence space). A
+            synced source on a secret also names its reader (reader: gitdocs or confluence) and,
+            for confluence, the site and the account's email.
           additionalProperties: { type: string }
+        read_when: { type: string, description: "The line that tells agents when to open it; empty when it has none" }
         sync_every_seconds: { type: integer, description: How often it syncs }
         status:
           type: string
@@ -9505,24 +10358,53 @@ components:
         last_error: { type: string }
         last_synced_at: { type: string, format: date-time, nullable: true }
         next_sync_at: { type: string, format: date-time, nullable: true, description: "When it is due next; null for a live source" }
-        documents: { type: integer, description: How many documents it has }
-        embed_model: { type: string, description: "The model its chunks are embedded with; absent when they have no embeddings" }
+        latest_snapshot:
+          description: Its newest snapshot; null before the first sync
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/KnowledgeSnapshotSummary" }]
+        sync_failures: { type: integer, description: "How many syncs failed in a row; a successful one resets it, and three show the source in Needs you" }
         used_by: { $ref: "#/components/schemas/KnowledgeSourceUsers" }
         created_by: { $ref: "#/components/schemas/Actor" }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+    KnowledgeSnapshotSummary:
+      type: object
+      description: A source's newest snapshot
+      required: [files, failed, bytes, synced_at]
+      properties:
+        files: { type: integer, description: How many files it holds }
+        failed: { type: integer, description: How many files failed to fetch or convert }
+        bytes: { type: integer, format: int64, description: Its files' Markdown together }
+        synced_at: { type: string, format: date-time, description: When it was written }
     KnowledgeSourceUsers:
       type: object
       description: What uses a source, so it cannot be deleted meanwhile
-      required: [factories]
+      required: [factories, readers]
       properties:
         factories:
           type: array
           description: The factories whose current version may search it (those the caller sees)
           items: { $ref: "#/components/schemas/ConnectionFactory" }
+        readers:
+          type: array
+          description: The same factories with who reads it in each; every list empty means every run
+          items: { $ref: "#/components/schemas/KnowledgeSourceReader" }
+    KnowledgeSourceReader:
+      type: object
+      required: [id, name, agents, stations, lanes, work_types]
+      properties:
+        id: { type: string, description: The factory's metadata.id }
+        name: { type: string }
+        agents: { type: array, items: { type: string } }
+        stations: { type: array, items: { type: string } }
+        lanes: { type: array, items: { type: string } }
+        work_types: { type: array, items: { type: string } }
     KnowledgeSourceKind:
       type: string
-      enum: [upload, synced, live]
+      description: >-
+        upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced
+        and live are the kinds before the cut-over
+      enum: [upload, repository, confluence, synced, live]
     NewKnowledgeSource:
       type: object
       required: [name, title, kind]
@@ -9530,164 +10412,158 @@ components:
         name: { $ref: "#/components/schemas/KnowledgeSourceName" }
         title: { type: string, minLength: 1, maxLength: 120 }
         kind: { $ref: "#/components/schemas/KnowledgeSourceKind" }
-        connection: { type: string, description: The connection a synced or live source reads }
+        connection: { type: string, description: The connection a live source reads }
+        secret:
+          allOf: [{ $ref: "#/components/schemas/SecretName" }]
+          description: >-
+            The secret a synced source reads with: the code host's token for gitdocs, the API token
+            for confluence. It must be open to all factories.
         config:
           type: object
+          description: >-
+            What its reader reads. A synced source names its reader (reader: gitdocs or
+            confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or
+            on the host code_host names: github or gitlab), branch, include and exclude;
+            confluence reads site, email and spaces.
           additionalProperties: { type: string }
+        read_when: { $ref: "#/components/schemas/KnowledgeReadWhen" }
         sync_every_seconds: { type: integer, minimum: 900, description: "How often it syncs (default 3600)" }
+    KnowledgeReadWhen:
+      type: string
+      maxLength: 160
+      description: One line that tells agents when to open the source, as "How to fix what pages us. Read before acting on an alert."
     KnowledgeSourcePatch:
       type: object
       properties:
         title: { type: string, minLength: 1, maxLength: 120 }
+        read_when: { $ref: "#/components/schemas/KnowledgeReadWhen" }
+        secret:
+          allOf: [{ $ref: "#/components/schemas/SecretName" }]
+          description: "A synced source's new secret: it reads with it from its next sync"
         config:
           type: object
           description: Replaces the config
           additionalProperties: { type: string }
         sync_every_seconds: { type: integer, minimum: 900 }
-    KnowledgeDocument:
+    KnowledgeFile:
       type: object
-      required: [id, source, title, mime, bytes, status, indexed_at]
+      description: One file of a source's current snapshot
+      required: [source, path, title, bytes, version]
       properties:
-        id: { type: string }
         source: { type: string, description: Its source's name }
+        path: { type: string, description: "Its path in the source's folder, /knowledge/<source>/<path> in a run" }
         title: { type: string }
-        url: { type: string, description: "A synced document's link back to its source" }
-        mime: { type: string }
+        bytes: { type: integer, format: int64, description: Its Markdown's size }
+        version: { type: string, description: "Changes whenever its content does: a content hash, a blob id, a page version" }
+    KnowledgeFilePage:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeFile" }
+        next_after: { type: string, description: The after of the next page; absent on the last }
+    KnowledgeFileList:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeFile" }
+    KnowledgeUploadList:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items:
+            type: object
+            required: [path, bytes]
+            properties:
+              path: { type: string }
+              bytes: { type: integer, format: int64 }
+    KnowledgeCheckInput:
+      type: object
+      description: A source's settings, not saved, as Add a source has them
+      required: [name, kind]
+      properties:
+        name: { $ref: "#/components/schemas/KnowledgeSourceName" }
+        kind: { $ref: "#/components/schemas/KnowledgeSourceKind" }
+        secret: { $ref: "#/components/schemas/SecretName" }
+        config:
+          type: object
+          description: What its reader reads, as createKnowledgeSource takes it
+          additionalProperties: { type: string }
+        read_when: { $ref: "#/components/schemas/KnowledgeReadWhen" }
+        factories:
+          type: array
+          description: The factories that would read it (each one's metadata.id or metadata.name)
+          items: { type: string }
+    KnowledgeCheck:
+      type: object
+      required: [access, files, limits, over_limit, warnings, line]
+      properties:
+        access: { $ref: "#/components/schemas/KnowledgeCheckAccess" }
+        files: { type: integer, description: How many files it lists; 0 when access failed }
+        bytes:
+          type: integer
+          format: int64
+          description: >-
+            Their Markdown's size, only when goald knows it: the current snapshot of a source of
+            that name and kind that exists. A listing does not say how big each file is.
+        limits: { $ref: "#/components/schemas/KnowledgeLimits" }
+        over_limit:
+          type: array
+          description: The limits it is over, which a sync would fail on
+          items: { type: string, enum: [files, bytes] }
+        warnings:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeCheckWarning" }
+        line: { type: string, description: The line agents will see for it in their prompt's Knowledge section }
+    KnowledgeCheckAccess:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean, description: Whether goald could list the source with these settings }
+        error: { type: string, description: Why it could not; never holds the secret's value }
+    KnowledgeLimits:
+      type: object
+      description: A source's limits (ADR 0038 decision 4)
+      required: [files, bytes, file_bytes]
+      properties:
+        files: { type: integer }
         bytes: { type: integer, format: int64 }
-        status:
+        file_bytes: { type: integer, format: int64 }
+    KnowledgeCheckWarning:
+      type: object
+      required: [code, message]
+      properties:
+        code:
           type: string
-          enum: [pending, indexed, failed, skipped]
-          description: pending until the next sync indexes it; failed with error; skipped when it has no text
-        error: { type: string }
-        indexed_at: { type: string, format: date-time, nullable: true }
-    KnowledgeDocumentList:
+          description: >-
+            knowledge-secret-not-in-scope, knowledge-copies-checkout and knowledge-too-many are the
+            definition checks the factory's draft would fail or warn with; knowledge-source-name-taken
+            and knowledge-source-listed say the name is in use or the factory lists it already
+        factory: { type: string, description: The picked factory's name; absent for a warning about the source }
+        message: { type: string }
+    KnowledgeReadList:
       type: object
-      required: [documents]
+      required: [reads]
       properties:
-        documents:
+        reads:
           type: array
-          items: { $ref: "#/components/schemas/KnowledgeDocument" }
-    KnowledgeDocumentPage:
+          items: { $ref: "#/components/schemas/KnowledgeReadCount" }
+    KnowledgeReadCount:
       type: object
-      required: [documents]
-      properties:
-        documents:
-          type: array
-          items: { $ref: "#/components/schemas/KnowledgeDocument" }
-        next_after: { type: string, description: "The after of the next page; absent on the last" }
-    KnowledgeDocumentText:
-      type: object
-      required: [document, text]
-      properties:
-        document: { $ref: "#/components/schemas/KnowledgeDocument" }
-        text: { type: string, description: "Its indexed text: its chunks joined in order, empty until it is indexed" }
-    KnowledgeSearchResult:
-      type: object
-      required: [hits]
-      properties:
-        hits:
-          type: array
-          items: { $ref: "#/components/schemas/KnowledgeHit" }
-    KnowledgeHit:
-      type: object
-      required: [document, source, title, heading, snippet, score]
-      properties:
-        document: { type: string, description: "The document's id, which getKnowledgeDocument and knowledge__read take" }
-        source: { type: string }
-        title: { type: string }
-        url: { type: string, description: A synced document's link back }
-        heading: { type: string, description: 'The headings the chunk is under ("Install > Docker")' }
-        snippet: { type: string, description: The chunk's text }
-        score: { type: number, format: double }
-    KnowledgeUsage:
-      type: object
-      required: [source, days, documents]
+      required: [source, path, factory_id, factory, day, reads, searches]
       properties:
         source: { type: string, description: The source's name }
-        days: { type: integer, description: The window in days }
-        documents:
-          type: array
-          items: { $ref: "#/components/schemas/KnowledgeDocumentUsage" }
-    KnowledgeDocumentUsage:
-      type: object
-      description: One document's use over the window; getKnowledgeDocument has its url
-      required: [id, title, source, runs, agents_helped, agents_misled, people_helped, people_misled]
-      properties:
-        id: { type: string, description: The document's id }
-        title: { type: string }
-        source: { type: string, description: Its source's name }
-        runs: { type: integer, description: The distinct runs that used it }
-        agents_helped: { type: integer }
-        agents_misled: { type: integer }
-        people_helped: { type: integer }
-        people_misled: { type: integer }
-    KnowledgeUseKind:
-      type: string
-      enum: [search, read]
-      description: search when knowledge__search returned some of its chunks, read when knowledge__read opened it
-    KnowledgeDocumentUsePage:
-      type: object
-      required: [uses]
-      properties:
-        uses:
-          type: array
-          items: { $ref: "#/components/schemas/KnowledgeDocumentUse" }
-        next_after: { type: string, description: "The after of the next page; absent on the last" }
-    KnowledgeDocumentUse:
-      type: object
-      description: One run that used a document
-      required: [run_id, item, factory, kinds, at]
-      properties:
-        run_id: { type: string }
-        item: { $ref: "#/components/schemas/RunItem" }
-        factory: { $ref: "#/components/schemas/FactoryHit" }
-        kinds:
-          type: array
-          items: { $ref: "#/components/schemas/KnowledgeUseKind" }
-        at: { type: string, format: date-time, description: The run's first use of the document }
-    KnowledgeVerdictInput:
-      type: object
-      required: [verdict]
-      additionalProperties: false
-      properties:
-        verdict: { type: string, enum: [helped, misled] }
-        run_id: { type: string, description: A run of the organization that used the document }
-        note: { type: string, maxLength: 500 }
-    KnowledgeVerdict:
-      type: object
-      required: [document, source, verdict, by, at]
-      properties:
-        document: { type: string, description: The document's id }
-        source: { type: string, description: Its source's name }
-        verdict: { type: string, enum: [helped, misled] }
-        run_id: { type: string }
-        item_id: { type: string, description: The run's item }
-        note: { type: string }
-        by: { $ref: "#/components/schemas/Actor" }
-        at: { type: string, format: date-time }
-    RunKnowledge:
-      type: object
-      required: [uses, verdicts]
-      properties:
-        uses:
-          type: array
-          items: { $ref: "#/components/schemas/RunKnowledgeUse" }
-        verdicts:
-          type: array
-          description: The verdicts given for the run, by time
-          items: { $ref: "#/components/schemas/KnowledgeVerdict" }
-    RunKnowledgeUse:
-      type: object
-      required: [document, source, kind, chunks, at]
-      properties:
-        document: { type: string, description: The document's id }
-        source: { type: string, description: Its source's name }
-        kind: { $ref: "#/components/schemas/KnowledgeUseKind" }
-        chunks:
-          type: array
-          description: The chunk ids a search returned; none for a read
-          items: { type: integer, format: int64 }
-        at: { type: string, format: date-time }
+        path: { type: string, description: 'The file read, or the folder searched ("." for the whole source)' }
+        factory_id: { type: string }
+        factory: { type: string, description: The factory's name }
+        day: { type: string, format: date, description: The UTC day }
+        reads: { type: integer }
+        searches: { type: integer }
     KnowledgeEvent:
       type: object
       description: "The data of one `event: knowledge` on /v1/orgs/{org}/stream: a source's sync started or ended"

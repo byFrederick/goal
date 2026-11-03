@@ -156,8 +156,27 @@ func exitCode(err error, code int) bool {
 	return errors.As(err, &exit) && exit.ExitCode() == code
 }
 
+// gitRepoVars are the variables that point git at a repository. git sets them when it runs a
+// hook, and they override -C, so a git started with them would act on the hook's repository.
+var gitRepoVars = []string{
+	"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY",
+	"GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_PREFIX", "GIT_QUARANTINE_PATH",
+}
+
+// gitEnv is os.Environ() without gitRepoVars, plus extra, so git finds the repository from -C.
+func gitEnv(extra ...string) []string {
+	env := slices.DeleteFunc(os.Environ(), func(kv string) bool {
+		name, _, _ := strings.Cut(kv, "=")
+
+		return slices.Contains(gitRepoVars, name)
+	})
+
+	return append(env, extra...)
+}
+
 func git(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir, "-c", "core.quotePath=false"}, args...)...) //nolint:gosec // git with this command's own arguments
+	cmd.Env = gitEnv()
 
 	var stderr bytes.Buffer
 

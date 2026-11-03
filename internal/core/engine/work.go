@@ -48,15 +48,23 @@ type claimed struct {
 	item    domain.Item
 	lease   domain.Lease
 	agent   domain.AgentSpec
+	// env is the agent's environment on a version on secrets (ADR 0037 decision 10); zero on
+	// connections.
+	env domain.Environment
 	// What the organization policy decided at run start (ADR 0024), the same for each of the
 	// claim's runs: the model, the commands and tools added to the agent's deny rules, how long
 	// one run may take, how long the box may live (0: no policy limit) and whether an approving
-	// gate whose action is merge leaves the merge to a person (noMerge).
+	// gate whose action is merge leaves the merge to a person (noMerge), and whether Use secrets
+	// is off, giving the agent no env, files or MCP servers (noEnv).
 	model    string
 	deny     []string
 	timeout  time.Duration
 	boxLimit time.Duration
 	noMerge  bool
+	// knowledge are the snapshots the claim's runs read, decided with the policy (pinKnowledge),
+	// so a lost box prepared again reads the same ones.
+	knowledge []domain.KnowledgePin
+	noEnv     bool
 	// branch and base are the runs' branch and the branch it is cut from and its pull request
 	// goes into, decided at the claim's start (integrate); both empty for the item's branch on the
 	// default branch, as for every item that is not a part on an integration branch.
@@ -224,12 +232,22 @@ func (e *Engine) backoff(ctx context.Context, lease domain.Lease, d time.Duratio
 // be decided) or waits for a person (the policy refuses its model).
 func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) bool {
 	var err error
-	if c.agent, err = agentFor(c.line, c.station, c.item.Lane); err != nil {
+	if c.agent, err = agentFor(c.line, c.station, c.item.Lane); err == nil {
+		c.env, err = agentEnvironment(c.line, c.agent)
+	}
+
+	if err != nil {
 		e.block(ctx, log, *c, err.Error())
 		return false
 	}
 
 	refusal, err := e.applyPolicy(ctx, c)
+	if err == nil && refusal == "" {
+		c.knowledge, err = e.pinKnowledge(ctx, c.line, c.agent, domain.RuleTarget{
+			Agent: c.agent.Name, Station: c.station.ID, Lane: c.item.Lane, WorkType: c.item.Type,
+		})
+	}
+
 	if err == nil && refusal == "" {
 		err = e.integrate(ctx, log, c)
 	}
@@ -259,9 +277,11 @@ func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) boo
 //     (webTools); ask is served as off, as for builtins, since no tool approval is enforced.
 //   - Merge a pull request, off: an approving gate whose action is merge does not merge, and the
 //     item waits there for a person's merge (noMerge); review_approval is the version's say.
-//   - Use credentials, off: the agent's connections list is emptied, so neither its env nor its
-//     task token gets any of them; the runtime's model and repository connections still reach
-//     the run, which cannot start without them. attached_only is the agent's list.
+//   - Use secrets (use_credentials), off: the agent's connections list is emptied, so neither its
+//     env nor its task token gets any of them; the runtime's model and repository connections
+//     still reach the run, which cannot start without them. On secrets the agent's environment
+//     env, files and MCP servers are emptied, and the model key still reaches the run.
+//     environment, and its deprecated alias attached_only, give the agent what it names.
 //   - Write outside the item's branch is not applied: comments, issues, tickets and messages go
 //     through connections' CLIs and MCP servers, and no engine or gateway step can ask a person
 //     for one, refuse it or allow it.
@@ -294,8 +314,9 @@ func (e *Engine) applyPolicy(ctx context.Context, c *claimed) (string, error) {
 
 	c.noMerge = p.MergePullRequest == domain.ToolOff
 
-	if p.UseCredentials == domain.ToolOff {
-		c.agent.Connections = nil
+	c.noEnv = p.UseCredentials == domain.ToolOff
+	if c.noEnv {
+		c.agent.Connections, c.env.Env, c.env.Files, c.env.MCP = nil, nil, nil, nil
 	}
 
 	if p.BoxTimeLimitMinutes > 0 {
@@ -304,6 +325,33 @@ func (e *Engine) applyPolicy(ctx context.Context, c *claimed) (string, error) {
 	}
 
 	return "", nil
+}
+
+// pinKnowledge is the newest snapshot of each of the line's knowledge sources that applies to run
+// (ADR 0038 decision 7), in the definition's order: none for an agent that may not read files
+// (builtins.read off) or without Knowledge, and no pin for a source with no snapshot yet or that
+// the organization no longer has. An error when the snapshots cannot be read.
+func (e *Engine) pinKnowledge(ctx context.Context, l domain.Line, agent domain.AgentSpec, run domain.RuleTarget) ([]domain.KnowledgePin, error) {
+	if e.knowledge == nil || !agent.ReadsFiles() {
+		return nil, nil
+	}
+
+	var pins []domain.KnowledgePin
+
+	for _, k := range domain.ApplyingKnowledge(l.Knowledge, run) {
+		snaps, err := e.knowledge.Snapshots(ctx, k.Name)
+
+		switch {
+		case errors.Is(err, ports.ErrNotFound):
+			continue
+		case err != nil:
+			return nil, fmt.Errorf("read the snapshots of knowledge source %s: %w", k.Name, err)
+		case len(snaps) > 0:
+			pins = append(pins, domain.KnowledgePin{Source: k.Name, Snapshot: snaps[0].ID})
+		}
+	}
+
+	return pins, nil
 }
 
 // escalate hands a claimed item that may not run to a person: it waits at its station with the
@@ -413,7 +461,7 @@ func (e *Engine) runOnce(ctx context.Context, c claimed, b *box, feedback string
 	var chk checked
 
 	res, err := e.runTask(ctx, runTask{
-		RunRequest: c.request(feedback), item: c.item, box: b,
+		RunRequest: c.request(feedback), item: c.item, box: b, work: c.item.Work(),
 		// The agent's env gets the connections of its list the factory lists too, as the gateway
 		// serves them; its task token names its whole list.
 		own:       slices.DeleteFunc(slices.Clone(c.agent.Connections), func(n string) bool { return !slices.Contains(c.line.Connections, n) }),
@@ -441,16 +489,26 @@ func (e *Engine) runOnce(ctx context.Context, c claimed, b *box, feedback string
 	return res, chk, err
 }
 
-// request is the claim's next run as a RunRequest, with brief added to its bundle's brief.
+// request is the claim's next run as a RunRequest, with brief added to its bundle's brief. A
+// version on secrets gives the run its model key and the agent's environment and no connection,
+// and its box the environment's size (medium when it names none) and image.
 func (c claimed) request(brief string) domain.RunRequest {
 	rt := c.line.Runtime
 
-	return domain.RunRequest{
+	r := domain.RunRequest{
 		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, Version: c.line.VersionID, Kind: domain.RunKindStation,
 		Station: c.station.ID, Item: c.item.ID, Agent: c.agent.Name, Model: c.model, Brief: brief,
 		Repository: rt.Repository, Branch: c.branch, Base: c.base, ModelConnection: rt.ModelConnection,
-		Connections: c.agent.Connections, DeniedCommands: c.deny, Size: rt.Size, Timeout: c.timeout, BoxLimit: c.boxLimit, Lease: &c.lease,
+		Connections: c.agent.Connections, DeniedCommands: c.deny, Knowledge: c.knowledge, NoEnvironment: c.noEnv, Size: rt.Size, Timeout: c.timeout, BoxLimit: c.boxLimit, Lease: &c.lease,
 	}
+
+	if c.line.OnSecrets() {
+		r.ModelConnection, r.Connections, r.Repository.Connection = "", nil, ""
+		r.ModelKey, r.Environment = rt.ModelKey, c.env
+		r.Size, r.Image = cmp.Or(c.env.Size, domain.SandboxMedium), c.env.Image
+	}
+
+	return r
 }
 
 // exitTimedOut is the exit code a check reports when it ran out of time, as timeout(1) does.
@@ -806,6 +864,22 @@ func (e *Engine) transition(ctx context.Context, log *slog.Logger, t ports.Trans
 	default:
 		log.InfoContext(ctx, "item moved", slog.String("to_station", t.To.Station), slog.String("to_state", string(t.To.State)))
 	}
+}
+
+// agentEnvironment is the environment a's box gets on a version on secrets: its own, or the
+// default; zero on connections. It fails when the version has no file for it.
+func agentEnvironment(l domain.Line, a domain.AgentSpec) (domain.Environment, error) {
+	if !l.OnSecrets() {
+		return domain.Environment{}, nil
+	}
+
+	env, ok := l.Environment(a.Environment)
+	if !ok {
+		return domain.Environment{}, fmt.Errorf("agent %s gets environment %s, which version %d has no environments/%s.yaml for",
+			a.Name, cmp.Or(a.Environment, domain.DefaultEnvironment), l.Number, cmp.Or(a.Environment, domain.DefaultEnvironment))
+	}
+
+	return env, nil
 }
 
 func agentSpec(l domain.Line, name string) (domain.AgentSpec, error) {

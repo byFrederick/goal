@@ -17,7 +17,7 @@ import { stationLabel } from '../factory-editor/line/labels';
 import { defaultEdits } from './budget-draft';
 import { BudgetFields, useBudgetValues } from './budget-fields';
 import { BudgetCard } from './budget-gauge';
-import type { OnboardingSearch } from './code-search';
+import { type OnboardingSearch, repoOf } from './code-search';
 import { codeCard, FactoryCard, organizationCard, previewSlots } from './factory-preview';
 import { OnboardingLayout, PreviewPlaceholder } from './onboarding-layout';
 
@@ -51,7 +51,7 @@ function Back({ org, search, factory }: { org: OrgSummary; search: OnboardingSea
         <Link
           to="/o/$org/get-started/$step"
           params={{ org: org.slug, step: 'factory' }}
-          search={{ connection: search.connection, owner: search.owner, repos: search.repos }}
+          search={{ url: search.url, secret: search.secret }}
         >
           Back
         </Link>
@@ -215,7 +215,7 @@ function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingS
       preview={{
         ...previewSlots({
           organization: organizationCard(org, host),
-          code: codeCard(search.repos?.[0]),
+          code: codeCard(repoOf(search.url), search.secret),
           factory: (
             <FactoryCard
               name={basics.name || factoryDetail?.name || ''}

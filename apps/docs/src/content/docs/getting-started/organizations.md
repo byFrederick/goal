@@ -6,7 +6,7 @@ sidebar:
   order: 3
 ---
 
-An organization holds your factories, their work items and runs, the connections they use, and the people who work in them. Everything in Goal belongs to one organization. The CLI acts in one organization at a time.
+An organization holds your factories, their work items and runs, the secrets and environments they use, and the people who work in them. Everything in Goal belongs to one organization. The CLI acts in one organization at a time.
 
 ## Who can create one
 

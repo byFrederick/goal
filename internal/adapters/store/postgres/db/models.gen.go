@@ -29,6 +29,11 @@ type AgentRun struct {
 	OrgID               uuid.UUID
 	DefinitionVersionID *uuid.UUID
 	Kind                string
+	Brief               *string
+	Output              []byte
+	BranchHead          *string
+	BaseHead            *string
+	PushedHead          *string
 }
 
 type AndonPull struct {
@@ -101,6 +106,17 @@ type DraftRequest struct {
 	LeaseExpiresAt *time.Time
 }
 
+type EnvironmentTest struct {
+	OrgID       uuid.UUID
+	FactoryID   uuid.UUID
+	Environment string
+	Server      string
+	At          time.Time
+	Ok          bool
+	Error       string
+	Tools       []string
+}
+
 type EvalResult struct {
 	EvalRunID  uuid.UUID
 	OrgID      uuid.UUID
@@ -154,6 +170,16 @@ type EvalRunArm struct {
 	Judge          *string
 	JudgedShare    *float64
 	PerCase        []byte
+}
+
+type FactoryConversion struct {
+	OrgID       uuid.UUID
+	FactoryID   uuid.UUID
+	FromVersion uuid.UUID
+	ToVersion   *uuid.UUID
+	Problems    []string
+	Names       []byte
+	At          time.Time
 }
 
 type FactoryRecord struct {

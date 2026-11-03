@@ -2,7 +2,14 @@
 import { cleanup, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, getAgentStats } from '../../api/client';
-import { agentStatsQuery, boardQuery, versionModelQuery } from '../../api/queries';
+import {
+  agentStatsQuery,
+  boardQuery,
+  factoryQuery,
+  versionFileQuery,
+  versionModelQuery,
+  versionQuery,
+} from '../../api/queries';
 import type { AgentStats, Board, Factory, OrgSummary, VersionModel } from '../../api/types';
 import { renderFactoryPage, type Seed } from '../../test/route';
 import { AgentsPage } from './agents-page';
@@ -31,10 +38,17 @@ const factory: Factory = {
   can: ['item:operate', 'item:decide'],
 };
 
+const factoryCurrent = {
+  id: 'version-1',
+  number: 1,
+  published_at: '2026-10-01T00:00:00Z',
+  published_by: { kind: 'user', id: 'u-1', name: 'Acme Owner' },
+} as Factory['current'];
+
 // Fixture names of their own: the line is read from the model, so the page names nothing.
 const line = {
   basics: { size: 'large' },
-  connections: [{ name: 'github' }, { name: 'context7' }],
+  connections: [],
   line: {
     flow: { constraint: 'build', andon: { rework_rate: 0.4 } },
     stations: [
@@ -110,6 +124,21 @@ function seeded(running: unknown, agentStats: AgentStats[]): Seed[] {
   return [
     [boardQuery(org.id, factory.id).queryKey, boardOf({ draft: [1, 1], build: [3, 5], check: [0, 0] })],
     [versionModelQuery(org.id, factory.id, 'current').queryKey, version(running)],
+    [factoryQuery(org.id, factory.id).queryKey, { ...factory, current: factoryCurrent }],
+    [
+      versionQuery(org.id, factory.id, 'current').queryKey,
+      {
+        files: [
+          { path: 'factory.yaml', sha256: 'sha-f' },
+          { path: 'environments/default.yaml', sha256: 'sha-d' },
+          { path: 'environments/deploy.yaml', sha256: 'sha-e' },
+        ],
+      },
+    ],
+    [
+      versionFileQuery(org.id, factory.id, 'current', 'factory.yaml', 'sha-f').queryKey,
+      { text: 'spec:\n  agents:\n    - name: checker\n      environment: deploy\n    - name: drafter\n' },
+    ],
     ...agentStats.map((s): Seed => [agentStatsQuery(org.id, factory.id, s.agent).queryKey, s]),
   ];
 }
@@ -126,23 +155,14 @@ function renderPage(seed: Seed[]) {
 }
 
 describe('AgentsPage', () => {
-  it('reads the connection count with its plural: 0 connections, 1 connection, 3 connections', async () => {
-    const three = {
-      ...line,
-      agents: {
-        ...line.agents,
-        agents: line.agents.agents.map((a) =>
-          a.name === 'checker' ? { ...a, connections: ['github', 'context7', 'slack'] } : a,
-        ),
-      },
-    };
-    renderPage(seeded(three, readyStats));
+  it("shows each agent's environment on its card and the factory's environments in the defaults", async () => {
+    renderPage(seeded(line, readyStats));
 
     await screen.findByRole('heading', { level: 1, name: 'Agents' });
-    expect(screen.getAllByTitle('0 connections').length).toBeGreaterThan(0);
-    expect(screen.getAllByTitle('1 connection')).toHaveLength(1);
-    expect(screen.getAllByTitle('3 connections')).toHaveLength(1);
-    expect(screen.queryByTitle('1 connections')).toBeNull();
+    expect(await screen.findByTitle('Environment deploy')).toBeTruthy();
+    expect(screen.getAllByTitle('Environment default').length).toBeGreaterThan(0);
+    expect(screen.getByText('Environments')).toBeTruthy();
+    expect(screen.queryByText(/connection/i)).toBeNull();
   });
 
   it("shows the line with each station's agents and the factory defaults", async () => {
@@ -158,7 +178,7 @@ describe('AgentsPage', () => {
     expect(defaults.getByText('Large')).toBeTruthy();
     expect(defaults.getByText('$12.00')).toBeTruthy();
     expect(defaults.getByText('150')).toBeTruthy();
-    expect(defaults.getByText('github, context7')).toBeTruthy();
+    expect(defaults.getByText('default, deploy')).toBeTruthy();
     expect(defaults.getByRole('link', { name: 'Edit defaults' }).getAttribute('href')).toBe(
       '/o/acme/f/widgets/definition/basics',
     );

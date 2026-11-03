@@ -6,9 +6,8 @@ import { NotFoundScreen, PendingScreen } from '../app/states';
 import { type SourceSearch, sourceSearch } from '../features/knowledge/search';
 import { SourcePage } from '../features/knowledge/source-page';
 
-// One knowledge source (spec 4 §10): what it reads and its status, Sync now, uploads, its
-// documents (?document= opens one's indexed text), its settings, what may search it and Delete.
-// ?created says it was just added here.
+// One knowledge source (ADR 0038 decision 12): its files with their reads (?find= filters them), the latest
+// sync, settings, the line agents see and who reads it. ?created says it was just added here.
 export const Route = createFileRoute('/o/$org/_org/knowledge/$source')({
   pendingComponent: PendingScreen,
   validateSearch: (search: Record<string, unknown>): SourceSearch => sourceSearch(search),

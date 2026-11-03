@@ -1,8 +1,8 @@
 // No page scrolls sideways (MASTER.md "Layout" and "Accessibility and checks"): the document is never wider than
 // the window (documentElement.scrollWidth against clientWidth, which counts a button's hit area), at 1440, 1280, 1024, 768 and 390 px wide, in light and
 // dark, against the mock. The routes: Runs, Items, Needs you, Item (/items/12), New trigger, Jonah, Home,
-// Definition line, Board, Account, Factory settings, Assembly item (/items/17), Agents, Agent (reviewer),
-// Connections, GitHub connection, Knowledge source (handbook) and Spend. A wide table scrolls in its own box, so
+// Definition line, Definition knowledge, Board, Account, Factory settings, Assembly item (/items/17), Agents, Agent (reviewer),
+// Connections, GitHub connection, Knowledge, Add a source (upload, repository, Confluence), Knowledge source (goal-docs, handbook), Secrets, the New secret sheet, a secret (github-token), Import secrets and Spend. A wide table scrolls in its own box, so
 // the document's width is asserted, and so is that no visible element ends past the right edge outside a
 // horizontal scroller (expectNoClippedElements): the shell clips overflow, so scrollWidth alone misses cut-off content. Each visit attaches a screenshot. Not run in the box (no browser): the
 // pull request says so.
@@ -95,6 +95,14 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
     },
   },
   {
+    name: 'Definition knowledge',
+    open: async (page) => {
+      await page.goto('/o/acme/f/software/definition/knowledge');
+      await expect(page.getByRole('heading', { level: 2, name: 'Knowledge' })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 3, name: 'Factory memory' })).toBeVisible();
+    },
+  },
+  {
     name: 'Board',
     open: async (page) => {
       await page.goto('/o/acme/f/goal/board');
@@ -139,29 +147,80 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
     },
   },
   {
-    name: 'Connections',
+    name: 'Secrets',
     open: async (page) => {
-      await page.goto('/o/acme/connections');
-      await expect(page.getByRole('heading', { level: 1, name: 'Connections' })).toBeVisible();
+      await page.goto('/o/acme/secrets');
+      await expect(
+        page.getByRole('heading', { level: 1, name: 'Secrets' }).or(page.getByText('Every key agents use')),
+      ).toBeVisible();
+      await expect(page.getByRole('radio', { name: /Expiring/ })).toBeVisible();
     },
   },
   {
-    name: 'GitHub connection',
+    name: 'New secret sheet',
     open: async (page) => {
-      await page.goto('/o/acme/connections/github');
-      await expect(page.getByRole('heading', { level: 1, name: /github/i })).toBeVisible();
+      await page.goto('/o/acme/secrets?new=true');
+      await expect(page.getByRole('dialog', { name: 'New secret' })).toBeVisible();
     },
   },
   {
-    name: 'Knowledge source',
+    name: 'Secret',
     open: async (page) => {
-      // The mock has no source at first: create the upload source the way the New source page does.
+      await page.goto('/o/acme/secrets/github-token');
+      await expect(page.getByRole('heading', { level: 1, name: /github-token/ })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Activity' })).toBeVisible();
+    },
+  },
+  {
+    name: 'Import secrets',
+    open: async (page) => {
+      await page.goto('/o/acme/secrets/import');
+      await expect(page.getByRole('heading', { level: 1, name: 'Import secrets' })).toBeVisible();
+      await page.getByLabel('Paste .env or YAML').fill('SENTRY_TOKEN=x\nLINEAR_API_KEY=y');
+      await expect(page.getByRole('region', { name: 'What happens' })).toBeVisible();
+    },
+  },
+  {
+    name: 'Access',
+    open: async (page) => {
+      await page.goto('/o/acme/access');
+      await expect(page.getByRole('heading', { level: 1, name: 'Access' })).toBeVisible();
+    },
+  },
+  {
+    name: 'Knowledge',
+    open: async (page) => {
+      await page.goto('/o/acme/knowledge');
+      await expect(page.getByRole('heading', { level: 1, name: 'Knowledge' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Sources', exact: true })).toBeVisible();
+    },
+  },
+  ...(['upload', 'repository', 'confluence'] as const).map((kind) => ({
+    name: `Add a source (${kind})`,
+    open: async (page: Page) => {
+      await page.goto(`/o/acme/knowledge/new?kind=${kind}`);
+      await expect(page.getByRole('heading', { level: 1, name: 'New source' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Check' })).toBeVisible();
+    },
+  })),
+  {
+    name: 'Knowledge source (goal-docs)',
+    open: async (page) => {
+      await page.goto('/o/acme/knowledge/goal-docs');
+      await expect(page.getByRole('heading', { level: 1, name: /goal-docs/ })).toBeVisible();
+      await expect(page.getByRole('table', { name: 'Files of goal-docs' })).toBeVisible();
+    },
+  },
+  {
+    name: 'Knowledge source (a new upload source)',
+    open: async (page) => {
+      // The mock has no upload source at first: create it the way Add a source does.
       const created = await page.request.post('/v1/orgs/acme/knowledge/sources', {
-        data: { name: 'handbook', title: 'Handbook', kind: 'upload' },
+        data: { name: 'handbook', title: 'Handbook', kind: 'upload', read_when: 'Read when unsure of a rule.' },
       });
       expect(created.status()).toBe(201);
       await page.goto('/o/acme/knowledge/handbook');
-      await expect(page.getByRole('heading', { level: 1, name: /Handbook/ })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1, name: /handbook/ })).toBeVisible();
     },
   },
   {

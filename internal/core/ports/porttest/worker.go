@@ -29,6 +29,8 @@ type Worker struct {
 	prepareCode   int
 	prepareStderr string
 	branchExisted bool
+	branchHead    string
+	baseHead      string
 	exits         map[string][]int
 	prepares      []ExecCall
 	runs          []ExecCall
@@ -55,6 +57,15 @@ func (w *Worker) BranchExisted() {
 	w.branchExisted = true
 }
 
+// Heads makes prepare report the item branch's and the base's heads before its rebase, as
+// goal-agent prepare does with a repository.
+func (w *Worker) Heads(branch, base string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.branchHead, w.baseHead = branch, base
+}
+
 // Exit scripts the exit codes of successive runs of a check command, repeating the last.
 func (w *Worker) Exit(command string, codes ...int) {
 	w.mu.Lock()
@@ -78,7 +89,7 @@ func (w *Worker) Exec(ctx context.Context, c ExecCall, stdout, stderr io.Writer)
 func (w *Worker) prepare(c ExecCall, stdout, stderr io.Writer) int {
 	w.mu.Lock()
 	w.prepares = append(w.prepares, c)
-	code, why, existed := w.prepareCode, w.prepareStderr, w.branchExisted
+	code, why, existed, branch, base := w.prepareCode, w.prepareStderr, w.branchExisted, w.branchHead, w.baseHead
 	w.mu.Unlock()
 
 	w.changes.signal()
@@ -88,7 +99,10 @@ func (w *Worker) prepare(c ExecCall, stdout, stderr io.Writer) int {
 		return code
 	}
 
-	writeLine(stdout, preparedLine{Type: "prepared", At: time.Now().UTC().Format(time.RFC3339), Seconds: 0.1, BranchExisted: existed})
+	writeLine(stdout, preparedLine{
+		Type: "prepared", At: time.Now().UTC().Format(time.RFC3339), Seconds: 0.1, BranchExisted: existed,
+		BranchHead: branch, BaseHead: base,
+	})
 
 	return 0
 }
@@ -119,7 +133,8 @@ func (w *Worker) run(ctx context.Context, c ExecCall, stdout, stderr io.Writer) 
 
 	writeLine(stdout, finishedLine{Type: "finished", WorkerFinished: domain.WorkerFinished{
 		Status: string(status), Output: res.Output, Error: res.Error, CostUSD: res.CostUSD, Turns: res.Turns,
-		InputTokens: res.InputTokens, OutputTokens: res.OutputTokens, SessionID: res.SessionID, At: time.Now().UTC().Format(time.RFC3339),
+		InputTokens: res.InputTokens, OutputTokens: res.OutputTokens, SessionID: res.SessionID, PushedHead: res.PushedHead,
+		At: time.Now().UTC().Format(time.RFC3339),
 	}})
 
 	return 0
@@ -138,6 +153,8 @@ type preparedLine struct {
 	Seconds       float64 `json:"seconds"`
 	Tools         int     `json:"tools"`
 	BranchExisted bool    `json:"branch_existed"`
+	BranchHead    string  `json:"branch_head,omitempty"`
+	BaseHead      string  `json:"base_head,omitempty"`
 }
 
 func (w *Worker) check(c ExecCall, stdout io.Writer) int {

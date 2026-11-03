@@ -19,6 +19,8 @@ import type {
   DraftModel,
   DraftRequest,
   DraftRequestList,
+  EnvironmentTestRequest,
+  EnvironmentTestResult,
   Factory,
   FileInfo,
   FileMap,
@@ -31,6 +33,7 @@ import type {
   SectionSave,
   Template,
   TemplateSummary,
+  ToolTemplate,
   ValidateDraftRequest,
   Validation,
   Version,
@@ -223,6 +226,22 @@ export async function listDraftFiles(org: string, factory: string, signal?: Abor
     goal.GET(orgPath('/factories/{factory}/draft/files'), { params: { path: { org, factory } }, ...cancel(signal) }),
   );
   return body.files;
+}
+
+/** The Knowledge prompt section one agent gets from the draft, as Markdown ("" when there is none); 404 no-draft. */
+export async function getDraftKnowledgePreview(
+  org: string,
+  factory: string,
+  agent: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const body = await unwrap(
+    goal.GET(orgPath('/factories/{factory}/draft/knowledge-preview'), {
+      params: { path: { org, factory }, query: { agent } },
+      ...cancel(signal),
+    }),
+  );
+  return body.section;
 }
 
 /** One file's text and the sha256 its writes are conditional on. */
@@ -462,6 +481,30 @@ export function restoreVersion(
   return unwrap(
     goal.POST(orgPath('/factories/{factory}/versions/{version}/restore'), {
       params: { path: { org, factory, version } },
+      body: request,
+    }),
+  );
+}
+
+/** The tool templates goald ships (ADR 0037 decision 15), the catalog of Add a tool. */
+export async function getCatalog(signal?: AbortSignal): Promise<ToolTemplate[]> {
+  const body = await unwrap(goal.GET('/v1/catalog', { ...cancel(signal) }));
+  return body.templates;
+}
+
+/**
+ * Tests one environment's MCP servers, or with `template` a catalog tool with the secrets picked for it.
+ * A test that fails is an answer (`ok: false`), not an error.
+ */
+export function testEnvironment(
+  org: string,
+  factory: string,
+  environment: string,
+  request: EnvironmentTestRequest,
+): Promise<EnvironmentTestResult> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/environments/{environment}/test'), {
+      params: { path: { org, factory, environment } },
       body: request,
     }),
   );

@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://goal.local/schema/environment.schema.json",
+  "title": "Goal environment",
+  "description": "environments/<name>.yaml in a factory definition (ADR 0037 decision 5): what an agent's box installs and what it can reach. Its name is its file name; every factory has environments/default.yaml, which an agent, judge or eval case without an environment gets. A {{secret}} reference names an organization secret and is valid only in env, files and mcp (headers, and a stdio server's env).",
+  "type": "object",
+  "required": ["apiVersion", "kind", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "goal/v1" },
+    "kind": { "const": "Environment" },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/slug", "description": "The file name without .yaml; written for readers, and must match it when present." },
+        "description": { "type": "string", "maxLength": 200, "description": "What the environment is for, in one sentence." }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "size": { "enum": ["small", "medium", "large"], "description": "How much CPU and memory the box gets; medium when omitted." },
+        "image": { "type": "string", "minLength": 1, "maxLength": 300, "description": "The box's container image; Goal's agent image when omitted." },
+        "tools": {
+          "type": "array",
+          "maxItems": 50,
+          "description": "mise tool specs (go@1.26, npm:@acme/cli@2) the box installs after the repository's own mise.toml or .tool-versions.",
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "setup": {
+          "type": "array",
+          "maxItems": 50,
+          "description": "Commands run in order after the clone and the tools. Each must finish in 30 minutes; a non-zero exit fails the run.",
+          "items": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        },
+        "env": {
+          "type": "object",
+          "description": "Variables the box gets, by name: a plain value, or one with {{secret}} references as the whole value or part of it (postgres://app:{{db-pass}}@db/app). Names the platform keeps (GOAL_*, HOME, PATH…) are refused at publish.",
+          "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+          "additionalProperties": { "type": "string", "maxLength": 4000 }
+        },
+        "files": {
+          "type": "object",
+          "description": "Files written before setup with mode 0600, by path: an absolute path or one that starts with ~/. Each value is a {{secret}} reference.",
+          "propertyNames": { "pattern": "^(/|~/).+$" },
+          "additionalProperties": { "$ref": "#/$defs/reference" }
+        },
+        "mcp": {
+          "type": "object",
+          "description": "MCP servers the agent gets, by name (a slug, as environment tests and standing rules name it): each is remote (url, optional headers) or stdio (command, optional env), never both.",
+          "propertyNames": { "$ref": "#/$defs/slug" },
+          "additionalProperties": { "$ref": "#/$defs/mcpServer" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "slug": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$" },
+    "reference": {
+      "type": "string",
+      "pattern": "^\\{\\{\\s*[^{}\\s]+\\s*\\}\\}$",
+      "description": "A whole {{secret}} reference: the name of an organization secret open to the factory."
+    },
+    "variables": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$" },
+      "additionalProperties": { "type": "string", "maxLength": 4000 }
+    },
+    "mcpServer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string", "pattern": "^https?://[^\\s]+$", "description": "Remote: the server's URL." },
+        "headers": { "$ref": "#/$defs/variables", "description": "Remote: the headers of every request, with {{secret}} references, such as Authorization: Bearer {{linear-key}}." },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Stdio: the command and its arguments, run in the box."
+        },
+        "env": { "$ref": "#/$defs/variables", "description": "Stdio: the server's own variables, with {{secret}} references." },
+        "tools": {
+          "type": "object",
+          "description": "Tool modes by tool name or glob (delete_*): allow, ask or off. The most specific match wins; a tool nothing matches is allow.",
+          "propertyNames": { "pattern": "^[A-Za-z0-9_.*?-]+$" },
+          "additionalProperties": { "enum": ["allow", "ask", "off"] }
+        }
+      },
+      "oneOf": [
+        { "required": ["url"], "not": { "anyOf": [{ "required": ["command"] }, { "required": ["env"] }] } },
+        { "required": ["command"], "not": { "anyOf": [{ "required": ["url"] }, { "required": ["headers"] }] } }
+      ]
+    }
+  }
+}

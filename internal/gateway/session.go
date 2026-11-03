@@ -12,16 +12,13 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
-// sep joins a server and a tool into the name an agent sees: "knowledge__search".
+// sep joins a server and a tool into the name an agent sees: "question__ask".
 const sep = "__"
 
-// session is one request's view of a task: its claims and the knowledge sources its tools reach.
+// session is one request's view of a task: its claims and whether it is served any tool.
 type session struct {
 	g      *Gateway
 	claims domain.TaskClaims
-	// sources are the knowledge sources the run's version lists, which Goal's knowledge tools
-	// search and read; none serves no knowledge tool.
-	sources []string
 	// noTools serves no tool at all: a Jonah review's (ADR 0034 decision 1).
 	noTools bool
 }
@@ -51,14 +48,10 @@ func (s *session) intercept(next mcp.MethodHandler) mcp.MethodHandler {
 	}
 }
 
-// listTools lists the tools the task may call: the knowledge tools when its version lists sources,
-// and the question tool always; none for a task served no tool.
+// listTools lists the tools the task may call: the question tool, or none for a task served no
+// tool.
 func (s *session) listTools() *mcp.ListToolsResult {
 	tools := []*mcp.Tool{}
-	if len(s.sources) > 0 && !s.noTools {
-		tools = append(tools, knowledgeTools(s.sources)...)
-	}
-
 	if !s.noTools {
 		tools = append(tools, askTool())
 	}
@@ -71,10 +64,6 @@ func (s *session) listTools() *mcp.ListToolsResult {
 // callTool answers one call and records it. A tool the task may not call is a protocol error, as
 // for an unknown tool.
 func (s *session) callTool(ctx context.Context, p *mcp.CallToolParamsRaw) (*mcp.CallToolResult, error) {
-	if tool, ok := s.knowledgeTool(p.Name); ok && !s.noTools {
-		return s.callKnowledge(ctx, tool, p.Arguments), nil
-	}
-
 	if p.Name == questionServer+sep+toolAsk && !s.noTools {
 		return s.callQuestion(ctx, p.Arguments), nil
 	}

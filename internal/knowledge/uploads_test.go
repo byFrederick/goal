@@ -10,6 +10,12 @@ import (
 	"github.com/byFrederick/goal/internal/knowledge"
 )
 
+// The world's sources.
+const (
+	srcHandbook = "handbook"
+	srcRunbooks = "runbooks"
+)
+
 // Check refuses what Upload would, before anything is stored, so a request of several files can
 // be refused whole.
 func TestUploads_CheckRefusesWhatUploadWould(t *testing.T) {
@@ -24,7 +30,7 @@ func TestUploads_CheckRefusesWhatUploadWould(t *testing.T) {
 	}{
 		{name: "markdown", file: "a.md", body: "# A"},
 		{name: "too large", file: "a.md", body: "# 123456789", want: ports.ErrTooLarge},
-		{name: "unsupported", file: "deck.pptx", body: "PK", want: domain.ErrUnsupportedDocument},
+		{name: "unsupported", file: "deck.key", body: "PK", want: domain.ErrUnsupportedDocument},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -36,9 +42,9 @@ func TestUploads_CheckRefusesWhatUploadWould(t *testing.T) {
 	}
 }
 
-// Original is an uploaded document's file as it was uploaded; a synced document's original stays
-// at its source.
-func TestUploads_OriginalOfAnUploadOnly(t *testing.T) {
+// The reader of an upload source lists its files by content hash and hands over each original from
+// the bucket.
+func TestUploads_ListAndFetchTheOriginals(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld(t)
@@ -46,25 +52,32 @@ func TestUploads_OriginalOfAnUploadOnly(t *testing.T) {
 
 	body := []byte("# Leave\n\nAsk your lead.")
 
-	d, err := w.uploads.Upload(ctx, srcHandbook, "leave.md", body, admin)
-	if err != nil {
+	if _, err := w.uploads.Upload(ctx, srcHandbook, "leave.md", body, admin); err != nil {
 		t.Fatal(err)
 	}
 
-	got, raw, err := w.uploads.Original(ctx, d.ID)
-	if err != nil || got.ID != d.ID || got.Title != "leave.md" || !bytes.Equal(raw, body) {
-		t.Fatalf("Original = %+v, %q, %v; want leave.md as uploaded", got, raw, err)
+	spec := domain.SyncSpec{Source: w.source(srcHandbook)}
+
+	var items []domain.SourceItem
+
+	for item, err := range w.uploads.List(ctx, spec) {
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		items = append(items, item)
 	}
 
-	w.docs.set(map[string]string{deployMD: "# Deploy\n\nShip it."})
-	w.syncDue(w.ingestor(nil, nil))
-
-	synced := w.documents(srcRunbooks)[deployMD]
-	if _, _, err := w.uploads.Original(ctx, synced.ID); !errors.Is(err, domain.ErrNotUploadSource) {
-		t.Errorf("Original of a synced document = %v, want not an upload source", err)
+	if len(items) != 1 || items[0].Title != "leave.md" || items[0].Version != string(domain.HashBlob(body)) {
+		t.Fatalf("List = %+v; want leave.md at its content hash", items)
 	}
 
-	if _, _, err := w.uploads.Original(ctx, "019a0000-0000-7000-8000-000000000999"); !errors.Is(err, ports.ErrNotFound) {
-		t.Errorf("Original of no document = %v, want not found", err)
+	doc, err := w.uploads.Fetch(ctx, spec, items[0].ID)
+	if err != nil || !bytes.Equal(doc.Body, body) {
+		t.Fatalf("Fetch = %q, %v; want the original", doc.Body, err)
+	}
+
+	if _, err := w.uploads.Fetch(ctx, spec, "not-a-hash"); !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("Fetch of no hash = %v, want invalid", err)
 	}
 }

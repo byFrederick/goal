@@ -11,8 +11,12 @@ export const paths = {
   factorySchema: '/goal/definition/factory.schema.json',
   agent: '/goal/agent',
   workspace: '/workspace',
+  /** The run's knowledge: each pinned snapshot unpacked, read-only, into /knowledge/<source>/ (ADR 0038). */
+  knowledge: '/knowledge',
   /** Claude Code's config dir for this run, in the sandbox's throwaway home; never the host's. */
   claudeConfig: '/home/node/.claude',
+  /** The sandbox's throwaway home, where git's global config and credential store go. */
+  home: '/home/node',
 } as const;
 
 /** A variable name; never an option or a shell word. */
@@ -44,6 +48,45 @@ export const Connection = z.object({
 });
 export type Connection = z.infer<typeof Connection>;
 
+/** One entry of an environment server's tool modes: a tool name or glob (as Go's path.Match) and its mode. */
+export const ToolMode = z.object({ tool: z.string().min(1), mode: z.enum(['allow', 'ask', 'off']) });
+export type ToolMode = z.infer<typeof ToolMode>;
+
+/**
+ * One MCP server of the agent's environment file (ADR 0037): remote (url and headers) or stdio
+ * (command and env), each secret in them as ${GOAL_SECRET_<NAME>} for Claude Code to expand, and
+ * its tool modes, most specific first.
+ */
+export const EnvironmentServer = z.object({
+  /** As environment.schema.json names servers: an MCP server name and the mcp__<name>__ tool prefix. */
+  name: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
+  url: z.url().optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+  command: z.array(z.string()).min(1).optional(),
+  env: z.record(envName, z.string()).optional(),
+  tool_modes: z.array(ToolMode).default([]),
+});
+export type EnvironmentServer = z.infer<typeof EnvironmentServer>;
+
+/**
+ * The agent's environment file on a version on secrets (ADR 0037 decisions 5, 8 and 11), without a
+ * value: goal-agent run's env holds the variables, each file's content in the variable its env
+ * names (GOAL_FILE_<n>) and the servers' secrets (GOAL_SECRET_<NAME>).
+ */
+export const Environment = z.object({
+  name: z.string().min(1),
+  mcp_servers: z.array(EnvironmentServer).default([]),
+  /** Shell commands run in /workspace, in order, before the agent starts. */
+  setup: z.array(z.string().min(1)).default([]),
+  /** Files written before setup with mode 0600: an absolute path or one that starts with ~/. */
+  files: z.array(z.object({ path: z.string().regex(/^(\/|~\/).+$/), env: envName })).default([]),
+  /** The names of the file's variables. */
+  env: z.array(envName).default([]),
+  /** The names of the file's tools, without their versions. */
+  clis: z.array(z.string()).default([]),
+});
+export type Environment = z.infer<typeof Environment>;
+
 /**
  * One of the factory rules that apply to the run (ADR 0014): its name, the sha256 of its rule
  * file in the run's definition version, its paths and the markdown file to write (frontmatter
@@ -57,6 +100,23 @@ export const Rule = z.object({
   content: z.string(),
 });
 export type Rule = z.infer<typeof Rule>;
+
+/**
+ * The run's knowledge (ADR 0038 decisions 7 and 8): its prompt's Knowledge section, and each pinned
+ * snapshot prepare downloads (a URL resolved against the gateway's, which the task token authorizes)
+ * and unpacks into /knowledge/<source>/. A draft request's has the section and no snapshot.
+ */
+export const Knowledge = z.object({
+  section: z.string(),
+  snapshots: z.array(
+    z.object({
+      /** A source's name, a slug: its folder under /knowledge, so it never holds a separator. */
+      source: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+      url: z.string().min(1),
+    }),
+  ),
+});
+export type Knowledge = z.infer<typeof Knowledge>;
 
 /** A draft request (ADR 0021): what a person asked to change in the factory's draft, and the agent it is about. */
 export const DraftRequest = z.object({
@@ -163,8 +223,10 @@ const taskFields = z.object({
   max_usd: z.number().positive().optional(),
   /** The agent's organization connections its token grants; absent from a goald before connections. */
   connections: z.array(Connection).default([]),
-  /** The knowledge sources the gateway's knowledge tools search for this run. */
-  knowledge_sources: z.array(z.string()).optional(),
+  /** The agent's environment file on a version on secrets (ADR 0037); absent on a version on connections. */
+  environment: Environment.optional(),
+  /** The run's Knowledge section and snapshots; absent when it has none, or from a goald before them. */
+  knowledge: Knowledge.optional(),
   /** The factory rules that apply to the run; absent from a goald before factory rules. */
   rules: z.array(Rule).optional(),
   /**
@@ -179,6 +241,8 @@ const taskFields = z.object({
   base_conflicts: z.array(z.string()).optional(),
   /** The branch those files conflict with when the bundle named a base; absent means the default branch. */
   base_branch: z.string().optional(),
+  /** The item's branch prepare checked out in /workspace; absent without a repository. */
+  branch: z.string().optional(),
   /** Definition mode (ADR 0021): the run changes the factory's draft files in /workspace for this request. */
   draft_request: DraftRequest.optional(),
   /** Judge mode (ADR 0025): the run scores this material with this judge, in one model call without tools. */
@@ -236,11 +300,16 @@ const bundlePath = relativePath
   .refine((p) => p !== 'spec.json', 'spec.json is the spec')
   .refine((p) => p !== 'definition.json', 'definition.json is the definition baseline');
 
-/** A git login for https://<host>: the user name and the variable that holds the password. */
+/**
+ * A git login for https://<host>: the user name and the variable that holds the password. With
+ * store (the repository token's login, ADR 0037 decision 7), prepare keeps it in git's credential
+ * store, so git commands after prepare sign in without the variable.
+ */
 export const GitCredential = z.object({
   host: z.string().regex(/^[A-Za-z0-9.-]+(:\d{1,5})?$/),
   username: z.string().regex(/^[A-Za-z0-9._@+-]+$/),
   password_env: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+  store: z.boolean().optional(),
 });
 export type GitCredential = z.infer<typeof GitCredential>;
 
@@ -254,7 +323,7 @@ const toolSpec = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9@:/._+-]*$/);
 export const Bundle = z
   .object({
     spec: taskFields
-      .omit({ gateway_url: true, base_conflicts: true, base_branch: true })
+      .omit({ gateway_url: true, base_conflicts: true, base_branch: true, branch: true })
       .refine(itemNamed, itemMessage)
       .refine(oneMode, modeMessage),
     /** Files under /goal by path, base64. */

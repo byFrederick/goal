@@ -44,16 +44,24 @@ func TestLine_Refusal(t *testing.T) {
 		line Line
 		want []string // in the reason; none for a line that runs
 	}{
-		{name: "on connections", line: Line{Runtime: Runtime{ModelConnection: "claude"}}},
+		{name: "on connections", line: Line{Runtime: Runtime{ModelConnection: testModelConn}}},
 		{
 			name: "a removed form", line: Line{
-				Number: 3, Runtime: Runtime{ModelConnection: "claude"}, Removed: []string{"spec.runtime.repository.token (env-reference-removed)"},
+				Number: 3, Runtime: Runtime{ModelConnection: testModelConn}, Removed: []string{"spec.runtime.repository.token (env-reference-removed)"},
 			},
-			want: []string{"version 3", "spec.runtime.repository.token (env-reference-removed)", "publish a version with connections (spec 4 §4.4)"},
+			want: []string{"version 3", "spec.runtime.repository.token (env-reference-removed)", "publish a version on environment files and secrets (ADR 0037)"},
 		},
 		{
 			name: "no model connection", line: Line{Number: 2},
-			want: []string{"version 2", "runtime.modelConnection", "publish a version with connections (spec 4 §4.4)"},
+			want: []string{"version 2", "runtime.modelConnection", "runtime.modelKey"},
+		},
+		{name: "on secrets", line: Line{Runtime: Runtime{ModelKey: testModelKey}, Environments: []Environment{{Name: DefaultEnvironment}}}},
+		{name: "a model key without environments", line: Line{Runtime: Runtime{ModelKey: testModelKey}}},
+		{
+			name: "environments without a model key", line: Line{
+				Number: 4, Runtime: Runtime{ModelConnection: testModelConn}, Environments: []Environment{{Name: DefaultEnvironment}},
+			},
+			want: []string{"version 4", "runtime.modelKey"},
 		},
 	}
 
@@ -85,6 +93,36 @@ func TestLine_MergeConnections(t *testing.T) {
 	l.Runtime.Repository.Connection = repos
 	if got := l.MergeConnections(); !slices.Equal(got, []string{repos, "datadog"}) {
 		t.Errorf("MergeConnections with the repository's listed = %v", got)
+	}
+}
+
+// A repository's host names its code host on github.com and gitlab.com, whatever the case;
+// forge names it on any host and wins over the host's.
+func TestRepository_CodeHost(t *testing.T) {
+	t.Parallel()
+
+	const forgeGitHub, forgeGitLab = "github", "gitlab"
+
+	tests := []struct {
+		repo                Repository
+		wantHost, wantForge string
+	}{
+		{repo: Repository{URL: "https://github.com/acme/app.git"}, wantHost: hostGitHub, wantForge: forgeGitHub},
+		{repo: Repository{URL: "https://GitLab.com/acme/web.git"}, wantHost: "gitlab.com", wantForge: forgeGitLab},
+		{repo: Repository{URL: "https://git.example.com/acme/app.git"}, wantHost: "git.example.com"},
+		{repo: Repository{URL: "https://git.example.com:8443/acme/app.git", Forge: forgeGitLab}, wantHost: "git.example.com:8443", wantForge: forgeGitLab},
+		{repo: Repository{URL: "https://github.com/acme/app.git", Forge: forgeGitLab}, wantHost: hostGitHub, wantForge: forgeGitLab},
+		{repo: Repository{}},
+	}
+
+	for _, tt := range tests {
+		if host, forge := tt.repo.CodeHost(); host != tt.wantHost || forge != tt.wantForge {
+			t.Errorf("CodeHost of %+v = %q, %q; want %q, %q", tt.repo, host, forge, tt.wantHost, tt.wantForge)
+		}
+	}
+
+	if KnownForge("GITHUB.COM") != forgeGitHub || KnownForge("git.example.com") != "" {
+		t.Error("KnownForge does not name github.com's adapter alone")
 	}
 }
 

@@ -52,8 +52,8 @@ export type OrgPath =
   | '/o/$org/settings'
   | '/o/$org/api-keys'
   | '/o/$org/models'
-  | '/o/$org/connections'
-  | '/o/$org/credentials'
+  | '/o/$org/access'
+  | '/o/$org/secrets'
   | '/o/$org/knowledge'
   | '/o/$org/runs'
   | '/o/$org/needs-you'
@@ -63,11 +63,11 @@ type Availability<Path> = { available: true; to: Path; exact?: boolean } | { ava
 
 /**
  * A factory screen: one of its own pages, or (`filters`) an organization page filtered to the
- * factory (?factory=<name>), as the factory's Connections and Knowledge are.
+ * factory (?factory=<name>), as the factory's Knowledge is.
  */
 export type FactoryScreen = Screen & { group: 'work' | 'build' | 'learn' } & (
     | Availability<FactoryPath>
-    | { available: true; filters: '/o/$org/connections' | '/o/$org/knowledge' }
+    | { available: true; filters: '/o/$org/knowledge' }
   );
 /**
  * An organization screen; one with `permissions` is listed only for people who hold at least one
@@ -105,15 +105,6 @@ export const factoryScreens: readonly FactoryScreen[] = [
     group: 'build',
     available: true,
     to: '/o/$org/f/$factory/settings',
-  },
-  // The organization's Connections, filtered to the factory (spec 4 §10).
-  {
-    id: 'connections',
-    label: 'Connections',
-    icon: Plug,
-    group: 'build',
-    available: true,
-    filters: '/o/$org/connections',
   },
   // The organization's Knowledge, filtered to the factory (spec 4 §10).
   {
@@ -167,21 +158,21 @@ export const apiKeysScreen: OrgScreen = {
   to: '/o/$org/api-keys',
   permissions: ['api_key:read', 'personal_token:read'],
 };
-/** The organization's connections (spec 4 §10): every member reads them; owners and admins change them. */
-export const connectionsScreen: OrgScreen = {
-  id: 'connections',
-  label: 'Connections',
+/** What the organization's agents reach (ADR 0037 decision 14): a read-only view for everyone who may read access. */
+export const accessScreen: OrgScreen = {
+  id: 'access',
+  label: 'Access',
   icon: Plug,
-  to: '/o/$org/connections',
-  permissions: ['connection:read'],
+  to: '/o/$org/access',
+  permissions: ['access:read'],
 };
-/** The organization's credentials (ADR 0017): every member reads their names; owners and admins change them. */
-export const credentialsScreen: OrgScreen = {
-  id: 'credentials',
-  label: 'Credentials',
+/** The organization's secrets (ADR 0037): every member reads their names; owners and admins change them. */
+export const secretsScreen: OrgScreen = {
+  id: 'secrets',
+  label: 'Secrets',
   icon: KeyRound,
-  to: '/o/$org/credentials',
-  permissions: ['credential:read'],
+  to: '/o/$org/secrets',
+  permissions: ['secret:read'],
 };
 /** The organization's knowledge base (spec 4 §10): every member reads and searches it; owners and admins change it. */
 export const knowledgeScreen: OrgScreen = {
@@ -239,8 +230,8 @@ export const sidebarOrgScreens: readonly Listed<OrgPath>[] = [
   { ...homeScreen, available: true },
   { ...needsYouScreen, available: true },
   { ...runsScreen, available: true },
-  { ...connectionsScreen, available: true },
-  { ...credentialsScreen, available: true },
+  { ...accessScreen, available: true },
+  { ...secretsScreen, available: true },
   { ...knowledgeScreen, available: true },
 ];
 

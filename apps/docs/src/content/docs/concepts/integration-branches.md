@@ -32,7 +32,7 @@ A line in `branch` mode needs a station that merges, and `landAt` must name a st
 
 When the last part is done or cancelled, the assembly does not close. It moves to its landing station and waits there in the queue.
 
-The landing run opens a pull request from the integration branch into the default branch. Approval at the gate merges it, as it would any item. An assembly whose parts changed nothing can land with no pull request.
+The landing run opens a pull request from the integration branch into the default branch. Approval at the gate merges it, as it would any item. On a version on secrets, goald merges it with `runtime.repository.token` (see [the repository and the model](/docs/concepts/access-and-secrets/#the-repository-and-the-model)). An assembly whose parts changed nothing can land with no pull request.
 
 If the landing is rejected, the gate sends the assembly back to its `onReject` station. There, the work goes back on the integration branch and the pull request stays open.
 

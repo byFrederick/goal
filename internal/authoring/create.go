@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"path"
 
 	"github.com/google/uuid"
 
@@ -131,7 +132,7 @@ func (s *Service) start(ctx context.Context, st Start) (starting, error) {
 
 		switch {
 		case errors.Is(err, ErrTemplateNotFound):
-			return s.stored(ctx, map[string][]byte{config.FileName: skeleton()}, domain.VersionSource{Kind: domain.SourceBlank})
+			return s.stored(ctx, skeleton(), domain.VersionSource{Kind: domain.SourceBlank})
 		case err != nil:
 			return starting{}, err
 		}
@@ -213,12 +214,17 @@ func (s *Service) cloneStart(ctx context.Context, st Start) (starting, error) {
 	}, nil
 }
 
-// skeleton is the blank definition when the catalog has no blank template: apiVersion, kind,
-// metadata and the runtime's size only, since a station, agent or connection name in Go would
-// make the code define factories. The Line section starts empty.
-func skeleton() []byte {
-	return []byte("apiVersion: goal/v1\nkind: Factory\nmetadata:\n  id: " + nilFactoryID + "\n  name: new-factory\n" +
-		"spec:\n  runtime:\n    size: " + string(domain.SandboxMedium) + "\n")
+// skeleton is the blank definition when the catalog has no blank template: factory.yaml with
+// apiVersion, kind, metadata and an empty runtime, and the default environment with its size
+// only (ADR 0037), since a station, agent or tool name in Go would make the code define
+// factories. The Line section starts empty.
+func skeleton() map[string][]byte {
+	return map[string][]byte{
+		config.FileName: []byte("apiVersion: goal/v1\nkind: Factory\nmetadata:\n  id: " + nilFactoryID + "\n  name: new-factory\n" +
+			"spec:\n  runtime: {}\n"),
+		path.Join(config.EnvironmentsDir, config.DefaultEnvironment+".yaml"): []byte(
+			"apiVersion: goal/v1\nkind: Environment\nspec:\n  size: " + string(domain.SandboxMedium) + "\n"),
+	}
 }
 
 // startingModel reads the starting tree's factory.yaml; one that is missing or does not parse

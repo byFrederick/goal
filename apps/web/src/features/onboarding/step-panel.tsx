@@ -6,7 +6,7 @@ import { modelOf } from '../../shared/definition/model';
 import { stationLabel } from '../factory-editor/line/labels';
 import { BudgetCard } from './budget-gauge';
 import { budgetRanges } from './budget-hints';
-import type { OnboardingSearch } from './code-search';
+import { type OnboardingSearch, repoOf } from './code-search';
 import { codeCard, FactoryCard, organizationCard, previewSlots, RunningItemCard } from './factory-preview';
 import { IntakeCard } from './intake-step';
 import type { PreviewSlots } from './onboarding-layout';
@@ -49,7 +49,7 @@ export function stepPanel({
   return {
     ...previewSlots({
       organization: organizationCard(org, window.location.host),
-      code: codeCard(search.repos?.[0]),
+      code: codeCard(repoOf(search.url), search.secret),
       factory: (
         <FactoryCard
           name={factory.name}

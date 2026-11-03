@@ -56,7 +56,7 @@ func seedCredential(t *testing.T, c *Credentials, org domain.OrgID, name, value 
 	return cred
 }
 
-// ADR 0017 decision 3: no column of the credentials table, nor of any other table, the audit log
+// ADR 0017 decision 3: no column of the secrets table (00065's credentials), nor of any other table, the audit log
 // included, holds a value in the clear, as text or as hex, after a create, a replace and a use.
 func TestCredentials_NoPlaintextInAnyColumn(t *testing.T) {
 	t.Parallel()
@@ -81,8 +81,8 @@ func TestCredentials_NoPlaintextInAnyColumn(t *testing.T) {
 
 	tables := queryStrings(t, d.admin, `SELECT c.relname::text FROM pg_class c
 		WHERE c.relnamespace = current_schema()::text::regnamespace AND c.relkind IN ('r', 'p')`)
-	if !slices.Contains(tables, "credentials") {
-		t.Fatalf("no credentials table among %v", tables)
+	if !slices.Contains(tables, "secrets") {
+		t.Fatalf("no secrets table among %v", tables)
 	}
 
 	for _, table := range tables {
@@ -106,7 +106,7 @@ func TestCredentials_NoPlaintextInAnyColumn(t *testing.T) {
 		cipher []byte
 	)
 
-	if err := d.admin.QueryRow(t.Context(), `SELECT key_id, ciphertext FROM credentials`).Scan(&key, &cipher); err != nil {
+	if err := d.admin.QueryRow(t.Context(), `SELECT key_id, ciphertext FROM secrets`).Scan(&key, &cipher); err != nil {
 		t.Fatal(err)
 	}
 
@@ -133,8 +133,8 @@ func TestCredentials_AADMismatchRefused(t *testing.T) {
 	copySealed := func(t *testing.T, toOrg domain.OrgID, to string) {
 		t.Helper()
 
-		tag, err := d.admin.Exec(t.Context(), `UPDATE credentials dst SET key_id = src.key_id, nonce = src.nonce, ciphertext = src.ciphertext
-			FROM credentials src WHERE src.org_id = $1 AND src.name = 'sentry-token' AND dst.org_id = $2 AND dst.name = $3`,
+		tag, err := d.admin.Exec(t.Context(), `UPDATE secrets dst SET key_id = src.key_id, nonce = src.nonce, ciphertext = src.ciphertext
+			FROM secrets src WHERE src.org_id = $1 AND src.name = 'sentry-token' AND dst.org_id = $2 AND dst.name = $3`,
 			string(acme), string(toOrg), to)
 		if err != nil || tag.RowsAffected() != 1 {
 			t.Fatalf("copy the sealed value: %d rows, %v", tag.RowsAffected(), err)
@@ -166,15 +166,20 @@ func TestCredentials_AADMismatchRefused(t *testing.T) {
 	}
 }
 
-// goald refuses to start without a key a credential is sealed under: the key ids it checks
-// include one that only a credential uses.
+// goald refuses to start without a key a secret is sealed under: the key ids it checks include
+// one that only a secret uses.
 func TestConnectionKeyIDs_IncludesCredentials(t *testing.T) {
 	t.Parallel()
 
 	d := newConnectionsDB(t)
 	org := newOrgID(t, d.store)
 	seedConnections(t, NewConnections(d.store, testKey(t, "k1")), org, "s3cret")
-	seedCredential(t, NewCredentials(d.store, testKey(t, "k9")), org, seededCredential, "sk-only-k9")
+
+	_, err := NewSecrets(d.store, testKey(t, "k9")).Create(domain.WithOrg(t.Context(), org),
+		domain.NewSecret{Name: seededCredential, Value: "sk-only-k9"}, domain.LocalUser)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	ids, err := ConnectionKeyIDs(t.Context(), d.store)
 	if err != nil || !slices.Equal(ids, []string{"k1", "k9"}) {
@@ -182,8 +187,9 @@ func TestConnectionKeyIDs_IncludesCredentials(t *testing.T) {
 	}
 }
 
-// goal db rekey reseals credentials as it reseals connections: after it, a credential sealed
-// under k1 opens under k2 alone, and running it again reseals nothing.
+// goal db rekey reseals secrets as it reseals connections: after it, a secret sealed under k1
+// opens under k2 alone, through the credentials API and the secrets store, and running it again
+// reseals nothing.
 func TestRekey_ResealsCredentials(t *testing.T) {
 	t.Parallel()
 
@@ -206,6 +212,8 @@ func TestRekey_ResealsCredentials(t *testing.T) {
 		t.Errorf("Resolve under k2 after Rekey: %v", err)
 	}
 
+	expectOpens(t, NewSecrets(d.store, testKey(t, "k2")), org, "sk-rekeyed-3b7c")
+
 	if n, err := Rekey(t.Context(), d.owner, testKey(t, "k2", "k1")); err != nil || n != 0 {
 		t.Errorf("Rekey again = %d, %v; want nothing left", n, err)
 	}
@@ -215,9 +223,19 @@ func TestRekey_ResealsCredentials(t *testing.T) {
 	}
 }
 
-// As goal_app, another organization neither reads nor writes a credential, and goal_app cannot
-// rewrite a credential's id, organization or creation.
-func TestCredentials_RLSAndGrants(t *testing.T) {
+// expectOpens fails unless secrets opens seededCredential of org as value.
+func expectOpens(t *testing.T, secrets *Secrets, org domain.OrgID, value string) {
+	t.Helper()
+
+	got, err := secrets.Resolve(domain.WithOrg(t.Context(), org), []string{seededCredential}, domain.SecretUse(credentialUse))
+	if err != nil || len(got) != 1 || got[0].Value != value {
+		t.Errorf("the secrets store's Resolve of %s: %v; want its value", seededCredential, err)
+	}
+}
+
+// As goal_app, another organization neither reads nor writes a secret, and goal_app cannot rewrite
+// a secret's id, organization, source or creation.
+func TestSecrets_RLSAndGrants(t *testing.T) {
 	t.Parallel()
 
 	d := newConnectionsDB(t)
@@ -227,11 +245,11 @@ func TestCredentials_RLSAndGrants(t *testing.T) {
 
 	err := inOrgTx(t, d.store.pool, labs, func(tx pgx.Tx) error {
 		var n int
-		if err := tx.QueryRow(t.Context(), `SELECT count(*) FROM credentials`).Scan(&n); err != nil || n != 0 {
-			t.Errorf("labs sees %d credentials, %v; want none", n, err)
+		if err := tx.QueryRow(t.Context(), `SELECT count(*) FROM secrets`).Scan(&n); err != nil || n != 0 {
+			t.Errorf("labs sees %d secrets, %v; want none", n, err)
 		}
 
-		for _, stmt := range []string{`UPDATE credentials SET description = 'taken' WHERE true`, `DELETE FROM credentials WHERE true`} {
+		for _, stmt := range []string{`UPDATE secrets SET description = 'taken' WHERE true`, `DELETE FROM secrets WHERE true`} {
 			if tag, err := tx.Exec(t.Context(), stmt); err != nil || tag.RowsAffected() != 0 {
 				t.Errorf("%s as labs: %d rows, %v; want none", stmt, tag.RowsAffected(), err)
 			}
@@ -244,10 +262,11 @@ func TestCredentials_RLSAndGrants(t *testing.T) {
 	}
 
 	for _, stmt := range []string{
-		`UPDATE credentials SET id = gen_random_uuid()`,
-		`UPDATE credentials SET org_id = '` + string(labs) + `'`,
-		`UPDATE credentials SET created_by = 'user:x'`,
-		`UPDATE credentials SET created_at = now()`,
+		`UPDATE secrets SET id = gen_random_uuid()`,
+		`UPDATE secrets SET org_id = '` + string(labs) + `'`,
+		`UPDATE secrets SET source = 'value'`,
+		`UPDATE secrets SET created_by = 'user:x'`,
+		`UPDATE secrets SET created_at = now()`,
 	} {
 		err := inOrgTx(t, d.store.pool, acme, func(tx pgx.Tx) error { _, err := tx.Exec(t.Context(), stmt); return err })
 		if err == nil {

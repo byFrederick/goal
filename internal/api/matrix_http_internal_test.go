@@ -260,6 +260,17 @@ func (mxAudit) AuditLog(context.Context, ports.AuditQuery) ([]domain.AuditEntry,
 // mxPlatform is every platform route's collaborator: reaching it is passing authorization.
 type mxPlatform struct{ Platform }
 
+// mxNotifySettings is the notification settings routes' collaborator, as mxNotifications.
+type mxNotifySettings struct{}
+
+func (mxNotifySettings) NotificationSettings(context.Context) (domain.NotificationSettings, error) {
+	panic("reached")
+}
+
+func (mxNotifySettings) SetNotificationSettings(context.Context, domain.NotificationSettings, domain.Actor) error {
+	panic("reached")
+}
+
 // mxNotifications is the notification routes' collaborator: reaching it is passing
 // authorization. It cannot embed its port, whose method has the port's name.
 type mxNotifications struct{}
@@ -304,11 +315,13 @@ func mxServer(t *testing.T, identity Identity) *httptest.Server {
 		Engine: struct{ Engine }{}, Items: mxItems{}, Factories: mxFactories{}, Definitions: mxDefinitions{}, Versions: struct{ Versions }{},
 		Orgs: mxOrgs{}, Audit: mxAudit{}, Access: struct{ Access }{}, OrgRetention: time.Hour, Authorizer: NewPermissions(clock),
 		Auth: AuthConfig{Mode: AuthSession}, Identity: identity, Platform: mxPlatform{}, Feed: NewFeed(porttest.NewItemNotices(), porttest.NewDefinitionNotices(), nil),
-		Builder: struct{ Builder }{}, Connections: struct{ ports.Connections }{}, Credentials: struct{ ports.Credentials }{}, Intake: struct{ ports.Intake }{}, DraftRequests: struct{ ports.DraftRequests }{}, ParseKind: connkind.Parse,
+		Builder: struct{ Builder }{}, Connections: struct{ ports.Connections }{}, Credentials: struct{ ports.Credentials }{}, OrgSecrets: struct{ ports.OrgSecrets }{}, EnvironmentTests: struct{ ports.EnvironmentTests }{}, ToolLister: struct{ ports.ToolLister }{}, Intake: struct{ ports.Intake }{}, DraftRequests: struct{ ports.DraftRequests }{}, ParseKind: connkind.Parse,
 		ConnectionTransport: http.DefaultTransport, Knowledge: struct{ ports.Knowledge }{}, KnowledgeUploads: struct{ KnowledgeUploads }{},
-		KnowledgeSearch: struct{ KnowledgeSearch }{}, UploadMaxBytes: 1 << 20, Clock: clock,
+		UploadMaxBytes: 1 << 20, Clock: clock,
+		KnowledgeObjects: struct{ KnowledgeObjects }{}, KnowledgeCheck: struct{ KnowledgeCheck }{},
 		OrgPolicies: struct{ ports.OrgPolicies }{}, BoxSizes: []domain.BoxSize{{Size: domain.SandboxMedium}},
 		NotificationPreferences: mxNotifications{},
+		NotificationSettings:    mxNotifySettings{}, SlackMessenger: struct{ ports.DirectMessenger }{},
 	})
 	if err != nil {
 		t.Fatal(err)

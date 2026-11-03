@@ -74,10 +74,16 @@ type harness struct {
 	connections ports.Connections
 	// credentials hold the test organization's credentials (credentials_test.go), none at first.
 	credentials *porttest.Credentials
+	// orgSecrets hold the test organization's secrets (environment_test.go), none at first.
+	orgSecrets *porttest.OrgSecrets
 	// minter mints the credentials of connections whose kind mints with mintAWS.
 	minter *porttest.Minter
 	// policies is the organization policy (policy_test.go); nil applies none.
 	policies ports.OrgPolicies
+	// knowledge holds the test organization's knowledge snapshots (knowledge_test.go); nil pins none.
+	knowledge *porttest.Knowledge
+	// knowledgeDeps, when set, is the engine's knowledge base instead of knowledge.
+	knowledgeDeps engine.KnowledgeSnapshots
 	// intake holds the trigger firings and the schedule lock every engine of the harness shares.
 	intake *porttest.Intake
 	// modelCheck answers triggers' model checks; nil builds the engine without one.
@@ -152,6 +158,7 @@ func newHarness(t *testing.T, line domain.Line, run porttest.AgentFunc) *harness
 	conns := newConnections(t, h.tenancy)
 	h.connections = conns
 	h.credentials = porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), h.tenancy, conns)
+	h.orgSecrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), h.tenancy, conns)
 	h.minter = porttest.NewMinter(clock.Now)
 	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store)
 	h.e = h.engine(t, h.store)
@@ -193,8 +200,8 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 	e, err := engine.New(engine.Deps{
 		Store: store, Orgs: h.tenancy, Sandboxes: h.sandboxes, Contracts: h.contracts, Clock: h.clock,
 		Secrets:     porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"},
-		Connections: h.connections, Credentials: h.credentials, CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab},
-		Minters: map[string]ports.Minter{mintAWS: h.minter}, Policies: h.policies, Intake: h.intake,
+		Connections: h.connections, Credentials: h.credentials, OrgSecrets: h.orgSecrets, CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab},
+		Minters: map[string]ports.Minter{mintAWS: h.minter}, Policies: h.policies, Knowledge: h.snapshots(), Intake: h.intake,
 		ModelCheck: h.modelCheck, Audit: h.tenancy, NotificationOutbox: h.outbox, Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
 	}, engine.Config{
 		Lines:          lines,
@@ -212,6 +219,19 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 	}
 
 	return e
+}
+
+// snapshots are the engine's knowledge snapshots: none without h.knowledge.
+func (h *harness) snapshots() engine.KnowledgeSnapshots {
+	if h.knowledgeDeps != nil {
+		return h.knowledgeDeps
+	}
+
+	if h.knowledge == nil {
+		return nil
+	}
+
+	return h.knowledge
 }
 
 func (h *harness) submit(t *testing.T, n domain.NewItem) domain.Item {

@@ -33,7 +33,8 @@ const (
 	importedValue = "sk-imported-value-5a3c"
 )
 
-// createToken creates acme-token, scoped to factory acme with its agent coder.
+// createToken creates acme-token, scoped to factory acme with its agent coder; the agent list is
+// checked and dropped, as secrets have none (ADR 0037).
 func (h *harness) createToken(t *testing.T) gen.Credential {
 	t.Helper()
 
@@ -81,32 +82,32 @@ func TestCredentials_CreateListGetPatchDelete(t *testing.T) {
 	}
 }
 
-// expectToken checks created is createToken's acme-token, scoped to acme for coder.
+// expectToken checks created is createToken's acme-token, scoped to acme, an api_key with no
+// agents: a secret has no agent list, so nothing uses it yet.
 func expectToken(t *testing.T, created gen.Credential) {
 	t.Helper()
 
 	if created.Name != tokenName || created.Type != gen.CredentialTypeApiKey || created.RemindDays != 14 || created.ExpiresAt == nil ||
 		!slices.Equal(created.Scope.Factories, []string{string(acmeID)}) || created.Scope.AllFactories ||
-		!slices.Equal(created.Agents[string(acmeID)], []string{"coder"}) || created.CreatedBy.Id != domain.LocalUser.ID {
-		t.Errorf("created = %+v; want acme-token scoped to acme for coder", created)
+		len(created.Agents) != 0 || created.CreatedBy.Id != domain.LocalUser.ID {
+		t.Errorf("created = %+v; want acme-token scoped to acme, with no agents", created)
 	}
 
-	if want := []gen.CredentialAgent{{FactoryId: string(acmeID), Agent: "coder"}}; !slices.Equal(created.UsedBy.Agents, want) ||
-		len(created.UsedBy.Connections) != 0 {
-		t.Errorf("used by = %+v; want coder of acme and no connection", created.UsedBy)
+	if len(created.UsedBy.Agents) != 0 || len(created.UsedBy.Connections) != 0 {
+		t.Errorf("used by = %+v; want no agent and no connection", created.UsedBy)
 	}
 }
 
-// patchToken changes acme-token's metadata to an oauth_token for all factories, with no agents
-// and no expiry.
+// patchToken changes acme-token's metadata for all factories with no expiry; the type it sends is
+// checked and dropped, so it still reads back as an api_key.
 func (h *harness) patchToken(t *testing.T) {
 	t.Helper()
 
 	patched := decode[gen.Credential](t, h.request(t, http.MethodPatch, tokenPath,
 		`{"type":"oauth_token","description":"rotated","scope":{"all_factories":true,"factories":[]},"agents":{},"expiry":{}}`, nil), http.StatusOK)
-	if patched.Type != gen.CredentialTypeOauthToken || patched.Description != "rotated" || !patched.Scope.AllFactories ||
+	if patched.Type != gen.CredentialTypeApiKey || patched.Description != "rotated" || !patched.Scope.AllFactories ||
 		len(patched.Agents) != 0 || patched.ExpiresAt != nil || patched.RemindDays != 0 {
-		t.Errorf("patched = %+v; want an oauth_token for all factories, no agents, no expiry", patched)
+		t.Errorf("patched = %+v; want an api_key for all factories, no agents, no expiry", patched)
 	}
 }
 

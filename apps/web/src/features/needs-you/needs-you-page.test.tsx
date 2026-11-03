@@ -333,6 +333,32 @@ describe('Needs you: deciding a Decision', () => {
     expect(screen.queryByRole('button', { name: /^Deny/ })).toBeNull();
     expect(screen.getByRole('link', { name: /Floor/ })).toBeTruthy();
   });
+
+  it('shows a failing knowledge source as an Alert under the factory that reads it, with why and a link to it', async () => {
+    const failing: InboxEntry = {
+      ...alert,
+      id: 'knowledge_source:factory-1:handbook',
+      kind: 'knowledge_source',
+      factory,
+      andon: null,
+      knowledge_source: { source: 'handbook', error: '401 from the code host', failed_syncs: 3 },
+    };
+    renderPage({
+      search: { entry: failing.id },
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([failing])],
+        [factoriesQuery(org.id).queryKey, factories()],
+      ],
+    });
+
+    expect(await screen.findByText('401 from the code host', { selector: 'p' })).toBeTruthy();
+    expect(screen.getAllByText('handbook does not sync').length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/The last 3 syncs of handbook failed, so Software reads the files from before/),
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open handbook' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Approve/ })).toBeNull();
+  });
 });
 
 describe('Needs you: the keyboard path', () => {

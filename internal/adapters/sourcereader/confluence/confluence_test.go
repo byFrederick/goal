@@ -1,9 +1,12 @@
 package confluence_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -24,8 +27,9 @@ import (
 )
 
 const (
-	email = "ada@example.com"
-	token = "s3cret-api-token"
+	wikiToken = "wiki-token"
+	email     = "ada@example.com"
+	token     = "s3cret-api-token"
 
 	kindConfluence = "confluence"
 	cfgSpaces      = "spaces"
@@ -37,6 +41,7 @@ const (
 	statusCurrent = "current"
 	nameWiki      = "wiki"
 	fieldSite     = "site"
+	fieldEmail    = "email"
 )
 
 var admin = domain.Actor{Kind: domain.ActorUser, ID: "00000000-0000-7000-8000-000000000001", Name: "Ada"}
@@ -269,7 +274,7 @@ func (s *site) spec(t *testing.T, spaces string) domain.SyncSpec {
 		Source: domain.KnowledgeSource{Name: nameWiki, Kind: domain.SourceSynced, Connection: nameWiki, Config: map[string]string{cfgSpaces: spaces}},
 		Connection: &domain.ResolvedConnection{
 			Connection: domain.Connection{Name: nameWiki, Kind: kindConfluence}, Kind: kinds[i],
-			Values: map[string]string{fieldSite: s.host(), "email": email, "token": token},
+			Values: map[string]string{fieldSite: s.host(), fieldEmail: email, "token": token},
 		},
 	}
 }
@@ -338,12 +343,12 @@ func TestReader_SyncsIncrementallyByVersion(t *testing.T) {
 	got := w.sync(s, []string{"11", "12", "13", "21"}, []string{"11", "12", "13", "21"})
 
 	d := got["11"]
-	if d.Version != "3" || d.Title != "Runbook" || d.URL != s.pageURL(spaceENG, "11") || d.Status != domain.DocumentIndexed || d.MIME != domain.MediaMarkdown {
-		t.Fatalf("page 11 = %+v, want version 3, its title and link, indexed Markdown", d)
+	if d.Version != "3" || d.Title != "Runbook" || d.URL != s.pageURL(spaceENG, "11") {
+		t.Fatalf("page 11 = %+v, want version 3, its title and link", d)
 	}
 
-	if text := w.text(d.ID); text != strings.TrimSuffix(runbookText, "\n") {
-		t.Fatalf("page 11's text =\n%s\nwant\n%s", text, runbookText)
+	if d.Text != strings.TrimSuffix(runbookText, "\n") {
+		t.Fatalf("page 11's text =\n%s\nwant\n%s", d.Text, runbookText)
 	}
 
 	s.set(
@@ -355,8 +360,8 @@ func TestReader_SyncsIncrementallyByVersion(t *testing.T) {
 	// Only the changed and the new page are fetched; the trashed one's document goes.
 	got = w.sync(s, []string{"12", "15"}, []string{"11", "12", "15", "21"})
 
-	if d := got["12"]; d.Version != "2" || w.text(d.ID) != "# Deploy\n\nShip on Tuesdays and Thursdays." {
-		t.Fatalf("page 12 = %+v with %q, want version 2 with the new text", d, w.text(d.ID))
+	if d := got["12"]; d.Version != "2" || d.Text != "# Deploy\n\nShip on Tuesdays and Thursdays." {
+		t.Fatalf("page 12 = %+v, want version 2 with the new text", d)
 	}
 
 	if src := w.source(); src.Status != domain.SyncIdle || src.LastError != "" {
@@ -507,15 +512,16 @@ func TestReader_DialsPublicAddressesOnly(t *testing.T) {
 	}
 }
 
-// world is one organization with a connection nameWiki of the platform kind confluence on the
-// site and a synced source nameWiki reading spaces, synced by the ingestion loop with the
-// confluence reader.
+// world is one organization with a secret and a Confluence source nameWiki reading spaces on the
+// site, synced by the ingestion loop with the confluence reader.
 type world struct {
 	t     *testing.T
 	org   domain.OrgID
 	clock *porttest.Clock
 	kb    ports.Knowledge
 	in    *knowledge.Ingestor
+	// objects is the bucket the snapshots go to.
+	objects ports.ObjectStore
 }
 
 func newWorld(t *testing.T, s *site, spaces string) *world {
@@ -542,31 +548,41 @@ func newWorld(t *testing.T, s *site, spaces string) *world {
 		t.Fatal(err)
 	}
 
-	if _, err := conns.Create(ctx, domain.NewConnection{
-		Name: nameWiki, Kind: kindConfluence, Fields: map[string]string{fieldSite: s.host(), "email": email}, Secrets: map[string]string{"token": token},
-	}, admin); err != nil {
+	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, conns)
+	kb.ReadSecrets(secrets)
+
+	if _, err := secrets.Create(ctx, domain.NewSecret{Name: wikiToken, Value: token, Scope: domain.SecretScope{All: true}}, admin); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := kb.CreateSource(ctx, domain.NewKnowledgeSource{
-		Name: nameWiki, Title: "Wiki", Kind: domain.SourceSynced, Connection: nameWiki, Config: map[string]string{cfgSpaces: spaces},
+		Name: nameWiki, Title: "Wiki", Kind: domain.SourceConfluence, Secret: wikiToken,
+		Config: map[string]string{cfgSpaces: spaces, fieldSite: s.host(), fieldEmail: email},
 	}, admin); err != nil {
 		t.Fatal(err)
 	}
 
+	objects := porttest.NewObjectStore()
 	in := knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: kb, Connections: conns, Clock: clock,
+		Knowledge: kb, Secrets: secrets, Objects: objects, Clock: clock,
 		Readers: map[string]ports.SourceReader{"confluence": s.reader()},
 	})
 
-	return &world{t: t, org: o.ID, clock: clock, kb: kb, in: in}
+	return &world{t: t, org: o.ID, clock: clock, kb: kb, in: in, objects: objects}
 }
 
 func (w *world) ctx() context.Context { return domain.WithOrg(w.t.Context(), w.org) }
 
+// docFile is a page of the source's snapshot: its file, the link its first line cites and its
+// text after that.
+type docFile struct {
+	domain.KnowledgeFile
+	URL, Text string
+}
+
 // sync makes the source due, syncs it once and checks that the site served exactly the pages
-// fetched and that the source then has the documents of documents; it returns them by id.
-func (w *world) sync(s *site, fetched, documents []string) map[string]domain.KnowledgeDocument {
+// fetched and that the source's snapshot then has the pages of documents; it returns them by id.
+func (w *world) sync(s *site, fetched, documents []string) map[string]docFile {
 	w.t.Helper()
 
 	if err := w.kb.SyncNow(w.ctx(), nameWiki); err != nil {
@@ -587,18 +603,9 @@ func (w *world) sync(s *site, fetched, documents []string) map[string]domain.Kno
 		w.t.Fatalf("the sync fetched %v, want %v", got, fetched)
 	}
 
-	docs, err := w.kb.Documents(w.ctx(), nameWiki, "", 100)
-	if err != nil {
-		w.t.Fatal(err)
-	}
-
-	got := map[string]domain.KnowledgeDocument{}
-	for _, d := range docs {
-		got[d.ExternalID] = d
-	}
-
+	got := w.files()
 	if ids := slices.Sorted(maps.Keys(got)); !slices.Equal(ids, documents) {
-		w.t.Fatalf("documents after the sync = %v, want %v", ids, documents)
+		w.t.Fatalf("pages after the sync = %v, want %v", ids, documents)
 	}
 
 	return got
@@ -615,14 +622,78 @@ func (w *world) source() domain.KnowledgeSource {
 	return s
 }
 
-// text is the indexed text of the document id (the extracted text, without its last new line).
-func (w *world) text(id domain.KnowledgeDocumentID) string {
+// files are the source's current files by the id of the page they came from (the end of their
+// path).
+func (w *world) files() map[string]docFile {
 	w.t.Helper()
 
-	_, text, err := w.kb.Document(w.ctx(), id)
+	snaps, err := w.kb.Snapshots(w.ctx(), nameWiki)
+	if err != nil || len(snaps) == 0 {
+		w.t.Fatalf("snapshots = %v, %v; want one", snaps, err)
+	}
+
+	obj, err := w.objects.Get(w.ctx(), snaps[0].Key)
 	if err != nil {
 		w.t.Fatal(err)
 	}
 
-	return text
+	zr, err := zip.NewReader(bytes.NewReader(obj.Body), int64(len(obj.Body)))
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	bodies := map[string]string{}
+
+	for _, f := range zr.File {
+		rc, err := f.Open()
+		if err != nil {
+			w.t.Fatal(err)
+		}
+
+		body, _ := io.ReadAll(rc)
+		_ = rc.Close()
+
+		bodies[f.Name] = string(body)
+	}
+
+	listed, err := w.kb.Files(w.ctx(), domain.KnowledgeFileQuery{Source: nameWiki, Limit: 100})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	out := map[string]docFile{}
+
+	for _, f := range listed {
+		base := strings.TrimSuffix(f.Path, ".md")
+		id := base[strings.LastIndex(base, "-")+1:]
+
+		head, text, _ := strings.Cut(strings.TrimPrefix(bodies[f.Path], "---\n"), "---\n\n")
+		out[id] = docFile{KnowledgeFile: f, URL: strings.TrimPrefix(strings.TrimSpace(head), "source: "), Text: strings.TrimSuffix(text, "\n")}
+	}
+
+	return out
+}
+
+// A source on a secret reads the site and email its config names with the secret's value as the
+// API token; a config without them is refused before anything is sent.
+func TestReader_ReadsWithASecret(t *testing.T) {
+	t.Parallel()
+
+	s := newSite(t, pages...)
+	spec := domain.SyncSpec{
+		Source: domain.KnowledgeSource{Name: nameWiki, Kind: domain.SourceSynced, Secret: wikiToken, Config: map[string]string{
+			domain.SourceReaderKey: "confluence", fieldSite: s.host(), fieldEmail: email, cfgSpaces: spaceENG,
+		}},
+		Secret: &domain.ResolvedSecret{Secret: domain.Secret{Name: wikiToken}, Value: token},
+	}
+
+	if got := list(t, s.reader(), spec); !slices.Equal(slices.Sorted(maps.Keys(got)), []string{"11", "12", "13"}) {
+		t.Errorf("listed %v; want ENG's current pages", slices.Sorted(maps.Keys(got)))
+	}
+
+	delete(spec.Source.Config, fieldEmail)
+
+	if err := listErr(t, s.reader(), spec); !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("no email: err = %v; want domain.ErrInvalid", err)
+	}
 }

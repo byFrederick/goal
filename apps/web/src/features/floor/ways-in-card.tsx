@@ -112,7 +112,7 @@ export function WaysInCard() {
           >
             {hasSlack ? null : (
               <Button asChild size="sm" variant="secondary">
-                <Link to="/o/$org/connections/new" params={{ org: org.slug }} search={{ kind: 'slack' }}>
+                <Link to="/o/$org/secrets" params={{ org: org.slug }} search={{ new: true }}>
                   Connect
                 </Link>
               </Button>

@@ -11,7 +11,8 @@ import { type Section, sections } from '../../../shared/definition/model';
 import { useFactoryParams } from '../../../shared/factory';
 import { cn } from '../../../ui/cn';
 import { useModel } from '../draft/use-draft';
-import { type EditorSection, sectionInfo } from '../sections';
+import { useEnvironmentNames } from '../environments/use-environments';
+import { type EditorSection, routeSection, sectionInfo } from '../sections';
 import { parseErrorTile, reviewTile, sectionTile, viewTileText, yamlTileText } from './state';
 
 interface TilesProps {
@@ -41,7 +42,13 @@ export function SectionTiles({
   viewOnly = false,
 }: TilesProps) {
   const model = useModel();
-  const shown = viewOnly ? sections.filter((s) => s !== 'review') : sections;
+  const envs = useEnvironmentNames();
+  const shown: readonly (Section | 'knowledge')[] = [
+    ...sections.filter((s) => s !== 'review'),
+    'knowledge',
+    ...(viewOnly ? [] : (['review'] as const)),
+  ];
+  const knowledgeText = knowledgeTileText(model.basics.knowledge_sources?.length ?? 0);
   return (
     <nav
       aria-label={yaml ? 'Definition sections, jump to a block in factory.yaml' : 'Definition sections'}
@@ -53,6 +60,13 @@ export function SectionTiles({
         )}
       >
         {shown.map((s) => {
+          if (s === 'knowledge') {
+            return (
+              <li key={s} className="min-w-[176px] shrink-0 @[880px]:min-w-0">
+                <Tile section={s} current={current === s} problem={false} text={knowledgeText} />
+              </li>
+            );
+          }
           const summary = summaries.find((x) => x.section === s);
           const tile: { state: string; text: string; badge?: string } = parseError
             ? parseErrorTile(s, parseError)
@@ -67,10 +81,16 @@ export function SectionTiles({
             <li key={s} className="min-w-[176px] shrink-0 @[880px]:min-w-0">
               <Tile
                 section={s}
-                current={current === s}
+                current={current === routeSection(s)}
                 problem={tile.state === 'problem'}
                 badge={yaml ? undefined : badge}
-                text={yaml ? yamlTileText(s, summary?.lines) : tile.text}
+                text={
+                  yaml
+                    ? yamlTileText(s, summary?.lines)
+                    : s === 'connections' && envs.ready
+                      ? envs.names.join(', ') || 'None yet'
+                      : tile.text
+                }
                 state={yaml ? tile.text : undefined}
                 line={yaml ? (line && line > 0 ? line : null) : undefined}
               />
@@ -82,6 +102,11 @@ export function SectionTiles({
   );
 }
 
+/** What the Knowledge tile says: how many sources the factory lists. */
+function knowledgeTileText(count: number): string {
+  return count === 0 ? 'No sources' : count === 1 ? '1 source' : `${count} sources`;
+}
+
 function Tile({
   section,
   current,
@@ -91,7 +116,7 @@ function Tile({
   state,
   line,
 }: {
-  section: Section;
+  section: Section | 'knowledge';
   current: boolean;
   problem: boolean;
   /** What needs attention, beside the label ("2 changes"). */
@@ -106,7 +131,7 @@ function Tile({
   // A tile is the current location in the editor (aria-current="location"), not a page.
   const { 'aria-current': _page, ...link } = useLinkProps({
     to: '/o/$org/f/$factory/definition/$section',
-    params: { ...params, section },
+    params: { ...params, section: routeSection(section) },
     search: line === undefined ? {} : { mode: 'yaml' as const, ...(line ? { line } : {}) },
   });
   const label = sectionInfo[section].label;

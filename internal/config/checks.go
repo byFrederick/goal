@@ -28,6 +28,11 @@ const (
 	checkAvailability = "availability"
 	checkEvals        = "evals"    // judges and eval cases are well formed (ADR 0025)
 	checkTriggers     = "triggers" // intake triggers' crons, time zones and templates are well formed (ADR 0026)
+	// checkEnvironments: environment files and {{secret}} references are well formed (ADR 0037).
+	checkEnvironments = "environments"
+	// checkMoved: no key ADR 0037 moved to environment files is left. Load skips it, so versions
+	// published before still run on the old path until Goal converts them.
+	checkMoved = "moved"
 )
 
 // Problem codes config reports. They are stable: the UI, the CLI and tests key on them.
@@ -66,6 +71,13 @@ const (
 	codeRuleNotFound      = "rule-not-found"
 	codeRuleInvalid       = "rule-invalid"
 
+	// codeKnowledgeTooMany: knowledge.sources lists more than domain.MaxFactorySources.
+	codeKnowledgeTooMany = "knowledge-too-many"
+	// codeMemoryTooLong and codeMemoryTooBig: a memory.yaml entry's text is over
+	// domain.MaxMemoryText characters; the file is over domain.MaxMemoryBytes or MaxMemoryEntries.
+	codeMemoryTooLong = "memory-too-long"
+	codeMemoryTooBig  = "memory-too-big"
+
 	codeContractNotToolSchema = "contract-not-tool-schema"
 
 	codeToolSpecInvalid = "tool-spec-invalid"
@@ -88,6 +100,22 @@ const (
 	codeTimeZoneInvalid      = "time-zone-invalid"
 	codePlaceholderInvalid   = "placeholder-invalid"
 	codeModelQuestionInvalid = "model-question-invalid"
+
+	codeEnvironmentNameInvalid    = "environment-name-invalid"
+	codeEnvironmentNameMismatch   = "environment-name-mismatch"
+	codeEnvironmentDefaultMissing = "environment-default-missing"
+	codeEnvironmentUnknown        = "environment-unknown"
+	// codeEnvironmentImage: an environment names an image, which a box on Cloudflare cannot run
+	// (the control Worker runs only its own images). A warning: Compose runs it.
+	codeEnvironmentImage = "environment-image"
+	codeForgeMissing     = "forge-missing"
+	codeSecretPlacement  = "secret-placement"
+	codeReferenceInvalid = "secret-ref-invalid"
+
+	// codeMovedToEnvironment: a key ADR 0037 moved (spec.connections, an agent's connections,
+	// runtime.modelConnection, size, tools and repository.connection, modelAgrees.connection). An
+	// error with a fix that removes it; Load skips it.
+	codeMovedToEnvironment = "moved-to-environment"
 )
 
 // toolSpec is a mise tool spec: an optional backend ("aqua:", "npm:"), a tool name (a path for
@@ -99,6 +127,8 @@ type checker struct {
 	f        *Factory
 	agents   []string
 	stations []string
+	// envNames are the names of the definition's environment files, once environments ran.
+	envNames []string
 	problems []domain.DefinitionProblem
 }
 
@@ -115,11 +145,15 @@ func (c *checker) run() []domain.DefinitionProblem {
 	c.files()
 	c.agentRefs()
 	c.rules()
+	c.knowledge()
+	c.memory()
 	c.line()
 	c.flowAndLearning()
 	c.tools()
 	c.outputContracts()
 	c.removedForms()
+	c.moved()
+	c.environments()
 	c.evals()
 	c.triggers()
 	c.starter()
@@ -182,6 +216,28 @@ func dup(c *checker, what string, ids []string, list, sub, key string) {
 
 		c.errorf(checkReferences, codeDuplicateName, append(p, strconv.Itoa(i), key),
 			"%s %s: the name is used by another %s", what, id, what)
+	}
+}
+
+// knowledge checks knowledge.sources: at most domain.MaxFactorySources, and each entry's appliesTo
+// names only what the definition declares. Whether the organization has the sources is
+// authoring's.
+func (c *checker) knowledge() {
+	k := c.f.Spec.Knowledge
+	if k == nil {
+		return
+	}
+
+	if n := len(k.Sources); n > domain.MaxFactorySources {
+		c.errorf(checkReferences, codeKnowledgeTooMany, at("spec", "knowledge", "sources"),
+			"knowledge.sources lists %d sources, more than the %d a factory may list, so that every box gets its files fast; remove some",
+			n, domain.MaxFactorySources)
+	}
+
+	for i, s := range k.Sources {
+		c.scope("knowledge source "+s.Name, s.AppliesTo, func(key string, j int) []string {
+			return at("spec", "knowledge", "sources", i, "appliesTo", key, j)
+		})
 	}
 }
 
@@ -522,9 +578,9 @@ func (c *checker) removedForms() {
 			Fixes = []domain.ProblemFix{RemoveFix("Remove "+name, k.path)}
 	}
 
-	if p := at("spec", "runtime", "repository", "token"); c.f.hasKey(p) {
+	if p := at("spec", "runtime", "repository", "token"); c.f.hasKey(p) && !strings.Contains(c.f.Spec.Runtime.Repository.Token, "{{") {
 		c.removed(p, codeEnvReferenceRemoved,
-			"runtime.repository.token is removed: set runtime.repository.connection to an organization connection that signs git in to the repository's host").
+			"runtime.repository.token: only a {{secret}} reference is valid here, such as {{github-token}}; references of other forms are removed").
 			Fixes = []domain.ProblemFix{RemoveFix("Remove the token", p)}
 	}
 
@@ -538,6 +594,60 @@ func (c *checker) removedForms() {
 			"connection %s: inline connections are removed; create an organization connection named %s (for example of kind mcp-server) "+
 				"and list it here by name, with its credentials in the connection", conn.Name, conn.Name).
 			Fixes = []domain.ProblemFix{ReplaceFix("Use the organization's connection "+conn.Name, p, map[string]string{keyName: conn.Name})}
+	}
+}
+
+// movedKeys are the keys ADR 0037 moved to environment files and secret references, with where
+// each went.
+var movedKeys = []struct {
+	path []string
+	to   string
+}{
+	{at("spec", "connections"), "what agents reach is listed in environments/<name>.yaml (env, files and mcp)"},
+	{at("spec", "runtime", "modelConnection"), "set runtime.modelKey to the {{secret}} that holds the model key"},
+	{at("spec", "runtime", "size"), "set size in each environment file"},
+	{at("spec", "runtime", "tools"), "set tools in each environment file"},
+	{at("spec", "runtime", "repository", "connection"), "set runtime.repository.token to the {{secret}} that clones and merges"},
+}
+
+// movedNote ends every moved-to-environment message.
+const movedNote = "Goal converts published versions itself (ADR 0037); remove it from this draft"
+
+// moved names each key ADR 0037 moved that the definition still has, with a fix that removes it.
+// They are errors, so no draft that has one publishes, but Load skips them and they are not
+// removed forms: a version published before runs on the old path until Goal converts it.
+func (c *checker) moved() {
+	for _, k := range movedKeys {
+		if !c.f.hasKey(k.path) {
+			continue
+		}
+
+		name := strings.Join(k.path[1:], ".")
+		fix := RemoveFix("Remove "+name, k.path)
+
+		if k.path[1] == "connections" {
+			fix = ReplaceFix("Remove "+name, k.path, []any{}) // the section is the list; an empty one writes nothing
+		}
+
+		c.errorf(checkMoved, codeMovedToEnvironment, k.path, "%s moved to environment files: %s. %s", name, k.to, movedNote).
+			Fixes = []domain.ProblemFix{fix}
+	}
+
+	for i, a := range c.f.Spec.Agents {
+		if p := at("spec", keyAgents, i, "connections"); c.f.hasKey(p) {
+			c.errorf(checkMoved, codeMovedToEnvironment, p,
+				"agent %s: connections moved to environment files: set the agent's environment to the file that lists what it reaches. %s",
+				a.Name, movedNote).Fixes = []domain.ProblemFix{RemoveFix("Remove the agent's connections", p)}
+		}
+	}
+
+	// Triggers are edited in YAML only (no model section), so this one has no fix to apply.
+	for i, t := range c.f.Spec.Board.Triggers {
+		if p := at("spec", "board", "triggers", i, "only", "modelAgrees", "connection"); c.f.hasKey(p) {
+			c.errorf(checkMoved, codeMovedToEnvironment, p,
+				"trigger %s: only.modelAgrees.connection moved: set only.modelAgrees.key to a {{secret}}, or leave it out for runtime.modelKey. %s",
+				t.Name, movedNote)
+		}
 	}
 }
 

@@ -70,7 +70,24 @@ func (o outboxOrg) ctx(t *testing.T) context.Context {
 	return domain.WithOrg(t.Context(), o.org)
 }
 
-// slackConnection gives the organization a connection of a kind named slack.
+// slackSetting turns Slack on: the organization's notification setting names a secret.
+func (o outboxOrg) slackSetting(t *testing.T) {
+	t.Helper()
+
+	ctx := o.ctx(t)
+	n := domain.NewSecret{Name: "slack-bot", Scope: domain.SecretScope{All: true}, Value: "test-token"}
+
+	if _, err := NewSecrets(o.d.s, testKey(t, "k1")).Create(ctx, n, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := NewNotificationSettings(o.d.s).SetNotificationSettings(ctx, domain.NotificationSettings{SlackSecret: n.Name}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// slackConnection gives the organization a connection of a kind named slack, which no longer
+// turns Slack on.
 func (o outboxOrg) slackConnection(t *testing.T) {
 	t.Helper()
 
@@ -209,7 +226,7 @@ func TestNotificationOutbox_ApprovalRecipients(t *testing.T) {
 	t.Parallel()
 
 	o := newOutboxOrg(t)
-	o.slackConnection(t)
+	o.slackSetting(t)
 	o.prefer(t, o.approver, domain.NotifyApproval, domain.NotificationChannels{InGoal: true, Email: true, Slack: true})
 	o.prefer(t, o.admin, domain.NotifyApproval, domain.NotificationChannels{InGoal: true})
 
@@ -237,12 +254,14 @@ func TestNotificationOutbox_ApprovalRecipients(t *testing.T) {
 	}
 }
 
-// Without a Slack connection no Slack row is queued, so approvals at their defaults queue none;
-// and the person whose decision put the item there (data.actor) hears nothing of it.
-func TestNotificationOutbox_NoSlackWithoutAConnectionAndNotTheActor(t *testing.T) {
+// Without the Slack notification setting no Slack row is queued, whatever connections exist, so
+// approvals at their defaults queue none; and the person whose decision put the item there
+// (data.actor) hears nothing of it.
+func TestNotificationOutbox_NoSlackWithoutTheSettingAndNotTheActor(t *testing.T) {
 	t.Parallel()
 
 	o := newOutboxOrg(t)
+	o.slackConnection(t)
 
 	it := o.item(t)
 	if err := o.toWaiting(t, it, nil, domain.EventWaitingHuman); err != nil {
@@ -250,7 +269,7 @@ func TestNotificationOutbox_NoSlackWithoutAConnectionAndNotTheActor(t *testing.T
 	}
 
 	if got := o.rows(t); len(got) != 0 {
-		t.Fatalf("outbox = %+v; want no rows without a Slack connection", got)
+		t.Fatalf("outbox = %+v; want no rows without the Slack notification setting", got)
 	}
 
 	for _, u := range []string{o.owner, o.editor} {
@@ -274,7 +293,7 @@ func TestNotificationOutbox_QuestionNotApproval(t *testing.T) {
 	t.Parallel()
 
 	o := newOutboxOrg(t)
-	o.slackConnection(t)
+	o.slackSetting(t)
 
 	it := o.item(t)
 	if err := o.toWaiting(t, it, nil, domain.EventLeaseTaken, domain.EventQuestionAsked, domain.EventWaitingHuman); err != nil {
@@ -293,7 +312,7 @@ func TestNotificationOutbox_AndonRecipients(t *testing.T) {
 	t.Parallel()
 
 	o := newOutboxOrg(t)
-	o.slackConnection(t)
+	o.slackSetting(t)
 
 	// A second editor, who pulls the line.
 	puller := o.d.user("Pia")
@@ -319,7 +338,7 @@ func TestNotificationOutbox_EnqueueIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	o := newOutboxOrg(t)
-	o.slackConnection(t)
+	o.slackSetting(t)
 
 	it := o.item(t)
 	if err := o.toWaiting(t, it, nil, domain.EventWaitingHuman); err != nil {

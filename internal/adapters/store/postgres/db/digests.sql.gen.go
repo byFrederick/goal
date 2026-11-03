@@ -195,9 +195,9 @@ WITH members AS (
   SELECT DISTINCT (m ->> 'user_id')::uuid AS user_id FROM jsonb_array_elements(goal_members()) AS m
 ),
 slack AS (
-  SELECT EXISTS (SELECT 1 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id WHERE k.name = 'slack') AS connected
+  SELECT EXISTS (SELECT 1 FROM org_notification_settings WHERE slack_secret_id IS NOT NULL) AS enabled
 )
-SELECT r.user_id, r.time_zone, r.email, r.slack, slack.connected AS slack_connected
+SELECT r.user_id, r.time_zone, r.email, r.slack, slack.enabled AS slack_enabled
 FROM (
   SELECT m.user_id, coalesce(ns.time_zone, 'UTC')::text AS time_zone,
          coalesce(p.email, $1::boolean)::boolean AS email,
@@ -217,11 +217,11 @@ type DigestRecipientsParams struct {
 }
 
 type DigestRecipientsRow struct {
-	UserID         uuid.UUID
-	TimeZone       string
-	Email          bool
-	Slack          bool
-	SlackConnected bool
+	UserID       uuid.UUID
+	TimeZone     string
+	Email        bool
+	Slack        bool
+	SlackEnabled bool
 }
 
 // The daily digests (ports.Digests; migration 00084; ADR 0023, decision 6). The digests table
@@ -230,7 +230,8 @@ type DigestRecipientsRow struct {
 // under its row-level security, in a transaction bound to it.
 // The members of the transaction's organization with the digest on for email or Slack (their
 // saved choice, else the defaults Go passes), with their time zone (UTC without a saved one) and
-// whether the organization has a connection of a kind named slack (decision 5).
+// whether the organization's notification setting names a Slack secret (00094; ADR 0037,
+// decision 14).
 func (q *Queries) DigestRecipients(ctx context.Context, arg DigestRecipientsParams) ([]DigestRecipientsRow, error) {
 	rows, err := q.db.Query(ctx, digestRecipients, arg.DefaultEmail, arg.DefaultSlack)
 	if err != nil {
@@ -245,7 +246,7 @@ func (q *Queries) DigestRecipients(ctx context.Context, arg DigestRecipientsPara
 			&i.TimeZone,
 			&i.Email,
 			&i.Slack,
-			&i.SlackConnected,
+			&i.SlackEnabled,
 		); err != nil {
 			return nil, err
 		}

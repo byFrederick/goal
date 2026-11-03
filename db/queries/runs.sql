@@ -13,9 +13,17 @@ SELECT item_id FROM agent_runs WHERE id = $1;
 UPDATE agent_runs SET
   status = sqlc.arg(status), session_id = sqlc.narg(session_id), turns = sqlc.arg(turns)::bigint,
   input_tokens = sqlc.arg(input_tokens), output_tokens = sqlc.arg(output_tokens),
-  cost_usd = sqlc.arg(cost_usd), error = sqlc.narg(error), ended_at = sqlc.arg(ended_at)
+  cost_usd = sqlc.arg(cost_usd), error = sqlc.narg(error), ended_at = sqlc.arg(ended_at),
+  output = sqlc.narg(output), pushed_head = sqlc.narg(pushed_head)
 WHERE id = sqlc.arg(id) AND status = 'running'
 RETURNING factory_id, item_id, station, agent;
+
+-- name: RecordRunInput :execrows
+-- What a run was given (00085): its brief and, for a claim's first run, the heads before
+-- prepare's rebase. Looked up by primary key; row-level security scopes it to the organization.
+UPDATE agent_runs SET
+  brief = sqlc.narg(brief), branch_head = sqlc.narg(branch_head), base_head = sqlc.narg(base_head)
+WHERE id = sqlc.arg(id);
 
 -- name: FailRunningRuns :exec
 UPDATE agent_runs SET status = 'failed', error = sqlc.arg(error), ended_at = sqlc.arg(ended_at)

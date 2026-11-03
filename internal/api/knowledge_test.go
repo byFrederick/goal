@@ -3,10 +3,8 @@ package api_test
 import (
 	"bytes"
 	"encoding/json"
-	"mime"
 	"mime/multipart"
 	"net/http"
-	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -21,10 +19,8 @@ import (
 
 // The routes the knowledge tests call.
 const (
-	sourcesPath   = "/v1/orgs/acme/knowledge/sources"
-	handbookPath  = sourcesPath + "/handbook"
-	documentsPath = "/v1/orgs/acme/knowledge/documents"
-	searchPath    = "/v1/orgs/acme/knowledge/search"
+	sourcesPath  = "/v1/orgs/acme/knowledge/sources"
+	handbookPath = sourcesPath + "/handbook"
 )
 
 // testUploadMax is the harness's GOAL_UPLOAD_MAX_BYTES.
@@ -44,8 +40,16 @@ func (h *harness) createHandbook(t *testing.T) gen.KnowledgeSource {
 		`{"name":"handbook","title":"Handbook","kind":"upload"}`, nil), http.StatusCreated)
 }
 
-// upload posts files (name → content) to source's documents as multipart/form-data.
+// upload posts files (name → content) to source's uploads as multipart/form-data.
 func (h *harness) upload(t *testing.T, source string, files ...[2]string) response {
+	t.Helper()
+
+	return h.uploadTo(t, sourcesPath+"/"+source+"/uploads", files...)
+}
+
+// uploadTo posts files (path → content) to path as multipart/form-data, each file name as given,
+// folders and all.
+func (h *harness) uploadTo(t *testing.T, path string, files ...[2]string) response {
 	t.Helper()
 
 	var buf bytes.Buffer
@@ -67,17 +71,18 @@ func (h *harness) upload(t *testing.T, source string, files ...[2]string) respon
 		t.Fatal(err)
 	}
 
-	return h.request(t, http.MethodPost, sourcesPath+"/"+source+"/documents", buf.String(),
-		http.Header{"Content-Type": {mw.FormDataContentType()}})
+	return h.request(t, http.MethodPost, path, buf.String(), http.Header{contentType: {mw.FormDataContentType()}})
 }
 
-// syncAll runs one ingestion pass over the organizations' due sources, as goald's loop does: on a
-// clock of its own, since the knowledge fake dates sources by the time of day.
+// syncAll runs one ingestion pass over the organizations' due sources, as goald's loop does,
+// writing snapshots into the harness's objects: on a clock of its own, since the knowledge fake
+// dates sources by the time of day.
 func (h *harness) syncAll(t *testing.T) {
 	t.Helper()
 
 	in := knowledge.NewIngestor(knowledge.IngestorConfig{
 		Knowledge: h.kb, Connections: h.conns, Uploads: h.uploads, Clock: porttest.NewClock(time.Now().Add(time.Second)),
+		Objects: h.kbObjects, TempDir: t.TempDir(),
 	})
 
 	if _, err := in.SyncDue(t.Context()); err != nil {
@@ -96,16 +101,6 @@ type sourceShape struct {
 
 func shapeOf(s gen.KnowledgeSource) sourceShape {
 	return sourceShape{Name: s.Name, Title: s.Title, Kind: s.Kind, Status: s.Status, Every: s.SyncEverySeconds, Due: s.NextSyncAt != nil}
-}
-
-// docShapes are what the tests check of documents: source/title status.
-func docShapes(docs []gen.KnowledgeDocument) []string {
-	out := []string{}
-	for _, d := range docs {
-		out = append(out, d.Source+"/"+d.Title+" "+string(d.Status))
-	}
-
-	return out
 }
 
 // An admin adds an upload source, which members list and read; its title and schedule change, and
@@ -145,6 +140,33 @@ func TestKnowledge_SourcesCreateChangeAndSync(t *testing.T) {
 	}
 
 	refused(t, "get after delete", h.request(t, http.MethodGet, handbookPath, "", nil), http.StatusNotFound, "knowledge-source-not-found")
+
+	h.syncedOnASecret(t)
+}
+
+// syncedOnASecret creates, reads and patches a synced source that reads with a secret.
+func (h *harness) syncedOnASecret(t *testing.T) {
+	t.Helper()
+
+	h.createRepoSecret(t)
+	decode[gen.Secret](t, h.request(t, http.MethodPost, secretsPath, `{"name":"docs-token","value":"test-token","scope":{"all_factories":true}}`, nil),
+		http.StatusCreated)
+
+	synced := decode[gen.KnowledgeSource](t, h.request(t, http.MethodPost, sourcesPath, `{"name":"runbooks","title":"Runbooks","kind":"synced",
+"secret":"`+repoSecret+`","config":{"reader":"gitdocs","repository":"https://github.com/acme/docs"}}`, nil), http.StatusCreated)
+	if deref(synced.Secret) != repoSecret || synced.Connection != nil || synced.Config["reader"] != "gitdocs" {
+		t.Errorf("created synced = %s; want it on secret %s with its reader", body(t, synced), repoSecret)
+	}
+
+	got := decode[gen.KnowledgeSource](t, h.request(t, http.MethodGet, sourcesPath+"/runbooks", "", nil), http.StatusOK)
+	if deref(got.Secret) != repoSecret {
+		t.Errorf("read synced = %s; want secret %s", body(t, got), repoSecret)
+	}
+
+	patched := decode[gen.KnowledgeSource](t, h.request(t, http.MethodPatch, sourcesPath+"/runbooks", `{"secret":"docs-token"}`, nil), http.StatusOK)
+	if deref(patched.Secret) != "docs-token" || patched.Config["reader"] != "gitdocs" {
+		t.Errorf("patched synced = %s; want secret docs-token, its config kept", body(t, patched))
+	}
 }
 
 // Requests the source rules refuse answer their codes; a source reading a connection is listed
@@ -155,8 +177,7 @@ func TestKnowledge_SourceRefusals(t *testing.T) {
 	h := newHarness(t)
 	h.createHandbook(t)
 	h.createGitHub(t)
-	decode[gen.Connection](t, h.request(t, http.MethodPost, connectionsPath, `{"name":"claude","kind":"anthropic","secrets":{"key":"k"}}`, nil),
-		http.StatusCreated)
+	h.createRepoSecret(t)
 
 	for _, tc := range []struct {
 		name, body string
@@ -165,8 +186,12 @@ func TestKnowledge_SourceRefusals(t *testing.T) {
 	}{
 		{"name taken", `{"name":"handbook","title":"Again","kind":"upload"}`, http.StatusConflict, "knowledge-source-name-taken"},
 		{"upload with a connection", `{"name":"notes","title":"Notes","kind":"upload","connection":"github"}`, http.StatusBadRequest, ""},
-		{"synced on a kind that cannot sync", `{"name":"models","title":"Models","kind":"synced","connection":"claude"}`, http.StatusBadRequest, "connection-cannot-sync"},
-		{"unknown connection", `{"name":"wiki","title":"Wiki","kind":"synced","connection":"wiki"}`, http.StatusNotFound, "connection-not-found"},
+		{"synced on a connection", `{"name":"models","title":"Models","kind":"synced","connection":"github","config":{"reader":"gitdocs"}}`, http.StatusBadRequest, ""},
+		{"synced on no secret", `{"name":"models","title":"Models","kind":"synced"}`, http.StatusBadRequest, ""},
+		{"synced without a reader", `{"name":"models","title":"Models","kind":"synced","secret":"` + repoSecret + `"}`, http.StatusBadRequest, ""},
+		{"unknown secret", `{"name":"wiki","title":"Wiki","kind":"synced","secret":"wiki","config":{"reader":"confluence"}}`, http.StatusNotFound, "secret-not-found"},
+		{"live with a secret", `{"name":"wiki","title":"Wiki","kind":"live","connection":"github","secret":"` + repoSecret + `"}`, http.StatusBadRequest, ""},
+		{"unknown connection", `{"name":"wiki","title":"Wiki","kind":"live","connection":"wiki"}`, http.StatusNotFound, "connection-not-found"},
 		{"schedule too short", `{"name":"often","title":"Often","kind":"upload","sync_every_seconds":60}`, http.StatusBadRequest, ""},
 	} {
 		refused(t, tc.name, h.request(t, http.MethodPost, sourcesPath, tc.body, nil), tc.status, tc.code)
@@ -177,6 +202,9 @@ func TestKnowledge_SourceRefusals(t *testing.T) {
 
 	refused(t, "sync of a live source", h.request(t, http.MethodPost, sourcesPath+"/repo-search/sync", "", nil), http.StatusConflict, "knowledge-source-live")
 	refused(t, "patch of no source", h.request(t, http.MethodPatch, sourcesPath+"/nothing", `{"title":"x"}`, nil), http.StatusNotFound, "knowledge-source-not-found")
+	refused(t, "patch of an upload source's secret", h.request(t, http.MethodPatch, handbookPath, `{"secret":"`+repoSecret+`"}`, nil),
+		http.StatusBadRequest, "")
+	refused(t, "patch to an unknown secret", h.request(t, http.MethodPatch, handbookPath, `{"secret":"gone"}`, nil), http.StatusNotFound, "secret-not-found")
 
 	conn := decode[gen.Connection](t, h.request(t, http.MethodGet, githubPath, "", nil), http.StatusOK)
 	if !slices.Equal(conn.UsedBy.KnowledgeSources, []string{"repo-search"}) {
@@ -184,76 +212,6 @@ func TestKnowledge_SourceRefusals(t *testing.T) {
 	}
 
 	refused(t, "delete of a connection a source reads", h.request(t, http.MethodDelete, githubPath, "", nil), http.StatusConflict, "connection-in-use")
-}
-
-// Files uploaded to an upload source are pending until a sync indexes them; then they are read,
-// searched as agents search them, and deleted.
-func TestKnowledge_UploadReadSearchAndDelete(t *testing.T) {
-	t.Parallel()
-
-	h := newHarness(t)
-	h.createHandbook(t)
-
-	up := decode[gen.KnowledgeDocumentList](t, h.upload(t, srcHandbook, [2]string{leaveFile, leaveMD}, [2]string{"expenses.txt", "Receipts within 30 days."}),
-		http.StatusAccepted)
-	if got, want := docShapes(up.Documents), []string{"handbook/leave.md pending", "handbook/expenses.txt pending"}; !slices.Equal(got, want) {
-		t.Fatalf("uploaded = %v; want %v", got, want)
-	}
-
-	h.syncAll(t)
-
-	page := decode[gen.KnowledgeDocumentPage](t, h.request(t, http.MethodGet, handbookPath+"/documents?limit=1", "", nil), http.StatusOK)
-	if len(page.Documents) != 1 || page.NextAfter == nil {
-		t.Fatalf("first page = %+v; want one document and a next page", page)
-	}
-
-	rest := decode[gen.KnowledgeDocumentPage](t, h.request(t, http.MethodGet, handbookPath+"/documents?after="+*page.NextAfter, "", nil), http.StatusOK)
-	if got := docShapes(append(page.Documents, rest.Documents...)); rest.NextAfter != nil || len(got) != 2 || !slices.Contains(got, "handbook/leave.md indexed") {
-		t.Errorf("pages = %v, next %v; want both documents indexed, then no next page", got, rest.NextAfter)
-	}
-
-	leave := up.Documents[0].Id
-
-	got := decode[gen.KnowledgeDocumentText](t, h.request(t, http.MethodGet, documentsPath+"/"+leave, "", nil), http.StatusOK)
-	if got.Text != leaveMD || got.Document.Source != srcHandbook {
-		t.Errorf("document = %+v; want leave.md's text", got)
-	}
-
-	hits := decode[gen.KnowledgeSearchResult](t, h.request(t, http.MethodGet, searchPath+"?q=receipts", "", nil), http.StatusOK)
-	if len(hits.Hits) == 0 || hits.Hits[0].Source+"/"+hits.Hits[0].Title != "handbook/expenses.txt" || hits.Hits[0].Document == "" {
-		t.Errorf("search = %+v; want expenses.txt first", hits.Hits)
-	}
-
-	if r := h.request(t, http.MethodDelete, documentsPath+"/"+leave, "", nil); r.status != http.StatusNoContent {
-		t.Fatalf("delete = %d %s; want 204", r.status, r.body)
-	}
-
-	refused(t, "get after delete", h.request(t, http.MethodGet, documentsPath+"/"+leave, "", nil), http.StatusNotFound, "knowledge-document-not-found")
-}
-
-// Threat row 11: an uploaded original is served as an attachment browsers never render, whatever
-// it holds.
-func TestAPI_DocumentContentIsAttachment(t *testing.T) {
-	t.Parallel()
-
-	h := newHarness(t)
-	h.createHandbook(t)
-
-	page := `<html><script>alert(document.cookie)</script></html>`
-	up := decode[gen.KnowledgeDocumentList](t, h.upload(t, srcHandbook, [2]string{"page.html", page}), http.StatusAccepted)
-
-	r := h.request(t, http.MethodGet, documentsPath+"/"+up.Documents[0].Id+"/content", "", nil)
-	if r.status != http.StatusOK || string(r.body) != page {
-		t.Fatalf("content = %d %q; want the file as uploaded", r.status, r.body)
-	}
-
-	if d, params, err := mime.ParseMediaType(r.header.Get("Content-Disposition")); err != nil || d != "attachment" || params["filename"] != "page.html" {
-		t.Errorf("Content-Disposition = %q; want an attachment named page.html", r.header.Get("Content-Disposition"))
-	}
-
-	if r.header.Get("X-Content-Type-Options") != "nosniff" || r.header.Get("Content-Type") != "application/octet-stream" {
-		t.Errorf("headers = %v; want nosniff and application/octet-stream", r.header)
-	}
 }
 
 // Uploads the knowledge base refuses answer their codes, and a refused file stores none of the
@@ -264,7 +222,7 @@ func TestKnowledge_UploadRefusals(t *testing.T) {
 	h := newHarness(t)
 	h.createHandbook(t)
 
-	refused(t, "a type not indexed", h.upload(t, srcHandbook, [2]string{leaveFile, leaveMD}, [2]string{"deck.pptx", "PK"}),
+	refused(t, "a type not indexed", h.upload(t, srcHandbook, [2]string{leaveFile, leaveMD}, [2]string{"deck.key", "PK"}),
 		http.StatusUnsupportedMediaType, "unsupported-document-type")
 	refused(t, "a file over the limit", h.upload(t, srcHandbook, [2]string{"big.md", strings.Repeat("a", testUploadMax+1)}),
 		http.StatusRequestEntityTooLarge, "upload-too-large")
@@ -273,41 +231,20 @@ func TestKnowledge_UploadRefusals(t *testing.T) {
 	refused(t, "no files", h.upload(t, srcHandbook), http.StatusBadRequest, "")
 	refused(t, "no source", h.upload(t, "nothing", [2]string{leaveFile, leaveMD}), http.StatusNotFound, "knowledge-source-not-found")
 
-	page := decode[gen.KnowledgeDocumentPage](t, h.request(t, http.MethodGet, handbookPath+"/documents", "", nil), http.StatusOK)
-	if len(page.Documents) != 0 {
-		t.Errorf("documents after the refusals = %+v; want none", page.Documents)
+	files := decode[gen.KnowledgeFilePage](t, h.request(t, http.MethodGet, handbookPath+"/files", "", nil), http.StatusOK)
+	if len(files.Files) != 0 {
+		t.Errorf("files after the refusals = %+v; want none", files.Files)
 	}
 
 	if objects, err := h.kbObjects.List(t.Context(), ""); err != nil || len(objects) != 0 {
 		t.Errorf("the bucket holds %v (%v) after the refusals; want nothing", objects, err)
 	}
 
-	h.request(t, http.MethodPost, connectionsPath, `{"name":"wiki","kind":"confluence","fields":{"site":"acme.atlassian.net","email":"ada@example.com"},`+
-		`"secrets":{"token":"t"}}`, nil)
-	decode[gen.KnowledgeSource](t, h.request(t, http.MethodPost, sourcesPath,
-		`{"name":"wiki","title":"Wiki","kind":"synced","connection":"wiki","config":{"space":"ENG"}}`, nil), http.StatusCreated)
+	h.createRepoSecret(t)
+	decode[gen.KnowledgeSource](t, h.request(t, http.MethodPost, sourcesPath, `{"name":"wiki","title":"Wiki","kind":"synced","secret":"`+repoSecret+
+		`","config":{"reader":"confluence","site":"acme.atlassian.net","email":"ada@example.com","spaces":"ENG"}}`, nil), http.StatusCreated)
 
 	refused(t, "an upload to a synced source", h.upload(t, "wiki", [2]string{leaveFile, leaveMD}), http.StatusConflict, "not-an-upload-source")
-}
-
-// A search answers what the gateway's knowledge__search does, over every source or the named
-// ones; it refuses an unknown source and a malformed query.
-func TestKnowledge_SearchRefusals(t *testing.T) {
-	t.Parallel()
-
-	h := newHarness(t)
-	h.createHandbook(t)
-	h.upload(t, srcHandbook, [2]string{leaveFile, leaveMD})
-	h.syncAll(t)
-
-	q := url.Values{"q": {"lead"}, "source": {srcHandbook}}
-	if hits := decode[gen.KnowledgeSearchResult](t, h.request(t, http.MethodGet, searchPath+"?"+q.Encode(), "", nil), http.StatusOK); len(hits.Hits) != 1 {
-		t.Errorf("search of handbook = %+v; want leave.md", hits.Hits)
-	}
-
-	refused(t, "an unknown source", h.request(t, http.MethodGet, searchPath+"?q=lead&source=wiki", "", nil), http.StatusNotFound, "knowledge-source-not-found")
-	refused(t, "an empty query", h.request(t, http.MethodGet, searchPath+"?q=+", "", nil), http.StatusBadRequest, "")
-	refused(t, "a limit over 20", h.request(t, http.MethodGet, searchPath+"?q=lead&limit=21", "", nil), http.StatusBadRequest, "")
 }
 
 // The stream relays a knowledge event under its name.
@@ -325,5 +262,38 @@ func TestAPI_StreamSendsKnowledgeEvents(t *testing.T) {
 	got := events.next(t)
 	if len(got) != 2 || got[0] != "event: knowledge" || got[1] != "data: "+data {
 		t.Fatalf("event %q; want the knowledge event", got)
+	}
+}
+
+// A source with no snapshot answers a null latest_snapshot; after a sync both the list and the get
+// answer its newest snapshot.
+func TestKnowledge_SourceLatestSnapshot(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	created := h.createHandbook(t)
+	if created.LatestSnapshot != nil {
+		t.Errorf("new source = %+v; want no snapshot", created.LatestSnapshot)
+	}
+
+	if r := h.upload(t, srcHandbook, [2]string{leaveFile, leaveMD}); r.status != http.StatusAccepted {
+		t.Fatalf("upload = %d %s; want 202", r.status, r.body)
+	}
+
+	h.syncAll(t)
+
+	got := decode[gen.KnowledgeSource](t, h.request(t, http.MethodGet, handbookPath, "", nil), http.StatusOK)
+	list := decode[gen.KnowledgeSourceList](t, h.request(t, http.MethodGet, sourcesPath, "", nil), http.StatusOK)
+
+	if len(list.Sources) != 1 {
+		t.Fatalf("list = %+v; want handbook", list.Sources)
+	}
+
+	for name, s := range map[string]gen.KnowledgeSource{"get": got, "list": list.Sources[0]} {
+		snap := s.LatestSnapshot
+		if snap == nil || snap.Files != 1 || snap.Failed != 0 || snap.Bytes <= 0 || snap.SyncedAt.IsZero() {
+			t.Errorf("%s: latest_snapshot = %+v; want 1 file, 0 failed, some bytes, a time", name, snap)
+		}
 	}
 }

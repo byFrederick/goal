@@ -46,6 +46,9 @@ type WorkerFinished struct {
 	InputTokens  int64           `json:"input_tokens"`
 	OutputTokens int64           `json:"output_tokens"`
 	SessionID    string          `json:"session_id"`
+	// PushedHead is the item branch's commit on the remote when the agent ended (ADR 0039,
+	// decision 8); empty without a repository or when the worker could not read it.
+	PushedHead string `json:"pushed_head"`
 	// At is when the worker wrote the line.
 	At string `json:"at"`
 	// PermissionDenials are the tool calls the agent's policy refused, by tool and call id.
@@ -115,6 +118,7 @@ func (f *WorkerFinished) Denials(now time.Time) []Event {
 func (f *WorkerFinished) Result() RunResult {
 	res := RunResult{
 		CostUSD: f.CostUSD, Turns: f.Turns, InputTokens: f.InputTokens, OutputTokens: f.OutputTokens, SessionID: f.SessionID,
+		PushedHead: GitHead(f.PushedHead),
 	}
 
 	switch {
@@ -127,6 +131,22 @@ func (f *WorkerFinished) Result() RunResult {
 	}
 
 	return res
+}
+
+// GitHead is s when it is a full git commit id (40 or 64 lowercase hex digits, SHA-1 or SHA-256)
+// and empty otherwise: the box reports heads, and only a commit id is kept from it.
+func GitHead(s string) string {
+	if len(s) != 40 && len(s) != 64 {
+		return ""
+	}
+
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return ""
+		}
+	}
+
+	return s
 }
 
 func (f *WorkerFinished) failure() string {

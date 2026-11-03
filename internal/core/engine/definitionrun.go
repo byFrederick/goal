@@ -37,7 +37,7 @@ type definitionOutput struct {
 // ctx, on its factory's loaded line: it refuses the request when the line's weekly budget is used
 // up, then creates a box with no item and no station, whose run id is the request's, prepares it
 // with a draft-request task token (the gateway's bundle gives it the draft's files at t.Revision)
-// and runs goal-agent with the env of runtime.modelConnection alone: no repository, no git login,
+// and runs goal-agent with the env of runtime.modelConnection, or runtime.modelKey on secrets, alone: no repository, no git login,
 // no agent connection and no credential listed for an agent. It deletes the box on every path and
 // records nothing: the caller applies the result and finishes the request.
 func (e *Engine) RunDefinition(ctx context.Context, t ports.DefinitionTask) (ports.DefinitionResult, error) {
@@ -96,8 +96,17 @@ func (e *Engine) RunDefinition(ctx context.Context, t ports.DefinitionTask) (por
 }
 
 // modelEnv resolves the line's model connection alone for the run, its use audited as
-// connection.used, with the credentials its secret fields refer to.
+// connection.used, with the credentials its secret fields refer to; on secrets, its model key
+// alone, audited as secret.used.
 func (e *Engine) modelEnv(ctx context.Context, l domain.Line, run domain.RunID) (runEnv, error) {
+	if l.OnSecrets() {
+		if l.Runtime.ModelKey == "" {
+			return runEnv{}, fmt.Errorf("factory %s has no runtime.modelKey", l.FactoryID)
+		}
+
+		return e.secretEnv(ctx, domain.SecretUse{Factory: l.FactoryID, Run: run}, l.Runtime.ModelKey, domain.Environment{}, domain.Repository{})
+	}
+
 	model := l.Runtime.ModelConnection
 	if model == "" {
 		return runEnv{}, fmt.Errorf("factory %s has no runtime.modelConnection", l.FactoryID)
@@ -135,8 +144,17 @@ func (e *Engine) definitionToken(ctx context.Context, l domain.Line, t ports.Def
 		return "", fmt.Errorf("gateway key: %w", err)
 	}
 
+	// The box gets no files, but its prompt's Knowledge section is the one the request's agent sees.
+	agent, _ := l.Agent(t.Request.Agent)
+	agent.Name = t.Request.Agent
+
+	pins, err := e.pinKnowledge(ctx, l, agent, domain.RuleTarget{Agent: t.Request.Agent})
+	if err != nil {
+		return "", err
+	}
+
 	token, err := domain.SignTaskToken([]byte(key), domain.TaskClaims{
-		Kind: domain.TaskKindDraftRequest, OrgID: l.OrgID, FactoryID: l.FactoryID, VersionID: l.VersionID, Agent: t.Request.Agent,
+		Knowledge: pins, Kind: domain.TaskKindDraftRequest, OrgID: l.OrgID, FactoryID: l.FactoryID, VersionID: l.VersionID, Agent: t.Request.Agent,
 		RunID: domain.RunID(t.Request.ID), Model: l.Runtime.Model, DraftRequest: t.Request.ID, DraftRevision: t.Revision,
 		ExpiresAt: e.clock.Now().Add(e.cfg.TaskTimeout + e.cfg.LeaseTTL).Unix(),
 	})

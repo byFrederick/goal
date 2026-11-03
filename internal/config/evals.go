@@ -48,8 +48,9 @@ var evalSchemas = sync.OnceValues(func() (evalKinds, error) {
 
 // judgeFront is what the checks read of a judge's front matter; the schema checks the rest.
 type judgeFront struct {
-	Agents   []string  `json:"agents"`
-	Outcomes []outcome `json:"outcomes"`
+	Agents      []string  `json:"agents"`
+	Environment string    `json:"environment"`
+	Outcomes    []outcome `json:"outcomes"`
 }
 
 // outcome is one answer a judge may give.
@@ -61,8 +62,9 @@ type outcome struct {
 // evalCase is what the checks read of an eval case; the schema checks the rest.
 type evalCase struct {
 	Spec struct {
-		Agent string `json:"agent"`
-		Check struct {
+		Agent       string `json:"agent"`
+		Environment string `json:"environment"`
+		Check       struct {
 			Judge          string `json:"judge"`
 			ReferencePatch string `json:"referencePatch"`
 		} `json:"check"`
@@ -231,6 +233,8 @@ func (c *checker) judge(p string) {
 		}
 	}
 
+	c.evalEnvironment(ef, "judge", j.Environment, at("environment"))
+
 	for i, o := range j.Outcomes {
 		earlier := j.Outcomes[:i]
 
@@ -289,6 +293,8 @@ func (c *checker) evalCases(judges []string) {
 				"case %s: unknown agent %q", p, a))
 		}
 
+		c.evalEnvironment(ef, "case", ec.Spec.Environment, at("spec", "environment"))
+
 		if j := ec.Spec.Check.Judge; j != "" && !slices.Contains(judges, j) {
 			c.problems = append(c.problems, ef.problem(checkReferences, codeUnknownJudge, at("spec", "check", "judge"),
 				"case %s: unknown judge %q; a judge is a file %s/<slug>.md", p, j, JudgesDir))
@@ -298,6 +304,15 @@ func (c *checker) evalCases(judges []string) {
 			c.problems = append(c.problems, ef.problem(checkReferences, codePatchNotFound, at("spec", "check", "referencePatch"),
 				"case %s: reference patch %s not found", p, rp))
 		}
+	}
+}
+
+// evalEnvironment reports env, the environment a judge or case (what) names at path, when it has
+// no file; "" is the default environment, which the environments check covers.
+func (c *checker) evalEnvironment(ef evalFile, what, env string, path []string) {
+	if env != "" && !slices.Contains(c.envNames, env) {
+		c.problems = append(c.problems, ef.problem(checkEnvironments, codeEnvironmentUnknown, path,
+			"%s %s: unknown environment %q; an environment is a file %s/<name>.yaml", what, ef.path, env, EnvironmentsDir))
 	}
 }
 

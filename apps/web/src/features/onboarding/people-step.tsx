@@ -53,7 +53,7 @@ function Back({ org, search, factory }: { org: OrgSummary; search: OnboardingSea
         <Link
           to="/o/$org/get-started/$step"
           params={{ org: org.slug, step: 'factory' }}
-          search={{ connection: search.connection, owner: search.owner, repos: search.repos }}
+          search={{ url: search.url, secret: search.secret }}
         >
           Back
         </Link>

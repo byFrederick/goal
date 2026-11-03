@@ -266,7 +266,7 @@ func TestRun_RefusesAVersionThatDoesNotRunOnConnections(t *testing.T) {
 			}
 
 			reason, _ := h.eventsOf(it.ID, domain.EventBlocked)[0].Data["reason"].(string)
-			if !strings.Contains(reason, tt.want) || !strings.Contains(reason, "publish a version with connections (spec 4 §4.4)") {
+			if !strings.Contains(reason, tt.want) || !strings.Contains(reason, "publish a version on environment files and secrets (ADR 0037)") {
 				t.Errorf("blocked reason %q; want it to name %q and the fix", reason, tt.want)
 			}
 
@@ -396,5 +396,127 @@ func TestRun_RelaysAgentEventsScrubbed(t *testing.T) {
 	token := h.worker.Runs()[0].Env["GOAL_GATEWAY_TOKEN"]
 	if run := h.runs(t, testOrg, it.ID)[0]; strings.Contains(run.Result.Error, token) || !strings.Contains(run.Result.Error, "[redacted]") {
 		t.Errorf("run error %q, want the task token redacted", run.Result.Error)
+	}
+}
+
+// Commits as the worker reports them: the item branch's and the base's heads before prepare's
+// rebase, and the branch's head on the remote when the agent ended.
+var (
+	branchHead = strings.Repeat("a", 40)
+	baseHead   = strings.Repeat("b", 40)
+	pushedHead = strings.Repeat("c", 40)
+)
+
+// pushed is a succeeded result with output that pushed head.
+func pushed(output, head string) domain.RunResult {
+	res := ok(output)
+	res.PushedHead = head
+
+	return res
+}
+
+// A claim's first run records what a try needs to rerun it (ADR 0039, decision 8): the brief the
+// agent was given, the bundle's and goald's feedback as the worker joins them, the heads prepare
+// found, its own output and the head it pushed.
+func TestRun_RecordsTheBriefOutputAndHeads(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, repoLine(), porttest.Sequence(pushed(`{"lane":"backend"}`, pushedHead)))
+	h.worker.Heads(branchHead, baseHead)
+	it := h.submit(t, domain.NewItem{Title: "Add a version command", Body: "Print the build's version."})
+
+	h.step(t)
+
+	feedback := h.worker.Runs()[0].Env["GOAL_FEEDBACK"]
+	if feedback == "" {
+		t.Fatal("the agent heard no feedback; the brief would hold only the item's work")
+	}
+
+	runs := h.runs(t, testOrg, it.ID)
+	if len(runs) != 1 {
+		t.Fatalf("%d runs, want 1", len(runs))
+	}
+
+	want := domain.RunInput{
+		Brief:      "Add a version command\n\nPrint the build's version.\n\n" + feedback,
+		BranchHead: branchHead, BaseHead: baseHead,
+	}
+
+	run := runs[0]
+	if run.Input != want {
+		t.Errorf("run input =\n%+v\nwant\n%+v", run.Input, want)
+	}
+
+	if string(run.Result.Output) != `{"lane":"backend"}` || run.Result.PushedHead != pushedHead {
+		t.Errorf("run output %s and pushed head %q; want the agent's output and %q", run.Result.Output, run.Result.PushedHead, pushedHead)
+	}
+}
+
+// A retry runs in its claim's prepared box, so it records its own brief (with why its first
+// output was rejected), output and pushed head, and no heads: only a claim's first run can be
+// tried.
+func TestRun_RetryInTheSameBoxRecordsNoHeads(t *testing.T) {
+	t.Parallel()
+
+	line := repoLine()
+	line.Stations[1].Checks = []string{makeTest} // the work station, after the inbox
+	h := newHarness(t, line, porttest.Sequence(pushed(`{"try":1}`, branchHead), pushed(`{"try":2}`, pushedHead)))
+	h.worker.Heads(branchHead, baseHead)
+	h.worker.Exit(makeTest, 2, 0)
+	it := h.submit(t, domain.NewItem{Title: "Add a version command"})
+
+	h.step(t)
+
+	if n := len(h.worker.Prepares()); n != 1 {
+		t.Fatalf("%d prepares, want 1: the retry runs in the first run's box", n)
+	}
+
+	runs := h.runs(t, testOrg, it.ID)
+	if len(runs) != 2 {
+		t.Fatalf("%d runs, want 2", len(runs))
+	}
+
+	first, retry := runs[0], runs[1]
+	if first.Input.BranchHead != branchHead || first.Input.BaseHead != baseHead {
+		t.Errorf("first run heads %+v; want %q and %q", first.Input, branchHead, baseHead)
+	}
+
+	feedback := h.worker.Runs()[1].Env["GOAL_FEEDBACK"]
+	if !strings.Contains(feedback, "`make test` exited 2") {
+		t.Fatalf("retry feedback %q does not carry the failed check", feedback)
+	}
+
+	want := domain.RunInput{Brief: "Add a version command\n\n" + feedback}
+	if retry.Input != want {
+		t.Errorf("retry input =\n%+v\nwant\n%+v", retry.Input, want)
+	}
+
+	if string(retry.Result.Output) != `{"try":2}` || retry.Result.PushedHead != pushedHead {
+		t.Errorf("retry output %s and pushed head %q; want its own", retry.Result.Output, retry.Result.PushedHead)
+	}
+}
+
+// Without a repository a run records its brief and output, and no heads, even when the worker
+// reports some; nothing fails.
+func TestRun_WithoutARepositoryRecordsNoHeads(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)), porttest.Succeed(`{"lane":"backend"}`))
+	h.worker.Heads(branchHead, baseHead)
+	it := h.submit(t, domain.NewItem{Title: "Write the release notes"})
+
+	h.step(t)
+
+	if got := h.item(t, it.ID); got.State != domain.StateDone {
+		t.Fatalf("item is %s, want done (events %v)", got.State, h.kinds(it.ID))
+	}
+
+	run := h.runs(t, testOrg, it.ID)[0]
+	if run.Input != (domain.RunInput{Brief: "Write the release notes"}) || run.Result.PushedHead != "" {
+		t.Errorf("run input %+v and pushed head %q; want only the brief", run.Input, run.Result.PushedHead)
+	}
+
+	if string(run.Result.Output) != `{"lane":"backend"}` {
+		t.Errorf("run output %s; want the agent's", run.Result.Output)
 	}
 }

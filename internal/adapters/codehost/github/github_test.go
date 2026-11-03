@@ -42,8 +42,9 @@ const (
 	octo = "octo"
 )
 
-// connection is a connection of the platform's github kind with values (token and host).
-func connection(t *testing.T, values map[string]string) domain.ResolvedConnection {
+// connection is the code host login of a connection of the platform's github kind with values
+// (token and host).
+func connection(t *testing.T, values map[string]string) domain.CodeHostLogin {
 	t.Helper()
 
 	kinds, err := connkind.Platform()
@@ -56,11 +57,18 @@ func connection(t *testing.T, values map[string]string) domain.ResolvedConnectio
 		t.Fatal("the platform has no github kind")
 	}
 
-	return domain.ResolvedConnection{Connection: domain.Connection{Name: "github", Kind: "github"}, Kind: kinds[i], Values: values}
+	rc := domain.ResolvedConnection{Connection: domain.Connection{Name: "github", Kind: "github"}, Kind: kinds[i], Values: values}
+
+	login, err := rc.CodeHostLogin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return login
 }
 
-// dotComConn is a github.com connection with the token.
-func dotComConn(t *testing.T) domain.ResolvedConnection {
+// dotComConn is a github.com login with the token.
+func dotComConn(t *testing.T) domain.CodeHostLogin {
 	t.Helper()
 
 	return connection(t, map[string]string{"token": token})
@@ -414,7 +422,7 @@ func TestPullRequest_OnlyOnTheConnectionsHost(t *testing.T) {
 	ghe := connection(t, map[string]string{"token": token, "host": "ghe.example.com"})
 
 	for _, tt := range []struct {
-		conn domain.ResolvedConnection
+		conn domain.CodeHostLogin
 		url  string
 	}{
 		{dotComConn(t), "https://code.example.com/acme/app/pull/7"},
@@ -438,9 +446,12 @@ func TestPullRequest_OnlyOnTheConnectionsHost(t *testing.T) {
 		}
 	}
 
-	// A connection without a token has no git login: nothing is sent either.
-	if _, err := c.PullRequest(t.Context(), connection(t, map[string]string{}), prURL); err == nil {
-		t.Error("PullRequest with a connection without a token succeeded; want an error")
+	// A login without a token: nothing is sent either.
+	noToken := dotComConn(t)
+	noToken.Token = ""
+
+	if _, err := c.PullRequest(t.Context(), noToken, prURL); err == nil {
+		t.Error("PullRequest with a login without a token succeeded; want an error")
 	}
 
 	if got := f.sent(); len(got) != 0 {
@@ -831,7 +842,7 @@ func TestBranchHead_OnlyOnTheConnectionsHost(t *testing.T) {
 	ghe := connection(t, map[string]string{"token": token, "host": "ghe.example.com"})
 
 	for _, tt := range []struct {
-		conn domain.ResolvedConnection
+		conn domain.CodeHostLogin
 		repo string
 	}{
 		{dotComConn(t), "https://code.example.com/acme/app"},
@@ -1175,5 +1186,150 @@ func TestClient_RepositoriesRefusals(t *testing.T) {
 	before := len(f.sent())
 	if _, err := c.Repositories(t.Context(), dotComConn(t), "../user"); err == nil || len(f.sent()) != before {
 		t.Errorf("Repositories(../user) = %v after %d requests; want an error and none sent", err, len(f.sent())-before)
+	}
+}
+
+// Names of the repository access tests.
+const (
+	repoApp        = "acme/app"
+	repoDocs       = "acme/docs"
+	badCredentials = "Bad credentials"
+	notFound       = "Not Found"
+	keyPermissions = "permissions"
+)
+
+// accessCase is one RepositoryAccess call and what it must answer: the checks and a word of the
+// failed check's reason.
+type accessCase struct {
+	name, repo, token string
+	read, push        bool
+	reason            string
+}
+
+// check calls RepositoryAccess on c and checks the answer against tc.
+func (tc accessCase) check(t *testing.T, c *Client) {
+	t.Helper()
+
+	got, err := c.RepositoryAccess(t.Context(), tc.repo, tc.token)
+	if err != nil {
+		t.Fatalf("%s: err = %v", tc.name, err)
+	}
+
+	if got.Read.OK != tc.read || got.Push.OK != tc.push || got.Read.Reason == "" || got.Push.Reason == "" {
+		t.Errorf("%s: access = %+v; want read %v, push %v, each with a reason", tc.name, got, tc.read, tc.push)
+	}
+
+	failed := got.Push.Reason
+	if !tc.read {
+		failed = got.Read.Reason
+	}
+
+	if tc.reason != "" && !strings.Contains(failed, tc.reason) {
+		t.Errorf("%s: reason %q; want it to say %q", tc.name, failed, tc.reason)
+	}
+}
+
+// accessGitHub is a stand-in GitHub that answers GET /repos/<repo> for the token with its push
+// permission in pushes, any other repository 404 and another token 401. It records each request.
+func accessGitHub(t *testing.T, pushes map[string]bool) (*httptest.Server, func() []string) {
+	t.Helper()
+
+	var (
+		mu    sync.Mutex
+		paths []string
+	)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+
+		paths = append(paths, r.Method+" "+r.URL.Path)
+
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+
+		push, ok := pushes[strings.TrimPrefix(r.URL.Path, "/repos/")]
+
+		switch {
+		case r.Header.Get("Authorization") != "Bearer "+token:
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{message: badCredentials})
+		case !ok:
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{message: notFound})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{keyPermissions: map[string]bool{"pull": true, "push": push}})
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	return srv, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+
+		return slices.Clone(paths)
+	}
+}
+
+// A token that GitHub shows the repository to reads it, and pushes when permissions.push is
+// true; an unknown repository and a bad token fail the read with GitHub's message. Only the
+// repository is read.
+func TestRepositoryAccess(t *testing.T) {
+	t.Parallel()
+
+	srv, paths := accessGitHub(t, map[string]bool{repoApp: true, repoDocs: false})
+	c := New(Config{APIURL: srv.URL})
+
+	for _, tc := range []accessCase{
+		{name: "read and push", repo: "https://github.com/" + repoApp + ".git", token: token, read: true, push: true},
+		{name: "read only", repo: "https://github.com/" + repoDocs, token: token, read: true, reason: "push"},
+		{name: "unknown repository", repo: "https://github.com/acme/gone", token: token, reason: notFound},
+		{name: "bad token", repo: "https://github.com/" + repoApp, token: "ghp_wrong", reason: badCredentials},
+	} {
+		tc.check(t, c)
+	}
+
+	for _, p := range paths() {
+		if !strings.HasPrefix(p, "GET /repos/") {
+			t.Errorf("sent %s; want only reads of the repository", p)
+		}
+	}
+}
+
+// A URL that is no repository's is refused before anything is sent, a token GitHub echoes is in
+// no reason, and a host that does not answer is an error, not a failed check.
+func TestRepositoryAccess_Refusals(t *testing.T) {
+	t.Parallel()
+
+	srv, paths := accessGitHub(t, map[string]bool{})
+	c := New(Config{APIURL: srv.URL})
+
+	for _, bad := range []string{"http://github.com/acme/app", "https://github.com/acme", "https://user:pw@github.com/acme/app", "github.com/acme/app"} {
+		if _, err := c.RepositoryAccess(t.Context(), bad, token); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("RepositoryAccess(%q) err = %v; want domain.ErrInvalid", bad, err)
+		}
+	}
+
+	if n := len(paths()); n != 0 {
+		t.Errorf("sent %d requests; want none", n)
+	}
+
+	echo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{message: "token " + token + " lacks a scope"})
+	}))
+	t.Cleanup(echo.Close)
+
+	got, err := New(Config{APIURL: echo.URL}).RepositoryAccess(t.Context(), "https://github.com/"+repoApp, token)
+	if err != nil || got.Read.OK || strings.Contains(got.Read.Reason+got.Push.Reason, token) {
+		t.Errorf("access = %+v, err = %v; want read failed without the token", got, err)
+	}
+
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	dead.Close()
+
+	if _, err := New(Config{APIURL: dead.URL}).RepositoryAccess(t.Context(), "https://github.com/"+repoApp, token); err == nil {
+		t.Error("a host that does not answer: err = nil; want an error")
 	}
 }

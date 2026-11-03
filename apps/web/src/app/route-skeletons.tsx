@@ -340,3 +340,49 @@ export function FloorShape() {
 export function FloorSkeleton() {
   return <PendingSkeleton placeholder={<FloorShape />} />;
 }
+
+/** A secret's page: its heading, a wide column of two cards and a narrow column of three. */
+export function SecretShape() {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-5">
+      <Heading />
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,448px)]">
+        <div className="flex flex-col gap-5">
+          <Panel className="h-56" />
+          <Panel className="h-48" />
+        </div>
+        <div className="flex flex-col gap-5">
+          <Panel className="h-40" />
+          <Panel className="h-44" />
+          <Panel className="h-28" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The pending component of a secret's page. */
+export function SecretSkeleton() {
+  return <PendingSkeleton placeholder={<SecretShape />} />;
+}
+
+/** The Import secrets page: its heading, the paste card with the result card under it, and the note card. */
+export function ImportShape() {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-5">
+      <Heading />
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,448px)]">
+        <div className="flex flex-col gap-5">
+          <Panel className="h-56" />
+          <Panel className="h-48" />
+        </div>
+        <Panel className="h-40" />
+      </div>
+    </div>
+  );
+}
+
+/** The pending component of the Import secrets page. */
+export function ImportSkeleton() {
+  return <PendingSkeleton placeholder={<ImportShape />} />;
+}

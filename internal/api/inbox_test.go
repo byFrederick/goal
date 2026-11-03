@@ -183,7 +183,52 @@ func checkLineEntries(t *testing.T, got gen.Inbox) {
 				t.Errorf("rework warning = %+v; want %+v", e.Rework, want)
 			}
 		case gen.InboxEntryKindDecision, gen.InboxEntryKindQuestion, gen.InboxEntryKindToolApproval, gen.InboxEntryKindBlocked,
-			gen.InboxEntryKindExpedite:
+			gen.InboxEntryKindExpedite, gen.InboxEntryKindConversion, gen.InboxEntryKindKnowledgeSource:
 		}
+	}
+}
+
+// A factory Goal could not convert to secrets and environment files (ADR 0037 decision 19) is a
+// conversion entry naming each problem, since the attempt; a converted factory has none.
+func TestInbox_Conversion(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	problems := []string{
+		"connection aws-prod uses the aws kind, which Goal no longer converts: remove it from the factory",
+		"connection docs does not exist in the organization: remove it from the factory",
+	}
+
+	for _, c := range []ports.FactoryConversion{
+		{Factory: lineID, From: "0b6f1c9e-0000-7000-8000-000000000101", Problems: problems, At: t0.Add(-time.Hour)},
+		{Factory: acmeID, From: "0b6f1c9e-0000-7000-8000-000000000102", To: "0b6f1c9e-0000-7000-8000-000000000103", At: t0},
+	} {
+		if _, err := h.conversions.Record(inOrg(t), c); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var got []gen.InboxEntry
+
+	for _, e := range h.inbox(t, "").Entries {
+		if e.Kind == gen.InboxEntryKindConversion {
+			got = append(got, e)
+		}
+	}
+
+	if len(got) != 1 {
+		t.Fatalf("conversion entries %+v; want the refused factory's only", got)
+	}
+
+	e := got[0]
+	if e.Id != "conversion:"+lineID || e.Factory.Id != lineID || !e.Since.Equal(t0.Add(-time.Hour)) || e.Item != nil {
+		t.Errorf("entry %+v; want conversion:%s since the attempt, about no item", e, lineID)
+	}
+
+	want := "Connection aws-prod uses the aws kind, which Goal no longer converts: remove it from the factory. " +
+		"Connection docs does not exist in the organization: remove it from the factory."
+	if e.Conversion == nil || e.Conversion.Reason != want || !reflect.DeepEqual(e.Conversion.Problems, problems) {
+		t.Errorf("conversion %+v; want reason %q and each problem", e.Conversion, want)
 	}
 }

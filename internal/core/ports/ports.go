@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -206,7 +207,13 @@ type Store interface {
 
 	// FinishRun records a run's result, adds its cost to the item and appends a run_finished
 	// event with its status, error, cost and turns. Finishing a run twice is a no-op.
+	// It also keeps the run's own output and the head it pushed (res.PushedHead).
 	FinishRun(ctx context.Context, id domain.RunID, res domain.RunResult, endedAt time.Time) error
+
+	// RecordRunInput records what a run was given: its brief and the heads before prepare's
+	// rebase (ADR 0039, decision 8), replacing any recorded before; empty fields are stored as
+	// unknown. A run of another organization, or none, is ErrNotFound.
+	RecordRunInput(ctx context.Context, id domain.RunID, in domain.RunInput) error
 
 	// Runs returns up to limit of an item's runs, oldest first (by start, then id). An unknown
 	// item has none.
@@ -815,20 +822,21 @@ type OrgEvent struct {
 	Data json.RawMessage
 }
 
-// CodeHost reaches the API of a code host (GitHub, GitLab) from goald, with the credential of a
-// connection whose kind names the adapter (domain.KindSpec.CodeHost): the password of its
-// rendered git login (domain.ResolvedConnection.GitLogin), sent only to that login's host. A
-// pull request's repository comes from its URL, which must be on that host (otherwise an error
-// wrapping ErrNotMergeable, before anything is sent). Adapters follow no redirects and never put
-// the credential in errors or logs.
+// CodeHost reaches the API of a code host (GitHub, GitLab) from goald with a code host login
+// (domain.CodeHostLogin): a host and a token, which callers build today from the git login of a
+// connection whose kind names the adapter (domain.ResolvedConnection.CodeHostLogin,
+// domain.KindSpec.CodeHost). The token is sent only to the login's host. A pull request's
+// repository comes from its URL, which must be on that host (otherwise an error wrapping
+// ErrNotMergeable, before anything is sent). Adapters follow no redirects and never put the token
+// in errors or logs.
 type CodeHost interface {
 	// PullRequest returns the state of the pull request (a GitLab merge request) at url.
-	PullRequest(ctx context.Context, c domain.ResolvedConnection, url string) (PullRequest, error)
+	PullRequest(ctx context.Context, login domain.CodeHostLogin, url string) (PullRequest, error)
 
 	// Merge merges the pull request at url only while its head is still m.HeadSHA, and never
 	// forces: a pull request the host refuses to merge is an error wrapping ErrNotMergeable.
 	// It returns the merge commit's SHA.
-	Merge(ctx context.Context, c domain.ResolvedConnection, url string, m Merge) (string, error)
+	Merge(ctx context.Context, login domain.CodeHostLogin, url string, m Merge) (string, error)
 
 	// UpdateBranch brings the head branch of the pull request at url up to date with its base
 	// (GitHub merges the base into it; GitLab rebases it) only while its head is still headSHA,
@@ -838,31 +846,50 @@ type CodeHost interface {
 	// accepted the update, and the head changes later, so callers read the pull request again
 	// before merging. GitLab's rebase takes no expected head, so there the check is the adapter's
 	// own read just before it: best effort against a push landing in between.
-	UpdateBranch(ctx context.Context, c domain.ResolvedConnection, url, headSHA string) error
+	UpdateBranch(ctx context.Context, login domain.CodeHostLogin, url, headSHA string) error
 
 	// DeleteBranch deletes a branch of the repository the pull request at url merges into; a
 	// branch that is already gone is not an error.
-	DeleteBranch(ctx context.Context, c domain.ResolvedConnection, url, branch string) error
+	DeleteBranch(ctx context.Context, login domain.CodeHostLogin, url, branch string) error
 
 	// BranchHead returns the SHA of the head commit of branch in the repository at repo
-	// (https://<host>/<owner>/<repo>, optionally ending in .git), which must be on the host of c's
-	// git login (otherwise an error, before anything is sent). An empty branch means the
-	// repository's default branch. An unknown repository or branch is an error wrapping
-	// ErrNotFound. It only reads.
-	BranchHead(ctx context.Context, c domain.ResolvedConnection, repo, branch string) (string, error)
+	// (https://<host>/<owner>/<repo>, optionally ending in .git), which must be on login's host
+	// (otherwise an error, before anything is sent). An empty branch means the repository's
+	// default branch. An unknown repository or branch is an error wrapping ErrNotFound. It only
+	// reads.
+	BranchHead(ctx context.Context, login domain.CodeHostLogin, repo, branch string) (string, error)
 
 	// Compare returns the commits of the repository at repo (as for BranchHead) reachable from
 	// head and not from base, oldest first, each with its subject and the paths it changed. It
 	// returns at most MaxCompareCommits, the oldest ones, and sets Comparison.Truncated when there
 	// are more. An unknown repository or commit is an error wrapping ErrNotFound. It only reads.
-	Compare(ctx context.Context, c domain.ResolvedConnection, repo, base, head string) (Comparison, error)
+	Compare(ctx context.Context, login domain.CodeHostLogin, repo, base, head string) (Comparison, error)
 
-	// Repositories returns the account c's credential signs in as, the owners it can list
+	// Repositories returns the account login's token signs in as, the owners it can list
 	// repositories of (the account and its organizations) and the repositories of owner (the
 	// account when owner is empty): at most MaxRepositories, the most recently updated first, with
 	// RepositoryList.Truncated set when there are more. An unknown owner is an error wrapping
 	// ErrNotFound; a host that cannot list them, one wrapping errors.ErrUnsupported. It only reads.
-	Repositories(ctx context.Context, c domain.ResolvedConnection, owner string) (RepositoryList, error)
+	Repositories(ctx context.Context, login domain.CodeHostLogin, owner string) (RepositoryList, error)
+
+	// RepositoryAccess reports what token can do in the repository at repo
+	// (https://<host>/<owner>/<repo>, optionally ending in .git), without a connection: whether it
+	// can read the repository and whether it can push to it, each with a one-line reason from the
+	// host. The token is sent only to repo's host. A refusal the host answers (an unknown
+	// repository, a bad token, no push) is in the result; err is a repo that is not a repository
+	// URL (wrapping domain.ErrInvalid), or a host that gave no answer it could read. It only reads.
+	RepositoryAccess(ctx context.Context, repo, token string) (RepositoryAccess, error)
+}
+
+// RepositoryAccess is what CodeHost.RepositoryAccess found a token can do in a repository.
+type RepositoryAccess struct {
+	Read, Push AccessCheck
+}
+
+// AccessCheck is one check of RepositoryAccess: whether it passed, and the host's one-line reason.
+type AccessCheck struct {
+	OK     bool
+	Reason string
 }
 
 // MaxCompareCommits bounds the commits one CodeHost.Compare returns.
@@ -983,8 +1010,20 @@ type ObjectStore interface {
 	// Get returns the object at key, or an error wrapping ErrNotFound when there is none.
 	Get(ctx context.Context, key string) (Object, error)
 
+	// GetRange reads length bytes of the object at key from offset without holding the object in
+	// memory, as a box reads one file of a knowledge snapshot's zip: fewer when the object ends
+	// first, none when offset is at or past its end, the rest of it when length is negative. The
+	// caller closes the reader. ErrNotFound when there is no object at key; a negative offset is
+	// domain.ErrInvalid.
+	GetRange(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error)
+
 	// Put stores body at key, replacing what was there, and returns it.
 	Put(ctx context.Context, key string, body []byte) (ObjectInfo, error)
+
+	// PutStream stores what r yields at key, replacing what was there, and returns it. It holds at
+	// most one part of the object in memory, so a knowledge snapshot's zip streams from disk. When
+	// r fails, the object at key is left as it was.
+	PutStream(ctx context.Context, key string, r io.Reader) (ObjectInfo, error)
 
 	// PutIfAbsent stores body at key unless an object is there; created reports which, and info
 	// is the object now at key. Content-addressed writes (definition blobs, domain.BlobKey) use

@@ -191,7 +191,7 @@ func TestServeRun_NotesRefusesWhatTheTokenDoesNotName(t *testing.T) {
 		token  string
 		status int
 	}{
-		{name: "no token", status: http.StatusUnauthorized},
+		{name: noToken, status: http.StatusUnauthorized},
 		{name: "garbage", token: "not-a-token", status: http.StatusUnauthorized},
 		{name: "expired", token: h.token(t, expired), status: http.StatusUnauthorized},
 		{name: "another audience", token: h.tokenFor(t, valid, "goal-api"), status: http.StatusUnauthorized},

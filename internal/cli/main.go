@@ -131,59 +131,71 @@ const usage = `usage:
                                                   --expires 1d to 90d, default 90d). The secret is printed
                                                   once, alone on stdout: store it as GOAL_API_KEY
   goal key revoke <name|id>                       revoke a key: anything using it stops working at once
-  goal connection list [--kind K] [--factory F]   the organization's connections: kind, status, which
-                                                  secrets are set (never a value), what uses them
-  goal connection show <name>                     one connection: its fields, last test, the env names a
-                                                  run gets and its kind's docs
-  goal connection create <name> --kind K [--field k=v]... [--secret k=-] [--secret-file k=<path>]... [--description D]
-                                                  create a connection (owners and admins); a secret comes
-                                                  from stdin (k=-, one value) or a file, never argv
-  goal connection update <name> [--name N] [--description D] [--field k=v]... [--secret k=-] [--secret-file k=<path>]...
-                                                  rename it, change its fields (merged; k= clears one) or
-                                                  replace the named secrets
-  goal connection delete <name>                   delete it (refused while a factory's current version
-                                                  names it)
-  goal connection test <name>                     run its kind's test from goald (exit 1 when it fails)
-  goal connection kinds                           the kinds connections are made of, the platform's and
-                                                  the organization's
-  goal connection kind push <file.yaml>           create or replace an organization kind from its file
-  goal connection kind delete <name>              delete an organization kind no connection is of
-  goal credential list                            the organization's credentials: type, factories, what uses
-                                                  them, last use and expiry (never a value)
-  goal credential create <name> --type T [--description D] [--factory <id>]... [--all-factories] [--expires YYYY-MM-DD] [--remind-days N]
-                                                  create a credential (owners and admins; types api_key,
-                                                  oauth_token, ssh_key, cloud_role, app_key); its value
-                                                  comes from stdin, never argv: ... < value-file
-  goal credential replace <name>                  replace its value with the one on stdin
-  goal credential rm <name>                       delete it (refused while a connection refers to it as
-                                                  {{name}}; the error names them)
-  goal credential import <file> [--format env|yaml] [--on-conflict replace|skip] [--dry-run]
-                                                  import a .env or YAML file's credentials (format from
-                                                  the extension by default; a name that exists is skipped
+  goal connection ...                             moved to goal access, goal secret and environment files;
+                                                  prints where and exits 2
+  goal secret list                                the organization's secrets: factories, what uses them,
+                                                  last use and expiry (never a value)
+  goal secret show <name>                         one secret: source, description, factories, what uses
+                                                  it, expiry and reminder, last use, who changed it
+  goal secret create <name> [--description D] [--factory <id>]... [--all-factories] [--expires YYYY-MM-DD] [--remind-days N]
+                                                  create a secret (owners and admins), open to no factory
+                                                  unless --factory or --all-factories; its value comes
+                                                  from stdin, never argv: ... < value-file
+  goal secret replace <name>                      replace its value with the one on stdin
+  goal secret delete <name>                       delete it (refused while something uses it; the error
+                                                  names each use)
+  goal secret import <file> [--format env|yaml] [--on-conflict replace|skip] [--dry-run]
+                                                  import a .env file or a YAML file's credentials: map
+                                                  (format from the extension by default; new names are
+                                                  open to no factory, a name that exists is skipped
                                                   unless --on-conflict replace); prints each name as new
                                                   or exists (--dry-run) or what was done with it
-  goal knowledge sources [--factory F]            the knowledge base's sources: kind, status, documents,
-                                                  last and next sync, the factories that search them
-  goal knowledge add <name> --kind upload|synced|live [--connection C] [--config k=v]... [--title T] [--every 1h]
-                                                  add a source (owners and admins); a synced or live one
-                                                  reads a connection, --config says what (space=ENG)
+  goal credential ...                             moved to goal secret; prints where and exits 2
+  goal env test <factory> [<env>] [--server <name>] [--version draft|current|N]
+                                                  call tools/list on the environment's remote MCP
+                                                  servers (default: default) from goald, with their
+                                                  secrets opened there; the draft, or the current
+                                                  version while no draft is open (exit 1 when one fails)
+  goal repository test <url> --secret <name>      whether the secret's token can read the repository
+                                                  and push to it (github.com and gitlab.com), asked of
+                                                  the code host by goald with the secret opened there
+                                                  (owners and admins; exit 1 when a check fails)
+  goal access [--factory <f>] [--group reach|factory|secret]
+                                                  what agents reach: each MCP server, and each variable
+                                                  and file with a secret, with its factories and
+                                                  environments, secrets and status (tested, failed,
+                                                  untested, expiring, expired, missing, ok)
+  goal knowledge sources [--factory F]            the knowledge sources: kind, status, last and next
+                                                  sync, the factories that list them, the read-when line
+  goal knowledge add <name> --kind upload|repository|confluence --read-when "<line>" [--factories a,b] [--secret S] [--config k=v]... [--title T] [--every 1h]
+                                                  add a source (owners and admins); a repository or
+                                                  Confluence one reads with secret S, --config says what
+                                                  (repository=URL branch=… include=…, or site=… email=…
+                                                  spaces=ENG); --factories lists it in each one's draft
+                                                  factory.yaml, never publishing
+  goal knowledge check <name> --kind … [same flags as add]
+                                                  a dry run of add: whether goald can read it, its file
+                                                  count against the limits, each factory's warnings and
+                                                  the line agents will see; saves nothing
   goal knowledge sync <source>                    sync it now
-  goal knowledge upload <source> <file>...        upload text, Markdown, HTML, JSON or YAML files to an
-                                                  upload source; indexed at its next sync
-  goal knowledge documents <source>               its documents: id, title, status, size
-  goal knowledge rm <document>                    delete an uploaded document
-  goal knowledge search "<query>" [--source S]... [--limit N]
-                                                  search as agents do: the best passages first, with
-                                                  their document ids or links
-  goal knowledge usage [--source S] [--days N] [--json]
-                                                  each document's use over the window (default 7
-                                                  days, at most 90), of S or every source: runs,
-                                                  helped and misled, the people's share in brackets
-  goal knowledge uses <document> [--json]         the runs that used it, newest first: item, factory,
-                                                  search or read, first use
-  goal knowledge verdict <document> helped|misled [--run R] [--note TEXT] [--json]
-                                                  give your verdict on it, of a run that used it
-                                                  with --run
+  goal knowledge files <source> [--find P]        its current files: path, size, title (--find: those
+                                                  whose path or title starts with P)
+  goal knowledge files --find P                   find a file across every source
+  goal knowledge cat <source> <path>              one file's Markdown, as runs read it under
+                                                  /knowledge/<source>/<path>
+  goal knowledge upload <source> <file|dir>...    upload text, Markdown, HTML, JSON or YAML files to an
+                                                  upload source, a folder's files at their paths below
+                                                  it; its next sync takes them
+  goal knowledge rm <source> [<path>]             delete the source, or one of an upload source's files
+  goal knowledge reads [--source S] [--days N]    how often runs read each file and searched each folder
+                                                  under /knowledge over the window (default 7 days, at
+                                                  most 90), by factory, the most read first
+  goal memory list <factory>                      the factory memory in its draft (memory.yaml), numbered
+  goal memory add <factory> "<text>" [--from <factory>#<n>] [--publish]
+                                                  add a fact to the draft's memory.yaml, dated today
+                                                  (--from: the items it came from, comma-separated;
+                                                  --publish: publish the draft after it)
+  goal memory rm <factory> <n>                    remove the n-th fact from the draft's memory.yaml
   goal search "<query>" [--limit N] [--json]      search the organization's items, agents, factories
                                                   and connections, by group, best first (--limit: per
                                                   group, 1 to 20, default 5; --json: goald's answer as
@@ -258,9 +270,6 @@ const usage = `usage:
   goal webhooks deliveries <factory> <name> [--limit N] [--after C] [--json]
                                                   what it received, newest first: refused (and why),
                                                   accepted or created an item
-  goal connection import-env                      once, after the cutover to connections: GOAL_GITHUB_TOKEN
-                                                  becomes github, CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY)
-                                                  claude; names that exist are left as they are
   goal storage init                               create the bucket if missing
   goal catalog skills sync --file <sources.yaml> [--search <q>]... [--top <n>]
                                                   fetch skills.sh skills (a YAML list of
@@ -304,7 +313,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, credential, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one
+Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
@@ -322,17 +331,24 @@ func Usage() string { return usage }
 var errUsage = errors.New(usage)
 
 // Run runs the command line args (without the program name) and returns the exit code: 2 for a
-// command line that names no valid command, exitNoPerm when goald refuses a credential or
-// permission, 1 for any other error and 0 on success.
+// command line that names no valid command or a command that moved, exitNoPerm when goald
+// refuses a credential or permission, 1 for any other error and 0 on success.
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(string) string, readBuildInfo buildInfoFunc) int {
 	out := &printer{w: stdout, e: stderr, in: stdin}
 	err := errors.Join(run(ctx, args, out, getenv, readBuildInfo), out.err)
 
-	var refused *accessError
+	var (
+		refused *accessError
+		moved   *movedError
+	)
 
 	switch {
 	case errors.Is(err, errUsage):
 		_, _ = fmt.Fprintln(stderr, err)
+
+		return 2
+	case errors.As(err, &moved):
+		_, _ = fmt.Fprintln(stderr, "goal:", moved)
 
 		return 2
 	case errors.As(err, &refused):
@@ -347,6 +363,11 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 
 	return 0
 }
+
+// movedError is a command that moved: Run prints where it went, without the usage, and exits 2.
+type movedError struct{ msg string }
+
+func (e *movedError) Error() string { return e.msg }
 
 // command is a command, or a group of them, given its arguments.
 type command func(ctx context.Context, out *printer, getenv func(string) string, args []string) error
@@ -377,7 +398,7 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 	if handler, ok := map[string]command{
 		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbLane: laneItem, verbPause: pauseItem, verbCancel: cancelItem, verbDeny: denyItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
-		"connection": connectionCommand, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "search": search, "runs": runs, "eval": evalCommand, "bake-off": bakeOffCommand, "spend": spend,
+		"connection": connectionCommand, "secret": secretCommand, "env": envCommand, "access": access, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "memory": memoryCommand, "repository": repositoryCommand, "search": search, "runs": runs, "eval": evalCommand, "bake-off": bakeOffCommand, "spend": spend,
 		"judge": judgeCommand, "jonah": jonahCommand, "triggers": triggersCommand, "webhooks": webhooksCommand, cmdStandingRules: standingRulesCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)

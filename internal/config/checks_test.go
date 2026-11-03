@@ -3,7 +3,9 @@ package config
 import (
 	"cmp"
 	"encoding/json"
+	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -20,7 +22,7 @@ metadata:
   name: acme-check
 spec:
   runtime:
-    modelConnection: claude
+    modelKey: "{{claude-key}}"
   agents:
     - name: worker
       prompt: ./agents/worker.md
@@ -39,7 +41,7 @@ const (
 	workAgentLine = "        agent: worker\n"
 	doneStation   = "      - id: done\n"
 	agentPrompt   = "      prompt: ./agents/worker.md\n"
-	runtimeModel  = "    modelConnection: claude\n"
+	runtimeModel  = "    modelKey: \"{{claude-key}}\"\n"
 	specAgents    = "  agents:\n"
 	routeBackend  = "/line/stations/1/route/backend"
 	// answerContract is the output contract file the contract cases write.
@@ -56,13 +58,33 @@ func edited(pairs ...string) string {
 	return doc
 }
 
+// defaultEnvFile is the environment file every factory has; baseEnvironment is a valid one.
+const (
+	defaultEnvFile  = "environments/default.yaml"
+	baseEnvironment = "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n"
+)
+
+// absent, as an extra file's body, leaves the file out of the tree.
+const absent = "\x00absent"
+
+// checkTree is a definition of doc as factory.yaml, the worker's prompt, baseEnvironment as the
+// default environment and the extra files.
 func checkTree(doc string, extra map[string]string) fstest.MapFS {
-	files := fstest.MapFS{"agents/worker.md": {Data: []byte("# worker\n")}}
+	files := fstest.MapFS{
+		"agents/worker.md": {Data: []byte("# worker\n")},
+		defaultEnvFile:     {Data: []byte(baseEnvironment)},
+	}
 	if doc != "" {
 		files[FileName] = &fstest.MapFile{Data: []byte(doc)}
 	}
 
 	for p, body := range extra {
+		if body == absent {
+			delete(files, p)
+
+			continue
+		}
+
 		files[p] = &fstest.MapFile{Data: []byte(body)}
 	}
 
@@ -103,6 +125,10 @@ var locatedCases = []struct {
 		code: "json-invalid", section: domain.SectionFiles, file: answerContract,
 	},
 	{name: "no factory.yaml", code: "factory-yaml-missing", section: domain.SectionFiles},
+	{
+		name: "too many knowledge sources", doc: edited(specAgents, "  knowledge: { sources: [s01, s02, s03, s04, s05, s06, s07, s08, s09, s10, s11] } #here\n"+specAgents),
+		code: codeKnowledgeTooMany, section: domain.SectionBasics, pointer: "/basics/knowledge_sources",
+	},
 	{
 		name: "missing required key", doc: edited("      - id: work\n        kind: agent\n", "      - id: work #here\n"),
 		code: "schema-required", section: domain.SectionLine, pointer: "/line/stations/1/kind",
@@ -336,8 +362,8 @@ func TestCheck_FixesPatchTheirSection(t *testing.T) {
 
 	p := problems[indexOf(problems, "agents-exceed-wip")]
 	want := []domain.ProblemFix{
-		{Label: "Set WIP to 3", Section: domain.SectionLine, Patch: []domain.PatchOp{{Op: "replace", Path: "/stations/1/wip", Value: json.RawMessage("3")}}},
-		{Label: "Set agents to 2", Section: domain.SectionLine, Patch: []domain.PatchOp{{Op: "replace", Path: "/stations/1/agents", Value: json.RawMessage("2")}}},
+		{Label: "Set WIP to 3", Section: domain.SectionLine, Patch: []domain.PatchOp{{Op: domain.PatchReplace, Path: "/stations/1/wip", Value: json.RawMessage("3")}}},
+		{Label: "Set agents to 2", Section: domain.SectionLine, Patch: []domain.PatchOp{{Op: domain.PatchReplace, Path: "/stations/1/agents", Value: json.RawMessage("2")}}},
 	}
 
 	if !reflect.DeepEqual(p.Fixes, want) {
@@ -381,7 +407,7 @@ func TestCheck_RemovedFormsAreFixed(t *testing.T) {
 				specAgents, agentPrompt, agentPrompt+"      connections: [tickets]\n"),
 			want: domain.ProblemFix{
 				Label: "Use the organization's connection tickets", Section: domain.SectionConnections,
-				Patch: []domain.PatchOp{{Op: "replace", Path: "/0", Value: json.RawMessage(`{"name":"tickets"}`)}},
+				Patch: []domain.PatchOp{{Op: domain.PatchReplace, Path: "/0", Value: json.RawMessage(`{"name":"tickets"}`)}},
 			},
 		},
 	}
@@ -404,24 +430,68 @@ func TestCheck_RemovedFormsAreFixed(t *testing.T) {
 	}
 }
 
-// A definition in the new form names organization connections, which agents list like any
-// connection; it has no removed form to warn about.
-func TestCheck_OrganizationConnectionsAreNames(t *testing.T) {
+// oldPathFactory is baseFactory as versions published before ADR 0037 wrote it: every key the
+// ADR moved, and no environment files.
+var oldPathFactory = replaced(withTriggers("dedupe: check.name }", "dedupe: check.name, modelAgrees: { question: \"Real?\", connection: claude } }"),
+	runtimeModel, "    modelConnection: claude\n    size: large\n    tools: [\"go@1.26.10\", task]\n"+
+		"    repository: { url: \"https://github.com/acme/app\", connection: github }\n",
+	specAgents, "  connections: [github, datadog]\n"+specAgents,
+	agentPrompt, agentPrompt+"      connections: [datadog]\n",
+)
+
+// Each key ADR 0037 moved is an error at the key, whose message says where it moved and that Goal
+// converts published versions, and whose one fix takes it out of the draft. A trigger's key has no
+// fix: triggers are edited in YAML only.
+func TestCheck_MovedKeysAreFixed(t *testing.T) {
 	t.Parallel()
 
-	f, problems := Check(checkTree(edited(
-		runtimeModel, runtimeModel+"    size: large\n    tools: [\"go@1.26.10\", \"npm:@acme/cli@2\", \"aqua:cli/cli\", task]\n"+
-			"    repository: { url: \"https://github.com/acme/app\", connection: github }\n",
-		specAgents, "  connections: [github, datadog]\n  knowledge:\n    sources: [handbook]\n"+specAgents,
-		agentPrompt, agentPrompt+"      connections: [datadog]\n",
-	), nil))
-	if len(problems) > 0 {
-		t.Fatalf("problems = %+v, want none", problems)
+	remove := func(label, section, path string) domain.ProblemFix {
+		return domain.ProblemFix{Label: label, Section: section, Patch: []domain.PatchOp{{Op: "remove", Path: path}}}
 	}
 
-	if names := []string{f.Spec.Connections[0].Name, f.Spec.Connections[1].Name}; !reflect.DeepEqual(names, []string{"github", "datadog"}) ||
-		f.Spec.Connections[0].Inline() {
-		t.Errorf("connections = %+v, want the organization's github and datadog", f.Spec.Connections)
+	want := map[string]domain.ProblemFix{
+		"/connections": {
+			Label: "Remove connections", Section: domain.SectionConnections,
+			Patch: []domain.PatchOp{{Op: domain.PatchReplace, Path: "", Value: json.RawMessage("[]")}},
+		},
+		"/basics/model_connection":      remove("Remove runtime.modelConnection", domain.SectionBasics, "/model_connection"),
+		"/basics/size":                  remove("Remove runtime.size", domain.SectionBasics, "/size"),
+		"/basics/tools":                 remove("Remove runtime.tools", domain.SectionBasics, "/tools"),
+		"/basics/repository/connection": remove("Remove runtime.repository.connection", domain.SectionBasics, "/repository/connection"),
+		"/agents/agents/0/connections":  remove("Remove the agent's connections", domain.SectionAgents, "/agents/0/connections"),
+	}
+
+	_, problems := Check(checkTree(oldPathFactory, nil))
+
+	got, triggers := map[string]domain.ProblemFix{}, 0
+
+	for _, p := range problems {
+		if p.Code != codeMovedToEnvironment {
+			continue
+		}
+
+		if p.Check != checkMoved || !p.Blocking() || p.Line == 0 || !strings.Contains(p.Message, "moved") ||
+			!strings.Contains(p.Message, "Goal converts published versions") || len(p.Fixes) != 1 && p.Section != domain.SectionFiles {
+			t.Errorf("problem %+v, want a located error at the key saying where it moved, with one fix", p)
+
+			continue
+		}
+
+		if p.Section == domain.SectionFiles {
+			triggers++
+
+			continue
+		}
+
+		got[p.Pointer] = p.Fixes[0]
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("moved keys' fixes =\n%+v\nwant\n%+v", got, want)
+	}
+
+	if triggers != 1 {
+		t.Errorf("%d moved trigger keys, want modelAgrees.connection's", triggers)
 	}
 }
 
@@ -658,5 +728,116 @@ func TestCheck_AssemblyIntegration(t *testing.T) {
 				t.Errorf("problems %+v, want %s", problems, tt.code)
 			}
 		})
+	}
+}
+
+// srcHandbook is the knowledge source the cases list.
+const srcHandbook = "handbook"
+
+// knowledgeDoc is baseFactory with a lane, a work type and the knowledge sources entries as written.
+func knowledgeDoc(entries string) string {
+	return edited(workAgentLine, "        route: { "+laneBackend+": worker }\n", specAgents, "  knowledge:\n    sources:\n"+entries+specAgents,
+		"  board:\n", "  board:\n    workTypes: [bug]\n")
+}
+
+// A knowledge source entry is a name or an object that scopes who reads it and says when; its
+// scope names only what the definition declares, and a factory lists at most ten sources.
+func TestCheck_KnowledgeEntries(t *testing.T) {
+	t.Parallel()
+
+	t.Run("names and objects", knowledgeNamesAndObjects)
+
+	t.Run("an unknown name in appliesTo", knowledgeUnknownScope)
+
+	t.Run("an entry the schema refuses", knowledgeSchemaRefuses)
+
+	t.Run("ten sources at most", knowledgeTenAtMost)
+}
+
+func knowledgeNamesAndObjects(t *testing.T) {
+	t.Parallel()
+
+	f, problems := Check(checkTree(knowledgeDoc("      - handbook\n"+
+		"      - name: runbooks\n        appliesTo: { agents: [worker], stations: [work], lanes: ["+laneBackend+"], workTypes: [bug] }\n"+
+		"        readWhen: Before you touch production, find the runbook for the alert.\n"), nil))
+	if f == nil || len(problems) > 0 {
+		t.Fatalf("problems = %+v, want none", problems)
+	}
+
+	if got := f.Spec.Knowledge.Names(); !slices.Equal(got, []string{srcHandbook, "runbooks"}) {
+		t.Errorf("names = %v, want [handbook runbooks]", got)
+	}
+
+	want := []KnowledgeSource{
+		{Name: srcHandbook},
+		{
+			Name: "runbooks", ReadWhen: "Before you touch production, find the runbook for the alert.",
+			AppliesTo: domain.RuleScope{Agents: []string{"worker"}, Stations: []string{"work"}, Lanes: []string{laneBackend}, WorkTypes: []string{"bug"}},
+		},
+	}
+	if !reflect.DeepEqual(f.Spec.Knowledge.Sources, want) {
+		t.Errorf("sources = %+v\nwant %+v", f.Spec.Knowledge.Sources, want)
+	}
+
+	wantLine := []domain.KnowledgeEntry{{Name: srcHandbook}, {Name: "runbooks", ReadWhen: want[1].ReadWhen, AppliesTo: want[1].AppliesTo}}
+	if got := f.Line().Knowledge; !reflect.DeepEqual(got, wantLine) {
+		t.Errorf("line's knowledge = %+v, want %+v", got, wantLine)
+	}
+}
+
+func knowledgeUnknownScope(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct{ scope, code, pointer string }{
+		{"agents: [ghost]", codeUnknownAgent, "/basics/knowledge_sources/0/appliesTo/agents/0"},
+		{"stations: [ghost]", codeUnknownStation, "/basics/knowledge_sources/0/appliesTo/stations/0"},
+		{"lanes: [ghost]", codeUnknownLane, "/basics/knowledge_sources/0/appliesTo/lanes/0"},
+		{"workTypes: [ghost]", codeUnknownWorkType, "/basics/knowledge_sources/0/appliesTo/workTypes/0"},
+	} {
+		_, problems := Check(checkTree(knowledgeDoc("      - { name: runbooks, appliesTo: { "+tt.scope+" } }\n"), nil))
+
+		i := indexOf(problems, tt.code)
+		if i < 0 || len(problems) != 1 {
+			t.Errorf("%s: problems = %+v, want one %s", tt.scope, problems, tt.code)
+
+			continue
+		}
+
+		if p := problems[i]; p.Pointer != tt.pointer || p.Severity != domain.SeverityError || !strings.Contains(p.Message, "knowledge source runbooks") {
+			t.Errorf("%s: problem = %+v, want an error at %s naming the source", tt.scope, p, tt.pointer)
+		}
+	}
+}
+
+func knowledgeSchemaRefuses(t *testing.T) {
+	t.Parallel()
+
+	for _, entry := range []string{
+		"      - { appliesTo: { agents: [worker] } }\n",
+		"      - { name: runbooks, appliesTo: { agents: [] } }\n",
+		"      - { name: runbooks, colour: red }\n",
+		"      - { name: runbooks, readWhen: \"" + strings.Repeat("a", 161) + "\" }\n",
+	} {
+		if f, problems := Check(checkTree(knowledgeDoc(entry), nil)); f != nil || len(problems) == 0 {
+			t.Errorf("%q: factory %v, problems %+v; want a schema problem", entry, f != nil, problems)
+		}
+	}
+}
+
+func knowledgeTenAtMost(t *testing.T) {
+	t.Parallel()
+
+	var ten strings.Builder
+	for i := range 10 {
+		fmt.Fprintf(&ten, "      - s%02d\n", i+1)
+	}
+
+	if _, problems := Check(checkTree(knowledgeDoc(ten.String()), nil)); len(problems) > 0 {
+		t.Errorf("ten sources: problems = %+v, want none", problems)
+	}
+
+	_, problems := Check(checkTree(knowledgeDoc(ten.String()+"      - { name: s11, readWhen: One too many. }\n"), nil))
+	if i := indexOf(problems, codeKnowledgeTooMany); i < 0 || problems[i].Severity != domain.SeverityError {
+		t.Errorf("eleven sources: problems = %+v, want a knowledge-too-many error", problems)
 	}
 }

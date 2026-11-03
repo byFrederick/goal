@@ -742,9 +742,9 @@ func resealWebhookSecrets(ctx context.Context, q *db.Queries, key ports.MasterKe
 		return 0, err
 	}
 
-	stale := make([]db.StaleSealedCredentialsRow, 0, len(rows))
+	stale := make([]db.StaleSealedSecretsRow, 0, len(rows))
 	for _, r := range rows {
-		stale = append(stale, db.StaleSealedCredentialsRow(r))
+		stale = append(stale, db.StaleSealedSecretsRow(r))
 	}
 
 	return resealRows(key, "webhook endpoint", stale, webhookSecretAAD, func(id uuid.UUID, s sealedValue) error {

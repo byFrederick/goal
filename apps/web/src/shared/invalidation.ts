@@ -151,26 +151,25 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
  * The queries one `connection` event touches (spec 4 §8.3): a connection created, changed, tested
  * or deleted changes the lists, that connection and the audit entries about connections, all
  * under one prefix; it carries no value. The kinds too: a connection of a kind another admin just
- * defined (kinds have no event of their own). A credential's "used by" names the connections
- * that refer to it, so the credentials list moves with them.
+ * defined (kinds have no event of their own). A secret's uses name the connections
+ * that refer to it, so the secrets list moves with them.
  */
 export function connectionInvalidations(org: string): QueryKey[] {
-  return [keys.connections(org), keys.connectionKinds(org), keys.credentials(org)];
+  return [keys.connections(org), keys.connectionKinds(org), keys.secrets(org)];
 }
 
 /**
  * The queries one `knowledge` event touches (spec 4 §8.3): a source's sync started or ended, so
- * the source lists, each source with its documents and each document's text may have changed, and
- * the usage of the sources (the runs that opened each document). The documents' uses sit under the
- * 'document' prefix. Not a search: one open on Knowledge is an embedding call on goald, run again when asked.
+ * the source lists, each source with its files, a search across the files and how often they were
+ * read may have changed.
  */
 export function knowledgeInvalidations(org: string): QueryKey[] {
   const knowledge = keys.knowledge(org);
   return [
     [...knowledge, 'sources'],
     [...knowledge, 'source'],
-    [...knowledge, 'document'],
-    [...knowledge, 'usage'],
+    [...knowledge, 'find'],
+    [...knowledge, 'reads'],
   ];
 }
 

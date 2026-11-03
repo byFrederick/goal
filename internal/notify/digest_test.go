@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
@@ -28,25 +27,27 @@ const (
 var digestOrgs = [2]struct{ slug, name string }{{"acme", "Acme"}, {"labs", "Labs"}}
 
 type digestHarness struct {
-	orgs    orgList
-	digests *porttest.Digests
-	prefs   *porttest.NotificationPreferences
-	mailer  *porttest.Mailer
-	slack   *porttest.DirectMessenger
-	conns   *porttest.Connections
-	clock   *porttest.Clock
-	logs    *syncBuffer
-	job     *DigestJob
+	orgs     orgList
+	digests  *porttest.Digests
+	prefs    *porttest.NotificationPreferences
+	mailer   *porttest.Mailer
+	slack    *porttest.DirectMessenger
+	secrets  *porttest.OrgSecrets
+	settings *porttest.NotificationSettings
+	tenancy  *porttest.Tenancy
+	clock    *porttest.Clock
+	logs     *syncBuffer
+	job      *DigestJob
 }
 
 // newDigestJob is a digest job over two real organizations of a tenancy, acme and labs, so they
-// can hold connections, with email and Slack, its clock at now.
+// can hold secrets and notification settings, with email and Slack, its clock at now.
 func newDigestJob(t *testing.T, now time.Time) digestHarness {
 	t.Helper()
 
 	clock := porttest.NewClock(now)
 	tenancy := porttest.NewTenancy(clock.Now)
-	conns := porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy)
+	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, nil)
 
 	var orgs orgList
 
@@ -59,18 +60,9 @@ func newDigestJob(t *testing.T, now time.Time) digestHarness {
 		orgs = append(orgs, o.ID)
 	}
 
-	kinds, err := connkind.Platform()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := conns.SyncPlatformKinds(t.Context(), kinds); err != nil {
-		t.Fatal(err)
-	}
-
 	h := digestHarness{
 		orgs: orgs, digests: porttest.NewDigests(), prefs: porttest.NewNotificationPreferences(), mailer: porttest.NewMailer(),
-		slack: porttest.NewDirectMessenger(), conns: conns, clock: clock, logs: &syncBuffer{},
+		slack: porttest.NewDirectMessenger(), tenancy: tenancy, secrets: secrets, settings: porttest.NewNotificationSettings(secrets, tenancy), clock: clock, logs: &syncBuffer{},
 	}
 	h.job = h.newJob()
 
@@ -80,7 +72,7 @@ func newDigestJob(t *testing.T, now time.Time) digestHarness {
 // newJob is another instance's job over the same database, mailer and Slack.
 func (h digestHarness) newJob() *DigestJob {
 	return NewDigestJob(DigestDeps{
-		Orgs: h.orgs, Digests: h.digests, Preferences: h.prefs, Mailer: h.mailer, Slack: h.slack, Connections: h.conns,
+		Orgs: h.orgs, Digests: h.digests, Preferences: h.prefs, Mailer: h.mailer, Slack: h.slack, Settings: h.settings, Secrets: h.secrets,
 		Clock: h.clock, PublicURL: publicURL,
 		Log: slog.New(slog.NewJSONHandler(h.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	})
@@ -114,14 +106,12 @@ func (h digestHarness) wantRound(t *testing.T, label string, queued, finished in
 	}
 }
 
-// connectSlack gives the i-th organization a Slack connection whose token is token.
-func (h digestHarness) connectSlack(t *testing.T, i int, token string) {
+// useSlackSecret gives the i-th organization the secret name holding token, open to all
+// factories, and names it in the organization's Slack notification setting.
+func (h digestHarness) useSlackSecret(t *testing.T, i int, name, token string) {
 	t.Helper()
 
-	ctx := domain.WithOrg(t.Context(), h.orgs[i])
-	if _, err := h.conns.Create(ctx, domain.NewConnection{Name: "slack", Kind: "slack", Secrets: map[string]string{"token": token}}, domain.LocalUser); err != nil {
-		t.Fatal(err)
-	}
+	setSlackSecret(domain.WithOrg(t.Context(), h.orgs[i]), t, h.secrets, h.settings, name, token, domain.SecretScope{All: true})
 }
 
 // wantText fails for each of wants text lacks.
@@ -324,7 +314,7 @@ func TestDigest_RenderLinksAndCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h.connectSlack(t, 0, "xoxb-test-token")
+	h.useSlackSecret(t, 0, "slack-bot", "xoxb-test-token")
 	h.digests.SetRecipients(acme, ports.DigestRecipient{UserID: ann, TimeZone: "UTC", Email: true, Slack: true})
 	h.digests.SetRecipients(labs, emailRecipient(ann, "UTC"))
 	h.digests.SetSummary(acme, ann, ports.DigestSummary{
@@ -369,6 +359,66 @@ func TestDigest_RenderLinksAndCounts(t *testing.T) {
 
 	wantText(t, "logs", logs, `"event":"digest"`)
 	wantNoText(t, "logs", logs, annAddress, "xoxb-", "Needs you")
+}
+
+// A Slack digest goes out with the value of the secret each organization's notification setting
+// names, opened once for the round; an organization without a setting fails its Slack digest with
+// slack-not-set and sends nothing.
+func TestDigest_SlackUsesTheSettingsSecret(t *testing.T) {
+	t.Parallel()
+
+	h := newDigestJob(t, time.Date(2026, 10, 28, 8, 0, 0, 0, time.UTC))
+	acme, labs := h.orgs[0], h.orgs[1]
+	bob := domain.UserID("bob")
+
+	ctx := domain.WithOrg(t.Context(), acme)
+	if _, err := h.secrets.Create(ctx, domain.NewSecret{Name: "aa-other", Scope: domain.SecretScope{All: true}, Value: "xoxb-other"}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	h.useSlackSecret(t, 0, "team-slack", chosenValue)
+	h.slackMembers(t, 0, ann, bob)
+	h.slackMembers(t, 1, ann)
+
+	h.wantRound(t, "round", 3, 3)
+
+	dms := h.slack.Sent()
+	if len(dms) != 2 || dms[0].Token != chosenValue || dms[1].Token != chosenValue {
+		t.Fatalf("direct messages %+v; want acme's two digests with the setting's secret", dms)
+	}
+
+	if used, err := h.tenancy.AuditLog(ctx, ports.AuditQuery{Action: domain.AuditSecretUsed, Limit: 100}); err != nil || len(used) != 1 {
+		t.Fatalf("secret opened %d times, %v; want once for the round", len(used), err)
+	}
+
+	for _, r := range h.digests.Rows() {
+		if r.OrgID == labs && (r.State != ports.NotificationFailed || r.LastError != "slack-not-set") {
+			t.Fatalf("labs' digest = %+v; want failed with slack-not-set", r)
+		}
+	}
+
+	wantNoText(t, "logs", h.logs.String(), "xoxb-")
+}
+
+// slackMembers makes users members of the i-th organization who get its Slack digest, with
+// something to report.
+func (h digestHarness) slackMembers(t *testing.T, i int, users ...domain.UserID) {
+	t.Helper()
+
+	var rs []ports.DigestRecipient
+
+	for _, u := range users {
+		if err := h.prefs.SetNotificationPreferences(t.Context(), u, slackDigestOn()); err != nil {
+			t.Fatal(err)
+		}
+
+		rs = append(rs, ports.DigestRecipient{UserID: u, TimeZone: time.UTC.String(), Slack: true})
+		h.digests.SetSummary(h.orgs[i], u, ports.DigestSummary{
+			Address: string(u) + "@example.com", OrgSlug: digestOrgs[i].slug, OrgName: digestOrgs[i].name, Done: 1,
+		})
+	}
+
+	h.digests.SetRecipients(h.orgs[i], rs...)
 }
 
 func slackDigestOn() domain.NotificationPreferences {

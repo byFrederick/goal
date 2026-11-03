@@ -78,8 +78,23 @@ type Run struct {
 	Agent               string
 	Model               string
 	Result              RunResult
-	StartedAt           time.Time
-	EndedAt             time.Time
+	// Input is what the run was given, as RecordRunInput stored it; empty for runs from before
+	// run records (00085).
+	Input     RunInput
+	StartedAt time.Time
+	EndedAt   time.Time
+}
+
+// RunInput is what a run was given, for a later try to rerun it (ADR 0039, decision 8). Empty
+// fields are unknown: a retry in its claim's box has no heads, and a run without a repository none.
+type RunInput struct {
+	// Brief is the brief the agent was given: the bundle's brief (the item's work) and the run's
+	// feedback (its notes, answers and rejections), joined as the worker's prompt joins them.
+	Brief string
+	// BranchHead and BaseHead are the item branch's and its base's commits when prepare checked
+	// the branch out, before it brought the branch up to date with the base.
+	BranchHead string
+	BaseHead   string
 }
 
 // ListedRun is a run with the number and title of the item it worked, as the organization's run
@@ -114,6 +129,9 @@ type RunResult struct {
 	SessionID    string
 	// Error explains a failed or cancelled run.
 	Error string
+	// PushedHead is the item branch's commit on the remote when the agent ended, as the worker
+	// read it; empty without a repository or when it could not be read.
+	PushedHead string
 }
 
 // RunRequest is one agent run for engine.RunTask: what it records, which sandbox it opens, what
@@ -148,14 +166,25 @@ type RunRequest struct {
 	Repository Repository
 	// Branch and Base are the run's branch and the branch it is cut from (TaskClaims).
 	Branch, Base string
-	// ModelConnection is the connection that gives the run its model access.
+	// ModelConnection is the connection that gives a run on connections its model access.
 	ModelConnection string
 	// Connections are the organization connections the agent gets besides the model's.
 	Connections []string
+	// ModelKey is the {{secret}} that gives a run on secrets its model (ADR 0037 decision 7), and
+	// Environment the agent's environment file it gets its env from (decision 10); a run on
+	// secrets names no connection, and a Jonah run no environment.
+	ModelKey    string
+	Environment Environment
 	// DeniedCommands are added to the agent's deny rules (TaskClaims.DeniedCommands).
 	DeniedCommands []string
-	// Size is the sandbox's size; empty is medium.
-	Size SandboxSize
+	// Knowledge are the knowledge snapshots the run reads (TaskClaims.Knowledge).
+	Knowledge []KnowledgePin
+	// NoEnvironment says the agent gets no env, files or MCP servers (TaskClaims.NoEnvironment).
+	NoEnvironment bool
+	// Size is the sandbox's size; empty is medium. Image is the sandbox's image; empty is the
+	// engine's, Goal's own.
+	Size  SandboxSize
+	Image string
 	// Timeout bounds the run; BoxLimit, when set, bounds how long its sandbox may live (the
 	// organization policy's box time limit). Zero takes the engine's defaults.
 	Timeout, BoxLimit time.Duration
@@ -167,13 +196,14 @@ type RunRequest struct {
 // ErrBadRunRequest refuses a RunRequest that Check does not accept.
 var ErrBadRunRequest = fmt.Errorf("bad run request: %w", ErrInvalid)
 
-// Check reports why r cannot run: a request without its organization, factory, agent or model
-// connection, a station run without its item and station, a Jonah run with an item, a station,
-// a lease, a repository or a connection besides the model's, a jonah bundle without a window that
-// ends after it starts, or a window on another bundle.
+// Check reports why r cannot run: a request without its organization, factory or agent, without
+// a model connection or a model key or with both, on a model key with a connection, a station run
+// without its item and station, a Jonah run with an item, a station, a lease, a repository, an
+// environment or a connection besides the model's, a jonah bundle without a window that ends
+// after it starts, or a window on another bundle.
 func (r RunRequest) Check() error {
-	if r.OrgID == "" || r.FactoryID == "" || r.Agent == "" || r.ModelConnection == "" {
-		return fmt.Errorf("%w: it needs an organization, a factory, an agent and a model connection", ErrBadRunRequest)
+	if err := r.checkModel(); err != nil {
+		return err
 	}
 
 	if err := r.checkWindow(); err != nil {
@@ -187,6 +217,20 @@ func (r RunRequest) Check() error {
 		return fmt.Errorf("%w: unknown run kind %q", ErrBadRunRequest, r.Kind)
 	case r.Item == "" || r.Station == "":
 		return fmt.Errorf("%w: a station run needs its item and station", ErrBadRunRequest)
+	}
+
+	return nil
+}
+
+// checkModel refuses a request without its organization, factory or agent, without a model
+// connection or a model key or with both, and one on a model key with a connection.
+func (r RunRequest) checkModel() error {
+	if r.OrgID == "" || r.FactoryID == "" || r.Agent == "" || (r.ModelConnection == "") == (r.ModelKey == "") {
+		return fmt.Errorf("%w: it needs an organization, a factory, an agent and either a model connection or a model key", ErrBadRunRequest)
+	}
+
+	if r.ModelKey != "" && (len(r.Connections) > 0 || r.Repository.Connection != "") {
+		return fmt.Errorf("%w: a run on secrets opens no connection", ErrBadRunRequest)
 	}
 
 	return nil
@@ -212,8 +256,9 @@ func (r RunRequest) checkWindow() error {
 
 // checkJonah refuses a Jonah run with what ADR 0034 decision 1 leaves out of it.
 func (r RunRequest) checkJonah() error {
-	if r.Item != "" || r.Station != "" || r.Lease != nil || r.Repository != (Repository{}) || len(r.Connections) > 0 {
-		return fmt.Errorf("%w: a Jonah run has no item, station, lease, repository or connection but the model's", ErrBadRunRequest)
+	if r.Item != "" || r.Station != "" || r.Lease != nil || r.Repository != (Repository{}) || len(r.Connections) > 0 ||
+		r.Environment.Name != "" || len(r.Environment.Env) > 0 {
+		return fmt.Errorf("%w: a Jonah run has no item, station, lease, repository, environment or connection but the model's", ErrBadRunRequest)
 	}
 
 	return nil

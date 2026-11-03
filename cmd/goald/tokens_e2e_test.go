@@ -94,7 +94,7 @@ func (s *e2eStack) useToken(t *testing.T, secret string, goal func(args ...strin
 	}
 
 	dir := t.TempDir()
-	if err := os.CopyFS(dir, os.DirFS("../../internal/config/testdata/line")); err != nil {
+	if err := os.CopyFS(dir, os.DirFS("../../internal/config/testdata/.line")); err != nil {
 		t.Fatal(err)
 	}
 

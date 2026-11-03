@@ -229,7 +229,7 @@ func TestSaveSection_AgentWithItsPromptInOneRevision(t *testing.T) {
 		paths = append(paths, fi.Path)
 	}
 
-	if strings.Join(paths, " ") != "agents/engineer.md factory.yaml" {
+	if strings.Join(paths, " ") != "agents/engineer.md environments/default.yaml factory.yaml" {
 		t.Errorf("files after removing the reviewer = %v", paths)
 	}
 }

@@ -164,6 +164,44 @@ spec:
 	}
 }
 
+// A knowledge source entry written as an object (ADR 0038 decision 5) is Basics as written, and
+// writing it back changes nothing, byte for byte.
+func TestFromYAML_KeepsKnowledgeEntryObjects(t *testing.T) {
+	t.Parallel()
+
+	doc := []byte(`apiVersion: goal/v1
+spec:
+  knowledge:
+    sources:
+      - handbook
+      - name: runbooks
+        appliesTo: { stations: [investigate, fix] }
+        readWhen: Before you touch production, find the runbook for the alert.
+`)
+
+	m, _, err := FromYAML(doc, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []any{"handbook", map[string]any{
+		keyName: "runbooks", "appliesTo": map[string]any{"stations": []any{"investigate", "fix"}},
+		"readWhen": "Before you touch production, find the runbook for the alert.",
+	}}
+	if got := m.Basics["knowledge_sources"]; !reflect.DeepEqual(got, want) {
+		t.Errorf("knowledge_sources = %#v\nwant %#v", got, want)
+	}
+
+	out, err := Apply(doc, Basics, sectionJSON(t, m, Basics))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(out, doc) {
+		t.Errorf("unchanged basics rewrote the file:\n%s", out)
+	}
+}
+
 func TestFromYAML_DocumentThatDoesNotParse(t *testing.T) {
 	t.Parallel()
 

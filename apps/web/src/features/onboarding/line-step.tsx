@@ -19,7 +19,7 @@ import { stationLabel } from '../factory-editor/line/labels';
 import { LineEditorProvider, useLineEditor } from '../factory-editor/line/line-editor';
 import { ModelsBox } from '../factory-editor/line/models-box';
 import { WipStepper } from '../factory-editor/line/station-row';
-import type { OnboardingSearch } from './code-search';
+import { type OnboardingSearch, repoOf } from './code-search';
 import { codeCard, FactoryCard, organizationCard, type PreviewStation, previewSlots } from './factory-preview';
 import { OnboardingLayout } from './onboarding-layout';
 
@@ -118,7 +118,7 @@ function LineBody({ org, search, factory }: { org: OrgSummary; search: Onboardin
           <Link
             to="/o/$org/get-started/$step"
             params={{ org: org.slug, step: 'factory' }}
-            search={{ connection: search.connection, owner: search.owner, repos: search.repos, factory }}
+            search={{ url: search.url, secret: search.secret, factory }}
           >
             Back
           </Link>
@@ -133,7 +133,7 @@ function LineBody({ org, search, factory }: { org: OrgSummary; search: Onboardin
       }
       preview={previewSlots({
         organization: organizationCard(org, host),
-        code: codeCard(search.repos?.[0]),
+        code: codeCard(repoOf(search.url), search.secret),
         factory: (
           <FactoryCard
             name={basics.name || factoryDetail?.name || ''}

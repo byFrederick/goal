@@ -1,0 +1,14 @@
+apiVersion: goal/v1
+kind: Environment
+metadata: { name: default }
+spec:
+  size: medium
+  image: ghcr.io/acme/box:1
+  tools: [go@1.26, gh@2]
+  setup:
+    - go mod download
+  env:
+    GH_TOKEN: "{{github-token}}"
+    SENTRY_ORG: acme
+  files:
+    ~/.npmrc: "{{npm-config}}"

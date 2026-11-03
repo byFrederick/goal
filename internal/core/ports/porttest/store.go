@@ -606,6 +606,27 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 	return nil
 }
 
+// RecordRunInput implements ports.Store.
+func (s *Store) RecordRunInput(ctx context.Context, id domain.RunID, in domain.RunInput) error {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	r, ok := s.runs[id]
+	if !ok || !s.runVisible(r, org) {
+		return fmt.Errorf("run %s: %w", id, ports.ErrNotFound)
+	}
+
+	r.Input = in
+
+	return nil
+}
+
 // Runs implements ports.Store.
 func (s *Store) Runs(ctx context.Context, item domain.ItemID, limit int) ([]domain.Run, error) {
 	org, err := orgOf(ctx)

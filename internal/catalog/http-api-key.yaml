@@ -1,0 +1,13 @@
+apiVersion: goal/v1
+kind: Template
+metadata:
+  name: http-api-key
+  title: HTTP API key
+  description: Any HTTP API that takes a key in a header; rename the variables to the API's own.
+spec:
+  secrets:
+    - {slot: key, title: Key, description: "The header's whole value, such as Bearer <token>.", suggest: api-key}
+  env:
+    API_URL: "https://api.example.com"
+    API_HEADER: Authorization
+    API_KEY: "{{key}}"

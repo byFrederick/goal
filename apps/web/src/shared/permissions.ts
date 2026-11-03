@@ -19,10 +19,11 @@ export type OrgPermission =
   | 'api_key:manage'
   | 'personal_token:read'
   | 'personal_token:manage'
+  | 'access:read'
   | 'connection:read'
   | 'connection:manage'
-  | 'credential:read'
-  | 'credential:manage'
+  | 'secret:read'
+  | 'secret:manage'
   | 'knowledge:read'
   | 'knowledge:manage'
   | 'audit:read';

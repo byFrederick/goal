@@ -2,10 +2,11 @@
 // connection's kind syncs with confluence (spec 4 §4.8, §5.6): the pages of one or more spaces of
 // a Confluence Cloud site, read through its REST API v2 with the connection's Atlassian account.
 //
-// The connection gives the site (site: its host, such as acme.atlassian.net), the account's
-// email and its API token (email, token: the platform kind confluence's fields), sent with basic
-// authentication. A source's config names the spaces (spaces: space keys separated by commas or
-// new lines, such as ENG, SUP).
+// A source on a secret (ADR 0037 decision 14) names the site (site: its host, such as
+// acme.atlassian.net) and the account's email (email) in its config, and its secret holds the
+// API token; a source still on a connection takes all three from the connection's fields (the
+// platform kind confluence's). They are sent with basic authentication. A source's config names
+// the spaces (spaces: space keys separated by commas or new lines, such as ENG, SUP).
 //
 // A listing is every current page of the spaces (GET /wiki/api/v2/spaces/{id}/pages, 250 a
 // request, following the cursor of each answer's next link) with its version number as its
@@ -50,7 +51,8 @@ type Config struct {
 }
 
 const (
-	// The connection fields the reader reads: the platform kind confluence's.
+	// The values the reader reads: the platform kind confluence's fields, and the config keys of a
+	// source on a secret (site, email).
 	fieldSite  = "site"
 	fieldEmail = "email"
 	fieldToken = "token"
@@ -199,22 +201,31 @@ type source struct {
 	keys         []string
 }
 
-// open reads s: the connection's site and account, and the source's spaces.
+// open reads s: the site and account (the source's config and its secret's value, or the
+// connection's fields), and the source's spaces.
 func open(s domain.SyncSpec) (source, error) {
-	if s.Connection == nil {
-		return source{}, fmt.Errorf("source %s has no connection to read: %w", s.Source.Name, domain.ErrInvalid)
+	var values map[string]string
+
+	owner := ""
+
+	switch {
+	case s.Secret != nil:
+		values = map[string]string{fieldSite: s.Source.Config[fieldSite], fieldEmail: s.Source.Config[fieldEmail], fieldToken: s.Secret.Value}
+		owner = "source " + s.Source.Name
+	case s.Connection != nil:
+		values, owner = s.Connection.Values, "connection "+s.Connection.Connection.Name
+	default:
+		return source{}, fmt.Errorf("source %s has no secret or connection to read with: %w", s.Source.Name, domain.ErrInvalid)
 	}
 
-	c := s.Connection
-
-	site, err := siteHost(c.Values[fieldSite])
+	site, err := siteHost(values[fieldSite])
 	if err != nil {
-		return source{}, fmt.Errorf("connection %s: %w", c.Connection.Name, err)
+		return source{}, fmt.Errorf("%s: %w", owner, err)
 	}
 
-	src := source{site: site, email: strings.TrimSpace(c.Values[fieldEmail]), token: c.Values[fieldToken]}
+	src := source{site: site, email: strings.TrimSpace(values[fieldEmail]), token: values[fieldToken]}
 	if src.email == "" || src.token == "" {
-		return source{}, fmt.Errorf("connection %s has no %s and %s for the site: %w", c.Connection.Name, fieldEmail, fieldToken, domain.ErrInvalid)
+		return source{}, fmt.Errorf("%s has no %s and %s for the site: %w", owner, fieldEmail, fieldToken, domain.ErrInvalid)
 	}
 
 	if src.keys, err = spaceKeys(s.Source.Config[cfgSpaces]); err != nil {

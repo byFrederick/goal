@@ -1,13 +1,11 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { pageTitle } from '../app/route-focus';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { PendingScreen } from '../app/states';
-import { NewCredentialPage } from '../features/credentials/new-credential-page';
-import { type NewCredentialSearch, newCredentialSearch } from '../features/credentials/search';
 
-// New credential (ADR 0017): ?panel=import opens the import panel (see new-credential-page.tsx).
+// Credentials became Secrets (ADR 0037): the old New credential address opens Import secrets, the one page
+// of the old pair that still has a home (a single secret is made in the list's New secret sheet).
 export const Route = createFileRoute('/o/$org/_org/credentials/new')({
   pendingComponent: PendingScreen,
-  validateSearch: (search: Record<string, unknown>): NewCredentialSearch => newCredentialSearch(search),
-  head: ({ match: { context } }) => pageTitle('New credential', 'Credentials', context.org.name),
-  component: NewCredentialPage,
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: '/o/$org/secrets/import', params: { org: params.org }, replace: true });
+  },
 });

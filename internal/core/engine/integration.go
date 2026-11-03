@@ -112,7 +112,7 @@ func (e *Engine) pullRequestBase(ctx context.Context, l domain.Line, it domain.I
 		return "", fmt.Errorf("the base of pull request %s: %w", url, err)
 	}
 
-	pr, err := targets[0].host.PullRequest(ctx, targets[0].conn, url)
+	pr, err := targets[0].host.PullRequest(ctx, targets[0].login, url)
 	if err != nil {
 		return "", fmt.Errorf("read pull request %s: %w", url, err)
 	}

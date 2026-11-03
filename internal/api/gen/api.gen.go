@@ -24,6 +24,84 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AccessBy.
+const (
+	AccessByFactory AccessBy = "factory"
+	AccessByReach   AccessBy = "reach"
+	AccessBySecret  AccessBy = "secret"
+)
+
+// Valid indicates whether the value is a known member of the AccessBy enum.
+func (e AccessBy) Valid() bool {
+	switch e {
+	case AccessByFactory:
+		return true
+	case AccessByReach:
+		return true
+	case AccessBySecret:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AccessRowKind.
+const (
+	AccessRowKindEnv   AccessRowKind = "env"
+	AccessRowKindFile  AccessRowKind = "file"
+	AccessRowKindMcp   AccessRowKind = "mcp"
+	AccessRowKindSlack AccessRowKind = "slack"
+)
+
+// Valid indicates whether the value is a known member of the AccessRowKind enum.
+func (e AccessRowKind) Valid() bool {
+	switch e {
+	case AccessRowKindEnv:
+		return true
+	case AccessRowKindFile:
+		return true
+	case AccessRowKindMcp:
+		return true
+	case AccessRowKindSlack:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AccessStatus.
+const (
+	AccessStatusExpired  AccessStatus = "expired"
+	AccessStatusExpiring AccessStatus = "expiring"
+	AccessStatusFailed   AccessStatus = "failed"
+	AccessStatusMissing  AccessStatus = "missing"
+	AccessStatusOk       AccessStatus = "ok"
+	AccessStatusTested   AccessStatus = "tested"
+	AccessStatusUntested AccessStatus = "untested"
+)
+
+// Valid indicates whether the value is a known member of the AccessStatus enum.
+func (e AccessStatus) Valid() bool {
+	switch e {
+	case AccessStatusExpired:
+		return true
+	case AccessStatusExpiring:
+		return true
+	case AccessStatusFailed:
+		return true
+	case AccessStatusMissing:
+		return true
+	case AccessStatusOk:
+		return true
+	case AccessStatusTested:
+		return true
+	case AccessStatusUntested:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ActorKind.
 const (
 	ActorKindAgent   ActorKind = "agent"
@@ -779,13 +857,15 @@ func (e ImportStartKind) Valid() bool {
 
 // Defines values for InboxEntryKind.
 const (
-	InboxEntryKindAndon         InboxEntryKind = "andon"
-	InboxEntryKindBlocked       InboxEntryKind = "blocked"
-	InboxEntryKindDecision      InboxEntryKind = "decision"
-	InboxEntryKindExpedite      InboxEntryKind = "expedite"
-	InboxEntryKindQuestion      InboxEntryKind = "question"
-	InboxEntryKindReworkWarning InboxEntryKind = "rework_warning"
-	InboxEntryKindToolApproval  InboxEntryKind = "tool_approval"
+	InboxEntryKindAndon           InboxEntryKind = "andon"
+	InboxEntryKindBlocked         InboxEntryKind = "blocked"
+	InboxEntryKindConversion      InboxEntryKind = "conversion"
+	InboxEntryKindDecision        InboxEntryKind = "decision"
+	InboxEntryKindExpedite        InboxEntryKind = "expedite"
+	InboxEntryKindKnowledgeSource InboxEntryKind = "knowledge_source"
+	InboxEntryKindQuestion        InboxEntryKind = "question"
+	InboxEntryKindReworkWarning   InboxEntryKind = "rework_warning"
+	InboxEntryKindToolApproval    InboxEntryKind = "tool_approval"
 )
 
 // Valid indicates whether the value is a known member of the InboxEntryKind enum.
@@ -795,9 +875,13 @@ func (e InboxEntryKind) Valid() bool {
 		return true
 	case InboxEntryKindBlocked:
 		return true
+	case InboxEntryKindConversion:
+		return true
 	case InboxEntryKindDecision:
 		return true
 	case InboxEntryKindExpedite:
+		return true
+	case InboxEntryKindKnowledgeSource:
 		return true
 	case InboxEntryKindQuestion:
 		return true
@@ -1050,24 +1134,18 @@ func (e JudgeScoreState) Valid() bool {
 	}
 }
 
-// Defines values for KnowledgeDocumentStatus.
+// Defines values for KnowledgeCheckOverLimit.
 const (
-	KnowledgeDocumentStatusFailed  KnowledgeDocumentStatus = "failed"
-	KnowledgeDocumentStatusIndexed KnowledgeDocumentStatus = "indexed"
-	KnowledgeDocumentStatusPending KnowledgeDocumentStatus = "pending"
-	KnowledgeDocumentStatusSkipped KnowledgeDocumentStatus = "skipped"
+	Bytes KnowledgeCheckOverLimit = "bytes"
+	Files KnowledgeCheckOverLimit = "files"
 )
 
-// Valid indicates whether the value is a known member of the KnowledgeDocumentStatus enum.
-func (e KnowledgeDocumentStatus) Valid() bool {
+// Valid indicates whether the value is a known member of the KnowledgeCheckOverLimit enum.
+func (e KnowledgeCheckOverLimit) Valid() bool {
 	switch e {
-	case KnowledgeDocumentStatusFailed:
+	case Bytes:
 		return true
-	case KnowledgeDocumentStatusIndexed:
-		return true
-	case KnowledgeDocumentStatusPending:
-		return true
-	case KnowledgeDocumentStatusSkipped:
+	case Files:
 		return true
 	default:
 		return false
@@ -1118,73 +1196,25 @@ func (e KnowledgeSourceStatus) Valid() bool {
 
 // Defines values for KnowledgeSourceKind.
 const (
-	KnowledgeSourceKindLive   KnowledgeSourceKind = "live"
-	KnowledgeSourceKindSynced KnowledgeSourceKind = "synced"
-	KnowledgeSourceKindUpload KnowledgeSourceKind = "upload"
+	KnowledgeSourceKindConfluence KnowledgeSourceKind = "confluence"
+	KnowledgeSourceKindLive       KnowledgeSourceKind = "live"
+	KnowledgeSourceKindRepository KnowledgeSourceKind = "repository"
+	KnowledgeSourceKindSynced     KnowledgeSourceKind = "synced"
+	KnowledgeSourceKindUpload     KnowledgeSourceKind = "upload"
 )
 
 // Valid indicates whether the value is a known member of the KnowledgeSourceKind enum.
 func (e KnowledgeSourceKind) Valid() bool {
 	switch e {
+	case KnowledgeSourceKindConfluence:
+		return true
 	case KnowledgeSourceKindLive:
+		return true
+	case KnowledgeSourceKindRepository:
 		return true
 	case KnowledgeSourceKindSynced:
 		return true
 	case KnowledgeSourceKindUpload:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for KnowledgeUseKind.
-const (
-	Read   KnowledgeUseKind = "read"
-	Search KnowledgeUseKind = "search"
-)
-
-// Valid indicates whether the value is a known member of the KnowledgeUseKind enum.
-func (e KnowledgeUseKind) Valid() bool {
-	switch e {
-	case Read:
-		return true
-	case Search:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for KnowledgeVerdictVerdict.
-const (
-	KnowledgeVerdictVerdictHelped KnowledgeVerdictVerdict = "helped"
-	KnowledgeVerdictVerdictMisled KnowledgeVerdictVerdict = "misled"
-)
-
-// Valid indicates whether the value is a known member of the KnowledgeVerdictVerdict enum.
-func (e KnowledgeVerdictVerdict) Valid() bool {
-	switch e {
-	case KnowledgeVerdictVerdictHelped:
-		return true
-	case KnowledgeVerdictVerdictMisled:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for KnowledgeVerdictInputVerdict.
-const (
-	KnowledgeVerdictInputVerdictHelped KnowledgeVerdictInputVerdict = "helped"
-	KnowledgeVerdictInputVerdictMisled KnowledgeVerdictInputVerdict = "misled"
-)
-
-// Valid indicates whether the value is a known member of the KnowledgeVerdictInputVerdict enum.
-func (e KnowledgeVerdictInputVerdict) Valid() bool {
-	switch e {
-	case KnowledgeVerdictInputVerdictHelped:
-		return true
-	case KnowledgeVerdictInputVerdictMisled:
 		return true
 	default:
 		return false
@@ -1482,6 +1512,105 @@ func (e RunStatus) Valid() bool {
 	}
 }
 
+// Defines values for SecretImportFormat.
+const (
+	SecretImportFormatEnv  SecretImportFormat = "env"
+	SecretImportFormatYaml SecretImportFormat = "yaml"
+)
+
+// Valid indicates whether the value is a known member of the SecretImportFormat enum.
+func (e SecretImportFormat) Valid() bool {
+	switch e {
+	case SecretImportFormatEnv:
+		return true
+	case SecretImportFormatYaml:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretImportOnConflict.
+const (
+	SecretImportOnConflictReplace SecretImportOnConflict = "replace"
+	SecretImportOnConflictSkip    SecretImportOnConflict = "skip"
+)
+
+// Valid indicates whether the value is a known member of the SecretImportOnConflict enum.
+func (e SecretImportOnConflict) Valid() bool {
+	switch e {
+	case SecretImportOnConflictReplace:
+		return true
+	case SecretImportOnConflictSkip:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretImportOutcomeOutcome.
+const (
+	SecretImportOutcomeOutcomeCreated  SecretImportOutcomeOutcome = "created"
+	SecretImportOutcomeOutcomeReplaced SecretImportOutcomeOutcome = "replaced"
+	SecretImportOutcomeOutcomeSkipped  SecretImportOutcomeOutcome = "skipped"
+)
+
+// Valid indicates whether the value is a known member of the SecretImportOutcomeOutcome enum.
+func (e SecretImportOutcomeOutcome) Valid() bool {
+	switch e {
+	case SecretImportOutcomeOutcomeCreated:
+		return true
+	case SecretImportOutcomeOutcomeReplaced:
+		return true
+	case SecretImportOutcomeOutcomeSkipped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretSource.
+const (
+	SecretSourceValue SecretSource = "value"
+)
+
+// Valid indicates whether the value is a known member of the SecretSource enum.
+func (e SecretSource) Valid() bool {
+	switch e {
+	case SecretSourceValue:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretUseKind.
+const (
+	SecretUseConnection      SecretUseKind = "connection"
+	SecretUseDefinition      SecretUseKind = "definition"
+	SecretUseKnowledgeSource SecretUseKind = "knowledge_source"
+	SecretUseSlack           SecretUseKind = "slack"
+	SecretUseWebhook         SecretUseKind = "webhook"
+)
+
+// Valid indicates whether the value is a known member of the SecretUseKind enum.
+func (e SecretUseKind) Valid() bool {
+	switch e {
+	case SecretUseConnection:
+		return true
+	case SecretUseDefinition:
+		return true
+	case SecretUseKnowledgeSource:
+		return true
+	case SecretUseSlack:
+		return true
+	case SecretUseWebhook:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for Section.
 const (
 	Agents      Section = "agents"
@@ -1641,6 +1770,27 @@ func (e TeardownRunOutcome) Valid() bool {
 	}
 }
 
+// Defines values for TemplateMCPTools.
+const (
+	TemplateMCPToolsAllow TemplateMCPTools = "allow"
+	TemplateMCPToolsAsk   TemplateMCPTools = "ask"
+	TemplateMCPToolsOff   TemplateMCPTools = "off"
+)
+
+// Valid indicates whether the value is a known member of the TemplateMCPTools enum.
+func (e TemplateMCPTools) Valid() bool {
+	switch e {
+	case TemplateMCPToolsAllow:
+		return true
+	case TemplateMCPToolsAsk:
+		return true
+	case TemplateMCPToolsOff:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TemplateStartKind.
 const (
 	TemplateStartKindTemplate TemplateStartKind = "template"
@@ -1716,6 +1866,7 @@ func (e ToolPolicyReadWeb) Valid() bool {
 // Defines values for ToolPolicyUseCredentials.
 const (
 	ToolPolicyUseCredentialsAttachedOnly ToolPolicyUseCredentials = "attached_only"
+	ToolPolicyUseCredentialsEnvironment  ToolPolicyUseCredentials = "environment"
 	ToolPolicyUseCredentialsOff          ToolPolicyUseCredentials = "off"
 )
 
@@ -1723,6 +1874,8 @@ const (
 func (e ToolPolicyUseCredentials) Valid() bool {
 	switch e {
 	case ToolPolicyUseCredentialsAttachedOnly:
+		return true
+	case ToolPolicyUseCredentialsEnvironment:
 		return true
 	case ToolPolicyUseCredentialsOff:
 		return true
@@ -1959,6 +2112,27 @@ func (e WebhookKind) Valid() bool {
 	}
 }
 
+// Defines values for GetAccessParamsBy.
+const (
+	GetAccessParamsByFactory GetAccessParamsBy = "factory"
+	GetAccessParamsByReach   GetAccessParamsBy = "reach"
+	GetAccessParamsBySecret  GetAccessParamsBy = "secret"
+)
+
+// Valid indicates whether the value is a known member of the GetAccessParamsBy enum.
+func (e GetAccessParamsBy) Valid() bool {
+	switch e {
+	case GetAccessParamsByFactory:
+		return true
+	case GetAccessParamsByReach:
+		return true
+	case GetAccessParamsBySecret:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GetMetricsParamsCompare.
 const (
 	Previous GetMetricsParamsCompare = "previous"
@@ -1972,6 +2146,88 @@ func (e GetMetricsParamsCompare) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// Access defines model for Access.
+type Access struct {
+	By     AccessBy      `json:"by"`
+	Groups []AccessGroup `json:"groups"`
+
+	// NeedAttention Of those, the missing, failed, expired or expiring
+	NeedAttention int `json:"need_attention"`
+
+	// Reached What agents reach
+	Reached int `json:"reached"`
+}
+
+// AccessBy defines model for Access.By.
+type AccessBy string
+
+// AccessFactory defines model for AccessFactory.
+type AccessFactory struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// AccessGroup One group: a kind (mcp, env, file, slack), a factory's id or a secret's name, by by. The organization-wide slack row has no factory, so no factory group holds it
+type AccessGroup struct {
+	Key   string      `json:"key"`
+	Rows  []AccessRow `json:"rows"`
+	Title string      `json:"title"`
+}
+
+// AccessRow What agents reach under one kind and name. A factory row (mcp, env, file) lists the environments that use it; the organization-wide slack row, "Slack notifications", holds the secret of the organization's Slack notifications and has no factory uses, so its uses are empty and its status comes from that secret alone.
+type AccessRow struct {
+	// ExpiresAt The soonest expiry of its secrets
+	ExpiresAt *time.Time    `json:"expires_at,omitempty"`
+	Kind      AccessRowKind `json:"kind"`
+
+	// LastUsedAt When a run last opened one of its secrets
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+
+	// Name The MCP server, the variable, the file path, or Slack notifications
+	Name string `json:"name"`
+
+	// Secrets The secrets it references
+	Secrets []string `json:"secrets"`
+
+	// Status The worst of its uses' statuses, in this order
+	Status AccessStatus `json:"status"`
+
+	// TestError Why its latest failed test failed
+	TestError *string `json:"test_error,omitempty"`
+
+	// TestedAt Its latest test
+	TestedAt *time.Time  `json:"tested_at,omitempty"`
+	Uses     []AccessUse `json:"uses"`
+}
+
+// AccessRowKind defines model for AccessRow.Kind.
+type AccessRowKind string
+
+// AccessStatus The worst of its uses' statuses, in this order
+type AccessStatus string
+
+// AccessTest defines model for AccessTest.
+type AccessTest struct {
+	At    time.Time `json:"at"`
+	Error *string   `json:"error,omitempty"`
+	Ok    bool      `json:"ok"`
+
+	// Tools How many tools it listed
+	Tools int `json:"tools"`
+}
+
+// AccessUse defines model for AccessUse.
+type AccessUse struct {
+	// Agents The agents on the environment
+	Agents      []string      `json:"agents"`
+	Environment string        `json:"environment"`
+	Factory     AccessFactory `json:"factory"`
+
+	// Status The worst of its uses' statuses, in this order
+	Status AccessStatus `json:"status"`
+	Test   *AccessTest  `json:"test,omitempty"`
 }
 
 // Activity defines model for Activity.
@@ -3413,6 +3669,36 @@ type DraftTree struct {
 	Files FileMap `json:"files"`
 }
 
+// EnvironmentTestRequest defines model for EnvironmentTestRequest.
+type EnvironmentTestRequest struct {
+	// Server Only this MCP server
+	Server   *string                  `json:"server,omitempty"`
+	Template *EnvironmentTestTemplate `json:"template,omitempty"`
+
+	// Version draft (the default while one is open), current (the default otherwise) or a version number
+	Version *string `json:"version,omitempty"`
+}
+
+// EnvironmentTestResult defines model for EnvironmentTestResult.
+type EnvironmentTestResult struct {
+	Environment string              `json:"environment"`
+	Servers     []ServerTest        `json:"servers"`
+	Template    *TemplateTestResult `json:"template,omitempty"`
+
+	// Version The version tested: draft or its number
+	Version string `json:"version"`
+}
+
+// EnvironmentTestTemplate defines model for EnvironmentTestTemplate.
+type EnvironmentTestTemplate struct {
+	// Env The template's plain env values to use instead of its own, by name
+	Env  *map[string]string `json:"env,omitempty"`
+	Name string             `json:"name"`
+
+	// Secrets The secret each slot takes, by slot
+	Secrets map[string]SecretName `json:"secrets"`
+}
+
 // EvalCaseEntry defines model for EvalCaseEntry.
 type EvalCaseEntry struct {
 	Agent     string        `json:"agent"`
@@ -3887,6 +4173,15 @@ type InboxBlocked struct {
 	Reason *string `json:"reason"`
 }
 
+// InboxConversion A factory Goal could not move from connections to secrets and environment files. It runs on its version, on connections, until a version on secrets is published.
+type InboxConversion struct {
+	// Problems What to fix, one entry each, such as "connection aws-prod uses the aws kind, which Goal no longer converts: remove it from the factory"
+	Problems []string `json:"problems"`
+
+	// Reason Every problem in one sentence each, for a row that shows one line
+	Reason string `json:"reason"`
+}
+
 // InboxEntry defines model for InboxEntry.
 type InboxEntry struct {
 	// Action merge for a decision at a merge station (POST /v1/orgs/{org}/items/{item}/merge), else null
@@ -3900,20 +4195,26 @@ type InboxEntry struct {
 
 	// Blocked Why a blocked item is blocked; null for other kinds
 	Blocked *InboxBlocked `json:"blocked"`
-	Factory struct {
+
+	// Conversion Why Goal could not convert the factory; absent or null for other kinds
+	Conversion *InboxConversion `json:"conversion,omitempty"`
+	Factory    struct {
 		Id    string  `json:"id"`
 		Name  string  `json:"name"`
 		Title *string `json:"title"`
 	} `json:"factory"`
 
-	// Id "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>
+	// Id "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>
 	Id string `json:"id"`
 
 	// Item The item it is about, or null for an entry that is about no item
 	Item *ItemCard `json:"item"`
 
-	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny
+	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it
 	Kind InboxEntryKind `json:"kind"`
+
+	// KnowledgeSource Why the knowledge source does not sync; absent or null for other kinds
+	KnowledgeSource *InboxKnowledgeSource `json:"knowledge_source,omitempty"`
 
 	// Question A question entry's open question; absent or null for other kinds
 	Question *ItemQuestion `json:"question,omitempty"`
@@ -3921,7 +4222,7 @@ type InboxEntry struct {
 	// Rework The gate tally of a rework warning; null for other kinds
 	Rework *ReworkWarning `json:"rework"`
 
-	// Since Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning)
+	// Since Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion)
 	Since time.Time `json:"since"`
 
 	// Station The station where it waits
@@ -3931,8 +4232,20 @@ type InboxEntry struct {
 	ToolApproval *ToolApproval `json:"tool_approval,omitempty"`
 }
 
-// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny
+// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it
 type InboxEntryKind string
+
+// InboxKnowledgeSource A knowledge source whose last syncs failed, shown under each factory that lists it.
+type InboxKnowledgeSource struct {
+	// Error What the last sync said
+	Error string `json:"error"`
+
+	// FailedSyncs How many syncs failed in a row
+	FailedSyncs int `json:"failed_syncs"`
+
+	// Source The source's name
+	Source string `json:"source"`
+}
 
 // Intake defines model for Intake.
 type Intake struct {
@@ -4594,82 +4907,68 @@ type JudgeWrite struct {
 	Title  string  `json:"title"`
 }
 
-// KnowledgeDocument defines model for KnowledgeDocument.
-type KnowledgeDocument struct {
-	Bytes     int64      `json:"bytes"`
-	Error     *string    `json:"error,omitempty"`
-	Id        string     `json:"id"`
-	IndexedAt *time.Time `json:"indexed_at"`
-	Mime      string     `json:"mime"`
+// KnowledgeCheck defines model for KnowledgeCheck.
+type KnowledgeCheck struct {
+	Access KnowledgeCheckAccess `json:"access"`
 
-	// Source Its source's name
-	Source string `json:"source"`
+	// Bytes Their Markdown's size, only when goald knows it: the current snapshot of a source of that name and kind that exists. A listing does not say how big each file is.
+	Bytes *int64 `json:"bytes,omitempty"`
 
-	// Status pending until the next sync indexes it; failed with error; skipped when it has no text
-	Status KnowledgeDocumentStatus `json:"status"`
-	Title  string                  `json:"title"`
+	// Files How many files it lists; 0 when access failed
+	Files int `json:"files"`
 
-	// Url A synced document's link back to its source
-	Url *string `json:"url,omitempty"`
+	// Limits A source's limits (ADR 0038 decision 4)
+	Limits KnowledgeLimits `json:"limits"`
+
+	// Line The line agents will see for it in their prompt's Knowledge section
+	Line string `json:"line"`
+
+	// OverLimit The limits it is over, which a sync would fail on
+	OverLimit []KnowledgeCheckOverLimit `json:"over_limit"`
+	Warnings  []KnowledgeCheckWarning   `json:"warnings"`
 }
 
-// KnowledgeDocumentStatus pending until the next sync indexes it; failed with error; skipped when it has no text
-type KnowledgeDocumentStatus string
+// KnowledgeCheckOverLimit defines model for KnowledgeCheck.OverLimit.
+type KnowledgeCheckOverLimit string
 
-// KnowledgeDocumentList defines model for KnowledgeDocumentList.
-type KnowledgeDocumentList struct {
-	Documents []KnowledgeDocument `json:"documents"`
+// KnowledgeCheckAccess defines model for KnowledgeCheckAccess.
+type KnowledgeCheckAccess struct {
+	// Error Why it could not; never holds the secret's value
+	Error *string `json:"error,omitempty"`
+
+	// Ok Whether goald could list the source with these settings
+	Ok bool `json:"ok"`
 }
 
-// KnowledgeDocumentPage defines model for KnowledgeDocumentPage.
-type KnowledgeDocumentPage struct {
-	Documents []KnowledgeDocument `json:"documents"`
+// KnowledgeCheckInput A source's settings, not saved, as Add a source has them
+type KnowledgeCheckInput struct {
+	// Config What its reader reads, as createKnowledgeSource takes it
+	Config *map[string]string `json:"config,omitempty"`
 
-	// NextAfter The after of the next page; absent on the last
-	NextAfter *string `json:"next_after,omitempty"`
+	// Factories The factories that would read it (each one's metadata.id or metadata.name)
+	Factories *[]string `json:"factories,omitempty"`
+
+	// Kind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over
+	Kind KnowledgeSourceKind `json:"kind"`
+
+	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
+	Name KnowledgeSourceName `json:"name"`
+
+	// ReadWhen One line that tells agents when to open the source, as "How to fix what pages us. Read before acting on an alert."
+	ReadWhen *KnowledgeReadWhen `json:"read_when,omitempty"`
+
+	// Secret 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+	Secret *SecretName `json:"secret,omitempty"`
 }
 
-// KnowledgeDocumentText defines model for KnowledgeDocumentText.
-type KnowledgeDocumentText struct {
-	Document KnowledgeDocument `json:"document"`
+// KnowledgeCheckWarning defines model for KnowledgeCheckWarning.
+type KnowledgeCheckWarning struct {
+	// Code knowledge-secret-not-in-scope, knowledge-copies-checkout and knowledge-too-many are the definition checks the factory's draft would fail or warn with; knowledge-source-name-taken and knowledge-source-listed say the name is in use or the factory lists it already
+	Code string `json:"code"`
 
-	// Text Its indexed text: its chunks joined in order, empty until it is indexed
-	Text string `json:"text"`
-}
-
-// KnowledgeDocumentUsage One document's use over the window; getKnowledgeDocument has its url
-type KnowledgeDocumentUsage struct {
-	AgentsHelped int `json:"agents_helped"`
-	AgentsMisled int `json:"agents_misled"`
-
-	// Id The document's id
-	Id           string `json:"id"`
-	PeopleHelped int    `json:"people_helped"`
-	PeopleMisled int    `json:"people_misled"`
-
-	// Runs The distinct runs that used it
-	Runs int `json:"runs"`
-
-	// Source Its source's name
-	Source string `json:"source"`
-	Title  string `json:"title"`
-}
-
-// KnowledgeDocumentUse One run that used a document
-type KnowledgeDocumentUse struct {
-	// At The run's first use of the document
-	At      time.Time          `json:"at"`
-	Factory FactoryHit         `json:"factory"`
-	Item    RunItem            `json:"item"`
-	Kinds   []KnowledgeUseKind `json:"kinds"`
-	RunId   string             `json:"run_id"`
-}
-
-// KnowledgeDocumentUsePage defines model for KnowledgeDocumentUsePage.
-type KnowledgeDocumentUsePage struct {
-	// NextAfter The after of the next page; absent on the last
-	NextAfter *string                `json:"next_after,omitempty"`
-	Uses      []KnowledgeDocumentUse `json:"uses"`
+	// Factory The picked factory's name; absent for a warning about the source
+	Factory *string `json:"factory,omitempty"`
+	Message string  `json:"message"`
 }
 
 // KnowledgeEvent The data of one `event: knowledge` on /v1/orgs/{org}/stream: a source's sync started or ended
@@ -4682,50 +4981,109 @@ type KnowledgeEvent struct {
 // KnowledgeEventStatus defines model for KnowledgeEvent.Status.
 type KnowledgeEventStatus string
 
-// KnowledgeHit defines model for KnowledgeHit.
-type KnowledgeHit struct {
-	// Document The document's id, which getKnowledgeDocument and knowledge__read take
-	Document string `json:"document"`
+// KnowledgeFile One file of a source's current snapshot
+type KnowledgeFile struct {
+	// Bytes Its Markdown's size
+	Bytes int64 `json:"bytes"`
 
-	// Heading The headings the chunk is under ("Install > Docker")
-	Heading string  `json:"heading"`
-	Score   float64 `json:"score"`
+	// Path Its path in the source's folder, /knowledge/<source>/<path> in a run
+	Path string `json:"path"`
 
-	// Snippet The chunk's text
-	Snippet string `json:"snippet"`
-	Source  string `json:"source"`
-	Title   string `json:"title"`
+	// Source Its source's name
+	Source string `json:"source"`
+	Title  string `json:"title"`
 
-	// Url A synced document's link back
-	Url *string `json:"url,omitempty"`
+	// Version Changes whenever its content does: a content hash, a blob id, a page version
+	Version string `json:"version"`
 }
 
-// KnowledgeSearchResult defines model for KnowledgeSearchResult.
-type KnowledgeSearchResult struct {
-	Hits []KnowledgeHit `json:"hits"`
+// KnowledgeFileList defines model for KnowledgeFileList.
+type KnowledgeFileList struct {
+	Files []KnowledgeFile `json:"files"`
+}
+
+// KnowledgeFilePage defines model for KnowledgeFilePage.
+type KnowledgeFilePage struct {
+	Files []KnowledgeFile `json:"files"`
+
+	// NextAfter The after of the next page; absent on the last
+	NextAfter *string `json:"next_after,omitempty"`
+}
+
+// KnowledgeLimits A source's limits (ADR 0038 decision 4)
+type KnowledgeLimits struct {
+	Bytes     int64 `json:"bytes"`
+	FileBytes int64 `json:"file_bytes"`
+	Files     int   `json:"files"`
+}
+
+// KnowledgePreview defines model for KnowledgePreview.
+type KnowledgePreview struct {
+	// Section The Knowledge prompt section the agent's runs get from the draft, as Markdown; "" when there is nothing to say or the agent may not read files
+	Section string `json:"section"`
+}
+
+// KnowledgeReadCount defines model for KnowledgeReadCount.
+type KnowledgeReadCount struct {
+	// Day The UTC day
+	Day openapi_types.Date `json:"day"`
+
+	// Factory The factory's name
+	Factory   string `json:"factory"`
+	FactoryId string `json:"factory_id"`
+
+	// Path The file read, or the folder searched ("." for the whole source)
+	Path     string `json:"path"`
+	Reads    int    `json:"reads"`
+	Searches int    `json:"searches"`
+
+	// Source The source's name
+	Source string `json:"source"`
+}
+
+// KnowledgeReadList defines model for KnowledgeReadList.
+type KnowledgeReadList struct {
+	Reads []KnowledgeReadCount `json:"reads"`
+}
+
+// KnowledgeReadWhen One line that tells agents when to open the source, as "How to fix what pages us. Read before acting on an alert."
+type KnowledgeReadWhen = string
+
+// KnowledgeSnapshotSummary A source's newest snapshot
+type KnowledgeSnapshotSummary struct {
+	// Bytes Its files' Markdown together
+	Bytes int64 `json:"bytes"`
+
+	// Failed How many files failed to fetch or convert
+	Failed int `json:"failed"`
+
+	// Files How many files it holds
+	Files int `json:"files"`
+
+	// SyncedAt When it was written
+	SyncedAt time.Time `json:"synced_at"`
 }
 
 // KnowledgeSource One source of the organization's knowledge base (spec 4 §4.8)
 type KnowledgeSource struct {
-	// Config What its reader reads (a repository, a branch and path globs; a Confluence space)
+	// Config What its reader reads (a repository, a branch and path globs; a Confluence space). A synced source on a secret also names its reader (reader: gitdocs or confluence) and, for confluence, the site and the account's email.
 	Config map[string]string `json:"config"`
 
-	// Connection The connection a synced or live source reads; absent for an upload source
+	// Connection The connection a live source reads, or a synced one not yet on a secret; absent for an upload source
 	Connection *string   `json:"connection,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
 
 	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
-	CreatedBy Actor `json:"created_by"`
+	CreatedBy Actor  `json:"created_by"`
+	Id        string `json:"id"`
 
-	// Documents How many documents it has
-	Documents int `json:"documents"`
-
-	// EmbedModel The model its chunks are embedded with; absent when they have no embeddings
-	EmbedModel   *string             `json:"embed_model,omitempty"`
-	Id           string              `json:"id"`
+	// Kind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over
 	Kind         KnowledgeSourceKind `json:"kind"`
 	LastError    *string             `json:"last_error,omitempty"`
 	LastSyncedAt *time.Time          `json:"last_synced_at"`
+
+	// LatestSnapshot Its newest snapshot; null before the first sync
+	LatestSnapshot *KnowledgeSnapshotSummary `json:"latest_snapshot"`
 
 	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
 	Name KnowledgeSourceName `json:"name"`
@@ -4733,13 +5091,22 @@ type KnowledgeSource struct {
 	// NextSyncAt When it is due next; null for a live source
 	NextSyncAt *time.Time `json:"next_sync_at"`
 
+	// ReadWhen The line that tells agents when to open it; empty when it has none
+	ReadWhen string `json:"read_when"`
+
+	// Secret The secret a synced source reads with, opened at each sync; absent for an upload or live source and a synced one still on its connection
+	Secret *string `json:"secret,omitempty"`
+
 	// Status syncing while a goald holds it; failed after a sync that stopped (last_error says why)
 	Status KnowledgeSourceStatus `json:"status"`
 
 	// SyncEverySeconds How often it syncs
-	SyncEverySeconds int       `json:"sync_every_seconds"`
-	Title            string    `json:"title"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	SyncEverySeconds int `json:"sync_every_seconds"`
+
+	// SyncFailures How many syncs failed in a row; a successful one resets it, and three show the source in Needs you
+	SyncFailures *int      `json:"sync_failures,omitempty"`
+	Title        string    `json:"title"`
+	UpdatedAt    time.Time `json:"updated_at"`
 
 	// UsedBy What uses a source, so it cannot be deleted meanwhile
 	UsedBy KnowledgeSourceUsers `json:"used_by"`
@@ -4748,7 +5115,24 @@ type KnowledgeSource struct {
 // KnowledgeSourceStatus syncing while a goald holds it; failed after a sync that stopped (last_error says why)
 type KnowledgeSourceStatus string
 
-// KnowledgeSourceKind defines model for KnowledgeSourceKind.
+// KnowledgeSourceEntry One knowledge.sources entry written as a mapping (ADR 0038 decision 5)
+type KnowledgeSourceEntry struct {
+	// AppliesTo The runs that read the source, matched as a rule's scope; every run when absent
+	AppliesTo *struct {
+		Agents    *[]string `json:"agents,omitempty"`
+		Lanes     *[]string `json:"lanes,omitempty"`
+		Stations  *[]string `json:"stations,omitempty"`
+		WorkTypes *[]string `json:"workTypes,omitempty"`
+	} `json:"appliesTo,omitempty"`
+
+	// Name The knowledge source's name
+	Name string `json:"name"`
+
+	// ReadWhen When to read it, in this factory's words; the snapshot's own line when absent
+	ReadWhen *string `json:"readWhen,omitempty"`
+}
+
+// KnowledgeSourceKind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over
 type KnowledgeSourceKind string
 
 // KnowledgeSourceList defines model for KnowledgeSourceList.
@@ -4762,64 +5146,45 @@ type KnowledgeSourceName = string
 // KnowledgeSourcePatch defines model for KnowledgeSourcePatch.
 type KnowledgeSourcePatch struct {
 	// Config Replaces the config
-	Config           *map[string]string `json:"config,omitempty"`
-	SyncEverySeconds *int               `json:"sync_every_seconds,omitempty"`
-	Title            *string            `json:"title,omitempty"`
+	Config *map[string]string `json:"config,omitempty"`
+
+	// ReadWhen One line that tells agents when to open the source, as "How to fix what pages us. Read before acting on an alert."
+	ReadWhen *KnowledgeReadWhen `json:"read_when,omitempty"`
+
+	// Secret A synced source's new secret: it reads with it from its next sync
+	Secret           *SecretName `json:"secret,omitempty"`
+	SyncEverySeconds *int        `json:"sync_every_seconds,omitempty"`
+	Title            *string     `json:"title,omitempty"`
+}
+
+// KnowledgeSourceReader defines model for KnowledgeSourceReader.
+type KnowledgeSourceReader struct {
+	Agents []string `json:"agents"`
+
+	// Id The factory's metadata.id
+	Id        string   `json:"id"`
+	Lanes     []string `json:"lanes"`
+	Name      string   `json:"name"`
+	Stations  []string `json:"stations"`
+	WorkTypes []string `json:"work_types"`
 }
 
 // KnowledgeSourceUsers What uses a source, so it cannot be deleted meanwhile
 type KnowledgeSourceUsers struct {
 	// Factories The factories whose current version may search it (those the caller sees)
 	Factories []ConnectionFactory `json:"factories"`
+
+	// Readers The same factories with who reads it in each; every list empty means every run
+	Readers []KnowledgeSourceReader `json:"readers"`
 }
 
-// KnowledgeUsage defines model for KnowledgeUsage.
-type KnowledgeUsage struct {
-	// Days The window in days
-	Days      int                      `json:"days"`
-	Documents []KnowledgeDocumentUsage `json:"documents"`
-
-	// Source The source's name
-	Source string `json:"source"`
+// KnowledgeUploadList defines model for KnowledgeUploadList.
+type KnowledgeUploadList struct {
+	Files []struct {
+		Bytes int64  `json:"bytes"`
+		Path  string `json:"path"`
+	} `json:"files"`
 }
-
-// KnowledgeUseKind search when knowledge__search returned some of its chunks, read when knowledge__read opened it
-type KnowledgeUseKind string
-
-// KnowledgeVerdict defines model for KnowledgeVerdict.
-type KnowledgeVerdict struct {
-	At time.Time `json:"at"`
-
-	// By Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
-	By Actor `json:"by"`
-
-	// Document The document's id
-	Document string `json:"document"`
-
-	// ItemId The run's item
-	ItemId *string `json:"item_id,omitempty"`
-	Note   *string `json:"note,omitempty"`
-	RunId  *string `json:"run_id,omitempty"`
-
-	// Source Its source's name
-	Source  string                  `json:"source"`
-	Verdict KnowledgeVerdictVerdict `json:"verdict"`
-}
-
-// KnowledgeVerdictVerdict defines model for KnowledgeVerdict.Verdict.
-type KnowledgeVerdictVerdict string
-
-// KnowledgeVerdictInput defines model for KnowledgeVerdictInput.
-type KnowledgeVerdictInput struct {
-	Note *string `json:"note,omitempty"`
-
-	// RunId A run of the organization that used the document
-	RunId   *string                      `json:"run_id,omitempty"`
-	Verdict KnowledgeVerdictInputVerdict `json:"verdict"`
-}
-
-// KnowledgeVerdictInputVerdict defines model for KnowledgeVerdictInput.Verdict.
-type KnowledgeVerdictInputVerdict string
 
 // LeadTimeBridge defines model for LeadTimeBridge.
 type LeadTimeBridge struct {
@@ -5189,14 +5554,23 @@ type NewItem struct {
 
 // NewKnowledgeSource defines model for NewKnowledgeSource.
 type NewKnowledgeSource struct {
+	// Config What its reader reads. A synced source names its reader (reader: gitdocs or confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or on the host code_host names: github or gitlab), branch, include and exclude; confluence reads site, email and spaces.
 	Config *map[string]string `json:"config,omitempty"`
 
-	// Connection The connection a synced or live source reads
-	Connection *string             `json:"connection,omitempty"`
-	Kind       KnowledgeSourceKind `json:"kind"`
+	// Connection The connection a live source reads
+	Connection *string `json:"connection,omitempty"`
+
+	// Kind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over
+	Kind KnowledgeSourceKind `json:"kind"`
 
 	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
 	Name KnowledgeSourceName `json:"name"`
+
+	// ReadWhen One line that tells agents when to open the source, as "How to fix what pages us. Read before acting on an alert."
+	ReadWhen *KnowledgeReadWhen `json:"read_when,omitempty"`
+
+	// Secret The secret a synced source reads with: the code host's token for gitdocs, the API token for confluence. It must be open to all factories.
+	Secret *SecretName `json:"secret,omitempty"`
 
 	// SyncEverySeconds How often it syncs (default 3600)
 	SyncEverySeconds *int   `json:"sync_every_seconds,omitempty"`
@@ -5264,6 +5638,22 @@ type NewSavedView struct {
 	Shared bool `json:"shared"`
 }
 
+// NewSecret defines model for NewSecret.
+type NewSecret struct {
+	Description *string    `json:"description,omitempty"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+
+	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+	Name       SecretName `json:"name"`
+	RemindDays *int       `json:"remind_days,omitempty"`
+
+	// Scope The factories whose runs may open it; neither all nor any listed reaches no run
+	Scope *SecretScope `json:"scope,omitempty"`
+
+	// Value The value; sealed and never answered
+	Value *string `json:"value,omitempty"`
+}
+
 // NewWebhookEndpoint defines model for NewWebhookEndpoint.
 type NewWebhookEndpoint struct {
 	// Kind How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's X-Hub-Signature-256 and X-GitHub-Event.
@@ -5324,6 +5714,30 @@ type NotificationPreferences struct {
 
 	// TimeZone The IANA time zone the daily digest goes out at 08:00 in, such as Europe/Berlin
 	TimeZone string `json:"time_zone"`
+}
+
+// NotificationSettings defines model for NotificationSettings.
+type NotificationSettings struct {
+	// SlackSecret The name of the secret holding the Slack bot token that sends the organization's Slack notifications, slack-bot by convention; null while Slack is off
+	SlackSecret *string `json:"slack_secret"`
+}
+
+// NotificationTestRequest defines model for NotificationTestRequest.
+type NotificationTestRequest struct {
+	// SlackSecret The secret to test; absent, the saved setting's
+	SlackSecret *SecretName `json:"slack_secret,omitempty"`
+}
+
+// NotificationTestResult defines model for NotificationTestResult.
+type NotificationTestResult struct {
+	// Error Why it failed, when not ok, as a fixed code: slack-not-set (no secret given and none saved), slack-token-invalid (Slack refused the token) or slack-token-unavailable (Slack could not be reached or asked to wait). Never the token or Slack's reply.
+	Error *string `json:"error,omitempty"`
+
+	// Ok Whether Slack accepted the token
+	Ok bool `json:"ok"`
+
+	// Workspace The Slack workspace the token belongs to, when ok
+	Workspace *string `json:"workspace,omitempty"`
 }
 
 // OpenDraftRequest defines model for OpenDraftRequest.
@@ -5390,6 +5804,9 @@ type OrgPolicyInput struct {
 
 	// DeniedCommands Claude Code Bash permission patterns no agent may run, such as Bash(terraform apply:*)
 	DeniedCommands []string `json:"denied_commands"`
+
+	// McpToolModes The organization's cap on MCP tool modes (ADR 0037 decision 12): a tool name or glob (* and ?), 1 to 128 letters, digits, underscores, dots, dashes, * or ?, mapped to allow, ask or off. Where a tool's mode and the cap disagree, the stricter wins (off, then ask, then allow). Empty means no cap. A save that omits it keeps the stored cap; a mode or pattern that is not valid is 400.
+	McpToolModes *map[string]ConnectionToolMode `json:"mcp_tool_modes,omitempty"`
 
 	// Tools The tool policy defaults (ADR 0024 decision 2)
 	Tools ToolPolicy `json:"tools"`
@@ -5466,6 +5883,9 @@ type OrgSearch struct {
 	Connections []ConnectionHit `json:"connections"`
 	Factories   []FactoryHit    `json:"factories"`
 	Items       []SearchItem    `json:"items"`
+
+	// Secrets Empty unless the caller holds secret:read
+	Secrets []SecretHit `json:"secrets"`
 }
 
 // OrgSettings defines model for OrgSettings.
@@ -5715,7 +6135,7 @@ type PolicyModel struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run has no use of the document). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422).
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422).
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -5750,6 +6170,9 @@ type Problem struct {
 	Sha256 *string `json:"sha256,omitempty"`
 	Status int     `json:"status"`
 	Title  string  `json:"title"`
+
+	// Uses secret-in-use only, what uses the secret
+	Uses *[]SecretUse `json:"uses,omitempty"`
 
 	// Value draft-conflict on a section save only, the section's value now (Keep theirs / Overwrite)
 	Value interface{} `json:"value,omitempty"`
@@ -5917,6 +6340,14 @@ type Repository struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// RepositoryCheck defines model for RepositoryCheck.
+type RepositoryCheck struct {
+	Ok bool `json:"ok"`
+
+	// Reason The host's one-line reason
+	Reason string `json:"reason"`
+}
+
 // RepositoryList What a code host connection reaches (GET …/connections/{connection}/repositories)
 type RepositoryList struct {
 	// Login The account the connection's credential signs in as
@@ -5943,6 +6374,24 @@ type RepositoryOwner struct {
 
 // RepositoryOwnerKind defines model for RepositoryOwner.Kind.
 type RepositoryOwnerKind string
+
+// RepositoryTestRequest defines model for RepositoryTestRequest.
+type RepositoryTestRequest struct {
+	// Secret 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+	Secret SecretName `json:"secret"`
+
+	// Url The repository's https URL, such as https://github.com/acme/app
+	Url string `json:"url"`
+}
+
+// RepositoryTestResult defines model for RepositoryTestResult.
+type RepositoryTestResult struct {
+	Push RepositoryCheck `json:"push"`
+	Read RepositoryCheck `json:"read"`
+
+	// Tested false when the host gave no answer within 10 seconds: read and push then say couldn't test
+	Tested bool `json:"tested"`
+}
 
 // RestoreRequest defines model for RestoreRequest.
 type RestoreRequest struct {
@@ -6038,31 +6487,6 @@ type RunItem struct {
 	Title string `json:"title"`
 }
 
-// RunKnowledge defines model for RunKnowledge.
-type RunKnowledge struct {
-	Uses []RunKnowledgeUse `json:"uses"`
-
-	// Verdicts The verdicts given for the run, by time
-	Verdicts []KnowledgeVerdict `json:"verdicts"`
-}
-
-// RunKnowledgeUse defines model for RunKnowledgeUse.
-type RunKnowledgeUse struct {
-	At time.Time `json:"at"`
-
-	// Chunks The chunk ids a search returned; none for a read
-	Chunks []int64 `json:"chunks"`
-
-	// Document The document's id
-	Document string `json:"document"`
-
-	// Kind search when knowledge__search returned some of its chunks, read when knowledge__read opened it
-	Kind KnowledgeUseKind `json:"kind"`
-
-	// Source Its source's name
-	Source string `json:"source"`
-}
-
 // RunList defines model for RunList.
 type RunList struct {
 	Runs []Run `json:"runs"`
@@ -6151,6 +6575,151 @@ type SearchItem struct {
 	Title   string `json:"title"`
 }
 
+// Secret An organization's secret (ADR 0037), never its value
+type Secret struct {
+	CreatedAt time.Time `json:"created_at"`
+
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	CreatedBy   Actor  `json:"created_by"`
+	Description string `json:"description"`
+
+	// ExpiresAt When the value expires
+	ExpiresAt *time.Time `json:"expires_at"`
+	Id        string     `json:"id"`
+
+	// LastUsedAt When a run last opened it
+	LastUsedAt *time.Time `json:"last_used_at"`
+
+	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+	Name SecretName `json:"name"`
+
+	// RemindDays Days before expires_at a reminder is due; 0: none
+	RemindDays int `json:"remind_days"`
+
+	// Scope The factories whose runs may open it; neither all nor any listed reaches no run
+	Scope SecretScope `json:"scope"`
+
+	// Source Where the value comes from. value: pasted or imported, and the run gets it as it is
+	Source    SecretSource `json:"source"`
+	UpdatedAt time.Time    `json:"updated_at"`
+
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	UpdatedBy Actor `json:"updated_by"`
+
+	// Uses What uses it, by kind then name
+	Uses []SecretUse `json:"uses"`
+}
+
+// SecretExpiry An expiry and its reminder; without expires_at, neither
+type SecretExpiry struct {
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	RemindDays *int       `json:"remind_days,omitempty"`
+}
+
+// SecretHit A secret whose name matched, never its value
+type SecretHit struct {
+	// ExpiresAt When the value expires
+	ExpiresAt *time.Time `json:"expires_at"`
+
+	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+	Name SecretName `json:"name"`
+
+	// Scope The factories whose runs may open it; neither all nor any listed reaches no run
+	Scope SecretScope `json:"scope"`
+}
+
+// SecretImport defines model for SecretImport.
+type SecretImport struct {
+	// DryRun Answer what the import would do and store nothing
+	DryRun *bool              `json:"dry_run,omitempty"`
+	Format SecretImportFormat `json:"format"`
+
+	// OnConflict What a real run does with a name that exists; skip when absent
+	OnConflict *SecretImportOnConflict `json:"on_conflict,omitempty"`
+
+	// Text The .env or YAML text; its values are sealed and never answered
+	Text *string `json:"text,omitempty"`
+}
+
+// SecretImportFormat defines model for SecretImport.Format.
+type SecretImportFormat string
+
+// SecretImportOnConflict What a real run does with a name that exists; skip when absent
+type SecretImportOnConflict string
+
+// SecretImportOutcome defines model for SecretImportOutcome.
+type SecretImportOutcome struct {
+	// Exists A secret had the name before the import
+	Exists bool   `json:"exists"`
+	Name   string `json:"name"`
+
+	// Outcome A real run only, what it did
+	Outcome *SecretImportOutcomeOutcome `json:"outcome,omitempty"`
+
+	// Uses What uses the existing one
+	Uses []SecretUse `json:"uses"`
+}
+
+// SecretImportOutcomeOutcome A real run only, what it did
+type SecretImportOutcomeOutcome string
+
+// SecretImportResult defines model for SecretImportResult.
+type SecretImportResult struct {
+	DryRun bool `json:"dry_run"`
+
+	// Secrets Each name of the import, in its order
+	Secrets []SecretImportOutcome `json:"secrets"`
+}
+
+// SecretList defines model for SecretList.
+type SecretList struct {
+	Secrets []Secret `json:"secrets"`
+}
+
+// SecretName 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+type SecretName = string
+
+// SecretPatch defines model for SecretPatch.
+type SecretPatch struct {
+	Description *string `json:"description,omitempty"`
+
+	// Expiry An expiry and its reminder; without expires_at, neither
+	Expiry *SecretExpiry `json:"expiry,omitempty"`
+
+	// Scope The factories whose runs may open it; neither all nor any listed reaches no run
+	Scope *SecretScope `json:"scope,omitempty"`
+}
+
+// SecretScope The factories whose runs may open it; neither all nor any listed reaches no run
+type SecretScope struct {
+	// AllFactories Every factory
+	AllFactories bool `json:"all_factories"`
+
+	// Factories The factories' metadata.id, when not all_factories
+	Factories []string `json:"factories"`
+}
+
+// SecretSource Where the value comes from. value: pasted or imported, and the run gets it as it is
+type SecretSource string
+
+// SecretUse One thing that uses a secret; while one does, it cannot be deleted
+type SecretUse struct {
+	// Kind What uses it: a factory's published definition, a knowledge source, a webhook, the organization's Slack setting, or a connection that refers to it as {{name}}
+	Kind SecretUseKind `json:"kind"`
+
+	// Name The factory, knowledge source, webhook or connection that uses it; slack: the organization's Slack setting
+	Name string `json:"name"`
+}
+
+// SecretUseKind What uses it: a factory's published definition, a knowledge source, a webhook, the organization's Slack setting, or a connection that refers to it as {{name}}
+type SecretUseKind string
+
+// SecretValue defines model for SecretValue.
+type SecretValue struct {
+	// Value The new value; sealed and never answered
+	Value *string `json:"value,omitempty"`
+}
+
 // Section defines model for Section.
 type Section string
 
@@ -6199,6 +6768,22 @@ type SentBack struct {
 
 	// Ratio Of the advanced tasks; null when none advanced
 	Ratio *float64 `json:"ratio"`
+}
+
+// ServerTest defines model for ServerTest.
+type ServerTest struct {
+	At *time.Time `json:"at,omitempty"`
+
+	// Error Why it failed
+	Error  *string `json:"error,omitempty"`
+	Ok     bool    `json:"ok"`
+	Server string  `json:"server"`
+
+	// Tested False for a stdio server, which goald does not start
+	Tested bool `json:"tested"`
+
+	// Tools The tool names tools/list answered
+	Tools []string `json:"tools"`
 }
 
 // SetLaneRequest defines model for SetLaneRequest.
@@ -6282,7 +6867,7 @@ type SpendBudget struct {
 	DailyUsd *float64   `json:"daily_usd"`
 	Factory  FactoryHit `json:"factory"`
 
-	// ModelConnections The organization's connections that give the factory's runs their model (runtime.modelConnection), for "Who pays for models"; empty when it names none
+	// ModelConnections What gives the factory's runs their model, for "Who pays for models": the organization's connection runtime.modelConnection names, with its kind, and on secrets the organization's secret runtime.modelKey names, by name with kind "secret" and never its value (ADR 0037 decision 7); empty when it names neither
 	ModelConnections []ConnectionHit `json:"model_connections"`
 
 	// Reason The open andon pull's reason when stopped, the spend against the cap when over_budget, else null
@@ -6315,25 +6900,36 @@ type SpendDay struct {
 // SpendWindow defines model for SpendWindow.
 type SpendWindow string
 
-// StandingRule Lets one agent role call one tool of one organization connection without asking, in every factory of the organization (ADR 0031 decision 7)
+// StandingRule Lets one agent role call one tool without asking (ADR 0031 decision 7). A rule is keyed by an organization connection, for every factory of the organization (connection_id set), or, for a factory on secrets, by one MCP server of one environment of one factory (factory_id, environment and server set, connection_id null; ADR 0037 decision 8)
 type StandingRule struct {
 	// Agent The agent's role, its name in the definition, as in architect
 	Agent string `json:"agent"`
 
-	// Connection The connection's name; null once the connection is deleted
-	Connection   *string   `json:"connection"`
-	ConnectionId string    `json:"connection_id"`
+	// Connection The connection's name; null once the connection is deleted, and for a rule keyed by server
+	Connection *string `json:"connection"`
+
+	// ConnectionId The connection the rule is keyed by; null for a rule keyed by server
+	ConnectionId *string   `json:"connection_id"`
 	CreatedAt    time.Time `json:"created_at"`
 
 	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
-	CreatedBy Actor  `json:"created_by"`
-	Id        string `json:"id"`
+	CreatedBy Actor `json:"created_by"`
+
+	// Environment The environment file's name of a rule keyed by server, as in default; null for a connection's rule
+	Environment *string `json:"environment"`
+
+	// FactoryId The factory of a rule keyed by server; null for a connection's rule
+	FactoryId *string `json:"factory_id"`
+	Id        string  `json:"id"`
 
 	// ItemId The item it was approved on
 	ItemId    string     `json:"item_id"`
 	RevokedAt *time.Time `json:"revoked_at"`
 	RevokedBy *Actor     `json:"revoked_by"`
-	Tool      string     `json:"tool"`
+
+	// Server The MCP server's name in the environment file (mcp.<server>) of a rule keyed by server; null for a connection's rule
+	Server *string `json:"server"`
+	Tool   string  `json:"tool"`
 }
 
 // StandingRuleList defines model for StandingRuleList.
@@ -6509,9 +7105,45 @@ type Template struct {
 	Version  int          `json:"version"`
 }
 
+// TemplateAdds What the template writes into an environment file
+type TemplateAdds struct {
+	Env map[string]string `json:"env"`
+
+	// Files By absolute or ~/ path
+	Files map[string]string      `json:"files"`
+	Mcp   map[string]TemplateMCP `json:"mcp"`
+
+	// Tools mise tool specs
+	Tools []string `json:"tools"`
+}
+
 // TemplateList defines model for TemplateList.
 type TemplateList struct {
 	Templates []TemplateSummary `json:"templates"`
+}
+
+// TemplateMCP A remote (url, headers) or stdio (command, env) MCP server, with suggested tool modes
+type TemplateMCP struct {
+	Command *[]string                   `json:"command,omitempty"`
+	Env     *map[string]string          `json:"env,omitempty"`
+	Headers *map[string]string          `json:"headers,omitempty"`
+	Tools   map[string]TemplateMCPTools `json:"tools"`
+	Url     *string                     `json:"url,omitempty"`
+}
+
+// TemplateMCPTools defines model for TemplateMCP.Tools.
+type TemplateMCPTools string
+
+// TemplateSecret defines model for TemplateSecret.
+type TemplateSecret struct {
+	Description string `json:"description"`
+
+	// Slot The {{slot}} its values refer to
+	Slot string `json:"slot"`
+
+	// Suggest The name a new secret for it is suggested to have
+	Suggest string `json:"suggest"`
+	Title   string `json:"title"`
 }
 
 // TemplateStart defines model for TemplateStart.
@@ -6540,6 +7172,33 @@ type TemplateSummary struct {
 	Summary    string   `json:"summary"`
 	Title      string   `json:"title"`
 	Version    int      `json:"version"`
+}
+
+// TemplateTest An HTTP test request; its values may hold {{slot}} and ${VAR} of the template's plain env values
+type TemplateTest struct {
+	Basic *struct {
+		Password string `json:"password"`
+		Username string `json:"username"`
+	} `json:"basic,omitempty"`
+
+	// Expect The status that passes
+	Expect  int               `json:"expect"`
+	Headers map[string]string `json:"headers"`
+	Method  string            `json:"method"`
+	Url     string            `json:"url"`
+}
+
+// TemplateTestResult defines model for TemplateTestResult.
+type TemplateTestResult struct {
+	At time.Time `json:"at"`
+
+	// Error Why it failed
+	Error *string `json:"error,omitempty"`
+	Name  string  `json:"name"`
+	Ok    bool    `json:"ok"`
+
+	// Status The status the test request got
+	Status *int `json:"status,omitempty"`
 }
 
 // TextFile defines model for TextFile.
@@ -6605,7 +7264,9 @@ type ToolPolicy struct {
 	MergePullRequest ToolPolicyMergePullRequest `json:"merge_pull_request"`
 
 	// ReadWeb Search, fetch and documentation tools
-	ReadWeb        ToolPolicyReadWeb        `json:"read_web"`
+	ReadWeb ToolPolicyReadWeb `json:"read_web"`
+
+	// UseCredentials Use secrets: environment gives an agent what its environment names; off gives it no env, files or MCP servers. attached_only is a deprecated alias for environment: a save stores it as environment, and every read returns environment.
 	UseCredentials ToolPolicyUseCredentials `json:"use_credentials"`
 
 	// WriteOutsideBranch Comments, issues, tickets and messages outside the item's branch
@@ -6618,11 +7279,31 @@ type ToolPolicyMergePullRequest string
 // ToolPolicyReadWeb Search, fetch and documentation tools
 type ToolPolicyReadWeb string
 
-// ToolPolicyUseCredentials defines model for ToolPolicy.UseCredentials.
+// ToolPolicyUseCredentials Use secrets: environment gives an agent what its environment names; off gives it no env, files or MCP servers. attached_only is a deprecated alias for environment: a save stores it as environment, and every read returns environment.
 type ToolPolicyUseCredentials string
 
 // ToolPolicyWriteOutsideBranch Comments, issues, tickets and messages outside the item's branch
 type ToolPolicyWriteOutsideBranch string
+
+// ToolTemplate A tool template (ADR 0037 decision 15)
+type ToolTemplate struct {
+	// Adds What the template writes into an environment file
+	Adds TemplateAdds `json:"adds"`
+
+	// Description One line
+	Description string `json:"description"`
+	Name        string `json:"name"`
+
+	// Secrets Its secret slots, in order
+	Secrets []TemplateSecret `json:"secrets"`
+	Test    *TemplateTest    `json:"test"`
+	Title   string           `json:"title"`
+}
+
+// ToolTemplateList defines model for ToolTemplateList.
+type ToolTemplateList struct {
+	Templates []ToolTemplate `json:"templates"`
+}
 
 // Touch One action by a person on an item, named by its most specific event
 type Touch struct {
@@ -7135,9 +7816,6 @@ type ConnectionRef = string
 // CredentialRef defines model for CredentialRef.
 type CredentialRef = string
 
-// DocumentRef defines model for DocumentRef.
-type DocumentRef = string
-
 // DraftRequestRef defines model for DraftRequestRef.
 type DraftRequestRef = string
 
@@ -7165,6 +7843,9 @@ type JudgeRef = string
 // KindRef defines model for KindRef.
 type KindRef = string
 
+// KnowledgeFilePath defines model for KnowledgeFilePath.
+type KnowledgeFilePath = string
+
 // OrgRef defines model for OrgRef.
 type OrgRef = string
 
@@ -7179,6 +7860,9 @@ type RangeTo = openapi_types.Date
 
 // SavedViewRef defines model for SavedViewRef.
 type SavedViewRef = string
+
+// SecretRef defines model for SecretRef.
+type SecretRef = string
 
 // SectionRef defines model for SectionRef.
 type SectionRef = Section
@@ -7200,6 +7884,17 @@ type WorkTypeFilter = string
 
 // Conflict defines model for Conflict.
 type Conflict = Problem
+
+// GetAccessParams defines parameters for GetAccess.
+type GetAccessParams struct {
+	By *GetAccessParamsBy `form:"by,omitempty" json:"by,omitempty"`
+
+	// Factory Only this factory's, by metadata.id or metadata.name
+	Factory *string `form:"factory,omitempty" json:"factory,omitempty"`
+}
+
+// GetAccessParamsBy defines parameters for GetAccess.
+type GetAccessParamsBy string
 
 // ListAuditParams defines parameters for ListAudit.
 type ListAuditParams struct {
@@ -7306,6 +8001,21 @@ type PutDraftFileParams struct {
 
 	// IfNoneMatch * to create a file that must not exist yet
 	IfNoneMatch *IfNoneMatch `json:"If-None-Match,omitempty"`
+}
+
+// GetDraftKnowledgePreviewParams defines parameters for GetDraftKnowledgePreview.
+type GetDraftKnowledgePreviewParams struct {
+	// Agent The agent's name, as the draft declares it
+	Agent string `form:"agent" json:"agent"`
+
+	// Station The station of the run, for sources whose appliesTo names stations
+	Station *string `form:"station,omitempty" json:"station,omitempty"`
+
+	// Lane The lane of the run, for sources whose appliesTo names lanes
+	Lane *string `form:"lane,omitempty" json:"lane,omitempty"`
+
+	// WorkType The work type of the run, for sources whose appliesTo names work types
+	WorkType *string `form:"work_type,omitempty" json:"work_type,omitempty"`
 }
 
 // SaveDraftSectionParams defines parameters for SaveDraftSection.
@@ -7442,20 +8152,17 @@ type ListItemEventsParams struct {
 	Limit *int   `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
-// ListKnowledgeDocumentUsesParams defines parameters for ListKnowledgeDocumentUses.
-type ListKnowledgeDocumentUsesParams struct {
-	// After The last run id of the previous page
-	After *string `form:"after,omitempty" json:"after,omitempty"`
-	Limit *int    `form:"limit,omitempty" json:"limit,omitempty"`
+// FindKnowledgeFilesParams defines parameters for FindKnowledgeFiles.
+type FindKnowledgeFilesParams struct {
+	Find  string `form:"find" json:"find"`
+	Limit *int   `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
-// SearchKnowledgeParams defines parameters for SearchKnowledge.
-type SearchKnowledgeParams struct {
-	Q string `form:"q" json:"q"`
-
-	// Source Only these sources (repeatable)
-	Source *[]string `form:"source,omitempty" json:"source,omitempty"`
-	Limit  *int      `form:"limit,omitempty" json:"limit,omitempty"`
+// ListKnowledgeReadsParams defines parameters for ListKnowledgeReads.
+type ListKnowledgeReadsParams struct {
+	// Source Only this source's reads
+	Source *string `form:"source,omitempty" json:"source,omitempty"`
+	Days   *int    `form:"days,omitempty" json:"days,omitempty"`
 }
 
 // ListKnowledgeSourcesParams defines parameters for ListKnowledgeSources.
@@ -7464,23 +8171,25 @@ type ListKnowledgeSourcesParams struct {
 	Factory *string `form:"factory,omitempty" json:"factory,omitempty"`
 }
 
-// ListKnowledgeDocumentsParams defines parameters for ListKnowledgeDocuments.
-type ListKnowledgeDocumentsParams struct {
-	// After The last document id of the previous page
+// ListKnowledgeFilesParams defines parameters for ListKnowledgeFiles.
+type ListKnowledgeFilesParams struct {
+	// Find Only the files whose path, or title in any case, starts with this
+	Find *string `form:"find,omitempty" json:"find,omitempty"`
+
+	// After The last path of the previous page
 	After *string `form:"after,omitempty" json:"after,omitempty"`
 	Limit *int    `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
-// UploadKnowledgeDocumentsMultipartBody defines parameters for UploadKnowledgeDocuments.
-type UploadKnowledgeDocumentsMultipartBody struct {
-	Files []openapi_types.File `json:"files"`
+// DeleteKnowledgeUploadParams defines parameters for DeleteKnowledgeUpload.
+type DeleteKnowledgeUploadParams struct {
+	// Path The upload's path in the source
+	Path string `form:"path" json:"path"`
 }
 
-// GetKnowledgeUsageParams defines parameters for GetKnowledgeUsage.
-type GetKnowledgeUsageParams struct {
-	// Source The source's name
-	Source string `form:"source" json:"source"`
-	Days   *int   `form:"days,omitempty" json:"days,omitempty"`
+// UploadKnowledgeFilesMultipartBody defines parameters for UploadKnowledgeFiles.
+type UploadKnowledgeFilesMultipartBody struct {
+	Files []openapi_types.File `json:"files"`
 }
 
 // GetOrgTouchMetricsParams defines parameters for GetOrgTouchMetrics.
@@ -7615,12 +8324,18 @@ type CreateConnectionJSONRequestBody = NewConnection
 type UpdateConnectionJSONRequestBody = ConnectionPatch
 
 // CreateCredentialJSONRequestBody defines body for CreateCredential for application/json ContentType.
+//
+// Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 type CreateCredentialJSONRequestBody = NewCredential
 
 // ImportCredentialsJSONRequestBody defines body for ImportCredentials for application/json ContentType.
+//
+// Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 type ImportCredentialsJSONRequestBody = CredentialImport
 
 // PatchCredentialJSONRequestBody defines body for PatchCredential for application/json ContentType.
+//
+// Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 type PatchCredentialJSONRequestBody = CredentialPatch
 
 // ValidateDefinitionJSONRequestBody defines body for ValidateDefinition for application/json ContentType.
@@ -7655,6 +8370,9 @@ type ReplaceDraftTreeJSONRequestBody = DraftTree
 
 // ValidateDraftJSONRequestBody defines body for ValidateDraft for application/json ContentType.
 type ValidateDraftJSONRequestBody = ValidateDraftRequest
+
+// TestEnvironmentJSONRequestBody defines body for TestEnvironment for application/json ContentType.
+type TestEnvironmentJSONRequestBody = EnvironmentTestRequest
 
 // StartBakeOffJSONRequestBody defines body for StartBakeOff for application/json ContentType.
 type StartBakeOffJSONRequestBody = BakeOffRequest
@@ -7734,8 +8452,8 @@ type DecideToolApprovalJSONRequestBody = ToolDecision
 // SetTouchReasonJSONRequestBody defines body for SetTouchReason for application/json ContentType.
 type SetTouchReasonJSONRequestBody = TouchReasonChange
 
-// GiveKnowledgeVerdictJSONRequestBody defines body for GiveKnowledgeVerdict for application/json ContentType.
-type GiveKnowledgeVerdictJSONRequestBody = KnowledgeVerdictInput
+// CheckKnowledgeSourceJSONRequestBody defines body for CheckKnowledgeSource for application/json ContentType.
+type CheckKnowledgeSourceJSONRequestBody = KnowledgeCheckInput
 
 // CreateKnowledgeSourceJSONRequestBody defines body for CreateKnowledgeSource for application/json ContentType.
 type CreateKnowledgeSourceJSONRequestBody = NewKnowledgeSource
@@ -7743,8 +8461,8 @@ type CreateKnowledgeSourceJSONRequestBody = NewKnowledgeSource
 // UpdateKnowledgeSourceJSONRequestBody defines body for UpdateKnowledgeSource for application/json ContentType.
 type UpdateKnowledgeSourceJSONRequestBody = KnowledgeSourcePatch
 
-// UploadKnowledgeDocumentsMultipartRequestBody defines body for UploadKnowledgeDocuments for multipart/form-data ContentType.
-type UploadKnowledgeDocumentsMultipartRequestBody UploadKnowledgeDocumentsMultipartBody
+// UploadKnowledgeFilesMultipartRequestBody defines body for UploadKnowledgeFiles for multipart/form-data ContentType.
+type UploadKnowledgeFilesMultipartRequestBody UploadKnowledgeFilesMultipartBody
 
 // SetFactoryRoleJSONRequestBody defines body for SetFactoryRole for application/json ContentType.
 type SetFactoryRoleJSONRequestBody = FactoryRoleChange
@@ -7755,8 +8473,29 @@ type CreatePersonalTokenJSONRequestBody = NewPersonalToken
 // PutOrgPolicyJSONRequestBody defines body for PutOrgPolicy for application/json ContentType.
 type PutOrgPolicyJSONRequestBody = OrgPolicyInput
 
+// TestRepositoryJSONRequestBody defines body for TestRepository for application/json ContentType.
+type TestRepositoryJSONRequestBody = RepositoryTestRequest
+
+// CreateSecretJSONRequestBody defines body for CreateSecret for application/json ContentType.
+type CreateSecretJSONRequestBody = NewSecret
+
+// ImportSecretsJSONRequestBody defines body for ImportSecrets for application/json ContentType.
+type ImportSecretsJSONRequestBody = SecretImport
+
+// PatchSecretJSONRequestBody defines body for PatchSecret for application/json ContentType.
+type PatchSecretJSONRequestBody = SecretPatch
+
+// ReplaceSecretValueJSONRequestBody defines body for ReplaceSecretValue for application/json ContentType.
+type ReplaceSecretValueJSONRequestBody = SecretValue
+
 // UpdateOrgSettingsJSONRequestBody defines body for UpdateOrgSettings for application/json ContentType.
 type UpdateOrgSettingsJSONRequestBody = OrgSettingsPatch
+
+// SetNotificationSettingsJSONRequestBody defines body for SetNotificationSettings for application/json ContentType.
+type SetNotificationSettingsJSONRequestBody = NotificationSettings
+
+// TestNotificationSettingsJSONRequestBody defines body for TestNotificationSettings for application/json ContentType.
+type TestNotificationSettingsJSONRequestBody = NotificationTestRequest
 
 // SetSignupDomainJSONRequestBody defines body for SetSignupDomain for application/json ContentType.
 type SetSignupDomainJSONRequestBody = SignupDomainInput
@@ -8090,6 +8829,13 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/auth/device/{user_code} (the `GetDeviceRequest` operationId).
 	GetDeviceRequest(ctx context.Context, userCode string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetCatalog The tool templates
+	//
+	// Every template goald ships, by name: its title, description, secret slots with suggested secret names, what it adds (tools, env, files and MCP servers with suggested tool modes) and its HTTP test, if any. Values are plain or {{slot}} references to its slots.
+	//
+	// Corresponds with GET /v1/catalog (the `GetCatalog` operationId).
+	GetCatalog(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetHealth Liveness of goald
 	//
 	// Corresponds with GET /v1/health (the `GetHealth` operationId).
@@ -8174,6 +8920,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
 	GetOrg(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAccess What the organization's agents reach
+	//
+	// Computed from each factory's current published version, the environment tests and the secrets, over the factories the caller sees that are not archived: every MCP server, and every env variable and file that references a secret. Each row lists the factories and environments that use it with their agents, the secrets it references, and a status: missing (a secret it references does not exist), failed (its last test failed), expired or expiring (a secret's expiry has passed, or is within its reminder days), untested (a remote MCP server never tested), tested, or ok. by groups the rows by what agents reach (MCP servers, env variables, files; the default), by factory or by secret; factory keeps one factory's. reached counts what agents reach and need_attention what is missing, failed, expired or expiring, whatever by is.
+	//
+	// Corresponds with GET /v1/orgs/{org}/access (the `GetAccess` operationId).
+	GetAccess(ctx context.Context, org OrgRef, params *GetAccessParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListAPIKeys The organization's API keys
 	//
@@ -8346,6 +9099,8 @@ type ClientInterface interface {
 	// By name, each with its type, description, factory scope, agents per factory, expiry, rotation reminder, last use and what uses it (the connections that refer to it as {{name}} and the agents listed). Never a value.
 	//
 	// Corresponds with GET /v1/orgs/{org}/credentials (the `ListCredentials` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ListCredentials(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateCredentialWithBody Create a credential
@@ -8355,6 +9110,8 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CreateCredentialWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateCredential Create a credential
@@ -8364,6 +9121,8 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CreateCredential(ctx context.Context, org OrgRef, body CreateCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ImportCredentialsWithBody Import credentials from a .env or YAML text
@@ -8373,6 +9132,8 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ImportCredentialsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ImportCredentials Import credentials from a .env or YAML text
@@ -8382,6 +9143,8 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ImportCredentials(ctx context.Context, org OrgRef, body ImportCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteCredential Delete a credential
@@ -8389,11 +9152,15 @@ type ClientInterface interface {
 	// 409 credential-in-use, naming the connections, while a connection refers to it as {{name}}; 404 credential-not-found. Needs a sign-in from the last 10 minutes. Audited as credential.deleted.
 	//
 	// Corresponds with DELETE /v1/orgs/{org}/credentials/{credential} (the `DeleteCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	DeleteCredential(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetCredential One credential, never its value
 	//
 	// Corresponds with GET /v1/orgs/{org}/credentials/{credential} (the `GetCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	GetCredential(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PatchCredentialWithBody Change a credential's metadata, or replace its value
@@ -8403,6 +9170,8 @@ type ClientInterface interface {
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PatchCredentialWithBody(ctx context.Context, org OrgRef, credential CredentialRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PatchCredential Change a credential's metadata, or replace its value
@@ -8412,6 +9181,8 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PatchCredential(ctx context.Context, org OrgRef, credential CredentialRef, body PatchCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// FormatDefinitionWithBody Format a factory.yaml the way Visual saves write changed lines (Format)
@@ -8621,6 +9392,13 @@ type ClientInterface interface {
 	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `PutDraftFile` operationId).
 	PutDraftFileWithBody(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, params *PutDraftFileParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetDraftKnowledgePreview The Knowledge prompt section one agent gets from the draft
+	//
+	// "What agents see" in the editor: the section goald builds for a run of agent, from the same code as a run's. It lists the draft's sources that apply to the agent (with station and lane and work_type, as a run's appliesTo is matched), each with its entry's readWhen or its snapshot's, its file count and top folders, names those with no snapshot as not synced yet, and gives memory.yaml's facts. It reads each source's current snapshot, while a run reads the snapshot its claim pinned, so a run started earlier may see another. 404 agent-not-found for an agent the draft does not declare, 409 yaml-invalid while factory.yaml does not parse or satisfy the schema, 404 no-draft.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview (the `GetDraftKnowledgePreview` operationId).
+	GetDraftKnowledgePreview(ctx context.Context, org OrgRef, factory FactoryRef, params *GetDraftKnowledgePreviewParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetDraftModel The draft's factory model for the Visual editor
 	//
 	// The model, each section's concurrency token, the fields the draft changed against its base (Edited · Undo) and where each model pointer is in factory.yaml. 409 yaml-invalid (with parse_error) while factory.yaml does not parse: Visual is read-only until it is fixed in YAML mode.
@@ -8749,6 +9527,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
 	ValidateDraft(ctx context.Context, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestEnvironmentWithBody Test an environment's MCP servers or a template
+	//
+	// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
+	TestEnvironmentWithBody(ctx context.Context, org OrgRef, factory FactoryRef, environment string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestEnvironment Test an environment's MCP servers or a template
+	//
+	// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
+	TestEnvironment(ctx context.Context, org OrgRef, factory FactoryRef, environment string, body TestEnvironmentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListEvals The eval cases of the current version, with their last tries and a summary
 	//
@@ -9527,58 +10323,37 @@ type ClientInterface interface {
 	// Corresponds with PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason (the `SetTouchReason` operationId).
 	SetTouchReason(ctx context.Context, org OrgRef, item ItemRef, event int64, body SetTouchReasonJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// DeleteKnowledgeDocument Delete an uploaded document
+	// CheckKnowledgeSourceWithBody Check a source's settings before saving them
 	//
-	// With its chunks, and its file when no other document holds the same content. 409 not-an-upload-source for a synced document, which its next sync would bring back. Audited as knowledge_document.deleted.
-	//
-	// Corresponds with DELETE /v1/orgs/{org}/knowledge/documents/{document} (the `DeleteKnowledgeDocument` operationId).
-	DeleteKnowledgeDocument(ctx context.Context, org OrgRef, document DocumentRef, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetKnowledgeDocument A document with its indexed text
-	//
-	// The text is its chunks joined in order, empty until it is indexed. 404 knowledge-document-not-found.
-	//
-	// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document} (the `GetKnowledgeDocument` operationId).
-	GetKnowledgeDocument(ctx context.Context, org OrgRef, document DocumentRef, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetKnowledgeDocumentContent The uploaded original of a document
-	//
-	// As uploaded, as an attachment that browsers download and never render (threat row 11). 409 not-an-upload-source for a synced document, whose original stays at its source (url).
-	//
-	// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document}/content (the `GetKnowledgeDocumentContent` operationId).
-	GetKnowledgeDocumentContent(ctx context.Context, org OrgRef, document DocumentRef, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ListKnowledgeDocumentUses One page of the runs that used a document
-	//
-	// Newest first use first (ADR 0027), after the run id after; next_after, when set, is the after of the next page. Each names its run, item and factory, so a client links to them; a run of a factory the caller may not see is left out. 404 knowledge-document-not-found.
-	//
-	// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document}/uses (the `ListKnowledgeDocumentUses` operationId).
-	ListKnowledgeDocumentUses(ctx context.Context, org OrgRef, document DocumentRef, params *ListKnowledgeDocumentUsesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GiveKnowledgeVerdictWithBody Say whether a document helped or misled
-	//
-	// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+	// The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
 	//
 	// Takes any type of body and a specified content type.
 	//
-	// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
-	GiveKnowledgeVerdictWithBody(ctx context.Context, org OrgRef, document DocumentRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with POST /v1/orgs/{org}/knowledge/check (the `CheckKnowledgeSource` operationId).
+	CheckKnowledgeSourceWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GiveKnowledgeVerdict Say whether a document helped or misled
+	// CheckKnowledgeSource Check a source's settings before saving them
 	//
-	// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+	// The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
 	//
 	// Takes a body of the `application/json` content type.
 	//
-	// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
-	GiveKnowledgeVerdict(ctx context.Context, org OrgRef, document DocumentRef, body GiveKnowledgeVerdictJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with POST /v1/orgs/{org}/knowledge/check (the `CheckKnowledgeSource` operationId).
+	CheckKnowledgeSource(ctx context.Context, org OrgRef, body CheckKnowledgeSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// SearchKnowledge Search the knowledge base as agents do
+	// FindKnowledgeFiles Find a file across every source
 	//
-	// What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
+	// The current files of every source whose path, or title in any case, starts with find, by source name then path, at most limit.
 	//
-	// Corresponds with GET /v1/orgs/{org}/knowledge/search (the `SearchKnowledge` operationId).
-	SearchKnowledge(ctx context.Context, org OrgRef, params *SearchKnowledgeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with GET /v1/orgs/{org}/knowledge/files (the `FindKnowledgeFiles` operationId).
+	FindKnowledgeFiles(ctx context.Context, org OrgRef, params *FindKnowledgeFilesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListKnowledgeReads How often runs read and searched the sources' files
+	//
+	// The daily rollup of runs' reads and searches under /knowledge (ADR 0038 decision 10), of one source or every one, over the last days days counting today (UTC): one row per source, path, factory and day, by day, source, path and factory. A search of a whole source counts at the path ".". Factories the caller may not see are left out. 404 knowledge-source-not-found.
+	//
+	// Corresponds with GET /v1/orgs/{org}/knowledge/reads (the `ListKnowledgeReads` operationId).
+	ListKnowledgeReads(ctx context.Context, org OrgRef, params *ListKnowledgeReadsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListKnowledgeSources The sources of the organization's knowledge base
 	//
@@ -9589,7 +10364,7 @@ type ClientInterface interface {
 
 	// CreateKnowledgeSourceWithBody Add a source to the knowledge base
 	//
-	// An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+	// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -9598,16 +10373,16 @@ type ClientInterface interface {
 
 	// CreateKnowledgeSource Add a source to the knowledge base
 	//
-	// An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+	// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /v1/orgs/{org}/knowledge/sources (the `CreateKnowledgeSource` operationId).
 	CreateKnowledgeSource(ctx context.Context, org OrgRef, body CreateKnowledgeSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// DeleteKnowledgeSource Delete a source with its documents
+	// DeleteKnowledgeSource Delete a source with its snapshots and uploads
 	//
-	// Its documents, their chunks and the uploaded files no other document holds go with it. 409 knowledge-source-in-use, naming them, while a factory's current version may search it. Audited as knowledge_source.deleted.
+	// Its snapshots and the uploaded files no other upload holds go with it. 409 knowledge-source-in-use, naming them, while a factory's current version may search it. Audited as knowledge_source.deleted.
 	//
 	// Corresponds with DELETE /v1/orgs/{org}/knowledge/sources/{source} (the `DeleteKnowledgeSource` operationId).
 	DeleteKnowledgeSource(ctx context.Context, org OrgRef, source SourceRef, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -9621,7 +10396,7 @@ type ClientInterface interface {
 
 	// UpdateKnowledgeSourceWithBody Change a source's title, config or schedule
 	//
-	// config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+	// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -9630,28 +10405,26 @@ type ClientInterface interface {
 
 	// UpdateKnowledgeSource Change a source's title, config or schedule
 	//
-	// config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+	// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/knowledge/sources/{source} (the `UpdateKnowledgeSource` operationId).
 	UpdateKnowledgeSource(ctx context.Context, org OrgRef, source SourceRef, body UpdateKnowledgeSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ListKnowledgeDocuments One page of a source's documents
+	// ListKnowledgeFiles One page of a source's current files
 	//
-	// In id order, after the document id after; next_after, when set, is the after of the next page. 404 knowledge-source-not-found.
+	// The files of the source's current snapshot (ADR 0038 decision 3), in path order, after the path after; next_after, when set, is the after of the next page. With find, only those whose path, or title in any case, starts with it. None before the first snapshot. 404 knowledge-source-not-found.
 	//
-	// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/documents (the `ListKnowledgeDocuments` operationId).
-	ListKnowledgeDocuments(ctx context.Context, org OrgRef, source SourceRef, params *ListKnowledgeDocumentsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/files (the `ListKnowledgeFiles` operationId).
+	ListKnowledgeFiles(ctx context.Context, org OrgRef, source SourceRef, params *ListKnowledgeFilesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// UploadKnowledgeDocumentsWithBody Upload files to an upload source
+	// GetKnowledgeFile One file's Markdown
 	//
-	// Each part named files is one document, titled by its file name: text, Markdown, HTML, JSON or YAML of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most that and 1 MiB more. They are pending until the next sync indexes them, which the upload makes due; the same content uploaded again is the document it already is. Every file is checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as knowledge_document.uploaded.
+	// The file as runs read it under /knowledge/<source>/, from the source's current snapshot. goald reads it from the snapshot's zip by range (the end record, the central directory, then the one entry), never the whole zip. 404 knowledge-source-not-found, 404 knowledge-file-not-found for a path the snapshot does not hold or a source with no snapshot yet.
 	//
-	// Takes any type of body and a specified content type.
-	//
-	// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/documents (the `UploadKnowledgeDocuments` operationId).
-	UploadKnowledgeDocumentsWithBody(ctx context.Context, org OrgRef, source SourceRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/files/{path} (the `GetKnowledgeFile` operationId).
+	GetKnowledgeFile(ctx context.Context, org OrgRef, source SourceRef, path KnowledgeFilePath, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SyncKnowledgeSource Sync a source now
 	//
@@ -9660,12 +10433,21 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/sync (the `SyncKnowledgeSource` operationId).
 	SyncKnowledgeSource(ctx context.Context, org OrgRef, source SourceRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetKnowledgeUsage Where a source's documents were used
+	// DeleteKnowledgeUpload Delete an uploaded file
 	//
-	// Per document of the source with a use or a verdict in the last days days (ADR 0027, decision 3): the distinct runs that used it and the verdicts given, agents' and people's apart; at most 500, the most used first, then by id. 404 knowledge-source-not-found.
+	// The upload at path, with its stored file when no other upload holds the same content; the next sync, which the deletion makes due, leaves it out of the snapshot. 404 knowledge-file-not-found, 409 not-an-upload-source. Audited as knowledge_document.deleted.
 	//
-	// Corresponds with GET /v1/orgs/{org}/knowledge/usage (the `GetKnowledgeUsage` operationId).
-	GetKnowledgeUsage(ctx context.Context, org OrgRef, params *GetKnowledgeUsageParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// Corresponds with DELETE /v1/orgs/{org}/knowledge/sources/{source}/uploads (the `DeleteKnowledgeUpload` operationId).
+	DeleteKnowledgeUpload(ctx context.Context, org OrgRef, source SourceRef, params *DeleteKnowledgeUploadParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UploadKnowledgeFilesWithBody Upload files to an upload source
+	//
+	// Each part named files is one file at the path its file name gives, which may hold folders (runbooks/db/disk.md); a path that is not relative and clean is 400. Text, Markdown, HTML, JSON, YAML, PDF or an Office file (the last two are converted when goald has a conversion service, else left out of the snapshot and listed) of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most that and 1 MiB more. The upload makes the source due, and its next sync writes the snapshot that holds them. Every file is checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as knowledge_document.uploaded.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/uploads (the `UploadKnowledgeFiles` operationId).
+	UploadKnowledgeFilesWithBody(ctx context.Context, org OrgRef, source SourceRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListMemberTokens Every member's personal tokens in the organization
 	//
@@ -9766,7 +10548,7 @@ type ClientInterface interface {
 
 	// PutOrgPolicyWithBody Replace the organization's policy
 	//
-	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -9775,12 +10557,30 @@ type ClientInterface interface {
 
 	// PutOrgPolicy Replace the organization's policy
 	//
-	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
 	PutOrgPolicy(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, body PutOrgPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestRepositoryWithBody Test a token's read and push access to a repository
+	//
+	// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
+	TestRepositoryWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestRepository Test a token's read and push access to a repository
+	//
+	// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
+	TestRepository(ctx context.Context, org OrgRef, body TestRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListRuns The organization's agent runs across the factories the caller sees, newest first
 	//
@@ -9801,19 +10601,105 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
 	GetRun(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ListRunKnowledge The knowledge documents a run used, with the verdicts given on them for it
-	//
-	// Its uses by time, document and kind, and the verdicts agents and people gave for the run (ADR 0027). 404 for a run of another organization.
-	//
-	// Corresponds with GET /v1/orgs/{org}/runs/{run}/knowledge (the `ListRunKnowledge` operationId).
-	ListRunKnowledge(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
 	//
 	// One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
 	//
 	// Corresponds with GET /v1/orgs/{org}/search (the `SearchOrg` operationId).
 	SearchOrg(ctx context.Context, org OrgRef, params *SearchOrgParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListSecrets The organization's secrets
+	//
+	// By name, each with its source, description, factory scope, expiry, reminder, last use and what uses it. Never a value.
+	//
+	// Corresponds with GET /v1/orgs/{org}/secrets (the `ListSecrets` operationId).
+	ListSecrets(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSecretWithBody Create a secret
+	//
+	// A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/secrets (the `CreateSecret` operationId).
+	CreateSecretWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSecret Create a secret
+	//
+	// A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/secrets (the `CreateSecret` operationId).
+	CreateSecret(ctx context.Context, org OrgRef, body CreateSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ImportSecretsWithBody Import secrets from a .env or YAML text
+	//
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/secrets/import (the `ImportSecrets` operationId).
+	ImportSecretsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ImportSecrets Import secrets from a .env or YAML text
+	//
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/secrets/import (the `ImportSecrets` operationId).
+	ImportSecrets(ctx context.Context, org OrgRef, body ImportSecretsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteSecret Delete a secret
+	//
+	// 409 secret-in-use, deleting nothing, while something uses it: the problem's uses names each use. 404 secret-not-found. Needs a sign-in from the last 10 minutes. Audited as secret.deleted.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/secrets/{secret} (the `DeleteSecret` operationId).
+	DeleteSecret(ctx context.Context, org OrgRef, secret SecretRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSecret One secret, never its value
+	//
+	// 404 secret-not-found.
+	//
+	// Corresponds with GET /v1/orgs/{org}/secrets/{secret} (the `GetSecret` operationId).
+	GetSecret(ctx context.Context, org OrgRef, secret SecretRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchSecretWithBody Change a secret's description, scope, expiry or reminder
+	//
+	// Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/secrets/{secret} (the `PatchSecret` operationId).
+	PatchSecretWithBody(ctx context.Context, org OrgRef, secret SecretRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchSecret Change a secret's description, scope, expiry or reminder
+	//
+	// Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/secrets/{secret} (the `PatchSecret` operationId).
+	PatchSecret(ctx context.Context, org OrgRef, secret SecretRef, body PatchSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReplaceSecretValueWithBody Replace a secret's value
+	//
+	// Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/secrets/{secret}/value (the `ReplaceSecretValue` operationId).
+	ReplaceSecretValueWithBody(ctx context.Context, org OrgRef, secret SecretRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReplaceSecretValue Replace a secret's value
+	//
+	// Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/secrets/{secret}/value (the `ReplaceSecretValue` operationId).
+	ReplaceSecretValue(ctx context.Context, org OrgRef, secret SecretRef, body ReplaceSecretValueJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetOrgSettings The organization's settings, slot caps included
 	//
@@ -9837,6 +10723,49 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
 	UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetNotificationSettings The organization's notification settings
+	//
+	// The secret whose Slack bot token sends the organization's Slack notifications (ADR 0037), by name; null while Slack is off. Never the token itself.
+	//
+	// Corresponds with GET /v1/orgs/{org}/settings/notifications (the `GetNotificationSettings` operationId).
+	GetNotificationSettings(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetNotificationSettingsWithBody Choose the secret that sends the organization's Slack notifications
+	//
+	// Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/settings/notifications (the `SetNotificationSettings` operationId).
+	SetNotificationSettingsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetNotificationSettings Choose the secret that sends the organization's Slack notifications
+	//
+	// Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/settings/notifications (the `SetNotificationSettings` operationId).
+	SetNotificationSettings(ctx context.Context, org OrgRef, body SetNotificationSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestNotificationSettingsWithBody Test a Slack bot token without saving it
+	//
+	// Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/settings/notifications/test (the `TestNotificationSettings` operationId).
+	TestNotificationSettingsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestNotificationSettings Test a Slack bot token without saving it
+	//
+	// Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/settings/notifications/test (the `TestNotificationSettings` operationId).
+	TestNotificationSettings(ctx context.Context, org OrgRef, body TestNotificationSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ClearSignupDomain Stop sign-up by domain
 	//
@@ -9992,6 +10921,23 @@ func (c *Client) GetAuthConfig(ctx context.Context, reqEditors ...RequestEditorF
 // Corresponds with GET /v1/auth/device/{user_code} (the `GetDeviceRequest` operationId).
 func (c *Client) GetDeviceRequest(ctx context.Context, userCode string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetDeviceRequestRequest(c.Server, userCode)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetCatalog The tool templates
+//
+// Every template goald ships, by name: its title, description, secret slots with suggested secret names, what it adds (tools, env, files and MCP servers with suggested tool modes) and its HTTP test, if any. Values are plain or {{slot}} references to its slots.
+//
+// Corresponds with GET /v1/catalog (the `GetCatalog` operationId).
+func (c *Client) GetCatalog(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCatalogRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -10187,6 +11133,23 @@ func (c *Client) DeleteOrg(ctx context.Context, org OrgRef, body DeleteOrgJSONRe
 // Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
 func (c *Client) GetOrg(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetOrgRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetAccess What the organization's agents reach
+//
+// Computed from each factory's current published version, the environment tests and the secrets, over the factories the caller sees that are not archived: every MCP server, and every env variable and file that references a secret. Each row lists the factories and environments that use it with their agents, the secrets it references, and a status: missing (a secret it references does not exist), failed (its last test failed), expired or expiring (a secret's expiry has passed, or is within its reminder days), untested (a remote MCP server never tested), tested, or ok. by groups the rows by what agents reach (MCP servers, env variables, files; the default), by factory or by secret; factory keeps one factory's. reached counts what agents reach and need_attention what is missing, failed, expired or expiring, whatever by is.
+//
+// Corresponds with GET /v1/orgs/{org}/access (the `GetAccess` operationId).
+func (c *Client) GetAccess(ctx context.Context, org OrgRef, params *GetAccessParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAccessRequest(c.Server, org, params)
 	if err != nil {
 		return nil, err
 	}
@@ -10588,6 +11551,7 @@ func (c *Client) TestConnection(ctx context.Context, org OrgRef, connection Conn
 // By name, each with its type, description, factory scope, agents per factory, expiry, rotation reminder, last use and what uses it (the connections that refer to it as {{name}} and the agents listed). Never a value.
 //
 // Corresponds with GET /v1/orgs/{org}/credentials (the `ListCredentials` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) ListCredentials(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListCredentialsRequest(c.Server, org)
 	if err != nil {
@@ -10607,6 +11571,7 @@ func (c *Client) ListCredentials(ctx context.Context, org OrgRef, reqEditors ...
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) CreateCredentialWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateCredentialRequestWithBody(c.Server, org, contentType, body)
 	if err != nil {
@@ -10626,6 +11591,7 @@ func (c *Client) CreateCredentialWithBody(ctx context.Context, org OrgRef, conte
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) CreateCredential(ctx context.Context, org OrgRef, body CreateCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateCredentialRequest(c.Server, org, body)
 	if err != nil {
@@ -10645,6 +11611,7 @@ func (c *Client) CreateCredential(ctx context.Context, org OrgRef, body CreateCr
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) ImportCredentialsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewImportCredentialsRequestWithBody(c.Server, org, contentType, body)
 	if err != nil {
@@ -10664,6 +11631,7 @@ func (c *Client) ImportCredentialsWithBody(ctx context.Context, org OrgRef, cont
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) ImportCredentials(ctx context.Context, org OrgRef, body ImportCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewImportCredentialsRequest(c.Server, org, body)
 	if err != nil {
@@ -10681,6 +11649,7 @@ func (c *Client) ImportCredentials(ctx context.Context, org OrgRef, body ImportC
 // 409 credential-in-use, naming the connections, while a connection refers to it as {{name}}; 404 credential-not-found. Needs a sign-in from the last 10 minutes. Audited as credential.deleted.
 //
 // Corresponds with DELETE /v1/orgs/{org}/credentials/{credential} (the `DeleteCredential` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) DeleteCredential(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteCredentialRequest(c.Server, org, credential)
 	if err != nil {
@@ -10696,6 +11665,7 @@ func (c *Client) DeleteCredential(ctx context.Context, org OrgRef, credential Cr
 // GetCredential One credential, never its value
 //
 // Corresponds with GET /v1/orgs/{org}/credentials/{credential} (the `GetCredential` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) GetCredential(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetCredentialRequest(c.Server, org, credential)
 	if err != nil {
@@ -10715,6 +11685,7 @@ func (c *Client) GetCredential(ctx context.Context, org OrgRef, credential Crede
 // Takes any type of body and a specified content type.
 //
 // Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) PatchCredentialWithBody(ctx context.Context, org OrgRef, credential CredentialRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPatchCredentialRequestWithBody(c.Server, org, credential, contentType, body)
 	if err != nil {
@@ -10734,6 +11705,7 @@ func (c *Client) PatchCredentialWithBody(ctx context.Context, org OrgRef, creden
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) PatchCredential(ctx context.Context, org OrgRef, credential CredentialRef, body PatchCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPatchCredentialRequest(c.Server, org, credential, body)
 	if err != nil {
@@ -11223,6 +12195,23 @@ func (c *Client) PutDraftFileWithBody(ctx context.Context, org OrgRef, factory F
 	return c.Client.Do(req)
 }
 
+// GetDraftKnowledgePreview The Knowledge prompt section one agent gets from the draft
+//
+// "What agents see" in the editor: the section goald builds for a run of agent, from the same code as a run's. It lists the draft's sources that apply to the agent (with station and lane and work_type, as a run's appliesTo is matched), each with its entry's readWhen or its snapshot's, its file count and top folders, names those with no snapshot as not synced yet, and gives memory.yaml's facts. It reads each source's current snapshot, while a run reads the snapshot its claim pinned, so a run started earlier may see another. 404 agent-not-found for an agent the draft does not declare, 409 yaml-invalid while factory.yaml does not parse or satisfy the schema, 404 no-draft.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview (the `GetDraftKnowledgePreview` operationId).
+func (c *Client) GetDraftKnowledgePreview(ctx context.Context, org OrgRef, factory FactoryRef, params *GetDraftKnowledgePreviewParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDraftKnowledgePreviewRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetDraftModel The draft's factory model for the Visual editor
 //
 // The model, each section's concurrency token, the fields the draft changed against its base (Edited · Undo) and where each model pointer is in factory.yaml. 409 yaml-invalid (with parse_error) while factory.yaml does not parse: Visual is read-only until it is fixed in YAML mode.
@@ -11492,6 +12481,44 @@ func (c *Client) ValidateDraftWithBody(ctx context.Context, org OrgRef, factory 
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
 func (c *Client) ValidateDraft(ctx context.Context, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewValidateDraftRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestEnvironmentWithBody Test an environment's MCP servers or a template
+//
+// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
+func (c *Client) TestEnvironmentWithBody(ctx context.Context, org OrgRef, factory FactoryRef, environment string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestEnvironmentRequestWithBody(c.Server, org, factory, environment, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestEnvironment Test an environment's MCP servers or a template
+//
+// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
+func (c *Client) TestEnvironment(ctx context.Context, org OrgRef, factory FactoryRef, environment string, body TestEnvironmentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestEnvironmentRequest(c.Server, org, factory, environment, body)
 	if err != nil {
 		return nil, err
 	}
@@ -13269,83 +14296,15 @@ func (c *Client) SetTouchReason(ctx context.Context, org OrgRef, item ItemRef, e
 	return c.Client.Do(req)
 }
 
-// DeleteKnowledgeDocument Delete an uploaded document
+// CheckKnowledgeSourceWithBody Check a source's settings before saving them
 //
-// With its chunks, and its file when no other document holds the same content. 409 not-an-upload-source for a synced document, which its next sync would bring back. Audited as knowledge_document.deleted.
-//
-// Corresponds with DELETE /v1/orgs/{org}/knowledge/documents/{document} (the `DeleteKnowledgeDocument` operationId).
-func (c *Client) DeleteKnowledgeDocument(ctx context.Context, org OrgRef, document DocumentRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteKnowledgeDocumentRequest(c.Server, org, document)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// GetKnowledgeDocument A document with its indexed text
-//
-// The text is its chunks joined in order, empty until it is indexed. 404 knowledge-document-not-found.
-//
-// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document} (the `GetKnowledgeDocument` operationId).
-func (c *Client) GetKnowledgeDocument(ctx context.Context, org OrgRef, document DocumentRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetKnowledgeDocumentRequest(c.Server, org, document)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// GetKnowledgeDocumentContent The uploaded original of a document
-//
-// As uploaded, as an attachment that browsers download and never render (threat row 11). 409 not-an-upload-source for a synced document, whose original stays at its source (url).
-//
-// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document}/content (the `GetKnowledgeDocumentContent` operationId).
-func (c *Client) GetKnowledgeDocumentContent(ctx context.Context, org OrgRef, document DocumentRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetKnowledgeDocumentContentRequest(c.Server, org, document)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// ListKnowledgeDocumentUses One page of the runs that used a document
-//
-// Newest first use first (ADR 0027), after the run id after; next_after, when set, is the after of the next page. Each names its run, item and factory, so a client links to them; a run of a factory the caller may not see is left out. 404 knowledge-document-not-found.
-//
-// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document}/uses (the `ListKnowledgeDocumentUses` operationId).
-func (c *Client) ListKnowledgeDocumentUses(ctx context.Context, org OrgRef, document DocumentRef, params *ListKnowledgeDocumentUsesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListKnowledgeDocumentUsesRequest(c.Server, org, document, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// GiveKnowledgeVerdictWithBody Say whether a document helped or misled
-//
-// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+// The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
 //
 // Takes any type of body and a specified content type.
 //
-// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
-func (c *Client) GiveKnowledgeVerdictWithBody(ctx context.Context, org OrgRef, document DocumentRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGiveKnowledgeVerdictRequestWithBody(c.Server, org, document, contentType, body)
+// Corresponds with POST /v1/orgs/{org}/knowledge/check (the `CheckKnowledgeSource` operationId).
+func (c *Client) CheckKnowledgeSourceWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCheckKnowledgeSourceRequestWithBody(c.Server, org, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -13356,15 +14315,15 @@ func (c *Client) GiveKnowledgeVerdictWithBody(ctx context.Context, org OrgRef, d
 	return c.Client.Do(req)
 }
 
-// GiveKnowledgeVerdict Say whether a document helped or misled
+// CheckKnowledgeSource Check a source's settings before saving them
 //
-// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+// The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
 //
 // Takes a body of the `application/json` content type.
 //
-// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
-func (c *Client) GiveKnowledgeVerdict(ctx context.Context, org OrgRef, document DocumentRef, body GiveKnowledgeVerdictJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGiveKnowledgeVerdictRequest(c.Server, org, document, body)
+// Corresponds with POST /v1/orgs/{org}/knowledge/check (the `CheckKnowledgeSource` operationId).
+func (c *Client) CheckKnowledgeSource(ctx context.Context, org OrgRef, body CheckKnowledgeSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCheckKnowledgeSourceRequest(c.Server, org, body)
 	if err != nil {
 		return nil, err
 	}
@@ -13375,13 +14334,30 @@ func (c *Client) GiveKnowledgeVerdict(ctx context.Context, org OrgRef, document 
 	return c.Client.Do(req)
 }
 
-// SearchKnowledge Search the knowledge base as agents do
+// FindKnowledgeFiles Find a file across every source
 //
-// What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
+// The current files of every source whose path, or title in any case, starts with find, by source name then path, at most limit.
 //
-// Corresponds with GET /v1/orgs/{org}/knowledge/search (the `SearchKnowledge` operationId).
-func (c *Client) SearchKnowledge(ctx context.Context, org OrgRef, params *SearchKnowledgeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSearchKnowledgeRequest(c.Server, org, params)
+// Corresponds with GET /v1/orgs/{org}/knowledge/files (the `FindKnowledgeFiles` operationId).
+func (c *Client) FindKnowledgeFiles(ctx context.Context, org OrgRef, params *FindKnowledgeFilesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFindKnowledgeFilesRequest(c.Server, org, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListKnowledgeReads How often runs read and searched the sources' files
+//
+// The daily rollup of runs' reads and searches under /knowledge (ADR 0038 decision 10), of one source or every one, over the last days days counting today (UTC): one row per source, path, factory and day, by day, source, path and factory. A search of a whole source counts at the path ".". Factories the caller may not see are left out. 404 knowledge-source-not-found.
+//
+// Corresponds with GET /v1/orgs/{org}/knowledge/reads (the `ListKnowledgeReads` operationId).
+func (c *Client) ListKnowledgeReads(ctx context.Context, org OrgRef, params *ListKnowledgeReadsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListKnowledgeReadsRequest(c.Server, org, params)
 	if err != nil {
 		return nil, err
 	}
@@ -13411,7 +14387,7 @@ func (c *Client) ListKnowledgeSources(ctx context.Context, org OrgRef, params *L
 
 // CreateKnowledgeSourceWithBody Add a source to the knowledge base
 //
-// An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 //
 // Takes any type of body and a specified content type.
 //
@@ -13430,7 +14406,7 @@ func (c *Client) CreateKnowledgeSourceWithBody(ctx context.Context, org OrgRef, 
 
 // CreateKnowledgeSource Add a source to the knowledge base
 //
-// An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -13447,9 +14423,9 @@ func (c *Client) CreateKnowledgeSource(ctx context.Context, org OrgRef, body Cre
 	return c.Client.Do(req)
 }
 
-// DeleteKnowledgeSource Delete a source with its documents
+// DeleteKnowledgeSource Delete a source with its snapshots and uploads
 //
-// Its documents, their chunks and the uploaded files no other document holds go with it. 409 knowledge-source-in-use, naming them, while a factory's current version may search it. Audited as knowledge_source.deleted.
+// Its snapshots and the uploaded files no other upload holds go with it. 409 knowledge-source-in-use, naming them, while a factory's current version may search it. Audited as knowledge_source.deleted.
 //
 // Corresponds with DELETE /v1/orgs/{org}/knowledge/sources/{source} (the `DeleteKnowledgeSource` operationId).
 func (c *Client) DeleteKnowledgeSource(ctx context.Context, org OrgRef, source SourceRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -13483,7 +14459,7 @@ func (c *Client) GetKnowledgeSource(ctx context.Context, org OrgRef, source Sour
 
 // UpdateKnowledgeSourceWithBody Change a source's title, config or schedule
 //
-// config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
 //
 // Takes any type of body and a specified content type.
 //
@@ -13502,7 +14478,7 @@ func (c *Client) UpdateKnowledgeSourceWithBody(ctx context.Context, org OrgRef, 
 
 // UpdateKnowledgeSource Change a source's title, config or schedule
 //
-// config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -13519,13 +14495,13 @@ func (c *Client) UpdateKnowledgeSource(ctx context.Context, org OrgRef, source S
 	return c.Client.Do(req)
 }
 
-// ListKnowledgeDocuments One page of a source's documents
+// ListKnowledgeFiles One page of a source's current files
 //
-// In id order, after the document id after; next_after, when set, is the after of the next page. 404 knowledge-source-not-found.
+// The files of the source's current snapshot (ADR 0038 decision 3), in path order, after the path after; next_after, when set, is the after of the next page. With find, only those whose path, or title in any case, starts with it. None before the first snapshot. 404 knowledge-source-not-found.
 //
-// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/documents (the `ListKnowledgeDocuments` operationId).
-func (c *Client) ListKnowledgeDocuments(ctx context.Context, org OrgRef, source SourceRef, params *ListKnowledgeDocumentsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListKnowledgeDocumentsRequest(c.Server, org, source, params)
+// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/files (the `ListKnowledgeFiles` operationId).
+func (c *Client) ListKnowledgeFiles(ctx context.Context, org OrgRef, source SourceRef, params *ListKnowledgeFilesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListKnowledgeFilesRequest(c.Server, org, source, params)
 	if err != nil {
 		return nil, err
 	}
@@ -13536,15 +14512,13 @@ func (c *Client) ListKnowledgeDocuments(ctx context.Context, org OrgRef, source 
 	return c.Client.Do(req)
 }
 
-// UploadKnowledgeDocumentsWithBody Upload files to an upload source
+// GetKnowledgeFile One file's Markdown
 //
-// Each part named files is one document, titled by its file name: text, Markdown, HTML, JSON or YAML of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most that and 1 MiB more. They are pending until the next sync indexes them, which the upload makes due; the same content uploaded again is the document it already is. Every file is checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as knowledge_document.uploaded.
+// The file as runs read it under /knowledge/<source>/, from the source's current snapshot. goald reads it from the snapshot's zip by range (the end record, the central directory, then the one entry), never the whole zip. 404 knowledge-source-not-found, 404 knowledge-file-not-found for a path the snapshot does not hold or a source with no snapshot yet.
 //
-// Takes any type of body and a specified content type.
-//
-// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/documents (the `UploadKnowledgeDocuments` operationId).
-func (c *Client) UploadKnowledgeDocumentsWithBody(ctx context.Context, org OrgRef, source SourceRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewUploadKnowledgeDocumentsRequestWithBody(c.Server, org, source, contentType, body)
+// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/files/{path} (the `GetKnowledgeFile` operationId).
+func (c *Client) GetKnowledgeFile(ctx context.Context, org OrgRef, source SourceRef, path KnowledgeFilePath, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetKnowledgeFileRequest(c.Server, org, source, path)
 	if err != nil {
 		return nil, err
 	}
@@ -13572,13 +14546,32 @@ func (c *Client) SyncKnowledgeSource(ctx context.Context, org OrgRef, source Sou
 	return c.Client.Do(req)
 }
 
-// GetKnowledgeUsage Where a source's documents were used
+// DeleteKnowledgeUpload Delete an uploaded file
 //
-// Per document of the source with a use or a verdict in the last days days (ADR 0027, decision 3): the distinct runs that used it and the verdicts given, agents' and people's apart; at most 500, the most used first, then by id. 404 knowledge-source-not-found.
+// The upload at path, with its stored file when no other upload holds the same content; the next sync, which the deletion makes due, leaves it out of the snapshot. 404 knowledge-file-not-found, 409 not-an-upload-source. Audited as knowledge_document.deleted.
 //
-// Corresponds with GET /v1/orgs/{org}/knowledge/usage (the `GetKnowledgeUsage` operationId).
-func (c *Client) GetKnowledgeUsage(ctx context.Context, org OrgRef, params *GetKnowledgeUsageParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetKnowledgeUsageRequest(c.Server, org, params)
+// Corresponds with DELETE /v1/orgs/{org}/knowledge/sources/{source}/uploads (the `DeleteKnowledgeUpload` operationId).
+func (c *Client) DeleteKnowledgeUpload(ctx context.Context, org OrgRef, source SourceRef, params *DeleteKnowledgeUploadParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteKnowledgeUploadRequest(c.Server, org, source, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UploadKnowledgeFilesWithBody Upload files to an upload source
+//
+// Each part named files is one file at the path its file name gives, which may hold folders (runbooks/db/disk.md); a path that is not relative and clean is 400. Text, Markdown, HTML, JSON, YAML, PDF or an Office file (the last two are converted when goald has a conversion service, else left out of the snapshot and listed) of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most that and 1 MiB more. The upload makes the source due, and its next sync writes the snapshot that holds them. Every file is checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as knowledge_document.uploaded.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/uploads (the `UploadKnowledgeFiles` operationId).
+func (c *Client) UploadKnowledgeFilesWithBody(ctx context.Context, org OrgRef, source SourceRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUploadKnowledgeFilesRequestWithBody(c.Server, org, source, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -13818,7 +14811,7 @@ func (c *Client) GetOrgPolicy(ctx context.Context, org OrgRef, reqEditors ...Req
 
 // PutOrgPolicyWithBody Replace the organization's policy
 //
-// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
 //
 // Takes any type of body and a specified content type.
 //
@@ -13837,13 +14830,51 @@ func (c *Client) PutOrgPolicyWithBody(ctx context.Context, org OrgRef, params *P
 
 // PutOrgPolicy Replace the organization's policy
 //
-// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
 //
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
 func (c *Client) PutOrgPolicy(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, body PutOrgPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutOrgPolicyRequest(c.Server, org, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestRepositoryWithBody Test a token's read and push access to a repository
+//
+// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
+func (c *Client) TestRepositoryWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestRepositoryRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestRepository Test a token's read and push access to a repository
+//
+// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
+func (c *Client) TestRepository(ctx context.Context, org OrgRef, body TestRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestRepositoryRequest(c.Server, org, body)
 	if err != nil {
 		return nil, err
 	}
@@ -13903,13 +14934,13 @@ func (c *Client) GetRun(ctx context.Context, org OrgRef, run string, reqEditors 
 	return c.Client.Do(req)
 }
 
-// ListRunKnowledge The knowledge documents a run used, with the verdicts given on them for it
+// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
 //
-// Its uses by time, document and kind, and the verdicts agents and people gave for the run (ADR 0027). 404 for a run of another organization.
+// One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
 //
-// Corresponds with GET /v1/orgs/{org}/runs/{run}/knowledge (the `ListRunKnowledge` operationId).
-func (c *Client) ListRunKnowledge(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListRunKnowledgeRequest(c.Server, org, run)
+// Corresponds with GET /v1/orgs/{org}/search (the `SearchOrg` operationId).
+func (c *Client) SearchOrg(ctx context.Context, org OrgRef, params *SearchOrgParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSearchOrgRequest(c.Server, org, params)
 	if err != nil {
 		return nil, err
 	}
@@ -13920,13 +14951,199 @@ func (c *Client) ListRunKnowledge(ctx context.Context, org OrgRef, run string, r
 	return c.Client.Do(req)
 }
 
-// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
+// ListSecrets The organization's secrets
 //
-// One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
+// By name, each with its source, description, factory scope, expiry, reminder, last use and what uses it. Never a value.
 //
-// Corresponds with GET /v1/orgs/{org}/search (the `SearchOrg` operationId).
-func (c *Client) SearchOrg(ctx context.Context, org OrgRef, params *SearchOrgParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSearchOrgRequest(c.Server, org, params)
+// Corresponds with GET /v1/orgs/{org}/secrets (the `ListSecrets` operationId).
+func (c *Client) ListSecrets(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListSecretsRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateSecretWithBody Create a secret
+//
+// A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/secrets (the `CreateSecret` operationId).
+func (c *Client) CreateSecretWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSecretRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateSecret Create a secret
+//
+// A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/secrets (the `CreateSecret` operationId).
+func (c *Client) CreateSecret(ctx context.Context, org OrgRef, body CreateSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSecretRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ImportSecretsWithBody Import secrets from a .env or YAML text
+//
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/secrets/import (the `ImportSecrets` operationId).
+func (c *Client) ImportSecretsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewImportSecretsRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ImportSecrets Import secrets from a .env or YAML text
+//
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/secrets/import (the `ImportSecrets` operationId).
+func (c *Client) ImportSecrets(ctx context.Context, org OrgRef, body ImportSecretsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewImportSecretsRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteSecret Delete a secret
+//
+// 409 secret-in-use, deleting nothing, while something uses it: the problem's uses names each use. 404 secret-not-found. Needs a sign-in from the last 10 minutes. Audited as secret.deleted.
+//
+// Corresponds with DELETE /v1/orgs/{org}/secrets/{secret} (the `DeleteSecret` operationId).
+func (c *Client) DeleteSecret(ctx context.Context, org OrgRef, secret SecretRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteSecretRequest(c.Server, org, secret)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetSecret One secret, never its value
+//
+// 404 secret-not-found.
+//
+// Corresponds with GET /v1/orgs/{org}/secrets/{secret} (the `GetSecret` operationId).
+func (c *Client) GetSecret(ctx context.Context, org OrgRef, secret SecretRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSecretRequest(c.Server, org, secret)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PatchSecretWithBody Change a secret's description, scope, expiry or reminder
+//
+// Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /v1/orgs/{org}/secrets/{secret} (the `PatchSecret` operationId).
+func (c *Client) PatchSecretWithBody(ctx context.Context, org OrgRef, secret SecretRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchSecretRequestWithBody(c.Server, org, secret, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PatchSecret Change a secret's description, scope, expiry or reminder
+//
+// Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /v1/orgs/{org}/secrets/{secret} (the `PatchSecret` operationId).
+func (c *Client) PatchSecret(ctx context.Context, org OrgRef, secret SecretRef, body PatchSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchSecretRequest(c.Server, org, secret, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReplaceSecretValueWithBody Replace a secret's value
+//
+// Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/secrets/{secret}/value (the `ReplaceSecretValue` operationId).
+func (c *Client) ReplaceSecretValueWithBody(ctx context.Context, org OrgRef, secret SecretRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReplaceSecretValueRequestWithBody(c.Server, org, secret, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReplaceSecretValue Replace a secret's value
+//
+// Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/secrets/{secret}/value (the `ReplaceSecretValue` operationId).
+func (c *Client) ReplaceSecretValue(ctx context.Context, org OrgRef, secret SecretRef, body ReplaceSecretValueJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReplaceSecretValueRequest(c.Server, org, secret, body)
 	if err != nil {
 		return nil, err
 	}
@@ -13980,6 +15197,99 @@ func (c *Client) UpdateOrgSettingsWithBody(ctx context.Context, org OrgRef, cont
 // Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
 func (c *Client) UpdateOrgSettings(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateOrgSettingsRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetNotificationSettings The organization's notification settings
+//
+// The secret whose Slack bot token sends the organization's Slack notifications (ADR 0037), by name; null while Slack is off. Never the token itself.
+//
+// Corresponds with GET /v1/orgs/{org}/settings/notifications (the `GetNotificationSettings` operationId).
+func (c *Client) GetNotificationSettings(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetNotificationSettingsRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetNotificationSettingsWithBody Choose the secret that sends the organization's Slack notifications
+//
+// Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/settings/notifications (the `SetNotificationSettings` operationId).
+func (c *Client) SetNotificationSettingsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetNotificationSettingsRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetNotificationSettings Choose the secret that sends the organization's Slack notifications
+//
+// Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/settings/notifications (the `SetNotificationSettings` operationId).
+func (c *Client) SetNotificationSettings(ctx context.Context, org OrgRef, body SetNotificationSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetNotificationSettingsRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestNotificationSettingsWithBody Test a Slack bot token without saving it
+//
+// Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/settings/notifications/test (the `TestNotificationSettings` operationId).
+func (c *Client) TestNotificationSettingsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestNotificationSettingsRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestNotificationSettings Test a Slack bot token without saving it
+//
+// Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/settings/notifications/test (the `TestNotificationSettings` operationId).
+func (c *Client) TestNotificationSettings(ctx context.Context, org OrgRef, body TestNotificationSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestNotificationSettingsRequest(c.Server, org, body)
 	if err != nil {
 		return nil, err
 	}
@@ -14350,6 +15660,33 @@ func NewGetDeviceRequestRequest(server string, userCode string) (*http.Request, 
 	return req, nil
 }
 
+// NewGetCatalogRequest constructs an http.Request for the GetCatalog method
+func NewGetCatalogRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/catalog")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetHealthRequest constructs an http.Request for the GetHealth method
 func NewGetHealthRequest(server string) (*http.Request, error) {
 	var err error
@@ -14609,6 +15946,79 @@ func NewGetOrgRequest(server string, org OrgRef) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAccessRequest constructs an http.Request for the GetAccess method
+func NewGetAccessRequest(server string, org OrgRef, params *GetAccessParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/access", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.By != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "by", *params.By, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Factory != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "factory", *params.Factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -17080,6 +18490,106 @@ func NewPutDraftFileRequestWithBody(server string, org OrgRef, factory FactoryRe
 	return req, nil
 }
 
+// NewGetDraftKnowledgePreviewRequest constructs an http.Request for the GetDraftKnowledgePreview method
+func NewGetDraftKnowledgePreviewRequest(server string, org OrgRef, factory FactoryRef, params *GetDraftKnowledgePreviewParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/knowledge-preview", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "agent", params.Agent, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Station != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "station", *params.Station, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Lane != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "lane", *params.Lane, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.WorkType != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "work_type", *params.WorkType, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetDraftModelRequest constructs an http.Request for the GetDraftModel method
 func NewGetDraftModelRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
 	var err error
@@ -17586,6 +19096,67 @@ func NewValidateDraftRequestWithBody(server string, org OrgRef, factory FactoryR
 	}
 
 	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/validate", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewTestEnvironmentRequest calls the generic TestEnvironment builder with application/json body
+func NewTestEnvironmentRequest(server string, org OrgRef, factory FactoryRef, environment string, body TestEnvironmentJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTestEnvironmentRequestWithBody(server, org, factory, environment, "application/json", bodyReader)
+}
+
+// NewTestEnvironmentRequestWithBody constructs an http.Request for the TestEnvironment method, with any body, and a specified content type
+func NewTestEnvironmentRequestWithBody(server string, org OrgRef, factory FactoryRef, environment string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "environment", environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/environments/%s/test", pathParam0, pathParam1, pathParam2)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -21667,8 +23238,19 @@ func NewSetTouchReasonRequestWithBody(server string, org OrgRef, item ItemRef, e
 	return req, nil
 }
 
-// NewDeleteKnowledgeDocumentRequest constructs an http.Request for the DeleteKnowledgeDocument method
-func NewDeleteKnowledgeDocumentRequest(server string, org OrgRef, document DocumentRef) (*http.Request, error) {
+// NewCheckKnowledgeSourceRequest calls the generic CheckKnowledgeSource builder with application/json body
+func NewCheckKnowledgeSourceRequest(server string, org OrgRef, body CheckKnowledgeSourceJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCheckKnowledgeSourceRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewCheckKnowledgeSourceRequestWithBody constructs an http.Request for the CheckKnowledgeSource method, with any body, and a specified content type
+func NewCheckKnowledgeSourceRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -21678,19 +23260,12 @@ func NewDeleteKnowledgeDocumentRequest(server string, org OrgRef, document Docum
 		return nil, err
 	}
 
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "document", document, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
 	serverURL, err := url.Parse(server)
 	if err != nil {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/documents/%s", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/check", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -21700,16 +23275,18 @@ func NewDeleteKnowledgeDocumentRequest(server string, org OrgRef, document Docum
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
 
+	req.Header.Add("Content-Type", contentType)
+
 	return req, nil
 }
 
-// NewGetKnowledgeDocumentRequest constructs an http.Request for the GetKnowledgeDocument method
-func NewGetKnowledgeDocumentRequest(server string, org OrgRef, document DocumentRef) (*http.Request, error) {
+// NewFindKnowledgeFilesRequest constructs an http.Request for the FindKnowledgeFiles method
+func NewFindKnowledgeFilesRequest(server string, org OrgRef, params *FindKnowledgeFilesParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -21719,101 +23296,12 @@ func NewGetKnowledgeDocumentRequest(server string, org OrgRef, document Document
 		return nil, err
 	}
 
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "document", document, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
 	serverURL, err := url.Parse(server)
 	if err != nil {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/documents/%s", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetKnowledgeDocumentContentRequest constructs an http.Request for the GetKnowledgeDocumentContent method
-func NewGetKnowledgeDocumentContentRequest(server string, org OrgRef, document DocumentRef) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "document", document, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/documents/%s/content", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewListKnowledgeDocumentUsesRequest constructs an http.Request for the ListKnowledgeDocumentUses method
-func NewListKnowledgeDocumentUsesRequest(server string, org OrgRef, document DocumentRef, params *ListKnowledgeDocumentUsesParams) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "document", document, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/documents/%s/uses", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/files", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -21832,16 +23320,12 @@ func NewListKnowledgeDocumentUsesRequest(server string, org OrgRef, document Doc
 		// per the OpenAPI spec (e.g. "color=blue,black,brown").
 		var rawQueryFragments []string
 
-		if params.After != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "find", params.Find, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
 			}
-
 		}
 
 		if params.Limit != nil {
@@ -21870,62 +23354,8 @@ func NewListKnowledgeDocumentUsesRequest(server string, org OrgRef, document Doc
 	return req, nil
 }
 
-// NewGiveKnowledgeVerdictRequest calls the generic GiveKnowledgeVerdict builder with application/json body
-func NewGiveKnowledgeVerdictRequest(server string, org OrgRef, document DocumentRef, body GiveKnowledgeVerdictJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewGiveKnowledgeVerdictRequestWithBody(server, org, document, "application/json", bodyReader)
-}
-
-// NewGiveKnowledgeVerdictRequestWithBody constructs an http.Request for the GiveKnowledgeVerdict method, with any body, and a specified content type
-func NewGiveKnowledgeVerdictRequestWithBody(server string, org OrgRef, document DocumentRef, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "document", document, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/documents/%s/verdict", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewSearchKnowledgeRequest constructs an http.Request for the SearchKnowledge method
-func NewSearchKnowledgeRequest(server string, org OrgRef, params *SearchKnowledgeParams) (*http.Request, error) {
+// NewListKnowledgeReadsRequest constructs an http.Request for the ListKnowledgeReads method
+func NewListKnowledgeReadsRequest(server string, org OrgRef, params *ListKnowledgeReadsParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -21940,7 +23370,7 @@ func NewSearchKnowledgeRequest(server string, org OrgRef, params *SearchKnowledg
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/search", pathParam0)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/reads", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -21959,17 +23389,9 @@ func NewSearchKnowledgeRequest(server string, org OrgRef, params *SearchKnowledg
 		// per the OpenAPI spec (e.g. "color=blue,black,brown").
 		var rawQueryFragments []string
 
-		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "q", params.Q, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-			return nil, err
-		} else {
-			for _, qp := range strings.Split(queryFrag, "&") {
-				rawQueryFragments = append(rawQueryFragments, qp)
-			}
-		}
-
 		if params.Source != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "source", *params.Source, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "array", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "source", *params.Source, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -21979,9 +23401,9 @@ func NewSearchKnowledgeRequest(server string, org OrgRef, params *SearchKnowledg
 
 		}
 
-		if params.Limit != nil {
+		if params.Days != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "days", *params.Days, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -22249,8 +23671,8 @@ func NewUpdateKnowledgeSourceRequestWithBody(server string, org OrgRef, source S
 	return req, nil
 }
 
-// NewListKnowledgeDocumentsRequest constructs an http.Request for the ListKnowledgeDocuments method
-func NewListKnowledgeDocumentsRequest(server string, org OrgRef, source SourceRef, params *ListKnowledgeDocumentsParams) (*http.Request, error) {
+// NewListKnowledgeFilesRequest constructs an http.Request for the ListKnowledgeFiles method
+func NewListKnowledgeFilesRequest(server string, org OrgRef, source SourceRef, params *ListKnowledgeFilesParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -22272,7 +23694,7 @@ func NewListKnowledgeDocumentsRequest(server string, org OrgRef, source SourceRe
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/sources/%s/documents", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/sources/%s/files", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -22290,6 +23712,18 @@ func NewListKnowledgeDocumentsRequest(server string, org OrgRef, source SourceRe
 		// styled parameters, preserving literal commas as delimiters
 		// per the OpenAPI spec (e.g. "color=blue,black,brown").
 		var rawQueryFragments []string
+
+		if params.Find != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "find", *params.Find, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
 
 		if params.After != nil {
 
@@ -22329,8 +23763,8 @@ func NewListKnowledgeDocumentsRequest(server string, org OrgRef, source SourceRe
 	return req, nil
 }
 
-// NewUploadKnowledgeDocumentsRequestWithBody constructs an http.Request for the UploadKnowledgeDocuments method, with any body, and a specified content type
-func NewUploadKnowledgeDocumentsRequestWithBody(server string, org OrgRef, source SourceRef, contentType string, body io.Reader) (*http.Request, error) {
+// NewGetKnowledgeFileRequest constructs an http.Request for the GetKnowledgeFile method
+func NewGetKnowledgeFileRequest(server string, org OrgRef, source SourceRef, path KnowledgeFilePath) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -22347,12 +23781,19 @@ func NewUploadKnowledgeDocumentsRequestWithBody(server string, org OrgRef, sourc
 		return nil, err
 	}
 
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "path", path, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
 	serverURL, err := url.Parse(server)
 	if err != nil {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/sources/%s/documents", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/sources/%s/files/%s", pathParam0, pathParam1, pathParam2)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -22362,12 +23803,10 @@ func NewUploadKnowledgeDocumentsRequestWithBody(server string, org OrgRef, sourc
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
-
-	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -22413,8 +23852,8 @@ func NewSyncKnowledgeSourceRequest(server string, org OrgRef, source SourceRef) 
 	return req, nil
 }
 
-// NewGetKnowledgeUsageRequest constructs an http.Request for the GetKnowledgeUsage method
-func NewGetKnowledgeUsageRequest(server string, org OrgRef, params *GetKnowledgeUsageParams) (*http.Request, error) {
+// NewDeleteKnowledgeUploadRequest constructs an http.Request for the DeleteKnowledgeUpload method
+func NewDeleteKnowledgeUploadRequest(server string, org OrgRef, source SourceRef, params *DeleteKnowledgeUploadParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -22424,12 +23863,19 @@ func NewGetKnowledgeUsageRequest(server string, org OrgRef, params *GetKnowledge
 		return nil, err
 	}
 
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "source", source, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
 	serverURL, err := url.Parse(server)
 	if err != nil {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/usage", pathParam0)
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/sources/%s/uploads", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -22448,24 +23894,12 @@ func NewGetKnowledgeUsageRequest(server string, org OrgRef, params *GetKnowledge
 		// per the OpenAPI spec (e.g. "color=blue,black,brown").
 		var rawQueryFragments []string
 
-		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "source", params.Source, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "path", params.Path, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 			return nil, err
 		} else {
 			for _, qp := range strings.Split(queryFrag, "&") {
 				rawQueryFragments = append(rawQueryFragments, qp)
 			}
-		}
-
-		if params.Days != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "days", *params.Days, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
 		}
 
 		if encoded := queryValues.Encode(); encoded != "" {
@@ -22474,10 +23908,53 @@ func NewGetKnowledgeUsageRequest(server string, org OrgRef, params *GetKnowledge
 		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewUploadKnowledgeFilesRequestWithBody constructs an http.Request for the UploadKnowledgeFiles method, with any body, and a specified content type
+func NewUploadKnowledgeFilesRequestWithBody(server string, org OrgRef, source SourceRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "source", source, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/knowledge/sources/%s/uploads", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -23052,6 +24529,53 @@ func NewPutOrgPolicyRequestWithBody(server string, org OrgRef, params *PutOrgPol
 	return req, nil
 }
 
+// NewTestRepositoryRequest calls the generic TestRepository builder with application/json body
+func NewTestRepositoryRequest(server string, org OrgRef, body TestRepositoryJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTestRepositoryRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewTestRepositoryRequestWithBody constructs an http.Request for the TestRepository method, with any body, and a specified content type
+func NewTestRepositoryRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/repositories/test", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewListRunsRequest constructs an http.Request for the ListRuns method
 func NewListRunsRequest(server string, org OrgRef, params *ListRunsParams) (*http.Request, error) {
 	var err error
@@ -23335,47 +24859,6 @@ func NewGetRunRequest(server string, org OrgRef, run string) (*http.Request, err
 	return req, nil
 }
 
-// NewListRunKnowledgeRequest constructs an http.Request for the ListRunKnowledge method
-func NewListRunKnowledgeRequest(server string, org OrgRef, run string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "run", run, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/runs/%s/knowledge", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewSearchOrgRequest constructs an http.Request for the SearchOrg method
 func NewSearchOrgRequest(server string, org OrgRef, params *SearchOrgParams) (*http.Request, error) {
 	var err error
@@ -23441,6 +24924,324 @@ func NewSearchOrgRequest(server string, org OrgRef, params *SearchOrgParams) (*h
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewListSecretsRequest constructs an http.Request for the ListSecrets method
+func NewListSecretsRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/secrets", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateSecretRequest calls the generic CreateSecret builder with application/json body
+func NewCreateSecretRequest(server string, org OrgRef, body CreateSecretJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateSecretRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewCreateSecretRequestWithBody constructs an http.Request for the CreateSecret method, with any body, and a specified content type
+func NewCreateSecretRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/secrets", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewImportSecretsRequest calls the generic ImportSecrets builder with application/json body
+func NewImportSecretsRequest(server string, org OrgRef, body ImportSecretsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewImportSecretsRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewImportSecretsRequestWithBody constructs an http.Request for the ImportSecrets method, with any body, and a specified content type
+func NewImportSecretsRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/secrets/import", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteSecretRequest constructs an http.Request for the DeleteSecret method
+func NewDeleteSecretRequest(server string, org OrgRef, secret SecretRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "secret", secret, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/secrets/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetSecretRequest constructs an http.Request for the GetSecret method
+func NewGetSecretRequest(server string, org OrgRef, secret SecretRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "secret", secret, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/secrets/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchSecretRequest calls the generic PatchSecret builder with application/json body
+func NewPatchSecretRequest(server string, org OrgRef, secret SecretRef, body PatchSecretJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchSecretRequestWithBody(server, org, secret, "application/json", bodyReader)
+}
+
+// NewPatchSecretRequestWithBody constructs an http.Request for the PatchSecret method, with any body, and a specified content type
+func NewPatchSecretRequestWithBody(server string, org OrgRef, secret SecretRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "secret", secret, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/secrets/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewReplaceSecretValueRequest calls the generic ReplaceSecretValue builder with application/json body
+func NewReplaceSecretValueRequest(server string, org OrgRef, secret SecretRef, body ReplaceSecretValueJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewReplaceSecretValueRequestWithBody(server, org, secret, "application/json", bodyReader)
+}
+
+// NewReplaceSecretValueRequestWithBody constructs an http.Request for the ReplaceSecretValue method, with any body, and a specified content type
+func NewReplaceSecretValueRequestWithBody(server string, org OrgRef, secret SecretRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "secret", secret, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/secrets/%s/value", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -23517,6 +25318,134 @@ func NewUpdateOrgSettingsRequestWithBody(server string, org OrgRef, contentType 
 	}
 
 	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetNotificationSettingsRequest constructs an http.Request for the GetNotificationSettings method
+func NewGetNotificationSettingsRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/settings/notifications", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSetNotificationSettingsRequest calls the generic SetNotificationSettings builder with application/json body
+func NewSetNotificationSettingsRequest(server string, org OrgRef, body SetNotificationSettingsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSetNotificationSettingsRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewSetNotificationSettingsRequestWithBody constructs an http.Request for the SetNotificationSettings method, with any body, and a specified content type
+func NewSetNotificationSettingsRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/settings/notifications", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewTestNotificationSettingsRequest calls the generic TestNotificationSettings builder with application/json body
+func NewTestNotificationSettingsRequest(server string, org OrgRef, body TestNotificationSettingsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTestNotificationSettingsRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewTestNotificationSettingsRequestWithBody constructs an http.Request for the TestNotificationSettings method, with any body, and a specified content type
+func NewTestNotificationSettingsRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/settings/notifications/test", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -24282,6 +26211,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/auth/device/{user_code} (the `GetDeviceRequest` operationId).
 	GetDeviceRequestWithResponse(ctx context.Context, userCode string, reqEditors ...RequestEditorFn) (*GetDeviceRequestResponse, error)
 
+	// GetCatalogWithResponse The tool templates
+	//
+	// Every template goald ships, by name: its title, description, secret slots with suggested secret names, what it adds (tools, env, files and MCP servers with suggested tool modes) and its HTTP test, if any. Values are plain or {{slot}} references to its slots.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/catalog (the `GetCatalog` operationId).
+	GetCatalogWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogResponse, error)
+
 	// GetHealthWithResponse Liveness of goald
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -24376,6 +26314,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org} (the `GetOrg` operationId).
 	GetOrgWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetOrgResponse, error)
+
+	// GetAccessWithResponse What the organization's agents reach
+	//
+	// Computed from each factory's current published version, the environment tests and the secrets, over the factories the caller sees that are not archived: every MCP server, and every env variable and file that references a secret. Each row lists the factories and environments that use it with their agents, the secrets it references, and a status: missing (a secret it references does not exist), failed (its last test failed), expired or expiring (a secret's expiry has passed, or is within its reminder days), untested (a remote MCP server never tested), tested, or ok. by groups the rows by what agents reach (MCP servers, env variables, files; the default), by factory or by secret; factory keeps one factory's. reached counts what agents reach and need_attention what is missing, failed, expired or expiring, whatever by is.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/access (the `GetAccess` operationId).
+	GetAccessWithResponse(ctx context.Context, org OrgRef, params *GetAccessParams, reqEditors ...RequestEditorFn) (*GetAccessResponse, error)
 
 	// ListAPIKeysWithResponse The organization's API keys
 	//
@@ -24578,6 +26525,8 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/orgs/{org}/credentials (the `ListCredentials` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ListCredentialsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListCredentialsResponse, error)
 
 	// CreateCredentialWithBodyWithResponse Create a credential
@@ -24587,6 +26536,8 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CreateCredentialWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCredentialResponse, error)
 
 	// CreateCredentialWithResponse Create a credential
@@ -24596,6 +26547,8 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CreateCredentialWithResponse(ctx context.Context, org OrgRef, body CreateCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCredentialResponse, error)
 
 	// ImportCredentialsWithBodyWithResponse Import credentials from a .env or YAML text
@@ -24605,6 +26558,8 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ImportCredentialsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ImportCredentialsResponse, error)
 
 	// ImportCredentialsWithResponse Import credentials from a .env or YAML text
@@ -24614,6 +26569,8 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ImportCredentialsWithResponse(ctx context.Context, org OrgRef, body ImportCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*ImportCredentialsResponse, error)
 
 	// DeleteCredentialWithResponse Delete a credential
@@ -24623,6 +26580,8 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with DELETE /v1/orgs/{org}/credentials/{credential} (the `DeleteCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	DeleteCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*DeleteCredentialResponse, error)
 
 	// GetCredentialWithResponse One credential, never its value
@@ -24630,6 +26589,8 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /v1/orgs/{org}/credentials/{credential} (the `GetCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	GetCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*GetCredentialResponse, error)
 
 	// PatchCredentialWithBodyWithResponse Change a credential's metadata, or replace its value
@@ -24639,6 +26600,8 @@ type ClientWithResponsesInterface interface {
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PatchCredentialWithBodyWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchCredentialResponse, error)
 
 	// PatchCredentialWithResponse Change a credential's metadata, or replace its value
@@ -24648,6 +26611,8 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PatchCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, body PatchCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchCredentialResponse, error)
 
 	// FormatDefinitionWithBodyWithResponse Format a factory.yaml the way Visual saves write changed lines (Format)
@@ -24887,6 +26852,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `PutDraftFile` operationId).
 	PutDraftFileWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, params *PutDraftFileParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutDraftFileResponse, error)
 
+	// GetDraftKnowledgePreviewWithResponse The Knowledge prompt section one agent gets from the draft
+	//
+	// "What agents see" in the editor: the section goald builds for a run of agent, from the same code as a run's. It lists the draft's sources that apply to the agent (with station and lane and work_type, as a run's appliesTo is matched), each with its entry's readWhen or its snapshot's, its file count and top folders, names those with no snapshot as not synced yet, and gives memory.yaml's facts. It reads each source's current snapshot, while a run reads the snapshot its claim pinned, so a run started earlier may see another. 404 agent-not-found for an agent the draft does not declare, 409 yaml-invalid while factory.yaml does not parse or satisfy the schema, 404 no-draft.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview (the `GetDraftKnowledgePreview` operationId).
+	GetDraftKnowledgePreviewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetDraftKnowledgePreviewParams, reqEditors ...RequestEditorFn) (*GetDraftKnowledgePreviewResponse, error)
+
 	// GetDraftModelWithResponse The draft's factory model for the Visual editor
 	//
 	// The model, each section's concurrency token, the fields the draft changed against its base (Edited · Undo) and where each model pointer is in factory.yaml. 409 yaml-invalid (with parse_error) while factory.yaml does not parse: Visual is read-only until it is fixed in YAML mode.
@@ -25021,6 +26995,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/validate (the `ValidateDraft` operationId).
 	ValidateDraftWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body ValidateDraftJSONRequestBody, reqEditors ...RequestEditorFn) (*ValidateDraftResponse, error)
+
+	// TestEnvironmentWithBodyWithResponse Test an environment's MCP servers or a template
+	//
+	// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
+	TestEnvironmentWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, environment string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestEnvironmentResponse, error)
+
+	// TestEnvironmentWithResponse Test an environment's MCP servers or a template
+	//
+	// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
+	TestEnvironmentWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, environment string, body TestEnvironmentJSONRequestBody, reqEditors ...RequestEditorFn) (*TestEnvironmentResponse, error)
 
 	// ListEvalsWithResponse The eval cases of the current version, with their last tries and a summary
 	//
@@ -25893,68 +27885,41 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason (the `SetTouchReason` operationId).
 	SetTouchReasonWithResponse(ctx context.Context, org OrgRef, item ItemRef, event int64, body SetTouchReasonJSONRequestBody, reqEditors ...RequestEditorFn) (*SetTouchReasonResponse, error)
 
-	// DeleteKnowledgeDocumentWithResponse Delete an uploaded document
+	// CheckKnowledgeSourceWithBodyWithResponse Check a source's settings before saving them
 	//
-	// With its chunks, and its file when no other document holds the same content. 409 not-an-upload-source for a synced document, which its next sync would bring back. Audited as knowledge_document.deleted.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with DELETE /v1/orgs/{org}/knowledge/documents/{document} (the `DeleteKnowledgeDocument` operationId).
-	DeleteKnowledgeDocumentWithResponse(ctx context.Context, org OrgRef, document DocumentRef, reqEditors ...RequestEditorFn) (*DeleteKnowledgeDocumentResponse, error)
-
-	// GetKnowledgeDocumentWithResponse A document with its indexed text
-	//
-	// The text is its chunks joined in order, empty until it is indexed. 404 knowledge-document-not-found.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document} (the `GetKnowledgeDocument` operationId).
-	GetKnowledgeDocumentWithResponse(ctx context.Context, org OrgRef, document DocumentRef, reqEditors ...RequestEditorFn) (*GetKnowledgeDocumentResponse, error)
-
-	// GetKnowledgeDocumentContentWithResponse The uploaded original of a document
-	//
-	// As uploaded, as an attachment that browsers download and never render (threat row 11). 409 not-an-upload-source for a synced document, whose original stays at its source (url).
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document}/content (the `GetKnowledgeDocumentContent` operationId).
-	GetKnowledgeDocumentContentWithResponse(ctx context.Context, org OrgRef, document DocumentRef, reqEditors ...RequestEditorFn) (*GetKnowledgeDocumentContentResponse, error)
-
-	// ListKnowledgeDocumentUsesWithResponse One page of the runs that used a document
-	//
-	// Newest first use first (ADR 0027), after the run id after; next_after, when set, is the after of the next page. Each names its run, item and factory, so a client links to them; a run of a factory the caller may not see is left out. 404 knowledge-document-not-found.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document}/uses (the `ListKnowledgeDocumentUses` operationId).
-	ListKnowledgeDocumentUsesWithResponse(ctx context.Context, org OrgRef, document DocumentRef, params *ListKnowledgeDocumentUsesParams, reqEditors ...RequestEditorFn) (*ListKnowledgeDocumentUsesResponse, error)
-
-	// GiveKnowledgeVerdictWithBodyWithResponse Say whether a document helped or misled
-	//
-	// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+	// The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
-	GiveKnowledgeVerdictWithBodyWithResponse(ctx context.Context, org OrgRef, document DocumentRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GiveKnowledgeVerdictResponse, error)
+	// Corresponds with POST /v1/orgs/{org}/knowledge/check (the `CheckKnowledgeSource` operationId).
+	CheckKnowledgeSourceWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CheckKnowledgeSourceResponse, error)
 
-	// GiveKnowledgeVerdictWithResponse Say whether a document helped or misled
+	// CheckKnowledgeSourceWithResponse Check a source's settings before saving them
 	//
-	// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+	// The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
-	GiveKnowledgeVerdictWithResponse(ctx context.Context, org OrgRef, document DocumentRef, body GiveKnowledgeVerdictJSONRequestBody, reqEditors ...RequestEditorFn) (*GiveKnowledgeVerdictResponse, error)
+	// Corresponds with POST /v1/orgs/{org}/knowledge/check (the `CheckKnowledgeSource` operationId).
+	CheckKnowledgeSourceWithResponse(ctx context.Context, org OrgRef, body CheckKnowledgeSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*CheckKnowledgeSourceResponse, error)
 
-	// SearchKnowledgeWithResponse Search the knowledge base as agents do
+	// FindKnowledgeFilesWithResponse Find a file across every source
 	//
-	// What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
+	// The current files of every source whose path, or title in any case, starts with find, by source name then path, at most limit.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with GET /v1/orgs/{org}/knowledge/search (the `SearchKnowledge` operationId).
-	SearchKnowledgeWithResponse(ctx context.Context, org OrgRef, params *SearchKnowledgeParams, reqEditors ...RequestEditorFn) (*SearchKnowledgeResponse, error)
+	// Corresponds with GET /v1/orgs/{org}/knowledge/files (the `FindKnowledgeFiles` operationId).
+	FindKnowledgeFilesWithResponse(ctx context.Context, org OrgRef, params *FindKnowledgeFilesParams, reqEditors ...RequestEditorFn) (*FindKnowledgeFilesResponse, error)
+
+	// ListKnowledgeReadsWithResponse How often runs read and searched the sources' files
+	//
+	// The daily rollup of runs' reads and searches under /knowledge (ADR 0038 decision 10), of one source or every one, over the last days days counting today (UTC): one row per source, path, factory and day, by day, source, path and factory. A search of a whole source counts at the path ".". Factories the caller may not see are left out. 404 knowledge-source-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/knowledge/reads (the `ListKnowledgeReads` operationId).
+	ListKnowledgeReadsWithResponse(ctx context.Context, org OrgRef, params *ListKnowledgeReadsParams, reqEditors ...RequestEditorFn) (*ListKnowledgeReadsResponse, error)
 
 	// ListKnowledgeSourcesWithResponse The sources of the organization's knowledge base
 	//
@@ -25967,7 +27932,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateKnowledgeSourceWithBodyWithResponse Add a source to the knowledge base
 	//
-	// An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+	// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -25976,16 +27941,16 @@ type ClientWithResponsesInterface interface {
 
 	// CreateKnowledgeSourceWithResponse Add a source to the knowledge base
 	//
-	// An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+	// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/orgs/{org}/knowledge/sources (the `CreateKnowledgeSource` operationId).
 	CreateKnowledgeSourceWithResponse(ctx context.Context, org OrgRef, body CreateKnowledgeSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateKnowledgeSourceResponse, error)
 
-	// DeleteKnowledgeSourceWithResponse Delete a source with its documents
+	// DeleteKnowledgeSourceWithResponse Delete a source with its snapshots and uploads
 	//
-	// Its documents, their chunks and the uploaded files no other document holds go with it. 409 knowledge-source-in-use, naming them, while a factory's current version may search it. Audited as knowledge_source.deleted.
+	// Its snapshots and the uploaded files no other upload holds go with it. 409 knowledge-source-in-use, naming them, while a factory's current version may search it. Audited as knowledge_source.deleted.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -26003,7 +27968,7 @@ type ClientWithResponsesInterface interface {
 
 	// UpdateKnowledgeSourceWithBodyWithResponse Change a source's title, config or schedule
 	//
-	// config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+	// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -26012,30 +27977,30 @@ type ClientWithResponsesInterface interface {
 
 	// UpdateKnowledgeSourceWithResponse Change a source's title, config or schedule
 	//
-	// config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+	// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/knowledge/sources/{source} (the `UpdateKnowledgeSource` operationId).
 	UpdateKnowledgeSourceWithResponse(ctx context.Context, org OrgRef, source SourceRef, body UpdateKnowledgeSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateKnowledgeSourceResponse, error)
 
-	// ListKnowledgeDocumentsWithResponse One page of a source's documents
+	// ListKnowledgeFilesWithResponse One page of a source's current files
 	//
-	// In id order, after the document id after; next_after, when set, is the after of the next page. 404 knowledge-source-not-found.
+	// The files of the source's current snapshot (ADR 0038 decision 3), in path order, after the path after; next_after, when set, is the after of the next page. With find, only those whose path, or title in any case, starts with it. None before the first snapshot. 404 knowledge-source-not-found.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/documents (the `ListKnowledgeDocuments` operationId).
-	ListKnowledgeDocumentsWithResponse(ctx context.Context, org OrgRef, source SourceRef, params *ListKnowledgeDocumentsParams, reqEditors ...RequestEditorFn) (*ListKnowledgeDocumentsResponse, error)
+	// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/files (the `ListKnowledgeFiles` operationId).
+	ListKnowledgeFilesWithResponse(ctx context.Context, org OrgRef, source SourceRef, params *ListKnowledgeFilesParams, reqEditors ...RequestEditorFn) (*ListKnowledgeFilesResponse, error)
 
-	// UploadKnowledgeDocumentsWithBodyWithResponse Upload files to an upload source
+	// GetKnowledgeFileWithResponse One file's Markdown
 	//
-	// Each part named files is one document, titled by its file name: text, Markdown, HTML, JSON or YAML of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most that and 1 MiB more. They are pending until the next sync indexes them, which the upload makes due; the same content uploaded again is the document it already is. Every file is checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as knowledge_document.uploaded.
+	// The file as runs read it under /knowledge/<source>/, from the source's current snapshot. goald reads it from the snapshot's zip by range (the end record, the central directory, then the one entry), never the whole zip. 404 knowledge-source-not-found, 404 knowledge-file-not-found for a path the snapshot does not hold or a source with no snapshot yet.
 	//
-	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	// Returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/documents (the `UploadKnowledgeDocuments` operationId).
-	UploadKnowledgeDocumentsWithBodyWithResponse(ctx context.Context, org OrgRef, source SourceRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadKnowledgeDocumentsResponse, error)
+	// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/files/{path} (the `GetKnowledgeFile` operationId).
+	GetKnowledgeFileWithResponse(ctx context.Context, org OrgRef, source SourceRef, path KnowledgeFilePath, reqEditors ...RequestEditorFn) (*GetKnowledgeFileResponse, error)
 
 	// SyncKnowledgeSourceWithResponse Sync a source now
 	//
@@ -26046,14 +28011,23 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/sync (the `SyncKnowledgeSource` operationId).
 	SyncKnowledgeSourceWithResponse(ctx context.Context, org OrgRef, source SourceRef, reqEditors ...RequestEditorFn) (*SyncKnowledgeSourceResponse, error)
 
-	// GetKnowledgeUsageWithResponse Where a source's documents were used
+	// DeleteKnowledgeUploadWithResponse Delete an uploaded file
 	//
-	// Per document of the source with a use or a verdict in the last days days (ADR 0027, decision 3): the distinct runs that used it and the verdicts given, agents' and people's apart; at most 500, the most used first, then by id. 404 knowledge-source-not-found.
+	// The upload at path, with its stored file when no other upload holds the same content; the next sync, which the deletion makes due, leaves it out of the snapshot. 404 knowledge-file-not-found, 409 not-an-upload-source. Audited as knowledge_document.deleted.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
-	// Corresponds with GET /v1/orgs/{org}/knowledge/usage (the `GetKnowledgeUsage` operationId).
-	GetKnowledgeUsageWithResponse(ctx context.Context, org OrgRef, params *GetKnowledgeUsageParams, reqEditors ...RequestEditorFn) (*GetKnowledgeUsageResponse, error)
+	// Corresponds with DELETE /v1/orgs/{org}/knowledge/sources/{source}/uploads (the `DeleteKnowledgeUpload` operationId).
+	DeleteKnowledgeUploadWithResponse(ctx context.Context, org OrgRef, source SourceRef, params *DeleteKnowledgeUploadParams, reqEditors ...RequestEditorFn) (*DeleteKnowledgeUploadResponse, error)
+
+	// UploadKnowledgeFilesWithBodyWithResponse Upload files to an upload source
+	//
+	// Each part named files is one file at the path its file name gives, which may hold folders (runbooks/db/disk.md); a path that is not relative and clean is 400. Text, Markdown, HTML, JSON, YAML, PDF or an Office file (the last two are converted when goald has a conversion service, else left out of the snapshot and listed) of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most that and 1 MiB more. The upload makes the source due, and its next sync writes the snapshot that holds them. Every file is checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as knowledge_document.uploaded.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/uploads (the `UploadKnowledgeFiles` operationId).
+	UploadKnowledgeFilesWithBodyWithResponse(ctx context.Context, org OrgRef, source SourceRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadKnowledgeFilesResponse, error)
 
 	// ListMemberTokensWithResponse Every member's personal tokens in the organization
 	//
@@ -26172,7 +28146,7 @@ type ClientWithResponsesInterface interface {
 
 	// PutOrgPolicyWithBodyWithResponse Replace the organization's policy
 	//
-	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -26181,12 +28155,30 @@ type ClientWithResponsesInterface interface {
 
 	// PutOrgPolicyWithResponse Replace the organization's policy
 	//
-	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+	// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
 	PutOrgPolicyWithResponse(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, body PutOrgPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*PutOrgPolicyResponse, error)
+
+	// TestRepositoryWithBodyWithResponse Test a token's read and push access to a repository
+	//
+	// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
+	TestRepositoryWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestRepositoryResponse, error)
+
+	// TestRepositoryWithResponse Test a token's read and push access to a repository
+	//
+	// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
+	TestRepositoryWithResponse(ctx context.Context, org OrgRef, body TestRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*TestRepositoryResponse, error)
 
 	// ListRunsWithResponse The organization's agent runs across the factories the caller sees, newest first
 	//
@@ -26213,15 +28205,6 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
 	GetRunWithResponse(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*GetRunResponse, error)
 
-	// ListRunKnowledgeWithResponse The knowledge documents a run used, with the verdicts given on them for it
-	//
-	// Its uses by time, document and kind, and the verdicts agents and people gave for the run (ADR 0027). 404 for a run of another organization.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with GET /v1/orgs/{org}/runs/{run}/knowledge (the `ListRunKnowledge` operationId).
-	ListRunKnowledgeWithResponse(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*ListRunKnowledgeResponse, error)
-
 	// SearchOrgWithResponse Find the organization's items, agents, factories and connections, for the shell's search box
 	//
 	// One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
@@ -26230,6 +28213,105 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/search (the `SearchOrg` operationId).
 	SearchOrgWithResponse(ctx context.Context, org OrgRef, params *SearchOrgParams, reqEditors ...RequestEditorFn) (*SearchOrgResponse, error)
+
+	// ListSecretsWithResponse The organization's secrets
+	//
+	// By name, each with its source, description, factory scope, expiry, reminder, last use and what uses it. Never a value.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/secrets (the `ListSecrets` operationId).
+	ListSecretsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListSecretsResponse, error)
+
+	// CreateSecretWithBodyWithResponse Create a secret
+	//
+	// A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/secrets (the `CreateSecret` operationId).
+	CreateSecretWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSecretResponse, error)
+
+	// CreateSecretWithResponse Create a secret
+	//
+	// A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/secrets (the `CreateSecret` operationId).
+	CreateSecretWithResponse(ctx context.Context, org OrgRef, body CreateSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSecretResponse, error)
+
+	// ImportSecretsWithBodyWithResponse Import secrets from a .env or YAML text
+	//
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/secrets/import (the `ImportSecrets` operationId).
+	ImportSecretsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ImportSecretsResponse, error)
+
+	// ImportSecretsWithResponse Import secrets from a .env or YAML text
+	//
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/secrets/import (the `ImportSecrets` operationId).
+	ImportSecretsWithResponse(ctx context.Context, org OrgRef, body ImportSecretsJSONRequestBody, reqEditors ...RequestEditorFn) (*ImportSecretsResponse, error)
+
+	// DeleteSecretWithResponse Delete a secret
+	//
+	// 409 secret-in-use, deleting nothing, while something uses it: the problem's uses names each use. 404 secret-not-found. Needs a sign-in from the last 10 minutes. Audited as secret.deleted.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/secrets/{secret} (the `DeleteSecret` operationId).
+	DeleteSecretWithResponse(ctx context.Context, org OrgRef, secret SecretRef, reqEditors ...RequestEditorFn) (*DeleteSecretResponse, error)
+
+	// GetSecretWithResponse One secret, never its value
+	//
+	// 404 secret-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/secrets/{secret} (the `GetSecret` operationId).
+	GetSecretWithResponse(ctx context.Context, org OrgRef, secret SecretRef, reqEditors ...RequestEditorFn) (*GetSecretResponse, error)
+
+	// PatchSecretWithBodyWithResponse Change a secret's description, scope, expiry or reminder
+	//
+	// Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/secrets/{secret} (the `PatchSecret` operationId).
+	PatchSecretWithBodyWithResponse(ctx context.Context, org OrgRef, secret SecretRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchSecretResponse, error)
+
+	// PatchSecretWithResponse Change a secret's description, scope, expiry or reminder
+	//
+	// Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/secrets/{secret} (the `PatchSecret` operationId).
+	PatchSecretWithResponse(ctx context.Context, org OrgRef, secret SecretRef, body PatchSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchSecretResponse, error)
+
+	// ReplaceSecretValueWithBodyWithResponse Replace a secret's value
+	//
+	// Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/secrets/{secret}/value (the `ReplaceSecretValue` operationId).
+	ReplaceSecretValueWithBodyWithResponse(ctx context.Context, org OrgRef, secret SecretRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReplaceSecretValueResponse, error)
+
+	// ReplaceSecretValueWithResponse Replace a secret's value
+	//
+	// Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/secrets/{secret}/value (the `ReplaceSecretValue` operationId).
+	ReplaceSecretValueWithResponse(ctx context.Context, org OrgRef, secret SecretRef, body ReplaceSecretValueJSONRequestBody, reqEditors ...RequestEditorFn) (*ReplaceSecretValueResponse, error)
 
 	// GetOrgSettingsWithResponse The organization's settings, slot caps included
 	//
@@ -26255,6 +28337,51 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PATCH /v1/orgs/{org}/settings (the `UpdateOrgSettings` operationId).
 	UpdateOrgSettingsWithResponse(ctx context.Context, org OrgRef, body UpdateOrgSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateOrgSettingsResponse, error)
+
+	// GetNotificationSettingsWithResponse The organization's notification settings
+	//
+	// The secret whose Slack bot token sends the organization's Slack notifications (ADR 0037), by name; null while Slack is off. Never the token itself.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/settings/notifications (the `GetNotificationSettings` operationId).
+	GetNotificationSettingsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetNotificationSettingsResponse, error)
+
+	// SetNotificationSettingsWithBodyWithResponse Choose the secret that sends the organization's Slack notifications
+	//
+	// Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/settings/notifications (the `SetNotificationSettings` operationId).
+	SetNotificationSettingsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetNotificationSettingsResponse, error)
+
+	// SetNotificationSettingsWithResponse Choose the secret that sends the organization's Slack notifications
+	//
+	// Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/settings/notifications (the `SetNotificationSettings` operationId).
+	SetNotificationSettingsWithResponse(ctx context.Context, org OrgRef, body SetNotificationSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*SetNotificationSettingsResponse, error)
+
+	// TestNotificationSettingsWithBodyWithResponse Test a Slack bot token without saving it
+	//
+	// Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/settings/notifications/test (the `TestNotificationSettings` operationId).
+	TestNotificationSettingsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestNotificationSettingsResponse, error)
+
+	// TestNotificationSettingsWithResponse Test a Slack bot token without saving it
+	//
+	// Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/settings/notifications/test (the `TestNotificationSettings` operationId).
+	TestNotificationSettingsWithResponse(ctx context.Context, org OrgRef, body TestNotificationSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*TestNotificationSettingsResponse, error)
 
 	// ClearSignupDomainWithResponse Stop sign-up by domain
 	//
@@ -26491,6 +28618,54 @@ func (r GetDeviceRequestResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetDeviceRequestResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetCatalogResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ToolTemplateList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetCatalogResponse) GetJSON200() *ToolTemplateList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetCatalogResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetCatalogResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCatalogResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCatalogResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetCatalogResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -26868,6 +29043,54 @@ func (r GetOrgResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetOrgResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetAccessResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Access
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAccessResponse) GetJSON200() *Access {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetAccessResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAccessResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAccessResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAccessResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAccessResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -29082,6 +31305,54 @@ func (r PutDraftFileResponse) ContentType() string {
 	return ""
 }
 
+type GetDraftKnowledgePreviewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *KnowledgePreview
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetDraftKnowledgePreviewResponse) GetJSON200() *KnowledgePreview {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetDraftKnowledgePreviewResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetDraftKnowledgePreviewResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDraftKnowledgePreviewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDraftKnowledgePreviewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDraftKnowledgePreviewResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetDraftModelResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -29508,6 +31779,54 @@ func (r ValidateDraftResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ValidateDraftResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TestEnvironmentResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EnvironmentTestResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TestEnvironmentResponse) GetJSON200() *EnvironmentTestResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TestEnvironmentResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TestEnvironmentResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TestEnvironmentResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TestEnvironmentResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TestEnvironmentResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -33089,73 +35408,32 @@ func (r SetTouchReasonResponse) ContentType() string {
 	return ""
 }
 
-type DeleteKnowledgeDocumentResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r DeleteKnowledgeDocumentResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r DeleteKnowledgeDocumentResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r DeleteKnowledgeDocumentResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DeleteKnowledgeDocumentResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r DeleteKnowledgeDocumentResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type GetKnowledgeDocumentResponse struct {
+type CheckKnowledgeSourceResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *KnowledgeDocumentText
+	JSON200 *KnowledgeCheck
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Problem
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GetKnowledgeDocumentResponse) GetJSON200() *KnowledgeDocumentText {
+func (r CheckKnowledgeSourceResponse) GetJSON200() *KnowledgeCheck {
 	return r.JSON200
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r GetKnowledgeDocumentResponse) GetApplicationproblemJSONDefault() *Problem {
+func (r CheckKnowledgeSourceResponse) GetApplicationproblemJSONDefault() *Problem {
 	return r.ApplicationproblemJSONDefault
 }
 
 // GetBody returns the raw response body bytes
-func (r GetKnowledgeDocumentResponse) GetBody() []byte {
+func (r CheckKnowledgeSourceResponse) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r GetKnowledgeDocumentResponse) Status() string {
+func (r CheckKnowledgeSourceResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -33163,7 +35441,7 @@ func (r GetKnowledgeDocumentResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GetKnowledgeDocumentResponse) StatusCode() int {
+func (r CheckKnowledgeSourceResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -33171,88 +35449,39 @@ func (r GetKnowledgeDocumentResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r GetKnowledgeDocumentResponse) ContentType() string {
+func (r CheckKnowledgeSourceResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
 }
 
-// GetKnowledgeDocumentContentResponse200Headers the declared response headers of an HTTP 200 response for GetKnowledgeDocumentContent
-type GetKnowledgeDocumentContentResponse200Headers struct {
-	ContentDisposition  string
-	XContentTypeOptions string
-}
-
-type GetKnowledgeDocumentContentResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-	// Headers200 the parsed response headers for an HTTP 200 response
-	Headers200 *GetKnowledgeDocumentContentResponse200Headers
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r GetKnowledgeDocumentContentResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r GetKnowledgeDocumentContentResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r GetKnowledgeDocumentContentResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetKnowledgeDocumentContentResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r GetKnowledgeDocumentContentResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ListKnowledgeDocumentUsesResponse struct {
+type FindKnowledgeFilesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *KnowledgeDocumentUsePage
+	JSON200 *KnowledgeFileList
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Problem
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListKnowledgeDocumentUsesResponse) GetJSON200() *KnowledgeDocumentUsePage {
+func (r FindKnowledgeFilesResponse) GetJSON200() *KnowledgeFileList {
 	return r.JSON200
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r ListKnowledgeDocumentUsesResponse) GetApplicationproblemJSONDefault() *Problem {
+func (r FindKnowledgeFilesResponse) GetApplicationproblemJSONDefault() *Problem {
 	return r.ApplicationproblemJSONDefault
 }
 
 // GetBody returns the raw response body bytes
-func (r ListKnowledgeDocumentUsesResponse) GetBody() []byte {
+func (r FindKnowledgeFilesResponse) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r ListKnowledgeDocumentUsesResponse) Status() string {
+func (r FindKnowledgeFilesResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -33260,7 +35489,7 @@ func (r ListKnowledgeDocumentUsesResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r ListKnowledgeDocumentUsesResponse) StatusCode() int {
+func (r FindKnowledgeFilesResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -33268,39 +35497,39 @@ func (r ListKnowledgeDocumentUsesResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ListKnowledgeDocumentUsesResponse) ContentType() string {
+func (r FindKnowledgeFilesResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
 }
 
-type GiveKnowledgeVerdictResponse struct {
+type ListKnowledgeReadsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *KnowledgeVerdict
+	JSON200 *KnowledgeReadList
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Problem
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GiveKnowledgeVerdictResponse) GetJSON200() *KnowledgeVerdict {
+func (r ListKnowledgeReadsResponse) GetJSON200() *KnowledgeReadList {
 	return r.JSON200
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r GiveKnowledgeVerdictResponse) GetApplicationproblemJSONDefault() *Problem {
+func (r ListKnowledgeReadsResponse) GetApplicationproblemJSONDefault() *Problem {
 	return r.ApplicationproblemJSONDefault
 }
 
 // GetBody returns the raw response body bytes
-func (r GiveKnowledgeVerdictResponse) GetBody() []byte {
+func (r ListKnowledgeReadsResponse) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r GiveKnowledgeVerdictResponse) Status() string {
+func (r ListKnowledgeReadsResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -33308,7 +35537,7 @@ func (r GiveKnowledgeVerdictResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GiveKnowledgeVerdictResponse) StatusCode() int {
+func (r ListKnowledgeReadsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -33316,55 +35545,7 @@ func (r GiveKnowledgeVerdictResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r GiveKnowledgeVerdictResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type SearchKnowledgeResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *KnowledgeSearchResult
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r SearchKnowledgeResponse) GetJSON200() *KnowledgeSearchResult {
-	return r.JSON200
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r SearchKnowledgeResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r SearchKnowledgeResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r SearchKnowledgeResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r SearchKnowledgeResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r SearchKnowledgeResponse) ContentType() string {
+func (r ListKnowledgeReadsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -33604,32 +35785,32 @@ func (r UpdateKnowledgeSourceResponse) ContentType() string {
 	return ""
 }
 
-type ListKnowledgeDocumentsResponse struct {
+type ListKnowledgeFilesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *KnowledgeDocumentPage
+	JSON200 *KnowledgeFilePage
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Problem
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListKnowledgeDocumentsResponse) GetJSON200() *KnowledgeDocumentPage {
+func (r ListKnowledgeFilesResponse) GetJSON200() *KnowledgeFilePage {
 	return r.JSON200
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r ListKnowledgeDocumentsResponse) GetApplicationproblemJSONDefault() *Problem {
+func (r ListKnowledgeFilesResponse) GetApplicationproblemJSONDefault() *Problem {
 	return r.ApplicationproblemJSONDefault
 }
 
 // GetBody returns the raw response body bytes
-func (r ListKnowledgeDocumentsResponse) GetBody() []byte {
+func (r ListKnowledgeFilesResponse) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r ListKnowledgeDocumentsResponse) Status() string {
+func (r ListKnowledgeFilesResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -33637,7 +35818,7 @@ func (r ListKnowledgeDocumentsResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r ListKnowledgeDocumentsResponse) StatusCode() int {
+func (r ListKnowledgeFilesResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -33645,39 +35826,32 @@ func (r ListKnowledgeDocumentsResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ListKnowledgeDocumentsResponse) ContentType() string {
+func (r ListKnowledgeFilesResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
 }
 
-type UploadKnowledgeDocumentsResponse struct {
+type GetKnowledgeFileResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	// JSON202 the response for an HTTP 202 `application/json` response
-	JSON202 *KnowledgeDocumentList
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Problem
 }
 
-// GetJSON202 returns the response for an HTTP 202 `application/json` response
-func (r UploadKnowledgeDocumentsResponse) GetJSON202() *KnowledgeDocumentList {
-	return r.JSON202
-}
-
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r UploadKnowledgeDocumentsResponse) GetApplicationproblemJSONDefault() *Problem {
+func (r GetKnowledgeFileResponse) GetApplicationproblemJSONDefault() *Problem {
 	return r.ApplicationproblemJSONDefault
 }
 
 // GetBody returns the raw response body bytes
-func (r UploadKnowledgeDocumentsResponse) GetBody() []byte {
+func (r GetKnowledgeFileResponse) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r UploadKnowledgeDocumentsResponse) Status() string {
+func (r GetKnowledgeFileResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -33685,7 +35859,7 @@ func (r UploadKnowledgeDocumentsResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r UploadKnowledgeDocumentsResponse) StatusCode() int {
+func (r GetKnowledgeFileResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -33693,7 +35867,7 @@ func (r UploadKnowledgeDocumentsResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r UploadKnowledgeDocumentsResponse) ContentType() string {
+func (r GetKnowledgeFileResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -33741,32 +35915,25 @@ func (r SyncKnowledgeSourceResponse) ContentType() string {
 	return ""
 }
 
-type GetKnowledgeUsageResponse struct {
+type DeleteKnowledgeUploadResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *KnowledgeUsage
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Problem
 }
 
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GetKnowledgeUsageResponse) GetJSON200() *KnowledgeUsage {
-	return r.JSON200
-}
-
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r GetKnowledgeUsageResponse) GetApplicationproblemJSONDefault() *Problem {
+func (r DeleteKnowledgeUploadResponse) GetApplicationproblemJSONDefault() *Problem {
 	return r.ApplicationproblemJSONDefault
 }
 
 // GetBody returns the raw response body bytes
-func (r GetKnowledgeUsageResponse) GetBody() []byte {
+func (r DeleteKnowledgeUploadResponse) GetBody() []byte {
 	return r.Body
 }
 
 // Status returns HTTPResponse.Status
-func (r GetKnowledgeUsageResponse) Status() string {
+func (r DeleteKnowledgeUploadResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -33774,7 +35941,7 @@ func (r GetKnowledgeUsageResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GetKnowledgeUsageResponse) StatusCode() int {
+func (r DeleteKnowledgeUploadResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -33782,7 +35949,55 @@ func (r GetKnowledgeUsageResponse) StatusCode() int {
 }
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r GetKnowledgeUsageResponse) ContentType() string {
+func (r DeleteKnowledgeUploadResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UploadKnowledgeFilesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *KnowledgeUploadList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r UploadKnowledgeFilesResponse) GetJSON202() *KnowledgeUploadList {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r UploadKnowledgeFilesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r UploadKnowledgeFilesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UploadKnowledgeFilesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UploadKnowledgeFilesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UploadKnowledgeFilesResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -34365,6 +36580,54 @@ func (r PutOrgPolicyResponse) ContentType() string {
 	return ""
 }
 
+type TestRepositoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RepositoryTestResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TestRepositoryResponse) GetJSON200() *RepositoryTestResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TestRepositoryResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TestRepositoryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TestRepositoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TestRepositoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TestRepositoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListRunsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -34516,54 +36779,6 @@ func (r GetRunResponse) ContentType() string {
 	return ""
 }
 
-type ListRunKnowledgeResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *RunKnowledge
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListRunKnowledgeResponse) GetJSON200() *RunKnowledge {
-	return r.JSON200
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r ListRunKnowledgeResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r ListRunKnowledgeResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r ListRunKnowledgeResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ListRunKnowledgeResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ListRunKnowledgeResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
 type SearchOrgResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -34606,6 +36821,335 @@ func (r SearchOrgResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r SearchOrgResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListSecretsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SecretList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListSecretsResponse) GetJSON200() *SecretList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListSecretsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListSecretsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListSecretsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListSecretsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListSecretsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateSecretResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Secret
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateSecretResponse) GetJSON201() *Secret {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateSecretResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateSecretResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateSecretResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateSecretResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateSecretResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ImportSecretsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SecretImportResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ImportSecretsResponse) GetJSON200() *SecretImportResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ImportSecretsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ImportSecretsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ImportSecretsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ImportSecretsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ImportSecretsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteSecretResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DeleteSecretResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteSecretResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteSecretResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteSecretResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteSecretResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetSecretResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Secret
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetSecretResponse) GetJSON200() *Secret {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetSecretResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetSecretResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSecretResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSecretResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetSecretResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PatchSecretResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Secret
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PatchSecretResponse) GetJSON200() *Secret {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PatchSecretResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PatchSecretResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchSecretResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchSecretResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PatchSecretResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReplaceSecretValueResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Secret
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReplaceSecretValueResponse) GetJSON200() *Secret {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ReplaceSecretValueResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ReplaceSecretValueResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReplaceSecretValueResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReplaceSecretValueResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReplaceSecretValueResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -34702,6 +37246,150 @@ func (r UpdateOrgSettingsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r UpdateOrgSettingsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetNotificationSettingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *NotificationSettings
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetNotificationSettingsResponse) GetJSON200() *NotificationSettings {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetNotificationSettingsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetNotificationSettingsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetNotificationSettingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetNotificationSettingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetNotificationSettingsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SetNotificationSettingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *NotificationSettings
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SetNotificationSettingsResponse) GetJSON200() *NotificationSettings {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SetNotificationSettingsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SetNotificationSettingsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SetNotificationSettingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SetNotificationSettingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SetNotificationSettingsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TestNotificationSettingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *NotificationTestResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TestNotificationSettingsResponse) GetJSON200() *NotificationTestResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TestNotificationSettingsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TestNotificationSettingsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TestNotificationSettingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TestNotificationSettingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TestNotificationSettingsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -35403,6 +38091,21 @@ func (c *ClientWithResponses) GetDeviceRequestWithResponse(ctx context.Context, 
 	return ParseGetDeviceRequestResponse(rsp)
 }
 
+// GetCatalogWithResponse The tool templates
+//
+// Every template goald ships, by name: its title, description, secret slots with suggested secret names, what it adds (tools, env, files and MCP servers with suggested tool modes) and its HTTP test, if any. Values are plain or {{slot}} references to its slots.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/catalog (the `GetCatalog` operationId).
+func (c *ClientWithResponses) GetCatalogWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogResponse, error) {
+	rsp, err := c.GetCatalog(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCatalogResponse(rsp)
+}
+
 // GetHealthWithResponse Liveness of goald
 //
 // Returns a wrapper object for the known response body format(s).
@@ -35562,6 +38265,21 @@ func (c *ClientWithResponses) GetOrgWithResponse(ctx context.Context, org OrgRef
 		return nil, err
 	}
 	return ParseGetOrgResponse(rsp)
+}
+
+// GetAccessWithResponse What the organization's agents reach
+//
+// Computed from each factory's current published version, the environment tests and the secrets, over the factories the caller sees that are not archived: every MCP server, and every env variable and file that references a secret. Each row lists the factories and environments that use it with their agents, the secrets it references, and a status: missing (a secret it references does not exist), failed (its last test failed), expired or expiring (a secret's expiry has passed, or is within its reminder days), untested (a remote MCP server never tested), tested, or ok. by groups the rows by what agents reach (MCP servers, env variables, files; the default), by factory or by secret; factory keeps one factory's. reached counts what agents reach and need_attention what is missing, failed, expired or expiring, whatever by is.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/access (the `GetAccess` operationId).
+func (c *ClientWithResponses) GetAccessWithResponse(ctx context.Context, org OrgRef, params *GetAccessParams, reqEditors ...RequestEditorFn) (*GetAccessResponse, error) {
+	rsp, err := c.GetAccess(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAccessResponse(rsp)
 }
 
 // ListAPIKeysWithResponse The organization's API keys
@@ -35897,6 +38615,8 @@ func (c *ClientWithResponses) TestConnectionWithResponse(ctx context.Context, or
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /v1/orgs/{org}/credentials (the `ListCredentials` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) ListCredentialsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListCredentialsResponse, error) {
 	rsp, err := c.ListCredentials(ctx, org, reqEditors...)
 	if err != nil {
@@ -35912,6 +38632,8 @@ func (c *ClientWithResponses) ListCredentialsWithResponse(ctx context.Context, o
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) CreateCredentialWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCredentialResponse, error) {
 	rsp, err := c.CreateCredentialWithBody(ctx, org, contentType, body, reqEditors...)
 	if err != nil {
@@ -35927,6 +38649,7 @@ func (c *ClientWithResponses) CreateCredentialWithBodyWithResponse(ctx context.C
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/orgs/{org}/credentials (the `CreateCredential` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) CreateCredentialWithResponse(ctx context.Context, org OrgRef, body CreateCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCredentialResponse, error) {
 	rsp, err := c.CreateCredential(ctx, org, body, reqEditors...)
 	if err != nil {
@@ -35942,6 +38665,8 @@ func (c *ClientWithResponses) CreateCredentialWithResponse(ctx context.Context, 
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) ImportCredentialsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ImportCredentialsResponse, error) {
 	rsp, err := c.ImportCredentialsWithBody(ctx, org, contentType, body, reqEditors...)
 	if err != nil {
@@ -35957,6 +38682,7 @@ func (c *ClientWithResponses) ImportCredentialsWithBodyWithResponse(ctx context.
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/orgs/{org}/credentials/import (the `ImportCredentials` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) ImportCredentialsWithResponse(ctx context.Context, org OrgRef, body ImportCredentialsJSONRequestBody, reqEditors ...RequestEditorFn) (*ImportCredentialsResponse, error) {
 	rsp, err := c.ImportCredentials(ctx, org, body, reqEditors...)
 	if err != nil {
@@ -35972,6 +38698,8 @@ func (c *ClientWithResponses) ImportCredentialsWithResponse(ctx context.Context,
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with DELETE /v1/orgs/{org}/credentials/{credential} (the `DeleteCredential` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) DeleteCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*DeleteCredentialResponse, error) {
 	rsp, err := c.DeleteCredential(ctx, org, credential, reqEditors...)
 	if err != nil {
@@ -35985,6 +38713,8 @@ func (c *ClientWithResponses) DeleteCredentialWithResponse(ctx context.Context, 
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /v1/orgs/{org}/credentials/{credential} (the `GetCredential` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) GetCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, reqEditors ...RequestEditorFn) (*GetCredentialResponse, error) {
 	rsp, err := c.GetCredential(ctx, org, credential, reqEditors...)
 	if err != nil {
@@ -36000,6 +38730,8 @@ func (c *ClientWithResponses) GetCredentialWithResponse(ctx context.Context, org
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) PatchCredentialWithBodyWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchCredentialResponse, error) {
 	rsp, err := c.PatchCredentialWithBody(ctx, org, credential, contentType, body, reqEditors...)
 	if err != nil {
@@ -36015,6 +38747,7 @@ func (c *ClientWithResponses) PatchCredentialWithBodyWithResponse(ctx context.Co
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PATCH /v1/orgs/{org}/credentials/{credential} (the `PatchCredential` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *ClientWithResponses) PatchCredentialWithResponse(ctx context.Context, org OrgRef, credential CredentialRef, body PatchCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchCredentialResponse, error) {
 	rsp, err := c.PatchCredential(ctx, org, credential, body, reqEditors...)
 	if err != nil {
@@ -36422,6 +39155,21 @@ func (c *ClientWithResponses) PutDraftFileWithBodyWithResponse(ctx context.Conte
 	return ParsePutDraftFileResponse(rsp)
 }
 
+// GetDraftKnowledgePreviewWithResponse The Knowledge prompt section one agent gets from the draft
+//
+// "What agents see" in the editor: the section goald builds for a run of agent, from the same code as a run's. It lists the draft's sources that apply to the agent (with station and lane and work_type, as a run's appliesTo is matched), each with its entry's readWhen or its snapshot's, its file count and top folders, names those with no snapshot as not synced yet, and gives memory.yaml's facts. It reads each source's current snapshot, while a run reads the snapshot its claim pinned, so a run started earlier may see another. 404 agent-not-found for an agent the draft does not declare, 409 yaml-invalid while factory.yaml does not parse or satisfy the schema, 404 no-draft.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview (the `GetDraftKnowledgePreview` operationId).
+func (c *ClientWithResponses) GetDraftKnowledgePreviewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *GetDraftKnowledgePreviewParams, reqEditors ...RequestEditorFn) (*GetDraftKnowledgePreviewResponse, error) {
+	rsp, err := c.GetDraftKnowledgePreview(ctx, org, factory, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDraftKnowledgePreviewResponse(rsp)
+}
+
 // GetDraftModelWithResponse The draft's factory model for the Visual editor
 //
 // The model, each section's concurrency token, the fields the draft changed against its base (Edited · Undo) and where each model pointer is in factory.yaml. 409 yaml-invalid (with parse_error) while factory.yaml does not parse: Visual is read-only until it is fixed in YAML mode.
@@ -36645,6 +39393,36 @@ func (c *ClientWithResponses) ValidateDraftWithResponse(ctx context.Context, org
 		return nil, err
 	}
 	return ParseValidateDraftResponse(rsp)
+}
+
+// TestEnvironmentWithBodyWithResponse Test an environment's MCP servers or a template
+//
+// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
+func (c *ClientWithResponses) TestEnvironmentWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, environment string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestEnvironmentResponse, error) {
+	rsp, err := c.TestEnvironmentWithBody(ctx, org, factory, environment, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestEnvironmentResponse(rsp)
+}
+
+// TestEnvironmentWithResponse Test an environment's MCP servers or a template
+//
+// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
+func (c *ClientWithResponses) TestEnvironmentWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, environment string, body TestEnvironmentJSONRequestBody, reqEditors ...RequestEditorFn) (*TestEnvironmentResponse, error) {
+	rsp, err := c.TestEnvironment(ctx, org, factory, environment, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestEnvironmentResponse(rsp)
 }
 
 // ListEvalsWithResponse The eval cases of the current version, with their last tries and a summary
@@ -38112,109 +40890,64 @@ func (c *ClientWithResponses) SetTouchReasonWithResponse(ctx context.Context, or
 	return ParseSetTouchReasonResponse(rsp)
 }
 
-// DeleteKnowledgeDocumentWithResponse Delete an uploaded document
+// CheckKnowledgeSourceWithBodyWithResponse Check a source's settings before saving them
 //
-// With its chunks, and its file when no other document holds the same content. 409 not-an-upload-source for a synced document, which its next sync would bring back. Audited as knowledge_document.deleted.
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with DELETE /v1/orgs/{org}/knowledge/documents/{document} (the `DeleteKnowledgeDocument` operationId).
-func (c *ClientWithResponses) DeleteKnowledgeDocumentWithResponse(ctx context.Context, org OrgRef, document DocumentRef, reqEditors ...RequestEditorFn) (*DeleteKnowledgeDocumentResponse, error) {
-	rsp, err := c.DeleteKnowledgeDocument(ctx, org, document, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDeleteKnowledgeDocumentResponse(rsp)
-}
-
-// GetKnowledgeDocumentWithResponse A document with its indexed text
-//
-// The text is its chunks joined in order, empty until it is indexed. 404 knowledge-document-not-found.
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document} (the `GetKnowledgeDocument` operationId).
-func (c *ClientWithResponses) GetKnowledgeDocumentWithResponse(ctx context.Context, org OrgRef, document DocumentRef, reqEditors ...RequestEditorFn) (*GetKnowledgeDocumentResponse, error) {
-	rsp, err := c.GetKnowledgeDocument(ctx, org, document, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetKnowledgeDocumentResponse(rsp)
-}
-
-// GetKnowledgeDocumentContentWithResponse The uploaded original of a document
-//
-// As uploaded, as an attachment that browsers download and never render (threat row 11). 409 not-an-upload-source for a synced document, whose original stays at its source (url).
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document}/content (the `GetKnowledgeDocumentContent` operationId).
-func (c *ClientWithResponses) GetKnowledgeDocumentContentWithResponse(ctx context.Context, org OrgRef, document DocumentRef, reqEditors ...RequestEditorFn) (*GetKnowledgeDocumentContentResponse, error) {
-	rsp, err := c.GetKnowledgeDocumentContent(ctx, org, document, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetKnowledgeDocumentContentResponse(rsp)
-}
-
-// ListKnowledgeDocumentUsesWithResponse One page of the runs that used a document
-//
-// Newest first use first (ADR 0027), after the run id after; next_after, when set, is the after of the next page. Each names its run, item and factory, so a client links to them; a run of a factory the caller may not see is left out. 404 knowledge-document-not-found.
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with GET /v1/orgs/{org}/knowledge/documents/{document}/uses (the `ListKnowledgeDocumentUses` operationId).
-func (c *ClientWithResponses) ListKnowledgeDocumentUsesWithResponse(ctx context.Context, org OrgRef, document DocumentRef, params *ListKnowledgeDocumentUsesParams, reqEditors ...RequestEditorFn) (*ListKnowledgeDocumentUsesResponse, error) {
-	rsp, err := c.ListKnowledgeDocumentUses(ctx, org, document, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListKnowledgeDocumentUsesResponse(rsp)
-}
-
-// GiveKnowledgeVerdictWithBodyWithResponse Say whether a document helped or misled
-//
-// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+// The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
-// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
-func (c *ClientWithResponses) GiveKnowledgeVerdictWithBodyWithResponse(ctx context.Context, org OrgRef, document DocumentRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*GiveKnowledgeVerdictResponse, error) {
-	rsp, err := c.GiveKnowledgeVerdictWithBody(ctx, org, document, contentType, body, reqEditors...)
+// Corresponds with POST /v1/orgs/{org}/knowledge/check (the `CheckKnowledgeSource` operationId).
+func (c *ClientWithResponses) CheckKnowledgeSourceWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CheckKnowledgeSourceResponse, error) {
+	rsp, err := c.CheckKnowledgeSourceWithBody(ctx, org, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGiveKnowledgeVerdictResponse(rsp)
+	return ParseCheckKnowledgeSourceResponse(rsp)
 }
 
-// GiveKnowledgeVerdictWithResponse Say whether a document helped or misled
+// CheckKnowledgeSourceWithResponse Check a source's settings before saving them
 //
-// The caller's verdict on the document, of a run of the organization when run_id is set (ADR 0027, decision 2). There is one per person, document and run, so a second replaces the first. 404 knowledge-document-not-found, 404 run-not-found, 422 knowledge-document-not-used for a run with no use of the document. Audited as knowledge_verdict.given, without the note; sends the stream event knowledge.
+// The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether goald can read the source with them (listing it as a sync would, with the secret opened in goald and never returned), how many files it lists and, when known, their size against the limits, a warning for each picked factory the source does not suit, and the line agents will see. Nothing is stored. 400 for settings a source may not have, 404 factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
-// Corresponds with PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict (the `GiveKnowledgeVerdict` operationId).
-func (c *ClientWithResponses) GiveKnowledgeVerdictWithResponse(ctx context.Context, org OrgRef, document DocumentRef, body GiveKnowledgeVerdictJSONRequestBody, reqEditors ...RequestEditorFn) (*GiveKnowledgeVerdictResponse, error) {
-	rsp, err := c.GiveKnowledgeVerdict(ctx, org, document, body, reqEditors...)
+// Corresponds with POST /v1/orgs/{org}/knowledge/check (the `CheckKnowledgeSource` operationId).
+func (c *ClientWithResponses) CheckKnowledgeSourceWithResponse(ctx context.Context, org OrgRef, body CheckKnowledgeSourceJSONRequestBody, reqEditors ...RequestEditorFn) (*CheckKnowledgeSourceResponse, error) {
+	rsp, err := c.CheckKnowledgeSource(ctx, org, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGiveKnowledgeVerdictResponse(rsp)
+	return ParseCheckKnowledgeSourceResponse(rsp)
 }
 
-// SearchKnowledgeWithResponse Search the knowledge base as agents do
+// FindKnowledgeFilesWithResponse Find a file across every source
 //
-// What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or the named ones (404 knowledge-source-not-found for a name the organization has not).
+// The current files of every source whose path, or title in any case, starts with find, by source name then path, at most limit.
 //
 // Returns a wrapper object for the known response body format(s).
 //
-// Corresponds with GET /v1/orgs/{org}/knowledge/search (the `SearchKnowledge` operationId).
-func (c *ClientWithResponses) SearchKnowledgeWithResponse(ctx context.Context, org OrgRef, params *SearchKnowledgeParams, reqEditors ...RequestEditorFn) (*SearchKnowledgeResponse, error) {
-	rsp, err := c.SearchKnowledge(ctx, org, params, reqEditors...)
+// Corresponds with GET /v1/orgs/{org}/knowledge/files (the `FindKnowledgeFiles` operationId).
+func (c *ClientWithResponses) FindKnowledgeFilesWithResponse(ctx context.Context, org OrgRef, params *FindKnowledgeFilesParams, reqEditors ...RequestEditorFn) (*FindKnowledgeFilesResponse, error) {
+	rsp, err := c.FindKnowledgeFiles(ctx, org, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseSearchKnowledgeResponse(rsp)
+	return ParseFindKnowledgeFilesResponse(rsp)
+}
+
+// ListKnowledgeReadsWithResponse How often runs read and searched the sources' files
+//
+// The daily rollup of runs' reads and searches under /knowledge (ADR 0038 decision 10), of one source or every one, over the last days days counting today (UTC): one row per source, path, factory and day, by day, source, path and factory. A search of a whole source counts at the path ".". Factories the caller may not see are left out. 404 knowledge-source-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/knowledge/reads (the `ListKnowledgeReads` operationId).
+func (c *ClientWithResponses) ListKnowledgeReadsWithResponse(ctx context.Context, org OrgRef, params *ListKnowledgeReadsParams, reqEditors ...RequestEditorFn) (*ListKnowledgeReadsResponse, error) {
+	rsp, err := c.ListKnowledgeReads(ctx, org, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListKnowledgeReadsResponse(rsp)
 }
 
 // ListKnowledgeSourcesWithResponse The sources of the organization's knowledge base
@@ -38234,7 +40967,7 @@ func (c *ClientWithResponses) ListKnowledgeSourcesWithResponse(ctx context.Conte
 
 // CreateKnowledgeSourceWithBodyWithResponse Add a source to the knowledge base
 //
-// An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -38249,7 +40982,7 @@ func (c *ClientWithResponses) CreateKnowledgeSourceWithBodyWithResponse(ctx cont
 
 // CreateKnowledgeSourceWithResponse Add a source to the knowledge base
 //
-// An upload source holds files people upload; a synced source reads a connection whose kind syncs (its config names what: a repository, a branch and paths, a Confluence space); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a connection on an upload source or none on another, a schedule under 15 minutes), 400 connection-cannot-sync for a synced source on a connection whose kind cannot sync, 404 connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -38262,9 +40995,9 @@ func (c *ClientWithResponses) CreateKnowledgeSourceWithResponse(ctx context.Cont
 	return ParseCreateKnowledgeSourceResponse(rsp)
 }
 
-// DeleteKnowledgeSourceWithResponse Delete a source with its documents
+// DeleteKnowledgeSourceWithResponse Delete a source with its snapshots and uploads
 //
-// Its documents, their chunks and the uploaded files no other document holds go with it. 409 knowledge-source-in-use, naming them, while a factory's current version may search it. Audited as knowledge_source.deleted.
+// Its snapshots and the uploaded files no other upload holds go with it. 409 knowledge-source-in-use, naming them, while a factory's current version may search it. Audited as knowledge_source.deleted.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -38294,7 +41027,7 @@ func (c *ClientWithResponses) GetKnowledgeSourceWithResponse(ctx context.Context
 
 // UpdateKnowledgeSourceWithBodyWithResponse Change a source's title, config or schedule
 //
-// config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -38309,7 +41042,7 @@ func (c *ClientWithResponses) UpdateKnowledgeSourceWithBodyWithResponse(ctx cont
 
 // UpdateKnowledgeSourceWithResponse Change a source's title, config or schedule
 //
-// config, when present, replaces the source's config. The name, kind and connection never change. Audited as knowledge_source.updated.
+// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -38322,34 +41055,34 @@ func (c *ClientWithResponses) UpdateKnowledgeSourceWithResponse(ctx context.Cont
 	return ParseUpdateKnowledgeSourceResponse(rsp)
 }
 
-// ListKnowledgeDocumentsWithResponse One page of a source's documents
+// ListKnowledgeFilesWithResponse One page of a source's current files
 //
-// In id order, after the document id after; next_after, when set, is the after of the next page. 404 knowledge-source-not-found.
+// The files of the source's current snapshot (ADR 0038 decision 3), in path order, after the path after; next_after, when set, is the after of the next page. With find, only those whose path, or title in any case, starts with it. None before the first snapshot. 404 knowledge-source-not-found.
 //
 // Returns a wrapper object for the known response body format(s).
 //
-// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/documents (the `ListKnowledgeDocuments` operationId).
-func (c *ClientWithResponses) ListKnowledgeDocumentsWithResponse(ctx context.Context, org OrgRef, source SourceRef, params *ListKnowledgeDocumentsParams, reqEditors ...RequestEditorFn) (*ListKnowledgeDocumentsResponse, error) {
-	rsp, err := c.ListKnowledgeDocuments(ctx, org, source, params, reqEditors...)
+// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/files (the `ListKnowledgeFiles` operationId).
+func (c *ClientWithResponses) ListKnowledgeFilesWithResponse(ctx context.Context, org OrgRef, source SourceRef, params *ListKnowledgeFilesParams, reqEditors ...RequestEditorFn) (*ListKnowledgeFilesResponse, error) {
+	rsp, err := c.ListKnowledgeFiles(ctx, org, source, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseListKnowledgeDocumentsResponse(rsp)
+	return ParseListKnowledgeFilesResponse(rsp)
 }
 
-// UploadKnowledgeDocumentsWithBodyWithResponse Upload files to an upload source
+// GetKnowledgeFileWithResponse One file's Markdown
 //
-// Each part named files is one document, titled by its file name: text, Markdown, HTML, JSON or YAML of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most that and 1 MiB more. They are pending until the next sync indexes them, which the upload makes due; the same content uploaded again is the document it already is. Every file is checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as knowledge_document.uploaded.
+// The file as runs read it under /knowledge/<source>/, from the source's current snapshot. goald reads it from the snapshot's zip by range (the end record, the central directory, then the one entry), never the whole zip. 404 knowledge-source-not-found, 404 knowledge-file-not-found for a path the snapshot does not hold or a source with no snapshot yet.
 //
-// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+// Returns a wrapper object for the known response body format(s).
 //
-// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/documents (the `UploadKnowledgeDocuments` operationId).
-func (c *ClientWithResponses) UploadKnowledgeDocumentsWithBodyWithResponse(ctx context.Context, org OrgRef, source SourceRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadKnowledgeDocumentsResponse, error) {
-	rsp, err := c.UploadKnowledgeDocumentsWithBody(ctx, org, source, contentType, body, reqEditors...)
+// Corresponds with GET /v1/orgs/{org}/knowledge/sources/{source}/files/{path} (the `GetKnowledgeFile` operationId).
+func (c *ClientWithResponses) GetKnowledgeFileWithResponse(ctx context.Context, org OrgRef, source SourceRef, path KnowledgeFilePath, reqEditors ...RequestEditorFn) (*GetKnowledgeFileResponse, error) {
+	rsp, err := c.GetKnowledgeFile(ctx, org, source, path, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseUploadKnowledgeDocumentsResponse(rsp)
+	return ParseGetKnowledgeFileResponse(rsp)
 }
 
 // SyncKnowledgeSourceWithResponse Sync a source now
@@ -38367,19 +41100,34 @@ func (c *ClientWithResponses) SyncKnowledgeSourceWithResponse(ctx context.Contex
 	return ParseSyncKnowledgeSourceResponse(rsp)
 }
 
-// GetKnowledgeUsageWithResponse Where a source's documents were used
+// DeleteKnowledgeUploadWithResponse Delete an uploaded file
 //
-// Per document of the source with a use or a verdict in the last days days (ADR 0027, decision 3): the distinct runs that used it and the verdicts given, agents' and people's apart; at most 500, the most used first, then by id. 404 knowledge-source-not-found.
+// The upload at path, with its stored file when no other upload holds the same content; the next sync, which the deletion makes due, leaves it out of the snapshot. 404 knowledge-file-not-found, 409 not-an-upload-source. Audited as knowledge_document.deleted.
 //
 // Returns a wrapper object for the known response body format(s).
 //
-// Corresponds with GET /v1/orgs/{org}/knowledge/usage (the `GetKnowledgeUsage` operationId).
-func (c *ClientWithResponses) GetKnowledgeUsageWithResponse(ctx context.Context, org OrgRef, params *GetKnowledgeUsageParams, reqEditors ...RequestEditorFn) (*GetKnowledgeUsageResponse, error) {
-	rsp, err := c.GetKnowledgeUsage(ctx, org, params, reqEditors...)
+// Corresponds with DELETE /v1/orgs/{org}/knowledge/sources/{source}/uploads (the `DeleteKnowledgeUpload` operationId).
+func (c *ClientWithResponses) DeleteKnowledgeUploadWithResponse(ctx context.Context, org OrgRef, source SourceRef, params *DeleteKnowledgeUploadParams, reqEditors ...RequestEditorFn) (*DeleteKnowledgeUploadResponse, error) {
+	rsp, err := c.DeleteKnowledgeUpload(ctx, org, source, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGetKnowledgeUsageResponse(rsp)
+	return ParseDeleteKnowledgeUploadResponse(rsp)
+}
+
+// UploadKnowledgeFilesWithBodyWithResponse Upload files to an upload source
+//
+// Each part named files is one file at the path its file name gives, which may hold folders (runbooks/db/disk.md); a path that is not relative and clean is 400. Text, Markdown, HTML, JSON, YAML, PDF or an Office file (the last two are converted when goald has a conversion service, else left out of the snapshot and listed) of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most that and 1 MiB more. The upload makes the source due, and its next sync writes the snapshot that holds them. Every file is checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as knowledge_document.uploaded.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/uploads (the `UploadKnowledgeFiles` operationId).
+func (c *ClientWithResponses) UploadKnowledgeFilesWithBodyWithResponse(ctx context.Context, org OrgRef, source SourceRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadKnowledgeFilesResponse, error) {
+	rsp, err := c.UploadKnowledgeFilesWithBody(ctx, org, source, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUploadKnowledgeFilesResponse(rsp)
 }
 
 // ListMemberTokensWithResponse Every member's personal tokens in the organization
@@ -38577,7 +41325,7 @@ func (c *ClientWithResponses) GetOrgPolicyWithResponse(ctx context.Context, org 
 
 // PutOrgPolicyWithBodyWithResponse Replace the organization's policy
 //
-// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -38592,7 +41340,7 @@ func (c *ClientWithResponses) PutOrgPolicyWithBodyWithResponse(ctx context.Conte
 
 // PutOrgPolicyWithResponse Replace the organization's policy
 //
-// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. Audited as one org_policy.updated entry.
+// If-Match is the revision the caller read ("<revision>"); without it 428 precondition-required, a stale one 409 policy-conflict, which changes nothing. A model that is not one of the install's (GOAL_MODELS), a default that is not one of the allowed models, a tool setting the default does not take, a blank denied command or a box time limit that is not positive is 422 policy-invalid. An MCP tool mode cap with a mode other than allow, ask or off, or a pattern that is not a tool name or glob, is 400; a body without mcp_tool_modes keeps the stored cap. Audited as one org_policy.updated entry.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -38603,6 +41351,36 @@ func (c *ClientWithResponses) PutOrgPolicyWithResponse(ctx context.Context, org 
 		return nil, err
 	}
 	return ParsePutOrgPolicyResponse(rsp)
+}
+
+// TestRepositoryWithBodyWithResponse Test a token's read and push access to a repository
+//
+// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
+func (c *ClientWithResponses) TestRepositoryWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestRepositoryResponse, error) {
+	rsp, err := c.TestRepositoryWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestRepositoryResponse(rsp)
+}
+
+// TestRepositoryWithResponse Test a token's read and push access to a repository
+//
+// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
+func (c *ClientWithResponses) TestRepositoryWithResponse(ctx context.Context, org OrgRef, body TestRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*TestRepositoryResponse, error) {
+	rsp, err := c.TestRepository(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestRepositoryResponse(rsp)
 }
 
 // ListRunsWithResponse The organization's agent runs across the factories the caller sees, newest first
@@ -38648,21 +41426,6 @@ func (c *ClientWithResponses) GetRunWithResponse(ctx context.Context, org OrgRef
 	return ParseGetRunResponse(rsp)
 }
 
-// ListRunKnowledgeWithResponse The knowledge documents a run used, with the verdicts given on them for it
-//
-// Its uses by time, document and kind, and the verdicts agents and people gave for the run (ADR 0027). 404 for a run of another organization.
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with GET /v1/orgs/{org}/runs/{run}/knowledge (the `ListRunKnowledge` operationId).
-func (c *ClientWithResponses) ListRunKnowledgeWithResponse(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*ListRunKnowledgeResponse, error) {
-	rsp, err := c.ListRunKnowledge(ctx, org, run, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListRunKnowledgeResponse(rsp)
-}
-
 // SearchOrgWithResponse Find the organization's items, agents, factories and connections, for the shell's search box
 //
 // One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
@@ -38676,6 +41439,171 @@ func (c *ClientWithResponses) SearchOrgWithResponse(ctx context.Context, org Org
 		return nil, err
 	}
 	return ParseSearchOrgResponse(rsp)
+}
+
+// ListSecretsWithResponse The organization's secrets
+//
+// By name, each with its source, description, factory scope, expiry, reminder, last use and what uses it. Never a value.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/secrets (the `ListSecrets` operationId).
+func (c *ClientWithResponses) ListSecretsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListSecretsResponse, error) {
+	rsp, err := c.ListSecrets(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListSecretsResponse(rsp)
+}
+
+// CreateSecretWithBodyWithResponse Create a secret
+//
+// A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/secrets (the `CreateSecret` operationId).
+func (c *ClientWithResponses) CreateSecretWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSecretResponse, error) {
+	rsp, err := c.CreateSecretWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSecretResponse(rsp)
+}
+
+// CreateSecretWithResponse Create a secret
+//
+// A named secret with its value, sealed under the platform's master key and never returned (ADR 0037 decision 1). Without a scope it is open to no factory. 400 secret-invalid for a name that is not a secret name, a missing or oversized value, a description over 500 characters, a reminder without an expiry or outside 1 to 90 days, or a scope of all factories and a list; 409 secret-name-taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as secret.created.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/secrets (the `CreateSecret` operationId).
+func (c *ClientWithResponses) CreateSecretWithResponse(ctx context.Context, org OrgRef, body CreateSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSecretResponse, error) {
+	rsp, err := c.CreateSecret(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSecretResponse(rsp)
+}
+
+// ImportSecretsWithBodyWithResponse Import secrets from a .env or YAML text
+//
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/secrets/import (the `ImportSecrets` operationId).
+func (c *ClientWithResponses) ImportSecretsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ImportSecretsResponse, error) {
+	rsp, err := c.ImportSecretsWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseImportSecretsResponse(rsp)
+}
+
+// ImportSecretsWithResponse Import secrets from a .env or YAML text
+//
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/secrets/import (the `ImportSecrets` operationId).
+func (c *ClientWithResponses) ImportSecretsWithResponse(ctx context.Context, org OrgRef, body ImportSecretsJSONRequestBody, reqEditors ...RequestEditorFn) (*ImportSecretsResponse, error) {
+	rsp, err := c.ImportSecrets(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseImportSecretsResponse(rsp)
+}
+
+// DeleteSecretWithResponse Delete a secret
+//
+// 409 secret-in-use, deleting nothing, while something uses it: the problem's uses names each use. 404 secret-not-found. Needs a sign-in from the last 10 minutes. Audited as secret.deleted.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/secrets/{secret} (the `DeleteSecret` operationId).
+func (c *ClientWithResponses) DeleteSecretWithResponse(ctx context.Context, org OrgRef, secret SecretRef, reqEditors ...RequestEditorFn) (*DeleteSecretResponse, error) {
+	rsp, err := c.DeleteSecret(ctx, org, secret, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteSecretResponse(rsp)
+}
+
+// GetSecretWithResponse One secret, never its value
+//
+// 404 secret-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/secrets/{secret} (the `GetSecret` operationId).
+func (c *ClientWithResponses) GetSecretWithResponse(ctx context.Context, org OrgRef, secret SecretRef, reqEditors ...RequestEditorFn) (*GetSecretResponse, error) {
+	rsp, err := c.GetSecret(ctx, org, secret, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSecretResponse(rsp)
+}
+
+// PatchSecretWithBodyWithResponse Change a secret's description, scope, expiry or reminder
+//
+// Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{org}/secrets/{secret} (the `PatchSecret` operationId).
+func (c *ClientWithResponses) PatchSecretWithBodyWithResponse(ctx context.Context, org OrgRef, secret SecretRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchSecretResponse, error) {
+	rsp, err := c.PatchSecretWithBody(ctx, org, secret, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchSecretResponse(rsp)
+}
+
+// PatchSecretWithResponse Change a secret's description, scope, expiry or reminder
+//
+// Each property present replaces its own: scope replaces the factory scope, expiry replaces the expiry and the reminder together (an empty expiry clears both). The value changes only through PUT …/value. Audited as secret.updated. 400 secret-invalid (a patch that changes nothing too), 404 secret-not-found. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{org}/secrets/{secret} (the `PatchSecret` operationId).
+func (c *ClientWithResponses) PatchSecretWithResponse(ctx context.Context, org OrgRef, secret SecretRef, body PatchSecretJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchSecretResponse, error) {
+	rsp, err := c.PatchSecret(ctx, org, secret, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchSecretResponse(rsp)
+}
+
+// ReplaceSecretValueWithBodyWithResponse Replace a secret's value
+//
+// Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/secrets/{secret}/value (the `ReplaceSecretValue` operationId).
+func (c *ClientWithResponses) ReplaceSecretValueWithBodyWithResponse(ctx context.Context, org OrgRef, secret SecretRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReplaceSecretValueResponse, error) {
+	rsp, err := c.ReplaceSecretValueWithBody(ctx, org, secret, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReplaceSecretValueResponse(rsp)
+}
+
+// ReplaceSecretValueWithResponse Replace a secret's value
+//
+// Runs that start afterwards get the new value; nothing else changes, and the answer holds no value. Audited as secret.value_replaced. 400 secret-invalid for a missing or oversized value, 404 secret-not-found, 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/secrets/{secret}/value (the `ReplaceSecretValue` operationId).
+func (c *ClientWithResponses) ReplaceSecretValueWithResponse(ctx context.Context, org OrgRef, secret SecretRef, body ReplaceSecretValueJSONRequestBody, reqEditors ...RequestEditorFn) (*ReplaceSecretValueResponse, error) {
+	rsp, err := c.ReplaceSecretValue(ctx, org, secret, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReplaceSecretValueResponse(rsp)
 }
 
 // GetOrgSettingsWithResponse The organization's settings, slot caps included
@@ -38719,6 +41647,81 @@ func (c *ClientWithResponses) UpdateOrgSettingsWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseUpdateOrgSettingsResponse(rsp)
+}
+
+// GetNotificationSettingsWithResponse The organization's notification settings
+//
+// The secret whose Slack bot token sends the organization's Slack notifications (ADR 0037), by name; null while Slack is off. Never the token itself.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/settings/notifications (the `GetNotificationSettings` operationId).
+func (c *ClientWithResponses) GetNotificationSettingsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetNotificationSettingsResponse, error) {
+	rsp, err := c.GetNotificationSettings(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetNotificationSettingsResponse(rsp)
+}
+
+// SetNotificationSettingsWithBodyWithResponse Choose the secret that sends the organization's Slack notifications
+//
+// Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/settings/notifications (the `SetNotificationSettings` operationId).
+func (c *ClientWithResponses) SetNotificationSettingsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetNotificationSettingsResponse, error) {
+	rsp, err := c.SetNotificationSettingsWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetNotificationSettingsResponse(rsp)
+}
+
+// SetNotificationSettingsWithResponse Choose the secret that sends the organization's Slack notifications
+//
+// Sets slack_secret, or turns Slack off with null. Notifications open the secret without a factory, so it must be open to all factories. Audited as org.notifications_updated with the secret's name; saving what is already saved changes nothing. A name that is no secret is 404 secret-not-found; a secret limited to some factories is 400 secret-not-allowed and nothing is saved. While the setting names a secret, deleting that secret is 409 secret-in-use with a slack use.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/settings/notifications (the `SetNotificationSettings` operationId).
+func (c *ClientWithResponses) SetNotificationSettingsWithResponse(ctx context.Context, org OrgRef, body SetNotificationSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*SetNotificationSettingsResponse, error) {
+	rsp, err := c.SetNotificationSettings(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetNotificationSettingsResponse(rsp)
+}
+
+// TestNotificationSettingsWithBodyWithResponse Test a Slack bot token without saving it
+//
+// Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/settings/notifications/test (the `TestNotificationSettings` operationId).
+func (c *ClientWithResponses) TestNotificationSettingsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestNotificationSettingsResponse, error) {
+	rsp, err := c.TestNotificationSettingsWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestNotificationSettingsResponse(rsp)
+}
+
+// TestNotificationSettingsWithResponse Test a Slack bot token without saving it
+//
+// Opens the named secret inside goald without a factory (audited as secret.used), so it must be open to all factories, and asks Slack (auth.test) whether its token works. Without a body, or with slack_secret absent, it tests the saved setting. Nothing is saved. A token that fails is an answer, not an error: ok false with a fixed error code. No answer, error or problem carries the token. 404 secret-not-found; 400 secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/settings/notifications/test (the `TestNotificationSettings` operationId).
+func (c *ClientWithResponses) TestNotificationSettingsWithResponse(ctx context.Context, org OrgRef, body TestNotificationSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*TestNotificationSettingsResponse, error) {
+	rsp, err := c.TestNotificationSettings(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestNotificationSettingsResponse(rsp)
 }
 
 // ClearSignupDomainWithResponse Stop sign-up by domain
@@ -39033,6 +42036,39 @@ func ParseGetDeviceRequestResponse(rsp *http.Response) (*GetDeviceRequestRespons
 	return response, nil
 }
 
+// ParseGetCatalogResponse parses an HTTP response from a GetCatalogWithResponse call
+func ParseGetCatalogResponse(rsp *http.Response) (*GetCatalogResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCatalogResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ToolTemplateList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetHealthResponse parses an HTTP response from a GetHealthWithResponse call
 func ParseGetHealthResponse(rsp *http.Response) (*GetHealthResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -39273,6 +42309,39 @@ func ParseGetOrgResponse(rsp *http.Response) (*GetOrgResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Org
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAccessResponse parses an HTTP response from a GetAccessWithResponse call
+func ParseGetAccessResponse(rsp *http.Response) (*GetAccessResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAccessResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Access
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -40850,6 +43919,39 @@ func ParsePutDraftFileResponse(rsp *http.Response) (*PutDraftFileResponse, error
 	return response, nil
 }
 
+// ParseGetDraftKnowledgePreviewResponse parses an HTTP response from a GetDraftKnowledgePreviewWithResponse call
+func ParseGetDraftKnowledgePreviewResponse(rsp *http.Response) (*GetDraftKnowledgePreviewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDraftKnowledgePreviewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest KnowledgePreview
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetDraftModelResponse parses an HTTP response from a GetDraftModelWithResponse call
 func ParseGetDraftModelResponse(rsp *http.Response) (*GetDraftModelResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -41130,6 +44232,39 @@ func ParseValidateDraftResponse(rsp *http.Response) (*ValidateDraftResponse, err
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Validation
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTestEnvironmentResponse parses an HTTP response from a TestEnvironmentWithResponse call
+func ParseTestEnvironmentResponse(rsp *http.Response) (*TestEnvironmentResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TestEnvironmentResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EnvironmentTestResult
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -43654,51 +46789,22 @@ func ParseSetTouchReasonResponse(rsp *http.Response) (*SetTouchReasonResponse, e
 	return response, nil
 }
 
-// ParseDeleteKnowledgeDocumentResponse parses an HTTP response from a DeleteKnowledgeDocumentWithResponse call
-func ParseDeleteKnowledgeDocumentResponse(rsp *http.Response) (*DeleteKnowledgeDocumentResponse, error) {
+// ParseCheckKnowledgeSourceResponse parses an HTTP response from a CheckKnowledgeSourceWithResponse call
+func ParseCheckKnowledgeSourceResponse(rsp *http.Response) (*CheckKnowledgeSourceResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &DeleteKnowledgeDocumentResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case rsp.StatusCode == 204:
-		break // No content-type
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetKnowledgeDocumentResponse parses an HTTP response from a GetKnowledgeDocumentWithResponse call
-func ParseGetKnowledgeDocumentResponse(rsp *http.Response) (*GetKnowledgeDocumentResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetKnowledgeDocumentResponse{
+	response := &CheckKnowledgeSourceResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest KnowledgeDocumentText
+		var dest KnowledgeCheck
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -43716,68 +46822,22 @@ func ParseGetKnowledgeDocumentResponse(rsp *http.Response) (*GetKnowledgeDocumen
 	return response, nil
 }
 
-// ParseGetKnowledgeDocumentContentResponse parses an HTTP response from a GetKnowledgeDocumentContentWithResponse call
-func ParseGetKnowledgeDocumentContentResponse(rsp *http.Response) (*GetKnowledgeDocumentContentResponse, error) {
+// ParseFindKnowledgeFilesResponse parses an HTTP response from a FindKnowledgeFilesWithResponse call
+func ParseFindKnowledgeFilesResponse(rsp *http.Response) (*FindKnowledgeFilesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetKnowledgeDocumentContentResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	switch {
-	case rsp.StatusCode == 200:
-		var headers GetKnowledgeDocumentContentResponse200Headers
-		if values := rsp.Header.Values("Content-Disposition"); len(values) > 0 {
-			var value string
-			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Disposition", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			}
-			headers.ContentDisposition = value
-		}
-		if values := rsp.Header.Values("X-Content-Type-Options"); len(values) > 0 {
-			var value string
-			if err := runtime.BindStyledParameterWithOptions("simple", "X-Content-Type-Options", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			}
-			headers.XContentTypeOptions = value
-		}
-		response.Headers200 = &headers
-	}
-
-	return response, nil
-}
-
-// ParseListKnowledgeDocumentUsesResponse parses an HTTP response from a ListKnowledgeDocumentUsesWithResponse call
-func ParseListKnowledgeDocumentUsesResponse(rsp *http.Response) (*ListKnowledgeDocumentUsesResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ListKnowledgeDocumentUsesResponse{
+	response := &FindKnowledgeFilesResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest KnowledgeDocumentUsePage
+		var dest KnowledgeFileList
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -43795,55 +46855,22 @@ func ParseListKnowledgeDocumentUsesResponse(rsp *http.Response) (*ListKnowledgeD
 	return response, nil
 }
 
-// ParseGiveKnowledgeVerdictResponse parses an HTTP response from a GiveKnowledgeVerdictWithResponse call
-func ParseGiveKnowledgeVerdictResponse(rsp *http.Response) (*GiveKnowledgeVerdictResponse, error) {
+// ParseListKnowledgeReadsResponse parses an HTTP response from a ListKnowledgeReadsWithResponse call
+func ParseListKnowledgeReadsResponse(rsp *http.Response) (*ListKnowledgeReadsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GiveKnowledgeVerdictResponse{
+	response := &ListKnowledgeReadsResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest KnowledgeVerdict
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseSearchKnowledgeResponse parses an HTTP response from a SearchKnowledgeWithResponse call
-func ParseSearchKnowledgeResponse(rsp *http.Response) (*SearchKnowledgeResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &SearchKnowledgeResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest KnowledgeSearchResult
+		var dest KnowledgeReadList
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -44022,22 +47049,22 @@ func ParseUpdateKnowledgeSourceResponse(rsp *http.Response) (*UpdateKnowledgeSou
 	return response, nil
 }
 
-// ParseListKnowledgeDocumentsResponse parses an HTTP response from a ListKnowledgeDocumentsWithResponse call
-func ParseListKnowledgeDocumentsResponse(rsp *http.Response) (*ListKnowledgeDocumentsResponse, error) {
+// ParseListKnowledgeFilesResponse parses an HTTP response from a ListKnowledgeFilesWithResponse call
+func ParseListKnowledgeFilesResponse(rsp *http.Response) (*ListKnowledgeFilesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &ListKnowledgeDocumentsResponse{
+	response := &ListKnowledgeFilesResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest KnowledgeDocumentPage
+		var dest KnowledgeFilePage
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -44055,27 +47082,20 @@ func ParseListKnowledgeDocumentsResponse(rsp *http.Response) (*ListKnowledgeDocu
 	return response, nil
 }
 
-// ParseUploadKnowledgeDocumentsResponse parses an HTTP response from a UploadKnowledgeDocumentsWithResponse call
-func ParseUploadKnowledgeDocumentsResponse(rsp *http.Response) (*UploadKnowledgeDocumentsResponse, error) {
+// ParseGetKnowledgeFileResponse parses an HTTP response from a GetKnowledgeFileWithResponse call
+func ParseGetKnowledgeFileResponse(rsp *http.Response) (*GetKnowledgeFileResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &UploadKnowledgeDocumentsResponse{
+	response := &GetKnowledgeFileResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest KnowledgeDocumentList
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON202 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -44117,26 +47137,55 @@ func ParseSyncKnowledgeSourceResponse(rsp *http.Response) (*SyncKnowledgeSourceR
 	return response, nil
 }
 
-// ParseGetKnowledgeUsageResponse parses an HTTP response from a GetKnowledgeUsageWithResponse call
-func ParseGetKnowledgeUsageResponse(rsp *http.Response) (*GetKnowledgeUsageResponse, error) {
+// ParseDeleteKnowledgeUploadResponse parses an HTTP response from a DeleteKnowledgeUploadWithResponse call
+func ParseDeleteKnowledgeUploadResponse(rsp *http.Response) (*DeleteKnowledgeUploadResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetKnowledgeUsageResponse{
+	response := &DeleteKnowledgeUploadResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest KnowledgeUsage
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.JSON200 = &dest
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUploadKnowledgeFilesResponse parses an HTTP response from a UploadKnowledgeFilesWithResponse call
+func ParseUploadKnowledgeFilesResponse(rsp *http.Response) (*UploadKnowledgeFilesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UploadKnowledgeFilesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest KnowledgeUploadList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
@@ -44573,6 +47622,39 @@ func ParsePutOrgPolicyResponse(rsp *http.Response) (*PutOrgPolicyResponse, error
 	return response, nil
 }
 
+// ParseTestRepositoryResponse parses an HTTP response from a TestRepositoryWithResponse call
+func ParseTestRepositoryResponse(rsp *http.Response) (*TestRepositoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TestRepositoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RepositoryTestResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListRunsResponse parses an HTTP response from a ListRunsWithResponse call
 func ParseListRunsResponse(rsp *http.Response) (*ListRunsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -44685,22 +47767,22 @@ func ParseGetRunResponse(rsp *http.Response) (*GetRunResponse, error) {
 	return response, nil
 }
 
-// ParseListRunKnowledgeResponse parses an HTTP response from a ListRunKnowledgeWithResponse call
-func ParseListRunKnowledgeResponse(rsp *http.Response) (*ListRunKnowledgeResponse, error) {
+// ParseSearchOrgResponse parses an HTTP response from a SearchOrgWithResponse call
+func ParseSearchOrgResponse(rsp *http.Response) (*SearchOrgResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &ListRunKnowledgeResponse{
+	response := &SearchOrgResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RunKnowledge
+		var dest OrgSearch
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -44718,22 +47800,216 @@ func ParseListRunKnowledgeResponse(rsp *http.Response) (*ListRunKnowledgeRespons
 	return response, nil
 }
 
-// ParseSearchOrgResponse parses an HTTP response from a SearchOrgWithResponse call
-func ParseSearchOrgResponse(rsp *http.Response) (*SearchOrgResponse, error) {
+// ParseListSecretsResponse parses an HTTP response from a ListSecretsWithResponse call
+func ParseListSecretsResponse(rsp *http.Response) (*ListSecretsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &SearchOrgResponse{
+	response := &ListSecretsResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest OrgSearch
+		var dest SecretList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateSecretResponse parses an HTTP response from a CreateSecretWithResponse call
+func ParseCreateSecretResponse(rsp *http.Response) (*CreateSecretResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateSecretResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Secret
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseImportSecretsResponse parses an HTTP response from a ImportSecretsWithResponse call
+func ParseImportSecretsResponse(rsp *http.Response) (*ImportSecretsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ImportSecretsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SecretImportResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteSecretResponse parses an HTTP response from a DeleteSecretWithResponse call
+func ParseDeleteSecretResponse(rsp *http.Response) (*DeleteSecretResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteSecretResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSecretResponse parses an HTTP response from a GetSecretWithResponse call
+func ParseGetSecretResponse(rsp *http.Response) (*GetSecretResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSecretResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Secret
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchSecretResponse parses an HTTP response from a PatchSecretWithResponse call
+func ParsePatchSecretResponse(rsp *http.Response) (*PatchSecretResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchSecretResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Secret
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReplaceSecretValueResponse parses an HTTP response from a ReplaceSecretValueWithResponse call
+func ParseReplaceSecretValueResponse(rsp *http.Response) (*ReplaceSecretValueResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReplaceSecretValueResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Secret
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -44800,6 +48076,105 @@ func ParseUpdateOrgSettingsResponse(rsp *http.Response) (*UpdateOrgSettingsRespo
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest OrgSettings
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetNotificationSettingsResponse parses an HTTP response from a GetNotificationSettingsWithResponse call
+func ParseGetNotificationSettingsResponse(rsp *http.Response) (*GetNotificationSettingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetNotificationSettingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest NotificationSettings
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSetNotificationSettingsResponse parses an HTTP response from a SetNotificationSettingsWithResponse call
+func ParseSetNotificationSettingsResponse(rsp *http.Response) (*SetNotificationSettingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SetNotificationSettingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest NotificationSettings
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTestNotificationSettingsResponse parses an HTTP response from a TestNotificationSettingsWithResponse call
+func ParseTestNotificationSettingsResponse(rsp *http.Response) (*TestNotificationSettingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TestNotificationSettingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest NotificationTestResult
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -45292,6 +48667,9 @@ type ServerInterface interface {
 	// GetDeviceRequest A pending CLI sign-in, by the code its terminal shows
 	// (GET /v1/auth/device/{user_code})
 	GetDeviceRequest(w http.ResponseWriter, r *http.Request, userCode string)
+	// GetCatalog The tool templates
+	// (GET /v1/catalog)
+	GetCatalog(w http.ResponseWriter, r *http.Request)
 	// GetHealth Liveness of goald
 	// (GET /v1/health)
 	GetHealth(w http.ResponseWriter, r *http.Request)
@@ -45316,6 +48694,9 @@ type ServerInterface interface {
 	// GetOrg One organization
 	// (GET /v1/orgs/{org})
 	GetOrg(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// GetAccess What the organization's agents reach
+	// (GET /v1/orgs/{org}/access)
+	GetAccess(w http.ResponseWriter, r *http.Request, org OrgRef, params GetAccessParams)
 	// ListAPIKeys The organization's API keys
 	// (GET /v1/orgs/{org}/api-keys)
 	ListAPIKeys(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -45372,21 +48753,33 @@ type ServerInterface interface {
 	TestConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
 	// ListCredentials The organization's credentials
 	// (GET /v1/orgs/{org}/credentials)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ListCredentials(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// CreateCredential Create a credential
 	// (POST /v1/orgs/{org}/credentials)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CreateCredential(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// ImportCredentials Import credentials from a .env or YAML text
 	// (POST /v1/orgs/{org}/credentials/import)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ImportCredentials(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// DeleteCredential Delete a credential
 	// (DELETE /v1/orgs/{org}/credentials/{credential})
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	DeleteCredential(w http.ResponseWriter, r *http.Request, org OrgRef, credential CredentialRef)
 	// GetCredential One credential, never its value
 	// (GET /v1/orgs/{org}/credentials/{credential})
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	GetCredential(w http.ResponseWriter, r *http.Request, org OrgRef, credential CredentialRef)
 	// PatchCredential Change a credential's metadata, or replace its value
 	// (PATCH /v1/orgs/{org}/credentials/{credential})
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PatchCredential(w http.ResponseWriter, r *http.Request, org OrgRef, credential CredentialRef)
 	// FormatDefinition Format a factory.yaml the way Visual saves write changed lines (Format)
 	// (POST /v1/orgs/{org}/definitions/format)
@@ -45454,6 +48847,9 @@ type ServerInterface interface {
 	// PutDraftFile Write one file of the draft exactly as sent (YAML mode)
 	// (PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path})
 	PutDraftFile(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, path FilePath, params PutDraftFileParams)
+	// GetDraftKnowledgePreview The Knowledge prompt section one agent gets from the draft
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview)
+	GetDraftKnowledgePreview(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetDraftKnowledgePreviewParams)
 	// GetDraftModel The draft's factory model for the Visual editor
 	// (GET /v1/orgs/{org}/factories/{factory}/draft/model)
 	GetDraftModel(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -45481,6 +48877,9 @@ type ServerInterface interface {
 	// ValidateDraft Validate the draft at its revision, as publish will
 	// (POST /v1/orgs/{org}/factories/{factory}/draft/validate)
 	ValidateDraft(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// TestEnvironment Test an environment's MCP servers or a template
+	// (POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test)
+	TestEnvironment(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, environment string)
 	// ListEvals The eval cases of the current version, with their last tries and a summary
 	// (GET /v1/orgs/{org}/factories/{factory}/evals)
 	ListEvals(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -45700,31 +49099,22 @@ type ServerInterface interface {
 	// SetTouchReason Say why a person had to act on an item
 	// (PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason)
 	SetTouchReason(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, event int64)
-	// DeleteKnowledgeDocument Delete an uploaded document
-	// (DELETE /v1/orgs/{org}/knowledge/documents/{document})
-	DeleteKnowledgeDocument(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef)
-	// GetKnowledgeDocument A document with its indexed text
-	// (GET /v1/orgs/{org}/knowledge/documents/{document})
-	GetKnowledgeDocument(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef)
-	// GetKnowledgeDocumentContent The uploaded original of a document
-	// (GET /v1/orgs/{org}/knowledge/documents/{document}/content)
-	GetKnowledgeDocumentContent(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef)
-	// ListKnowledgeDocumentUses One page of the runs that used a document
-	// (GET /v1/orgs/{org}/knowledge/documents/{document}/uses)
-	ListKnowledgeDocumentUses(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef, params ListKnowledgeDocumentUsesParams)
-	// GiveKnowledgeVerdict Say whether a document helped or misled
-	// (PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict)
-	GiveKnowledgeVerdict(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef)
-	// SearchKnowledge Search the knowledge base as agents do
-	// (GET /v1/orgs/{org}/knowledge/search)
-	SearchKnowledge(w http.ResponseWriter, r *http.Request, org OrgRef, params SearchKnowledgeParams)
+	// CheckKnowledgeSource Check a source's settings before saving them
+	// (POST /v1/orgs/{org}/knowledge/check)
+	CheckKnowledgeSource(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// FindKnowledgeFiles Find a file across every source
+	// (GET /v1/orgs/{org}/knowledge/files)
+	FindKnowledgeFiles(w http.ResponseWriter, r *http.Request, org OrgRef, params FindKnowledgeFilesParams)
+	// ListKnowledgeReads How often runs read and searched the sources' files
+	// (GET /v1/orgs/{org}/knowledge/reads)
+	ListKnowledgeReads(w http.ResponseWriter, r *http.Request, org OrgRef, params ListKnowledgeReadsParams)
 	// ListKnowledgeSources The sources of the organization's knowledge base
 	// (GET /v1/orgs/{org}/knowledge/sources)
 	ListKnowledgeSources(w http.ResponseWriter, r *http.Request, org OrgRef, params ListKnowledgeSourcesParams)
 	// CreateKnowledgeSource Add a source to the knowledge base
 	// (POST /v1/orgs/{org}/knowledge/sources)
 	CreateKnowledgeSource(w http.ResponseWriter, r *http.Request, org OrgRef)
-	// DeleteKnowledgeSource Delete a source with its documents
+	// DeleteKnowledgeSource Delete a source with its snapshots and uploads
 	// (DELETE /v1/orgs/{org}/knowledge/sources/{source})
 	DeleteKnowledgeSource(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef)
 	// GetKnowledgeSource One knowledge source
@@ -45733,18 +49123,21 @@ type ServerInterface interface {
 	// UpdateKnowledgeSource Change a source's title, config or schedule
 	// (PATCH /v1/orgs/{org}/knowledge/sources/{source})
 	UpdateKnowledgeSource(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef)
-	// ListKnowledgeDocuments One page of a source's documents
-	// (GET /v1/orgs/{org}/knowledge/sources/{source}/documents)
-	ListKnowledgeDocuments(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef, params ListKnowledgeDocumentsParams)
-	// UploadKnowledgeDocuments Upload files to an upload source
-	// (POST /v1/orgs/{org}/knowledge/sources/{source}/documents)
-	UploadKnowledgeDocuments(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef)
+	// ListKnowledgeFiles One page of a source's current files
+	// (GET /v1/orgs/{org}/knowledge/sources/{source}/files)
+	ListKnowledgeFiles(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef, params ListKnowledgeFilesParams)
+	// GetKnowledgeFile One file's Markdown
+	// (GET /v1/orgs/{org}/knowledge/sources/{source}/files/{path})
+	GetKnowledgeFile(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef, path KnowledgeFilePath)
 	// SyncKnowledgeSource Sync a source now
 	// (POST /v1/orgs/{org}/knowledge/sources/{source}/sync)
 	SyncKnowledgeSource(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef)
-	// GetKnowledgeUsage Where a source's documents were used
-	// (GET /v1/orgs/{org}/knowledge/usage)
-	GetKnowledgeUsage(w http.ResponseWriter, r *http.Request, org OrgRef, params GetKnowledgeUsageParams)
+	// DeleteKnowledgeUpload Delete an uploaded file
+	// (DELETE /v1/orgs/{org}/knowledge/sources/{source}/uploads)
+	DeleteKnowledgeUpload(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef, params DeleteKnowledgeUploadParams)
+	// UploadKnowledgeFiles Upload files to an upload source
+	// (POST /v1/orgs/{org}/knowledge/sources/{source}/uploads)
+	UploadKnowledgeFiles(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef)
 	// ListMemberTokens Every member's personal tokens in the organization
 	// (GET /v1/orgs/{org}/member-tokens)
 	ListMemberTokens(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -45781,6 +49174,9 @@ type ServerInterface interface {
 	// PutOrgPolicy Replace the organization's policy
 	// (PUT /v1/orgs/{org}/policy)
 	PutOrgPolicy(w http.ResponseWriter, r *http.Request, org OrgRef, params PutOrgPolicyParams)
+	// TestRepository Test a token's read and push access to a repository
+	// (POST /v1/orgs/{org}/repositories/test)
+	TestRepository(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// ListRuns The organization's agent runs across the factories the caller sees, newest first
 	// (GET /v1/orgs/{org}/runs)
 	ListRuns(w http.ResponseWriter, r *http.Request, org OrgRef, params ListRunsParams)
@@ -45790,18 +49186,45 @@ type ServerInterface interface {
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(w http.ResponseWriter, r *http.Request, org OrgRef, run string)
-	// ListRunKnowledge The knowledge documents a run used, with the verdicts given on them for it
-	// (GET /v1/orgs/{org}/runs/{run}/knowledge)
-	ListRunKnowledge(w http.ResponseWriter, r *http.Request, org OrgRef, run string)
 	// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
 	// (GET /v1/orgs/{org}/search)
 	SearchOrg(w http.ResponseWriter, r *http.Request, org OrgRef, params SearchOrgParams)
+	// ListSecrets The organization's secrets
+	// (GET /v1/orgs/{org}/secrets)
+	ListSecrets(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// CreateSecret Create a secret
+	// (POST /v1/orgs/{org}/secrets)
+	CreateSecret(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// ImportSecrets Import secrets from a .env or YAML text
+	// (POST /v1/orgs/{org}/secrets/import)
+	ImportSecrets(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// DeleteSecret Delete a secret
+	// (DELETE /v1/orgs/{org}/secrets/{secret})
+	DeleteSecret(w http.ResponseWriter, r *http.Request, org OrgRef, secret SecretRef)
+	// GetSecret One secret, never its value
+	// (GET /v1/orgs/{org}/secrets/{secret})
+	GetSecret(w http.ResponseWriter, r *http.Request, org OrgRef, secret SecretRef)
+	// PatchSecret Change a secret's description, scope, expiry or reminder
+	// (PATCH /v1/orgs/{org}/secrets/{secret})
+	PatchSecret(w http.ResponseWriter, r *http.Request, org OrgRef, secret SecretRef)
+	// ReplaceSecretValue Replace a secret's value
+	// (PUT /v1/orgs/{org}/secrets/{secret}/value)
+	ReplaceSecretValue(w http.ResponseWriter, r *http.Request, org OrgRef, secret SecretRef)
 	// GetOrgSettings The organization's settings, slot caps included
 	// (GET /v1/orgs/{org}/settings)
 	GetOrgSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// UpdateOrgSettings Change the organization's settings
 	// (PATCH /v1/orgs/{org}/settings)
 	UpdateOrgSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// GetNotificationSettings The organization's notification settings
+	// (GET /v1/orgs/{org}/settings/notifications)
+	GetNotificationSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// SetNotificationSettings Choose the secret that sends the organization's Slack notifications
+	// (PUT /v1/orgs/{org}/settings/notifications)
+	SetNotificationSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// TestNotificationSettings Test a Slack bot token without saving it
+	// (POST /v1/orgs/{org}/settings/notifications/test)
+	TestNotificationSettings(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// ClearSignupDomain Stop sign-up by domain
 	// (DELETE /v1/orgs/{org}/settings/signup-domain)
 	ClearSignupDomain(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -45886,6 +49309,20 @@ func (siw *ServerInterfaceWrapper) GetDeviceRequest(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetDeviceRequest(w, r, userCode)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCatalog operation middleware
+func (siw *ServerInterfaceWrapper) GetCatalog(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCatalog(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -46022,6 +49459,61 @@ func (siw *ServerInterfaceWrapper) GetOrg(w http.ResponseWriter, r *http.Request
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetOrg(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAccess operation middleware
+func (siw *ServerInterfaceWrapper) GetAccess(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAccessParams
+
+	// ------------- Optional query parameter "by" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "by", r.URL.Query(), &params.By, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "by"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "by", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "factory" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "factory", r.URL.Query(), &params.Factory, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "factory"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAccess(w, r, org, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -47961,6 +51453,96 @@ func (siw *ServerInterfaceWrapper) PutDraftFile(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// GetDraftKnowledgePreview operation middleware
+func (siw *ServerInterfaceWrapper) GetDraftKnowledgePreview(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetDraftKnowledgePreviewParams
+
+	// ------------- Required query parameter "agent" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "agent", r.URL.Query(), &params.Agent, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "agent"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agent", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "station" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "station", r.URL.Query(), &params.Station, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "station"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "station", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "lane" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "lane", r.URL.Query(), &params.Lane, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "lane"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lane", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "work_type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "work_type", r.URL.Query(), &params.WorkType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "work_type"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "work_type", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDraftKnowledgePreview(w, r, org, factory, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetDraftModel operation middleware
 func (siw *ServerInterfaceWrapper) GetDraftModel(w http.ResponseWriter, r *http.Request) {
 
@@ -48358,6 +51940,50 @@ func (siw *ServerInterfaceWrapper) ValidateDraft(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ValidateDraft(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TestEnvironment operation middleware
+func (siw *ServerInterfaceWrapper) TestEnvironment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "environment" -------------
+	var environment string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "environment", r.PathValue("environment"), &environment, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "environment", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestEnvironment(w, r, org, factory, environment)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -51605,8 +55231,8 @@ func (siw *ServerInterfaceWrapper) SetTouchReason(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
-// DeleteKnowledgeDocument operation middleware
-func (siw *ServerInterfaceWrapper) DeleteKnowledgeDocument(w http.ResponseWriter, r *http.Request) {
+// CheckKnowledgeSource operation middleware
+func (siw *ServerInterfaceWrapper) CheckKnowledgeSource(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -51620,17 +55246,8 @@ func (siw *ServerInterfaceWrapper) DeleteKnowledgeDocument(w http.ResponseWriter
 		return
 	}
 
-	// ------------- Path parameter "document" -------------
-	var document DocumentRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "document", r.PathValue("document"), &document, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "document", Err: err})
-		return
-	}
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteKnowledgeDocument(w, r, org, document)
+		siw.Handler.CheckKnowledgeSource(w, r, org)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -51640,8 +55257,8 @@ func (siw *ServerInterfaceWrapper) DeleteKnowledgeDocument(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
-// GetKnowledgeDocument operation middleware
-func (siw *ServerInterfaceWrapper) GetKnowledgeDocument(w http.ResponseWriter, r *http.Request) {
+// FindKnowledgeFiles operation middleware
+func (siw *ServerInterfaceWrapper) FindKnowledgeFiles(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -51652,100 +55269,21 @@ func (siw *ServerInterfaceWrapper) GetKnowledgeDocument(w http.ResponseWriter, r
 	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "document" -------------
-	var document DocumentRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "document", r.PathValue("document"), &document, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "document", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetKnowledgeDocument(w, r, org, document)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetKnowledgeDocumentContent operation middleware
-func (siw *ServerInterfaceWrapper) GetKnowledgeDocumentContent(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "document" -------------
-	var document DocumentRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "document", r.PathValue("document"), &document, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "document", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetKnowledgeDocumentContent(w, r, org, document)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListKnowledgeDocumentUses operation middleware
-func (siw *ServerInterfaceWrapper) ListKnowledgeDocumentUses(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "document" -------------
-	var document DocumentRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "document", r.PathValue("document"), &document, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "document", Err: err})
 		return
 	}
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params ListKnowledgeDocumentUsesParams
+	var params FindKnowledgeFilesParams
 
-	// ------------- Optional query parameter "after" -------------
+	// ------------- Required query parameter "find" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "find", r.URL.Query(), &params.Find, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "find"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "find", Err: err})
 		}
 		return
 	}
@@ -51764,7 +55302,7 @@ func (siw *ServerInterfaceWrapper) ListKnowledgeDocumentUses(w http.ResponseWrit
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListKnowledgeDocumentUses(w, r, org, document, params)
+		siw.Handler.FindKnowledgeFiles(w, r, org, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -51774,43 +55312,8 @@ func (siw *ServerInterfaceWrapper) ListKnowledgeDocumentUses(w http.ResponseWrit
 	handler.ServeHTTP(w, r)
 }
 
-// GiveKnowledgeVerdict operation middleware
-func (siw *ServerInterfaceWrapper) GiveKnowledgeVerdict(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "document" -------------
-	var document DocumentRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "document", r.PathValue("document"), &document, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "document", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GiveKnowledgeVerdict(w, r, org, document)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// SearchKnowledge operation middleware
-func (siw *ServerInterfaceWrapper) SearchKnowledge(w http.ResponseWriter, r *http.Request) {
+// ListKnowledgeReads operation middleware
+func (siw *ServerInterfaceWrapper) ListKnowledgeReads(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -51825,24 +55328,11 @@ func (siw *ServerInterfaceWrapper) SearchKnowledge(w http.ResponseWriter, r *htt
 	}
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params SearchKnowledgeParams
-
-	// ------------- Required query parameter "q" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, true, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
-		}
-		return
-	}
+	var params ListKnowledgeReadsParams
 
 	// ------------- Optional query parameter "source" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "source", r.URL.Query(), &params.Source, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "source", r.URL.Query(), &params.Source, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
@@ -51853,21 +55343,21 @@ func (siw *ServerInterfaceWrapper) SearchKnowledge(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// ------------- Optional query parameter "limit" -------------
+	// ------------- Optional query parameter "days" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "days", r.URL.Query(), &params.Days, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "days"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "days", Err: err})
 		}
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SearchKnowledge(w, r, org, params)
+		siw.Handler.ListKnowledgeReads(w, r, org, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -52050,8 +55540,8 @@ func (siw *ServerInterfaceWrapper) UpdateKnowledgeSource(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
-// ListKnowledgeDocuments operation middleware
-func (siw *ServerInterfaceWrapper) ListKnowledgeDocuments(w http.ResponseWriter, r *http.Request) {
+// ListKnowledgeFiles operation middleware
+func (siw *ServerInterfaceWrapper) ListKnowledgeFiles(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -52075,7 +55565,20 @@ func (siw *ServerInterfaceWrapper) ListKnowledgeDocuments(w http.ResponseWriter,
 	}
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params ListKnowledgeDocumentsParams
+	var params ListKnowledgeFilesParams
+
+	// ------------- Optional query parameter "find" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "find", r.URL.Query(), &params.Find, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "find"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "find", Err: err})
+		}
+		return
+	}
 
 	// ------------- Optional query parameter "after" -------------
 
@@ -52104,7 +55607,7 @@ func (siw *ServerInterfaceWrapper) ListKnowledgeDocuments(w http.ResponseWriter,
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListKnowledgeDocuments(w, r, org, source, params)
+		siw.Handler.ListKnowledgeFiles(w, r, org, source, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -52114,8 +55617,8 @@ func (siw *ServerInterfaceWrapper) ListKnowledgeDocuments(w http.ResponseWriter,
 	handler.ServeHTTP(w, r)
 }
 
-// UploadKnowledgeDocuments operation middleware
-func (siw *ServerInterfaceWrapper) UploadKnowledgeDocuments(w http.ResponseWriter, r *http.Request) {
+// GetKnowledgeFile operation middleware
+func (siw *ServerInterfaceWrapper) GetKnowledgeFile(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -52138,8 +55641,17 @@ func (siw *ServerInterfaceWrapper) UploadKnowledgeDocuments(w http.ResponseWrite
 		return
 	}
 
+	// ------------- Path parameter "path" -------------
+	var path KnowledgeFilePath
+
+	err = runtime.BindStyledParameterWithOptions("simple", "path", r.PathValue("path"), &path, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UploadKnowledgeDocuments(w, r, org, source)
+		siw.Handler.GetKnowledgeFile(w, r, org, source, path)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -52184,8 +55696,8 @@ func (siw *ServerInterfaceWrapper) SyncKnowledgeSource(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
-// GetKnowledgeUsage operation middleware
-func (siw *ServerInterfaceWrapper) GetKnowledgeUsage(w http.ResponseWriter, r *http.Request) {
+// DeleteKnowledgeUpload operation middleware
+func (siw *ServerInterfaceWrapper) DeleteKnowledgeUpload(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -52199,37 +55711,68 @@ func (siw *ServerInterfaceWrapper) GetKnowledgeUsage(w http.ResponseWriter, r *h
 		return
 	}
 
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetKnowledgeUsageParams
+	// ------------- Path parameter "source" -------------
+	var source SourceRef
 
-	// ------------- Required query parameter "source" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, true, "source", r.URL.Query(), &params.Source, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	err = runtime.BindStyledParameterWithOptions("simple", "source", r.PathValue("source"), &source, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "source"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "source", Err: err})
-		}
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "source", Err: err})
 		return
 	}
 
-	// ------------- Optional query parameter "days" -------------
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteKnowledgeUploadParams
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "days", r.URL.Query(), &params.Days, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	// ------------- Required query parameter "path" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "path", r.URL.Query(), &params.Path, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
 		var requiredError *runtime.RequiredParameterError
 		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "days"})
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "path"})
 		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "days", Err: err})
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
 		}
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetKnowledgeUsage(w, r, org, params)
+		siw.Handler.DeleteKnowledgeUpload(w, r, org, source, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadKnowledgeFiles operation middleware
+func (siw *ServerInterfaceWrapper) UploadKnowledgeFiles(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "source" -------------
+	var source SourceRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "source", r.PathValue("source"), &source, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "source", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadKnowledgeFiles(w, r, org, source)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -52674,6 +56217,32 @@ func (siw *ServerInterfaceWrapper) PutOrgPolicy(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// TestRepository operation middleware
+func (siw *ServerInterfaceWrapper) TestRepository(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestRepository(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListRuns operation middleware
 func (siw *ServerInterfaceWrapper) ListRuns(w http.ResponseWriter, r *http.Request) {
 
@@ -52923,41 +56492,6 @@ func (siw *ServerInterfaceWrapper) GetRun(w http.ResponseWriter, r *http.Request
 	handler.ServeHTTP(w, r)
 }
 
-// ListRunKnowledge operation middleware
-func (siw *ServerInterfaceWrapper) ListRunKnowledge(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "run" -------------
-	var run string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "run", r.PathValue("run"), &run, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "run", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListRunKnowledge(w, r, org, run)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // SearchOrg operation middleware
 func (siw *ServerInterfaceWrapper) SearchOrg(w http.ResponseWriter, r *http.Request) {
 
@@ -53013,6 +56547,224 @@ func (siw *ServerInterfaceWrapper) SearchOrg(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// ListSecrets operation middleware
+func (siw *ServerInterfaceWrapper) ListSecrets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSecrets(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSecret operation middleware
+func (siw *ServerInterfaceWrapper) CreateSecret(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSecret(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ImportSecrets operation middleware
+func (siw *ServerInterfaceWrapper) ImportSecrets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ImportSecrets(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteSecret operation middleware
+func (siw *ServerInterfaceWrapper) DeleteSecret(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "secret" -------------
+	var secret SecretRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secret", r.PathValue("secret"), &secret, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secret", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteSecret(w, r, org, secret)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSecret operation middleware
+func (siw *ServerInterfaceWrapper) GetSecret(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "secret" -------------
+	var secret SecretRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secret", r.PathValue("secret"), &secret, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secret", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSecret(w, r, org, secret)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PatchSecret operation middleware
+func (siw *ServerInterfaceWrapper) PatchSecret(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "secret" -------------
+	var secret SecretRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secret", r.PathValue("secret"), &secret, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secret", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PatchSecret(w, r, org, secret)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReplaceSecretValue operation middleware
+func (siw *ServerInterfaceWrapper) ReplaceSecretValue(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "secret" -------------
+	var secret SecretRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secret", r.PathValue("secret"), &secret, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secret", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReplaceSecretValue(w, r, org, secret)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetOrgSettings operation middleware
 func (siw *ServerInterfaceWrapper) GetOrgSettings(w http.ResponseWriter, r *http.Request) {
 
@@ -53056,6 +56808,84 @@ func (siw *ServerInterfaceWrapper) UpdateOrgSettings(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateOrgSettings(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNotificationSettings operation middleware
+func (siw *ServerInterfaceWrapper) GetNotificationSettings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNotificationSettings(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetNotificationSettings operation middleware
+func (siw *ServerInterfaceWrapper) SetNotificationSettings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetNotificationSettings(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TestNotificationSettings operation middleware
+func (siw *ServerInterfaceWrapper) TestNotificationSettings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestNotificationSettings(w, r, org)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -53659,6 +57489,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/health", wrapper.GetHealth)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/auth/config", wrapper.GetAuthConfig)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/auth/device/{user_code}", wrapper.GetDeviceRequest)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/catalog", wrapper.GetCatalog)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/me", wrapper.GetMe)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/me/notifications", wrapper.GetNotificationPreferences)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/me/notifications", wrapper.PutNotificationPreferences)
@@ -53674,6 +57505,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/settings", wrapper.UpdateOrgSettings)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/settings/signup-domain", wrapper.ClearSignupDomain)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/settings/signup-domain", wrapper.SetSignupDomain)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/settings/notifications", wrapper.GetNotificationSettings)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/settings/notifications", wrapper.SetNotificationSettings)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/settings/notifications/test", wrapper.TestNotificationSettings)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/policy", wrapper.GetOrgPolicy)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/policy", wrapper.PutOrgPolicy)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/audit", wrapper.ListAudit)
@@ -53710,6 +57544,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft", wrapper.GetDraft)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft", wrapper.OpenDraft)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/model", wrapper.GetDraftModel)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/knowledge-preview", wrapper.GetDraftKnowledgePreview)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/model/{section}", wrapper.SaveDraftSection)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/model/{section}/revert", wrapper.RevertDraftSection)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/files", wrapper.ListDraftFiles)
@@ -53771,6 +57606,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.GetAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.PullAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon/clear", wrapper.ClearAndon)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/environments/{environment}/test", wrapper.TestEnvironment)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/repositories/test", wrapper.TestRepository)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks", wrapper.ListWebhookEndpoints)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks", wrapper.CreateWebhookEndpoint)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}", wrapper.DeleteWebhookEndpoint)
@@ -53795,7 +57632,6 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs", wrapper.ListRuns)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/export", wrapper.ExportRuns)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/{run}", wrapper.GetRun)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/runs/{run}/knowledge", wrapper.ListRunKnowledge)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/approve", wrapper.ApproveItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/answer", wrapper.AnswerItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/tool-approval", wrapper.DecideToolApproval)
@@ -53827,21 +57663,27 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/credentials/{credential}", wrapper.DeleteCredential)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/credentials/{credential}", wrapper.GetCredential)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/credentials/{credential}", wrapper.PatchCredential)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/access", wrapper.GetAccess)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/secrets", wrapper.ListSecrets)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/secrets", wrapper.CreateSecret)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/secrets/import", wrapper.ImportSecrets)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/secrets/{secret}", wrapper.DeleteSecret)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/secrets/{secret}", wrapper.GetSecret)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/secrets/{secret}", wrapper.PatchSecret)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/secrets/{secret}/value", wrapper.ReplaceSecretValue)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources", wrapper.ListKnowledgeSources)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources", wrapper.CreateKnowledgeSource)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}", wrapper.DeleteKnowledgeSource)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}", wrapper.GetKnowledgeSource)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}", wrapper.UpdateKnowledgeSource)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}/sync", wrapper.SyncKnowledgeSource)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}/documents", wrapper.ListKnowledgeDocuments)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}/documents", wrapper.UploadKnowledgeDocuments)
-	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/documents/{document}", wrapper.DeleteKnowledgeDocument)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/documents/{document}", wrapper.GetKnowledgeDocument)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/documents/{document}/content", wrapper.GetKnowledgeDocumentContent)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/documents/{document}/uses", wrapper.ListKnowledgeDocumentUses)
-	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/documents/{document}/verdict", wrapper.GiveKnowledgeVerdict)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/usage", wrapper.GetKnowledgeUsage)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/search", wrapper.SearchKnowledge)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}/files", wrapper.ListKnowledgeFiles)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}/files/{path}", wrapper.GetKnowledgeFile)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}/uploads", wrapper.DeleteKnowledgeUpload)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/sources/{source}/uploads", wrapper.UploadKnowledgeFiles)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/check", wrapper.CheckKnowledgeSource)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/files", wrapper.FindKnowledgeFiles)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/knowledge/reads", wrapper.ListKnowledgeReads)
 
 	return m
 }
@@ -53899,6 +57741,44 @@ type GetDeviceRequestdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetDeviceRequestdefaultApplicationProblemPlusJSONResponse) VisitGetDeviceRequestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCatalogRequestObject struct {
+}
+
+type GetCatalogResponseObject interface {
+	VisitGetCatalogResponse(w http.ResponseWriter) error
+}
+
+type GetCatalog200JSONResponse ToolTemplateList
+
+func (response GetCatalog200JSONResponse) VisitGetCatalogResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCatalogdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetCatalogdefaultApplicationProblemPlusJSONResponse) VisitGetCatalogResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -54191,6 +58071,46 @@ type GetOrgdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetOrgdefaultApplicationProblemPlusJSONResponse) VisitGetOrgResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAccessRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params GetAccessParams
+}
+
+type GetAccessResponseObject interface {
+	VisitGetAccessResponse(w http.ResponseWriter) error
+}
+
+type GetAccess200JSONResponse Access
+
+func (response GetAccess200JSONResponse) VisitGetAccessResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAccessdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetAccessdefaultApplicationProblemPlusJSONResponse) VisitGetAccessResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -56112,6 +60032,47 @@ func (response PutDraftFiledefaultApplicationProblemPlusJSONResponse) VisitPutDr
 	return err
 }
 
+type GetDraftKnowledgePreviewRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Params  GetDraftKnowledgePreviewParams
+}
+
+type GetDraftKnowledgePreviewResponseObject interface {
+	VisitGetDraftKnowledgePreviewResponse(w http.ResponseWriter) error
+}
+
+type GetDraftKnowledgePreview200JSONResponse KnowledgePreview
+
+func (response GetDraftKnowledgePreview200JSONResponse) VisitGetDraftKnowledgePreviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDraftKnowledgePreviewdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetDraftKnowledgePreviewdefaultApplicationProblemPlusJSONResponse) VisitGetDraftKnowledgePreviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetDraftModelRequestObject struct {
 	Org     OrgRef     `json:"org"`
 	Factory FactoryRef `json:"factory"`
@@ -56473,6 +60434,48 @@ type ValidateDraftdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ValidateDraftdefaultApplicationProblemPlusJSONResponse) VisitValidateDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestEnvironmentRequestObject struct {
+	Org         OrgRef     `json:"org"`
+	Factory     FactoryRef `json:"factory"`
+	Environment string     `json:"environment"`
+	Body        *TestEnvironmentJSONRequestBody
+}
+
+type TestEnvironmentResponseObject interface {
+	VisitTestEnvironmentResponse(w http.ResponseWriter) error
+}
+
+type TestEnvironment200JSONResponse EnvironmentTestResult
+
+func (response TestEnvironment200JSONResponse) VisitTestEnvironmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestEnvironmentdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response TestEnvironmentdefaultApplicationProblemPlusJSONResponse) VisitTestEnvironmentResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -59690,52 +63693,18 @@ func (response SetTouchReasondefaultApplicationProblemPlusJSONResponse) VisitSet
 	return err
 }
 
-type DeleteKnowledgeDocumentRequestObject struct {
-	Org      OrgRef      `json:"org"`
-	Document DocumentRef `json:"document"`
+type CheckKnowledgeSourceRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *CheckKnowledgeSourceJSONRequestBody
 }
 
-type DeleteKnowledgeDocumentResponseObject interface {
-	VisitDeleteKnowledgeDocumentResponse(w http.ResponseWriter) error
+type CheckKnowledgeSourceResponseObject interface {
+	VisitCheckKnowledgeSourceResponse(w http.ResponseWriter) error
 }
 
-type DeleteKnowledgeDocument204Response struct {
-}
+type CheckKnowledgeSource200JSONResponse KnowledgeCheck
 
-func (response DeleteKnowledgeDocument204Response) VisitDeleteKnowledgeDocumentResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
-}
-
-type DeleteKnowledgeDocumentdefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response DeleteKnowledgeDocumentdefaultApplicationProblemPlusJSONResponse) VisitDeleteKnowledgeDocumentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetKnowledgeDocumentRequestObject struct {
-	Org      OrgRef      `json:"org"`
-	Document DocumentRef `json:"document"`
-}
-
-type GetKnowledgeDocumentResponseObject interface {
-	VisitGetKnowledgeDocumentResponse(w http.ResponseWriter) error
-}
-
-type GetKnowledgeDocument200JSONResponse KnowledgeDocumentText
-
-func (response GetKnowledgeDocument200JSONResponse) VisitGetKnowledgeDocumentResponse(w http.ResponseWriter) error {
+func (response CheckKnowledgeSource200JSONResponse) VisitCheckKnowledgeSourceResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -59747,12 +63716,12 @@ func (response GetKnowledgeDocument200JSONResponse) VisitGetKnowledgeDocumentRes
 	return err
 }
 
-type GetKnowledgeDocumentdefaultApplicationProblemPlusJSONResponse struct {
+type CheckKnowledgeSourcedefaultApplicationProblemPlusJSONResponse struct {
 	Body       Problem
 	StatusCode int
 }
 
-func (response GetKnowledgeDocumentdefaultApplicationProblemPlusJSONResponse) VisitGetKnowledgeDocumentResponse(w http.ResponseWriter) error {
+func (response CheckKnowledgeSourcedefaultApplicationProblemPlusJSONResponse) VisitCheckKnowledgeSourceResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -59764,154 +63733,18 @@ func (response GetKnowledgeDocumentdefaultApplicationProblemPlusJSONResponse) Vi
 	return err
 }
 
-type GetKnowledgeDocumentContentRequestObject struct {
-	Org      OrgRef      `json:"org"`
-	Document DocumentRef `json:"document"`
-}
-
-type GetKnowledgeDocumentContentResponseObject interface {
-	VisitGetKnowledgeDocumentContentResponse(w http.ResponseWriter) error
-}
-
-type GetKnowledgeDocumentContent200ResponseHeaders struct {
-	ContentDisposition  string
-	XContentTypeOptions string
-}
-
-type GetKnowledgeDocumentContent200ApplicationoctetStreamResponse struct {
-	Body          io.Reader
-	Headers       GetKnowledgeDocumentContent200ResponseHeaders
-	ContentLength int64
-}
-
-func (response GetKnowledgeDocumentContent200ApplicationoctetStreamResponse) VisitGetKnowledgeDocumentContentResponse(w http.ResponseWriter) error {
-
-	w.Header().Set("Content-Type", "application/octet-stream")
-	if response.ContentLength != 0 {
-		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
-	}
-	w.Header().Set("Content-Disposition", fmt.Sprint(response.Headers.ContentDisposition))
-	w.Header().Set("X-Content-Type-Options", fmt.Sprint(response.Headers.XContentTypeOptions))
-	w.WriteHeader(200)
-
-	if closer, ok := response.Body.(io.ReadCloser); ok {
-		defer closer.Close()
-	}
-	_, err := io.Copy(w, response.Body)
-	return err
-}
-
-type GetKnowledgeDocumentContentdefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response GetKnowledgeDocumentContentdefaultApplicationProblemPlusJSONResponse) VisitGetKnowledgeDocumentContentResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListKnowledgeDocumentUsesRequestObject struct {
-	Org      OrgRef      `json:"org"`
-	Document DocumentRef `json:"document"`
-	Params   ListKnowledgeDocumentUsesParams
-}
-
-type ListKnowledgeDocumentUsesResponseObject interface {
-	VisitListKnowledgeDocumentUsesResponse(w http.ResponseWriter) error
-}
-
-type ListKnowledgeDocumentUses200JSONResponse KnowledgeDocumentUsePage
-
-func (response ListKnowledgeDocumentUses200JSONResponse) VisitListKnowledgeDocumentUsesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListKnowledgeDocumentUsesdefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response ListKnowledgeDocumentUsesdefaultApplicationProblemPlusJSONResponse) VisitListKnowledgeDocumentUsesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GiveKnowledgeVerdictRequestObject struct {
-	Org      OrgRef      `json:"org"`
-	Document DocumentRef `json:"document"`
-	Body     *GiveKnowledgeVerdictJSONRequestBody
-}
-
-type GiveKnowledgeVerdictResponseObject interface {
-	VisitGiveKnowledgeVerdictResponse(w http.ResponseWriter) error
-}
-
-type GiveKnowledgeVerdict200JSONResponse KnowledgeVerdict
-
-func (response GiveKnowledgeVerdict200JSONResponse) VisitGiveKnowledgeVerdictResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GiveKnowledgeVerdictdefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response GiveKnowledgeVerdictdefaultApplicationProblemPlusJSONResponse) VisitGiveKnowledgeVerdictResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type SearchKnowledgeRequestObject struct {
+type FindKnowledgeFilesRequestObject struct {
 	Org    OrgRef `json:"org"`
-	Params SearchKnowledgeParams
+	Params FindKnowledgeFilesParams
 }
 
-type SearchKnowledgeResponseObject interface {
-	VisitSearchKnowledgeResponse(w http.ResponseWriter) error
+type FindKnowledgeFilesResponseObject interface {
+	VisitFindKnowledgeFilesResponse(w http.ResponseWriter) error
 }
 
-type SearchKnowledge200JSONResponse KnowledgeSearchResult
+type FindKnowledgeFiles200JSONResponse KnowledgeFileList
 
-func (response SearchKnowledge200JSONResponse) VisitSearchKnowledgeResponse(w http.ResponseWriter) error {
+func (response FindKnowledgeFiles200JSONResponse) VisitFindKnowledgeFilesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -59923,12 +63756,52 @@ func (response SearchKnowledge200JSONResponse) VisitSearchKnowledgeResponse(w ht
 	return err
 }
 
-type SearchKnowledgedefaultApplicationProblemPlusJSONResponse struct {
+type FindKnowledgeFilesdefaultApplicationProblemPlusJSONResponse struct {
 	Body       Problem
 	StatusCode int
 }
 
-func (response SearchKnowledgedefaultApplicationProblemPlusJSONResponse) VisitSearchKnowledgeResponse(w http.ResponseWriter) error {
+func (response FindKnowledgeFilesdefaultApplicationProblemPlusJSONResponse) VisitFindKnowledgeFilesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListKnowledgeReadsRequestObject struct {
+	Org    OrgRef `json:"org"`
+	Params ListKnowledgeReadsParams
+}
+
+type ListKnowledgeReadsResponseObject interface {
+	VisitListKnowledgeReadsResponse(w http.ResponseWriter) error
+}
+
+type ListKnowledgeReads200JSONResponse KnowledgeReadList
+
+func (response ListKnowledgeReads200JSONResponse) VisitListKnowledgeReadsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListKnowledgeReadsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListKnowledgeReadsdefaultApplicationProblemPlusJSONResponse) VisitListKnowledgeReadsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -60135,19 +64008,19 @@ func (response UpdateKnowledgeSourcedefaultApplicationProblemPlusJSONResponse) V
 	return err
 }
 
-type ListKnowledgeDocumentsRequestObject struct {
+type ListKnowledgeFilesRequestObject struct {
 	Org    OrgRef    `json:"org"`
 	Source SourceRef `json:"source"`
-	Params ListKnowledgeDocumentsParams
+	Params ListKnowledgeFilesParams
 }
 
-type ListKnowledgeDocumentsResponseObject interface {
-	VisitListKnowledgeDocumentsResponse(w http.ResponseWriter) error
+type ListKnowledgeFilesResponseObject interface {
+	VisitListKnowledgeFilesResponse(w http.ResponseWriter) error
 }
 
-type ListKnowledgeDocuments200JSONResponse KnowledgeDocumentPage
+type ListKnowledgeFiles200JSONResponse KnowledgeFilePage
 
-func (response ListKnowledgeDocuments200JSONResponse) VisitListKnowledgeDocumentsResponse(w http.ResponseWriter) error {
+func (response ListKnowledgeFiles200JSONResponse) VisitListKnowledgeFilesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -60159,12 +64032,12 @@ func (response ListKnowledgeDocuments200JSONResponse) VisitListKnowledgeDocument
 	return err
 }
 
-type ListKnowledgeDocumentsdefaultApplicationProblemPlusJSONResponse struct {
+type ListKnowledgeFilesdefaultApplicationProblemPlusJSONResponse struct {
 	Body       Problem
 	StatusCode int
 }
 
-func (response ListKnowledgeDocumentsdefaultApplicationProblemPlusJSONResponse) VisitListKnowledgeDocumentsResponse(w http.ResponseWriter) error {
+func (response ListKnowledgeFilesdefaultApplicationProblemPlusJSONResponse) VisitListKnowledgeFilesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -60176,36 +64049,42 @@ func (response ListKnowledgeDocumentsdefaultApplicationProblemPlusJSONResponse) 
 	return err
 }
 
-type UploadKnowledgeDocumentsRequestObject struct {
-	Org    OrgRef    `json:"org"`
-	Source SourceRef `json:"source"`
-	Body   *multipart.Reader
+type GetKnowledgeFileRequestObject struct {
+	Org    OrgRef            `json:"org"`
+	Source SourceRef         `json:"source"`
+	Path   KnowledgeFilePath `json:"path"`
 }
 
-type UploadKnowledgeDocumentsResponseObject interface {
-	VisitUploadKnowledgeDocumentsResponse(w http.ResponseWriter) error
+type GetKnowledgeFileResponseObject interface {
+	VisitGetKnowledgeFileResponse(w http.ResponseWriter) error
 }
 
-type UploadKnowledgeDocuments202JSONResponse KnowledgeDocumentList
+type GetKnowledgeFile200TextmarkdownResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
 
-func (response UploadKnowledgeDocuments202JSONResponse) VisitUploadKnowledgeDocumentsResponse(w http.ResponseWriter) error {
+func (response GetKnowledgeFile200TextmarkdownResponse) VisitGetKnowledgeFileResponse(w http.ResponseWriter) error {
 
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
+	w.Header().Set("Content-Type", "text/markdown")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(202)
-	_, err := buf.WriteTo(w)
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
 	return err
 }
 
-type UploadKnowledgeDocumentsdefaultApplicationProblemPlusJSONResponse struct {
+type GetKnowledgeFiledefaultApplicationProblemPlusJSONResponse struct {
 	Body       Problem
 	StatusCode int
 }
 
-func (response UploadKnowledgeDocumentsdefaultApplicationProblemPlusJSONResponse) VisitUploadKnowledgeDocumentsResponse(w http.ResponseWriter) error {
+func (response GetKnowledgeFiledefaultApplicationProblemPlusJSONResponse) VisitGetKnowledgeFileResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -60251,35 +64130,71 @@ func (response SyncKnowledgeSourcedefaultApplicationProblemPlusJSONResponse) Vis
 	return err
 }
 
-type GetKnowledgeUsageRequestObject struct {
-	Org    OrgRef `json:"org"`
-	Params GetKnowledgeUsageParams
+type DeleteKnowledgeUploadRequestObject struct {
+	Org    OrgRef    `json:"org"`
+	Source SourceRef `json:"source"`
+	Params DeleteKnowledgeUploadParams
 }
 
-type GetKnowledgeUsageResponseObject interface {
-	VisitGetKnowledgeUsageResponse(w http.ResponseWriter) error
+type DeleteKnowledgeUploadResponseObject interface {
+	VisitDeleteKnowledgeUploadResponse(w http.ResponseWriter) error
 }
 
-type GetKnowledgeUsage200JSONResponse KnowledgeUsage
+type DeleteKnowledgeUpload204Response struct {
+}
 
-func (response GetKnowledgeUsage200JSONResponse) VisitGetKnowledgeUsageResponse(w http.ResponseWriter) error {
+func (response DeleteKnowledgeUpload204Response) VisitDeleteKnowledgeUploadResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteKnowledgeUploaddefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteKnowledgeUploaddefaultApplicationProblemPlusJSONResponse) VisitDeleteKnowledgeUploadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadKnowledgeFilesRequestObject struct {
+	Org    OrgRef    `json:"org"`
+	Source SourceRef `json:"source"`
+	Body   *multipart.Reader
+}
+
+type UploadKnowledgeFilesResponseObject interface {
+	VisitUploadKnowledgeFilesResponse(w http.ResponseWriter) error
+}
+
+type UploadKnowledgeFiles202JSONResponse KnowledgeUploadList
+
+func (response UploadKnowledgeFiles202JSONResponse) VisitUploadKnowledgeFilesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
+	w.WriteHeader(202)
 	_, err := buf.WriteTo(w)
 	return err
 }
 
-type GetKnowledgeUsagedefaultApplicationProblemPlusJSONResponse struct {
+type UploadKnowledgeFilesdefaultApplicationProblemPlusJSONResponse struct {
 	Body       Problem
 	StatusCode int
 }
 
-func (response GetKnowledgeUsagedefaultApplicationProblemPlusJSONResponse) VisitGetKnowledgeUsageResponse(w http.ResponseWriter) error {
+func (response UploadKnowledgeFilesdefaultApplicationProblemPlusJSONResponse) VisitUploadKnowledgeFilesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -60777,6 +64692,46 @@ func (response PutOrgPolicydefaultApplicationProblemPlusJSONResponse) VisitPutOr
 	return err
 }
 
+type TestRepositoryRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *TestRepositoryJSONRequestBody
+}
+
+type TestRepositoryResponseObject interface {
+	VisitTestRepositoryResponse(w http.ResponseWriter) error
+}
+
+type TestRepository200JSONResponse RepositoryTestResult
+
+func (response TestRepository200JSONResponse) VisitTestRepositoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestRepositorydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response TestRepositorydefaultApplicationProblemPlusJSONResponse) VisitTestRepositoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListRunsRequestObject struct {
 	Org    OrgRef `json:"org"`
 	Params ListRunsParams
@@ -60925,46 +64880,6 @@ func (response GetRundefaultApplicationProblemPlusJSONResponse) VisitGetRunRespo
 	return err
 }
 
-type ListRunKnowledgeRequestObject struct {
-	Org OrgRef `json:"org"`
-	Run string `json:"run"`
-}
-
-type ListRunKnowledgeResponseObject interface {
-	VisitListRunKnowledgeResponse(w http.ResponseWriter) error
-}
-
-type ListRunKnowledge200JSONResponse RunKnowledge
-
-func (response ListRunKnowledge200JSONResponse) VisitListRunKnowledgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListRunKnowledgedefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response ListRunKnowledgedefaultApplicationProblemPlusJSONResponse) VisitListRunKnowledgeResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
 type SearchOrgRequestObject struct {
 	Org    OrgRef `json:"org"`
 	Params SearchOrgParams
@@ -60994,6 +64909,281 @@ type SearchOrgdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response SearchOrgdefaultApplicationProblemPlusJSONResponse) VisitSearchOrgResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSecretsRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type ListSecretsResponseObject interface {
+	VisitListSecretsResponse(w http.ResponseWriter) error
+}
+
+type ListSecrets200JSONResponse SecretList
+
+func (response ListSecrets200JSONResponse) VisitListSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSecretsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListSecretsdefaultApplicationProblemPlusJSONResponse) VisitListSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSecretRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *CreateSecretJSONRequestBody
+}
+
+type CreateSecretResponseObject interface {
+	VisitCreateSecretResponse(w http.ResponseWriter) error
+}
+
+type CreateSecret201JSONResponse Secret
+
+func (response CreateSecret201JSONResponse) VisitCreateSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSecretdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateSecretdefaultApplicationProblemPlusJSONResponse) VisitCreateSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ImportSecretsRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *ImportSecretsJSONRequestBody
+}
+
+type ImportSecretsResponseObject interface {
+	VisitImportSecretsResponse(w http.ResponseWriter) error
+}
+
+type ImportSecrets200JSONResponse SecretImportResult
+
+func (response ImportSecrets200JSONResponse) VisitImportSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ImportSecretsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ImportSecretsdefaultApplicationProblemPlusJSONResponse) VisitImportSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteSecretRequestObject struct {
+	Org    OrgRef    `json:"org"`
+	Secret SecretRef `json:"secret"`
+}
+
+type DeleteSecretResponseObject interface {
+	VisitDeleteSecretResponse(w http.ResponseWriter) error
+}
+
+type DeleteSecret204Response struct {
+}
+
+func (response DeleteSecret204Response) VisitDeleteSecretResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteSecretdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteSecretdefaultApplicationProblemPlusJSONResponse) VisitDeleteSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecretRequestObject struct {
+	Org    OrgRef    `json:"org"`
+	Secret SecretRef `json:"secret"`
+}
+
+type GetSecretResponseObject interface {
+	VisitGetSecretResponse(w http.ResponseWriter) error
+}
+
+type GetSecret200JSONResponse Secret
+
+func (response GetSecret200JSONResponse) VisitGetSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecretdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetSecretdefaultApplicationProblemPlusJSONResponse) VisitGetSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchSecretRequestObject struct {
+	Org    OrgRef    `json:"org"`
+	Secret SecretRef `json:"secret"`
+	Body   *PatchSecretJSONRequestBody
+}
+
+type PatchSecretResponseObject interface {
+	VisitPatchSecretResponse(w http.ResponseWriter) error
+}
+
+type PatchSecret200JSONResponse Secret
+
+func (response PatchSecret200JSONResponse) VisitPatchSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchSecretdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PatchSecretdefaultApplicationProblemPlusJSONResponse) VisitPatchSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceSecretValueRequestObject struct {
+	Org    OrgRef    `json:"org"`
+	Secret SecretRef `json:"secret"`
+	Body   *ReplaceSecretValueJSONRequestBody
+}
+
+type ReplaceSecretValueResponseObject interface {
+	VisitReplaceSecretValueResponse(w http.ResponseWriter) error
+}
+
+type ReplaceSecretValue200JSONResponse Secret
+
+func (response ReplaceSecretValue200JSONResponse) VisitReplaceSecretValueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReplaceSecretValuedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ReplaceSecretValuedefaultApplicationProblemPlusJSONResponse) VisitReplaceSecretValueResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -61073,6 +65263,125 @@ type UpdateOrgSettingsdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response UpdateOrgSettingsdefaultApplicationProblemPlusJSONResponse) VisitUpdateOrgSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationSettingsRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type GetNotificationSettingsResponseObject interface {
+	VisitGetNotificationSettingsResponse(w http.ResponseWriter) error
+}
+
+type GetNotificationSettings200JSONResponse NotificationSettings
+
+func (response GetNotificationSettings200JSONResponse) VisitGetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationSettingsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetNotificationSettingsdefaultApplicationProblemPlusJSONResponse) VisitGetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetNotificationSettingsRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *SetNotificationSettingsJSONRequestBody
+}
+
+type SetNotificationSettingsResponseObject interface {
+	VisitSetNotificationSettingsResponse(w http.ResponseWriter) error
+}
+
+type SetNotificationSettings200JSONResponse NotificationSettings
+
+func (response SetNotificationSettings200JSONResponse) VisitSetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetNotificationSettingsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response SetNotificationSettingsdefaultApplicationProblemPlusJSONResponse) VisitSetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestNotificationSettingsRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *TestNotificationSettingsJSONRequestBody
+}
+
+type TestNotificationSettingsResponseObject interface {
+	VisitTestNotificationSettingsResponse(w http.ResponseWriter) error
+}
+
+type TestNotificationSettings200JSONResponse NotificationTestResult
+
+func (response TestNotificationSettings200JSONResponse) VisitTestNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestNotificationSettingsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response TestNotificationSettingsdefaultApplicationProblemPlusJSONResponse) VisitTestNotificationSettingsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -61707,6 +66016,9 @@ type StrictServerInterface interface {
 	// GetDeviceRequest A pending CLI sign-in, by the code its terminal shows
 	// (GET /v1/auth/device/{user_code})
 	GetDeviceRequest(ctx context.Context, request GetDeviceRequestRequestObject) (GetDeviceRequestResponseObject, error)
+	// GetCatalog The tool templates
+	// (GET /v1/catalog)
+	GetCatalog(ctx context.Context, request GetCatalogRequestObject) (GetCatalogResponseObject, error)
 	// GetHealth Liveness of goald
 	// (GET /v1/health)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
@@ -61731,6 +66043,9 @@ type StrictServerInterface interface {
 	// GetOrg One organization
 	// (GET /v1/orgs/{org})
 	GetOrg(ctx context.Context, request GetOrgRequestObject) (GetOrgResponseObject, error)
+	// GetAccess What the organization's agents reach
+	// (GET /v1/orgs/{org}/access)
+	GetAccess(ctx context.Context, request GetAccessRequestObject) (GetAccessResponseObject, error)
 	// ListAPIKeys The organization's API keys
 	// (GET /v1/orgs/{org}/api-keys)
 	ListAPIKeys(ctx context.Context, request ListAPIKeysRequestObject) (ListAPIKeysResponseObject, error)
@@ -61787,21 +66102,33 @@ type StrictServerInterface interface {
 	TestConnection(ctx context.Context, request TestConnectionRequestObject) (TestConnectionResponseObject, error)
 	// ListCredentials The organization's credentials
 	// (GET /v1/orgs/{org}/credentials)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ListCredentials(ctx context.Context, request ListCredentialsRequestObject) (ListCredentialsResponseObject, error)
 	// CreateCredential Create a credential
 	// (POST /v1/orgs/{org}/credentials)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	CreateCredential(ctx context.Context, request CreateCredentialRequestObject) (CreateCredentialResponseObject, error)
 	// ImportCredentials Import credentials from a .env or YAML text
 	// (POST /v1/orgs/{org}/credentials/import)
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	ImportCredentials(ctx context.Context, request ImportCredentialsRequestObject) (ImportCredentialsResponseObject, error)
 	// DeleteCredential Delete a credential
 	// (DELETE /v1/orgs/{org}/credentials/{credential})
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	DeleteCredential(ctx context.Context, request DeleteCredentialRequestObject) (DeleteCredentialResponseObject, error)
 	// GetCredential One credential, never its value
 	// (GET /v1/orgs/{org}/credentials/{credential})
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	GetCredential(ctx context.Context, request GetCredentialRequestObject) (GetCredentialResponseObject, error)
 	// PatchCredential Change a credential's metadata, or replace its value
 	// (PATCH /v1/orgs/{org}/credentials/{credential})
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	PatchCredential(ctx context.Context, request PatchCredentialRequestObject) (PatchCredentialResponseObject, error)
 	// FormatDefinition Format a factory.yaml the way Visual saves write changed lines (Format)
 	// (POST /v1/orgs/{org}/definitions/format)
@@ -61869,6 +66196,9 @@ type StrictServerInterface interface {
 	// PutDraftFile Write one file of the draft exactly as sent (YAML mode)
 	// (PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path})
 	PutDraftFile(ctx context.Context, request PutDraftFileRequestObject) (PutDraftFileResponseObject, error)
+	// GetDraftKnowledgePreview The Knowledge prompt section one agent gets from the draft
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview)
+	GetDraftKnowledgePreview(ctx context.Context, request GetDraftKnowledgePreviewRequestObject) (GetDraftKnowledgePreviewResponseObject, error)
 	// GetDraftModel The draft's factory model for the Visual editor
 	// (GET /v1/orgs/{org}/factories/{factory}/draft/model)
 	GetDraftModel(ctx context.Context, request GetDraftModelRequestObject) (GetDraftModelResponseObject, error)
@@ -61896,6 +66226,9 @@ type StrictServerInterface interface {
 	// ValidateDraft Validate the draft at its revision, as publish will
 	// (POST /v1/orgs/{org}/factories/{factory}/draft/validate)
 	ValidateDraft(ctx context.Context, request ValidateDraftRequestObject) (ValidateDraftResponseObject, error)
+	// TestEnvironment Test an environment's MCP servers or a template
+	// (POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test)
+	TestEnvironment(ctx context.Context, request TestEnvironmentRequestObject) (TestEnvironmentResponseObject, error)
 	// ListEvals The eval cases of the current version, with their last tries and a summary
 	// (GET /v1/orgs/{org}/factories/{factory}/evals)
 	ListEvals(ctx context.Context, request ListEvalsRequestObject) (ListEvalsResponseObject, error)
@@ -62115,31 +66448,22 @@ type StrictServerInterface interface {
 	// SetTouchReason Say why a person had to act on an item
 	// (PUT /v1/orgs/{org}/items/{item}/touches/{event}/reason)
 	SetTouchReason(ctx context.Context, request SetTouchReasonRequestObject) (SetTouchReasonResponseObject, error)
-	// DeleteKnowledgeDocument Delete an uploaded document
-	// (DELETE /v1/orgs/{org}/knowledge/documents/{document})
-	DeleteKnowledgeDocument(ctx context.Context, request DeleteKnowledgeDocumentRequestObject) (DeleteKnowledgeDocumentResponseObject, error)
-	// GetKnowledgeDocument A document with its indexed text
-	// (GET /v1/orgs/{org}/knowledge/documents/{document})
-	GetKnowledgeDocument(ctx context.Context, request GetKnowledgeDocumentRequestObject) (GetKnowledgeDocumentResponseObject, error)
-	// GetKnowledgeDocumentContent The uploaded original of a document
-	// (GET /v1/orgs/{org}/knowledge/documents/{document}/content)
-	GetKnowledgeDocumentContent(ctx context.Context, request GetKnowledgeDocumentContentRequestObject) (GetKnowledgeDocumentContentResponseObject, error)
-	// ListKnowledgeDocumentUses One page of the runs that used a document
-	// (GET /v1/orgs/{org}/knowledge/documents/{document}/uses)
-	ListKnowledgeDocumentUses(ctx context.Context, request ListKnowledgeDocumentUsesRequestObject) (ListKnowledgeDocumentUsesResponseObject, error)
-	// GiveKnowledgeVerdict Say whether a document helped or misled
-	// (PUT /v1/orgs/{org}/knowledge/documents/{document}/verdict)
-	GiveKnowledgeVerdict(ctx context.Context, request GiveKnowledgeVerdictRequestObject) (GiveKnowledgeVerdictResponseObject, error)
-	// SearchKnowledge Search the knowledge base as agents do
-	// (GET /v1/orgs/{org}/knowledge/search)
-	SearchKnowledge(ctx context.Context, request SearchKnowledgeRequestObject) (SearchKnowledgeResponseObject, error)
+	// CheckKnowledgeSource Check a source's settings before saving them
+	// (POST /v1/orgs/{org}/knowledge/check)
+	CheckKnowledgeSource(ctx context.Context, request CheckKnowledgeSourceRequestObject) (CheckKnowledgeSourceResponseObject, error)
+	// FindKnowledgeFiles Find a file across every source
+	// (GET /v1/orgs/{org}/knowledge/files)
+	FindKnowledgeFiles(ctx context.Context, request FindKnowledgeFilesRequestObject) (FindKnowledgeFilesResponseObject, error)
+	// ListKnowledgeReads How often runs read and searched the sources' files
+	// (GET /v1/orgs/{org}/knowledge/reads)
+	ListKnowledgeReads(ctx context.Context, request ListKnowledgeReadsRequestObject) (ListKnowledgeReadsResponseObject, error)
 	// ListKnowledgeSources The sources of the organization's knowledge base
 	// (GET /v1/orgs/{org}/knowledge/sources)
 	ListKnowledgeSources(ctx context.Context, request ListKnowledgeSourcesRequestObject) (ListKnowledgeSourcesResponseObject, error)
 	// CreateKnowledgeSource Add a source to the knowledge base
 	// (POST /v1/orgs/{org}/knowledge/sources)
 	CreateKnowledgeSource(ctx context.Context, request CreateKnowledgeSourceRequestObject) (CreateKnowledgeSourceResponseObject, error)
-	// DeleteKnowledgeSource Delete a source with its documents
+	// DeleteKnowledgeSource Delete a source with its snapshots and uploads
 	// (DELETE /v1/orgs/{org}/knowledge/sources/{source})
 	DeleteKnowledgeSource(ctx context.Context, request DeleteKnowledgeSourceRequestObject) (DeleteKnowledgeSourceResponseObject, error)
 	// GetKnowledgeSource One knowledge source
@@ -62148,18 +66472,21 @@ type StrictServerInterface interface {
 	// UpdateKnowledgeSource Change a source's title, config or schedule
 	// (PATCH /v1/orgs/{org}/knowledge/sources/{source})
 	UpdateKnowledgeSource(ctx context.Context, request UpdateKnowledgeSourceRequestObject) (UpdateKnowledgeSourceResponseObject, error)
-	// ListKnowledgeDocuments One page of a source's documents
-	// (GET /v1/orgs/{org}/knowledge/sources/{source}/documents)
-	ListKnowledgeDocuments(ctx context.Context, request ListKnowledgeDocumentsRequestObject) (ListKnowledgeDocumentsResponseObject, error)
-	// UploadKnowledgeDocuments Upload files to an upload source
-	// (POST /v1/orgs/{org}/knowledge/sources/{source}/documents)
-	UploadKnowledgeDocuments(ctx context.Context, request UploadKnowledgeDocumentsRequestObject) (UploadKnowledgeDocumentsResponseObject, error)
+	// ListKnowledgeFiles One page of a source's current files
+	// (GET /v1/orgs/{org}/knowledge/sources/{source}/files)
+	ListKnowledgeFiles(ctx context.Context, request ListKnowledgeFilesRequestObject) (ListKnowledgeFilesResponseObject, error)
+	// GetKnowledgeFile One file's Markdown
+	// (GET /v1/orgs/{org}/knowledge/sources/{source}/files/{path})
+	GetKnowledgeFile(ctx context.Context, request GetKnowledgeFileRequestObject) (GetKnowledgeFileResponseObject, error)
 	// SyncKnowledgeSource Sync a source now
 	// (POST /v1/orgs/{org}/knowledge/sources/{source}/sync)
 	SyncKnowledgeSource(ctx context.Context, request SyncKnowledgeSourceRequestObject) (SyncKnowledgeSourceResponseObject, error)
-	// GetKnowledgeUsage Where a source's documents were used
-	// (GET /v1/orgs/{org}/knowledge/usage)
-	GetKnowledgeUsage(ctx context.Context, request GetKnowledgeUsageRequestObject) (GetKnowledgeUsageResponseObject, error)
+	// DeleteKnowledgeUpload Delete an uploaded file
+	// (DELETE /v1/orgs/{org}/knowledge/sources/{source}/uploads)
+	DeleteKnowledgeUpload(ctx context.Context, request DeleteKnowledgeUploadRequestObject) (DeleteKnowledgeUploadResponseObject, error)
+	// UploadKnowledgeFiles Upload files to an upload source
+	// (POST /v1/orgs/{org}/knowledge/sources/{source}/uploads)
+	UploadKnowledgeFiles(ctx context.Context, request UploadKnowledgeFilesRequestObject) (UploadKnowledgeFilesResponseObject, error)
 	// ListMemberTokens Every member's personal tokens in the organization
 	// (GET /v1/orgs/{org}/member-tokens)
 	ListMemberTokens(ctx context.Context, request ListMemberTokensRequestObject) (ListMemberTokensResponseObject, error)
@@ -62196,6 +66523,9 @@ type StrictServerInterface interface {
 	// PutOrgPolicy Replace the organization's policy
 	// (PUT /v1/orgs/{org}/policy)
 	PutOrgPolicy(ctx context.Context, request PutOrgPolicyRequestObject) (PutOrgPolicyResponseObject, error)
+	// TestRepository Test a token's read and push access to a repository
+	// (POST /v1/orgs/{org}/repositories/test)
+	TestRepository(ctx context.Context, request TestRepositoryRequestObject) (TestRepositoryResponseObject, error)
 	// ListRuns The organization's agent runs across the factories the caller sees, newest first
 	// (GET /v1/orgs/{org}/runs)
 	ListRuns(ctx context.Context, request ListRunsRequestObject) (ListRunsResponseObject, error)
@@ -62205,18 +66535,45 @@ type StrictServerInterface interface {
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(ctx context.Context, request GetRunRequestObject) (GetRunResponseObject, error)
-	// ListRunKnowledge The knowledge documents a run used, with the verdicts given on them for it
-	// (GET /v1/orgs/{org}/runs/{run}/knowledge)
-	ListRunKnowledge(ctx context.Context, request ListRunKnowledgeRequestObject) (ListRunKnowledgeResponseObject, error)
 	// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
 	// (GET /v1/orgs/{org}/search)
 	SearchOrg(ctx context.Context, request SearchOrgRequestObject) (SearchOrgResponseObject, error)
+	// ListSecrets The organization's secrets
+	// (GET /v1/orgs/{org}/secrets)
+	ListSecrets(ctx context.Context, request ListSecretsRequestObject) (ListSecretsResponseObject, error)
+	// CreateSecret Create a secret
+	// (POST /v1/orgs/{org}/secrets)
+	CreateSecret(ctx context.Context, request CreateSecretRequestObject) (CreateSecretResponseObject, error)
+	// ImportSecrets Import secrets from a .env or YAML text
+	// (POST /v1/orgs/{org}/secrets/import)
+	ImportSecrets(ctx context.Context, request ImportSecretsRequestObject) (ImportSecretsResponseObject, error)
+	// DeleteSecret Delete a secret
+	// (DELETE /v1/orgs/{org}/secrets/{secret})
+	DeleteSecret(ctx context.Context, request DeleteSecretRequestObject) (DeleteSecretResponseObject, error)
+	// GetSecret One secret, never its value
+	// (GET /v1/orgs/{org}/secrets/{secret})
+	GetSecret(ctx context.Context, request GetSecretRequestObject) (GetSecretResponseObject, error)
+	// PatchSecret Change a secret's description, scope, expiry or reminder
+	// (PATCH /v1/orgs/{org}/secrets/{secret})
+	PatchSecret(ctx context.Context, request PatchSecretRequestObject) (PatchSecretResponseObject, error)
+	// ReplaceSecretValue Replace a secret's value
+	// (PUT /v1/orgs/{org}/secrets/{secret}/value)
+	ReplaceSecretValue(ctx context.Context, request ReplaceSecretValueRequestObject) (ReplaceSecretValueResponseObject, error)
 	// GetOrgSettings The organization's settings, slot caps included
 	// (GET /v1/orgs/{org}/settings)
 	GetOrgSettings(ctx context.Context, request GetOrgSettingsRequestObject) (GetOrgSettingsResponseObject, error)
 	// UpdateOrgSettings Change the organization's settings
 	// (PATCH /v1/orgs/{org}/settings)
 	UpdateOrgSettings(ctx context.Context, request UpdateOrgSettingsRequestObject) (UpdateOrgSettingsResponseObject, error)
+	// GetNotificationSettings The organization's notification settings
+	// (GET /v1/orgs/{org}/settings/notifications)
+	GetNotificationSettings(ctx context.Context, request GetNotificationSettingsRequestObject) (GetNotificationSettingsResponseObject, error)
+	// SetNotificationSettings Choose the secret that sends the organization's Slack notifications
+	// (PUT /v1/orgs/{org}/settings/notifications)
+	SetNotificationSettings(ctx context.Context, request SetNotificationSettingsRequestObject) (SetNotificationSettingsResponseObject, error)
+	// TestNotificationSettings Test a Slack bot token without saving it
+	// (POST /v1/orgs/{org}/settings/notifications/test)
+	TestNotificationSettings(ctx context.Context, request TestNotificationSettingsRequestObject) (TestNotificationSettingsResponseObject, error)
 	// ClearSignupDomain Stop sign-up by domain
 	// (DELETE /v1/orgs/{org}/settings/signup-domain)
 	ClearSignupDomain(ctx context.Context, request ClearSignupDomainRequestObject) (ClearSignupDomainResponseObject, error)
@@ -62343,6 +66700,30 @@ func (sh *strictHandler) GetDeviceRequest(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetDeviceRequestResponseObject); ok {
 		if err := validResponse.VisitGetDeviceRequestResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCatalog operation middleware
+func (sh *strictHandler) GetCatalog(w http.ResponseWriter, r *http.Request) {
+	var request GetCatalogRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCatalog(ctx, request.(GetCatalogRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCatalog")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCatalogResponseObject); ok {
+		if err := validResponse.VisitGetCatalogResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -62560,6 +66941,33 @@ func (sh *strictHandler) GetOrg(w http.ResponseWriter, r *http.Request, org OrgR
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetOrgResponseObject); ok {
 		if err := validResponse.VisitGetOrgResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAccess operation middleware
+func (sh *strictHandler) GetAccess(w http.ResponseWriter, r *http.Request, org OrgRef, params GetAccessParams) {
+	var request GetAccessRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAccess(ctx, request.(GetAccessRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAccess")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAccessResponseObject); ok {
+		if err := validResponse.VisitGetAccessResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -63907,6 +68315,34 @@ func (sh *strictHandler) PutDraftFile(w http.ResponseWriter, r *http.Request, or
 	}
 }
 
+// GetDraftKnowledgePreview operation middleware
+func (sh *strictHandler) GetDraftKnowledgePreview(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetDraftKnowledgePreviewParams) {
+	var request GetDraftKnowledgePreviewRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetDraftKnowledgePreview(ctx, request.(GetDraftKnowledgePreviewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetDraftKnowledgePreview")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetDraftKnowledgePreviewResponseObject); ok {
+		if err := validResponse.VisitGetDraftKnowledgePreviewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetDraftModel operation middleware
 func (sh *strictHandler) GetDraftModel(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
 	var request GetDraftModelRequestObject
@@ -64194,6 +68630,44 @@ func (sh *strictHandler) ValidateDraft(w http.ResponseWriter, r *http.Request, o
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ValidateDraftResponseObject); ok {
 		if err := validResponse.VisitValidateDraftResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestEnvironment operation middleware
+func (sh *strictHandler) TestEnvironment(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, environment string) {
+	var request TestEnvironmentRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Environment = environment
+
+	var body TestEnvironmentJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestEnvironment(ctx, request.(TestEnvironmentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestEnvironment")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestEnvironmentResponseObject); ok {
+		if err := validResponse.VisitTestEnvironmentResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -66400,123 +70874,13 @@ func (sh *strictHandler) SetTouchReason(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
-// DeleteKnowledgeDocument operation middleware
-func (sh *strictHandler) DeleteKnowledgeDocument(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef) {
-	var request DeleteKnowledgeDocumentRequestObject
+// CheckKnowledgeSource operation middleware
+func (sh *strictHandler) CheckKnowledgeSource(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request CheckKnowledgeSourceRequestObject
 
 	request.Org = org
-	request.Document = document
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteKnowledgeDocument(ctx, request.(DeleteKnowledgeDocumentRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DeleteKnowledgeDocument")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DeleteKnowledgeDocumentResponseObject); ok {
-		if err := validResponse.VisitDeleteKnowledgeDocumentResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetKnowledgeDocument operation middleware
-func (sh *strictHandler) GetKnowledgeDocument(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef) {
-	var request GetKnowledgeDocumentRequestObject
-
-	request.Org = org
-	request.Document = document
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetKnowledgeDocument(ctx, request.(GetKnowledgeDocumentRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetKnowledgeDocument")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetKnowledgeDocumentResponseObject); ok {
-		if err := validResponse.VisitGetKnowledgeDocumentResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetKnowledgeDocumentContent operation middleware
-func (sh *strictHandler) GetKnowledgeDocumentContent(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef) {
-	var request GetKnowledgeDocumentContentRequestObject
-
-	request.Org = org
-	request.Document = document
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetKnowledgeDocumentContent(ctx, request.(GetKnowledgeDocumentContentRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetKnowledgeDocumentContent")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetKnowledgeDocumentContentResponseObject); ok {
-		if err := validResponse.VisitGetKnowledgeDocumentContentResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// ListKnowledgeDocumentUses operation middleware
-func (sh *strictHandler) ListKnowledgeDocumentUses(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef, params ListKnowledgeDocumentUsesParams) {
-	var request ListKnowledgeDocumentUsesRequestObject
-
-	request.Org = org
-	request.Document = document
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListKnowledgeDocumentUses(ctx, request.(ListKnowledgeDocumentUsesRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListKnowledgeDocumentUses")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListKnowledgeDocumentUsesResponseObject); ok {
-		if err := validResponse.VisitListKnowledgeDocumentUsesResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GiveKnowledgeVerdict operation middleware
-func (sh *strictHandler) GiveKnowledgeVerdict(w http.ResponseWriter, r *http.Request, org OrgRef, document DocumentRef) {
-	var request GiveKnowledgeVerdictRequestObject
-
-	request.Org = org
-	request.Document = document
-
-	var body GiveKnowledgeVerdictJSONRequestBody
+	var body CheckKnowledgeSourceJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
@@ -66524,18 +70888,18 @@ func (sh *strictHandler) GiveKnowledgeVerdict(w http.ResponseWriter, r *http.Req
 	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GiveKnowledgeVerdict(ctx, request.(GiveKnowledgeVerdictRequestObject))
+		return sh.ssi.CheckKnowledgeSource(ctx, request.(CheckKnowledgeSourceRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GiveKnowledgeVerdict")
+		handler = middleware(handler, "CheckKnowledgeSource")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GiveKnowledgeVerdictResponseObject); ok {
-		if err := validResponse.VisitGiveKnowledgeVerdictResponse(w); err != nil {
+	} else if validResponse, ok := response.(CheckKnowledgeSourceResponseObject); ok {
+		if err := validResponse.VisitCheckKnowledgeSourceResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -66543,26 +70907,53 @@ func (sh *strictHandler) GiveKnowledgeVerdict(w http.ResponseWriter, r *http.Req
 	}
 }
 
-// SearchKnowledge operation middleware
-func (sh *strictHandler) SearchKnowledge(w http.ResponseWriter, r *http.Request, org OrgRef, params SearchKnowledgeParams) {
-	var request SearchKnowledgeRequestObject
+// FindKnowledgeFiles operation middleware
+func (sh *strictHandler) FindKnowledgeFiles(w http.ResponseWriter, r *http.Request, org OrgRef, params FindKnowledgeFilesParams) {
+	var request FindKnowledgeFilesRequestObject
 
 	request.Org = org
 	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.SearchKnowledge(ctx, request.(SearchKnowledgeRequestObject))
+		return sh.ssi.FindKnowledgeFiles(ctx, request.(FindKnowledgeFilesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "SearchKnowledge")
+		handler = middleware(handler, "FindKnowledgeFiles")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(SearchKnowledgeResponseObject); ok {
-		if err := validResponse.VisitSearchKnowledgeResponse(w); err != nil {
+	} else if validResponse, ok := response.(FindKnowledgeFilesResponseObject); ok {
+		if err := validResponse.VisitFindKnowledgeFilesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListKnowledgeReads operation middleware
+func (sh *strictHandler) ListKnowledgeReads(w http.ResponseWriter, r *http.Request, org OrgRef, params ListKnowledgeReadsParams) {
+	var request ListKnowledgeReadsRequestObject
+
+	request.Org = org
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListKnowledgeReads(ctx, request.(ListKnowledgeReadsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListKnowledgeReads")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListKnowledgeReadsResponseObject); ok {
+		if err := validResponse.VisitListKnowledgeReadsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -66718,27 +71109,27 @@ func (sh *strictHandler) UpdateKnowledgeSource(w http.ResponseWriter, r *http.Re
 	}
 }
 
-// ListKnowledgeDocuments operation middleware
-func (sh *strictHandler) ListKnowledgeDocuments(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef, params ListKnowledgeDocumentsParams) {
-	var request ListKnowledgeDocumentsRequestObject
+// ListKnowledgeFiles operation middleware
+func (sh *strictHandler) ListKnowledgeFiles(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef, params ListKnowledgeFilesParams) {
+	var request ListKnowledgeFilesRequestObject
 
 	request.Org = org
 	request.Source = source
 	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListKnowledgeDocuments(ctx, request.(ListKnowledgeDocumentsRequestObject))
+		return sh.ssi.ListKnowledgeFiles(ctx, request.(ListKnowledgeFilesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListKnowledgeDocuments")
+		handler = middleware(handler, "ListKnowledgeFiles")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListKnowledgeDocumentsResponseObject); ok {
-		if err := validResponse.VisitListKnowledgeDocumentsResponse(w); err != nil {
+	} else if validResponse, ok := response.(ListKnowledgeFilesResponseObject); ok {
+		if err := validResponse.VisitListKnowledgeFilesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -66746,33 +71137,27 @@ func (sh *strictHandler) ListKnowledgeDocuments(w http.ResponseWriter, r *http.R
 	}
 }
 
-// UploadKnowledgeDocuments operation middleware
-func (sh *strictHandler) UploadKnowledgeDocuments(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef) {
-	var request UploadKnowledgeDocumentsRequestObject
+// GetKnowledgeFile operation middleware
+func (sh *strictHandler) GetKnowledgeFile(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef, path KnowledgeFilePath) {
+	var request GetKnowledgeFileRequestObject
 
 	request.Org = org
 	request.Source = source
-
-	if reader, err := r.MultipartReader(); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode multipart body: %w", err))
-		return
-	} else {
-		request.Body = reader
-	}
+	request.Path = path
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.UploadKnowledgeDocuments(ctx, request.(UploadKnowledgeDocumentsRequestObject))
+		return sh.ssi.GetKnowledgeFile(ctx, request.(GetKnowledgeFileRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UploadKnowledgeDocuments")
+		handler = middleware(handler, "GetKnowledgeFile")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(UploadKnowledgeDocumentsResponseObject); ok {
-		if err := validResponse.VisitUploadKnowledgeDocumentsResponse(w); err != nil {
+	} else if validResponse, ok := response.(GetKnowledgeFileResponseObject); ok {
+		if err := validResponse.VisitGetKnowledgeFileResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -66807,26 +71192,61 @@ func (sh *strictHandler) SyncKnowledgeSource(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-// GetKnowledgeUsage operation middleware
-func (sh *strictHandler) GetKnowledgeUsage(w http.ResponseWriter, r *http.Request, org OrgRef, params GetKnowledgeUsageParams) {
-	var request GetKnowledgeUsageRequestObject
+// DeleteKnowledgeUpload operation middleware
+func (sh *strictHandler) DeleteKnowledgeUpload(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef, params DeleteKnowledgeUploadParams) {
+	var request DeleteKnowledgeUploadRequestObject
 
 	request.Org = org
+	request.Source = source
 	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetKnowledgeUsage(ctx, request.(GetKnowledgeUsageRequestObject))
+		return sh.ssi.DeleteKnowledgeUpload(ctx, request.(DeleteKnowledgeUploadRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetKnowledgeUsage")
+		handler = middleware(handler, "DeleteKnowledgeUpload")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetKnowledgeUsageResponseObject); ok {
-		if err := validResponse.VisitGetKnowledgeUsageResponse(w); err != nil {
+	} else if validResponse, ok := response.(DeleteKnowledgeUploadResponseObject); ok {
+		if err := validResponse.VisitDeleteKnowledgeUploadResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UploadKnowledgeFiles operation middleware
+func (sh *strictHandler) UploadKnowledgeFiles(w http.ResponseWriter, r *http.Request, org OrgRef, source SourceRef) {
+	var request UploadKnowledgeFilesRequestObject
+
+	request.Org = org
+	request.Source = source
+
+	if reader, err := r.MultipartReader(); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode multipart body: %w", err))
+		return
+	} else {
+		request.Body = reader
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UploadKnowledgeFiles(ctx, request.(UploadKnowledgeFilesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UploadKnowledgeFiles")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UploadKnowledgeFilesResponseObject); ok {
+		if err := validResponse.VisitUploadKnowledgeFilesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -67176,6 +71596,39 @@ func (sh *strictHandler) PutOrgPolicy(w http.ResponseWriter, r *http.Request, or
 	}
 }
 
+// TestRepository operation middleware
+func (sh *strictHandler) TestRepository(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request TestRepositoryRequestObject
+
+	request.Org = org
+
+	var body TestRepositoryJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestRepository(ctx, request.(TestRepositoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestRepository")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestRepositoryResponseObject); ok {
+		if err := validResponse.VisitTestRepositoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListRuns operation middleware
 func (sh *strictHandler) ListRuns(w http.ResponseWriter, r *http.Request, org OrgRef, params ListRunsParams) {
 	var request ListRunsRequestObject
@@ -67257,33 +71710,6 @@ func (sh *strictHandler) GetRun(w http.ResponseWriter, r *http.Request, org OrgR
 	}
 }
 
-// ListRunKnowledge operation middleware
-func (sh *strictHandler) ListRunKnowledge(w http.ResponseWriter, r *http.Request, org OrgRef, run string) {
-	var request ListRunKnowledgeRequestObject
-
-	request.Org = org
-	request.Run = run
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListRunKnowledge(ctx, request.(ListRunKnowledgeRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListRunKnowledge")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListRunKnowledgeResponseObject); ok {
-		if err := validResponse.VisitListRunKnowledgeResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // SearchOrg operation middleware
 func (sh *strictHandler) SearchOrg(w http.ResponseWriter, r *http.Request, org OrgRef, params SearchOrgParams) {
 	var request SearchOrgRequestObject
@@ -67304,6 +71730,220 @@ func (sh *strictHandler) SearchOrg(w http.ResponseWriter, r *http.Request, org O
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SearchOrgResponseObject); ok {
 		if err := validResponse.VisitSearchOrgResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListSecrets operation middleware
+func (sh *strictHandler) ListSecrets(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ListSecretsRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListSecrets(ctx, request.(ListSecretsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListSecrets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListSecretsResponseObject); ok {
+		if err := validResponse.VisitListSecretsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateSecret operation middleware
+func (sh *strictHandler) CreateSecret(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request CreateSecretRequestObject
+
+	request.Org = org
+
+	var body CreateSecretJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateSecret(ctx, request.(CreateSecretRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateSecret")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateSecretResponseObject); ok {
+		if err := validResponse.VisitCreateSecretResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ImportSecrets operation middleware
+func (sh *strictHandler) ImportSecrets(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ImportSecretsRequestObject
+
+	request.Org = org
+
+	var body ImportSecretsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ImportSecrets(ctx, request.(ImportSecretsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ImportSecrets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ImportSecretsResponseObject); ok {
+		if err := validResponse.VisitImportSecretsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteSecret operation middleware
+func (sh *strictHandler) DeleteSecret(w http.ResponseWriter, r *http.Request, org OrgRef, secret SecretRef) {
+	var request DeleteSecretRequestObject
+
+	request.Org = org
+	request.Secret = secret
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteSecret(ctx, request.(DeleteSecretRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteSecret")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteSecretResponseObject); ok {
+		if err := validResponse.VisitDeleteSecretResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSecret operation middleware
+func (sh *strictHandler) GetSecret(w http.ResponseWriter, r *http.Request, org OrgRef, secret SecretRef) {
+	var request GetSecretRequestObject
+
+	request.Org = org
+	request.Secret = secret
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSecret(ctx, request.(GetSecretRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSecret")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSecretResponseObject); ok {
+		if err := validResponse.VisitGetSecretResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PatchSecret operation middleware
+func (sh *strictHandler) PatchSecret(w http.ResponseWriter, r *http.Request, org OrgRef, secret SecretRef) {
+	var request PatchSecretRequestObject
+
+	request.Org = org
+	request.Secret = secret
+
+	var body PatchSecretJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PatchSecret(ctx, request.(PatchSecretRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PatchSecret")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PatchSecretResponseObject); ok {
+		if err := validResponse.VisitPatchSecretResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReplaceSecretValue operation middleware
+func (sh *strictHandler) ReplaceSecretValue(w http.ResponseWriter, r *http.Request, org OrgRef, secret SecretRef) {
+	var request ReplaceSecretValueRequestObject
+
+	request.Org = org
+	request.Secret = secret
+
+	var body ReplaceSecretValueJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReplaceSecretValue(ctx, request.(ReplaceSecretValueRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReplaceSecretValue")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReplaceSecretValueResponseObject); ok {
+		if err := validResponse.VisitReplaceSecretValueResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -67363,6 +72003,101 @@ func (sh *strictHandler) UpdateOrgSettings(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateOrgSettingsResponseObject); ok {
 		if err := validResponse.VisitUpdateOrgSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNotificationSettings operation middleware
+func (sh *strictHandler) GetNotificationSettings(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request GetNotificationSettingsRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNotificationSettings(ctx, request.(GetNotificationSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNotificationSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNotificationSettingsResponseObject); ok {
+		if err := validResponse.VisitGetNotificationSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetNotificationSettings operation middleware
+func (sh *strictHandler) SetNotificationSettings(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request SetNotificationSettingsRequestObject
+
+	request.Org = org
+
+	var body SetNotificationSettingsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetNotificationSettings(ctx, request.(SetNotificationSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetNotificationSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetNotificationSettingsResponseObject); ok {
+		if err := validResponse.VisitSetNotificationSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestNotificationSettings operation middleware
+func (sh *strictHandler) TestNotificationSettings(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request TestNotificationSettingsRequestObject
+
+	request.Org = org
+
+	var body TestNotificationSettingsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestNotificationSettings(ctx, request.(TestNotificationSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestNotificationSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestNotificationSettingsResponseObject); ok {
+		if err := validResponse.VisitTestNotificationSettingsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

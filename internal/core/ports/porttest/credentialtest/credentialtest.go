@@ -2,8 +2,10 @@
 // fake in porttest runs it, and the PostgreSQL adapter joins it with the store part, so tests on
 // the fake hold for the database's rules: names unique per organization, write-only values sealed
 // under the master key, the factory scope enforced by Resolve, an audit entry for every change and
-// use, organizations kept apart, an import's dry run that stores nothing, and no deletion of a
-// credential that a connection refers to as {{name}}.
+// use, organizations kept apart, an import's dry run that stores nothing, no deletion of a
+// credential that a connection refers to as {{name}}, and, since credentials live in the secrets
+// table (ADR 0037), no type label or agent list: every credential reads back as an api_key with
+// no agents.
 package credentialtest
 
 import (
@@ -212,9 +214,13 @@ func testCreate(f *fixture) {
 	f.expect(got.ExpiresAt != nil && got.RemindDays == 14 && got.LastUsedAt == nil, "Create's expiry or last use = %+v", got)
 	f.expect(got.CreatedBy == admin && got.UpdatedBy == admin && !got.CreatedAt.IsZero(), "Create's actors = %+v", got)
 	f.expect(!got.Scope.All && len(got.Scope.Factories) == 1 && got.Scope.Factories[0] == factoryA, "Create's scope = %+v", got.Scope)
-	f.expect(got.ForAgent(factoryA, agent), "Create's agents = %+v", got.Agents)
+	f.expect(len(got.Agents) == 0 && !got.ForAgent(factoryA, agent), "Create kept its agents, which secrets do not have: %+v", got.Agents)
 
 	f.readBack(acme, got)
+
+	n := sentryIn(replaced)
+	n.Name, n.Type = deploy, domain.CredentialSSHKey
+	f.expect(f.create(acme, n).Type == domain.CredentialAPIKey, "Create stored a type label, which secrets do not have")
 }
 
 // readBack checks that Get, List, the audit log and Resolve agree with got, the credential
@@ -288,9 +294,10 @@ func testPatch(f *fixture) {
 	}
 
 	f.noValue("Patch's credential", got)
-	f.expect(got.ID == before.ID && got.Name == name && got.Description == desc && got.Type == typ, "Patch = %+v", got)
+	f.expect(got.ID == before.ID && got.Name == name && got.Description == desc, "Patch = %+v", got)
+	f.expect(got.Type == domain.CredentialAPIKey && len(got.Agents) == 0,
+		"Patch stored type %s and agents %+v; a secret has neither, so they read back as api_key and none", got.Type, got.Agents)
 	f.expect(got.ExpiresAt == nil && got.RemindDays == 0, "Patch did not clear the expiry: %+v", got)
-	f.expect(got.ForAgent(factoryB, "frontend") && !got.ForAgent(factoryA, agent), "Patch's agents = %+v", got.Agents)
 	f.expect(got.UpdatedBy == editor && got.CreatedBy == admin, "Patch's actors = %+v", got)
 
 	_, err = f.c.Get(f.in(acme), sentry)

@@ -85,3 +85,49 @@ func TestPathsFrom(t *testing.T) {
 		})
 	}
 }
+
+// A run gets its model from a connection or from a key, never both, and a run on a key opens no
+// connection; a Jonah run has no environment.
+func TestRunRequest_Check(t *testing.T) {
+	t.Parallel()
+
+	station := RunRequest{OrgID: "org", FactoryID: "factory", Agent: "engineer", Item: "item", Station: "work"}
+
+	tests := []struct {
+		name   string
+		change func(*RunRequest)
+		ok     bool
+	}{
+		{name: "a model connection", change: func(r *RunRequest) { r.ModelConnection = testModelConn }, ok: true},
+		{name: "a model key", change: func(r *RunRequest) {
+			r.ModelKey, r.Environment = testModelKey, Environment{Name: DefaultEnvironment}
+		}, ok: true},
+		{name: "no model", change: func(*RunRequest) {}},
+		{name: "both", change: func(r *RunRequest) { r.ModelKey, r.ModelConnection = testModelKey, testModelConn }},
+		{name: "a key and a connection", change: func(r *RunRequest) { r.ModelKey, r.Connections = testModelKey, []string{"issues"} }},
+		{name: "a key and a repository connection", change: func(r *RunRequest) {
+			r.ModelKey, r.Repository = testModelKey, Repository{URL: "https://example.com/acme.git", Connection: "code"}
+		}},
+		{name: "a Jonah run with an environment", change: func(r *RunRequest) {
+			r.Kind, r.Item, r.Station = RunKindJonah, "", ""
+			r.ModelKey, r.Environment = testModelKey, Environment{Name: DefaultEnvironment}
+		}},
+		{name: "a Jonah run on a key", change: func(r *RunRequest) {
+			r.Kind, r.Item, r.Station, r.ModelKey = RunKindJonah, "", "", testModelKey
+		}, ok: true},
+	}
+
+	for _, tt := range tests {
+		r := station
+		tt.change(&r)
+
+		err := r.Check()
+		if tt.ok != (err == nil) {
+			t.Errorf("%s: Check = %v; want ok %v", tt.name, err, tt.ok)
+		}
+
+		if err != nil && !errors.Is(err, ErrBadRunRequest) {
+			t.Errorf("%s: Check = %v; want ErrBadRunRequest", tt.name, err)
+		}
+	}
+}
