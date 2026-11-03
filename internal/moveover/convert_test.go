@@ -473,3 +473,28 @@ func TestConvert(t *testing.T) {
 		}
 	})
 }
+
+// A suffixed secret name stays a valid secret name: the base is trimmed, and of a trailing dash,
+// to leave room for the suffix.
+func TestSuffixed_StaysAValidName(t *testing.T) {
+	t.Parallel()
+
+	long := strings.Repeat("a", 37) + "-bc"
+
+	for _, c := range []struct {
+		base string
+		n    int
+		want string
+	}{
+		{connGitHub, 1, connGitHub},
+		{connGitHub, 2, connGitHub + "-2"},
+		{connGitHub, 3, connGitHub + "-3"},
+		{long, 2, strings.Repeat("a", 37) + "-2"},
+		{strings.Repeat("a", 40), 12, strings.Repeat("a", 37) + "-12"},
+	} {
+		got := moveover.Suffixed(c.base, c.n)
+		if got != c.want || domain.CheckSecretName(got) != nil {
+			t.Errorf("Suffixed(%q, %d) = %q; want %q, a valid name", c.base, c.n, got, c.want)
+		}
+	}
+}

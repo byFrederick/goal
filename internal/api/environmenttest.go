@@ -5,11 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"net/http"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/authoring"
@@ -120,6 +123,128 @@ func (s *server) TestEnvironment(ctx context.Context, req gen.TestEnvironmentReq
 	}
 
 	return gen.TestEnvironment200JSONResponse(out), nil
+}
+
+// retestSecretUsers re-tests the remote MCP servers whose headers name secret (ADR 0037 decision
+// 9: tests run when a referenced secret is replaced) and keeps their results, in the environment
+// files of each factory that is not archived: its open draft's, then its current version's. A
+// server both have is tested once, as the draft has it, since both keep one result. The tests run
+// within the request; a step that fails is logged, never the value, and the next one goes on.
+func (s *server) retestSecretUsers(ctx context.Context, secret string) {
+	recs, err := s.records(ctx)
+	if err != nil {
+		s.log.WarnContext(ctx, "secret retest skipped", slog.String("secret", secret), slog.Any("error", err))
+
+		return
+	}
+
+	for _, id := range slices.Sorted(maps.Keys(recs)) {
+		rec := recs[id]
+		if rec.Archived() {
+			continue
+		}
+
+		tested := map[[2]string]bool{}
+
+		for _, sel := range retestVersions(rec) {
+			names, err := s.environmentNames(ctx, id, sel)
+			if err != nil {
+				s.log.WarnContext(ctx, "secret retest environments not listed", slog.String("secret", secret),
+					slog.String("factory", string(id)), slog.String("version", string(sel.Kind)), slog.Any("error", err))
+
+				continue
+			}
+
+			for _, name := range names {
+				s.retestEnvironment(ctx, secret, id, sel, name, tested)
+			}
+		}
+	}
+}
+
+// retestVersions are the versions of rec a retest reads: the open draft first, then the current one.
+func retestVersions(rec ports.FactoryRecord) []authoring.VersionSelector {
+	var out []authoring.VersionSelector
+
+	if rec.Draft != nil {
+		out = append(out, authoring.VersionSelector{Kind: authoring.SelectDraft})
+	}
+
+	if rec.Current != nil {
+		out = append(out, authoring.VersionSelector{Kind: authoring.SelectCurrent})
+	}
+
+	return out
+}
+
+// environmentNames are the environments of factory's version sel, by their files' names, sorted.
+func (s *server) environmentNames(ctx context.Context, factory domain.FactoryID, sel authoring.VersionSelector) ([]string, error) {
+	var files []authoring.FileInfo
+
+	if sel.Kind == authoring.SelectDraft {
+		var err error
+		if files, err = s.defs.DraftFiles(ctx, factory); err != nil {
+			return nil, err
+		}
+	} else {
+		v, err := s.defs.Version(ctx, factory, sel)
+		if err != nil {
+			return nil, err
+		}
+
+		files = v.Files
+	}
+
+	var out []string
+
+	for _, f := range files {
+		dir, file := path.Split(f.Path)
+		if dir != config.EnvironmentsDir+"/" {
+			continue
+		}
+
+		if name, ok := strings.CutSuffix(file, ".yaml"); ok {
+			out = append(out, name)
+		} else if name, ok := strings.CutSuffix(file, ".yml"); ok {
+			out = append(out, name)
+		}
+	}
+
+	slices.Sort(out)
+
+	return slices.Compact(out), nil
+}
+
+// retestEnvironment re-tests environment name's remote MCP servers whose headers name secret,
+// unless tested holds them already, and adds them to it.
+func (s *server) retestEnvironment(ctx context.Context, secret string, factory domain.FactoryID, sel authoring.VersionSelector, name string,
+	tested map[[2]string]bool,
+) {
+	attrs := []any{slog.String("secret", secret), slog.String("factory", string(factory)), slog.String("environment", name)}
+
+	env, err := s.readEnvironment(ctx, factory, sel, name)
+	if err != nil {
+		s.log.WarnContext(ctx, "secret retest environment not read", append(attrs, slog.Any("error", err))...)
+
+		return
+	}
+
+	t := envTest{s: s, factory: factory, environment: env.Name}
+
+	for _, server := range slices.Sorted(maps.Keys(env.Spec.MCP)) {
+		m := env.Spec.MCP[server]
+		key := [2]string{env.Name, server}
+
+		if m.URL == "" || tested[key] || !slices.Contains(environmentcheck.Referenced(m.Headers), secret) {
+			continue
+		}
+
+		tested[key] = true
+
+		if _, err := t.server(ctx, server, m.URL, m.Headers, nil); err != nil {
+			s.log.WarnContext(ctx, "secret retest failed", append(attrs, slog.String("server", server), slog.Any("error", err))...)
+		}
+	}
 }
 
 // readEnvironment reads environment name of factory's version sel: errEnvironmentNotFound when it
