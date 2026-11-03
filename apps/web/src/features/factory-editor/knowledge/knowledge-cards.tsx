@@ -177,7 +177,7 @@ export function MemoryCard({
               value={draft}
               rows={2}
               onChange={(ev) => setDraft(ev.target.value)}
-              className="field-sizing-content min-h-[4.5rem]"
+              className="field-sizing-content min-h-18"
             />
           </Field>
           <div>
