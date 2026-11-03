@@ -19,7 +19,7 @@ The channels are In Goal, Email and Slack. The digest has no In Goal column.
 
 Each box saves when you change it. Notifications are personal: they follow you into every organization you belong to. With sign-in off there is no person to notify, so the boxes are unavailable.
 
-The Slack column works only after an admin has set up Slack for the organization (below).
+The Slack column turns on once the organization's Slack notifications are set (see Set up Slack below). Until then its boxes show your saved choice but cannot be changed.
 
 ## The daily digest
 
@@ -39,6 +39,8 @@ You need the `org:manage` permission.
    - `Slack could not be reached. Try again.`: Slack did not answer. Test again later.
    - `Pick a secret first`: no secret is picked.
 6. Press Save. Slack direct messages go out to people who ticked Slack on their account page.
+
+Once saved, the setting shows on the Access page as a "Slack notifications" row with its secret. The Floor's setup checklist counts "Set up Slack notifications" as done at the same point.
 
 Turn off removes the setting; Slack messages stop. Members without `org:manage` see the saved secret name but no controls.
 

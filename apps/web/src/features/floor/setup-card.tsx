@@ -13,6 +13,7 @@ import {
   itemsQuery,
   knowledgeSourcesQuery,
   membersQuery,
+  orgNotificationsQuery,
   versionModelQuery,
 } from '../../api/queries';
 import type { Factory } from '../../api/types';
@@ -57,11 +58,12 @@ export function SetupCard() {
   const members = useQuery(membersQuery(org.id));
   const invitations = useQuery(invitationsQuery(org.id));
   const connections = useQuery(connectionsQuery(org.id));
+  const notifications = useQuery(orgNotificationsQuery(org.id));
   const knowledge = useQuery(knowledgeSourcesQuery(org.id));
   const model = useQuery({ ...versionModelQuery(org.id, factory.id, 'current'), select: (v) => modelOf(v.model) });
   const intake = useQuery(intakeQuery(org.id, factory.id));
   const finished = useQuery(itemsQuery(org.id, factory.id, { state: 'done', limit: 1 }));
-  const queries = [members, invitations, connections, knowledge, model, intake, finished];
+  const queries = [members, invitations, connections, notifications, knowledge, model, intake, finished];
 
   if (hidden) return null;
   if (queries.some((query) => query.isError)) {
@@ -91,6 +93,7 @@ export function SetupCard() {
     members: members.data ?? [],
     invitations: invitations.data ?? [],
     connections: connections.data ?? [],
+    slackSet: Boolean(notifications.data?.slack_secret),
     knowledge: knowledge.data ?? [],
     model: model.data,
     triggers: intake.data.triggers,
@@ -179,7 +182,12 @@ function SetupLine({ row, factory }: { row: SetupRow; factory: Factory }) {
         <span className="sr-only">{row.done ? 'Done' : 'To do'}</span>
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className={cn(row.done ? 'text-ink-soft' : 'font-semibold text-ink')}>{row.text}</span>
+        <span
+          key={row.done ? 'done' : 'todo'}
+          className={cn(row.done ? 'text-ink-soft' : 'font-semibold text-ink', 'motion-safe:animate-text-states-swap')}
+        >
+          {row.text}
+        </span>
         {!row.done && row.hint ? <span className="text-meta text-muted">{row.hint}</span> : null}
       </span>
       {row.done ? null : <SetupAction id={row.id} factory={factory} />}
@@ -187,7 +195,7 @@ function SetupLine({ row, factory }: { row: SetupRow; factory: Factory }) {
   );
 }
 
-/** A to-do row's button: the page that does it. Connect Slack opens the add-connection page for slack. */
+/** A to-do row's button: the page that does it. Set up Slack notifications opens the settings page at its Notifications section. */
 function SetupAction({ id, factory }: { id: SetupRowId; factory: Factory }) {
   const { org, factory: ref } = useFactoryParams();
   const orgSlug = useOrg().slug;
@@ -195,7 +203,7 @@ function SetupAction({ id, factory }: { id: SetupRowId; factory: Factory }) {
     case 'invite':
       return <ActionLink to="/o/$org/members" params={{ org: orgSlug }} label="Invite" />;
     case 'slack':
-      return <ActionLink to="/o/$org/secrets" params={{ org: orgSlug }} search={{ new: true }} label="Connect" />;
+      return <ActionLink to="/o/$org/settings" params={{ org: orgSlug }} hash="notifications" label="Set up" />;
     case 'github':
       return <ActionLink to="/o/$org/secrets" params={{ org: orgSlug }} search={{ new: true }} label="Connect" />;
     case 'knowledge':
@@ -230,11 +238,17 @@ function ActionLink(props: {
   to: string;
   params: Record<string, string>;
   search?: Record<string, string | boolean>;
+  hash?: string;
   label: string;
 }) {
   return (
     <Button asChild size="sm" variant="secondary">
-      <Link to={props.to} params={props.params} search={props.search as never}>
+      <Link
+        to={props.to}
+        params={props.params}
+        search={props.search as never}
+        {...(props.hash ? { hash: props.hash } : {})}
+      >
         {props.label}
       </Link>
     </Button>
