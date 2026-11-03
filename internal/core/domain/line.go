@@ -79,6 +79,9 @@ type Line struct {
 	// Jonah is learning.jonah, the policy of the reviews that turn sent-back runs into
 	// proposals (ADR 0034), with DefaultJonahPolicy's values for the keys a definition leaves out.
 	Jonah JonahPolicy
+	// Environments are the version's environment files (ADR 0037 decision 5), by name; none for
+	// a version published before, which runs on connections (OnSecrets).
+	Environments []Environment
 }
 
 // JonahPolicy is when and how a factory's Jonah reviews run (ADR 0034).
@@ -101,17 +104,22 @@ func DefaultJonahPolicy() JonahPolicy {
 }
 
 // Refusal is why no run of the line can start, "" when runs can: since the cutover to
-// connections (spec 4 §14, step 5) a version that still has a form connections replaced, or one
-// that names no runtime.modelConnection (the only way a run gets its model), is refused, and the
-// engine blocks its items with this reason.
+// connections (spec 4 §14, step 5) a version that still has a form connections replaced is
+// refused, and so is one that names nothing that gives every run its model: runtime.modelKey on
+// secrets (ADR 0037 decision 7), runtime.modelConnection on connections. The engine blocks its
+// items with this reason.
 func (l Line) Refusal() string {
 	const fix = "publish a version with connections (spec 4 §4.4); goal factory validate and the builder show the fix of each problem"
 
 	switch {
 	case len(l.Removed) > 0:
 		return fmt.Sprintf("version %d still has %s, which connections replaced: %s", l.Number, strings.Join(l.Removed, ", "), fix)
-	case l.Runtime.ModelConnection == "":
-		return fmt.Sprintf("version %d names no runtime.modelConnection, which gives every run its model: %s", l.Number, fix)
+	case l.OnSecrets() && l.Runtime.ModelKey == "":
+		return fmt.Sprintf("version %d has environment files but names no runtime.modelKey, which gives every run its model: "+
+			"set it to the {{secret}} that holds the model's key", l.Number)
+	case !l.OnSecrets() && l.Runtime.ModelConnection == "":
+		return fmt.Sprintf("version %d names neither runtime.modelKey nor runtime.modelConnection, one of which gives every run its model: %s",
+			l.Number, fix)
 	default:
 		return ""
 	}
@@ -133,8 +141,11 @@ func (l Line) MergeConnections() []string {
 type Runtime struct {
 	Model string // default model; an agent's own Model wins
 	// ModelConnection is the organization connection, of a kind with model access, that gives
-	// every run its model.
+	// every run of a version on connections its model.
 	ModelConnection string
+	// ModelKey is the {{secret}} that gives every run of a version on secrets its model (ADR 0037
+	// decision 7).
+	ModelKey string
 	// Size is how much CPU and memory each run's sandbox gets; empty is medium.
 	Size SandboxSize
 	// Tools are mise tool specs every run installs after the repository's own.
@@ -155,9 +166,12 @@ type Runtime struct {
 type Repository struct {
 	// URL is an https clone URL without credentials.
 	URL string
-	// Connection is the organization connection that clones and merges it; empty for a public
-	// repository.
+	// Connection is the organization connection that clones and merges it on connections; empty
+	// for a public repository.
 	Connection string
+	// Token is the {{secret}} that clones and merges it on secrets, and Forge its forge on a host
+	// other than github.com and gitlab.com (ADR 0037 decision 12); both empty on connections.
+	Token, Forge string
 }
 
 // Station is one step of the line.
@@ -216,6 +230,8 @@ type AgentSpec struct {
 	PerItemUSD  float64
 	Skills      []SkillRef
 	Connections []string
+	// Environment is the environment file the agent's box gets on secrets; "" is DefaultEnvironment.
+	Environment string
 	ToolsAllow  []string
 	ToolsDeny   []string
 }

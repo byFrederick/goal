@@ -53,7 +53,15 @@ func TestLine_Refusal(t *testing.T) {
 		},
 		{
 			name: "no model connection", line: Line{Number: 2},
-			want: []string{"version 2", "runtime.modelConnection", "publish a version with connections (spec 4 §4.4)"},
+			want: []string{"version 2", "runtime.modelConnection", "runtime.modelKey"},
+		},
+		{name: "on secrets", line: Line{Runtime: Runtime{ModelKey: "{{claude-key}}"}, Environments: []Environment{{Name: DefaultEnvironment}}}},
+		{name: "a model key without environments", line: Line{Runtime: Runtime{ModelKey: "{{claude-key}}"}}},
+		{
+			name: "environments without a model key", line: Line{
+				Number: 4, Runtime: Runtime{ModelConnection: "claude"}, Environments: []Environment{{Name: DefaultEnvironment}},
+			},
+			want: []string{"version 4", "runtime.modelKey"},
 		},
 	}
 

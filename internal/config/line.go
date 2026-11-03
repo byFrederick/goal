@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -18,7 +19,7 @@ func (f *Factory) Line() domain.Line {
 		Name:      f.Metadata.Name,
 		Purpose:   f.Purpose(),
 		Runtime: domain.Runtime{
-			Model: s.Runtime.Model, ModelConnection: s.Runtime.ModelConnection,
+			Model: s.Runtime.Model, ModelConnection: s.Runtime.ModelConnection, ModelKey: s.Runtime.ModelKey,
 			Size: domain.SandboxSize(s.Runtime.Size), Tools: slices.Clone(s.Runtime.Tools),
 		},
 		Stations: make([]domain.Station, 0, len(s.Board.Stations)),
@@ -26,7 +27,11 @@ func (f *Factory) Line() domain.Line {
 	}
 
 	if r := s.Runtime.Repository; r != nil {
-		l.Runtime.Repository = domain.Repository{URL: r.URL, Connection: r.Connection}
+		l.Runtime.Repository = domain.Repository{URL: r.URL, Connection: r.Connection, Token: r.Token, Forge: r.Forge}
+	}
+
+	for _, e := range f.environments {
+		l.Environments = append(l.Environments, domain.Environment{Name: e.Name, Env: maps.Clone(e.Spec.Env)})
 	}
 
 	for _, c := range s.Connections {
@@ -284,7 +289,7 @@ func trigger(t Trigger) domain.Trigger {
 
 func agent(a Agent, sources map[string]string) domain.AgentSpec {
 	out := domain.AgentSpec{
-		Name: a.Name, PromptPath: a.Prompt, Model: a.Model, Connections: slices.Clone(a.Connections),
+		Name: a.Name, PromptPath: a.Prompt, Model: a.Model, Connections: slices.Clone(a.Connections), Environment: a.Environment,
 		MaxTurns: a.MaxTurns, PerItemUSD: a.PerItemUSD,
 	}
 
