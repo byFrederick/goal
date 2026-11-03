@@ -323,7 +323,8 @@ func (m *Mover) files(ctx context.Context, v domain.DefinitionVersion) (map[stri
 
 // factory converts rec's current version and returns its conversion: nil for a version on
 // secrets already, refused with the problems for one that cannot convert or fails its publish
-// checks.
+// checks. Once the converted version is published, it re-keys the organization's standing rules
+// onto its environments (rekey).
 func (m *Mover) factory(ctx context.Context, rec ports.FactoryRecord, conns []domain.ResolvedConnection) (*ports.FactoryConversion, error) {
 	current, err := m.d.Definitions.Version(ctx, rec.Current.ID)
 	if err != nil {
@@ -361,6 +362,10 @@ func (m *Mover) factory(ctx context.Context, rec ports.FactoryRecord, conns []do
 		c.Problems = []string{fmt.Sprintf("the converted version does not publish: %v", pubErr)}
 	} else {
 		c.To = v.ID
+
+		if err := m.rekey(ctx, rec.ID, r.Servers); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := m.reopen(ctx, rec.ID, open, cmpOr(v.ID, current.ID), conns); err != nil {
@@ -368,6 +373,37 @@ func (m *Mover) factory(ctx context.Context, rec ports.FactoryRecord, conns []do
 	}
 
 	return c, nil
+}
+
+// rekey copies each active standing rule keyed by a connection onto every environment of factory
+// f whose converted file has a server named after the connection (servers, Result.Servers): the
+// same tool and agent role, made by Goal with the item the rule was approved on (ADR 0037
+// decision 19, step 4). The rules stay as they are. A copy made before is found instead of made
+// again (ports.Connections.CreateServerStandingRule), so re-keying twice copies nothing.
+func (m *Mover) rekey(ctx context.Context, f domain.FactoryID, servers map[string][]string) error {
+	rules, err := m.d.Connections.StandingRules(ctx, false)
+	if err != nil {
+		return fmt.Errorf("list standing rules: %w", err)
+	}
+
+	for _, r := range rules {
+		if r.ConnectionID == "" || r.Connection == "" {
+			continue
+		}
+
+		for _, env := range slices.Sorted(maps.Keys(servers)) {
+			if !slices.Contains(servers[env], r.Connection) {
+				continue
+			}
+
+			n := domain.NewServerStandingRule{Factory: f, Environment: env, Server: r.Connection, Tool: r.Tool, Agent: r.Agent, Item: r.ItemID}
+			if _, err := m.d.Connections.CreateServerStandingRule(ctx, n, Actor); err != nil {
+				return fmt.Errorf("re-key standing rule %s onto environment %s: %w", r.ID, env, err)
+			}
+		}
+	}
+
+	return nil
 }
 
 func cmpOr(a, b domain.DefinitionVersionID) domain.DefinitionVersionID {

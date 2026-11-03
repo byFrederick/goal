@@ -118,6 +118,9 @@ type Result struct {
 	Files map[string][]byte
 	// Names maps each connection the version used to its secret fields' secret names.
 	Names map[string]map[string]string
+	// Servers maps each environment file the conversion wrote, by name, to its MCP servers' names,
+	// sorted: the names of the connections they came from. Nil when Files is.
+	Servers map[string][]string
 	// Problems say what keeps the version from converting, each naming what to fix.
 	Problems []string
 	// OnSecrets reports a version that has environment files or a model key already: nothing to do.
@@ -153,7 +156,7 @@ func Convert(files map[string][]byte, conns []domain.ResolvedConnection) Result 
 		return Result{OnSecrets: true}
 	}
 
-	c := &converter{byName: map[string]domain.ResolvedConnection{}, names: map[string]map[string]string{}}
+	c := &converter{byName: map[string]domain.ResolvedConnection{}, names: map[string]map[string]string{}, servers: map[string][]string{}}
 	for _, rc := range conns {
 		c.byName[rc.Connection.Name] = rc
 	}
@@ -166,12 +169,13 @@ func Convert(files map[string][]byte, conns []domain.ResolvedConnection) Result 
 	tree := maps.Clone(files)
 	maps.Copy(tree, out)
 
-	return Result{Files: tree, Names: c.names}
+	return Result{Files: tree, Names: c.names, Servers: c.servers}
 }
 
 type converter struct {
 	byName   map[string]domain.ResolvedConnection
 	names    map[string]map[string]string
+	servers  map[string][]string
 	problems []string
 }
 
@@ -355,6 +359,7 @@ func (c *converter) convert(f *config.Factory, raw []byte) map[string][]byte {
 		}
 
 		out[config.EnvironmentsDir+"/"+name+".yaml"] = b
+		c.servers[name] = slices.Sorted(maps.Keys(s.MCP))
 	}
 
 	write(config.DefaultEnvironment, c.environment(factoryConns, rt.Size, rt.Tools))
