@@ -7,6 +7,7 @@ This page lists the changes a person using Goal would notice, newest first, grou
 
 ## Week of 2026-11-02
 
+- Credentials is now Secrets, with a list, a page for each secret, and Import. New secret opens a side sheet where you paste a value; nobody can read it back. A secret's page shows where it is used, its activity, Replace value, its settings and Delete, which is disabled while anything uses the secret. Import takes a `.env` file or YAML, shows what would happen first, and replaces or skips names that exist. The old `/credentials` addresses open Secrets.
 - The Board's Expedite lane is one yellow box per column again, all at the same top and height, labelled just Expedite in the first column. From 1280 px wide every station fits without scrolling sideways. The caption with the lane's use stays gone, and on a phone the lane shows only the Expedite chip.
 - The Agents page shows each agent once per station, even when a route sends several lanes to it. The card's label lists every lane it takes, and items with no lane read "no lane".
 - On the agent's Overview, Why review sent work back shows each reason in sentence case on one line, with the full text in a tooltip, and a solid red bar. Settings values are regular weight, Skills shows the first seven with a + N more chip, and the stat strip keeps four figures on one line from 768 px up.

@@ -2,7 +2,7 @@
 // the window (documentElement.scrollWidth against clientWidth, which counts a button's hit area), at 1440, 1280, 1024, 768 and 390 px wide, in light and
 // dark, against the mock. The routes: Runs, Items, Needs you, Item (/items/12), New trigger, Jonah, Home,
 // Definition line, Board, Account, Factory settings, Assembly item (/items/17), Agents, Agent (reviewer),
-// Connections, GitHub connection, Knowledge source (handbook) and Spend. A wide table scrolls in its own box, so
+// Connections, GitHub connection, Knowledge source (handbook), Secrets, the New secret sheet, a secret (github-token), Import secrets and Spend. A wide table scrolls in its own box, so
 // the document's width is asserted, and so is that no visible element ends past the right edge outside a
 // horizontal scroller (expectNoClippedElements): the shell clips overflow, so scrollWidth alone misses cut-off content. Each visit attaches a screenshot. Not run in the box (no browser): the
 // pull request says so.
@@ -136,6 +136,40 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
     open: async (page) => {
       await page.goto('/o/acme/f/goal/agents/reviewer');
       await expect(page.getByRole('heading', { level: 1, name: 'reviewer' })).toBeVisible();
+    },
+  },
+  {
+    name: 'Secrets',
+    open: async (page) => {
+      await page.goto('/o/acme/secrets');
+      await expect(
+        page.getByRole('heading', { level: 1, name: 'Secrets' }).or(page.getByText('Every key agents use')),
+      ).toBeVisible();
+      await expect(page.getByRole('radio', { name: /Expiring/ })).toBeVisible();
+    },
+  },
+  {
+    name: 'New secret sheet',
+    open: async (page) => {
+      await page.goto('/o/acme/secrets?new=true');
+      await expect(page.getByRole('dialog', { name: 'New secret' })).toBeVisible();
+    },
+  },
+  {
+    name: 'Secret',
+    open: async (page) => {
+      await page.goto('/o/acme/secrets/github-token');
+      await expect(page.getByRole('heading', { level: 1, name: /github-token/ })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Activity' })).toBeVisible();
+    },
+  },
+  {
+    name: 'Import secrets',
+    open: async (page) => {
+      await page.goto('/o/acme/secrets/import');
+      await expect(page.getByRole('heading', { level: 1, name: 'Import secrets' })).toBeVisible();
+      await page.getByLabel('Paste .env or YAML').fill('SENTRY_TOKEN=x\nLINEAR_API_KEY=y');
+      await expect(page.getByRole('region', { name: 'What happens' })).toBeVisible();
     },
   },
   {

@@ -53,7 +53,7 @@ export type OrgPath =
   | '/o/$org/api-keys'
   | '/o/$org/models'
   | '/o/$org/connections'
-  | '/o/$org/credentials'
+  | '/o/$org/secrets'
   | '/o/$org/knowledge'
   | '/o/$org/runs'
   | '/o/$org/needs-you'
@@ -175,12 +175,12 @@ export const connectionsScreen: OrgScreen = {
   to: '/o/$org/connections',
   permissions: ['connection:read'],
 };
-/** The organization's credentials (ADR 0017): every member reads their names; owners and admins change them. */
-export const credentialsScreen: OrgScreen = {
-  id: 'credentials',
+/** The organization's secrets (ADR 0037): every member reads their names; owners and admins change them. The label stays Credentials until the Access part renames it. */
+export const secretsScreen: OrgScreen = {
+  id: 'secrets',
   label: 'Credentials',
   icon: KeyRound,
-  to: '/o/$org/credentials',
+  to: '/o/$org/secrets',
   permissions: ['secret:read'],
 };
 /** The organization's knowledge base (spec 4 §10): every member reads and searches it; owners and admins change it. */
@@ -240,7 +240,7 @@ export const sidebarOrgScreens: readonly Listed<OrgPath>[] = [
   { ...needsYouScreen, available: true },
   { ...runsScreen, available: true },
   { ...connectionsScreen, available: true },
-  { ...credentialsScreen, available: true },
+  { ...secretsScreen, available: true },
   { ...knowledgeScreen, available: true },
 ];
 

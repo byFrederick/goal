@@ -544,7 +544,7 @@ describe('the collapsed rail', () => {
     renderSidebar({ can: ['secret:read'] });
     const link = within(await nav()).getByRole('link', { name: /^Credentials/ });
 
-    expect(link.getAttribute('href')).toBe('/o/acme/credentials');
+    expect(link.getAttribute('href')).toBe('/o/acme/secrets');
   });
 
   it('does not list Credentials without secret:read', async () => {
