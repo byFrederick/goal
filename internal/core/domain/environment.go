@@ -1,8 +1,10 @@
 package domain
 
 import (
+	"maps"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -10,11 +12,114 @@ import (
 // none gets (ADR 0037 decision 5).
 const DefaultEnvironment = "default"
 
-// Environment is the part of one environment file (environments/<name>.yaml) the engine gives a
-// run at its start (ADR 0037 decision 10): its env, whose values may hold {{secret}} references.
+// Environment is one environment file (environments/<name>.yaml) as the engine resolves it at a
+// run's start (ADR 0037 decision 10). Values of Env, Files and the MCP servers' Headers and Env
+// may hold {{secret}} references.
 type Environment struct {
 	Name string
-	Env  map[string]string
+	// Size is the box's size; empty is medium. Image is the box's image; empty is Goal's.
+	Size  SandboxSize
+	Image string
+	// Tools are mise tool specs and Setup the commands prepare runs after installing them.
+	Tools []string
+	Setup []string
+	// Env are the agent's variables and Files the files the worker writes, by path.
+	Env   map[string]string
+	Files map[string]string
+	// MCP are the MCP servers the agent gets, by name.
+	MCP map[string]MCPServer
+}
+
+// MCPServer is an MCP server an environment gives: remote (URL and Headers) or stdio (Command and
+// Env). Tools maps a tool name or glob to its mode, allow, ask or off.
+type MCPServer struct {
+	URL     string
+	Headers map[string]string
+	Command []string
+	Env     map[string]string
+	Tools   map[string]string
+}
+
+// The prefixes of the platform-reserved variables a run's files and its MCP servers' secrets go in
+// (ReservedRunEnv reserves GOAL_*, so an environment's env cannot set them).
+const (
+	envFilePrefix   = "GOAL_FILE_"
+	envSecretPrefix = "GOAL_SECRET_"
+)
+
+// FileEnv maps each of files' paths to the variable its content goes in: GOAL_FILE_1, GOAL_FILE_2…
+// numbered by sorted path. The engine fills the variables and the worker writes each file from
+// its variable, so both number them here.
+func FileEnv(files map[string]string) map[string]string {
+	out := make(map[string]string, len(files))
+	for i, p := range slices.Sorted(maps.Keys(files)) {
+		out[p] = envFilePrefix + strconv.Itoa(i+1)
+	}
+
+	return out
+}
+
+// SecretEnv is the variable secret name's value goes in for an MCP server's header or stdio env:
+// GOAL_SECRET_ and the name upper-cased, each character other than a letter or digit turned into _.
+func SecretEnv(name string) string {
+	return envSecretPrefix + strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z':
+			return r - 'a' + 'A'
+		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			return r
+		default:
+			return '_'
+		}
+	}, name)
+}
+
+// RenderSecrets is value with each {{secret}} reference replaced by ${GOAL_SECRET_<NAME>}
+// (SecretEnv), so a config holding it names the variable and never the value.
+func RenderSecrets(value string) string {
+	return secretReference.ReplaceAllStringFunc(value, func(ref string) string {
+		return "${" + SecretEnv(secretReference.FindStringSubmatch(ref)[1]) + "}"
+	})
+}
+
+// SecretNames are every secret the server's headers and env refer to, in sorted key order, each
+// once.
+func (s MCPServer) SecretNames() []string {
+	var out []string
+
+	for _, m := range []map[string]string{s.Headers, s.Env} {
+		for _, k := range slices.Sorted(maps.Keys(m)) {
+			for _, n := range SecretNames(m[k]) {
+				if !slices.Contains(out, n) {
+					out = append(out, n)
+				}
+			}
+		}
+	}
+
+	return out
+}
+
+// Rendered is the server with each {{secret}} of its headers and env rendered as RenderSecrets
+// does.
+func (s MCPServer) Rendered() MCPServer {
+	render := func(m map[string]string) map[string]string {
+		if m == nil {
+			return nil
+		}
+
+		out := make(map[string]string, len(m))
+		for k, v := range m {
+			out[k] = RenderSecrets(v)
+		}
+
+		return out
+	}
+
+	s.Headers, s.Env = render(s.Headers), render(s.Env)
+	s.Command, s.Tools = slices.Clone(s.Command), maps.Clone(s.Tools)
+
+	return s
 }
 
 // secretReference is one {{secret}} in a value, spaces inside the braces allowed; its group is the

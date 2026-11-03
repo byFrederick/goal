@@ -151,7 +151,16 @@ Nothing reads the settings yet: the store, the engine and the worker follow in t
 
 ## Environment files
 
-An environment file, `environments/<name>.yaml`, says what an agent's box installs and what it can reach ([ADR 0037](../adr/0037-secrets-and-environment-files.md), decisions 5 to 8). Every factory has `environments/default.yaml`. An agent names its file with `environment: <name>`, and an agent without one gets `default`; a judge's front matter and an eval case's `spec` take `environment` the same way. `config.Check` loads and checks the files (`internal/config/environment.go`); run start does not read them yet, so runs still take the [old path](#keys-moved-to-environment-files).
+An environment file, `environments/<name>.yaml`, says what an agent's box installs and what it can reach ([ADR 0037](../adr/0037-secrets-and-environment-files.md), decisions 5 to 8). Every factory has `environments/default.yaml`. An agent names its file with `environment: <name>`, and an agent without one gets `default`; a judge's front matter and an eval case's `spec` take `environment` the same way. `config.Check` loads and checks the files (`internal/config/environment.go`), and the published version keeps every key on `domain.Environment`.
+
+**At run start** the engine resolves the agent's file from the pinned version (`internal/core/engine/environment.go`, decision 10):
+
+- It opens every `{{secret}}` of `env`, `files`, `mcp.<server>.headers`, a stdio server's `env` and `runtime.modelKey` together, once, through the secrets store, which checks each secret's scope against the factory and writes one `secret.used` per secret. A missing or out-of-scope secret fails the run with a reason that names the secret and the environment and never a value. Every opened value is scrubbed from what the run reports.
+- The agent's box gets `env` with the values filled in, each `files` entry's content in a platform-reserved variable `GOAL_FILE_<n>` (numbered from 1 by sorted path, `domain.FileEnv`), and the value of each secret an MCP header or stdio `env` names in `GOAL_SECRET_<NAME>` (the name upper-cased, every other character `_`, `domain.SecretEnv`). The resolved MCP servers name `${GOAL_SECRET_<NAME>}` in place of the reference, so they hold no value.
+- The box takes the file's `size` (medium when omitted) and its `image` (Goal's agent image when omitted). The Docker and Cloudflare sandboxes fail the run with an error that names an image they cannot run.
+- The organization policy's Use credentials `off` drops `env`, `files` and `mcp`; the model key and the repository still reach the run.
+
+The run bundle does not carry the file paths, the MCP servers, `tools` or `setup` yet, so the worker writes no file and starts no MCP server from them.
 
 ```yaml
 apiVersion: goal/v1
