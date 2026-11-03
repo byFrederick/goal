@@ -17,7 +17,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `CLAUDE_CODE_OAUTH_TOKEN` | secret | no | Retired: a factory's model key, a secret, replaces it; goald ignores it and warns while it is set. |
 | `GOAL_AGENT_EGRESS` | config | no | Retired: compose's goal-egress service replaced it; goald ignores it and warns while it is set. |
 | `GOAL_AGENT_IMAGE` | config | no | The image every run's sandbox runs (goal-agent); a factory's runtime.image is ignored. |
-| `GOAL_ALLOW_PRIVATE_UPSTREAMS` | config | no | true lets connection tests and the embeddings API reach this machine's and the LAN's servers; refused unless goald listens on loopback. |
+| `GOAL_ALLOW_PRIVATE_UPSTREAMS` | config | no | true lets connection tests and the conversion API reach this machine's and the LAN's servers; refused unless goald listens on loopback. |
 | `GOAL_AUTH` | config | no | session (the default) turns sign-in on; none makes every request the single local user, on loopback only. |
 | `GOAL_AUTH_EMAIL` | config | no | off turns email sign-in codes and all mail off; it needs GOAL_AUTH_GOOGLE=on. |
 | `GOAL_AUTH_GOOGLE` | config | no | on also offers sign-in with Google, with GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. |
@@ -31,9 +31,6 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_EGRESS_ADDRESSES` | public | no | The addresses agents' traffic leaves the install from, comma-separated CIDRs, shown on the organization's models and policies screen; empty by default. |
 | `GOAL_EGRESS_IMAGE` | config | no | Retired: compose's goal-egress service replaced it; goald ignores it and warns while it is set. |
 | `GOAL_EGRESS_NAME` | config | no | Retired: compose's goal-egress service replaced it; goald ignores it and warns while it is set. |
-| `GOAL_EMBED_KEY` | secret | no | The bearer key of the embeddings API. |
-| `GOAL_EMBED_MODEL` | config | no | The embeddings model, of 1024 dimensions; changing it re-embeds every knowledge source. |
-| `GOAL_EMBED_URL` | config | no | An OpenAI-compatible embeddings API; set, the knowledge base uses hybrid search instead of keywords only. |
 | `GOAL_GATEWAY_KEY` | secret | yes | Signs the per-task MCP gateway tokens; at least 32 bytes, and it never reaches a task. |
 | `GOAL_GATEWAY_KEY_REF` | config | no | The Secrets reference that names the gateway key (env:GOAL_GATEWAY_KEY by default). |
 | `GOAL_GATEWAY_LISTEN` | config | no | The gateway's own listener, serving only /mcp and /run; required when GOAL_LISTEN is off loopback. |
@@ -75,6 +72,8 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_TICK_EVERY` | config | no | How often goald's engine moves work along. |
 | `GOAL_TRUSTED_PROXIES` | config | no | CIDRs of the proxies in front of goald whose X-Forwarded-For names the client; the control Worker sets it. |
 | `GOAL_UPLOAD_MAX_BYTES` | config | no | The largest file that may be uploaded to the knowledge base, in bytes. |
+| `GOAL_WORKERS_AI_KEY` | secret | no | The bearer token of Workers AI, which converts uploaded PDF and Office files to Markdown for knowledge sources. |
+| `GOAL_WORKERS_AI_URL` | config | no | The account's Workers AI API root (https://api.cloudflare.com/client/v4/accounts/<id>/ai); set, goald converts PDF and Office files, and unset, it refuses them. |
 | `GOAL_WORKSPACE_ROOT` | config | no | Retired: a run's sandbox holds its workspace; goald ignores it and warns while it is set. |
 
 ## goal-egress (`cmd/goal-egress`)
@@ -173,9 +172,6 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_BOOTSTRAP_OWNER_EMAIL` | config | no | The first owner's address: until someone signs in it is the only one that may, and becomes platform admin; goal up requires it under sign-in. |
 | `GOAL_DATABASE_URL` | secret | no | goald's PostgreSQL URL, as goal_app under row-level security; by default compose's database with GOAL_PG_APP_PASSWORD. |
 | `GOAL_EGRESS_ADDRESSES` | public | no | The addresses agents' traffic leaves the install from, comma-separated CIDRs, shown on the organization's models and policies screen; empty by default. |
-| `GOAL_EMBED_KEY` | secret | no | The bearer key of the embeddings API. |
-| `GOAL_EMBED_MODEL` | config | no | The embeddings model, of 1024 dimensions; changing it re-embeds every knowledge source. |
-| `GOAL_EMBED_URL` | config | no | An OpenAI-compatible embeddings API; set, the knowledge base uses hybrid search instead of keywords only. |
 | `GOAL_GATEWAY_KEY` | secret | yes | Signs the per-task MCP gateway tokens; at least 32 bytes, and it never reaches a task. |
 | `GOAL_KB_WORKERS` | config | no | How many knowledge sources one goald syncs at once (0: none). |
 | `GOAL_LOG_FORMAT` | config | no | goald's log format: json or text. |
@@ -194,6 +190,8 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_SMTP_FROM` | public | no | The sender of sign-in codes, invitations and notification email. |
 | `GOAL_SMTP_URL` | secret | no | Where sign-in codes, invitations and notification email are mailed, with user:password for a real server; the auth service defaults to compose's Mailpit, and goald sends no email while it is unset. |
 | `GOAL_UPLOAD_MAX_BYTES` | config | no | The largest file that may be uploaded to the knowledge base, in bytes. |
+| `GOAL_WORKERS_AI_KEY` | secret | no | The bearer token of Workers AI, which converts uploaded PDF and Office files to Markdown for knowledge sources. |
+| `GOAL_WORKERS_AI_URL` | config | no | The account's Workers AI API root (https://api.cloudflare.com/client/v4/accounts/<id>/ai); set, goald converts PDF and Office files, and unset, it refuses them. |
 | `GOOGLE_CLIENT_ID` | secret | no | The Google OAuth client's id, for sign-in with Google. |
 | `GOOGLE_CLIENT_SECRET` | secret | no | The Google OAuth client's secret, for sign-in with Google. |
 

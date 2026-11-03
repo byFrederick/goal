@@ -6,7 +6,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Check, LoaderCircle, TriangleAlert, Upload, X } from 'lucide-react';
 import { type DragEvent, useId, useRef, useState } from 'react';
-import { uploadKnowledgeDocuments } from '../../api/knowledge';
+import { uploadKnowledgeFiles } from '../../api/knowledge';
 import { keys } from '../../api/queries';
 import type { KnowledgeSource } from '../../api/types';
 import { useOrg } from '../../shared/org';
@@ -59,7 +59,7 @@ export function useUploader(org: string) {
       for (const r of chosen.filter((x) => x.state === 'ready')) {
         set(r.key, { state: 'uploading' });
         try {
-          await uploadKnowledgeDocuments(org, source, [r.file]);
+          await uploadKnowledgeFiles(org, source, [r.file]);
           set(r.key, { state: 'uploaded' });
           uploaded += 1;
         } catch (err) {
@@ -74,7 +74,7 @@ export function useUploader(org: string) {
 }
 
 export const uploadLimits =
-  'Text, Markdown, HTML, JSON, YAML, each up to the upload limit (25 MiB by default). PDF and Office files come later.';
+  'Text, Markdown, HTML, JSON and YAML, and PDF and Office files, which are converted to Markdown, each up to the upload limit (25 MiB by default).';
 
 /** Drop files on it, or press it (Enter, Space, a tap) to choose them. */
 export function DropZone({ onFiles, disabled = false }: { onFiles: (files: File[]) => void; disabled?: boolean }) {

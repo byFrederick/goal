@@ -23,12 +23,22 @@
 // see of them (domain.ConnectionKind.Outline): env names, MCP servers whose headers name env
 // variables (${NAME}, expanded by Claude Code in the box), git logins, CLI tools and docs. The
 // bundle holds no secret, and it proxies nothing: everything it describes is used from the box.
-// Its knowledge_sources name what Goal's knowledge tools search, which the worker's prompt
-// mentions. Its rules are the factory rules of the run's version that apply to its agent,
-// station and item's lane and work type (ADR 0014; Definitions.Rules), each with the hash of its
+// Its rules are the factory rules of the run's version that apply to its agent, station and item's lane and work type (ADR 0014; Definitions.Rules), each with the hash of its
 // rule file and the file the worker writes; the first bundle served to a run that any rule
 // applies to appends domain.EventRulesApplied with their names and hashes, and a bundle fetched
 // again appends none.
+//
+// # Knowledge
+//
+// The engine pins, at a claim's start, the newest snapshot of each knowledge source of the version
+// that applies to the run (ADR 0038 decision 7), and the task token carries the pins. The bundle's
+// spec.knowledge holds the run's Knowledge section (domain.KnowledgeIndex: the ground rules, one
+// line per pinned source with its read-when line, file count and top folders read from its zip's
+// central directory, the sources not synced yet and the factory memory) and, for each pin, the URL
+// prepare downloads it from: GET /run/knowledge/<source> (ServeKnowledge), which streams the pinned
+// zip and answers 404 for a source the token did not pin. An agent whose builtins.read is off gets
+// no knowledge; a draft request's bundle gets the section and no snapshot. The first bundle served
+// to a run with a pin appends domain.EventKnowledgePinned, once, as for rules.
 //
 // # Notes
 //
@@ -52,13 +62,7 @@
 // # Goal's tools
 //
 // The endpoint serves Goal's own tools, named "<server>__<tool>" (Claude's tool names allow no
-// dots); a tool the run may not call, a connection's included, is refused like an unknown one. A
-// run whose definition version lists knowledge sources (spec.knowledge.sources) is served
-// knowledge__search, knowledge__read and knowledge__verdict (knowledge.go). They search and read
-// those sources only, in the token's organization only (row-level security), whatever the agent
-// asks: a document of another source answers as one that does not exist. A search and a read
-// record the run's use of each document they return, best effort, and knowledge__verdict records
-// the agent's verdict on a document the run used (ADR 0027).
+// dots); a tool the run may not call, a connection's included, is refused like an unknown one.
 //
 // Every run is served question__ask (question.go, ADR 0018): the agent asks the person
 // responsible for its item a question, 1 to 500 characters, with 0 to 4 quick-answer choices of
@@ -157,9 +161,11 @@ type Deps struct {
 	Events      Events
 	Clock       ports.Clock
 	Logger      *slog.Logger
-	// Knowledge serves Goal's knowledge tools to runs whose factory lists knowledge sources; nil
-	// serves none.
+	// Knowledge and Objects give runs the knowledge snapshots their tokens pin, and their prompt's
+	// Knowledge section (knowledge.go); without Knowledge every pinned source reads as not synced,
+	// and without Objects no snapshot is served and no top folder listed.
 	Knowledge Knowledge
+	Objects   Objects
 	// Policies cap the tool modes of the run bundle's environment MCP servers.
 	Policies Policies
 	// Questions takes the questions agents ask with question__ask, which every run is served.
@@ -214,6 +220,7 @@ type Gateway struct {
 	clock       ports.Clock
 	log         *slog.Logger
 	knowledge   Knowledge // nil without Deps.Knowledge
+	objects     Objects   // nil without Deps.Objects
 	questions   Questions
 	approvals   ToolApprovals
 	// draftRequests and drafts are nil without Deps.DraftRequests and Deps.Drafts.
@@ -239,7 +246,7 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 
 	g := &Gateway{
 		defs: d.Definitions, items: d.Items, connections: d.Connections, policies: d.Policies, events: d.Events, clock: d.Clock, log: d.Logger,
-		knowledge: d.Knowledge, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah, cfg: cfg,
+		knowledge: d.Knowledge, objects: d.Objects, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah, cfg: cfg,
 	}
 	if g.log == nil {
 		g.log = slog.New(slog.DiscardHandler)
@@ -339,7 +346,7 @@ func (g *Gateway) session(ctx context.Context, c domain.TaskClaims) (*session, e
 		return nil, fmt.Errorf("%w: agent %q is not in factory %s", errForbidden, c.Agent, c.FactoryID)
 	}
 
-	return &session{g: g, claims: c, sources: g.searchable(f.Line())}, nil
+	return &session{g: g, claims: c}, nil
 }
 
 func claimAttrs(c domain.TaskClaims, more ...any) []any {

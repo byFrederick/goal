@@ -30,6 +30,12 @@ func parseDocument(raw []byte) (*document, *domain.DefinitionProblem) {
 
 // parseYAML parses the YAML file at path in the tree, as parseDocument does factory.yaml.
 func parseYAML(file string, raw []byte) (*document, *domain.DefinitionProblem) {
+	return parseYAMLWith(file, raw, nil)
+}
+
+// parseYAMLWith is parseYAML that lets prepare, when not nil, change the node tree before its
+// JSON form is made.
+func parseYAMLWith(file string, raw []byte, prepare func(*yaml.Node)) (*document, *domain.DefinitionProblem) {
 	var n yaml.Node
 	if err := yaml.Unmarshal(raw, &n); err != nil {
 		return nil, yamlInvalid(file, err)
@@ -40,6 +46,10 @@ func parseYAML(file string, raw []byte) (*document, *domain.DefinitionProblem) {
 			Code: codeYAMLInvalid, Severity: domain.SeverityError, Check: checkYAML, Section: domain.SectionFiles,
 			File: file, Message: file + " is empty",
 		}
+	}
+
+	if prepare != nil {
+		prepare(&n)
 	}
 
 	var v any

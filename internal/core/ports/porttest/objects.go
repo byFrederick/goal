@@ -1,15 +1,18 @@
 package porttest
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
@@ -40,6 +43,45 @@ func (s *ObjectStore) Get(_ context.Context, key string) (ports.Object, error) {
 	}
 
 	return ports.Object{ObjectInfo: objectInfo(key, body), Body: slices.Clone(body)}, nil
+}
+
+// GetRange implements ports.ObjectStore.
+func (s *ObjectStore) GetRange(_ context.Context, key string, offset, length int64) (io.ReadCloser, error) {
+	if offset < 0 {
+		return nil, fmt.Errorf("get %s from %d: a negative offset: %w", key, offset, domain.ErrInvalid)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	body, ok := s.objects[key]
+	if !ok {
+		return nil, fmt.Errorf("get %s: %w", key, ports.ErrNotFound)
+	}
+
+	size := int64(len(body))
+	from := min(offset, size)
+
+	to := size
+	if length >= 0 {
+		to = min(from+length, size)
+	}
+
+	return io.NopCloser(bytes.NewReader(slices.Clone(body[from:to]))), nil
+}
+
+// PutStream implements ports.ObjectStore. The fake reads the whole stream before it writes, so
+// a reader that fails leaves the object as it was.
+func (s *ObjectStore) PutStream(_ context.Context, key string, r io.Reader) (ports.ObjectInfo, error) {
+	body, err := io.ReadAll(r)
+	if err != nil {
+		return ports.ObjectInfo{}, fmt.Errorf("put %s: read: %w", key, err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.write(key, body), nil
 }
 
 // Put implements ports.ObjectStore.

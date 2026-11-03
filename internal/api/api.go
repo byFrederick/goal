@@ -211,12 +211,14 @@ type Deps struct {
 	// DraftRequests are the factories' asked definition changes (ADR 0021).
 	DraftRequests ports.DraftRequests
 	// Knowledge is the organization's knowledge base (spec 4 §4.8); KnowledgeUploads keeps its
-	// uploaded files, of at most UploadMaxBytes each (GOAL_UPLOAD_MAX_BYTES); KnowledgeSearch
-	// searches it as the gateway's knowledge__search does.
+	// uploaded files, of at most UploadMaxBytes each (GOAL_UPLOAD_MAX_BYTES).
 	Knowledge        ports.Knowledge
 	KnowledgeUploads KnowledgeUploads
-	KnowledgeSearch  KnowledgeSearch
 	UploadMaxBytes   int64
+	// KnowledgeObjects reads the snapshots' zips by range for one file's Markdown, and
+	// KnowledgeCheck lists a source's settings before they are saved (ADR 0038 decision 13).
+	KnowledgeObjects KnowledgeObjects
+	KnowledgeCheck   KnowledgeCheck
 	// OrgPolicies is the organization policy (ADR 0024), over the install's models (Builder's
 	// Meta). BoxSizes are small, medium and large as the active sandbox backend sizes them, and
 	// EgressAddresses where agents' traffic leaves from (GOAL_EGRESS_ADDRESSES): facts the policy
@@ -256,7 +258,7 @@ func (d Deps) complete() bool {
 		d.Engine == nil, d.Items == nil, d.Factories == nil, d.Definitions == nil, d.Versions == nil, d.Orgs == nil,
 		d.Audit == nil, d.Access == nil, d.Authorizer == nil, d.Platform == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil,
 		d.Connections == nil, d.Credentials == nil, d.OrgSecrets == nil, d.EnvironmentTests == nil, d.ToolLister == nil, d.Intake == nil, d.DraftRequests == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
-		d.Knowledge == nil, d.KnowledgeUploads == nil, d.KnowledgeSearch == nil, d.UploadMaxBytes <= 0,
+		d.Knowledge == nil, d.KnowledgeUploads == nil, d.UploadMaxBytes <= 0, d.KnowledgeObjects == nil, d.KnowledgeCheck == nil,
 		d.OrgPolicies == nil, len(d.BoxSizes) == 0, d.NotificationPreferences == nil, d.NotificationSettings == nil, d.SlackMessenger == nil,
 		d.Judges != nil && (d.Judges.Judges == nil || d.Judges.Scores == nil || d.Judges.Tries == nil),
 		d.Evals != nil && (d.Evals.Runs == nil || d.Evals.Loop == nil || d.Evals.Judges == nil),
@@ -302,7 +304,7 @@ var errInvalid = errors.New("invalid request")
 func New(d Deps) (http.Handler, error) {
 	if !d.complete() {
 		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock, " +
-			"Connections, Credentials, OrgSecrets, EnvironmentTests, ToolLister, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeSearch, OrgPolicies, BoxSizes, NotificationPreferences, NotificationSettings, SlackMessenger, " +
+			"Connections, Credentials, OrgSecrets, EnvironmentTests, ToolLister, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeObjects, KnowledgeCheck, OrgPolicies, BoxSizes, NotificationPreferences, NotificationSettings, SlackMessenger, " +
 			"a positive UploadMaxBytes and a positive OrgRetention are required, Judges, when set, needs Judges, Scores and Tries, " +
 			"Evals, when set, needs Runs, Loop and Judges, and Jonah, when set, needs Store and Decisions")
 	}
@@ -322,7 +324,7 @@ func New(d Deps) (http.Handler, error) {
 		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, secrets: d.OrgSecrets, catalog: slices.Clone(d.Catalog), envTests: d.EnvironmentTests, tools: d.ToolLister, conversions: d.Conversions, intake: d.Intake, draftRequests: d.DraftRequests, parseKind: d.ParseKind, codehosts: d.CodeHosts,
 		repoTestTimeout:  cmp.Or(d.RepositoryTestTimeout, connectionTestTimeout),
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
-		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes,
+		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, uploadMax: d.UploadMaxBytes, objects: d.KnowledgeObjects, check: d.KnowledgeCheck,
 		policies: d.OrgPolicies, notifications: d.NotificationPreferences, notifySettings: d.NotificationSettings, slack: d.SlackMessenger, boxSizes: slices.Clone(d.BoxSizes), egress: slices.Clone(d.EgressAddresses),
 		judges: d.Judges, evals: d.Evals, jonah: d.Jonah, clock: d.Clock, log: log, exportMax: cmp.Or(d.ExportMaxRows, defaultExportMaxRows),
 	}
@@ -403,17 +405,17 @@ func definitionRoute(path string) bool {
 	}
 }
 
-// uploadRoute reports whether r uploads knowledge documents:
-// POST /v1/orgs/{org}/knowledge/sources/{source}/documents.
+// uploadRoute reports whether r uploads knowledge files:
+// POST /v1/orgs/{org}/knowledge/sources/{source}/uploads.
 func uploadRoute(r *http.Request) bool {
 	rest, ok := strings.CutPrefix(r.URL.Path, "/v1/orgs/")
 	if !ok || r.Method != http.MethodPost {
 		return false
 	}
 
-	parts := strings.Split(rest, "/") // org, knowledge, sources, source, documents
+	parts := strings.Split(rest, "/") // org, knowledge, sources, source, uploads
 
-	return len(parts) == 5 && parts[1] == "knowledge" && parts[2] == "sources" && parts[4] == "documents"
+	return len(parts) == 5 && parts[1] == "knowledge" && parts[2] == "sources" && parts[4] == "uploads"
 }
 
 // errCrossOrigin marks an unsafe request from another origin, which cross-origin protection
@@ -462,10 +464,11 @@ type server struct {
 	intake ports.Intake
 	// draftRequests serve the draft request routes.
 	draftRequests ports.DraftRequests
-	// knowledge, uploads and search serve the knowledge routes; uploadMax bounds an uploaded file.
+	// knowledge and uploads serve the knowledge routes; uploadMax bounds an uploaded file.
 	knowledge ports.Knowledge
 	uploads   KnowledgeUploads
-	search    KnowledgeSearch
+	objects   KnowledgeObjects
+	check     KnowledgeCheck
 	uploadMax int64
 	// exportMax caps a CSV export.
 	exportMax int

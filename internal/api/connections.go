@@ -650,6 +650,8 @@ func (s *server) usersBy(ctx context.Context, names func(*config.Factory) []stri
 type factoryUse struct {
 	id   domain.FactoryID
 	name string
+	// scope is who reads a knowledge source in the factory; zero for every run.
+	scope domain.RuleScope
 }
 
 // inUse refuses a change of the connection name while factories name it, naming them.

@@ -1,32 +1,22 @@
-// The organizations' knowledge bases for the mock API (spec 4 §8.2): GET and POST
+// The organizations' knowledge as files for the mock API (ADR 0038): GET and POST
 // /v1/orgs/{org}/knowledge/sources, GET, PATCH and DELETE …/sources/{source}, POST …/{source}/sync,
-// GET and POST (multipart files) …/{source}/documents, GET and DELETE …/knowledge/documents/{document},
-// GET …/{document}/content and GET …/knowledge/search, refusing as goald does
+// POST (multipart files) and DELETE …/{source}/uploads, refusing as goald does
 // (knowledge-source-name-taken, connection-not-found, connection-cannot-sync,
 // knowledge-source-not-found, knowledge-source-in-use, knowledge-source-live,
-// knowledge-document-not-found, not-an-upload-source, upload-too-large, unsupported-document-type).
-// The mock indexes at once: a sync, or an upload, makes its source's pending documents indexed,
+// knowledge-file-not-found, not-an-upload-source, upload-too-large, unsupported-document-type).
+// The mock syncs at once: a sync, or an upload, makes the files of its source current,
 // broadcasting `event: knowledge` as syncing, then idle; its end moves updated_at, as goald's
-// does. Its search ranks documents by how often they hold the query's words. A source's used_by is the factories whose current version lists it
+// does. A source's used_by is the factories whose current version lists it
 // (knowledge.sources). acme starts with three sources synced through github, as the knowledge
 // picture shows them: dashboards, whose last sync failed (it shows Retry now), goal-docs, and
 // support-macros, synced daily. Upload sources are created by the flows that upload to them.
 import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type {
-  Actor,
-  Factory,
-  KnowledgeDocument,
-  KnowledgeEvent,
-  KnowledgeHit,
-  KnowledgeSource,
-  KnowledgeSourceKind,
-  Org,
-} from '@goal/api-client';
+import type { Actor, Factory, KnowledgeEvent, KnowledgeSource, KnowledgeSourceKind, Org } from '@goal/api-client';
 
 const dayMs = 86_400_000;
 const namePattern = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/;
-const kinds: readonly KnowledgeSourceKind[] = ['upload', 'synced', 'live'];
+const kinds: readonly KnowledgeSourceKind[] = ['upload', 'repository', 'confluence', 'synced', 'live'];
 /** The file types an upload takes, by extension (internal/knowledge.TypeOf). */
 const types: Record<string, string> = {
   '.txt': 'text/plain',
@@ -38,6 +28,12 @@ const types: Record<string, string> = {
   '.json': 'application/json',
   '.yaml': 'application/yaml',
   '.yml': 'application/yaml',
+  '.pdf': 'application/pdf',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.odt': 'application/vnd.oasis.opendocument.text',
+  '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
 };
 /** GOAL_UPLOAD_MAX_BYTES's default. */
 const maxUpload = 25 << 20;
@@ -48,11 +44,22 @@ interface MockSource {
   docs: MockDocument[];
 }
 
+/** One file of a source: an upload's original or a synced file. */
+interface KnowledgeDocument {
+  id: string;
+  source: string;
+  title: string;
+  mime: string;
+  bytes: number;
+  status: 'pending' | 'indexed' | 'failed' | 'skipped';
+  indexed_at: string | null;
+  /** Where a synced file came from. */
+  url?: string;
+}
+
 interface MockDocument {
   document: KnowledgeDocument;
   text: string;
-  /** The runs that used it over the last 7 days, and the agents' verdicts on them (the usage card's counts). */
-  use?: { runs: number; helped: number; misled: number };
 }
 
 export interface MockKnowledge {
@@ -113,17 +120,6 @@ const refuse = (res: ServerResponse, status: number, detail: string, code?: stri
 const strings = (v: unknown): Record<string, string> =>
   v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, String(x)])) : {};
 
-/** Sample items' titles for the mock's runs, in the order the card's uses list them. */
-const sampleTitles = [
-  'Fix the palette drift on the item page',
-  'Add the usage card to Knowledge',
-  'Check the spend window at 375 px',
-  'Write the verdict copy',
-  'Document the knowledge event',
-];
-
-const words = (text: string) => text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-
 /** acme's sources, dated from now. */
 function seed(now: number, by: Actor): MockSource[] {
   const at = (ms: number) => new Date(now + ms).toISOString();
@@ -151,12 +147,13 @@ function seed(now: number, by: Actor): MockSource[] {
   ): KnowledgeSource => ({
     id: `019a1c00-0000-7000-8000-0000000000e${i}`,
     config: {},
+    read_when: '',
     sync_every_seconds: 3600,
     status: 'idle',
     last_synced_at: at(-1 * dayMs),
     next_sync_at: at(-1 * dayMs + hourMs),
-    documents: 0,
-    used_by: { factories: [] },
+    latest_snapshot: null,
+    used_by: { factories: [], readers: [] },
     created_by: by,
     created_at: at(-30 * dayMs),
     updated_at: at(-30 * dayMs),
@@ -194,7 +191,6 @@ function seed(now: number, by: Actor): MockSource[] {
         config: { repository: 'https://github.com/acme/goal', branch: 'main', include: 'docs/**/*.md' },
         last_synced_at: at(-45 * 60_000),
         next_sync_at: at(15 * 60_000),
-        embed_model: '@cf/baai/bge-m3',
       }),
       docs: [
         {
@@ -204,7 +200,6 @@ function seed(now: number, by: Actor): MockSource[] {
             '# Goal\n\nThe index for every agent and human working in this repo. Each rule lives in one place.',
             { url: blob('goal', 'AGENTS.md'), indexed_at: at(-45 * 60_000) },
           ),
-          use: { runs: 212, helped: 61, misled: 0 },
         },
         {
           ...doc(
@@ -213,7 +208,6 @@ function seed(now: number, by: Actor): MockSource[] {
             '# Factory definition\n\nA factory is one YAML file: its stations, agents, work types and the knowledge its agents may search.',
             { url: blob('goal', 'docs/engineering/factory-definition.md'), indexed_at: at(-45 * 60_000) },
           ),
-          use: { runs: 64, helped: 22, misled: 1 },
         },
         {
           ...doc(
@@ -222,7 +216,6 @@ function seed(now: number, by: Actor): MockSource[] {
             '# Design system\n\nThe palette, the type scale and the components. Use the token names, never a hex value.',
             { url: blob('goal', 'docs/design/MASTER.md'), indexed_at: at(-45 * 60_000) },
           ),
-          use: { runs: 41, helped: 9, misled: 6 },
         },
         {
           ...doc(
@@ -231,7 +224,6 @@ function seed(now: number, by: Actor): MockSource[] {
             '# Testing\n\nTest the engine with in-memory port fakes; test adapters against real PostgreSQL.',
             { url: blob('goal', 'docs/engineering/testing.md'), indexed_at: at(-45 * 60_000) },
           ),
-          use: { runs: 33, helped: 14, misled: 0 },
         },
         doc(
           'goal-docs',
@@ -283,23 +275,51 @@ export function createKnowledge({
 
   const list = (org: string) => sources.get(org) ?? [];
   const named = (org: string, name: string) => list(org).find((s) => s.source.name === name);
-  const documentOf = (org: string, id: string) => {
-    for (const s of list(org)) {
-      const d = s.docs.find((x) => x.document.id === id);
-      if (d) return { s, d };
-    }
-    return undefined;
-  };
-
   /** The factories whose current version may search the source. */
   const usersOf = (org: string, s: MockSource) => factories(org).filter((f) => listedBy(f).includes(s.source.name));
 
   /** The source as the contract has it: its documents counted, what uses it by current names. */
   const out = (org: string, s: MockSource): KnowledgeSource => ({
     ...structuredClone(s.source),
-    documents: s.docs.length,
-    used_by: { factories: usersOf(org, s).map((f) => ({ id: f.id, name: f.name })) },
+    latest_snapshot: snapshotOf(s),
+    used_by: {
+      factories: usersOf(org, s).map((f) => ({ id: f.id, name: f.name })),
+      readers: usersOf(org, s).map((f) => ({
+        id: f.id,
+        name: f.name,
+        agents: [],
+        stations: [],
+        lanes: [],
+        work_types: [],
+      })),
+    },
   });
+
+  /** A source's files as the mock has them: one per document, at its title as path. */
+  const filesOf = (s: MockSource) =>
+    s.docs
+      .map((d) => ({
+        source: s.source.name,
+        path: d.document.title,
+        title: d.document.title,
+        bytes: d.document.bytes,
+        version: d.document.id,
+      }))
+      .sort((a, b) => a.path.localeCompare(b.path));
+  const snapshotOf = (s: MockSource) =>
+    s.docs.length === 0
+      ? null
+      : {
+          files: s.docs.length,
+          failed: 0,
+          bytes: s.docs.reduce((n, d) => n + d.document.bytes, 0),
+          synced_at: s.source.last_synced_at ?? s.source.created_at,
+        };
+  const findIn = (files: ReturnType<typeof filesOf>, find: string) =>
+    files.filter(
+      (f) =>
+        f.path.toLowerCase().startsWith(find.toLowerCase()) || f.title.toLowerCase().startsWith(find.toLowerCase()),
+    );
 
   const event = (org: string, s: MockSource) =>
     broadcast(org, 'knowledge', {
@@ -339,12 +359,22 @@ export function createKnowledge({
     if (!namePattern.test(name))
       return refuse(res, 400, `name "${name}" must be 3 to 40 lowercase letters, digits or dashes`);
     if (title.length === 0 || title.length > 120) return refuse(res, 400, 'a source title has 1 to 120 characters');
-    if (!kind) return refuse(res, 400, `source kind "${String(b.kind)}" is not upload, synced or live`);
-    if (kind === 'synced' && secret !== '' && connection === '') {
+    if (!kind)
+      return refuse(res, 400, `source kind "${String(b.kind)}" is not upload, repository, confluence, synced or live`);
+    if ((kind === 'synced' || kind === 'repository' || kind === 'confluence') && connection === '') {
       if (every < 900) return refuse(res, 400, 'a source syncs at most every 15 minutes');
       if (named(org.id, name))
         return refuse(res, 409, `knowledge source "${name}" is taken`, 'knowledge-source-name-taken');
-      return createOn(org, req, res, { name, title, kind, connection: '', secret, every, config: strings(b.config) });
+      return createOn(org, req, res, {
+        name,
+        title,
+        kind,
+        connection: '',
+        secret,
+        every,
+        config: strings(b.config),
+        readWhen: typeof b.read_when === 'string' ? b.read_when : '',
+      });
     }
     if ((kind === 'upload') !== (connection === '')) {
       return refuse(
@@ -361,7 +391,16 @@ export function createKnowledge({
     }
     if (named(org.id, name))
       return refuse(res, 409, `knowledge source "${name}" is taken`, 'knowledge-source-name-taken');
-    return createOn(org, req, res, { name, title, kind, connection, secret: '', every, config: strings(b.config) });
+    return createOn(org, req, res, {
+      name,
+      title,
+      kind,
+      connection,
+      secret: '',
+      every,
+      config: strings(b.config),
+      readWhen: typeof b.read_when === 'string' ? b.read_when : '',
+    });
   }
 
   function createOn(
@@ -376,6 +415,7 @@ export function createKnowledge({
       secret: string;
       every: number;
       config: Record<string, string>;
+      readWhen: string;
     },
   ) {
     const { name, title, kind, connection, secret, every } = v;
@@ -390,12 +430,13 @@ export function createKnowledge({
         ...(connection ? { connection } : {}),
         ...(secret ? { secret } : {}),
         config: v.config,
+        read_when: v.readWhen,
         sync_every_seconds: every,
         status: 'idle',
         last_synced_at: null,
         next_sync_at: kind === 'live' ? null : now,
-        documents: 0,
-        used_by: { factories: [] },
+        latest_snapshot: null,
+        used_by: { factories: [], readers: [] },
         created_by: by,
         created_at: now,
         updated_at: now,
@@ -457,17 +498,28 @@ export function createKnowledge({
     send(res, 204, null);
   }
 
-  function documents(s: MockSource, url: URL, res: ServerResponse) {
-    const limit = Number(url.searchParams.get('limit') ?? 100);
-    if (!Number.isInteger(limit) || limit < 1 || limit > 500) return refuse(res, 400, 'limit must be in [1, 500]');
-    const after = url.searchParams.get('after') ?? '';
-    const rest = s.docs
-      .map((d) => d.document)
-      .sort((a, b) => a.id.localeCompare(b.id))
-      .filter((d) => d.id > after);
-    const page = rest.slice(0, limit);
-    const last = page.at(-1);
-    send(res, 200, { documents: page, ...(rest.length > limit && last ? { next_after: last.id } : {}) });
+  function removeUpload(org: Org, s: MockSource, url: URL, req: IncomingMessage, res: ServerResponse) {
+    if (s.source.kind !== 'upload') {
+      return refuse(res, 409, `knowledge source "${s.source.name}" is ${s.source.kind}`, 'not-an-upload-source');
+    }
+    const path = url.searchParams.get('path') ?? '';
+    const d = s.docs.find((x) => x.document.title === path);
+    if (!d)
+      return refuse(
+        res,
+        404,
+        `knowledge source "${s.source.name}" has no upload at "${path}"`,
+        'knowledge-file-not-found',
+      );
+    s.docs = s.docs.filter((x) => x !== d);
+    audit(
+      org.id,
+      actor(req),
+      'knowledge_document.deleted',
+      { kind: 'knowledge_document', id: d.document.id },
+      { title: d.document.title },
+    );
+    send(res, 204, null);
   }
 
   async function upload(org: Org, s: MockSource, req: IncomingMessage, res: ServerResponse) {
@@ -493,7 +545,12 @@ export function createKnowledge({
       if (f.body.length > maxUpload)
         return refuse(res, 413, `"${f.name}" has more than ${maxUpload} bytes`, 'upload-too-large');
       if (!types[extension(f.name)]) {
-        return refuse(res, 415, `"${f.name}" is not text, Markdown, HTML, JSON or YAML`, 'unsupported-document-type');
+        return refuse(
+          res,
+          415,
+          `"${f.name}" is not text, Markdown, HTML, JSON, YAML, PDF or an Office file`,
+          'unsupported-document-type',
+        );
       }
     }
     const by = actor(req);
@@ -523,76 +580,8 @@ export function createKnowledge({
       );
       return structuredClone(d.document);
     });
-    send(res, 202, { documents: stored });
+    send(res, 202, { files: stored.map((d) => ({ path: d.title, bytes: d.bytes })) });
   }
-
-  function search(org: Org, url: URL, res: ServerResponse) {
-    const q = (url.searchParams.get('q') ?? '').trim();
-    if (q.length === 0 || q.length > 1000) return refuse(res, 400, 'q is 1 to 1000 characters');
-    const limit = Number(url.searchParams.get('limit') ?? 8);
-    if (!Number.isInteger(limit) || limit < 1 || limit > 20) return refuse(res, 400, 'limit must be in [1, 20]');
-    const names = url.searchParams.getAll('source');
-    const unknown = names.find((n) => !named(org.id, n));
-    if (unknown) return refuse(res, 404, `knowledge source "${unknown}" not found`, 'knowledge-source-not-found');
-    const terms = new Set(words(q));
-    const hits: KnowledgeHit[] = list(org.id)
-      .filter((s) => names.length === 0 || names.includes(s.source.name))
-      .flatMap((s) =>
-        s.docs
-          .filter((d) => d.document.status === 'indexed')
-          .map((d) => ({ s, d, score: words(d.text).filter((w) => terms.has(w)).length })),
-      )
-      .filter((h) => h.score > 0)
-      .sort((a, b) => b.score - a.score || a.d.document.id.localeCompare(b.d.document.id))
-      .slice(0, limit)
-      .map(({ s, d, score }) => ({
-        document: d.document.id,
-        source: s.source.name,
-        title: d.document.title,
-        ...(d.document.url ? { url: d.document.url } : {}),
-        heading: d.text.match(/^#+\s*(.+)$/m)?.[1] ?? '',
-        snippet: d.text,
-        score: score / 60,
-      }));
-    send(res, 200, { hits });
-  }
-
-  /** The uses of a document: the runs that used it, newest first, one a run; the factories of the org take turns. */
-  const usesOf = (org: string, id: string, d: MockDocument) => {
-    const runs = d.use?.runs ?? 0;
-    const pool = factories(org);
-    if (runs === 0 || pool.length === 0) return [];
-    return Array.from({ length: Math.min(runs, 50) }, (_, i) => {
-      const factory = pool[(i + id.length) % pool.length] as Factory;
-      return {
-        run_id: `run-${d.document.id.slice(-3)}-${String(i).padStart(3, '0')}`,
-        item: {
-          id: `item-${factory.name}-${i + 1}`,
-          ref: `${factory.name}#${i + 101}`,
-          title: sampleTitles[i % sampleTitles.length] ?? 'Build the card',
-        },
-        factory: { id: factory.id, name: factory.name, title: factory.name },
-        kinds: i % 3 === 0 ? ['read'] : ['search'],
-        at: new Date(clock() - (i + 1) * 3_600_000).toISOString(),
-      };
-    });
-  };
-
-  /** The usage of a source's documents over `days` days: each with a use or a verdict, the most used first. */
-  const usageOf = (s: MockSource) =>
-    s.docs
-      .filter((d) => (d.use?.runs ?? 0) > 0)
-      .map((d) => ({
-        id: d.document.id,
-        title: d.document.title,
-        source: s.source.name,
-        runs: d.use?.runs ?? 0,
-        agents_helped: d.use?.helped ?? 0,
-        agents_misled: d.use?.misled ?? 0,
-        people_helped: 0,
-        people_misled: 0,
-      }))
-      .sort((a, b) => b.runs - a.runs || a.id.localeCompare(b.id));
 
   return {
     reset,
@@ -620,82 +609,82 @@ export function createKnowledge({
         create(org, req, res, await body());
         return true;
       }
-      if (rest === '/knowledge/search' && method === 'GET') {
-        search(org, url, res);
+      if (rest === '/knowledge/check' && method === 'POST') {
+        const input = await body();
+        send(res, 200, {
+          access: { ok: true },
+          files: 12,
+          bytes: 2_400_000,
+          limits: { files: 20000, bytes: 50 << 20, file_bytes: 5 << 20 },
+          over_limit: [],
+          warnings: [],
+          line: `/knowledge/${String(input.name ?? '')} — ${String(input.read_when ?? '')} 12 files.`,
+        });
         return true;
       }
-      const src = rest.match(/^\/knowledge\/sources\/([^/]+)(\/sync|\/documents)?$/);
-      if (src) {
-        const name = decodeURIComponent(src[1] ?? '');
-        const s = named(org.id, name);
-        const known = { '': ['GET', 'PATCH', 'DELETE'], '/sync': ['POST'], '/documents': ['GET', 'POST'] }[
-          src[2] ?? ''
-        ];
-        if (!known?.includes(method)) return false;
-        if (!s) {
-          refuse(res, 404, `knowledge source "${name}" not found`, 'knowledge-source-not-found');
-          return true;
+      if (rest === '/knowledge/files' && method === 'GET') {
+        const find = url.searchParams.get('find') ?? '';
+        send(res, 200, {
+          files: list(org.id)
+            .flatMap((s) => findIn(filesOf(s), find))
+            .slice(0, 8),
+        });
+        return true;
+      }
+      if (rest === '/knowledge/reads' && method === 'GET') {
+        const only = url.searchParams.get('source');
+        const day = new Date().toISOString().slice(0, 10);
+        const reads = list(org.id)
+          .filter((s) => !only || s.source.name === only)
+          .flatMap((s) =>
+            filesOf(s)
+              .slice(0, 3)
+              .map((f, i) => ({
+                source: s.source.name,
+                path: f.path,
+                factory_id: '',
+                factory: 'Software',
+                day,
+                reads: 9 - i * 3,
+                searches: 0,
+              })),
+          );
+        send(res, 200, { reads });
+        return true;
+      }
+      const filesRoute = rest.match(/^\/knowledge\/sources\/([^/]+)\/files$/);
+      if (filesRoute && method === 'GET') {
+        const s = named(org.id, decodeURIComponent(filesRoute[1] ?? ''));
+        if (!s) refuse(res, 404, 'knowledge source not found', 'knowledge-source-not-found');
+        else send(res, 200, { files: findIn(filesOf(s), url.searchParams.get('find') ?? '') });
+        return true;
+      }
+      const src = rest.match(/^\/knowledge\/sources\/([^/]+)(\/sync|\/uploads)?$/);
+      if (!src) return false;
+      const name = decodeURIComponent(src[1] ?? '');
+      const s = named(org.id, name);
+      const known = { '': ['GET', 'PATCH', 'DELETE'], '/sync': ['POST'], '/uploads': ['POST', 'DELETE'] }[src[2] ?? ''];
+      if (!known?.includes(method)) return false;
+      if (!s) {
+        refuse(res, 404, `knowledge source "${name}" not found`, 'knowledge-source-not-found');
+        return true;
+      }
+      if (src[2] === '/sync') {
+        if (s.source.kind === 'live')
+          refuse(res, 409, `knowledge source "${name}" is live and never syncs`, 'knowledge-source-live');
+        else {
+          res.statusCode = 202;
+          res.end();
+          sync(org.id, s);
         }
-        if (src[2] === '/sync') {
-          if (s.source.kind === 'live')
-            refuse(res, 409, `knowledge source "${name}" is live and never syncs`, 'knowledge-source-live');
-          else {
-            res.statusCode = 202;
-            res.end();
-            sync(org.id, s);
-          }
-        } else if (src[2] === '/documents') {
-          if (method === 'GET') documents(s, url, res);
-          else {
-            await upload(org, s, req, res);
-            if (res.statusCode === 202) sync(org.id, s);
-          }
-        } else if (method === 'GET') send(res, 200, out(org.id, s));
-        else if (method === 'PATCH') update(org, s, req, res, await body());
-        else remove(org, s, req, res);
-        return true;
-      }
-      if (rest === '/knowledge/usage' && method === 'GET') {
-        const name = url.searchParams.get('source') ?? '';
-        const s = named(org.id, name);
-        if (!s) refuse(res, 404, `knowledge source "${name}" not found`, 'knowledge-source-not-found');
-        else send(res, 200, { source: name, days: 7, documents: usageOf(s) });
-        return true;
-      }
-      const doc = rest.match(/^\/knowledge\/documents\/([^/]+)(\/content|\/uses)?$/);
-      if (!doc) return false;
-      const id = decodeURIComponent(doc[1] ?? '');
-      const known = doc[2] ? method === 'GET' : ['GET', 'DELETE'].includes(method);
-      if (!known) return false;
-      const found = documentOf(org.id, id);
-      if (!found) {
-        refuse(res, 404, `knowledge document ${id} not found`, 'knowledge-document-not-found');
-        return true;
-      }
-      const { s, d } = found;
-      if (doc[2] === '/uses') {
-        send(res, 200, { uses: usesOf(org.id, id, d) });
-      } else if (method === 'GET' && !doc[2]) {
-        send(res, 200, { document: d.document, text: d.document.status === 'indexed' ? d.text : '' });
-      } else if (s.source.kind !== 'upload') {
-        refuse(res, 409, `knowledge document ${id} is not an upload`, 'not-an-upload-source');
-      } else if (doc[2] === '/content') {
-        res.statusCode = 200;
-        res.setHeader('Content-Type', 'application/octet-stream');
-        res.setHeader('Content-Disposition', `attachment; filename="${d.document.title.replace(/["\\]/g, '_')}"`);
-        res.setHeader('X-Content-Type-Options', 'nosniff');
-        res.end(d.text);
-      } else {
-        s.docs = s.docs.filter((x) => x !== d);
-        audit(
-          org.id,
-          actor(req),
-          'knowledge_document.deleted',
-          { kind: 'knowledge_document', id },
-          { title: d.document.title },
-        );
-        send(res, 204, null);
-      }
+      } else if (src[2] === '/uploads') {
+        if (method === 'POST') {
+          await upload(org, s, req, res);
+          if (res.statusCode === 202) sync(org.id, s);
+        } else removeUpload(org, s, url, req, res);
+      } else if (method === 'GET') send(res, 200, out(org.id, s));
+      else if (method === 'PATCH') update(org, s, req, res, await body());
+      else remove(org, s, req, res);
       return true;
     },
   };

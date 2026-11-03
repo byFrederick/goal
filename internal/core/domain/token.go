@@ -65,6 +65,10 @@ type TaskClaims struct {
 	// tools (WebFetch, WebSearch) when its Read the web and docs default is off or ask, which the
 	// gateway adds to the agent's deny rules whatever the version says.
 	DeniedCommands []string `json:"d,omitempty"`
+	// Knowledge are the knowledge snapshots the engine pinned at the claim's start (ADR 0038
+	// decision 7): the gateway serves the run these snapshots' zips and its prompt's Knowledge
+	// section, and no other snapshot.
+	Knowledge []KnowledgePin `json:"kn,omitempty"`
 	// NoEnvironment says the organization policy's Use secrets was off at run start (ADR 0037
 	// decision 12): the gateway's bundle then gives the agent's environment no variables, files
 	// or MCP servers. Tokens issued before it leave it false.

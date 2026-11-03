@@ -38,9 +38,7 @@ func (f *Factory) Line() domain.Line {
 		}
 	}
 
-	if s.Knowledge != nil {
-		l.KnowledgeSources = slices.Clone(s.Knowledge.Sources)
-	}
+	l.Knowledge, l.Memory = f.knowledge()
 
 	for _, r := range s.Rules {
 		l.Rules = append(l.Rules, domain.Rule{
@@ -329,6 +327,26 @@ func agent(a Agent, sources map[string]string) domain.AgentSpec {
 	}
 
 	return out
+}
+
+// knowledge are the factory's knowledge.sources and its memory.yaml's facts as the line has them.
+func (f *Factory) knowledge() ([]domain.KnowledgeEntry, []domain.MemoryFact) {
+	var (
+		entries []domain.KnowledgeEntry
+		facts   []domain.MemoryFact
+	)
+
+	if k := f.Spec.Knowledge; k != nil {
+		for _, s := range k.Sources {
+			entries = append(entries, domain.KnowledgeEntry{Name: s.Name, AppliesTo: s.AppliesTo, ReadWhen: s.ReadWhen})
+		}
+	}
+
+	for _, m := range f.memory {
+		facts = append(facts, domain.MemoryFact{Text: m.Text, From: slices.Clone(m.From)})
+	}
+
+	return entries, facts
 }
 
 // builtinGroups are the Claude Code tools of each built-in group but run.

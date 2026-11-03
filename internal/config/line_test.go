@@ -419,8 +419,8 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 		t.Errorf("runtime = %+v, want %+v", l.Runtime, wantRuntime)
 	}
 
-	if !slices.Equal(l.Connections, []string{"code", "docs"}) || !slices.Equal(l.KnowledgeSources, []string{"notes"}) {
-		t.Errorf("connections %v, knowledge sources %v; want [code docs] and [notes]", l.Connections, l.KnowledgeSources)
+	if !slices.Equal(l.Connections, []string{"code", "docs"}) || !reflect.DeepEqual(l.Knowledge, []domain.KnowledgeEntry{{Name: "notes"}}) {
+		t.Errorf("connections %v, knowledge %+v; want [code docs] and notes for every run", l.Connections, l.Knowledge)
 	}
 
 	wantStations := []domain.Station{

@@ -61,7 +61,10 @@ type claimed struct {
 	timeout  time.Duration
 	boxLimit time.Duration
 	noMerge  bool
-	noEnv    bool
+	// knowledge are the snapshots the claim's runs read, decided with the policy (pinKnowledge),
+	// so a lost box prepared again reads the same ones.
+	knowledge []domain.KnowledgePin
+	noEnv     bool
 	// branch and base are the runs' branch and the branch it is cut from and its pull request
 	// goes into, decided at the claim's start (integrate); both empty for the item's branch on the
 	// default branch, as for every item that is not a part on an integration branch.
@@ -240,6 +243,12 @@ func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) boo
 
 	refusal, err := e.applyPolicy(ctx, c)
 	if err == nil && refusal == "" {
+		c.knowledge, err = e.pinKnowledge(ctx, c.line, c.agent, domain.RuleTarget{
+			Agent: c.agent.Name, Station: c.station.ID, Lane: c.item.Lane, WorkType: c.item.Type,
+		})
+	}
+
+	if err == nil && refusal == "" {
 		err = e.integrate(ctx, log, c)
 	}
 
@@ -316,6 +325,33 @@ func (e *Engine) applyPolicy(ctx context.Context, c *claimed) (string, error) {
 	}
 
 	return "", nil
+}
+
+// pinKnowledge is the newest snapshot of each of the line's knowledge sources that applies to run
+// (ADR 0038 decision 7), in the definition's order: none for an agent that may not read files
+// (builtins.read off) or without Knowledge, and no pin for a source with no snapshot yet or that
+// the organization no longer has. An error when the snapshots cannot be read.
+func (e *Engine) pinKnowledge(ctx context.Context, l domain.Line, agent domain.AgentSpec, run domain.RuleTarget) ([]domain.KnowledgePin, error) {
+	if e.knowledge == nil || !agent.ReadsFiles() {
+		return nil, nil
+	}
+
+	var pins []domain.KnowledgePin
+
+	for _, k := range domain.ApplyingKnowledge(l.Knowledge, run) {
+		snaps, err := e.knowledge.Snapshots(ctx, k.Name)
+
+		switch {
+		case errors.Is(err, ports.ErrNotFound):
+			continue
+		case err != nil:
+			return nil, fmt.Errorf("read the snapshots of knowledge source %s: %w", k.Name, err)
+		case len(snaps) > 0:
+			pins = append(pins, domain.KnowledgePin{Source: k.Name, Snapshot: snaps[0].ID})
+		}
+	}
+
+	return pins, nil
 }
 
 // escalate hands a claimed item that may not run to a person: it waits at its station with the
@@ -463,7 +499,7 @@ func (c claimed) request(brief string) domain.RunRequest {
 		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, Version: c.line.VersionID, Kind: domain.RunKindStation,
 		Station: c.station.ID, Item: c.item.ID, Agent: c.agent.Name, Model: c.model, Brief: brief,
 		Repository: rt.Repository, Branch: c.branch, Base: c.base, ModelConnection: rt.ModelConnection,
-		Connections: c.agent.Connections, DeniedCommands: c.deny, NoEnvironment: c.noEnv, Size: rt.Size, Timeout: c.timeout, BoxLimit: c.boxLimit, Lease: &c.lease,
+		Connections: c.agent.Connections, DeniedCommands: c.deny, Knowledge: c.knowledge, NoEnvironment: c.noEnv, Size: rt.Size, Timeout: c.timeout, BoxLimit: c.boxLimit, Lease: &c.lease,
 	}
 
 	if c.line.OnSecrets() {

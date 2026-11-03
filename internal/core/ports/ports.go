@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -1009,8 +1010,20 @@ type ObjectStore interface {
 	// Get returns the object at key, or an error wrapping ErrNotFound when there is none.
 	Get(ctx context.Context, key string) (Object, error)
 
+	// GetRange reads length bytes of the object at key from offset without holding the object in
+	// memory, as a box reads one file of a knowledge snapshot's zip: fewer when the object ends
+	// first, none when offset is at or past its end, the rest of it when length is negative. The
+	// caller closes the reader. ErrNotFound when there is no object at key; a negative offset is
+	// domain.ErrInvalid.
+	GetRange(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error)
+
 	// Put stores body at key, replacing what was there, and returns it.
 	Put(ctx context.Context, key string, body []byte) (ObjectInfo, error)
+
+	// PutStream stores what r yields at key, replacing what was there, and returns it. It holds at
+	// most one part of the object in memory, so a knowledge snapshot's zip streams from disk. When
+	// r fails, the object at key is left as it was.
+	PutStream(ctx context.Context, key string, r io.Reader) (ObjectInfo, error)
 
 	// PutIfAbsent stores body at key unless an object is there; created reports which, and info
 	// is the object now at key. Content-addressed writes (definition blobs, domain.BlobKey) use

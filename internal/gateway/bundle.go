@@ -81,12 +81,12 @@ type bundleSpec struct {
 	// Connections are the agent's organization connections its token grants, in its order: the
 	// worker configures their MCP servers and tells the agent about them. None on secrets.
 	Connections []bundleConnection `json:"connections"`
+	// Knowledge is the run's Knowledge section and the snapshots prepare unpacks under
+	// /knowledge (knowledge.go); nil when it has none.
+	Knowledge *bundleKnowledge `json:"knowledge,omitempty"`
 	// Environment is the agent's environment file on a version on secrets (ADR 0037); nil on
 	// connections.
 	Environment *bundleEnvironment `json:"environment,omitempty"`
-	// KnowledgeSources are the knowledge sources the gateway's knowledge tools search for the
-	// run, which the worker's prompt names.
-	KnowledgeSources []string `json:"knowledge_sources,omitempty"`
 	// Rules are the factory rules that apply to the run (ADR 0014), in declaration order, which
 	// the worker writes to the agent's rules.
 	Rules []bundleRule `json:"rules"`
@@ -362,6 +362,14 @@ func (g *Gateway) definitionBundle(ctx context.Context, c domain.TaskClaims) (ru
 	line := f.Line()
 	maxTurns, maxUSD := domain.AgentSpec{}.Limits(line.Runtime)
 
+	// The box gets no files, but the section is the one the request's agent sees.
+	agent, _ := line.Agent(req.Agent)
+
+	k, err := g.knowledgeOf(ctx, c, line, agent, domain.RuleTarget{Agent: req.Agent}, false)
+	if err != nil {
+		return runBundle{}, err
+	}
+
 	return runBundle{
 		Spec: bundleSpec{
 			FactoryID: c.FactoryID, RunID: c.RunID, Agent: req.Agent, Model: cmp.Or(c.Model, line.Runtime.Model),
@@ -369,6 +377,7 @@ func (g *Gateway) definitionBundle(ctx context.Context, c domain.TaskClaims) (ru
 			Brief: req.Text, MaxTurns: maxTurns, MaxUSD: maxUSD,
 			Connections: []bundleConnection{}, Rules: []bundleRule{}, GrantedCalls: []grantedCall{},
 			DraftRequest: &bundleDraftRequest{ID: req.ID, Text: req.Text, Agent: req.Agent},
+			Knowledge:    k,
 		},
 		Files:      map[string][]byte{},
 		Git:        []gitCredential{},
@@ -428,10 +437,9 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 			// two must match.
 			ToolsAllow: nonNil(agent.ToolsAllow), ToolsDeny: withDenied(agent.ToolsDeny, c.DeniedCommands), Purpose: line.Purpose,
 			Brief: it.Work(), Inputs: it.Outputs, Output: station.Output, MaxTurns: maxTurns, MaxUSD: maxUSD,
-			Connections:      []bundleConnection{},
-			KnowledgeSources: g.searchable(line),
-			Rules:            []bundleRule{},
-			GrantedCalls:     []grantedCall{},
+			Connections:  []bundleConnection{},
+			Rules:        []bundleRule{},
+			GrantedCalls: []grantedCall{},
 		},
 		Files: make(map[string][]byte, len(agentFiles)),
 		Git:   []gitCredential{},
@@ -478,7 +486,33 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 		return runBundle{}, err
 	}
 
+	if err := g.addKnowledge(ctx, c, line, agent, it, &b); err != nil {
+		return runBundle{}, err
+	}
+
 	return b, nil
+}
+
+// addKnowledge puts the run's knowledge in b, matched by its agent, station and item's lane and
+// work type, and records the snapshots it pinned.
+func (g *Gateway) addKnowledge(ctx context.Context, c domain.TaskClaims, line domain.Line, agent domain.AgentSpec, it domain.Item, b *runBundle) error {
+	k, err := g.knowledgeOf(ctx, c, line, agent, domain.RuleTarget{Agent: c.Agent, Station: c.Station, Lane: it.Lane, WorkType: it.Type}, true)
+	if err != nil {
+		return err
+	}
+
+	b.Spec.Knowledge = k
+
+	if k == nil || len(k.Snapshots) == 0 {
+		return nil
+	}
+
+	pinned := make([]any, 0, len(c.Knowledge))
+	for _, p := range c.Knowledge {
+		pinned = append(pinned, map[string]any{"source": p.Source, "snapshot": string(p.Snapshot)})
+	}
+
+	return g.recordOnce(ctx, c, domain.EventKnowledgePinned, map[string]any{"snapshots": pinned})
 }
 
 // addGrantedCalls puts the calls approved for the run in b (domain.GrantedCalls).
@@ -527,26 +561,31 @@ func (g *Gateway) addRules(ctx context.Context, c domain.TaskClaims, it domain.I
 		b.Spec.Rules = append(b.Spec.Rules, bundleRule{Name: r.Name, SHA256: r.SHA256, Paths: r.Paths, Content: r.Content})
 	}
 
-	return g.recordRules(ctx, c, rules)
-}
-
-// eventPage is how many of an item's events recordRules reads at a time.
-const eventPage = 500
-
-// recordRules appends the run's EventRulesApplied with the name and hash of each of its rules,
-// unless no rule applies or the run has one already: a bundle fetched again records nothing.
-func (g *Gateway) recordRules(ctx context.Context, c domain.TaskClaims, rules []domain.RunRule) error {
 	if len(rules) == 0 {
 		return nil
 	}
 
+	applied := make([]any, 0, len(rules))
+	for _, r := range rules {
+		applied = append(applied, map[string]any{"name": r.Name, "sha256": string(r.SHA256)})
+	}
+
+	return g.recordOnce(ctx, c, domain.EventRulesApplied, map[string]any{"rules": applied})
+}
+
+// eventPage is how many of an item's events recordOnce reads at a time.
+const eventPage = 500
+
+// recordOnce appends the run's event of kind with data, unless the run has one already: a bundle
+// fetched again records nothing.
+func (g *Gateway) recordOnce(ctx context.Context, c domain.TaskClaims, kind domain.EventKind, data map[string]any) error {
 	for after := int64(0); ; {
 		events, err := g.events.ItemEvents(ctx, c.ItemID, after, eventPage)
 		if err != nil {
 			return fmt.Errorf("events of item %s: %w", c.ItemID, err)
 		}
 
-		if slices.ContainsFunc(events, func(e domain.Event) bool { return e.Kind == domain.EventRulesApplied && e.RunID == c.RunID }) {
+		if slices.ContainsFunc(events, func(e domain.Event) bool { return e.Kind == kind && e.RunID == c.RunID }) {
 			return nil
 		}
 
@@ -557,17 +596,12 @@ func (g *Gateway) recordRules(ctx context.Context, c domain.TaskClaims, rules []
 		after = events[len(events)-1].ID
 	}
 
-	applied := make([]any, 0, len(rules))
-	for _, r := range rules {
-		applied = append(applied, map[string]any{"name": r.Name, "sha256": string(r.SHA256)})
-	}
-
 	err := g.events.AppendEvents(ctx, domain.Event{
-		FactoryID: c.FactoryID, ItemID: c.ItemID, RunID: c.RunID, At: g.clock.Now(), Kind: domain.EventRulesApplied,
-		Station: c.Station, Actor: c.Agent, Data: map[string]any{"rules": applied},
+		FactoryID: c.FactoryID, ItemID: c.ItemID, RunID: c.RunID, At: g.clock.Now(), Kind: kind,
+		Station: c.Station, Actor: c.Agent, Data: data,
 	})
 	if err != nil {
-		return fmt.Errorf("record the rules of run %s: %w", c.RunID, err)
+		return fmt.Errorf("record %s of run %s: %w", kind, c.RunID, err)
 	}
 
 	return nil

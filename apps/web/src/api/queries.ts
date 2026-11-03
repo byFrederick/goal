@@ -85,15 +85,12 @@ import {
 import { definitionFile, getIntake, getIntakeTrigger, tryIntakeTrigger } from './intake';
 import { listApiKeys, listMemberTokens, listPersonalTokens } from './keys';
 import {
-  getKnowledgeDocument,
+  findKnowledgeFiles,
   getKnowledgeSource,
-  getKnowledgeUsage,
-  type KnowledgeQuery,
   type KnowledgeSourceFilter,
-  listKnowledgeDocuments,
-  listKnowledgeDocumentUses,
+  listKnowledgeFiles,
+  listKnowledgeReads,
   listKnowledgeSources,
-  searchKnowledge,
 } from './knowledge';
 import { getNotificationPreferences } from './notifications';
 import { getOrgNotificationSettings } from './org-notifications';
@@ -196,22 +193,20 @@ export const keys = {
   secretActivity: (org: string, id: string) => ['org', org, 'secrets', 'activity', id] as const,
   /**
    * The prefix of everything of the organization's knowledge base (spec 4 §10): the source lists
-   * by filter, each source and its documents, a document's text, searches. `event: knowledge` re-reads
-   * all of it but the searches (shared/invalidation.ts).
+   * by filter, each source and its files, how often they were read. `event: knowledge` re-reads
+   * all of it (shared/invalidation.ts).
    */
   knowledge: (org: string) => ['org', org, 'knowledge'] as const,
   /** The spend over one window (week, month or 90d) with the factories' budgets. */
   spend: (org: string, window: SpendWindow) => ['org', org, 'spend', window] as const,
   knowledgeSources: (org: string, filter: KnowledgeSourceFilter) =>
     ['org', org, 'knowledge', 'sources', filter] as const,
+  knowledgeFiles: (org: string, name: string, find: string) =>
+    ['org', org, 'knowledge', 'source', name, 'files', find] as const,
+  knowledgeFind: (org: string, find: string) => ['org', org, 'knowledge', 'find', find] as const,
+  knowledgeReads: (org: string, source: string, days: number) =>
+    ['org', org, 'knowledge', 'reads', source, days] as const,
   knowledgeSource: (org: string, name: string) => ['org', org, 'knowledge', 'source', name] as const,
-  knowledgeDocuments: (org: string, name: string) => ['org', org, 'knowledge', 'source', name, 'documents'] as const,
-  knowledgeDocument: (org: string, id: string) => ['org', org, 'knowledge', 'document', id] as const,
-  knowledgeSearch: (org: string, query: KnowledgeQuery) => ['org', org, 'knowledge', 'search', query] as const,
-  /** Where one source's documents were used over `days` days (ADR 0027, decision 3). */
-  knowledgeUsage: (org: string, source: string, days: number) =>
-    ['org', org, 'knowledge', 'usage', source, days] as const,
-  knowledgeDocumentUses: (org: string, id: string) => ['org', org, 'knowledge', 'document', id, 'uses'] as const,
   /** The shell's search box (sidebar-search.tsx): one entry per debounced query and limit. */
   search: (org: string, query: SearchQuery) => ['org', org, 'search', query] as const,
   /** The prefix of every factory overview window. */
@@ -470,56 +465,36 @@ export const knowledgeSourcesQuery = (org: string, filter: KnowledgeSourceFilter
     staleTime: 30_000,
   });
 
+/** The files of a source's current snapshot, in path order; `find` narrows by path or title. */
+export const knowledgeFilesQuery = (org: string, name: string, find = '') =>
+  queryOptions({
+    queryKey: keys.knowledgeFiles(org, name, find),
+    queryFn: ({ signal }) => listKnowledgeFiles(org, name, { find, limit: 1000 }, signal).then((p) => p.files),
+    staleTime: 30_000,
+  });
+
+/** The files whose path or title starts with `find`, across every source. */
+export const knowledgeFindQuery = (org: string, find: string) =>
+  queryOptions({
+    queryKey: keys.knowledgeFind(org, find),
+    queryFn: ({ signal }) => findKnowledgeFiles(org, find, 8, signal),
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
+
+/** The reads of every source, or of one, over the last `days` days (UTC days, today counting). */
+export const knowledgeReadsQuery = (org: string, source = '', days = 7) =>
+  queryOptions({
+    queryKey: keys.knowledgeReads(org, source, days),
+    queryFn: ({ signal }) => listKnowledgeReads(org, { source, days }, signal),
+    staleTime: 30_000,
+  });
+
 export const knowledgeSourceQuery = (org: string, name: string) =>
   queryOptions({
     queryKey: keys.knowledgeSource(org, name),
     queryFn: ({ signal }) => getKnowledgeSource(org, name, signal),
     staleTime: 30_000,
-    retry: retryUnlessRefused,
-  });
-
-/** A source's documents, a page of `limit` at a time ("Show more"). */
-export const knowledgeDocumentsQuery = (org: string, name: string, limit = 100) =>
-  infiniteQueryOptions({
-    queryKey: [...keys.knowledgeDocuments(org, name), limit],
-    queryFn: ({ pageParam, signal }) => listKnowledgeDocuments(org, name, { after: pageParam, limit }, signal),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (last) => last.next_after,
-    staleTime: 30_000,
-  });
-
-export const knowledgeDocumentQuery = (org: string, id: string) =>
-  queryOptions({
-    queryKey: keys.knowledgeDocument(org, id),
-    queryFn: ({ signal }) => getKnowledgeDocument(org, id, signal),
-    staleTime: 30_000,
-    retry: retryUnlessRefused,
-  });
-
-/** Where a source's documents were used over the last `days` days (7 by default), the most used first. */
-export const knowledgeUsageQuery = (org: string, source: string, days = 7) =>
-  queryOptions({
-    queryKey: keys.knowledgeUsage(org, source, days),
-    queryFn: ({ signal }) => getKnowledgeUsage(org, source, days, signal),
-    staleTime: 30_000,
-  });
-
-/** The first page of the runs that used a document, newest first (the card's uses under a document). */
-export const knowledgeDocumentUsesQuery = (org: string, id: string, limit = 50) =>
-  queryOptions({
-    queryKey: keys.knowledgeDocumentUses(org, id),
-    queryFn: ({ signal }) => listKnowledgeDocumentUses(org, id, { limit }, signal),
-    staleTime: 30_000,
-    retry: retryUnlessRefused,
-  });
-
-/** What knowledge__search answers; the previous answer stays shown while the next one loads. */
-export const knowledgeSearchQuery = (org: string, query: KnowledgeQuery) =>
-  queryOptions({
-    queryKey: keys.knowledgeSearch(org, query),
-    queryFn: ({ signal }) => searchKnowledge(org, query, signal),
-    staleTime: 30_000,
-    placeholderData: keepPreviousData,
     retry: retryUnlessRefused,
   });
 

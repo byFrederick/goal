@@ -97,23 +97,29 @@ func (c *checker) readRule(r *Rule) (code, why string) {
 
 // ruleScope reports each name of a rule's appliesTo that the definition does not declare.
 func (c *checker) ruleScope(r *Rule, p []string) {
+	c.scope("rule "+r.Name, r.AppliesTo, func(string, int) []string { return p })
+}
+
+// scope reports each name of an appliesTo (a rule's, a knowledge source's) that the definition
+// does not declare, at the place at gives the name, the j-th of the list key.
+func (c *checker) scope(what string, s domain.RuleScope, at func(key string, j int) []string) {
 	var lanes []string
-	for _, s := range c.f.Spec.Board.Stations {
-		lanes = append(lanes, sortedKeys(s.Route)...)
+	for _, st := range c.f.Spec.Board.Stations {
+		lanes = append(lanes, sortedKeys(st.Route)...)
 	}
 
 	for _, l := range []struct {
 		key, code, what, hint string
 		list, known           []string
 	}{
-		{keyAgents, codeUnknownAgent, "agent", "", r.AppliesTo.Agents, c.agents},
-		{keyStations, codeUnknownStation, "station", "", r.AppliesTo.Stations, c.stations},
-		{"lanes", codeUnknownLane, "lane", "; lanes are the keys of the stations' routes", r.AppliesTo.Lanes, lanes},
-		{"workTypes", codeUnknownWorkType, "work type", "; work types are board.workTypes", r.AppliesTo.WorkTypes, c.f.Spec.Board.WorkTypes},
+		{keyAgents, codeUnknownAgent, "agent", "", s.Agents, c.agents},
+		{keyStations, codeUnknownStation, "station", "", s.Stations, c.stations},
+		{"lanes", codeUnknownLane, "lane", "; lanes are the keys of the stations' routes", s.Lanes, lanes},
+		{"workTypes", codeUnknownWorkType, "work type", "; work types are board.workTypes", s.WorkTypes, c.f.Spec.Board.WorkTypes},
 	} {
-		for _, v := range l.list {
+		for j, v := range l.list {
 			if !slices.Contains(l.known, v) {
-				c.errorf(checkReferences, l.code, p, "rule %s: appliesTo.%s: unknown %s %q%s", r.Name, l.key, l.what, v, l.hint)
+				c.errorf(checkReferences, l.code, at(l.key, j), "%s: appliesTo.%s: unknown %s %q%s", what, l.key, l.what, v, l.hint)
 			}
 		}
 	}

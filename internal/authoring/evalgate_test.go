@@ -230,3 +230,46 @@ func TestPublish_EvalGateUnsetPublishesCases(t *testing.T) {
 		t.Errorf("published v%d, want v1", v.Number)
 	}
 }
+
+// A draft whose only change from the version it started from is memory.yaml publishes without a
+// new eval run (ADR 0038 decision 6); one that changes anything else too waits for its run.
+func TestPublish_EvalGateSkipsAMemoryOnlyVersion(t *testing.T) {
+	t.Parallel()
+
+	g, f := withCases(t)
+
+	_, err := g.svc.Publish(g.ctx, f, g.publishRequest(t, f))
+	g.finish(t, refused(t, err, authoring.CodeEvalsPending).Run, domain.EvalPass)
+	g.publish(t, f)
+
+	if _, _, err := g.svc.OpenDraft(g.ctx, f, authoring.OpenDraftRequest{}); err != nil {
+		t.Fatal(err)
+	}
+
+	memory := "- text: Use pnpm, not npm.\n  added: \"2026-11-03\"\n"
+	if _, err := g.svc.PutFile(g.ctx, f, authoring.FileWrite{Path: "memory.yaml", Content: []byte(memory)}); err != nil {
+		t.Fatal(err)
+	}
+
+	starts := g.start.starts
+
+	if v := g.publish(t, f); v.Number != 2 || g.start.starts != starts {
+		t.Errorf("memory-only publish = v%d with %d new runs, want v2 and none", v.Number, g.start.starts-starts)
+	}
+
+	// The same facts and another change: the gate applies again.
+	if _, _, err := g.svc.OpenDraft(g.ctx, f, authoring.OpenDraftRequest{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := g.svc.PutFile(g.ctx, f, authoring.FileWrite{Path: "memory.yaml", Content: []byte(memory + "- text: Run task check.\n  added: \"2026-11-03\"\n")}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := g.svc.PutFile(g.ctx, f, authoring.FileWrite{Path: "agents/note.md", Content: []byte("A note.\n")}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = g.svc.Publish(g.ctx, f, g.publishRequest(t, f))
+	_ = refused(t, err, authoring.CodeEvalsPending)
+}

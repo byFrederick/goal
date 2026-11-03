@@ -125,6 +125,34 @@ describe('TraceList: a run', () => {
   });
 });
 
+describe('TraceList: knowledge reads', () => {
+  it('tags a read under /knowledge with Knowledge and names the file', async () => {
+    const reads: Entry = {
+      ...run,
+      tools: [
+        {
+          id: 'k1',
+          tool: 'Read',
+          argument: '/knowledge/handbook/leave.md',
+          path: '/knowledge/handbook/leave.md',
+          summary: 'Leave policy',
+          isError: false,
+          at: '2026-10-25T08:00:30Z',
+        },
+      ],
+    };
+    renderBoardPage({
+      page: () => <TraceList entries={[reads]} itemState="done" />,
+      org,
+      factory,
+      builderMeta,
+    });
+
+    expect(await screen.findByText('Knowledge')).toBeTruthy();
+    expect(screen.getByText('handbook/leave.md')).toBeTruthy();
+  });
+});
+
 describe('TraceList: a spec run and the timeline states', () => {
   const specRun: Entry = {
     ...run,

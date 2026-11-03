@@ -36,8 +36,8 @@ import (
 
 	"github.com/byFrederick/goal/apps/web"
 	"github.com/byFrederick/goal/internal/adapters/clock/sys"
+	"github.com/byFrederick/goal/internal/adapters/converter/workersai"
 	"github.com/byFrederick/goal/internal/adapters/directmessage/slack"
-	"github.com/byFrederick/goal/internal/adapters/embedder/openai"
 	"github.com/byFrederick/goal/internal/adapters/mailer/smtp"
 	"github.com/byFrederick/goal/internal/adapters/masterkey/masterkey"
 	"github.com/byFrederick/goal/internal/adapters/minter/awssts"
@@ -190,7 +190,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// (ADR 0037), its models against the organization policy.
 	authors := authoring.New(authoring.Deps{
 		Store: definitionStore, Loads: store, Templates: objects, Policies: policies, Clock: clock,
-		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.searcher},
+		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.kb},
 	})
 	// The code host adapters: moving over tests a converted version's repository token with them,
 	// the engine merges with them and the API lists what a connection reaches.
@@ -216,7 +216,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// bundle; the engine's RunDefinition signs its token.
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Policies: policies, Events: store, Clock: clock, Logger: log,
-		Knowledge: kb.searcher, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore,
+		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore,
 	}, gateway.Config{Key: []byte(key)})
 	if err != nil {
 		return err
@@ -229,7 +229,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
 		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Clock: clock,
-		Minters: minters(s), Policies: policies, Intake: intake, Audit: store, NotificationOutbox: store, Logger: log,
+		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Audit: store, NotificationOutbox: store, Logger: log,
 	}, engine.Config{
 		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxes.gateway, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns,
 	})
@@ -263,7 +263,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
 		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), Conversions: postgres.NewFactoryConversions(store), ToolLister: toolLister,
 		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
-		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, KnowledgeSearch: kb.searcher, UploadMaxBytes: s.UploadMaxBytes,
+		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, UploadMaxBytes: s.UploadMaxBytes, KnowledgeObjects: objects, KnowledgeCheck: kb.ingestor,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
 		NotificationPreferences: postgres.NewNotificationPreferences(store), NotificationSettings: postgres.NewNotificationSettings(store), SlackMessenger: slack.New(slack.Config{Transport: connectionTransport(false)}),
 		Jonah: jonahDeps(store, authors, clock, log), Clock: clock, Logger: log,
@@ -356,13 +356,14 @@ func notificationJobs(s settings, store *postgres.Store, orgSecrets *postgres.Se
 type knowledgeBase struct {
 	kb       *postgres.Knowledge
 	uploads  *knowledge.Uploads
-	searcher *knowledge.Searcher
 	ingestor *knowledge.Ingestor
 }
 
 // openKnowledge wires the knowledge base: uploads of at most GOAL_UPLOAD_MAX_BYTES each, read
-// from the bucket; embeddings from GOAL_EMBED_URL's model or, without one, keyword search only;
-// GOAL_KB_WORKERS workers syncing due sources. A synced source is read with its secret by the
+// from the bucket; PDF and Office files converted by Workers AI when GOAL_WORKERS_AI_URL is set;
+// GOAL_KB_WORKERS workers syncing due sources. Upload, repository and Confluence sources sync
+// into zip snapshots in the bucket, written first in the system's temporary directory; with no
+// GOAL_WORKERS_AI_URL, what is neither text nor HTML is refused. A synced source is read with its secret by the
 // reader its config names, or by its connection kind's sync reader while it is still on a
 // connection, through the public-only transport: gitdocs (GitHub and GitLab repositories) or
 // confluence (the spaces of a Confluence Cloud site).
@@ -371,21 +372,20 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 ) knowledgeBase {
 	kb := postgres.NewKnowledge(store)
 
-	var embedder ports.Embedder
+	var converter ports.Converter
 
-	if s.Embed.URL == "" {
-		log.Info("knowledge base: keyword search only; set " + embedURLEnv + " (and " + embedModelEnv + ", " + embedKeyEnv +
-			") for an embedding model")
+	if s.WorkersAI.URL == "" {
+		log.Info("knowledge base: PDF and Office files are refused; set " + workersAIURLEnv + " (and " + workersAIKeyEnv +
+			") to convert them")
 	} else {
-		cfg := s.Embed
+		cfg := s.WorkersAI
 		cfg.Transport = connectionTransport(s.AllowPrivateUpstreams)
 
-		client, err := openai.New(cfg) // settingsFrom checked it
+		client, err := workersai.New(cfg) // settingsFrom checked it
 		if err != nil {
-			log.Error("knowledge base: keyword search only", slog.Any("error", err))
+			log.Error("knowledge base: PDF and Office files are refused", slog.Any("error", err))
 		} else {
-			embedder = client
-			log.Info("knowledge base: hybrid search", slog.String("embed_model", client.Model()))
+			converter = client
 		}
 	}
 
@@ -396,10 +396,10 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 	uploads := knowledge.NewUploads(kb, objects, s.UploadMaxBytes)
 
 	return knowledgeBase{
-		kb: kb, uploads: uploads, searcher: knowledge.NewSearcher(kb, embedder, log),
+		kb: kb, uploads: uploads,
 		ingestor: knowledge.NewIngestor(knowledge.IngestorConfig{
 			Knowledge: kb, Connections: connections, Secrets: secrets, Uploads: uploads,
-			Readers: readers, Embedder: embedder, Clock: clock, Log: log, Workers: s.KBWorkers,
+			Readers: readers, Objects: objects, Converter: converter, Clock: clock, Log: log, Workers: s.KBWorkers,
 		}),
 	}
 }
@@ -460,7 +460,7 @@ func minters(s settings) map[string]ports.Minter {
 }
 
 // connectionTransport carries every request goald makes for a connection (its test, STS, merges,
-// sync and embeddings): to public addresses only (egress.PublicDialer, threat row 4), unless
+// sync and conversions): to public addresses only (egress.PublicDialer, threat row 4), unless
 // GOAL_ALLOW_PRIVATE_UPSTREAMS lets a laptop reach its own test servers. It uses no proxy, so a
 // proxy variable cannot route around the address check.
 func connectionTransport(allowPrivate bool) *http.Transport {
@@ -573,7 +573,7 @@ func routes(separate bool, apiHandler, gw, spa, site http.Handler) (primary, gat
 	mux.Handle(api.DocsPath, site)
 	mux.Handle(api.DocsPath+"/", site)
 
-	gatewayPaths := []string{api.GatewayPath, api.RunPath, api.ToolApprovalPath}
+	gatewayPaths := []string{api.GatewayPath, api.RunPath, api.ToolApprovalPath, api.KnowledgePath}
 
 	if !separate {
 		for _, p := range gatewayPaths {
@@ -593,13 +593,14 @@ func routes(separate bool, apiHandler, gw, spa, site http.Handler) (primary, gat
 	return mux, only
 }
 
-// gatewayHandler serves the gateway's paths: the MCP endpoint, the run bundle and the run's
-// tool approvals.
+// gatewayHandler serves the gateway's paths: the MCP endpoint, the run bundle, the run's tool
+// approvals and its knowledge snapshots.
 func gatewayHandler(gw *gateway.Gateway) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle(api.GatewayPath, gw)
 	mux.HandleFunc(api.RunPath, gw.ServeRun)
 	mux.HandleFunc(api.ToolApprovalPath, gw.ServeToolApproval)
+	mux.HandleFunc(api.KnowledgePath, gw.ServeKnowledge)
 
 	return mux
 }

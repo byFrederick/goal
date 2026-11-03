@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -123,6 +124,10 @@ func (s *Service) evalGate(ctx context.Context, f domain.FactoryID, d domain.Def
 		return nil
 	}
 
+	if only, err := s.onlyMemoryChanged(ctx, f, d); err != nil || only {
+		return err
+	}
+
 	c, err := s.evalContent(ctx, d)
 	if err != nil {
 		return err
@@ -132,6 +137,11 @@ func (s *Service) evalGate(ctx context.Context, f domain.FactoryID, d domain.Def
 		return nil
 	}
 
+	return s.gateRun(ctx, f, c, by)
+}
+
+// gateRun applies the gate to content c: the newest run of its every case decides.
+func (s *Service) gateRun(ctx context.Context, f domain.FactoryID, c EvalContent, by domain.Actor) error {
 	run, err := s.evals.Runs.LatestRunForContent(ctx, f, c.SHA256)
 
 	switch {
@@ -158,6 +168,29 @@ func (s *Service) evalGate(ctx context.Context, f domain.FactoryID, d domain.Def
 	}
 
 	return nil
+}
+
+// onlyMemoryChanged is whether draft d differs from the published version it started from in
+// memory.yaml and nothing else (ADR 0038 decision 6): facts people add are guidance, not behaviour
+// the cases test, so such a version passes the gate. A draft that started from nothing never does.
+func (s *Service) onlyMemoryChanged(ctx context.Context, f domain.FactoryID, d domain.DefinitionVersion) (bool, error) {
+	if d.BaseID == "" {
+		return false, nil
+	}
+
+	base, err := s.byID(ctx, f, d.BaseID, VersionSelector{Kind: SelectBase})
+	if err != nil {
+		return false, fmt.Errorf("publish %s: read the version it started from: %w", f, err)
+	}
+
+	without := func(m domain.Manifest) domain.Manifest {
+		out := maps.Clone(m)
+		delete(out, config.MemoryFile)
+
+		return out
+	}
+
+	return d.Manifest[config.MemoryFile] != base.Manifest[config.MemoryFile] && maps.Equal(without(d.Manifest), without(base.Manifest)), nil
 }
 
 // FailingCases are the cases of run, by name, with a try that is not pass: one that failed,

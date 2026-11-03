@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/byFrederick/goal/internal/adapters/embedder/openai"
+	"github.com/byFrederick/goal/internal/adapters/converter/workersai"
 	"github.com/byFrederick/goal/internal/adapters/sandboxes/cloudflare"
 	"github.com/byFrederick/goal/internal/adapters/sandboxes/docker"
 	"github.com/byFrederick/goal/internal/adapters/store/postgres"
@@ -139,10 +139,10 @@ type settings struct {
 	// loopback and link-local addresses too (GOAL_ALLOW_PRIVATE_UPSTREAMS: true or false, default
 	// false): for a laptop's own test servers, and refused when goald listens off loopback.
 	AllowPrivateUpstreams bool
-	// Embed is the knowledge base's embedding model (GOAL_EMBED_URL, an OpenAI-compatible API
-	// root; GOAL_EMBED_MODEL, default defaultEmbedModel; GOAL_EMBED_KEY, its bearer key). Without
-	// GOAL_EMBED_URL the knowledge base is searched by keywords only.
-	Embed openai.Config
+	// WorkersAI is the conversion service for PDF and Office files (GOAL_WORKERS_AI_URL, the
+	// account's Workers AI API root; GOAL_WORKERS_AI_KEY, its bearer token). Without
+	// GOAL_WORKERS_AI_URL those files are refused.
+	WorkersAI workersai.Config
 	// KBWorkers is how many knowledge sources this goald syncs at once (GOAL_KB_WORKERS, default
 	// 2; 0 syncs none here).
 	KBWorkers int
@@ -179,15 +179,10 @@ const (
 	sandboxURLEnv     = "GOAL_SANDBOX_URL"
 	sandboxKeyEnv     = "GOAL_SANDBOX_KEY"
 
-	embedURLEnv   = "GOAL_EMBED_URL"
-	embedModelEnv = "GOAL_EMBED_MODEL"
-	embedKeyEnv   = "GOAL_EMBED_KEY"
-	kbWorkersEnv  = "GOAL_KB_WORKERS"
-	uploadMaxEnv  = "GOAL_UPLOAD_MAX_BYTES"
-	// defaultEmbedModel is Workers AI's bge-m3 (1024 dimensions), the default by spec 4's recall
-	// check on this repository's docs (§17 q2); on another API name its id of a 1024-dimension
-	// model (Ollama's bge-m3, OpenAI's text-embedding-3-small with dimensions).
-	defaultEmbedModel = "@cf/baai/bge-m3"
+	workersAIURLEnv = "GOAL_WORKERS_AI_URL"
+	workersAIKeyEnv = "GOAL_WORKERS_AI_KEY"
+	kbWorkersEnv    = "GOAL_KB_WORKERS"
+	uploadMaxEnv    = "GOAL_UPLOAD_MAX_BYTES"
 	// authProxySecretEnv is the secret goald's /api/auth proxy sends the identity service, which
 	// refuses requests without it (GOAL_AUTH=session only; goal up generates one for both).
 	authProxySecretEnv = "GOAL_AUTH_PROXY_SECRET" //nolint:gosec // a variable name, not a credential
@@ -398,14 +393,14 @@ func smtpPlaintext(u *url.URL, mode string) (bool, error) {
 	return allowed, nil
 }
 
-// knowledgeSettings reads the embedding model, GOAL_KB_WORKERS and GOAL_UPLOAD_MAX_BYTES.
+// knowledgeSettings reads the conversion service, GOAL_KB_WORKERS and GOAL_UPLOAD_MAX_BYTES.
 func knowledgeSettings(s *settings, or func(name, def string) string) []error {
 	var errs []error
 
-	if url := or(embedURLEnv, ""); url != "" {
-		s.Embed = openai.Config{URL: url, Model: or(embedModelEnv, defaultEmbedModel), Key: or(embedKeyEnv, "")}
-		if _, err := openai.New(s.Embed); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", embedURLEnv, err))
+	if url := or(workersAIURLEnv, ""); url != "" {
+		s.WorkersAI = workersai.Config{URL: url, Key: or(workersAIKeyEnv, "")}
+		if _, err := workersai.New(s.WorkersAI); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", workersAIURLEnv, err))
 		}
 	}
 

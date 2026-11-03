@@ -144,8 +144,17 @@ func (e *Engine) definitionToken(ctx context.Context, l domain.Line, t ports.Def
 		return "", fmt.Errorf("gateway key: %w", err)
 	}
 
+	// The box gets no files, but its prompt's Knowledge section is the one the request's agent sees.
+	agent, _ := l.Agent(t.Request.Agent)
+	agent.Name = t.Request.Agent
+
+	pins, err := e.pinKnowledge(ctx, l, agent, domain.RuleTarget{Agent: t.Request.Agent})
+	if err != nil {
+		return "", err
+	}
+
 	token, err := domain.SignTaskToken([]byte(key), domain.TaskClaims{
-		Kind: domain.TaskKindDraftRequest, OrgID: l.OrgID, FactoryID: l.FactoryID, VersionID: l.VersionID, Agent: t.Request.Agent,
+		Knowledge: pins, Kind: domain.TaskKindDraftRequest, OrgID: l.OrgID, FactoryID: l.FactoryID, VersionID: l.VersionID, Agent: t.Request.Agent,
 		RunID: domain.RunID(t.Request.ID), Model: l.Runtime.Model, DraftRequest: t.Request.ID, DraftRevision: t.Revision,
 		ExpiresAt: e.clock.Now().Add(e.cfg.TaskTimeout + e.cfg.LeaseTTL).Unix(),
 	})

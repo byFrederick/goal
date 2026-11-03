@@ -11,6 +11,8 @@ export interface ToolCall {
   tool: string;
   /** The call's main argument (a path, a command, a pattern), shortened. */
   argument: string;
+  /** The file or folder a Read, Grep or Glob call names, unclipped, when the worker sent it. */
+  path?: string;
   summary?: string;
   isError: boolean;
   at: string;
@@ -269,6 +271,7 @@ export function buildTrace(events: readonly ItemEvent[], records: readonly Run[]
             id: str(e.data.id) ?? String(e.id),
             tool: str(e.data.tool) ?? 'tool',
             argument: toolArgument(e.data.input),
+            ...(str(e.data.path) === undefined ? {} : { path: str(e.data.path) as string }),
             isError: false,
             at: e.at,
           });

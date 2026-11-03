@@ -34,13 +34,20 @@ export interface BasicsSection {
   tools?: string[];
   repository?: Repository | null;
   /** knowledge.sources: the organization's knowledge sources the factory may search. */
-  knowledge_sources?: string[];
+  knowledge_sources?: (string | KnowledgeEntry)[];
   // Removed in phase 4 (field-removed): present while factory.yaml has them, so their fixes apply.
   runner?: string;
   image?: string;
   auth?: string;
   secrets?: Record<string, unknown>;
   knowledge_base?: Record<string, unknown>;
+}
+
+/** An object entry of knowledge.sources (ADR 0038 decision 5). */
+export interface KnowledgeEntry {
+  name: string;
+  appliesTo?: { agents?: string[]; stations?: string[]; lanes?: string[]; workTypes?: string[] };
+  readWhen?: string;
 }
 
 export type StationKind = 'queue' | 'agent' | 'human' | 'done';

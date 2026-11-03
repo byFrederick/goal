@@ -214,16 +214,31 @@ describe('agentQuery', () => {
     expect(systemPromptOf({ rules: [] })).not.toContain('Factory rules');
   });
 
-  it('names the knowledge tools and their sources after the prompt when the gateway serves them', () => {
-    const append = systemPromptOf({
-      gateway_url: 'http://gateway.internal/mcp',
-      knowledge_sources: ['handbook', 'runbooks'],
-    });
-    expect(append).toBe(
-      "You are the engineer.\n\n## Knowledge\nThe organization's knowledge sources handbook, runbooks are searchable with " +
-        'mcp__goal__knowledge__search; mcp__goal__knowledge__read returns a whole document by the id a search gave.',
-    );
-    expect(systemPromptOf({ knowledge_sources: ['handbook'] })).not.toContain('Knowledge');
+  const knowledge = {
+    section:
+      '## Knowledge\n\nReference files for this run are under `/knowledge`.\n\n- `/knowledge/handbook/`: 4 files.',
+    snapshots: [{ source: 'handbook', url: '/run/knowledge/handbook' }],
+  };
+
+  it("appends the bundle's Knowledge section after the connections and the factory rules", () => {
+    const rules = [{ name: 'tone', sha256: 'b'.repeat(64), content: 'Say what you did.\n' }];
+    const prompt = systemPromptOf({ connections, rules, knowledge });
+
+    expect(prompt.endsWith(`\n\n${knowledge.section}`)).toBe(true);
+    expect(prompt.indexOf('## Connections')).toBeLessThan(prompt.indexOf('## Factory rules'));
+    expect(prompt.indexOf('## Factory rules')).toBeLessThan(prompt.indexOf('## Knowledge'));
+    expect(prompt).not.toContain('knowledge__search');
+  });
+
+  it('has no Knowledge section without one', () => {
+    expect(systemPromptOf({})).not.toContain('Knowledge');
+    expect(systemPromptOf({ knowledge: { section: '', snapshots: [] } })).toBe('You are the engineer.');
+  });
+
+  it('gives the agent /knowledge as an additional directory when the run has snapshots', () => {
+    expect(optionsOf({ knowledge }).additionalDirectories).toEqual(['/knowledge']);
+    expect(optionsOf({ knowledge: { ...knowledge, snapshots: [] } }).additionalDirectories).toBeUndefined();
+    expect(optionsOf({}).additionalDirectories).toBeUndefined();
   });
 });
 

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"path"
-	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -21,18 +20,26 @@ import (
 // KnowledgeSourceID is a knowledge source's id (a UUID).
 type KnowledgeSourceID string
 
-// KnowledgeDocumentID is a knowledge document's id (a UUID).
-type KnowledgeDocumentID string
+// KnowledgeUploadID is an uploaded file's id (a UUID).
+type KnowledgeUploadID string
 
 // KnowledgeSourceKind is how a source gets its documents.
 type KnowledgeSourceKind string
 
-// The kinds of knowledge sources.
+// The kinds of knowledge sources. ADR 0038 makes them upload, repository and confluence; synced
+// and live stay until the cut-over converts their sources (decision 16).
 const (
-	SourceUpload KnowledgeSourceKind = "upload"
-	SourceSynced KnowledgeSourceKind = "synced"
-	SourceLive   KnowledgeSourceKind = "live"
+	SourceUpload     KnowledgeSourceKind = "upload"
+	SourceRepository KnowledgeSourceKind = "repository"
+	SourceConfluence KnowledgeSourceKind = "confluence"
+	SourceSynced     KnowledgeSourceKind = "synced"
+	SourceLive       KnowledgeSourceKind = "live"
 )
+
+// readsSecret reports whether a source of kind k may read with a secret.
+func (k KnowledgeSourceKind) readsSecret() bool {
+	return k == SourceSynced || k == SourceRepository || k == SourceConfluence
+}
 
 // SyncStatus is a source's sync state: idle between syncs, syncing while a goald holds its lease,
 // failed after a sync that stopped (LastError says why).
@@ -45,19 +52,6 @@ const (
 	SyncFailed  SyncStatus = "failed"
 )
 
-// DocumentStatus is where a document is in indexing: pending until the next sync of its source
-// indexes it, failed when it could not be (Error says why) and skipped when there is nothing to
-// index (no text).
-type DocumentStatus string
-
-// The states of a document.
-const (
-	DocumentPending DocumentStatus = "pending"
-	DocumentIndexed DocumentStatus = "indexed"
-	DocumentFailed  DocumentStatus = "failed"
-	DocumentSkipped DocumentStatus = "skipped"
-)
-
 // Limits and defaults of the knowledge base (00054's checks).
 const (
 	// DefaultSyncEvery and MinSyncEvery bound how often a source syncs.
@@ -67,19 +61,8 @@ const (
 	// size as JSON.
 	MaxSourceTitle  = 120
 	MaxSourceConfig = 8192
-	// MaxChunkText is a chunk's text in characters.
-	MaxChunkText = 8000
-	// MaxExternalID is a document's id at its source in bytes: an entry of its unique index
-	// must fit a btree page's third (00056).
-	MaxExternalID = 2000
 	// MaxKnowledgeError is a stored error message in characters.
 	MaxKnowledgeError = 500
-	// EmbeddingDimensions is every embedding's size: one embedding space per install.
-	EmbeddingDimensions = 1024
-	// SearchCandidates is how many chunks each ranking of a search contributes before fusion.
-	SearchCandidates = 50
-	// RRFK is reciprocal rank fusion's constant: a chunk scores 1/(RRFK+rank) in each ranking.
-	RRFK = 60
 )
 
 var (
@@ -106,22 +89,24 @@ type KnowledgeSource struct {
 	Secret string
 	// Config is the source's settings for its reader (a repository, a branch and path globs; a
 	// Confluence space). A synced source on a secret names its reader too (SourceReaderKey).
-	Config     map[string]string
-	SyncEvery  time.Duration
-	NextSyncAt *time.Time
+	Config map[string]string
+	// ReadWhen is the line that tells agents when to open the source (ADR 0038 decision 1).
+	ReadWhen string
+	// CurrentSnapshot is the snapshot runs read; "" before its first.
+	CurrentSnapshot KnowledgeSnapshotID
+	SyncEvery       time.Duration
+	NextSyncAt      *time.Time
 	// LeaseUntil is when the lease of the goald syncing it ends.
 	LeaseUntil   *time.Time
 	Status       SyncStatus
 	LastSyncedAt *time.Time
 	LastError    string
-	// EmbedModel is the model the source's chunks were embedded with at its last full sync; ""
-	// when they have no embeddings.
-	EmbedModel string
-	// Documents is how many documents it has.
-	Documents int
-	CreatedBy Actor
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	// SyncFailures is how many syncs failed in a row; a successful one resets it, and three show
+	// the source in Needs you (ADR 0038 decision 3).
+	SyncFailures int
+	CreatedBy    Actor
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // NewKnowledgeSource is a source to create. SyncEvery 0 is DefaultSyncEvery.
@@ -131,6 +116,7 @@ type NewKnowledgeSource struct {
 	Connection  string
 	Secret      string
 	Config      map[string]string
+	ReadWhen    string
 	SyncEvery   time.Duration
 }
 
@@ -139,39 +125,56 @@ type NewKnowledgeSource struct {
 const SourceReaderKey = "reader"
 
 // Check enforces a new source's rules: its name as a connection's, a title, a kind; an upload
-// source reads neither a connection nor a secret, a synced one exactly one of them (a secret
+// source reads neither a connection nor a secret, a repository no connection and a secret or
+// none, Confluence a secret, a synced one exactly one of a connection and a secret (a secret
 // with its reader in its config; a connection until moving over gives it a secret), a live one
-// a connection; its config's size and the schedule. Errors wrap ErrInvalid.
+// a connection; its config's size, its read-when line and the schedule. Errors wrap ErrInvalid.
 func (n NewKnowledgeSource) Check() error {
-	errs := []error{CheckConnectionName(n.Name), checkSourceTitle(n.Title), checkSourceConfig(n.Config), checkSyncEvery(n.SyncEvery)}
-
-	switch n.Kind {
-	case SourceUpload:
-		if n.Connection != "" || n.Secret != "" {
-			errs = append(errs, fmt.Errorf("an upload source reads no connection or secret: %w", ErrInvalid))
-		}
-	case SourceSynced:
-		switch {
-		case (n.Connection == "") == (n.Secret == ""):
-			errs = append(errs, fmt.Errorf("a synced source reads with a secret: %w", ErrInvalid))
-		case n.Secret != "":
-			errs = append(errs, CheckSecretName(n.Secret), checkSourceReader(n.Config))
-		}
-	case SourceLive:
-		if n.Connection == "" || n.Secret != "" {
-			errs = append(errs, fmt.Errorf("a live source reads a connection and no secret: %w", ErrInvalid))
-		}
-	default:
-		errs = append(errs, fmt.Errorf("source kind %q is not upload, synced or live: %w", n.Kind, ErrInvalid))
+	errs := []error{
+		CheckConnectionName(n.Name), checkSourceTitle(n.Title), checkSourceConfig(n.Config), checkSyncEvery(n.SyncEvery),
+		CheckReadWhen(n.ReadWhen),
 	}
 
-	return errors.Join(errs...)
+	if n.Secret != "" {
+		errs = append(errs, CheckSecretName(n.Secret))
+	}
+
+	return errors.Join(append(errs, n.checkReads())...)
 }
 
-// KnowledgeSourcePatch changes a source: Title, SyncEvery and Secret when set, Config when not
-// nil. Secret is a synced source's only: it moves a source on a connection over to the secret.
+// checkReads enforces what a new source of each kind reads: a connection, a secret or neither.
+func (n NewKnowledgeSource) checkReads() error {
+	conn, secret := n.Connection != "", n.Secret != ""
+
+	rule, ok := map[KnowledgeSourceKind]struct {
+		holds bool
+		says  string
+	}{
+		SourceUpload:     {!conn && !secret, "an upload source reads no connection or secret"},
+		SourceRepository: {!conn, "a repository source reads with a secret, not a connection"},
+		SourceConfluence: {!conn && secret, "a Confluence source reads with a secret and no connection"},
+		SourceSynced:     {conn != secret, "a synced source reads with a secret"},
+		SourceLive:       {conn && !secret, "a live source reads a connection and no secret"},
+	}[n.Kind]
+
+	switch {
+	case !ok:
+		return fmt.Errorf("source kind %q is not upload, repository, confluence, synced or live: %w", n.Kind, ErrInvalid)
+	case !rule.holds:
+		return fmt.Errorf("%s: %w", rule.says, ErrInvalid)
+	case n.Kind == SourceSynced && secret:
+		return checkSourceReader(n.Config)
+	}
+
+	return nil
+}
+
+// KnowledgeSourcePatch changes a source: Title, ReadWhen, SyncEvery and Secret when set, Config
+// when not nil. Secret is a synced, repository or Confluence source's only: it moves a synced
+// source on a connection over to the secret.
 type KnowledgeSourcePatch struct {
 	Title     *string
+	ReadWhen  *string
 	Config    map[string]string
 	SyncEvery *time.Duration
 	Secret    *string
@@ -197,17 +200,22 @@ func (p KnowledgeSourcePatch) Check() error {
 		errs = append(errs, CheckSecretName(*p.Secret))
 	}
 
+	if p.ReadWhen != nil {
+		errs = append(errs, CheckReadWhen(*p.ReadWhen))
+	}
+
 	return errors.Join(append(errs, checkSourceConfig(p.Config))...)
 }
 
-// CheckOn enforces p's rules on src, the source it changes: a secret only on a synced source,
-// and a synced source on a secret keeps naming its reader. Errors wrap ErrInvalid.
+// CheckOn enforces p's rules on src, the source it changes: a secret only on a synced, repository
+// or Confluence source, and a synced source on a secret keeps naming its reader. Errors wrap
+// ErrInvalid.
 func (p KnowledgeSourcePatch) CheckOn(src KnowledgeSource) error {
-	if p.Secret != nil && src.Kind != SourceSynced {
-		return fmt.Errorf("only a synced source reads with a secret, and %s is %s: %w", src.Name, src.Kind, ErrInvalid)
+	if p.Secret != nil && !src.Kind.readsSecret() {
+		return fmt.Errorf("only a synced, repository or Confluence source reads with a secret, and %s is %s: %w", src.Name, src.Kind, ErrInvalid)
 	}
 
-	if p.Secret == nil && src.Secret == "" {
+	if src.Kind != SourceSynced || (p.Secret == nil && src.Secret == "") {
 		return nil
 	}
 
@@ -217,6 +225,66 @@ func (p KnowledgeSourcePatch) CheckOn(src KnowledgeSource) error {
 	}
 
 	return checkSourceReader(cfg)
+}
+
+// ConvertsTo is the kind a synced source on a secret becomes when moving over (ADR 0038 decision
+// 16): repository for one gitdocs reads, confluence for one confluence reads. It errs, wrapping
+// ErrInvalid and saying why, for any other source.
+func (s KnowledgeSource) ConvertsTo() (KnowledgeSourceKind, error) {
+	if s.Kind != SourceSynced || s.Secret == "" {
+		return "", fmt.Errorf("only a synced source that reads with a secret converts, and %s is %s reading %s: %w",
+			s.Name, s.Kind, s.reads(), ErrInvalid)
+	}
+
+	switch r := s.Config[SourceReaderKey]; r {
+	case "gitdocs":
+		return SourceRepository, nil
+	case "confluence":
+		return SourceConfluence, nil
+	default:
+		return "", fmt.Errorf("source %s's reader %q is neither gitdocs nor confluence: %w", s.Name, r, ErrInvalid)
+	}
+}
+
+// CheckConvert enforces the rules of converting s into a source of kind to: s converts
+// (ConvertsTo), and to is the kind it converts into. Errors wrap ErrInvalid.
+func (s KnowledgeSource) CheckConvert(to KnowledgeSourceKind) error {
+	want, err := s.ConvertsTo()
+	if err != nil {
+		return err
+	}
+
+	if to != want {
+		return fmt.Errorf("source %s converts into a %s source, not %q: %w", s.Name, want, to, ErrInvalid)
+	}
+
+	return nil
+}
+
+// ConvertedConfig is s's config as its converted source keeps it: without SourceReaderKey, which
+// the kind names now.
+func (s KnowledgeSource) ConvertedConfig() map[string]string {
+	out := make(map[string]string, len(s.Config))
+
+	for k, v := range s.Config {
+		if k != SourceReaderKey {
+			out[k] = v
+		}
+	}
+
+	return out
+}
+
+// reads names what s reads with, for a refusal.
+func (s KnowledgeSource) reads() string {
+	switch {
+	case s.Secret != "":
+		return "secret " + s.Secret
+	case s.Connection != "":
+		return "connection " + s.Connection
+	default:
+		return "nothing"
+	}
 }
 
 // checkSourceReader refuses a synced source on a secret whose config names no reader.
@@ -253,14 +321,12 @@ func checkSyncEvery(d time.Duration) error {
 	return nil
 }
 
-// SyncResult is how a source's sync ended: Error "" when it went through, EmbedModel the model
-// every chunk now has ("" without one), At when it ended. Due is the source's NextSyncAt when
+// SyncResult is how a source's sync ended: Error "" when it went through, At when it ended. Due is the source's NextSyncAt when
 // it was claimed: the next sync is At plus the source's interval unless someone made it due
 // since (Sync now, an upload), which then stands.
 type SyncResult struct {
-	At, Due    time.Time
-	Error      string
-	EmbedModel string
+	At, Due time.Time
+	Error   string
 }
 
 // SourceClaim is a source claimed for one sync, with its organization (a claim reaches every
@@ -279,67 +345,24 @@ type SourceLease struct {
 	Token  string
 }
 
-// KnowledgeDocument is one document of a source.
-type KnowledgeDocument struct {
-	ID     KnowledgeDocumentID
+// KnowledgeUpload is one uploaded file of an upload source (ADR 0038 decision 2): its name, and its
+// original, which stays in the bucket at KnowledgeKey under its content hash.
+type KnowledgeUpload struct {
+	ID     KnowledgeUploadID
 	Source KnowledgeSourceID
-	// ExternalID is the document's id at its source: a path, a page id, an upload's SHA-256.
-	ExternalID string
-	// Version changes whenever the content does: a git blob id, a page version, an upload's
-	// SHA-256.
-	Version string
-	Title   string
-	// URL links back to the document at its source; "" for uploads.
-	URL   string
+	// Name is the file's path in the source, unique in it.
+	Name  string
 	MIME  string
 	Bytes int64
-	// Blob is an upload's content hash, its object at KnowledgeKey; "" otherwise.
-	Blob   BlobHash
-	Status DocumentStatus
-	Error  string
-	// SeenAt is when a sync last listed it.
-	SeenAt    time.Time
-	IndexedAt *time.Time
-	// EmbedModel is the model its chunks were embedded with; "" without embeddings.
-	EmbedModel string
-	CreatedBy  Actor
+	// Blob is the original's content hash, its object at KnowledgeKey and the file's version.
+	Blob      BlobHash
+	CreatedBy Actor
+	CreatedAt time.Time
 }
 
 // KnowledgeKey is the bucket key of an organization's uploaded document with content hash h:
 // orgs/<org-id>/knowledge/<sha256>.
 func KnowledgeKey(org OrgID, h BlobHash) string { return OrgPrefix(org) + "knowledge/" + string(h) }
-
-// Chunk is one indexed piece of a document's text, in document order. Heading is the path of the
-// headings it is under ("Install > Docker"); Embedding is nil without an embedding model.
-type Chunk struct {
-	Ord       int
-	Heading   string
-	Text      string
-	Embedding []float32
-}
-
-// KnowledgeQuery is a search: Text ranked by keywords and, with Embedding (Text's embedding by
-// Model), by nearest neighbours among the chunks of Model; only chunks of the named Sources are
-// ranked. Limit is how many hits at most.
-type KnowledgeQuery struct {
-	Text      string
-	Sources   []string
-	Limit     int
-	Embedding []float32
-	Model     string
-}
-
-// KnowledgeHit is one chunk a search found, best first.
-type KnowledgeHit struct {
-	Chunk    int64
-	Document KnowledgeDocumentID
-	Source   string
-	Title    string
-	URL      string
-	Heading  string
-	Text     string
-	Score    float64
-}
 
 // SyncSpec is what a source reader reads: the source and, for a synced source, its secret
 // opened with its value, or the connection it still reads opened with its values.
@@ -362,208 +385,15 @@ type SourceDoc struct {
 	Body []byte
 }
 
-// Ranked is a chunk's score after FuseRanks.
-type Ranked struct {
-	Chunk int64
-	Score float64
-}
-
-// FuseRanks fuses rankings of chunks (each best first) by reciprocal rank: a chunk scores the
-// sum of 1/(RRFK+rank) over the rankings it is in, ranks from 1. The fused ranking is best
-// first, ties by chunk id. The postgres adapter's search computes the same in SQL.
-func FuseRanks(rankings ...[]int64) []Ranked {
-	scores := map[int64]float64{}
-
-	for _, r := range rankings {
-		for i, id := range r {
-			scores[id] += 1 / float64(RRFK+i+1)
-		}
-	}
-
-	out := make([]Ranked, 0, len(scores))
-	for id, s := range scores {
-		out = append(out, Ranked{Chunk: id, Score: s})
-	}
-
-	slices.SortFunc(out, func(a, b Ranked) int {
-		switch {
-		case a.Score > b.Score:
-			return -1
-		case a.Score < b.Score:
-			return 1
-		case a.Chunk < b.Chunk:
-			return -1
-		case a.Chunk > b.Chunk:
-			return 1
-		default:
-			return 0
-		}
-	})
-
-	return out
-}
-
-// Knowledge use and verdicts (ADR 0027): which documents each run used, and whether they helped
-// or misled the agents and people who judged them. Neither copies a document's text, a snippet
-// or a title (decision 6).
-
-// KnowledgeUseKind is how a run used a document.
-type KnowledgeUseKind string
-
-// The kinds of knowledge use: a search returned some of the document's chunks, or a read opened it.
-const (
-	KnowledgeSearched KnowledgeUseKind = "search"
-	KnowledgeRead     KnowledgeUseKind = "read"
-)
-
-// KnowledgeVerdictKind is what an actor says a document did.
-type KnowledgeVerdictKind string
-
-// The verdicts.
-const (
-	KnowledgeHelped KnowledgeVerdictKind = "helped"
-	KnowledgeMisled KnowledgeVerdictKind = "misled"
-)
-
-// Limits of knowledge use and verdicts (00072's checks).
-const (
-	// MaxVerdictNote is a verdict's note in characters.
-	MaxVerdictNote = 500
-	// MaxUseChunks is how many chunk ids one use keeps.
-	MaxUseChunks = 1000
-	// DefaultUsageDays and MaxUsageDays bound a source's usage window.
-	DefaultUsageDays = 7
-	MaxUsageDays     = 90
-	// MaxUsageDocuments is how many documents a source's usage lists, most used first.
-	MaxUsageDocuments = 500
-)
-
-// KnowledgeUse is one run's use of one document by one kind: one per run, document and kind.
-// Chunks are the chunk ids a search returned (none for a read), At the run's first use.
-type KnowledgeUse struct {
-	Factory  FactoryID
-	Item     ItemID
-	Run      RunID
-	Source   KnowledgeSourceID
-	Document KnowledgeDocumentID
-	Kind     KnowledgeUseKind
-	Chunks   []int64
-	At       time.Time
-}
-
-// Check enforces a use's rules: every id, a known kind and at most MaxUseChunks chunks. Errors
-// wrap ErrInvalid.
-func (u KnowledgeUse) Check() error {
-	var errs []error
-
-	if u.Factory == "" || u.Item == "" || u.Run == "" || u.Source == "" || u.Document == "" {
-		errs = append(errs, fmt.Errorf("a knowledge use names its factory, item, run, source and document: %w", ErrInvalid))
-	}
-
-	if u.Kind != KnowledgeSearched && u.Kind != KnowledgeRead {
-		errs = append(errs, fmt.Errorf("knowledge use kind %q is not search or read: %w", u.Kind, ErrInvalid))
-	}
-
-	if len(u.Chunks) > MaxUseChunks {
-		errs = append(errs, fmt.Errorf("a knowledge use keeps at most %d chunks: %w", MaxUseChunks, ErrInvalid))
-	}
-
-	return errors.Join(errs...)
-}
-
-// KnowledgeVerdict is By's verdict on a document, of a run and its item when Run is set. There is
-// one per actor, document and run (no run counting as its own); a later one replaces it. Source is
-// the document's, which the store fills; At zero is the store's now.
-type KnowledgeVerdict struct {
-	Document KnowledgeDocumentID
-	Source   KnowledgeSourceID
-	Run      RunID
-	Item     ItemID
-	Verdict  KnowledgeVerdictKind
-	Note     string
-	By       Actor
-	At       time.Time
-}
-
-// Check enforces a verdict's rules: a document, a known verdict, a note of at most
-// MaxVerdictNote characters, a person or an agent as its actor, and an item only with a run.
-// Errors wrap ErrInvalid.
-func (v KnowledgeVerdict) Check() error {
-	var errs []error
-
-	if v.Document == "" {
-		errs = append(errs, fmt.Errorf("a verdict names its document: %w", ErrInvalid))
-	}
-
-	if v.Verdict != KnowledgeHelped && v.Verdict != KnowledgeMisled {
-		errs = append(errs, fmt.Errorf("verdict %q is not helped or misled: %w", v.Verdict, ErrInvalid))
-	}
-
-	if utf8.RuneCountInString(v.Note) > MaxVerdictNote {
-		errs = append(errs, fmt.Errorf("a verdict's note has at most %d characters: %w", MaxVerdictNote, ErrInvalid))
-	}
-
-	if (v.By.Kind != ActorUser && v.By.Kind != ActorAgent) || v.By.ID == "" {
-		errs = append(errs, fmt.Errorf("a verdict is a person's or an agent's, not %q: %w", v.By.Ref(), ErrInvalid))
-	}
-
-	if v.Item != "" && v.Run == "" {
-		errs = append(errs, fmt.Errorf("a verdict names an item only with its run: %w", ErrInvalid))
-	}
-
-	return errors.Join(errs...)
-}
-
-// AuditEntry is v's audit entry, AuditKnowledgeVerdictGiven on its document: its kind and run,
-// never its note (decision 6).
-func (v KnowledgeVerdict) AuditEntry() AuditEntry {
-	return AuditEntry{
-		Actor: v.By, Action: AuditKnowledgeVerdictGiven, TargetKind: AuditTargetKnowledgeDocument, TargetID: string(v.Document),
-		Data: map[string]any{"verdict": string(v.Verdict), "run": string(v.Run)},
-	}
-}
-
-// CheckUsageDays refuses a usage window outside 1 to MaxUsageDays days (ErrInvalid).
-func CheckUsageDays(days int) error {
-	if days < 1 || days > MaxUsageDays {
-		return fmt.Errorf("a usage window is 1 to %d days, not %d: %w", MaxUsageDays, days, ErrInvalid)
-	}
-
-	return nil
-}
-
-// DocumentUsage is one document's use over a source's window: the distinct runs that used it and
-// the verdicts given on it, agents' and people's apart.
-type DocumentUsage struct {
-	Document     KnowledgeDocumentID
-	Title        string
-	Runs         int
-	AgentsHelped int
-	AgentsMisled int
-	PeopleHelped int
-	PeopleMisled int
-}
-
-// KnowledgeRunUse is one run that used a document: its item and factory, the kinds of its uses
-// in order, and its first use.
-type KnowledgeRunUse struct {
-	Run     RunID
-	Item    ItemID
-	Factory FactoryID
-	Kinds   []KnowledgeUseKind
-	At      time.Time
-}
-
 // Audit actions of the knowledge base (spec 4 §12).
 const (
-	AuditKnowledgeSourceCreated    = "knowledge_source.created"
-	AuditKnowledgeSourceUpdated    = "knowledge_source.updated"
-	AuditKnowledgeSourceDeleted    = "knowledge_source.deleted"
+	AuditKnowledgeSourceCreated = "knowledge_source.created"
+	AuditKnowledgeSourceUpdated = "knowledge_source.updated"
+	AuditKnowledgeSourceDeleted = "knowledge_source.deleted"
+	// The audit actions of uploads keep the names of the documents they replaced, so entries
+	// written before ADR 0038 stay readable.
 	AuditKnowledgeDocumentUploaded = "knowledge_document.uploaded"
 	AuditKnowledgeDocumentDeleted  = "knowledge_document.deleted"
-	// AuditKnowledgeVerdictGiven is a verdict on a document, with its kind and run but never its
-	// note (ADR 0027, decision 6).
-	AuditKnowledgeVerdictGiven = "knowledge_verdict.given"
 )
 
 // Audit target kinds of the knowledge base.
@@ -581,6 +411,17 @@ const (
 	MediaYAML     = "application/yaml"
 )
 
+// The types a conversion service turns into Markdown (ADR 0038 decision 2); a goald without one
+// leaves such a file out of the snapshot and lists it.
+const (
+	MediaPDF  = "application/pdf"
+	MediaDOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	MediaXLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	MediaPPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+	MediaODT  = "application/vnd.oasis.opendocument.text"
+	MediaODS  = "application/vnd.oasis.opendocument.spreadsheet"
+)
+
 // DefaultMaxUpload is the largest document the knowledge base takes, uploaded or fetched from a
 // source (GOAL_UPLOAD_MAX_BYTES).
 const DefaultMaxUpload = 25 << 20
@@ -589,6 +430,7 @@ const DefaultMaxUpload = 25 << 20
 var documentExtensions = map[string]string{
 	".txt": MediaText, ".text": MediaText, ".md": MediaMarkdown, ".markdown": MediaMarkdown,
 	".html": MediaHTML, ".htm": MediaHTML, ".json": MediaJSON, ".yaml": MediaYAML, ".yml": MediaYAML,
+	".pdf": MediaPDF, ".docx": MediaDOCX, ".xlsx": MediaXLSX, ".pptx": MediaPPTX, ".odt": MediaODT, ".ods": MediaODS,
 }
 
 // DocumentType is the indexed type of a file named name: by its extension, else by what its
@@ -606,7 +448,7 @@ func DocumentType(name string, body []byte) (string, error) {
 		return MediaText, nil
 	}
 
-	return "", fmt.Errorf("%q is not text, Markdown, HTML, JSON or YAML: %w", name, ErrUnsupportedDocument)
+	return "", fmt.Errorf("%q is not text, Markdown, HTML, JSON, YAML, PDF or an Office file: %w", name, ErrUnsupportedDocument)
 }
 
 func looksLikeHTML(body []byte) bool {

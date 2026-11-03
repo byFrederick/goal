@@ -30,7 +30,7 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0024](0024-organization-policy.md): Organization policy: a ceiling over factory definitions. Status: accepted.
 - [ADR 0025](0025-judges-and-evals-as-the-screens-show-them.md): Judges and evals as the screens show them. Status: accepted.
 - [ADR 0026](0026-intake-triggers.md): Intake triggers. Status: accepted.
-- [ADR 0027](0027-knowledge-use-and-verdicts.md): Knowledge use and verdicts. Status: proposed.
+- [ADR 0027](0027-knowledge-use-and-verdicts.md): Knowledge use and verdicts. Status: superseded by ADR 0038 (knowledge uses become reads counted from the trace; verdicts and `knowledge__verdict` go).
 - [ADR 0028](0028-trigger-try-and-model-check.md): Trying a trigger with a past event, and the model check in Only if. Status: proposed.
 - [ADR 0029](0029-bake-offs-are-eval-runs-of-one-agent-across-models.md): Bake-offs are eval runs of one agent across models. Status: accepted.
 - [ADR 0031](0031-tool-calls-ask-first-and-standing-rules.md): Tool calls that ask first: the run ends until a person approves, and Always allow records a standing rule. Status: accepted.
@@ -40,3 +40,4 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0035](0035-docs-site-from-the-control-workers-static-assets.md): The docs site is served from the control Worker's static assets on Cloudflare. Status: accepted.
 - [ADR 0036](0036-design-system-v3-plain-and-motion-binding.md): Design system v3 "Plain" and MOTION.md are binding. Status: accepted.
 - [ADR 0037](0037-secrets-and-environment-files.md): Secrets hold the keys, environment files say what agents reach. Status: accepted.
+- [ADR 0038](0038-knowledge-is-files.md): Knowledge is files: synced folders, factory memory, an index in every prompt. Status: proposed.

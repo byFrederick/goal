@@ -1,6 +1,6 @@
 # ADR 0025 — Judges and evals as the screens show them
 
-Status: accepted · 2026-10-27 · Amends [ADR 0002](0002-jonah-evals.md) ([phase 5 amendment](0002-jonah-evals.md#amendment--phase-5-the-minimal-loop), decisions 3, 4 and 5) · Builds on [ADR 0016](0016-ui-revamp.md) (the screens are the contract) and [ADR 0005](0005-factory-definitions-in-object-storage.md) (definitions are files in the bucket, published as versions)
+Status: accepted · 2026-10-27 · Amended by [ADR 0038](0038-knowledge-is-files.md) (a version whose only change is `memory.yaml` publishes without the eval gate) · Amends [ADR 0002](0002-jonah-evals.md) ([phase 5 amendment](0002-jonah-evals.md#amendment--phase-5-the-minimal-loop), decisions 3, 4 and 5) · Builds on [ADR 0016](0016-ui-revamp.md) (the screens are the contract) and [ADR 0005](0005-factory-definitions-in-object-storage.md) (definitions are files in the bucket, published as versions)
 
 ## Context
 

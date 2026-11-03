@@ -174,6 +174,9 @@ func (e *Engine) agent(ctx context.Context, t runTask, runID domain.RunID, env m
 	var fin *domain.WorkerFinished
 
 	started := e.clock.Now()
+	tally := domain.NewKnowledgeTally(t.Knowledge)
+
+	defer e.countReads(ctx, t, runID, tally)
 
 	st, err := execLines(ctx, t.box.sandbox, ports.Exec{Argv: argvAgent, Env: env, Timeout: t.Timeout}, func(line []byte) {
 		ev, f, err := domain.DecodeWorkerLine(line, e.clock.Now())
@@ -189,6 +192,7 @@ func (e *Engine) agent(ctx context.Context, t runTask, runID domain.RunID, env m
 				e.relay(ctx, t, runID, d, scrub)
 			}
 		default:
+			countTouch(tally, *ev)
 			e.relay(ctx, t, runID, *ev, scrub)
 		}
 	})
@@ -226,6 +230,54 @@ func (e *Engine) agent(ctx context.Context, t runTask, runID domain.RunID, env m
 		slog.Int("exit", st.Code), slog.Float64("seconds", e.since(started)))
 
 	return res, lost
+}
+
+// countTouch adds a tool call the agent reported to the run's knowledge tally.
+func countTouch(tally *domain.KnowledgeTally, ev domain.Event) {
+	if ev.Kind != domain.EventToolCall {
+		return
+	}
+
+	tool, _ := ev.Data["tool"].(string)
+	p, _ := ev.Data["path"].(string)
+	tally.Add(tool, p)
+}
+
+// countReadsTimeout bounds counting a run's knowledge reads once the run ended.
+const countReadsTimeout = 10 * time.Second
+
+// countReads adds a run's reads and searches of its pinned knowledge sources to its factory's
+// rollup for today (ADR 0038 decision 10). It is best effort: a failure is logged and never
+// changes the run, and it counts even when the run's ctx ended.
+func (e *Engine) countReads(ctx context.Context, t runTask, runID domain.RunID, tally *domain.KnowledgeTally) {
+	sources := tally.Sources()
+	if e.knowledge == nil || len(sources) == 0 {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), countReadsTimeout)
+	defer cancel()
+
+	ids := make(map[string]domain.KnowledgeSourceID, len(sources))
+
+	for _, name := range sources {
+		s, err := e.knowledge.Source(ctx, name)
+		if err != nil {
+			e.log.WarnContext(ctx, "knowledge reads not counted", slog.String("run", string(runID)), slog.String("source", name), slog.Any("error", err))
+			continue
+		}
+
+		ids[name] = s.ID
+	}
+
+	reads := tally.Reads(ids, t.FactoryID, e.clock.Now())
+	if len(reads) == 0 {
+		return
+	}
+
+	if err := e.knowledge.AddReads(ctx, reads); err != nil {
+		e.log.WarnContext(ctx, "knowledge reads not counted", slog.String("run", string(runID)), slog.Int("counts", len(reads)), slog.Any("error", err))
+	}
 }
 
 // relay records one event the agent reported, by the agent, for its run. A run without an item
@@ -268,7 +320,7 @@ func (e *Engine) gatewayToken(ctx context.Context, req domain.RunRequest, runID 
 	token, err := domain.SignTaskToken([]byte(key), domain.TaskClaims{
 		Kind: req.Bundle, OrgID: req.OrgID, FactoryID: req.FactoryID, VersionID: req.Version, ItemID: req.Item, Station: req.Station,
 		Agent: req.Agent, RunID: runID, Connections: req.Connections, Model: req.Model, DeniedCommands: req.DeniedCommands,
-		Branch: req.Branch, Base: req.Base, WindowStart: unixSeconds(req.WindowStart, false), WindowEnd: unixSeconds(req.WindowEnd, true),
+		Knowledge: req.Knowledge, Branch: req.Branch, Base: req.Base, WindowStart: unixSeconds(req.WindowStart, false), WindowEnd: unixSeconds(req.WindowEnd, true),
 		Manual: req.Manual, NoEnvironment: req.NoEnvironment, ExpiresAt: e.clock.Now().Add(req.Timeout + e.cfg.LeaseTTL).Unix(),
 	})
 	if err != nil {

@@ -228,6 +228,22 @@ export async function listDraftFiles(org: string, factory: string, signal?: Abor
   return body.files;
 }
 
+/** The Knowledge prompt section one agent gets from the draft, as Markdown ("" when there is none); 404 no-draft. */
+export async function getDraftKnowledgePreview(
+  org: string,
+  factory: string,
+  agent: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const body = await unwrap(
+    goal.GET(orgPath('/factories/{factory}/draft/knowledge-preview'), {
+      params: { path: { org, factory }, query: { agent } },
+      ...cancel(signal),
+    }),
+  );
+  return body.section;
+}
+
 /** One file's text and the sha256 its writes are conditional on. */
 export interface FileText {
   text: string;

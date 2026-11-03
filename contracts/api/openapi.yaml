@@ -81,10 +81,10 @@ tags:
       environments, their tests and their secrets.
   - name: knowledge
     description: >-
-      The organization's knowledge base (spec 4 §4.8): sources of uploaded files, of connections
-      synced into it and of connections searched live, their documents, and the search agents
-      run through the gateway's knowledge__search. Members and keys read and search it; owners,
-      admins and keys add, sync and delete sources and documents.
+      The organization's knowledge as files (ADR 0038): sources of uploaded files, of a repository
+      or of Confluence, kept in sync as snapshots, the files of their current snapshot and how
+      often agents read them. Members and keys read it; owners, admins and keys add, sync and
+      delete sources and uploads.
   - name: intake
     description: >-
       Where a factory's items come from (ADR 0026): the sources of its newest items and its
@@ -1416,6 +1416,49 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DraftModel" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: getDraftKnowledgePreview
+      x-goal-scope: factory:read
+      tags: [definitions]
+      summary: The Knowledge prompt section one agent gets from the draft
+      description: >-
+        "What agents see" in the editor: the section goald builds for a run of agent, from the same
+        code as a run's. It lists the draft's sources that apply to the agent (with station and
+        lane and work_type, as a run's appliesTo is matched), each with its entry's readWhen or its
+        snapshot's, its file count and top folders, names those with no snapshot as not synced yet,
+        and gives memory.yaml's facts. It reads each source's current snapshot, while a run reads
+        the snapshot its claim pinned, so a run started earlier may see another. 404 agent-not-found
+        for an agent the draft does not declare, 409 yaml-invalid while factory.yaml does not parse
+        or satisfy the schema, 404 no-draft.
+      parameters:
+        - name: agent
+          in: query
+          required: true
+          description: The agent's name, as the draft declares it
+          schema: { type: string }
+        - name: station
+          in: query
+          description: The station of the run, for sources whose appliesTo names stations
+          schema: { type: string }
+        - name: lane
+          in: query
+          description: The lane of the run, for sources whose appliesTo names lanes
+          schema: { type: string }
+        - name: work_type
+          in: query
+          description: The work type of the run, for sources whose appliesTo names work types
+          schema: { type: string }
+      responses:
+        "200":
+          description: The agent's Knowledge section
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgePreview" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/draft/model/{section}:
     parameters:
@@ -3578,29 +3621,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Run" }
         default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/runs/{run}/knowledge:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - name: run
-        in: path
-        required: true
-        description: The run's id
-        schema: { type: string }
-    get:
-      operationId: listRunKnowledge
-      x-goal-scope: factory:read
-      tags: [knowledge]
-      summary: The knowledge documents a run used, with the verdicts given on them for it
-      description: >-
-        Its uses by time, document and kind, and the verdicts agents and people gave for the run
-        (ADR 0027). 404 for a run of another organization.
-      responses:
-        "200":
-          description: The run's knowledge
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/RunKnowledge" }
-        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/approve:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -4644,9 +4664,9 @@ paths:
       operationId: deleteKnowledgeSource
       x-goal-scope: knowledge:manage
       tags: [knowledge]
-      summary: Delete a source with its documents
+      summary: Delete a source with its snapshots and uploads
       description: >-
-        Its documents, their chunks and the uploaded files no other document holds go with it. 409
+        Its snapshots and the uploaded files no other upload holds go with it. 409
         knowledge-source-in-use, naming them, while a factory's current version may search it.
         Audited as knowledge_source.deleted.
       responses:
@@ -4669,45 +4689,80 @@ paths:
         "202":
           description: The source is due
         default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/knowledge/sources/{source}/documents:
+  /v1/orgs/{org}/knowledge/sources/{source}/files:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
       - $ref: "#/components/parameters/SourceRef"
     get:
-      operationId: listKnowledgeDocuments
+      operationId: listKnowledgeFiles
       x-goal-scope: knowledge:read
       tags: [knowledge]
-      summary: One page of a source's documents
+      summary: One page of a source's current files
       description: >-
-        In id order, after the document id after; next_after, when set, is the after of the next
-        page. 404 knowledge-source-not-found.
+        The files of the source's current snapshot (ADR 0038 decision 3), in path order, after the
+        path after; next_after, when set, is the after of the next page. With find, only those
+        whose path, or title in any case, starts with it. None before the first snapshot. 404
+        knowledge-source-not-found.
       parameters:
+        - name: find
+          in: query
+          description: Only the files whose path, or title in any case, starts with this
+          schema: { type: string, maxLength: 1024 }
         - name: after
           in: query
-          description: The last document id of the previous page
+          description: The last path of the previous page
           schema: { type: string }
         - name: limit
           in: query
-          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
       responses:
         "200":
           description: The page
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/KnowledgeDocumentPage" }
+              schema: { $ref: "#/components/schemas/KnowledgeFilePage" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/sources/{source}/files/{path}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/SourceRef"
+      - $ref: "#/components/parameters/KnowledgeFilePath"
+    get:
+      operationId: getKnowledgeFile
+      x-goal-scope: knowledge:read
+      tags: [knowledge]
+      summary: One file's Markdown
+      description: >-
+        The file as runs read it under /knowledge/<source>/, from the source's current snapshot.
+        goald reads it from the snapshot's zip by range (the end record, the central directory,
+        then the one entry), never the whole zip. 404 knowledge-source-not-found, 404
+        knowledge-file-not-found for a path the snapshot does not hold or a source with no snapshot
+        yet.
+      responses:
+        "200":
+          description: The file's Markdown
+          content:
+            text/markdown:
+              schema: { type: string }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/sources/{source}/uploads:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/SourceRef"
     post:
-      operationId: uploadKnowledgeDocuments
+      operationId: uploadKnowledgeFiles
       x-goal-scope: knowledge:manage
       tags: [knowledge]
       summary: Upload files to an upload source
       description: >-
-        Each part named files is one document, titled by its file name: text, Markdown, HTML, JSON
-        or YAML of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at most
-        that and 1 MiB more. They are pending until the next sync indexes them, which the upload
-        makes due; the same content uploaded again is the document it already is. Every file is
-        checked before any is stored: 413 upload-too-large, 415 unsupported-document-type, 409
-        not-an-upload-source. Audited as knowledge_document.uploaded.
+        Each part named files is one file at the path its file name gives, which may hold folders
+        (runbooks/db/disk.md); a path that is not relative and clean is 400. Text, Markdown, HTML,
+        JSON, YAML, PDF or an Office file (the last two are converted when goald has a conversion
+        service, else left out of the snapshot and listed) of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at
+        most that and 1 MiB more. The upload makes the source due, and its next sync writes the
+        snapshot that holds them. Every file is checked before any is stored: 413
+        upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as
+        knowledge_document.uploaded.
       requestBody:
         required: true
         content:
@@ -4721,183 +4776,111 @@ paths:
                   items: { type: string, format: binary }
       responses:
         "202":
-          description: The documents, pending
+          description: The files, stored until the next sync takes them
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/KnowledgeDocumentList" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/knowledge/documents/{document}:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/DocumentRef"
-    get:
-      operationId: getKnowledgeDocument
-      x-goal-scope: knowledge:read
-      tags: [knowledge]
-      summary: A document with its indexed text
-      description: The text is its chunks joined in order, empty until it is indexed. 404 knowledge-document-not-found.
-      responses:
-        "200":
-          description: The document
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/KnowledgeDocumentText" }
+              schema: { $ref: "#/components/schemas/KnowledgeUploadList" }
         default: { $ref: "#/components/responses/Problem" }
     delete:
-      operationId: deleteKnowledgeDocument
+      operationId: deleteKnowledgeUpload
       x-goal-scope: knowledge:manage
       tags: [knowledge]
-      summary: Delete an uploaded document
+      summary: Delete an uploaded file
       description: >-
-        With its chunks, and its file when no other document holds the same content. 409
-        not-an-upload-source for a synced document, which its next sync would bring back. Audited
-        as knowledge_document.deleted.
+        The upload at path, with its stored file when no other upload holds the same content; the
+        next sync, which the deletion makes due, leaves it out of the snapshot. 404
+        knowledge-file-not-found, 409 not-an-upload-source. Audited as knowledge_document.deleted.
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: The upload's path in the source
+          schema: { type: string, minLength: 1, maxLength: 1024 }
       responses:
         "204":
           description: Deleted
         default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/knowledge/documents/{document}/content:
+  /v1/orgs/{org}/knowledge/check:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/DocumentRef"
-    get:
-      operationId: getKnowledgeDocumentContent
-      x-goal-scope: knowledge:read
+    post:
+      operationId: checkKnowledgeSource
+      x-goal-scope: knowledge:manage
       tags: [knowledge]
-      summary: The uploaded original of a document
+      summary: Check a source's settings before saving them
       description: >-
-        As uploaded, as an attachment that browsers download and never render (threat row 11). 409
-        not-an-upload-source for a synced document, whose original stays at its source (url).
-      responses:
-        "200":
-          description: The file
-          headers:
-            Content-Disposition:
-              required: true
-              schema: { type: string }
-            X-Content-Type-Options:
-              required: true
-              schema: { type: string }
-          content:
-            application/octet-stream:
-              schema: { type: string, format: binary }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/knowledge/documents/{document}/uses:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/DocumentRef"
-    get:
-      operationId: listKnowledgeDocumentUses
-      x-goal-scope: knowledge:read
-      tags: [knowledge]
-      summary: One page of the runs that used a document
-      description: >-
-        Newest first use first (ADR 0027), after the run id after; next_after, when set, is the
-        after of the next page. Each names its run, item and factory, so a client links to them;
-        a run of a factory the caller may not see is left out. 404 knowledge-document-not-found.
-      parameters:
-        - name: after
-          in: query
-          description: The last run id of the previous page
-          schema: { type: string }
-        - name: limit
-          in: query
-          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
-      responses:
-        "200":
-          description: The page
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/KnowledgeDocumentUsePage" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/knowledge/documents/{document}/verdict:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/DocumentRef"
-    put:
-      operationId: giveKnowledgeVerdict
-      x-goal-scope: knowledge:verdict
-      tags: [knowledge]
-      summary: Say whether a document helped or misled
-      description: >-
-        The caller's verdict on the document, of a run of the organization when run_id is set
-        (ADR 0027, decision 2). There is one per person, document and run, so a second replaces
-        the first. 404 knowledge-document-not-found, 404 run-not-found, 422
-        knowledge-document-not-used for a run with no use of the document. Audited as
-        knowledge_verdict.given, without the note; sends the stream event knowledge.
+        The Check panel of Add a source (ADR 0038 decision 12), for settings not saved yet: whether
+        goald can read the source with them (listing it as a sync would, with the secret opened in
+        goald and never returned), how many files it lists and, when known, their size against the
+        limits, a warning for each picked factory the source does not suit, and the line agents
+        will see. Nothing is stored. 400 for settings a source may not have, 404
+        factory-not-found for a picked factory the caller cannot see, 404 secret-not-found.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/KnowledgeVerdictInput" }
+            schema: { $ref: "#/components/schemas/KnowledgeCheckInput" }
       responses:
         "200":
-          description: The verdict as stored
+          description: The answers
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/KnowledgeVerdict" }
+              schema: { $ref: "#/components/schemas/KnowledgeCheck" }
         default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/knowledge/usage:
+  /v1/orgs/{org}/knowledge/files:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
     get:
-      operationId: getKnowledgeUsage
+      operationId: findKnowledgeFiles
       x-goal-scope: knowledge:read
       tags: [knowledge]
-      summary: Where a source's documents were used
+      summary: Find a file across every source
       description: >-
-        Per document of the source with a use or a verdict in the last days days (ADR 0027,
-        decision 3): the distinct runs that used it and the verdicts given, agents' and people's
-        apart; at most 500, the most used first, then by id. 404 knowledge-source-not-found.
+        The current files of every source whose path, or title in any case, starts with find, by
+        source name then path, at most limit.
+      parameters:
+        - name: find
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 1024 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        "200":
+          description: The files found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KnowledgeFileList" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/knowledge/reads:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listKnowledgeReads
+      x-goal-scope: knowledge:read
+      tags: [knowledge]
+      summary: How often runs read and searched the sources' files
+      description: >-
+        The daily rollup of runs' reads and searches under /knowledge (ADR 0038 decision 10), of one
+        source or every one, over the last days days counting today (UTC): one row per source,
+        path, factory and day, by day, source, path and factory. A search of a whole source counts
+        at the path ".". Factories the caller may not see are left out. 404
+        knowledge-source-not-found.
       parameters:
         - name: source
           in: query
-          required: true
-          description: The source's name
+          description: Only this source's reads
           schema: { type: string }
         - name: days
           in: query
           schema: { type: integer, minimum: 1, maximum: 90, default: 7 }
       responses:
         "200":
-          description: The usage
+          description: The counts
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/KnowledgeUsage" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/knowledge/search:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-    get:
-      operationId: searchKnowledge
-      x-goal-scope: knowledge:read
-      tags: [knowledge]
-      summary: Search the knowledge base as agents do
-      description: >-
-        What the gateway's knowledge__search tool returns: chunks ranked by keywords and, with an
-        embedding model, nearest neighbours too, fused by reciprocal rank; over every source, or
-        the named ones (404 knowledge-source-not-found for a name the organization has not).
-      parameters:
-        - name: q
-          in: query
-          required: true
-          schema: { type: string, minLength: 1, maxLength: 1000 }
-        - name: source
-          in: query
-          description: Only these sources (repeatable)
-          explode: true
-          schema:
-            type: array
-            items: { type: string }
-        - name: limit
-          in: query
-          schema: { type: integer, minimum: 1, maximum: 20, default: 8 }
-      responses:
-        "200":
-          description: The hits, best first
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/KnowledgeSearchResult" }
+              schema: { $ref: "#/components/schemas/KnowledgeReadList" }
         default: { $ref: "#/components/responses/Problem" }
 components:
   parameters:
@@ -4948,6 +4931,14 @@ components:
       in: path
       required: true
       description: The knowledge source's name
+      schema: { type: string }
+    KnowledgeFilePath:
+      name: path
+      in: path
+      required: true
+      description: >-
+        A file's path in its source's folder, as in db/disk.md; percent-encode its slashes as %2F so
+        it is one path segment
       schema: { type: string }
     DocumentRef:
       name: document
@@ -5131,11 +5122,10 @@ components:
             Environment tests (ADR 0037 decision 9): environment-not-found,
             environment-server-not-found and template-not-found (404), environment-test-invalid
             (400).
-            Knowledge (spec 4 §8.2): knowledge-source-not-found and knowledge-document-not-found
+            Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found
             (404), connection-cannot-sync (400), knowledge-source-name-taken,
             knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413),
-            unsupported-document-type (415), knowledge-document-not-used (422: a verdict's run
-            has no use of the document).
+            unsupported-document-type (415).
             Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found
             (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409),
             and a publish's evals-pending (its eval run is queued or running, or it started one)
@@ -8567,8 +8557,9 @@ components:
         row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny.
         conversion: a factory Goal could not move from connections to secrets and environment files
         (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and
-        publishes
-      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite, conversion]
+        publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038
+        decision 3), once for each factory that lists it
+      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite, conversion, knowledge_source]
     InboxEntry:
       type: object
       required: [id, kind, factory, since, item, station, action, approval, blocked, andon, rework]
@@ -8638,6 +8629,19 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/InboxConversion"
+        knowledge_source:
+          description: Why the knowledge source does not sync; absent or null for other kinds
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/InboxKnowledgeSource"
+    InboxKnowledgeSource:
+      type: object
+      description: A knowledge source whose last syncs failed, shown under each factory that lists it.
+      required: [source, error, failed_syncs]
+      properties:
+        source: { type: string, description: The source's name }
+        error: { type: string, description: What the last sync said }
+        failed_syncs: { type: integer, description: How many syncs failed in a row }
     InboxConversion:
       type: object
       description: >-
@@ -8978,6 +8982,30 @@ components:
         requests:
           type: array
           items: { $ref: "#/components/schemas/DraftRequest" }
+    KnowledgeSourceEntry:
+      type: object
+      description: One knowledge.sources entry written as a mapping (ADR 0038 decision 5)
+      required: [name]
+      properties:
+        name: { type: string, description: The knowledge source's name, its folder under /knowledge }
+        appliesTo:
+          type: object
+          description: The runs that read the source, matched as a rule's scope; every run when absent
+          properties:
+            agents: { type: array, items: { type: string } }
+            stations: { type: array, items: { type: string } }
+            lanes: { type: array, items: { type: string } }
+            workTypes: { type: array, items: { type: string } }
+        readWhen: { type: string, description: "When to read it, in this factory's words; the snapshot's own line when absent" }
+    KnowledgePreview:
+      type: object
+      required: [section]
+      properties:
+        section:
+          type: string
+          description: >-
+            The Knowledge prompt section the agent's runs get from the draft, as Markdown; "" when
+            there is nothing to say or the agent may not read files
     DraftModel:
       type: object
       required: [revision, model, etags, edited, ranges]
@@ -9325,8 +9353,14 @@ components:
               additionalProperties: {}
             knowledge_sources:
               type: array
-              description: knowledge.sources, the organization's knowledge sources the factory may search
-              items: { type: string }
+              description: >-
+                knowledge.sources, the organization's knowledge sources the factory's runs read, in
+                the definition's order: a name, or an entry with its own appliesTo and readWhen,
+                each kept as factory.yaml writes it
+              items:
+                oneOf:
+                  - { type: string }
+                  - { $ref: "#/components/schemas/KnowledgeSourceEntry" }
             runner: { type: string, description: "Removed in phase 4 (field-removed); present while factory.yaml has it, so its quick fix can remove it" }
             image: { type: string, description: Removed in phase 4 (field-removed), as runner }
             auth: { type: string, description: Removed in phase 4 (field-removed), as runner }
@@ -10300,7 +10334,7 @@ components:
     KnowledgeSource:
       type: object
       description: One source of the organization's knowledge base (spec 4 §4.8)
-      required: [id, name, title, kind, config, sync_every_seconds, status, last_synced_at, next_sync_at, documents, used_by, created_by, created_at, updated_at]
+      required: [id, name, title, kind, config, read_when, sync_every_seconds, status, last_synced_at, next_sync_at, latest_snapshot, used_by, created_by, created_at, updated_at]
       properties:
         id: { type: string }
         name: { $ref: "#/components/schemas/KnowledgeSourceName" }
@@ -10315,6 +10349,7 @@ components:
             synced source on a secret also names its reader (reader: gitdocs or confluence) and,
             for confluence, the site and the account's email.
           additionalProperties: { type: string }
+        read_when: { type: string, description: "The line that tells agents when to open it; empty when it has none" }
         sync_every_seconds: { type: integer, description: How often it syncs }
         status:
           type: string
@@ -10323,24 +10358,53 @@ components:
         last_error: { type: string }
         last_synced_at: { type: string, format: date-time, nullable: true }
         next_sync_at: { type: string, format: date-time, nullable: true, description: "When it is due next; null for a live source" }
-        documents: { type: integer, description: How many documents it has }
-        embed_model: { type: string, description: "The model its chunks are embedded with; absent when they have no embeddings" }
+        latest_snapshot:
+          description: Its newest snapshot; null before the first sync
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/KnowledgeSnapshotSummary" }]
+        sync_failures: { type: integer, description: "How many syncs failed in a row; a successful one resets it, and three show the source in Needs you" }
         used_by: { $ref: "#/components/schemas/KnowledgeSourceUsers" }
         created_by: { $ref: "#/components/schemas/Actor" }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+    KnowledgeSnapshotSummary:
+      type: object
+      description: A source's newest snapshot
+      required: [files, failed, bytes, synced_at]
+      properties:
+        files: { type: integer, description: How many files it holds }
+        failed: { type: integer, description: How many files failed to fetch or convert }
+        bytes: { type: integer, format: int64, description: Its files' Markdown together }
+        synced_at: { type: string, format: date-time, description: When it was written }
     KnowledgeSourceUsers:
       type: object
       description: What uses a source, so it cannot be deleted meanwhile
-      required: [factories]
+      required: [factories, readers]
       properties:
         factories:
           type: array
           description: The factories whose current version may search it (those the caller sees)
           items: { $ref: "#/components/schemas/ConnectionFactory" }
+        readers:
+          type: array
+          description: The same factories with who reads it in each; every list empty means every run
+          items: { $ref: "#/components/schemas/KnowledgeSourceReader" }
+    KnowledgeSourceReader:
+      type: object
+      required: [id, name, agents, stations, lanes, work_types]
+      properties:
+        id: { type: string, description: The factory's metadata.id }
+        name: { type: string }
+        agents: { type: array, items: { type: string } }
+        stations: { type: array, items: { type: string } }
+        lanes: { type: array, items: { type: string } }
+        work_types: { type: array, items: { type: string } }
     KnowledgeSourceKind:
       type: string
-      enum: [upload, synced, live]
+      description: >-
+        upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced
+        and live are the kinds before the cut-over
+      enum: [upload, repository, confluence, synced, live]
     NewKnowledgeSource:
       type: object
       required: [name, title, kind]
@@ -10362,11 +10426,17 @@ components:
             on the host code_host names: github or gitlab), branch, include and exclude;
             confluence reads site, email and spaces.
           additionalProperties: { type: string }
+        read_when: { $ref: "#/components/schemas/KnowledgeReadWhen" }
         sync_every_seconds: { type: integer, minimum: 900, description: "How often it syncs (default 3600)" }
+    KnowledgeReadWhen:
+      type: string
+      maxLength: 160
+      description: One line that tells agents when to open the source, as "How to fix what pages us. Read before acting on an alert."
     KnowledgeSourcePatch:
       type: object
       properties:
         title: { type: string, minLength: 1, maxLength: 120 }
+        read_when: { $ref: "#/components/schemas/KnowledgeReadWhen" }
         secret:
           allOf: [{ $ref: "#/components/schemas/SecretName" }]
           description: "A synced source's new secret: it reads with it from its next sync"
@@ -10375,150 +10445,125 @@ components:
           description: Replaces the config
           additionalProperties: { type: string }
         sync_every_seconds: { type: integer, minimum: 900 }
-    KnowledgeDocument:
+    KnowledgeFile:
       type: object
-      required: [id, source, title, mime, bytes, status, indexed_at]
+      description: One file of a source's current snapshot
+      required: [source, path, title, bytes, version]
       properties:
-        id: { type: string }
         source: { type: string, description: Its source's name }
+        path: { type: string, description: "Its path in the source's folder, /knowledge/<source>/<path> in a run" }
         title: { type: string }
-        url: { type: string, description: "A synced document's link back to its source" }
-        mime: { type: string }
+        bytes: { type: integer, format: int64, description: Its Markdown's size }
+        version: { type: string, description: "Changes whenever its content does: a content hash, a blob id, a page version" }
+    KnowledgeFilePage:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeFile" }
+        next_after: { type: string, description: The after of the next page; absent on the last }
+    KnowledgeFileList:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeFile" }
+    KnowledgeUploadList:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items:
+            type: object
+            required: [path, bytes]
+            properties:
+              path: { type: string }
+              bytes: { type: integer, format: int64 }
+    KnowledgeCheckInput:
+      type: object
+      description: A source's settings, not saved, as Add a source has them
+      required: [name, kind]
+      properties:
+        name: { $ref: "#/components/schemas/KnowledgeSourceName" }
+        kind: { $ref: "#/components/schemas/KnowledgeSourceKind" }
+        secret: { $ref: "#/components/schemas/SecretName" }
+        config:
+          type: object
+          description: What its reader reads, as createKnowledgeSource takes it
+          additionalProperties: { type: string }
+        read_when: { $ref: "#/components/schemas/KnowledgeReadWhen" }
+        factories:
+          type: array
+          description: The factories that would read it (each one's metadata.id or metadata.name)
+          items: { type: string }
+    KnowledgeCheck:
+      type: object
+      required: [access, files, limits, over_limit, warnings, line]
+      properties:
+        access: { $ref: "#/components/schemas/KnowledgeCheckAccess" }
+        files: { type: integer, description: How many files it lists; 0 when access failed }
+        bytes:
+          type: integer
+          format: int64
+          description: >-
+            Their Markdown's size, only when goald knows it: the current snapshot of a source of
+            that name and kind that exists. A listing does not say how big each file is.
+        limits: { $ref: "#/components/schemas/KnowledgeLimits" }
+        over_limit:
+          type: array
+          description: The limits it is over, which a sync would fail on
+          items: { type: string, enum: [files, bytes] }
+        warnings:
+          type: array
+          items: { $ref: "#/components/schemas/KnowledgeCheckWarning" }
+        line: { type: string, description: The line agents will see for it in their prompt's Knowledge section }
+    KnowledgeCheckAccess:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean, description: Whether goald could list the source with these settings }
+        error: { type: string, description: Why it could not; never holds the secret's value }
+    KnowledgeLimits:
+      type: object
+      description: A source's limits (ADR 0038 decision 4)
+      required: [files, bytes, file_bytes]
+      properties:
+        files: { type: integer }
         bytes: { type: integer, format: int64 }
-        status:
+        file_bytes: { type: integer, format: int64 }
+    KnowledgeCheckWarning:
+      type: object
+      required: [code, message]
+      properties:
+        code:
           type: string
-          enum: [pending, indexed, failed, skipped]
-          description: pending until the next sync indexes it; failed with error; skipped when it has no text
-        error: { type: string }
-        indexed_at: { type: string, format: date-time, nullable: true }
-    KnowledgeDocumentList:
+          description: >-
+            knowledge-secret-not-in-scope, knowledge-copies-checkout and knowledge-too-many are the
+            definition checks the factory's draft would fail or warn with; knowledge-source-name-taken
+            and knowledge-source-listed say the name is in use or the factory lists it already
+        factory: { type: string, description: The picked factory's name; absent for a warning about the source }
+        message: { type: string }
+    KnowledgeReadList:
       type: object
-      required: [documents]
+      required: [reads]
       properties:
-        documents:
+        reads:
           type: array
-          items: { $ref: "#/components/schemas/KnowledgeDocument" }
-    KnowledgeDocumentPage:
+          items: { $ref: "#/components/schemas/KnowledgeReadCount" }
+    KnowledgeReadCount:
       type: object
-      required: [documents]
-      properties:
-        documents:
-          type: array
-          items: { $ref: "#/components/schemas/KnowledgeDocument" }
-        next_after: { type: string, description: "The after of the next page; absent on the last" }
-    KnowledgeDocumentText:
-      type: object
-      required: [document, text]
-      properties:
-        document: { $ref: "#/components/schemas/KnowledgeDocument" }
-        text: { type: string, description: "Its indexed text: its chunks joined in order, empty until it is indexed" }
-    KnowledgeSearchResult:
-      type: object
-      required: [hits]
-      properties:
-        hits:
-          type: array
-          items: { $ref: "#/components/schemas/KnowledgeHit" }
-    KnowledgeHit:
-      type: object
-      required: [document, source, title, heading, snippet, score]
-      properties:
-        document: { type: string, description: "The document's id, which getKnowledgeDocument and knowledge__read take" }
-        source: { type: string }
-        title: { type: string }
-        url: { type: string, description: A synced document's link back }
-        heading: { type: string, description: 'The headings the chunk is under ("Install > Docker")' }
-        snippet: { type: string, description: The chunk's text }
-        score: { type: number, format: double }
-    KnowledgeUsage:
-      type: object
-      required: [source, days, documents]
+      required: [source, path, factory_id, factory, day, reads, searches]
       properties:
         source: { type: string, description: The source's name }
-        days: { type: integer, description: The window in days }
-        documents:
-          type: array
-          items: { $ref: "#/components/schemas/KnowledgeDocumentUsage" }
-    KnowledgeDocumentUsage:
-      type: object
-      description: One document's use over the window; getKnowledgeDocument has its url
-      required: [id, title, source, runs, agents_helped, agents_misled, people_helped, people_misled]
-      properties:
-        id: { type: string, description: The document's id }
-        title: { type: string }
-        source: { type: string, description: Its source's name }
-        runs: { type: integer, description: The distinct runs that used it }
-        agents_helped: { type: integer }
-        agents_misled: { type: integer }
-        people_helped: { type: integer }
-        people_misled: { type: integer }
-    KnowledgeUseKind:
-      type: string
-      enum: [search, read]
-      description: search when knowledge__search returned some of its chunks, read when knowledge__read opened it
-    KnowledgeDocumentUsePage:
-      type: object
-      required: [uses]
-      properties:
-        uses:
-          type: array
-          items: { $ref: "#/components/schemas/KnowledgeDocumentUse" }
-        next_after: { type: string, description: "The after of the next page; absent on the last" }
-    KnowledgeDocumentUse:
-      type: object
-      description: One run that used a document
-      required: [run_id, item, factory, kinds, at]
-      properties:
-        run_id: { type: string }
-        item: { $ref: "#/components/schemas/RunItem" }
-        factory: { $ref: "#/components/schemas/FactoryHit" }
-        kinds:
-          type: array
-          items: { $ref: "#/components/schemas/KnowledgeUseKind" }
-        at: { type: string, format: date-time, description: The run's first use of the document }
-    KnowledgeVerdictInput:
-      type: object
-      required: [verdict]
-      additionalProperties: false
-      properties:
-        verdict: { type: string, enum: [helped, misled] }
-        run_id: { type: string, description: A run of the organization that used the document }
-        note: { type: string, maxLength: 500 }
-    KnowledgeVerdict:
-      type: object
-      required: [document, source, verdict, by, at]
-      properties:
-        document: { type: string, description: The document's id }
-        source: { type: string, description: Its source's name }
-        verdict: { type: string, enum: [helped, misled] }
-        run_id: { type: string }
-        item_id: { type: string, description: The run's item }
-        note: { type: string }
-        by: { $ref: "#/components/schemas/Actor" }
-        at: { type: string, format: date-time }
-    RunKnowledge:
-      type: object
-      required: [uses, verdicts]
-      properties:
-        uses:
-          type: array
-          items: { $ref: "#/components/schemas/RunKnowledgeUse" }
-        verdicts:
-          type: array
-          description: The verdicts given for the run, by time
-          items: { $ref: "#/components/schemas/KnowledgeVerdict" }
-    RunKnowledgeUse:
-      type: object
-      required: [document, source, kind, chunks, at]
-      properties:
-        document: { type: string, description: The document's id }
-        source: { type: string, description: Its source's name }
-        kind: { $ref: "#/components/schemas/KnowledgeUseKind" }
-        chunks:
-          type: array
-          description: The chunk ids a search returned; none for a read
-          items: { type: integer, format: int64 }
-        at: { type: string, format: date-time }
+        path: { type: string, description: 'The file read, or the folder searched ("." for the whole source)' }
+        factory_id: { type: string }
+        factory: { type: string, description: The factory's name }
+        day: { type: string, format: date, description: The UTC day }
+        reads: { type: integer }
+        searches: { type: integer }
     KnowledgeEvent:
       type: object
       description: "The data of one `event: knowledge` on /v1/orgs/{org}/stream: a source's sync started or ended"

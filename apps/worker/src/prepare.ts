@@ -1,8 +1,12 @@
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, writeFile } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import { chmod, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import type { ReadableStream } from 'node:stream/web';
 import { gitWithRetry } from './retry.js';
-import { Bundle, type GitCredential } from './spec.js';
+import { Bundle, type GitCredential, type Knowledge } from './spec.js';
 
 /**
  * One command prepare runs; the result is its exit code. Its output goes to stderr, never stdout.
@@ -25,9 +29,9 @@ export interface PrepareDeps {
   now: () => Date;
   /**
    * Where the bundle's files go (/goal), the repository is cloned (/workspace), Claude Code's config
-   * dir (claude) and the box's home, where git's credential store goes.
+   * dir (claude) the box's home, where git's credential store goes, and the run's knowledge is unpacked (/knowledge).
    */
-  dirs: { goal: string; workspace: string; claude: string; home: string };
+  dirs: { goal: string; workspace: string; claude: string; home: string; knowledge: string };
   /** The wait between attempts of a network git step; setTimeout when absent. */
   sleep?: (ms: number) => Promise<void>;
   /** Where a retry is logged; stderr when absent. */
@@ -64,6 +68,8 @@ export interface Prepared {
   tools: number;
   /** Definition mode: how many of the draft's files were written into the workspace. */
   definition_files?: number;
+  /** How many knowledge snapshots were unpacked under /knowledge; absent for none. */
+  knowledge?: number;
 }
 
 type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
@@ -81,6 +87,9 @@ type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
  * go to the user-level rules in the config dir, never into /workspace, so they cannot be committed.
  * In definition mode (the bundle's definition, ADR 0021) /workspace gets the factory's draft files
  * instead, /goal/definition.json their starting sha256, and no git command runs.
+ * While the repository clones, prepare downloads the run's knowledge snapshots (spec.knowledge,
+ * ADR 0038) in parallel and unpacks each into /knowledge/<source>/, files 0444 and folders 0555,
+ * replacing an earlier unpack; a snapshot that does not download or unpack fails the run.
  * The clone is partial (--filter=blob:none: history without file contents, fetched when checked
  * out). The network git steps (the clone, and the base branch's push and fetch) run with a time limit
  * per attempt (GOAL_GIT_ATTEMPT_TIMEOUT seconds, 300 by default); an attempt cut off at it or failed
@@ -90,7 +99,11 @@ type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
 export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   const started = deps.now();
   const gateway = required(deps.env, 'GOAL_GATEWAY_URL');
-  const bundle = await fetchBundle(deps, new URL('/run', gateway), required(deps.env, 'GOAL_GATEWAY_TOKEN'));
+  const token = required(deps.env, 'GOAL_GATEWAY_TOKEN');
+  const bundle = await fetchBundle(deps, new URL('/run', gateway), token);
+  // It runs beside the clone; the handler keeps a failure from going unhandled until it is awaited.
+  const knowledge = unpackKnowledge(deps, gateway, token, bundle.spec.knowledge?.snapshots ?? []);
+  knowledge.catch(() => undefined);
 
   for (const [path, content] of Object.entries(bundle.files)) {
     await put(join(deps.dirs.goal, path), Buffer.from(content, 'base64'));
@@ -160,6 +173,8 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
     out.branch = repo.branch;
     out.branch_existed = existed;
   }
+  const unpacked = await knowledge;
+  if (unpacked > 0) out.knowledge = unpacked;
 
   const spec = {
     ...bundle.spec,
@@ -179,6 +194,82 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   out.at = done.toISOString();
   out.seconds = Math.round((done.getTime() - started.getTime()) / 100) / 10;
   return out;
+}
+
+/**
+ * Downloads snapshots in parallel and unpacks each into dirs.knowledge/<source>/; it returns how
+ * many. It fails with the first failure once every one has settled, so none still writes after.
+ */
+async function unpackKnowledge(
+  deps: PrepareDeps,
+  gateway: string,
+  token: string,
+  snapshots: Knowledge['snapshots'],
+): Promise<number> {
+  const results = await Promise.allSettled(snapshots.map((s) => unpackSnapshot(deps, gateway, token, s)));
+  const failed = results.find((r) => r.status === 'rejected');
+  if (failed) throw failed.reason;
+  return snapshots.length;
+}
+
+/**
+ * Downloads one snapshot's zip to a file beside its folder, replaces the folder with the zip's
+ * files and makes them read-only. Its URL resolves against the gateway's, and only a request to the
+ * gateway carries the task token.
+ */
+async function unpackSnapshot(
+  deps: PrepareDeps,
+  gateway: string,
+  token: string,
+  s: Knowledge['snapshots'][number],
+): Promise<void> {
+  const url = new URL(s.url, gateway);
+  const headers: Record<string, string> =
+    url.origin === new URL(gateway).origin ? { Authorization: `Bearer ${token}` } : {};
+  const res = await deps.fetch(url, { headers });
+  if (!res.ok || !res.body) {
+    const why = (await res.text()).trim().slice(0, 200);
+    throw new Error(`knowledge ${s.source}: GET ${url.pathname}: ${res.status}${why ? ` ${why}` : ''}`);
+  }
+  const dest = join(deps.dirs.knowledge, s.source);
+  const zip = join(deps.dirs.knowledge, `.${s.source}.zip`);
+  await mkdir(deps.dirs.knowledge, { recursive: true });
+  try {
+    await pipeline(Readable.fromWeb(res.body as ReadableStream<Uint8Array>), createWriteStream(zip));
+    await removeTree(dest);
+    await mkdir(dest);
+    const code = await deps.exec('unzip', ['-q', '-o', zip, '-d', dest]);
+    if (code !== 0) throw new Error(`knowledge ${s.source}: unzip exited ${code}`);
+  } finally {
+    await rm(zip, { force: true });
+  }
+  await readOnly(dest);
+}
+
+/** Makes the files under dir 0444 and its folders, dir included, 0555; a link is left as it is. */
+async function readOnly(dir: string): Promise<void> {
+  for (const e of await readdir(dir, { withFileTypes: true })) {
+    const path = join(dir, e.name);
+    if (e.isDirectory()) await readOnly(path);
+    else if (e.isFile()) await chmod(path, 0o444);
+  }
+  await chmod(dir, 0o555);
+}
+
+/** Removes dir, an earlier read-only unpack included: its folders are made writable first. */
+async function removeTree(dir: string): Promise<void> {
+  const writable = async (d: string): Promise<void> => {
+    await chmod(d, 0o755);
+    for (const e of await readdir(d, { withFileTypes: true })) {
+      if (e.isDirectory()) await writable(join(d, e.name));
+    }
+  };
+  try {
+    await writable(dir);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
+  await rm(dir, { recursive: true, force: true });
 }
 
 /** The commit ref names in ws, or undefined when git cannot name one (an empty repository). */

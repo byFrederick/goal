@@ -1,9 +1,8 @@
 // What the Knowledge pages say, as pure functions (words.test.ts): a source's status (never
-// colour alone) and its last and next sync, a document's status, the schedules people pick, a
-// refusal's sentence, which files an upload takes, and a search hit's snippet cut to the part
-// around the query's words with those words marked.
+// colour alone) and its last and next sync, the schedules people pick, a
+// refusal's sentence and which files an upload takes.
 import { ApiError } from '../../api/client';
-import type { KnowledgeDocument, KnowledgeSource } from '../../api/types';
+import type { KnowledgeSource } from '../../api/types';
 import { since, type Tone } from '../../shared/connections';
 import { formatAge, formatClock, formatDay, formatDuration } from '../../shared/format';
 
@@ -19,7 +18,7 @@ export function sourceStatus(s: KnowledgeSource): StatusLine {
   if (s.kind === 'live') return { tone: 'muted', text: 'Live, not indexed' };
   if (s.status === 'syncing') return { tone: 'muted', text: 'Syncing' };
   if (s.status === 'failed') {
-    const kept = s.last_synced_at ? ` The documents from ${formatDay(s.last_synced_at)} stay searchable.` : '';
+    const kept = s.last_synced_at ? ` The files from ${formatDay(s.last_synced_at)} stay as they were.` : '';
     return {
       tone: 'rework',
       text: 'Sync failed',
@@ -27,11 +26,11 @@ export function sourceStatus(s: KnowledgeSource): StatusLine {
     };
   }
   if (!s.last_synced_at) {
-    return s.kind === 'upload' && s.documents === 0
-      ? { tone: 'muted', text: 'No documents yet' }
+    return s.kind === 'upload' && !s.latest_snapshot
+      ? { tone: 'muted', text: 'No files yet' }
       : { tone: 'muted', text: 'Waiting for its first sync' };
   }
-  return { tone: 'ok', text: s.kind === 'upload' ? 'Indexed' : 'Synced' };
+  return { tone: 'ok', text: 'Synced' };
 }
 
 const sentence = (text: string) => text.charAt(0).toUpperCase() + text.slice(1).replace(/\.$/, '');
@@ -58,20 +57,6 @@ export function syncTimes(s: KnowledgeSource, now: number): { last: string; next
   if (wait < 3_600_000) return { last, next: `Next in ${formatAge(wait / 1000)}` };
   if (wait < dayMs) return { last, next: `Next ${formatClock(s.next_sync_at, new Date(now))}` };
   return { last, next: `Next ${formatDay(s.next_sync_at)}` };
-}
-
-/** "Indexed 14:00", "Waiting to be indexed", "Failed: …", "Skipped: …". */
-export function documentStatus(d: KnowledgeDocument, now: number): StatusLine {
-  switch (d.status) {
-    case 'indexed':
-      return { tone: 'ok', text: d.indexed_at ? `Indexed ${formatClock(d.indexed_at, new Date(now))}` : 'Indexed' };
-    case 'failed':
-      return { tone: 'rework', text: `Failed: ${d.error || 'the sync gave no reason'}` };
-    case 'skipped':
-      return { tone: 'muted', text: `Skipped: ${d.error || 'it has no text'}` };
-    default:
-      return { tone: 'muted', text: 'Waiting to be indexed' };
-  }
 }
 
 /** The schedules a synced source takes (at least every 15 minutes). */
@@ -112,54 +97,6 @@ export function formatBytes(n: number): string {
 export function refusalText(err: unknown): string {
   if (!(err instanceof ApiError)) return 'goald is not answering. Try again once it is running.';
   return err.detail ?? err.title;
-}
-
-export interface Segment {
-  text: string;
-  /** One of the query's words. */
-  mark: boolean;
-}
-
-/** The query's words worth marking: letters and digits, two or more. */
-function terms(query: string): string[] {
-  return [...new Set(query.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? [])];
-}
-
-const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/**
- * A hit's snippet as a search result shows it: one line of plain text (no Markdown heading marks),
- * at most `max` characters starting a little before the first of the query's words, cut at words,
- * with an ellipsis where it was cut and the query's words marked where they start a word.
- */
-export function excerpt(snippet: string, query: string, max = 240): Segment[] {
-  const text = snippet
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const words = terms(query);
-  const pattern =
-    words.length > 0 ? new RegExp(`(?<![\\p{L}\\p{N}])(${words.map(escapeRegExp).join('|')})`, 'giu') : null;
-  const first = pattern ? text.search(pattern) : -1;
-  let start = first > 60 ? text.lastIndexOf(' ', first - 40) + 1 : 0;
-  if (start < 0) start = 0;
-  let end = Math.min(text.length, start + max);
-  if (end < text.length) {
-    const space = text.lastIndexOf(' ', end);
-    if (space > start) end = space;
-  }
-  const cut = `${start > 0 ? '…' : ''}${text.slice(start, end)}${end < text.length ? '…' : ''}`;
-  if (!pattern) return [{ text: cut, mark: false }];
-  const out: Segment[] = [];
-  let at = 0;
-  for (const m of cut.matchAll(pattern)) {
-    const i = m.index ?? 0;
-    if (i > at) out.push({ text: cut.slice(at, i), mark: false });
-    out.push({ text: m[0], mark: true });
-    at = i + m[0].length;
-  }
-  if (at < cut.length) out.push({ text: cut.slice(at), mark: false });
-  return out;
 }
 
 /** goald's pattern of a source's name: 3 to 40 lowercase letters, digits and inner dashes. */

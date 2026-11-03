@@ -21,6 +21,8 @@ export function titleOf(entry: InboxEntry): string {
   if (entry.kind === 'question' && entry.question) return `${entry.question.agent}: ${entry.question.text}`;
   if (entry.kind === 'tool_approval' && entry.tool_approval) return approvalTitle(entry.tool_approval);
   if (entry.item) return entry.item.title;
+  if (entry.kind === 'knowledge_source' && entry.knowledge_source)
+    return `${entry.knowledge_source.source} does not sync`;
   if (entry.kind === 'andon') return 'Line stopped';
   if (entry.kind === 'rework_warning' && entry.rework) {
     return `${humanize(entry.rework.station)} sent back ${entry.rework.rejected} of the last ${entry.rework.verdicts}`;

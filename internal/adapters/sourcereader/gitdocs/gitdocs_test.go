@@ -1,16 +1,20 @@
 package gitdocs_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/sha1" //nolint:gosec // git's blob ids are SHA-1; the stand-in computes them as git does
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -29,6 +33,10 @@ import (
 
 const (
 	token = "glpat-s3cret-token"
+
+	// docsToken is the secret the source reads with, and docsSource its name.
+	docsToken  = "docs-token"
+	docsSource = "docs"
 
 	kindGitHub = "github"
 	kindGitLab = "gitlab"
@@ -393,8 +401,8 @@ func TestReader_SyncsIncrementallyByBlobID(t *testing.T) {
 				wantURL = h.repository() + "/-/blob/main/docs/deploy.md"
 			}
 
-			if d.Version != blobID(docs[deployMD]) || d.URL != wantURL || d.Status != domain.DocumentIndexed || d.MIME != domain.MediaMarkdown {
-				t.Fatalf("docs/deploy.md = %+v, want blob %s, url %s, indexed Markdown", d, blobID(docs[deployMD]), wantURL)
+			if d.Version != blobID(docs[deployMD]) || d.URL != wantURL {
+				t.Fatalf("docs/deploy.md = %+v, want blob %s, url %s", d, blobID(docs[deployMD]), wantURL)
 			}
 
 			changed := maps.Clone(docs)
@@ -641,6 +649,8 @@ type world struct {
 	clock *porttest.Clock
 	kb    ports.Knowledge
 	in    *knowledge.Ingestor
+	// objects is the bucket the snapshots go to.
+	objects ports.ObjectStore
 }
 
 func newWorld(t *testing.T, h *codeHost, kind string, config map[string]string) *world {
@@ -676,26 +686,38 @@ func newWorld(t *testing.T, h *codeHost, kind string, config map[string]string) 
 		t.Fatal(err)
 	}
 
-	if _, err := kb.CreateSource(ctx, domain.NewKnowledgeSource{Name: "docs", Title: "Docs", Kind: domain.SourceSynced, Connection: kind, Config: config}, admin); err != nil {
+	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, conns)
+	kb.ReadSecrets(secrets)
+
+	if _, err := secrets.Create(ctx, domain.NewSecret{Name: docsToken, Value: token, Scope: domain.SecretScope{All: true}}, admin); err != nil {
 		t.Fatal(err)
 	}
 
+	cfg := maps.Clone(config)
+	cfg["code_host"] = kind
+
+	if _, err := kb.CreateSource(ctx, domain.NewKnowledgeSource{Name: docsSource, Title: "Docs", Kind: domain.SourceRepository, Secret: docsToken, Config: cfg}, admin); err != nil {
+		t.Fatal(err)
+	}
+
+	objects := porttest.NewObjectStore()
 	in := knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: kb, Connections: conns, Clock: clock,
+		Knowledge: kb, Secrets: secrets, Objects: objects, Clock: clock,
 		Readers: map[string]ports.SourceReader{"gitdocs": gitdocs.New(gitdocs.Config{Transport: h.transport(true)})},
 	})
 
-	return &world{t: t, org: o.ID, clock: clock, kb: kb, in: in}
+	return &world{t: t, org: o.ID, clock: clock, kb: kb, in: in, objects: objects}
 }
 
 func (w *world) ctx() context.Context { return domain.WithOrg(w.t.Context(), w.org) }
 
 // sync makes the source due, syncs it once and checks that the stand-in served exactly the files
-// fetched and that the source then has the documents of documents; it returns them by id.
-func (w *world) sync(h *codeHost, fetched, documents []string) map[string]domain.KnowledgeDocument {
+// fetched and that the source's snapshot then has the files of documents (their paths without
+// the .md the snapshot adds to a file that has none); it returns them by id.
+func (w *world) sync(h *codeHost, fetched, documents []string) map[string]file {
 	w.t.Helper()
 
-	if err := w.kb.SyncNow(w.ctx(), "docs"); err != nil {
+	if err := w.kb.SyncNow(w.ctx(), docsSource); err != nil {
 		w.t.Fatal(err)
 	}
 
@@ -713,9 +735,9 @@ func (w *world) sync(h *codeHost, fetched, documents []string) map[string]domain
 		w.t.Fatalf("the sync fetched %v, want %v", got, fetched)
 	}
 
-	got := w.documents()
+	got := w.files()
 	if ids := slices.Sorted(maps.Keys(got)); !slices.Equal(ids, documents) {
-		w.t.Fatalf("documents after the sync = %v, want %v", ids, documents)
+		w.t.Fatalf("files after the sync = %v, want %v", ids, documents)
 	}
 
 	return got
@@ -724,7 +746,7 @@ func (w *world) sync(h *codeHost, fetched, documents []string) map[string]domain
 func (w *world) source() domain.KnowledgeSource {
 	w.t.Helper()
 
-	s, err := w.kb.Source(w.ctx(), "docs")
+	s, err := w.kb.Source(w.ctx(), docsSource)
 	if err != nil {
 		w.t.Fatal(err)
 	}
@@ -732,18 +754,62 @@ func (w *world) source() domain.KnowledgeSource {
 	return s
 }
 
-// documents are the source's documents by external id.
-func (w *world) documents() map[string]domain.KnowledgeDocument {
+// file is a file of the source's snapshot with the link its first line cites.
+type file struct {
+	domain.KnowledgeFile
+	URL string
+}
+
+// files are the source's current files by the id of the repository file they came from.
+func (w *world) files() map[string]file {
 	w.t.Helper()
 
-	docs, err := w.kb.Documents(w.ctx(), "docs", "", 100)
+	snaps, err := w.kb.Snapshots(w.ctx(), docsSource)
+	if err != nil || len(snaps) == 0 {
+		w.t.Fatalf("snapshots = %v, %v; want one", snaps, err)
+	}
+
+	obj, err := w.objects.Get(w.ctx(), snaps[0].Key)
 	if err != nil {
 		w.t.Fatal(err)
 	}
 
-	out := map[string]domain.KnowledgeDocument{}
-	for _, d := range docs {
-		out[d.ExternalID] = d
+	zr, err := zip.NewReader(bytes.NewReader(obj.Body), int64(len(obj.Body)))
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	urls := map[string]string{}
+
+	for _, f := range zr.File {
+		rc, err := f.Open()
+		if err != nil {
+			w.t.Fatal(err)
+		}
+
+		body, _ := io.ReadAll(rc)
+		_ = rc.Close()
+
+		_, rest, _ := strings.Cut(string(body), "source: ")
+		url, _, _ := strings.Cut(rest, "\n")
+		urls[f.Name] = url
+	}
+
+	listed, err := w.kb.Files(w.ctx(), domain.KnowledgeFileQuery{Source: docsSource, Limit: 100})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	out := map[string]file{}
+
+	for _, f := range listed {
+		// A file that was not Markdown has .md after its name.
+		id := f.Path
+		if base := strings.TrimSuffix(f.Path, ".md"); base != f.Path && path.Ext(base) != "" {
+			id = base
+		}
+
+		out[id] = file{KnowledgeFile: f, URL: urls[f.Path]}
 	}
 
 	return out
@@ -763,10 +829,10 @@ func TestReader_ReadsWithASecret(t *testing.T) {
 			r := gitdocs.New(gitdocs.Config{Transport: h.transport(true)})
 
 			spec := domain.SyncSpec{
-				Source: domain.KnowledgeSource{Name: "runbooks", Kind: domain.SourceSynced, Secret: "docs-token", Config: map[string]string{
+				Source: domain.KnowledgeSource{Name: "runbooks", Kind: domain.SourceSynced, Secret: docsToken, Config: map[string]string{
 					domain.SourceReaderKey: "gitdocs", "code_host": kind, cfgRepository: h.repository(),
 				}},
-				Secret: &domain.ResolvedSecret{Secret: domain.Secret{Name: "docs-token"}, Value: token},
+				Secret: &domain.ResolvedSecret{Secret: domain.Secret{Name: docsToken}, Value: token},
 			}
 
 			if got := list(t, r, spec); len(got) != 4 {
