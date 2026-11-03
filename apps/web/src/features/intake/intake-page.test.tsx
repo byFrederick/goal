@@ -125,7 +125,7 @@ describe('IntakePage', () => {
     expect(screen.getAllByRole('button', { name: 'Add' })).toHaveLength(3);
   });
 
-  it('says which connection a trigger needs, links Connect and reads Off', async () => {
+  it('says what a trigger needs, links Set up and reads Off', async () => {
     vi.mocked(getIntake).mockResolvedValue({
       ...intake,
       triggers: [
@@ -140,8 +140,8 @@ describe('IntakePage', () => {
     renderIntake();
 
     const triggers = await screen.findByRole('region', { name: 'Triggers' });
-    expect(within(triggers).getByText(/Needs the sentry connection\./)).toBeTruthy();
-    expect(within(triggers).getByRole('link', { name: 'Connect' }).getAttribute('href')).toBe(
+    expect(within(triggers).getByText(/Needs a sentry webhook\./)).toBeTruthy();
+    expect(within(triggers).getByRole('link', { name: 'Set up' }).getAttribute('href')).toBe(
       '/o/acme/f/widgets/intake/webhooks',
     );
     expect(within(triggers).getByText('Off')).toBeTruthy();

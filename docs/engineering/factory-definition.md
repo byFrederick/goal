@@ -1,6 +1,6 @@
 # Factory definition reference
 
-A factory definition is a file tree with `factory.yaml` at its root ([ADR 0005](../adr/0005-factory-definitions-in-object-storage.md)): `agents/` (prompts), `skills/`, `rules/`, `contracts/` and `evals/`. `contracts/definitions/factory.schema.json` is the reference for every key of `factory.yaml`, and `contracts/definitions/evals.schema.json` for judges and eval cases ([below](#judges-and-eval-cases)). `internal/config` loads a tree and validates it (`config.Check`): every file parses, `factory.yaml` satisfies the schema, and every name and path it uses points at something that exists. `goal factory validate` (and `goal validate`, its offline form), the builder and publish all run the same checks. This page covers what the schema alone cannot explain.
+A factory definition is a file tree with `factory.yaml` at its root ([ADR 0005](../adr/0005-factory-definitions-in-object-storage.md)): `agents/` (prompts), `skills/`, `rules/`, `contracts/`, `environments/` and `evals/`. `contracts/definitions/factory.schema.json` is the reference for every key of `factory.yaml`, `contracts/definitions/environment.schema.json` for environment files ([below](#environment-files)) and `contracts/definitions/evals.schema.json` for judges and eval cases ([below](#judges-and-eval-cases)). `internal/config` loads a tree and validates it (`config.Check`): every file parses, `factory.yaml` satisfies the schema, and every name and path it uses points at something that exists. `goal factory validate` (and `goal validate`, its offline form), the builder and publish all run the same checks. This page covers what the schema alone cannot explain.
 
 ## Rules
 
@@ -149,6 +149,90 @@ A definition without the block is trunk, `onLand`, 0 and no `landAt`. The checks
 
 Nothing reads the settings yet: the store, the engine and the worker follow in the parts of the assembly ADR 0033 describes.
 
+## Environment files
+
+An environment file, `environments/<name>.yaml`, says what an agent's box installs and what it can reach ([ADR 0037](../adr/0037-secrets-and-environment-files.md), decisions 5 to 8). Every factory has `environments/default.yaml`. An agent names its file with `environment: <name>`, and an agent without one gets `default`; a judge's front matter and an eval case's `spec` take `environment` the same way. `config.Check` loads and checks the files (`internal/config/environment.go`); run start does not read them yet, so runs still take the [old path](#keys-moved-to-environment-files).
+
+```yaml
+apiVersion: goal/v1
+kind: Environment
+metadata: {name: default}            # optional; it must be the file name when present
+spec:
+  size: medium                       # small | medium | large; medium when omitted
+  image: ghcr.io/acme/box:2026.11    # optional; Goal's agent image when omitted
+  tools: [go@1.26, node@22, gh@2]    # mise specs, after the repository's own mise.toml
+  setup:                             # run in order after the clone and the tools
+    - pnpm install --frozen-lockfile
+  env:
+    GH_TOKEN: "{{github-token}}"
+    DATABASE_URL: "postgres://app:{{db-pass}}@db/app"
+    SENTRY_ORG: acme
+  files:                             # absolute paths or ~/; each value is a reference
+    ~/.kube/config: "{{kube-staging}}"
+  mcp:
+    linear:                          # remote: url and optional headers
+      url: https://mcp.linear.app/mcp
+      headers: {Authorization: "Bearer {{linear-key}}"}
+      tools: {create_comment: ask, "delete_*": off}
+    playwright:                      # stdio: command and optional env
+      command: [npx, "@playwright/mcp@0.0.41"]
+```
+
+- `env` holds plain values and `{{secret}}` references, as the whole value or part of it.
+- `files` keys are absolute paths or start with `~/`, and each value is one reference.
+- An `mcp` server is remote (`url`, optional `headers`) or stdio (`command`, optional `env`), never both. `tools` maps a tool name or glob to `allow`, `ask` or `off`; the most specific match wins, and a tool nothing matches is `allow`.
+
+### Secret references
+
+`{{name}}` names one of the organization's secrets, and it is the only placeholder. It is valid in an environment file's `env`, `files`, `mcp.<server>.headers` and a stdio server's `env`, and in `runtime.repository.token`, `runtime.modelKey` and a trigger's `only.modelAgrees.key`; the last three take one whole reference. A trigger's `create.title` and `create.brief` keep their `{{field}}` event placeholders. A literal `{{` is not supported.
+
+`runtime.repository` is `{url, token}`. A URL on `github.com` or `gitlab.com` picks its code host; any other host needs `forge: github` or `forge: gitlab`.
+
+### Environment checks
+
+`config.Check` reports these as errors, each in the file and at the line of its key:
+
+| Code | Check | When |
+| --- | --- | --- |
+| `environment-default-missing` | environments | `environments/default.yaml` does not exist |
+| `environment-unknown` | environments | an agent, judge or eval case names an environment that has no file |
+| `environment-name-invalid` | environments | a file name is not a slug |
+| `environment-name-mismatch` | environments | `metadata.name` is not the file name |
+| `tool-spec-invalid` | environments | a `tools` entry is not a mise tool spec; the fix removes it |
+| `secret-placement` | environments | a `{{...}}` is anywhere but the places above |
+| `secret-ref-invalid` | environments | a reference does not name a secret, a `{{` is unclosed, or `modelKey` or `modelAgrees.key` is not one whole reference |
+| `forge-missing` | environments | a repository on another host names no `forge`; the fixes set it |
+| schema codes | schema | a file does not satisfy `environment.schema.json` |
+
+Publish then runs the secrets check (`authoring.SecretsCheck`, `internal/authoring/secrets.go`) against the organization's secrets, reading names and scopes, never a value:
+
+| Code | Severity | When |
+| --- | --- | --- |
+| `secret-missing` | error | the organization has no secret of a referenced name |
+| `secret-not-in-scope` | error | the secret's factory scope leaves the factory out |
+| `reserved-env` | error | an `env` name is one the platform keeps (`domain.ReservedRunEnv`: `GOAL_*`, `HOME`, `PATH`, the proxy variables, `LD_*`, `MISE_*`…) |
+| `plain-key` | error | a plain `env` value starts with `sk-`, `ghp_`, `github_pat_`, `glpat-`, `xoxb-` or `xoxp-` |
+| `plain-key` | warning | a plain `env` value's name ends with `_TOKEN`, `_KEY`, `_SECRET` or `_PASSWORD` |
+| `knowledge-source-unknown` | error | the organization has no knowledge source of a name in `knowledge.sources` |
+| `merge-needs-code-host` | error | a station has `action: merge` and `runtime.repository` has no `token` |
+
+`plain-key` carries the fix "Move to Secrets", which replaces the value with a reference named after the variable in kebab case (`GH_TOKEN` becomes `{{gh-token}}`). A problem in an environment file has the section `environments` and the pointer `/environments/<name>/<keys below spec>`; the Form view does not show that section yet.
+
+### Keys moved to environment files
+
+These keys are errors under the check `moved` (code `moved-to-environment`). Each message says where the key went, and each fix removes it, but the one under a trigger, which is edited in YAML only:
+
+| Key | Moved to |
+| --- | --- |
+| `spec.connections` | `env`, `files` and `mcp` in an environment file |
+| `spec.agents[].connections` | the agent's `environment` |
+| `runtime.modelConnection` | `runtime.modelKey` |
+| `runtime.size`, `runtime.tools` | `size` and `tools` in each environment file |
+| `runtime.repository.connection` | `runtime.repository.token` |
+| `board.triggers[].only.modelAgrees.connection` | `only.modelAgrees.key` |
+
+A draft that has one does not publish. A version published before ADR 0037 has them and no `environments/` folder: `config.Load` skips the `moved` check, and the environment checks for such a version, so it loads and its line keeps its connections, model connection, size and tools. The engine runs it as before until Goal converts it.
+
 ## Judges and eval cases
 
 Jonah's two file kinds live under `evals/` ([ADR 0025](../adr/0025-judges-and-evals-as-the-screens-show-them.md)). `contracts/definitions/evals.schema.json` defines both, and `config.Check` validates them with the factory (`internal/config/evals.go`). Judge runs and eval runs are built in `internal/jonah` but goald does not run them yet; the publish eval gate is described under [Publishing with eval cases](#publishing-with-eval-cases).
@@ -263,7 +347,7 @@ The keys of a trigger:
 - `on` (required): the event key. One of `github.check_run.failed`, `github.issues.labeled`, `schedule`, or `webhook.<endpoint name>` with an optional `.<event>`, matched against the delivery's `event` field. Slack, Linear, Jira and Sentry keys are not accepted yet.
 - `cron` and `timeZone`: only with `on: schedule`, where `cron` is required. `cron` is five fields: minute, hour, day of month, month, day of week. A field takes numbers, `*`, ranges (`1-5`), steps (`*/15`, `0-30/10`), lists (`0,30`) and, for months and weekdays, names in any case (`JAN`, `mon`). Weekdays are 0 to 6, Sunday first. `@daily`, `?` and seconds are not accepted. `timeZone` is an IANA name and defaults to `UTC`; `Local` is refused.
 - `filter`: filters on the event's fields, all of which must match: `branch`, `repo` (owner/name), `label`, `paths` (globs; any changed path matches), `authors` (any of) and `skipBots`.
-- `only`: checks before an item is created, in this order. `failuresInARow: n` passes when the same check failed on the last n events for it. `dedupe: <field>` passes when no open item this trigger created holds the same value of that event field. `modelAgrees: {question, connection, model}` is the model check, run last and only when the other two passed (ADR 0028, decisions 3 to 5). It passes when a model answers yes to `question` (required, not blank, at most 500 characters) about the event, which the model gets as untrusted data. `connection` names the organization connection that pays for the call, `runtime.modelConnection` when unset; it must be that one or one of the factory's `connections`. `model` is the model asked, the connection kind's default when unset. A no skips the event with the model's one-line reason; any failure skips it with `Model check failed` and never lets it through. goald has no model check adapter wired yet, so today a trigger with `modelAgrees` skips every event with `Model check failed`, and no model is called.
+- `only`: checks before an item is created, in this order. `failuresInARow: n` passes when the same check failed on the last n events for it. `dedupe: <field>` passes when no open item this trigger created holds the same value of that event field. `modelAgrees: {question, key, model}` is the model check, run last and only when the other two passed (ADR 0028, decisions 3 to 5). It passes when a model answers yes to `question` (required, not blank, at most 500 characters) about the event, which the model gets as untrusted data. `key` is the `{{secret}}` that pays for the call, `runtime.modelKey` when unset; `connection`, its old form, is a [moved key](#keys-moved-to-environment-files). `model` is the model asked, the default model when unset. A no skips the event with the model's one-line reason; any failure skips it with `Model check failed` and never lets it through. goald has no model check adapter wired yet, so today a trigger with `modelAgrees` skips every event with `Model check failed`, and no model is called.
 - `create` (required): `type` (one of `board.workTypes`) and `station` (a station id) are required. `lane` is a key of that station's `route`, `expedite: true` puts the item in the expedite flow, and `title` and `brief` are templates. A placeholder is `{{field}}` or a dotted `{{field.sub}}`, spaces inside the braces allowed, and takes the event's field. Event text reaches agents only as untrusted data (ADR 0026, decision 5).
 - `limits`: `perDay` (at most n items from this trigger since the start of the UTC day) and `pauseOnBudget` (skip events while the factory's weekly budget is spent).
 

@@ -3,12 +3,13 @@
 
 -- name: KnowledgeSources :many
 -- The organization's sources, or the one named or with the given id.
-SELECT s.id, s.name, s.title, s.kind, c.name AS connection, s.config,
+SELECT s.id, s.name, s.title, s.kind, c.name AS connection, sc.name AS secret, s.config,
        extract(epoch FROM s.sync_every)::bigint AS sync_every_seconds, s.next_sync_at, s.lease_until, s.status,
        s.last_synced_at, s.last_error, s.embed_model, s.created_by, s.created_at, s.updated_at,
        (SELECT count(*) FROM knowledge_documents d WHERE d.org_id = s.org_id AND d.source_id = s.id) AS documents
 FROM knowledge_sources s
 LEFT JOIN connections c ON c.org_id = s.org_id AND c.id = s.connection_id
+LEFT JOIN secrets sc ON sc.org_id = s.org_id AND sc.id = s.secret_id
 WHERE (sqlc.narg(name)::text IS NULL OR s.name = sqlc.narg(name)::text)
   AND (sqlc.narg(id)::uuid IS NULL OR s.id = sqlc.narg(id)::uuid)
 ORDER BY s.name;
@@ -19,16 +20,27 @@ SELECT c.id, coalesce(k.spec->'spec'->>'sync', '')::text AS sync
 FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
 WHERE c.name = sqlc.arg(name);
 
+-- name: KnowledgeSecret :one
+-- The id of a secret a source may read with.
+SELECT id FROM secrets WHERE name = sqlc.arg(name);
+
+-- name: SecretKnowledgeSources :many
+-- The sources that read with secret name, by name: a secret's deletion is refused while one does.
+SELECT s.name FROM knowledge_sources s JOIN secrets sc ON sc.org_id = s.org_id AND sc.id = s.secret_id
+WHERE sc.name = sqlc.arg(name)
+ORDER BY s.name;
+
 -- name: InsertKnowledgeSource :exec
 -- org_id comes from its default, goal_org(). A live source never syncs.
-INSERT INTO knowledge_sources (id, name, title, kind, connection_id, config, sync_every, next_sync_at, created_by)
-VALUES (sqlc.arg(id), sqlc.arg(name), sqlc.arg(title), sqlc.arg(kind), sqlc.narg(connection_id), sqlc.arg(config),
+INSERT INTO knowledge_sources (id, name, title, kind, connection_id, secret_id, config, sync_every, next_sync_at, created_by)
+VALUES (sqlc.arg(id), sqlc.arg(name), sqlc.arg(title), sqlc.arg(kind), sqlc.narg(connection_id), sqlc.narg(secret_id), sqlc.arg(config),
         make_interval(secs => sqlc.arg(sync_every_seconds)::bigint),
         CASE WHEN sqlc.arg(kind)::text = 'live' THEN NULL ELSE now() END, sqlc.arg(created_by));
 
 -- name: UpdateKnowledgeSource :one
 UPDATE knowledge_sources
 SET title = coalesce(sqlc.narg(title)::text, title), config = coalesce(sqlc.narg(config)::jsonb, config),
+    secret_id = coalesce(sqlc.narg(secret_id)::uuid, secret_id),
     sync_every = CASE WHEN sqlc.narg(sync_every_seconds)::bigint IS NULL THEN sync_every
                       ELSE make_interval(secs => sqlc.narg(sync_every_seconds)::bigint) END,
     updated_at = now()

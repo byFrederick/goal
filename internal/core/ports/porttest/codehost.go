@@ -28,13 +28,46 @@ type CodeHost struct {
 	refuse   map[string]int    // url → how many more merges are refused though it reads mergeable
 	merges   []MergeCall
 	branches []string
-	updated  []string                        // urls whose branches were updated, in order
-	conflict map[string][]string             // url → the files its branch conflicts with its base in
-	current  map[string]bool                 // urls whose branches already hold their base
-	heads    map[string]map[string]string    // repo → branch ("" the default) → head SHA
-	history  map[string][]ports.Commit       // repo → its linear history, oldest first
-	repos    map[string]ports.RepositoryList // owner → what Repositories answers for it
-	login    string                          // the owner an empty one means
+	updated  []string                          // urls whose branches were updated, in order
+	conflict map[string][]string               // url → the files its branch conflicts with its base in
+	current  map[string]bool                   // urls whose branches already hold their base
+	heads    map[string]map[string]string      // repo → branch ("" the default) → head SHA
+	history  map[string][]ports.Commit         // repo → its linear history, oldest first
+	repos    map[string]ports.RepositoryList   // owner → what Repositories answers for it
+	login    string                            // the owner an empty one means
+	access   map[string]ports.RepositoryAccess // repo + " " + token → what RepositoryAccess answers
+	stall    bool                              // RepositoryAccess waits for its context to end
+	tokens   []string                          // the tokens RepositoryAccess was given, in order
+}
+
+// SetAccess makes a what RepositoryAccess answers for token in the repository at repo. Any other
+// repository or token reads as one the host does not show: read and push failed.
+func (c *CodeHost) SetAccess(repo, token string, a ports.RepositoryAccess) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.access == nil {
+		c.access = map[string]ports.RepositoryAccess{}
+	}
+
+	c.access[repo+" "+token] = a
+}
+
+// StallAccess makes RepositoryAccess give no answer until its context ends, as a host that does
+// not answer.
+func (c *CodeHost) StallAccess() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.stall = true
+}
+
+// AccessTokens are the tokens RepositoryAccess was given, in order.
+func (c *CodeHost) AccessTokens() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return slices.Clone(c.tokens)
 }
 
 // SetRepositories makes list what Repositories answers for list.Owner; the first list set is
@@ -406,6 +439,33 @@ func (c *CodeHost) Repositories(_ context.Context, conn domain.ResolvedConnectio
 	list.Repositories = slices.Clone(list.Repositories)
 
 	return list, nil
+}
+
+// RepositoryAccess implements ports.CodeHost from SetAccess and StallAccess.
+func (c *CodeHost) RepositoryAccess(ctx context.Context, repo, token string) (ports.RepositoryAccess, error) {
+	if u, err := url.Parse(repo); err != nil || u.Scheme != "https" || u.Host == "" || strings.Trim(u.Path, "/") == "" {
+		return ports.RepositoryAccess{}, fmt.Errorf("%q is not a repository URL: %w", repo, domain.ErrInvalid)
+	}
+
+	c.mu.Lock()
+	c.tokens = append(c.tokens, token)
+	stall := c.stall
+	a, ok := c.access[repo+" "+token]
+	c.mu.Unlock()
+
+	if stall {
+		<-ctx.Done()
+
+		return ports.RepositoryAccess{}, fmt.Errorf("repository access of %s: %w", repo, ctx.Err())
+	}
+
+	if !ok {
+		reason := "the host answered 404: Not Found"
+
+		return ports.RepositoryAccess{Read: ports.AccessCheck{Reason: reason}, Push: ports.AccessCheck{Reason: reason}}, nil
+	}
+
+	return a, nil
 }
 
 // onHost refuses a pull request or repository URL that is not on the host of the connection's git login.

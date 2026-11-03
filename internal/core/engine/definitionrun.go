@@ -37,7 +37,7 @@ type definitionOutput struct {
 // ctx, on its factory's loaded line: it refuses the request when the line's weekly budget is used
 // up, then creates a box with no item and no station, whose run id is the request's, prepares it
 // with a draft-request task token (the gateway's bundle gives it the draft's files at t.Revision)
-// and runs goal-agent with the env of runtime.modelConnection alone: no repository, no git login,
+// and runs goal-agent with the env of runtime.modelConnection, or runtime.modelKey on secrets, alone: no repository, no git login,
 // no agent connection and no credential listed for an agent. It deletes the box on every path and
 // records nothing: the caller applies the result and finishes the request.
 func (e *Engine) RunDefinition(ctx context.Context, t ports.DefinitionTask) (ports.DefinitionResult, error) {
@@ -96,8 +96,17 @@ func (e *Engine) RunDefinition(ctx context.Context, t ports.DefinitionTask) (por
 }
 
 // modelEnv resolves the line's model connection alone for the run, its use audited as
-// connection.used, with the credentials its secret fields refer to.
+// connection.used, with the credentials its secret fields refer to; on secrets, its model key
+// alone, audited as secret.used.
 func (e *Engine) modelEnv(ctx context.Context, l domain.Line, run domain.RunID) (runEnv, error) {
+	if l.OnSecrets() {
+		if l.Runtime.ModelKey == "" {
+			return runEnv{}, fmt.Errorf("factory %s has no runtime.modelKey", l.FactoryID)
+		}
+
+		return e.secretEnv(ctx, domain.SecretUse{Factory: l.FactoryID, Run: run}, l.Runtime.ModelKey, domain.Environment{})
+	}
+
 	model := l.Runtime.ModelConnection
 	if model == "" {
 		return runEnv{}, fmt.Errorf("factory %s has no runtime.modelConnection", l.FactoryID)

@@ -170,14 +170,26 @@ func (s *server) CreateKnowledgeSource(ctx context.Context, req gen.CreateKnowle
 
 	b := req.Body
 
+	// A new synced source reads with a secret (ADR 0037 decision 14); only a live one still names
+	// a connection, and the sources made before keep theirs until moving over.
+	if b.Kind == gen.KnowledgeSourceKindSynced && b.Connection != nil {
+		return nil, fmt.Errorf("%w: a synced source reads with a secret, not connection %q", errSourceInvalid, *b.Connection)
+	}
+
+	if err := s.sourceSecret(ctx, b.Secret); err != nil {
+		return nil, err
+	}
+
 	src, err := s.knowledge.CreateSource(ctx, domain.NewKnowledgeSource{
-		Name: b.Name, Title: b.Title, Kind: domain.KnowledgeSourceKind(b.Kind), Connection: deref(b.Connection), Config: deref(b.Config),
-		SyncEvery: seconds(b.SyncEverySeconds),
+		Name: b.Name, Title: b.Title, Kind: domain.KnowledgeSourceKind(b.Kind), Connection: deref(b.Connection), Secret: deref(b.Secret),
+		Config: deref(b.Config), SyncEvery: seconds(b.SyncEverySeconds),
 	}, by)
 
 	switch {
+	case errors.Is(err, ports.ErrNotFound) && b.Connection == nil:
+		// A new source names a connection or a secret, which sourceSecret found a moment ago.
+		return nil, secretError(err)
 	case errors.Is(err, ports.ErrNotFound):
-		// The only thing a new source names is its connection.
 		return nil, fmt.Errorf("%w: %q: %w", errConnectionNotFound, deref(b.Connection), err)
 	case err != nil:
 		return nil, sourceError(err, b.Name)
@@ -207,7 +219,11 @@ func (s *server) UpdateKnowledgeSource(ctx context.Context, req gen.UpdateKnowle
 	}
 
 	b := req.Body
-	p := domain.KnowledgeSourcePatch{Title: b.Title}
+	p := domain.KnowledgeSourcePatch{Title: b.Title, Secret: b.Secret}
+
+	if err := s.sourceSecret(ctx, b.Secret); err != nil {
+		return nil, err
+	}
 
 	if b.Config != nil {
 		p.Config = *b.Config
@@ -571,11 +587,25 @@ func (s *server) connectionSources(ctx context.Context) (map[string][]string, er
 	return out, nil
 }
 
+// sourceSecret refuses a secret a source would read with that does not exist (404
+// secret-not-found), before the source is changed.
+func (s *server) sourceSecret(ctx context.Context, name *string) error {
+	if name == nil {
+		return nil
+	}
+
+	if _, err := s.secrets.Get(ctx, *name); err != nil {
+		return secretError(err)
+	}
+
+	return nil
+}
+
 // sourceOut is a source as the contract has it, with the factories the caller sees among by.
 func (s *server) sourceOut(ctx context.Context, src domain.KnowledgeSource, by []factoryUse) gen.KnowledgeSource {
 	out := gen.KnowledgeSource{
 		Id: string(src.ID), Name: src.Name, Title: src.Title, Kind: gen.KnowledgeSourceKind(src.Kind), Connection: optional(src.Connection),
-		Config: map[string]string{}, SyncEverySeconds: int(src.SyncEvery / time.Second), Status: gen.KnowledgeSourceStatus(src.Status),
+		Secret: optional(src.Secret), Config: map[string]string{}, SyncEverySeconds: int(src.SyncEvery / time.Second), Status: gen.KnowledgeSourceStatus(src.Status),
 		LastError: optional(src.LastError), LastSyncedAt: src.LastSyncedAt, NextSyncAt: src.NextSyncAt, Documents: src.Documents,
 		EmbedModel: optional(src.EmbedModel), UsedBy: gen.KnowledgeSourceUsers{Factories: []gen.ConnectionFactory{}},
 		CreatedBy: s.actorOut(src.CreatedBy), CreatedAt: src.CreatedAt, UpdatedAt: src.UpdatedAt,

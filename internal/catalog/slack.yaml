@@ -1,0 +1,12 @@
+apiVersion: goal/v1
+kind: Template
+metadata:
+  name: slack
+  title: Slack
+  description: A Slack bot token for agents that call the Slack Web API.
+spec:
+  secrets:
+    - {slot: token, title: Bot token, description: "A bot token (xoxb-…) with the scopes agents need.", suggest: slack-bot-token}
+  env:
+    SLACK_BOT_TOKEN: "{{token}}"
+  test: {method: POST, url: "https://slack.com/api/auth.test", headers: {Authorization: "Bearer {{token}}"}, expect: 200}

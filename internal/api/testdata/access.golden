@@ -598,6 +598,32 @@ createSavedView      pat-demoted      404 factory-not-found    404 org-not-found
 createSavedView      pat-removed      401 unauthenticated      401 unauthenticated
 createSavedView      pat-platform     200                      404 org-not-found
 createSavedView      pat-deleted-org  401 unauthenticated      401 unauthenticated
+createSecret         anonymous        401 unauthenticated      401 unauthenticated
+createSecret         owner            200                      404 org-not-found
+createSecret         admin            200                      404 org-not-found
+createSecret         viewer           403 forbidden            404 org-not-found
+createSecret         approver         403 forbidden            404 org-not-found
+createSecret         editor           403 forbidden            404 org-not-found
+createSecret         member-no-roles  403 forbidden            404 org-not-found
+createSecret         other-org-owner  404 org-not-found        200
+createSecret         platform-admin   404 org-not-found        404 org-not-found
+createSecret         stale-owner      403 reauth-required      404 org-not-found
+createSecret         key-scoped       403 forbidden            404 org-not-found
+createSecret         key-restricted   403 forbidden            404 org-not-found
+createSecret         key-other-org    404 org-not-found        403 forbidden
+createSecret         key-expired      401 unauthenticated      401 unauthenticated
+createSecret         key-revoked      401 unauthenticated      401 unauthenticated
+createSecret         bearer-owner     200                      404 org-not-found
+createSecret         pat-approver     403 forbidden            404 org-not-found
+createSecret         pat-owner        403 forbidden            404 org-not-found
+createSecret         pat-viewer       403 forbidden            404 org-not-found
+createSecret         pat-other-org    404 org-not-found        403 forbidden
+createSecret         pat-expired      401 unauthenticated      401 unauthenticated
+createSecret         pat-revoked      401 unauthenticated      401 unauthenticated
+createSecret         pat-demoted      403 forbidden            404 org-not-found
+createSecret         pat-removed      401 unauthenticated      401 unauthenticated
+createSecret         pat-platform     403 forbidden            404 org-not-found
+createSecret         pat-deleted-org  401 unauthenticated      401 unauthenticated
 createWebhookEndpoint anonymous        401 unauthenticated      401 unauthenticated
 createWebhookEndpoint owner            200                      404 org-not-found
 createWebhookEndpoint admin            200                      404 org-not-found
@@ -884,6 +910,32 @@ deleteSavedView      pat-demoted      404 factory-not-found    404 org-not-found
 deleteSavedView      pat-removed      401 unauthenticated      401 unauthenticated
 deleteSavedView      pat-platform     200                      404 org-not-found
 deleteSavedView      pat-deleted-org  401 unauthenticated      401 unauthenticated
+deleteSecret         anonymous        401 unauthenticated      401 unauthenticated
+deleteSecret         owner            200                      404 org-not-found
+deleteSecret         admin            200                      404 org-not-found
+deleteSecret         viewer           403 forbidden            404 org-not-found
+deleteSecret         approver         403 forbidden            404 org-not-found
+deleteSecret         editor           403 forbidden            404 org-not-found
+deleteSecret         member-no-roles  403 forbidden            404 org-not-found
+deleteSecret         other-org-owner  404 org-not-found        200
+deleteSecret         platform-admin   404 org-not-found        404 org-not-found
+deleteSecret         stale-owner      403 reauth-required      404 org-not-found
+deleteSecret         key-scoped       403 forbidden            404 org-not-found
+deleteSecret         key-restricted   403 forbidden            404 org-not-found
+deleteSecret         key-other-org    404 org-not-found        403 forbidden
+deleteSecret         key-expired      401 unauthenticated      401 unauthenticated
+deleteSecret         key-revoked      401 unauthenticated      401 unauthenticated
+deleteSecret         bearer-owner     200                      404 org-not-found
+deleteSecret         pat-approver     403 forbidden            404 org-not-found
+deleteSecret         pat-owner        403 forbidden            404 org-not-found
+deleteSecret         pat-viewer       403 forbidden            404 org-not-found
+deleteSecret         pat-other-org    404 org-not-found        403 forbidden
+deleteSecret         pat-expired      401 unauthenticated      401 unauthenticated
+deleteSecret         pat-revoked      401 unauthenticated      401 unauthenticated
+deleteSecret         pat-demoted      403 forbidden            404 org-not-found
+deleteSecret         pat-removed      401 unauthenticated      401 unauthenticated
+deleteSecret         pat-platform     403 forbidden            404 org-not-found
+deleteSecret         pat-deleted-org  401 unauthenticated      401 unauthenticated
 deleteWebhookEndpoint anonymous        401 unauthenticated      401 unauthenticated
 deleteWebhookEndpoint owner            200                      404 org-not-found
 deleteWebhookEndpoint admin            200                      404 org-not-found
@@ -1066,6 +1118,32 @@ formatDefinition     pat-demoted      200                      404 org-not-found
 formatDefinition     pat-removed      401 unauthenticated      401 unauthenticated
 formatDefinition     pat-platform     200                      404 org-not-found
 formatDefinition     pat-deleted-org  401 unauthenticated      401 unauthenticated
+getAccess            anonymous        401 unauthenticated      401 unauthenticated
+getAccess            owner            200                      404 org-not-found
+getAccess            admin            200                      404 org-not-found
+getAccess            viewer           200                      404 org-not-found
+getAccess            approver         200                      404 org-not-found
+getAccess            editor           200                      404 org-not-found
+getAccess            member-no-roles  404 factory-not-found    404 org-not-found
+getAccess            other-org-owner  404 org-not-found        200
+getAccess            platform-admin   404 org-not-found        404 org-not-found
+getAccess            stale-owner      200                      404 org-not-found
+getAccess            key-scoped       403 forbidden            404 org-not-found
+getAccess            key-restricted   404 factory-not-found    404 org-not-found
+getAccess            key-other-org    404 org-not-found        200
+getAccess            key-expired      401 unauthenticated      401 unauthenticated
+getAccess            key-revoked      401 unauthenticated      401 unauthenticated
+getAccess            bearer-owner     200                      404 org-not-found
+getAccess            pat-approver     403 forbidden            404 org-not-found
+getAccess            pat-owner        200                      404 org-not-found
+getAccess            pat-viewer       200                      404 org-not-found
+getAccess            pat-other-org    404 org-not-found        200
+getAccess            pat-expired      401 unauthenticated      401 unauthenticated
+getAccess            pat-revoked      401 unauthenticated      401 unauthenticated
+getAccess            pat-demoted      404 factory-not-found    404 org-not-found
+getAccess            pat-removed      401 unauthenticated      401 unauthenticated
+getAccess            pat-platform     200                      404 org-not-found
+getAccess            pat-deleted-org  401 unauthenticated      401 unauthenticated
 getAgentStats        anonymous        401 unauthenticated      401 unauthenticated
 getAgentStats        owner            200                      404 org-not-found
 getAgentStats        admin            200                      404 org-not-found
@@ -1222,6 +1300,32 @@ getBuilderMeta       pat-demoted      200                      404 org-not-found
 getBuilderMeta       pat-removed      401 unauthenticated      401 unauthenticated
 getBuilderMeta       pat-platform     200                      404 org-not-found
 getBuilderMeta       pat-deleted-org  401 unauthenticated      401 unauthenticated
+getCatalog           anonymous        install: 401 unauthenticated
+getCatalog           owner            install: 200
+getCatalog           admin            install: 200
+getCatalog           viewer           install: 200
+getCatalog           approver         install: 200
+getCatalog           editor           install: 200
+getCatalog           member-no-roles  install: 200
+getCatalog           other-org-owner  install: 200
+getCatalog           platform-admin   install: 200
+getCatalog           stale-owner      install: 200
+getCatalog           key-scoped       install: 200
+getCatalog           key-restricted   install: 200
+getCatalog           key-other-org    install: 200
+getCatalog           key-expired      install: 401 unauthenticated
+getCatalog           key-revoked      install: 401 unauthenticated
+getCatalog           bearer-owner     install: 200
+getCatalog           pat-approver     install: 200
+getCatalog           pat-owner        install: 200
+getCatalog           pat-viewer       install: 200
+getCatalog           pat-other-org    install: 200
+getCatalog           pat-expired      install: 401 unauthenticated
+getCatalog           pat-revoked      install: 401 unauthenticated
+getCatalog           pat-demoted      install: 200
+getCatalog           pat-removed      install: 401 unauthenticated
+getCatalog           pat-platform     install: 200
+getCatalog           pat-deleted-org  install: 401 unauthenticated
 getConnection        anonymous        401 unauthenticated      401 unauthenticated
 getConnection        owner            200                      404 org-not-found
 getConnection        admin            200                      404 org-not-found
@@ -2132,6 +2236,32 @@ getRun               pat-demoted      404 run-not-found        404 org-not-found
 getRun               pat-removed      401 unauthenticated      401 unauthenticated
 getRun               pat-platform     200                      404 org-not-found
 getRun               pat-deleted-org  401 unauthenticated      401 unauthenticated
+getSecret            anonymous        401 unauthenticated      401 unauthenticated
+getSecret            owner            200                      404 org-not-found
+getSecret            admin            200                      404 org-not-found
+getSecret            viewer           200                      404 org-not-found
+getSecret            approver         200                      404 org-not-found
+getSecret            editor           200                      404 org-not-found
+getSecret            member-no-roles  200                      404 org-not-found
+getSecret            other-org-owner  404 org-not-found        200
+getSecret            platform-admin   404 org-not-found        404 org-not-found
+getSecret            stale-owner      200                      404 org-not-found
+getSecret            key-scoped       403 forbidden            404 org-not-found
+getSecret            key-restricted   200                      404 org-not-found
+getSecret            key-other-org    404 org-not-found        200
+getSecret            key-expired      401 unauthenticated      401 unauthenticated
+getSecret            key-revoked      401 unauthenticated      401 unauthenticated
+getSecret            bearer-owner     200                      404 org-not-found
+getSecret            pat-approver     403 forbidden            404 org-not-found
+getSecret            pat-owner        200                      404 org-not-found
+getSecret            pat-viewer       200                      404 org-not-found
+getSecret            pat-other-org    404 org-not-found        200
+getSecret            pat-expired      401 unauthenticated      401 unauthenticated
+getSecret            pat-revoked      401 unauthenticated      401 unauthenticated
+getSecret            pat-demoted      200                      404 org-not-found
+getSecret            pat-removed      401 unauthenticated      401 unauthenticated
+getSecret            pat-platform     200                      404 org-not-found
+getSecret            pat-deleted-org  401 unauthenticated      401 unauthenticated
 getSkillFiles        anonymous        401 unauthenticated      401 unauthenticated
 getSkillFiles        owner            200                      404 org-not-found
 getSkillFiles        admin            200                      404 org-not-found
@@ -2392,6 +2522,32 @@ importCredentials    pat-demoted      403 forbidden            404 org-not-found
 importCredentials    pat-removed      401 unauthenticated      401 unauthenticated
 importCredentials    pat-platform     403 forbidden            404 org-not-found
 importCredentials    pat-deleted-org  401 unauthenticated      401 unauthenticated
+importSecrets        anonymous        401 unauthenticated      401 unauthenticated
+importSecrets        owner            200                      404 org-not-found
+importSecrets        admin            200                      404 org-not-found
+importSecrets        viewer           403 forbidden            404 org-not-found
+importSecrets        approver         403 forbidden            404 org-not-found
+importSecrets        editor           403 forbidden            404 org-not-found
+importSecrets        member-no-roles  403 forbidden            404 org-not-found
+importSecrets        other-org-owner  404 org-not-found        200
+importSecrets        platform-admin   404 org-not-found        404 org-not-found
+importSecrets        stale-owner      403 reauth-required      404 org-not-found
+importSecrets        key-scoped       403 forbidden            404 org-not-found
+importSecrets        key-restricted   403 forbidden            404 org-not-found
+importSecrets        key-other-org    404 org-not-found        403 forbidden
+importSecrets        key-expired      401 unauthenticated      401 unauthenticated
+importSecrets        key-revoked      401 unauthenticated      401 unauthenticated
+importSecrets        bearer-owner     200                      404 org-not-found
+importSecrets        pat-approver     403 forbidden            404 org-not-found
+importSecrets        pat-owner        403 forbidden            404 org-not-found
+importSecrets        pat-viewer       403 forbidden            404 org-not-found
+importSecrets        pat-other-org    404 org-not-found        403 forbidden
+importSecrets        pat-expired      401 unauthenticated      401 unauthenticated
+importSecrets        pat-revoked      401 unauthenticated      401 unauthenticated
+importSecrets        pat-demoted      403 forbidden            404 org-not-found
+importSecrets        pat-removed      401 unauthenticated      401 unauthenticated
+importSecrets        pat-platform     403 forbidden            404 org-not-found
+importSecrets        pat-deleted-org  401 unauthenticated      401 unauthenticated
 linkItem             anonymous        401 unauthenticated      401 unauthenticated
 linkItem             owner            200                      404 org-not-found
 linkItem             admin            200                      404 org-not-found
@@ -3224,6 +3380,32 @@ listSavedViews       pat-demoted      404 factory-not-found    404 org-not-found
 listSavedViews       pat-removed      401 unauthenticated      401 unauthenticated
 listSavedViews       pat-platform     200                      404 org-not-found
 listSavedViews       pat-deleted-org  401 unauthenticated      401 unauthenticated
+listSecrets          anonymous        401 unauthenticated      401 unauthenticated
+listSecrets          owner            200                      404 org-not-found
+listSecrets          admin            200                      404 org-not-found
+listSecrets          viewer           200                      404 org-not-found
+listSecrets          approver         200                      404 org-not-found
+listSecrets          editor           200                      404 org-not-found
+listSecrets          member-no-roles  200                      404 org-not-found
+listSecrets          other-org-owner  404 org-not-found        200
+listSecrets          platform-admin   404 org-not-found        404 org-not-found
+listSecrets          stale-owner      200                      404 org-not-found
+listSecrets          key-scoped       403 forbidden            404 org-not-found
+listSecrets          key-restricted   200                      404 org-not-found
+listSecrets          key-other-org    404 org-not-found        200
+listSecrets          key-expired      401 unauthenticated      401 unauthenticated
+listSecrets          key-revoked      401 unauthenticated      401 unauthenticated
+listSecrets          bearer-owner     200                      404 org-not-found
+listSecrets          pat-approver     403 forbidden            404 org-not-found
+listSecrets          pat-owner        200                      404 org-not-found
+listSecrets          pat-viewer       200                      404 org-not-found
+listSecrets          pat-other-org    404 org-not-found        200
+listSecrets          pat-expired      401 unauthenticated      401 unauthenticated
+listSecrets          pat-revoked      401 unauthenticated      401 unauthenticated
+listSecrets          pat-demoted      200                      404 org-not-found
+listSecrets          pat-removed      401 unauthenticated      401 unauthenticated
+listSecrets          pat-platform     200                      404 org-not-found
+listSecrets          pat-deleted-org  401 unauthenticated      401 unauthenticated
 listStandingRules    anonymous        401 unauthenticated      401 unauthenticated
 listStandingRules    owner            200                      404 org-not-found
 listStandingRules    admin            200                      404 org-not-found
@@ -3484,6 +3666,32 @@ patchCredential      pat-demoted      403 forbidden            404 org-not-found
 patchCredential      pat-removed      401 unauthenticated      401 unauthenticated
 patchCredential      pat-platform     403 forbidden            404 org-not-found
 patchCredential      pat-deleted-org  401 unauthenticated      401 unauthenticated
+patchSecret          anonymous        401 unauthenticated      401 unauthenticated
+patchSecret          owner            200                      404 org-not-found
+patchSecret          admin            200                      404 org-not-found
+patchSecret          viewer           403 forbidden            404 org-not-found
+patchSecret          approver         403 forbidden            404 org-not-found
+patchSecret          editor           403 forbidden            404 org-not-found
+patchSecret          member-no-roles  403 forbidden            404 org-not-found
+patchSecret          other-org-owner  404 org-not-found        200
+patchSecret          platform-admin   404 org-not-found        404 org-not-found
+patchSecret          stale-owner      403 reauth-required      404 org-not-found
+patchSecret          key-scoped       403 forbidden            404 org-not-found
+patchSecret          key-restricted   403 forbidden            404 org-not-found
+patchSecret          key-other-org    404 org-not-found        403 forbidden
+patchSecret          key-expired      401 unauthenticated      401 unauthenticated
+patchSecret          key-revoked      401 unauthenticated      401 unauthenticated
+patchSecret          bearer-owner     200                      404 org-not-found
+patchSecret          pat-approver     403 forbidden            404 org-not-found
+patchSecret          pat-owner        403 forbidden            404 org-not-found
+patchSecret          pat-viewer       403 forbidden            404 org-not-found
+patchSecret          pat-other-org    404 org-not-found        403 forbidden
+patchSecret          pat-expired      401 unauthenticated      401 unauthenticated
+patchSecret          pat-revoked      401 unauthenticated      401 unauthenticated
+patchSecret          pat-demoted      403 forbidden            404 org-not-found
+patchSecret          pat-removed      401 unauthenticated      401 unauthenticated
+patchSecret          pat-platform     403 forbidden            404 org-not-found
+patchSecret          pat-deleted-org  401 unauthenticated      401 unauthenticated
 pauseFactory         anonymous        401 unauthenticated      401 unauthenticated
 pauseFactory         owner            200                      404 org-not-found
 pauseFactory         admin            200                      404 org-not-found
@@ -3874,6 +4082,32 @@ replaceDraftTree     pat-demoted      404 factory-not-found    404 org-not-found
 replaceDraftTree     pat-removed      401 unauthenticated      401 unauthenticated
 replaceDraftTree     pat-platform     200                      404 org-not-found
 replaceDraftTree     pat-deleted-org  401 unauthenticated      401 unauthenticated
+replaceSecretValue   anonymous        401 unauthenticated      401 unauthenticated
+replaceSecretValue   owner            200                      404 org-not-found
+replaceSecretValue   admin            200                      404 org-not-found
+replaceSecretValue   viewer           403 forbidden            404 org-not-found
+replaceSecretValue   approver         403 forbidden            404 org-not-found
+replaceSecretValue   editor           403 forbidden            404 org-not-found
+replaceSecretValue   member-no-roles  403 forbidden            404 org-not-found
+replaceSecretValue   other-org-owner  404 org-not-found        200
+replaceSecretValue   platform-admin   404 org-not-found        404 org-not-found
+replaceSecretValue   stale-owner      403 reauth-required      404 org-not-found
+replaceSecretValue   key-scoped       403 forbidden            404 org-not-found
+replaceSecretValue   key-restricted   403 forbidden            404 org-not-found
+replaceSecretValue   key-other-org    404 org-not-found        403 forbidden
+replaceSecretValue   key-expired      401 unauthenticated      401 unauthenticated
+replaceSecretValue   key-revoked      401 unauthenticated      401 unauthenticated
+replaceSecretValue   bearer-owner     200                      404 org-not-found
+replaceSecretValue   pat-approver     403 forbidden            404 org-not-found
+replaceSecretValue   pat-owner        403 forbidden            404 org-not-found
+replaceSecretValue   pat-viewer       403 forbidden            404 org-not-found
+replaceSecretValue   pat-other-org    404 org-not-found        403 forbidden
+replaceSecretValue   pat-expired      401 unauthenticated      401 unauthenticated
+replaceSecretValue   pat-revoked      401 unauthenticated      401 unauthenticated
+replaceSecretValue   pat-demoted      403 forbidden            404 org-not-found
+replaceSecretValue   pat-removed      401 unauthenticated      401 unauthenticated
+replaceSecretValue   pat-platform     403 forbidden            404 org-not-found
+replaceSecretValue   pat-deleted-org  401 unauthenticated      401 unauthenticated
 rerunBakeOff         anonymous        401 unauthenticated      401 unauthenticated
 rerunBakeOff         owner            200                      404 org-not-found
 rerunBakeOff         admin            200                      404 org-not-found
@@ -4524,6 +4758,58 @@ testConnection       pat-demoted      403 forbidden            404 org-not-found
 testConnection       pat-removed      401 unauthenticated      401 unauthenticated
 testConnection       pat-platform     403 forbidden            404 org-not-found
 testConnection       pat-deleted-org  401 unauthenticated      401 unauthenticated
+testEnvironment      anonymous        401 unauthenticated      401 unauthenticated
+testEnvironment      owner            200                      404 org-not-found
+testEnvironment      admin            200                      404 org-not-found
+testEnvironment      viewer           403 forbidden            404 org-not-found
+testEnvironment      approver         403 forbidden            404 org-not-found
+testEnvironment      editor           200                      404 org-not-found
+testEnvironment      member-no-roles  404 factory-not-found    404 org-not-found
+testEnvironment      other-org-owner  404 org-not-found        200
+testEnvironment      platform-admin   404 org-not-found        404 org-not-found
+testEnvironment      stale-owner      200                      404 org-not-found
+testEnvironment      key-scoped       403 forbidden            404 org-not-found
+testEnvironment      key-restricted   404 factory-not-found    404 org-not-found
+testEnvironment      key-other-org    404 org-not-found        200
+testEnvironment      key-expired      401 unauthenticated      401 unauthenticated
+testEnvironment      key-revoked      401 unauthenticated      401 unauthenticated
+testEnvironment      bearer-owner     200                      404 org-not-found
+testEnvironment      pat-approver     403 forbidden            404 org-not-found
+testEnvironment      pat-owner        200                      404 org-not-found
+testEnvironment      pat-viewer       403 forbidden            404 org-not-found
+testEnvironment      pat-other-org    404 org-not-found        200
+testEnvironment      pat-expired      401 unauthenticated      401 unauthenticated
+testEnvironment      pat-revoked      401 unauthenticated      401 unauthenticated
+testEnvironment      pat-demoted      404 factory-not-found    404 org-not-found
+testEnvironment      pat-removed      401 unauthenticated      401 unauthenticated
+testEnvironment      pat-platform     200                      404 org-not-found
+testEnvironment      pat-deleted-org  401 unauthenticated      401 unauthenticated
+testRepository       anonymous        401 unauthenticated      401 unauthenticated
+testRepository       owner            200                      404 org-not-found
+testRepository       admin            200                      404 org-not-found
+testRepository       viewer           403 forbidden            404 org-not-found
+testRepository       approver         403 forbidden            404 org-not-found
+testRepository       editor           403 forbidden            404 org-not-found
+testRepository       member-no-roles  403 forbidden            404 org-not-found
+testRepository       other-org-owner  404 org-not-found        200
+testRepository       platform-admin   404 org-not-found        404 org-not-found
+testRepository       stale-owner      200                      404 org-not-found
+testRepository       key-scoped       403 forbidden            404 org-not-found
+testRepository       key-restricted   200                      404 org-not-found
+testRepository       key-other-org    404 org-not-found        200
+testRepository       key-expired      401 unauthenticated      401 unauthenticated
+testRepository       key-revoked      401 unauthenticated      401 unauthenticated
+testRepository       bearer-owner     200                      404 org-not-found
+testRepository       pat-approver     403 forbidden            404 org-not-found
+testRepository       pat-owner        200                      404 org-not-found
+testRepository       pat-viewer       403 forbidden            404 org-not-found
+testRepository       pat-other-org    404 org-not-found        200
+testRepository       pat-expired      401 unauthenticated      401 unauthenticated
+testRepository       pat-revoked      401 unauthenticated      401 unauthenticated
+testRepository       pat-demoted      403 forbidden            404 org-not-found
+testRepository       pat-removed      401 unauthenticated      401 unauthenticated
+testRepository       pat-platform     200                      404 org-not-found
+testRepository       pat-deleted-org  401 unauthenticated      401 unauthenticated
 transferOwnership    anonymous        401 unauthenticated      401 unauthenticated
 transferOwnership    owner            200                      404 org-not-found
 transferOwnership    admin            403 forbidden            404 org-not-found

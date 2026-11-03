@@ -74,6 +74,6 @@ export const toolOptions: { [K in keyof ToolPolicy]: readonly { value: ToolPolic
   ],
   use_credentials: [
     { value: 'off', label: 'Off' },
-    { value: 'attached_only', label: 'Attached only' },
+    { value: 'attached_only', label: 'Environment' },
   ],
 };

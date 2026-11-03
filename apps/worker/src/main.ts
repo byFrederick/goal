@@ -7,7 +7,7 @@ import type { WorkerEvent } from './events.js';
 import { runJonah } from './jonah.js';
 import { runJudge } from './judge.js';
 import { type Exec, type Output, type Prepared, prepare } from './prepare.js';
-import { failed, runTask } from './run.js';
+import { failed, lsRemoteHead, runTask } from './run.js';
 import { type AgentFiles, parseSpec, paths } from './spec.js';
 
 // stdout carries only protocol lines; anything else goes to stderr.
@@ -70,6 +70,30 @@ const output: Output = (command, args, opts = {}) =>
     });
   });
 
+/** How long reading the pushed head may take before the run ends without it. */
+const remoteHeadTimeoutMs = 60_000;
+
+/**
+ * The item branch's commit on origin, from the workspace, with the run's own git login. git never
+ * prompts (a missing login fails the lookup) and is stopped after remoteHeadTimeoutMs.
+ */
+const remoteHead = (branch: string): Promise<string | undefined> =>
+  new Promise((resolve, reject) => {
+    const child = spawn('git', ['ls-remote', '--', 'origin', `refs/heads/${branch}`], {
+      cwd: paths.workspace,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      stdio: ['ignore', 'pipe', 2],
+      timeout: remoteHeadTimeoutMs,
+    });
+    const chunks: Buffer[] = [];
+    child.stdout?.on('data', (c: Buffer) => chunks.push(c));
+    child.once('error', reject);
+    child.once('close', (code, signal) => {
+      if (code === 0) resolve(lsRemoteHead(Buffer.concat(chunks).toString('utf8'), branch));
+      else reject(new Error(`git ls-remote exited ${code ?? signal}`));
+    });
+  });
+
 async function runPrepare(): Promise<number> {
   try {
     emit(
@@ -104,7 +128,7 @@ async function runAgent(): Promise<number> {
     if (spec.jonah) return await runJonah(spec, { query, emit, now, env: process.env, abortController });
     const files = await readAgentFiles();
     await installSkills();
-    return await runTask(spec, files, { query, emit, now, env: process.env, abortController, fetch });
+    return await runTask(spec, files, { query, emit, now, env: process.env, abortController, fetch, remoteHead });
   } catch (err) {
     emit(failed(now, `worker setup: ${err instanceof Error ? err.message : String(err)}`));
     return 1;

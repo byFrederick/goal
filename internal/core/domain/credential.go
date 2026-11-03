@@ -72,6 +72,16 @@ type Credential struct {
 	UpdatedAt  time.Time
 }
 
+// Stored is c as the store keeps it since credentials became secrets (ADR 0037 decisions 1 and
+// 18): a secret has no type label and no agent list, so every credential reads back as an
+// api_key with no agents, and a write's type and agents are checked and then dropped. Environment
+// files grant a secret to an agent in their place.
+func (c Credential) Stored() Credential {
+	c.Type, c.Agents = CredentialAPIKey, nil
+
+	return c
+}
+
 // ForAgent reports whether agent of factory gets the credential directly: factory is in its
 // scope and agent on its agent list for factory.
 func (c Credential) ForAgent(factory FactoryID, agent string) bool {

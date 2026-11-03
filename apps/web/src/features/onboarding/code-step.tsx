@@ -1,86 +1,103 @@
-// Step 2, "Connect your code" (docs/design/screens/get-started/github.jpg, ADR 0032). The organization's
-// GitHub connection, or a link to add one; the owner whose repositories are listed; the repositories
-// to work on, chosen by checkbox. The choice lives in the URL (code-search.ts), so step 3 reads it and a
-// linked step shows the same thing. Continue carries it on.
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+// Step 2, "Connect your code" (docs/design/screens/get-started/repository.jpg, ADR 0037): the repository's
+// URL and a write-only token. Continue saves the token as a secret open to every factory (github-token),
+// tests that it can clone and push, and shows the host's answer; a passing answer lets Continue go on, a
+// failing one keeps it disabled until the URL or the token changes. The URL and the secret's name live in
+// the URL (code-search.ts), so step 3 reads them; the token never does.
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { Check, Search } from 'lucide-react';
-import { useState } from 'react';
+import { type FormEvent, useState } from 'react';
 import { ApiError } from '../../api/client';
-import { connectionRepositoriesQuery, connectionsQuery } from '../../api/queries';
-import type { Connection, OrgSummary, Repository, RepositoryList } from '../../api/types';
+import { keys } from '../../api/queries';
+import { testRepository } from '../../api/repositories';
+import { createSecret, replaceSecretValue } from '../../api/secrets';
+import type { OrgSummary, RepositoryTestResult } from '../../api/types';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
-import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
-import { Field, NativeSelect } from '../../ui/field';
-import { GitHubMark } from '../../ui/github-mark';
-import { NotAvailable } from '../../ui/not-available';
-import type { OnboardingSearch } from './code-search';
+import { Field, Input } from '../../ui/field';
+import { Spinner } from '../../ui/spinner';
+import { type OnboardingSearch, repoOf, repositoryUrl } from './code-search';
 import { codeCard, organizationCard } from './factory-preview';
 import { OnboardingLayout } from './onboarding-layout';
 
-const day = 86_400_000;
+/** The secret the token is saved as. */
+export const tokenSecret = 'github-token';
 
-const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
-
-/** "Updated today", "Updated 3 weeks ago", "Updated 2 months ago": the age of the last push, to the unit that reads. */
-function updatedLabel(updatedAt: string, now = Date.now()): string {
-  const days = Math.floor((now - Date.parse(updatedAt)) / day);
-  if (!(days >= 1)) return 'Updated today';
-  if (days < 7) return `Updated ${plural(days, 'day')} ago`;
-  if (days < 31) return `Updated ${plural(Math.floor(days / 7), 'week')} ago`;
-  if (days < 365) return `Updated ${plural(Math.floor(days / 30), 'month')} ago`;
-  return `Updated ${plural(Math.floor(days / 365), 'year')} ago`;
+/** The check, in words: what Goal could do with the token, or the host's reason it could not. */
+export function checkText(repo: string, result: RepositoryTestResult): { ok: boolean; text: string } {
+  if (!result.tested)
+    return { ok: false, text: 'Goal couldn’t test the token: the host gave no answer in 10 seconds.' };
+  if (!result.read.ok) return { ok: false, text: `Goal couldn’t clone ${repo}. ${result.read.reason}` };
+  if (!result.push.ok) return { ok: false, text: `Goal cloned ${repo} but can’t push a branch. ${result.push.reason}` };
+  return { ok: true, text: `Goal cloned ${repo} and can push a branch.` };
 }
 
 /** `search` is the URL's choice (code-search.ts): the route passes it, so the step reads it the same way in a test. */
 export function CodeStep({ org, search }: { org: OrgSummary; search: OnboardingSearch }) {
   const navigate = useNavigate();
-  const [text, setText] = useState('');
+  const client = useQueryClient();
+  const [address, setAddress] = useState(search.url ?? '');
+  const [token, setToken] = useState('');
+  const [touched, setTouched] = useState(false);
+  /** The inputs the last test answered for, and what it answered. */
+  const [answer, setAnswer] = useState<{ key: string; ok: boolean; text: string } | undefined>();
   /** This browser's host, the start of the address the organization gets (as step 1 shows it). */
   const host = window.location.host;
 
-  const connections = useQuery(connectionsQuery(org.id));
-  const githubs = (connections.data ?? []).filter((c) => c.kind === 'github');
-  const connection: Connection | undefined = githubs.find((c) => c.name === search.connection) ?? githubs[0];
+  const url = repositoryUrl(address);
+  const repo = repoOf(url);
+  const secret = search.secret ?? tokenSecret;
+  // A token typed now, or the secret an earlier visit saved: one of them is needed to test.
+  const hasToken = token !== '' || search.secret !== undefined;
+  const key = `${url ?? ''}\n${token}`;
+  const passed = answer?.ok === true && answer.key === key;
+  const failed = answer?.ok === false && answer.key === key;
+  const urlError =
+    touched && url === undefined
+      ? 'Enter the repository’s https address, such as https://github.com/acme/app.'
+      : undefined;
 
-  const repos = useQuery({
-    ...connectionRepositoriesQuery(org.id, connection?.name ?? '', search.owner),
-    enabled: connection !== undefined,
-    placeholderData: keepPreviousData,
+  const check = useMutation({
+    mutationFn: async (): Promise<RepositoryTestResult> => {
+      if (token !== '') {
+        try {
+          await createSecret(org.id, {
+            name: secret,
+            value: token,
+            description: 'The repository token set up in onboarding',
+            scope: { all_factories: true, factories: [] },
+          });
+        } catch (error) {
+          // The name is taken by an earlier visit or another token: the typed one replaces its value.
+          if (!(error instanceof ApiError) || error.code !== 'secret-name-taken') throw error;
+          await replaceSecretValue(org.id, secret, token);
+        }
+        void client.invalidateQueries({ queryKey: keys.secrets(org.id) });
+      }
+      return testRepository(org.id, { url: url ?? '', secret });
+    },
+    onSuccess: (result) => {
+      const found = checkText(repo ?? 'the repository', result);
+      setAnswer({ key, ...found });
+    },
   });
-  const list: RepositoryList | undefined = repos.data;
 
-  // Only the repositories the list shows count: a link's stale name is not chosen.
-  const chosen = (list?.repositories ?? [])
-    .map((r) => r.full_name)
-    .filter((name) => (search.repos ?? []).includes(name));
-  const count = chosen.length;
-
-  const toggle = (name: string) => {
-    const next = chosen.includes(name) ? chosen.filter((r) => r !== name) : [...chosen, name];
+  const proceed = () =>
     void navigate({
       to: '/o/$org/get-started/$step',
-      params: { org: org.slug, step: 'code' },
-      search: { ...search, repos: next.length > 0 ? next : undefined },
-      replace: true,
+      params: { org: org.slug, step: 'factory' },
+      search: { url, secret },
     });
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    setTouched(true);
+    if (passed) return proceed();
+    if (url === undefined || !repo || !hasToken || failed || check.isPending) return;
+    check.mutate();
   };
 
-  /** A new owner's list has its own choice: the repositories chosen under the last one are dropped. */
-  const chooseOwner = (owner: string | undefined) => {
-    void navigate({
-      to: '/o/$org/get-started/$step',
-      params: { org: org.slug, step: 'code' },
-      search: { ...search, owner, repos: undefined },
-      replace: true,
-    });
-  };
-
-  const loading = connections.isPending || (connection !== undefined && repos.isPending);
-  const loadFailed = connections.isError || (connection !== undefined && repos.isError && !list);
-
+  const busy = check.isPending;
   return (
     <OnboardingLayout
       step="code"
@@ -92,250 +109,97 @@ export function CodeStep({ org, search }: { org: OrgSummary; search: OnboardingS
       }
       action={
         <Button
-          type="button"
+          type="submit"
+          form="repository-form"
           size="lg"
           variant="primary"
-          disabled={count === 0 || !list}
-          onClick={() => {
-            if (!list || count === 0 || !connection) return;
-            void navigate({
-              to: '/o/$org/get-started/$step',
-              params: { org: org.slug, step: 'factory' },
-              search: { connection: connection.name, owner: list.owner, repos: chosen },
-            });
-          }}
+          disabled={failed || busy || (!passed && (url === undefined || !hasToken))}
         >
-          {`Continue with ${count} ${count === 1 ? 'repository' : 'repositories'}`}
+          {busy ? (
+            <>
+              <Spinner />
+              Testing the token
+            </>
+          ) : (
+            'Continue'
+          )}
         </Button>
       }
-      preview={{ organization: organizationCard(org, host), second: codeCard(chosen[0]) }}
+      preview={{ organization: organizationCard(org, host), second: codeCard(repo, passed ? secret : undefined) }}
     >
       <div className="flex flex-col gap-2">
         <h1 className="m-0 text-kpi tracking-display">Connect your code</h1>
         <p className="m-0 text-heading font-normal text-ink-soft">
-          Agents clone the repositories you choose, work on branches and open pull requests.
+          Agents clone one repository, work on a branch per item and open pull requests. A token is all Goal needs.
         </p>
       </div>
 
-      {loading ? (
-        <div aria-busy="true">
-          <span role="status" className="sr-only">
-            Loading
-          </span>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-6">
-          {connections.isError ? null : <GitHubCard org={org} connection={connection} login={list?.login} />}
+      <form id="repository-form" onSubmit={submit} noValidate className="flex flex-col gap-6">
+        <Field
+          label="Repository"
+          error={urlError}
+          help="GitHub. GitLab and other git hosts over https work the same way."
+        >
+          <Input
+            type="url"
+            inputMode="url"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            onBlur={() => setTouched(true)}
+            placeholder="https://github.com/acme/app"
+            autoComplete="off"
+            autoCapitalize="off"
+            spellCheck={false}
+          />
+        </Field>
 
-          {loadFailed ? (
-            <div role="alert" className="flex flex-col items-start gap-3">
-              <Callout tone="rework">
-                {`Couldn’t load the repositories. ${(connections.error ?? repos.error)?.message ?? ''}`.trim()}
-              </Callout>
-              {repos.error instanceof ApiError && repos.error.code === 'owner-not-found' ? (
-                <Button variant="secondary" onClick={() => chooseOwner(undefined)}>
-                  Use your account
-                </Button>
-              ) : (
-                <Button
-                  variant="secondary"
-                  onClick={() => void (connections.isError ? connections.refetch() : repos.refetch())}
-                >
-                  Retry
-                </Button>
-              )}
-            </div>
-          ) : connection === undefined ? null : list ? (
+        <Field
+          label="Token"
+          help={
             <>
-              <Field label="Owner">
-                <NativeSelect value={list.owner} onChange={(e) => chooseOwner(e.target.value)}>
-                  {list.owners.map((o) => (
-                    <option key={o.login} value={o.login}>
-                      {o.kind === 'user' && o.login === list.login ? `${o.login}, your account` : o.login}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </Field>
-
-              <section aria-labelledby="repositories-label" className="flex flex-col gap-2">
-                <p id="repositories-label" className="m-0 text-sm font-medium text-ink">
-                  Repositories
-                </p>
-                <div className="overflow-hidden rounded-card border border-line bg-card">
-                  {list.repositories.length === 0 ? (
-                    <p className="m-0 px-4 py-6 text-body text-muted">
-                      {`${list.owner} has no repositories the Goal app can reach.`}
-                    </p>
-                  ) : (
-                    <RepositoryRows
-                      repositories={list.repositories}
-                      chosen={chosen}
-                      text={text}
-                      onText={setText}
-                      onToggle={toggle}
-                    />
-                  )}
-                </div>
-                <div className="text-secondary text-muted">
-                  Missing one?{' '}
-                  <a
-                    href="https://github.com/settings/installations"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-control no-underline"
-                  >
-                    Give the Goal app access on GitHub
-                  </a>
-                  . <GitLabComing />
-                </div>
-              </section>
-
-              <div className="grid grid-cols-1 gap-4 text-secondary sm:grid-cols-3">
-                <Access title="Reads" tone="text-ok-ink" text="Code, issues, checks" />
-                <Access
-                  title="Writes"
-                  tone="text-run-ink"
-                  text="Branches and pull requests; comments only when you approve"
-                />
-                <Access title="Never" tone="text-rework-ink" text="Force pushes, deletes or settings" />
-              </div>
+              A fine-grained token for this repository: Contents and Pull requests, read and write.{' '}
+              <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">
+                Create one on GitHub
+              </a>
             </>
+          }
+        >
+          <Input
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder={
+              search.secret ? `Saved as ${search.secret}. Paste a new token to replace it.` : 'Paste the token'
+            }
+            autoComplete="off"
+            autoCapitalize="off"
+            spellCheck={false}
+          />
+        </Field>
+
+        <div role="status" aria-live="polite" className={cn(!answer && !check.isError && 'hidden')}>
+          {answer && (passed || failed) ? (
+            <div className="flex animate-fade-in flex-col gap-1">
+              <Callout tone={answer.ok ? 'ok' : 'rework'}>{answer.text}</Callout>
+              {answer.ok ? (
+                <p className="m-0 text-meta text-muted">Saved as the secret {secret}. Change it later in Secrets.</p>
+              ) : null}
+            </div>
+          ) : null}
+          {check.isError ? (
+            <div className="animate-fade-in">
+              <Callout tone="rework">{`Couldn’t save and test the token. ${check.error.message}`.trim()}</Callout>
+            </div>
           ) : null}
         </div>
-      )}
+
+        <dl className="m-0 grid grid-cols-1 gap-4 text-secondary sm:grid-cols-3">
+          <Access title="Reads" tone="text-ok-ink" text="Code, issues and checks" />
+          <Access title="Writes" tone="text-run-ink" text="Branches and pull requests; anything else asks you first" />
+          <Access title="Never" tone="text-rework-ink" text="Force pushes or the default branch" />
+        </dl>
+      </form>
     </OnboardingLayout>
-  );
-}
-
-/** The GitHub card: connected as the account the credential signs in as, or a link to connect one. */
-function GitHubCard({
-  org,
-  connection,
-  login,
-}: {
-  org: OrgSummary;
-  connection: Connection | undefined;
-  login: string | undefined;
-}) {
-  return (
-    <section
-      aria-label="GitHub"
-      className="flex flex-wrap items-center gap-3 rounded-card border border-line bg-card p-4"
-    >
-      <span
-        aria-hidden="true"
-        className="flex size-9 shrink-0 items-center justify-center rounded-control bg-ink text-shell"
-      >
-        <GitHubMark />
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="font-control text-body">GitHub</span>
-        <span className="text-secondary text-muted">
-          {connection === undefined ? 'Not connected yet' : login ? `Connected as ${login}` : connection.name}
-        </span>
-      </div>
-      {connection === undefined ? (
-        <Button asChild variant="primary">
-          <Link
-            to="/o/$org/connections/new"
-            params={{ org: org.slug }}
-            search={{ kind: 'github', next: `/o/${org.slug}/get-started/code` }}
-          >
-            Connect GitHub
-          </Link>
-        </Button>
-      ) : (
-        <>
-          {login ? (
-            <Chip tone="ok">
-              <Check size={12} strokeWidth={2.25} aria-hidden="true" />
-              Connected
-            </Chip>
-          ) : null}
-          <Button asChild variant="secondary">
-            <Link to="/o/$org/connections/$connection" params={{ org: org.slug, connection: connection.name }}>
-              Switch account
-            </Link>
-          </Button>
-        </>
-      )}
-    </section>
-  );
-}
-
-/** The search box and the checkable rows. The selected rows take the selection tint. */
-function RepositoryRows({
-  repositories,
-  chosen,
-  text,
-  onText,
-  onToggle,
-}: {
-  repositories: Repository[];
-  chosen: string[];
-  text: string;
-  onText: (text: string) => void;
-  onToggle: (name: string) => void;
-}) {
-  const q = text.trim().toLowerCase();
-  const shown = repositories.filter((r) => r.full_name.toLowerCase().includes(q));
-  const label = `Search ${repositories.length} repositories`;
-  return (
-    <>
-      <label className="flex h-11 items-center gap-2 px-4 text-muted">
-        <Search size={16} strokeWidth={1.5} aria-hidden="true" className="shrink-0" />
-        <input
-          type="search"
-          aria-label={label}
-          placeholder={label}
-          value={text}
-          onChange={(e) => onText(e.target.value)}
-          autoComplete="off"
-          className="min-w-0 flex-1 bg-transparent text-body text-ink outline-none placeholder:text-muted"
-        />
-      </label>
-      {shown.length === 0 ? (
-        <p className="m-0 border-t border-line px-4 py-4 text-secondary text-muted">{`No repository matches “${text.trim()}”.`}</p>
-      ) : (
-        shown.map((r) => {
-          const checked = chosen.includes(r.full_name);
-          return (
-            <label
-              key={r.full_name}
-              className={cn(
-                'flex cursor-pointer items-center gap-3 border-t border-line px-4 py-3 hover:bg-hover',
-                checked && 'bg-run-tint hover:bg-run-tint',
-              )}
-            >
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={() => onToggle(r.full_name)}
-                className="size-4 accent-run"
-              />
-              <span className="flex min-w-0 flex-col">
-                <span className="font-control text-body break-all">{r.full_name}</span>
-                {r.languages.length > 0 ? (
-                  <span className="text-secondary text-muted">{r.languages.join(', ')}</span>
-                ) : null}
-              </span>
-              <span className="text-secondary whitespace-nowrap text-muted">{updatedLabel(r.updated_at)}</span>
-            </label>
-          );
-        })
-      )}
-    </>
-  );
-}
-
-/** GitLab is not built: its link is the disabled control, which says so on hover and focus. */
-function GitLabComing() {
-  return (
-    <NotAvailable label="GitLab">
-      <button type="button" className="cursor-pointer bg-transparent p-0 text-secondary text-muted">
-        GitLab is coming.
-      </button>
-    </NotAvailable>
   );
 }
 
@@ -343,8 +207,8 @@ function GitLabComing() {
 function Access({ title, tone, text }: { title: string; tone: string; text: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className={cn('font-control', tone)}>{title}</span>
-      <span className="text-ink-soft">{text}</span>
+      <dt className={cn('font-control', tone)}>{title}</dt>
+      <dd className="m-0 text-ink-soft">{text}</dd>
     </div>
   );
 }

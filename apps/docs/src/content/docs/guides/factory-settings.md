@@ -1,6 +1,6 @@
 ---
 title: Factory settings
-description: Set a factory's repository, box size, tools, budgets, flow targets and flow choices from its Settings page, and publish them as a new version.
+description: Set a factory's repository and its token, model key, environments, box size, tools, budgets, flow targets and flow choices from its Settings page, and publish them as a new version.
 ---
 
 You end with the factory's repository, runtime, budgets and flow set as you want them, published as a new version. The Settings page edits the same definition as the Definition editor, for the fields below.
@@ -30,12 +30,12 @@ The factory's name, its purpose from the definition, and its Badge: the colour a
 
 ### Repository
 
-The page shows the repository URL with a chip, "Connected with" and the connection's name, and a Change button. Change opens the two fields below in place; edits still save into the draft. With no repository set, the fields show directly.
+The page shows the repository URL, a chip that says whether the token works, the name of the secret that holds the token, and a Change button. The chip comes from Goal trying to clone and push with the token: "Token works", or "Token fails" with the host's reason. It shows only to people who may create factories, and "Token not tested" says the test could not run, for example because the secret is limited to some factories. Change opens the two fields below in place; edits still save into the draft. With no repository set, the fields show directly.
 
 | Field | Sets | Notes |
 |---|---|---|
 | Repository URL | `runtime.repository.url` | An https URL cloned into each run's box before the agent starts. Empty means no checkout and no pull requests. |
-| Repository connection | `runtime.repository.connection` | The organization connection git signs in with. Choose "Public, no connection" for a public repository. |
+| Repository token | `runtime.repository.token` | The secret whose token git signs in with, written as `{{secret-name}}`. Pick one, or choose New secret to make it here. "Use no token" is for a public repository. See [Access and secrets](../../concepts/access-and-secrets/). |
 | Base branch | none yet | Shows "Not available yet". The factory definition has no field for it. |
 
 ### Runtime
@@ -43,6 +43,8 @@ The page shows the repository URL with a chip, "Connected with" and the connecti
 | Field | Sets | Notes |
 |---|---|---|
 | Size of each run's box | `runtime.size` | `small` (1 CPU, 2 GiB), `medium` (2 CPU, 4 GiB) or `large` (4 CPU, 8 GiB). Medium when unset. |
+| Model key | `runtime.modelKey` | The secret that gives every run its model. It shows here with a Change link to Secrets; set it in the YAML view. |
+| Environments | `environments/<name>.yaml` | One chip per environment with the number of agents that use it, and an Edit link to the Definition's Environments section. |
 | Tools | `runtime.tools` | mise tool specs, such as `go`, `go@1.26.10` or `npm:@acme/cli@2`. Each run installs them after the repository's own `mise.toml`. Press Enter to add one. A value that is not a tool spec is refused. |
 
 ### Budgets and targets

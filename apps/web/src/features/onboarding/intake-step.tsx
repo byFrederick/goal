@@ -22,7 +22,7 @@ import { OpenDraftError, setTriggersEnabled } from '../intake/set-trigger-enable
 import { sourceIcon } from '../intake/triggers-table';
 import { BudgetCard } from './budget-gauge';
 import { budgetRanges } from './budget-hints';
-import type { OnboardingSearch } from './code-search';
+import { type OnboardingSearch, repoOf } from './code-search';
 import { codeCard, FactoryCard, organizationCard, previewSlots } from './factory-preview';
 import { OnboardingLayout, PreviewPlaceholder } from './onboarding-layout';
 
@@ -52,7 +52,7 @@ function Back({ org, search, factory }: { org: OrgSummary; search: OnboardingSea
         <Link
           to="/o/$org/get-started/$step"
           params={{ org: org.slug, step: 'factory' }}
-          search={{ connection: search.connection, owner: search.owner, repos: search.repos }}
+          search={{ url: search.url, secret: search.secret }}
         >
           Back
         </Link>
@@ -263,7 +263,7 @@ function Ready({
       preview={{
         ...previewSlots({
           organization: organizationCard(org, window.location.host),
-          code: codeCard(search.repos?.[0]),
+          code: codeCard(repoOf(search.url), search.secret),
           factory: <FactoryCard name={factory.name} purpose={basics.purpose ?? ''} stations={panelStations} />,
         }),
         cards: (

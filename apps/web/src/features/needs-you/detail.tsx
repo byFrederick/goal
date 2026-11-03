@@ -210,7 +210,7 @@ function Brief({ entry }: { entry: InboxEntry }) {
   );
 }
 
-/** The tool call an Approval asks to make: its input as canonical JSON, then its tool and connection. */
+/** The tool call an Approval asks to make: its input as canonical JSON, then its tool and server. */
 function ToolCall({ call }: { call: ToolApproval }) {
   return (
     <>
@@ -226,7 +226,7 @@ function ToolCall({ call }: { call: ToolApproval }) {
         <Fact label="Tool">
           <span className="font-mono">{call.tool}</span>
         </Fact>
-        <Fact label="Connection">{call.connection}</Fact>
+        <Fact label="Server">{call.connection}</Fact>
       </dl>
     </>
   );

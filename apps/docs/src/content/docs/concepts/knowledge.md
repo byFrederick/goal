@@ -5,17 +5,33 @@ sidebar:
   order: 23
 ---
 
-The knowledge base is one per organization. It holds the documents that agents may search, read and rate through the gateway. Its documents come from sources: files people upload, a repository or a space that a connection syncs, or a connection whose own tools search the outside system directly.
+The knowledge base is one per organization. It holds the documents that agents may search, read and rate through the gateway. Its documents come from sources: files people upload, a repository or a space that Goal syncs with a secret, or a server whose own tools search the outside system directly.
 
 ## Sources
 
 | Kind | Where the documents come from |
 | --- | --- |
 | `upload` | Files people upload: text, Markdown, HTML, JSON or YAML. The originals are kept in the bucket under the organization's knowledge prefix. |
-| `synced` | A connection whose kind can sync. `gitdocs` reads Markdown from a repository on GitHub or GitLab, with include and exclude globs (`**/*.md` by default). The `confluence` reader reads pages of one or more spaces of a Confluence Cloud site. Each sync fetches only the files that changed. |
-| `live` | A connection whose own tools search the outside system. Nothing is indexed. |
+| `synced` | A repository or a Confluence space, read with a secret. Its config names the reader. `gitdocs` reads Markdown from a repository on GitHub or GitLab, with include and exclude globs (`**/*.md` by default). The `confluence` reader reads pages of one or more spaces of a Confluence Cloud site. Each sync fetches only the files that changed. |
+| `live` | A server whose own tools search the outside system. Nothing is indexed. |
 
 A synced source keeps its text, its chunks and a link back to the original. The originals stay where they are.
+
+### A synced source's secret and config
+
+A synced source names a secret (`goal secret`, [Access and secrets](../access-and-secrets/)) and a config. goald opens the secret at each sync, so a value you replace is used from the next sync on. The secret must be open to all factories, because a source belongs to the organization, not to one factory. Renaming the secret keeps the source on it. You can't delete a secret while a source reads with it: the error names the source.
+
+| Reader | Config | The secret holds |
+| --- | --- | --- |
+| `gitdocs` | `reader: gitdocs`, `repository` (its https URL), and optionally `branch`, `include` and `exclude`. A repository off github.com and gitlab.com also needs `code_host: github` or `gitlab`. | The code host's token. |
+| `confluence` | `reader: confluence`, `site` (such as `acme.atlassian.net`), `email` (the Atlassian account) and `spaces` (such as `ENG, SUP`). | The account's API token. |
+
+```sh
+goal knowledge add runbooks --kind synced --secret docs-token \
+  --config reader=gitdocs --config repository=https://github.com/acme/docs
+```
+
+Sources made before secrets read a connection. When goald moves an organization over to secrets, each such source gets the secret made from its connection's token, and the connection's other values go into its config. A source it can't move keeps reading its connection, and goald logs why.
 
 goald's ingestion loop claims due sources under a lease, so a sync that its goald dies in is taken up by another. A source can sync on an interval, `--every 1h` for example, or on demand.
 

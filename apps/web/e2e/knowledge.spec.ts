@@ -347,22 +347,20 @@ test.describe('a source', () => {
 });
 
 test.describe('New source', () => {
-  test('synced: a connection that can sync, what of it to read, a schedule', async ({ page }) => {
+  test('synced: a reader, a secret open to all factories, what of it to read, a schedule', async ({ page }) => {
     await page.goto('/o/acme/knowledge');
     await page.getByRole('link', { name: /Add a source/ }).click();
     await expect(page).toHaveTitle('New source · Knowledge · Acme · Goal');
     await page.getByRole('radio', { name: /Synced/ }).check();
     await expect(page).toHaveURL(/kind=synced/);
-    await expect(page.getByRole('combobox', { name: 'Connection' })).toHaveValue('github');
-    // Only connections whose kind can sync: no model key, no MCP server.
-    await expect(page.getByRole('combobox', { name: 'Connection' }).getByRole('option')).toHaveText([
-      'github, GitHub',
-      'gitlab-infra, GitLab',
-    ]);
+    await expect(page.getByRole('combobox', { name: 'Connection' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Add source' }).click();
+    await expect(page.getByText('Pick a secret.')).toBeVisible();
     await expect(page.getByText('Repository is required.')).toBeVisible();
     await expect(page.getByText('A title is required.')).toBeVisible();
 
+    await page.getByRole('combobox', { name: 'Secret' }).click();
+    await page.getByRole('option', { name: 'github-token' }).click();
     await page.getByRole('textbox', { name: 'Repository' }).fill('acme/infra');
     await page.getByRole('textbox', { name: 'Title' }).fill('Infra docs');
     await expect(page.getByRole('textbox', { name: 'Name' })).toHaveValue('infra-docs');
@@ -378,7 +376,7 @@ test.describe('New source', () => {
     await expect(page.getByRole('status').filter({ hasText: 'is added' })).toHaveText(
       'Infra docs is added. Its first sync starts now; this page updates when it ends.',
     );
-    await expect(page.getByText('github, acme/infra, docs/**/*.md, runbooks/**/*.md')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'github-token' })).toBeVisible();
   });
 
   test('upload: files chosen here go up once the source exists', async ({ page, request }) => {
@@ -404,13 +402,13 @@ test.describe('New source', () => {
     ).toBeVisible();
   });
 
-  test('live: a connection that runs an MCP server, nothing stored', async ({ page }) => {
+  test('live: a server that runs an MCP server, nothing stored', async ({ page }) => {
     await page.goto('/o/acme/knowledge/new?kind=live');
-    await expect(page.getByRole('combobox', { name: 'Connection' }).getByRole('option')).toHaveText([
+    await expect(page.getByRole('combobox', { name: 'Server' }).getByRole('option')).toHaveText([
       'github, GitHub',
       'playwright, MCP server',
     ]);
-    await page.getByRole('combobox', { name: 'Connection' }).selectOption('playwright');
+    await page.getByRole('combobox', { name: 'Server' }).selectOption('playwright');
     await page.getByRole('textbox', { name: 'Title' }).fill('Browser');
     await page.getByRole('button', { name: 'Add source' }).click();
     await expect(page).toHaveURL(/\/o\/acme\/knowledge\/browser$/);

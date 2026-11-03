@@ -10,7 +10,7 @@ export type InviteRole = 'owner' | 'admin' | 'builder' | 'viewer';
 /** The four roles in the picture's order, each with the sentence the picture gives it. */
 export const inviteRoles: readonly { value: InviteRole; label: string; description: string }[] = [
   { value: 'owner', label: 'Owner', description: 'Everything, including billing' },
-  { value: 'admin', label: 'Admin', description: 'Factories, people and connections' },
+  { value: 'admin', label: 'Admin', description: 'Factories, people and secrets' },
   { value: 'builder', label: 'Builder', description: 'Definitions, items and approvals' },
   { value: 'viewer', label: 'Viewer', description: 'Sees everything, changes nothing' },
 ];

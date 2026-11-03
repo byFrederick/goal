@@ -148,3 +148,18 @@ func TestWorkerFinished_Result(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkerFinished_ResultKeepsOnlyACommitAsPushedHead(t *testing.T) {
+	t.Parallel()
+
+	sha1, sha256 := strings.Repeat("a1", 20), strings.Repeat("b2", 32)
+
+	for in, want := range map[string]string{
+		sha1: sha1, sha256: sha256, "": "", "main": "", strings.ToUpper(sha1): "", sha1 + "\n": "", sha1[:39]: "",
+	} {
+		f := WorkerFinished{Status: string(RunFailed), PushedHead: in}
+		if got := f.Result().PushedHead; got != want {
+			t.Errorf("Result().PushedHead of %q = %q; want %q", in, got, want)
+		}
+	}
+}

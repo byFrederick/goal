@@ -5,6 +5,7 @@ import (
 	"context"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
@@ -50,6 +51,13 @@ func (w workInbox) Inbox(ctx context.Context, q InboxQuery) ([]gen.InboxEntry, e
 
 		out = append(out, lines...)
 	}
+
+	conversions, err := w.conversionEntries(ctx, q.Factories)
+	if err != nil {
+		return nil, err
+	}
+
+	out = append(out, conversions...)
 
 	// The most recent, as every source returns them.
 	slices.SortFunc(out, func(a, b gen.InboxEntry) int { return cmp.Or(b.Since.Compare(a.Since), cmp.Compare(a.Id, b.Id)) })
@@ -195,6 +203,49 @@ func (w workInbox) lineEntries(ctx context.Context, f *config.Factory) ([]gen.In
 	}
 
 	return out, nil
+}
+
+// conversionEntries are the factories Goal could not convert to secrets and environment files
+// (ADR 0037 decision 19) that still run on connections: one entry each, naming every problem. A
+// factory that published a version on secrets since has none.
+func (w workInbox) conversionEntries(ctx context.Context, factories []*config.Factory) ([]gen.InboxEntry, error) {
+	if w.s.conversions == nil {
+		return nil, nil
+	}
+
+	list, err := w.s.conversions.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := []gen.InboxEntry{}
+
+	for _, c := range list {
+		i := slices.IndexFunc(factories, func(f *config.Factory) bool { return domain.FactoryID(f.Metadata.ID) == c.Factory })
+		if !c.Refused() || i < 0 || factories[i].Line().OnSecrets() {
+			continue
+		}
+
+		e := entryOf(factories[i], gen.InboxEntryKindConversion, string(c.Factory), c.At)
+		e.Conversion = &gen.InboxConversion{Reason: conversionReason(c.Problems), Problems: slices.Clone(c.Problems)}
+		out = append(out, e)
+	}
+
+	return out, nil
+}
+
+// conversionReason is a conversion's problems as one line: each a sentence.
+func conversionReason(problems []string) string {
+	parts := make([]string, 0, len(problems))
+	for _, p := range problems {
+		if p == "" {
+			continue
+		}
+
+		parts = append(parts, strings.ToUpper(p[:1])+p[1:]+".")
+	}
+
+	return strings.Join(parts, " ")
 }
 
 // entryOf is an entry of kind about what (an id) of factory f, waiting since.

@@ -1,9 +1,9 @@
 // New source (spec 4 §10, canvas "Knowledge-Source-New"): choose a kind (?kind=), then what it
 // needs. Upload: a title and name, and files dropped here go up once the source exists. Synced: a
-// connection whose kind can sync, what of it to read (a repository's paths, Confluence spaces)
-// and how often. Live: a connection that runs an MCP server; nothing is stored. Add source opens
+// reader, the secret it reads with (open to all factories), what of it to read (a repository's paths,
+// Confluence spaces) and how often. Live: a server that runs an MCP server; nothing is stored. Add source opens
 // the new source's page, which says what happens next.
-import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { Info } from 'lucide-react';
 import { type FormEvent, useId, useState } from 'react';
@@ -19,7 +19,8 @@ import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Field, Input, NativeSelect } from '../../ui/field';
 import { RadioCards } from '../../ui/radio-cards';
-import { type Config, ConfigFields, configErrors, readerOf, trimmed } from './config-fields';
+import { type Config, ConfigFields, configErrors, readerChoices, readerOf, trimmed } from './config-fields';
+import { SecretField } from './secret-field';
 import { DropZone, UploadRows, useUploader } from './upload';
 import { nameFor, refusalText, sourceName, syncChoices } from './words';
 
@@ -29,9 +30,9 @@ const kindText: Record<KnowledgeSourceKind, (org: string) => string> = {
   upload: (org) =>
     `Drop files. Text, Markdown, HTML, JSON or YAML, each up to goald’s upload limit (25 MiB by default). Stored in ${org}’s bucket and indexed.`,
   synced: () =>
-    'A connection that can sync: a repository’s docs, or a Confluence space. Goal copies the text on a schedule, indexes it and links back.',
+    'A repository’s docs or a Confluence space, read with a secret. Goal copies the text on a schedule, indexes it and links back.',
   live: () =>
-    'A connection that searches by itself, such as a Slack MCP server. Nothing is stored; factories listing it get its tools.',
+    'A server that searches by itself, such as a Slack MCP server. Nothing is stored; factories listing it get its tools.',
 };
 
 export function NewSourcePage() {
@@ -47,8 +48,8 @@ export function NewSourcePage() {
       <header className="flex flex-col gap-1">
         <h1 className="m-0 text-page-title">New source</h1>
         <p className="m-0 max-w-[680px] text-body text-muted">
-          Add text agents can search: files you upload, or a system Goal reaches through one of {org.name}’s
-          connections. Factories add a source in their Definition.
+          Add text agents can search: files you upload, or a system Goal reaches with one of {org.name}’s secrets.
+          Factories add a source in their Definition.
         </p>
       </header>
       {manage ? (
@@ -84,35 +85,36 @@ export function NewSourcePage() {
   );
 }
 
-/** A connection's kind: the one a synced source's reader comes from, or whose tools a live source gets. */
-function useConnections(kind: KnowledgeSourceKind) {
+/** The servers a live source can read: connections that run an MCP server. A synced source needs none. */
+function useServers(kind: KnowledgeSourceKind) {
   const org = useOrg();
-  const { data: connections } = useSuspenseQuery(connectionsQuery(org.id));
-  const { data: kinds } = useSuspenseQuery(connectionKindsQuery(org.id));
+  const live = kind === 'live';
+  const connections = useQuery({ ...connectionsQuery(org.id), enabled: live }).data ?? [];
+  const kinds = useQuery({ ...connectionKindsQuery(org.id), enabled: live }).data ?? [];
   const kindOf = (c: Connection): ConnectionKind | undefined => kinds.find((k) => k.name === c.kind);
-  const fits = (c: Connection) => (kind === 'synced' ? Boolean(kindOf(c)?.sync) : kindOf(c)?.modes.includes('mcp'));
-  return { usable: connections.filter(fits), kindOf };
+  return { usable: live ? connections.filter((c) => kindOf(c)?.modes.includes('mcp')) : [], kindOf };
 }
 
 function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
   const org = useOrg();
   const client = useQueryClient();
   const navigate = useNavigate();
-  const mayConnect = useOrgHolds('connection:manage');
   const taken = (useQuery(knowledgeSourcesQuery(org.id)).data ?? []).map((s) => s.name);
-  const { usable, kindOf } = useConnections(kind);
+  const { usable, kindOf } = useServers(kind);
   const uploader = useUploader(org.id);
   const [title, setTitle] = useState('');
   const [name, setName] = useState('');
   const [named, setNamed] = useState(false);
-  const [connection, setConnection] = useState(kind === 'upload' ? '' : (usable[0]?.name ?? ''));
+  const [connection, setConnection] = useState(usable[0]?.name ?? '');
+  const [secret, setSecret] = useState('');
+  const [readerName, setReaderName] = useState('gitdocs');
   const [config, setConfig] = useState<Config>({});
   const [every, setEvery] = useState(3600);
   const [submitted, setSubmitted] = useState(false);
   const id = useId();
 
   const chosen = usable.find((c) => c.name === connection);
-  const reader = kind === 'synced' && chosen ? readerOf(kindOf(chosen)?.sync, {}) : undefined;
+  const reader = kind === 'synced' ? readerOf(readerName, {}) : undefined;
   const errors = kind === 'synced' ? configErrors(reader, config) : {};
   const shownName = named ? name : nameFor(title, taken);
   const titleError = title.trim() === '' ? 'A title is required.' : undefined;
@@ -121,7 +123,8 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
     : taken.includes(shownName)
       ? `${org.name} already has a source named ${shownName}.`
       : undefined;
-  const connectionError = kind !== 'upload' && !chosen ? 'Choose a connection.' : undefined;
+  const connectionError =
+    kind === 'live' && !chosen ? 'Choose a server.' : kind === 'synced' && secret === '' ? 'Pick a secret.' : undefined;
 
   const create = useMutation({
     mutationFn: () =>
@@ -129,8 +132,10 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
         name: shownName,
         title: title.trim(),
         kind,
-        ...(kind === 'upload' ? {} : { connection }),
-        ...(kind === 'synced' ? { config: trimmed(config), sync_every_seconds: every } : {}),
+        ...(kind === 'live' ? { connection } : {}),
+        ...(kind === 'synced'
+          ? { secret, config: { ...trimmed(config), reader: readerName }, sync_every_seconds: every }
+          : {}),
       }),
     onSuccess: async (created) => {
       client.setQueryData(keys.knowledgeSource(org.id, created.name), created);
@@ -159,11 +164,8 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
     create.mutate();
   };
 
-  const heading = { upload: 'Upload', synced: 'Synced from a connection', live: 'Live from a connection' }[kind];
-  const noConnection =
-    kind === 'synced'
-      ? `${org.name} has no connection whose kind can sync yet: a GitHub, GitLab or Confluence connection.`
-      : `${org.name} has no connection that runs an MCP server yet.`;
+  const heading = { upload: 'Upload', synced: 'Synced with a secret', live: 'Live from a server' }[kind];
+  const noServer = `${org.name} has no MCP server a live source can read yet. Add one to an environment.`;
 
   return (
     <form onSubmit={submit} noValidate aria-labelledby={id} className="flex flex-col gap-4">
@@ -171,47 +173,18 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
         <h2 id={id} className="m-0 text-heading">
           {heading}
         </h2>
-        {kind !== 'upload' && usable.length === 0 ? (
-          <Callout tone="note">
-            {noConnection}{' '}
-            {mayConnect ? (
-              <Link
-                to="/o/$org/connections/new"
-                params={{ org: org.slug }}
-                className="text-ink underline underline-offset-3"
-              >
-                New connection
-              </Link>
-            ) : null}
-          </Callout>
-        ) : null}
+        {kind === 'live' && usable.length === 0 ? <Callout tone="note">{noServer}</Callout> : null}
         <div className="grid grid-cols-1 gap-x-5 gap-y-4 @[640px]:grid-cols-2">
-          {kind === 'upload' ? null : (
+          {kind === 'live' ? (
             <Field
-              label="Connection"
+              label="Server"
               error={submitted ? connectionError : undefined}
-              help={
-                <>
-                  {kind === 'synced'
-                    ? 'Only connections whose kind can sync.'
-                    : 'Only connections that run an MCP server.'}{' '}
-                  {mayConnect ? (
-                    <Link
-                      to="/o/$org/connections/new"
-                      params={{ org: org.slug }}
-                      className="text-ink underline underline-offset-3"
-                    >
-                      New connection
-                    </Link>
-                  ) : null}
-                </>
-              }
+              help="Only servers that run an MCP server."
             >
               <NativeSelect
                 value={connection}
                 onChange={(e) => {
                   setConnection(e.target.value);
-                  setConfig({});
                 }}
               >
                 {usable.length === 0 ? <option value="">None yet</option> : null}
@@ -222,11 +195,31 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
                 ))}
               </NativeSelect>
             </Field>
-          )}
+          ) : null}
+          {kind === 'synced' ? (
+            <>
+              <Field label="Reads">
+                <NativeSelect
+                  value={readerName}
+                  onChange={(e) => {
+                    setReaderName(e.target.value);
+                    setConfig({});
+                  }}
+                >
+                  {readerChoices.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <SecretField value={secret} onChange={setSecret} error={submitted ? connectionError : undefined} />
+            </>
+          ) : null}
           {kind === 'synced' ? (
             <ConfigFields
               reader={reader}
-              connection={connection}
+              secret={secret}
               config={config}
               errors={submitted ? errors : {}}
               onChange={setConfig}
@@ -301,8 +294,8 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
         <p className="m-0 flex items-start gap-2.5 text-body leading-normal text-ink-soft">
           <Info size={16} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0 text-muted" />
           {kind === 'synced'
-            ? 'Goal indexes the source with the connection’s access. Every factory that lists it can find anything that access sees.'
-            : 'Agents of factories that list it call the connection’s tools with the connection’s access.'}
+            ? 'Goal indexes the source with the secret’s access. Every factory that lists it can find anything that access sees.'
+            : 'Agents of factories that list it call the server’s tools with the server’s access.'}
         </p>
       ) : null}
     </form>

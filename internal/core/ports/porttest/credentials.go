@@ -20,8 +20,9 @@ var _ ports.Credentials = (*Credentials)(nil)
 
 // Credentials keeps credentials in memory with the database's rules: names unique per
 // organization, each value sealed with the master key under domain.CredentialAAD and returned only
-// by Resolve, the factory scope enforced there, and an audit entry through audit for every change
-// and use. Views made with WithKey share the data, as goalds with different keys share one
+// by Resolve, the factory scope enforced there, an audit entry through audit for every change and
+// use, and, as the secrets table they now live in, no type label or agent list
+// (domain.Credential.Stored). Views made with WithKey share the data, as goalds with different keys share one
 // database. The connections given to NewCredentials are the ones that refer to credentials as
 // {{name}}: UsedBy names them, and Delete refuses while one does.
 type Credentials struct {
@@ -133,7 +134,7 @@ func (c *Credentials) Create(ctx context.Context, n domain.NewCredential, by dom
 	}
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	cred := cloneCredential(n.Credential())
+	cred := cloneCredential(n.Credential().Stored())
 	cred.ID, cred.CreatedBy, cred.CreatedAt, cred.UpdatedBy, cred.UpdatedAt = domain.CredentialID(id.String()), by, now, by, now
 
 	r := &credentialRow{cred: cred}
@@ -141,7 +142,7 @@ func (c *Credentials) Create(ctx context.Context, n domain.NewCredential, by dom
 		return domain.Credential{}, err
 	}
 
-	err = c.appendAudit(ctx, by, domain.AuditCredentialCreated, r.cred, map[string]any{auditName: n.Name, "type": string(n.Type)})
+	err = c.appendAudit(ctx, by, domain.AuditCredentialCreated, r.cred, map[string]any{auditName: n.Name})
 	if err != nil {
 		return domain.Credential{}, err
 	}
@@ -178,6 +179,8 @@ func (c *Credentials) Patch(ctx context.Context, name string, p domain.Credentia
 	if err := domain.CheckCredential(next); err != nil {
 		return domain.Credential{}, err
 	}
+
+	next = next.Stored()
 
 	if next.Name != name {
 		if _, taken := c.d.rows[org][next.Name]; taken {

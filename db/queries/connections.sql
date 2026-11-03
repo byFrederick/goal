@@ -72,10 +72,11 @@ WHERE id = sqlc.arg(id)
 RETURNING updated_at;
 
 -- name: ShareReferencedCredentials :exec
--- Locks the credentials a connection's write refers to (ADR 0017 decision 8) against their
--- deletion until it commits: a credential's delete locks it FOR UPDATE and then counts its users.
--- A name that is no credential locks nothing; a reference may name one that does not exist yet.
-SELECT id FROM credentials WHERE name = ANY (sqlc.arg(names)::text[]) ORDER BY id FOR KEY SHARE;
+-- Locks the secrets (credentials until ADR 0037) a connection's write refers to (ADR 0017 decision
+-- 8) against their deletion until it commits: a secret's delete locks it FOR UPDATE and then
+-- counts its users. A name that is no secret locks nothing; a reference may name one that does not
+-- exist yet.
+SELECT id FROM secrets WHERE name = ANY (sqlc.arg(names)::text[]) ORDER BY id FOR KEY SHARE;
 
 -- name: ConnectionForRule :one
 -- The connection name's id, locked against its deletion until a standing rule for it is written.
@@ -103,7 +104,7 @@ SELECT pg_notify('goal_org_events', json_build_object(
 UPDATE connections SET last_used_at = now() WHERE id = ANY (sqlc.arg(ids)::uuid[]);
 
 -- name: ConnectionKeyIDs :one
--- The master key ids of every organization's sealed connections.
+-- The master key ids of every organization's sealed secrets, connections and webhook endpoints.
 SELECT goal_connection_key_ids()::text[] AS key_ids;
 
 -- name: StaleSealedConnections :many

@@ -26,7 +26,9 @@ type Harness struct {
 	Knowledge ports.Knowledge
 	// Connections are the connections sources read; the suite syncs its platform kinds.
 	Connections ports.Connections
-	Audit       ports.Audit
+	// Secrets are the secrets synced sources read with.
+	Secrets ports.OrgSecrets
+	Audit   ports.Audit
 	// NewOrg returns a new organization.
 	NewOrg func(t *testing.T) domain.OrgID
 }
@@ -43,6 +45,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Sources_CreateUpdateDeleteAudited", testSources},
 		{"CreateSource_RulesRefused", testSourceRules},
 		{"ConnectionReadBySource_DeleteIsAConflict", testConnectionInUse},
+		{"SecretReadBySource_KeptByIDAndDeleteIsAConflict", testSecretSources},
 		{"Claim_LeaseEndsAndAnotherTakesOver", testClaimLease},
 		{"Claim_TakenOverLeaseChangesNothing", testClaimFenced},
 		{"Claim_EveryOrganizationOldestDueFirst", testClaimAcrossOrgs},
@@ -76,12 +79,15 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 
 // Names the suite uses.
 const (
-	syncKind  = "kb-docs"
-	liveKind  = "kb-chat"
-	docsConn  = "docs"
-	chatConn  = "chat"
-	model     = "acme-embed-1"
-	otherName = "acme-embed-2"
+	syncKind = "kb-docs"
+	liveKind = "kb-chat"
+	docsConn = "docs"
+	chatConn = "chat"
+	// docsSecret is the secret synced sources read with, and readerGitDocs their reader.
+	docsSecret    = "docs-token"
+	readerGitDocs = "gitdocs"
+	model         = "acme-embed-1"
+	otherName     = "acme-embed-2"
 )
 
 var admin = domain.Actor{Kind: domain.ActorUser, ID: "00000000-0000-7000-8000-000000000001", Name: "Ada"}
@@ -394,6 +400,78 @@ func testConnectionInUse(f *fixture) {
 	err := f.Knowledge.DeleteSource(ctx, runbooks, admin, nil)
 	f.must(err)
 	f.must(f.Connections.Delete(ctx, docsConn, admin))
+}
+
+func testSecretSources(f *fixture) {
+	ctx := f.ctx()
+
+	if _, err := f.Secrets.Create(ctx, domain.NewSecret{Name: docsSecret, Value: "test-token", Scope: domain.SecretScope{All: true}}, admin); err != nil {
+		f.t.Fatalf("Create secret: %v", err)
+	}
+
+	onSecret := domain.NewKnowledgeSource{
+		Name: runbooks, Title: "Runbooks", Kind: domain.SourceSynced, Secret: docsSecret,
+		Config: map[string]string{domain.SourceReaderKey: readerGitDocs, "repository": "https://github.com/acme/docs"},
+	}
+
+	for _, bad := range []struct {
+		what string
+		n    domain.NewKnowledgeSource
+		want error
+	}{
+		{"a secret source without a reader", domain.NewKnowledgeSource{Name: "no-reader", Title: "t", Kind: domain.SourceSynced, Secret: docsSecret}, domain.ErrInvalid},
+		{"an unknown secret", domain.NewKnowledgeSource{
+			Name: "no-secret", Title: "t", Kind: domain.SourceSynced, Secret: "gone",
+			Config: onSecret.Config,
+		}, ports.ErrNotFound},
+		{"an upload source with a secret", domain.NewKnowledgeSource{Name: "up", Title: "t", Kind: domain.SourceUpload, Secret: docsSecret}, domain.ErrInvalid},
+	} {
+		_, err := f.Knowledge.CreateSource(ctx, bad.n, admin)
+		f.refused("CreateSource with "+bad.what, err, bad.want)
+	}
+
+	src := f.source(f.org, onSecret)
+	if src.Secret != docsSecret || src.Connection != "" || src.Config[domain.SourceReaderKey] != readerGitDocs {
+		f.t.Errorf("source = %+v; want it on secret %s with its reader", src, docsSecret)
+	}
+
+	// Renaming the secret keeps the source on it.
+	renamed := "docs-token-2"
+	if _, err := f.Secrets.Patch(ctx, docsSecret, domain.SecretPatch{Name: &renamed}, admin); err != nil {
+		f.t.Fatalf("rename the secret: %v", err)
+	}
+
+	if got, err := f.Knowledge.Source(ctx, runbooks); err != nil || got.Secret != renamed {
+		f.t.Errorf("after the rename: source secret %q, %v; want %q", got.Secret, err, renamed)
+	}
+
+	f.refused("Delete a secret a source reads with", f.Secrets.Delete(ctx, renamed, admin), ports.ErrConflict)
+
+	// A synced source on its connection moves over to a secret; another kind takes none.
+	f.synced(f.org, handbook)
+
+	moved, err := f.Knowledge.UpdateSource(ctx, handbook, domain.KnowledgeSourcePatch{
+		Secret: &renamed, Config: map[string]string{domain.SourceReaderKey: readerGitDocs},
+	}, admin)
+	if err != nil || moved.Secret != renamed || moved.Connection != docsConn {
+		f.t.Errorf("move over = %+v, %v; want the secret and the connection it keeps", moved, err)
+	}
+
+	_, err = f.Knowledge.UpdateSource(ctx, runbooks, domain.KnowledgeSourcePatch{Config: map[string]string{}}, admin)
+	f.refused("UpdateSource dropping a secret source's reader", err, domain.ErrInvalid)
+
+	gone := "gone"
+	_, err = f.Knowledge.UpdateSource(ctx, runbooks, domain.KnowledgeSourcePatch{Secret: &gone}, admin)
+	f.refused("UpdateSource to an unknown secret", err, ports.ErrNotFound)
+
+	f.upload("notes")
+
+	_, err = f.Knowledge.UpdateSource(ctx, "notes", domain.KnowledgeSourcePatch{Secret: &renamed}, admin)
+	f.refused("UpdateSource giving an upload source a secret", err, domain.ErrInvalid)
+
+	f.must(f.Knowledge.DeleteSource(ctx, runbooks, admin, nil))
+	f.must(f.Knowledge.DeleteSource(ctx, handbook, admin, nil))
+	f.must(f.Secrets.Delete(ctx, renamed, admin))
 }
 
 // claim claims at now for lease, in no organization (a claim reaches every one), failing the
