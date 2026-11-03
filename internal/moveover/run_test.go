@@ -705,7 +705,16 @@ func (w *world) auditCount(t *testing.T) int {
 		t.Fatal(err)
 	}
 
-	return len(entries)
+	// Opening a secret to check the converted version is audited on every run; it changes nothing.
+	n := 0
+
+	for _, e := range entries {
+		if e.Action != "secret.used" {
+			n++
+		}
+	}
+
+	return n
 }
 
 // source is the knowledge source name.
