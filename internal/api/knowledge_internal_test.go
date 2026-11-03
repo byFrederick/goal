@@ -110,7 +110,6 @@ func TestKnowledgeProblem_Codes(t *testing.T) {
 		{sourceError(domain.ErrConnectionCannotSync, kbHandbook), http.StatusBadRequest, "connection-cannot-sync"},
 		{sourceError(domain.ErrInvalid, kbHandbook), http.StatusBadRequest, ""},
 		{sourceError(domain.ErrNotUploadSource, kbHandbook), http.StatusConflict, "not-an-upload-source"},
-		{documentError(ports.ErrNotFound, "d"), http.StatusNotFound, "knowledge-document-not-found"},
 		{uploadError(ports.ErrTooLarge), http.StatusRequestEntityTooLarge, "upload-too-large"},
 		{uploadError(domain.ErrUnsupportedDocument), http.StatusUnsupportedMediaType, "unsupported-document-type"},
 		{fmt.Errorf("%w: db/disk.md", errFileNotFound), http.StatusNotFound, "knowledge-file-not-found"},

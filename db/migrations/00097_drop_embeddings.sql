@@ -12,6 +12,13 @@ ALTER TABLE knowledge_sources DROP COLUMN embed_model;
 -- The source due first claims no longer weigh a model: not live, its lease ended, and due.
 DROP FUNCTION goal_claim_knowledge_source(timestamptz, timestamptz, text);
 
+-- The function pins its search_path to this schema, pg_temp last (00055).
+-- +goose StatementBegin
+DO $$ BEGIN
+  PERFORM set_config('search_path', quote_ident(current_schema()) || ', pg_temp', true);
+END $$;
+-- +goose StatementEnd
+
 -- +goose StatementBegin
 CREATE FUNCTION goal_claim_knowledge_source(p_now timestamptz, p_until timestamptz)
 RETURNS TABLE (org_id uuid, id uuid, lease_token uuid)

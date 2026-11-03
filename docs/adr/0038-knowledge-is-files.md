@@ -2,6 +2,8 @@
 
 Status: proposed · 2026-11-03
 
+Amended during the build: the migration that drops the old tables (00098, with 00097 for the embeddings) does not drop the `vector` extension, because the administrator owns it and the migration role may not drop it. `goal db init` creates it and the administrator drops it, once no database needs 00054's `vector` columns on a fresh install; row 8 of the build plan reads that way. Uploads keep the original in the bucket and their name and content hash in `knowledge_uploads` (decision 2).
+
 - **Replaces:**
   - Decision 6 of [ADR 0008](0008-portable-runs-connections-and-knowledge.md): the knowledge base of chunks and vectors, searched through gateway tools.
   - [ADR 0027](0027-knowledge-use-and-verdicts.md), knowledge uses and verdicts. Uses become reads (decision 10), and verdicts go.

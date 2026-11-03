@@ -3,10 +3,8 @@ package api_test
 import (
 	"bytes"
 	"encoding/json"
-	"mime"
 	"mime/multipart"
 	"net/http"
-	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -23,8 +21,6 @@ import (
 const (
 	sourcesPath   = "/v1/orgs/acme/knowledge/sources"
 	handbookPath  = sourcesPath + "/handbook"
-	documentsPath = "/v1/orgs/acme/knowledge/documents"
-	searchPath    = "/v1/orgs/acme/knowledge/search"
 )
 
 // testUploadMax is the harness's GOAL_UPLOAD_MAX_BYTES.
@@ -44,11 +40,11 @@ func (h *harness) createHandbook(t *testing.T) gen.KnowledgeSource {
 		`{"name":"handbook","title":"Handbook","kind":"upload"}`, nil), http.StatusCreated)
 }
 
-// upload posts files (name → content) to source's documents as multipart/form-data.
+// upload posts files (name → content) to source's uploads as multipart/form-data.
 func (h *harness) upload(t *testing.T, source string, files ...[2]string) response {
 	t.Helper()
 
-	return h.uploadTo(t, sourcesPath+"/"+source+"/documents", files...)
+	return h.uploadTo(t, sourcesPath+"/"+source+"/uploads", files...)
 }
 
 // uploadTo posts files (path → content) to path as multipart/form-data, each file name as given,
@@ -105,16 +101,6 @@ type sourceShape struct {
 
 func shapeOf(s gen.KnowledgeSource) sourceShape {
 	return sourceShape{Name: s.Name, Title: s.Title, Kind: s.Kind, Status: s.Status, Every: s.SyncEverySeconds, Due: s.NextSyncAt != nil}
-}
-
-// docShapes are what the tests check of documents: source/title status.
-func docShapes(docs []gen.KnowledgeDocument) []string {
-	out := []string{}
-	for _, d := range docs {
-		out = append(out, d.Source+"/"+d.Title+" "+string(d.Status))
-	}
-
-	return out
 }
 
 // An admin adds an upload source, which members list and read; its title and schedule change, and
@@ -228,76 +214,6 @@ func TestKnowledge_SourceRefusals(t *testing.T) {
 	refused(t, "delete of a connection a source reads", h.request(t, http.MethodDelete, githubPath, "", nil), http.StatusConflict, "connection-in-use")
 }
 
-// Files uploaded to an upload source are pending until a sync indexes them; then they are read,
-// searched as agents search them, and deleted.
-func TestKnowledge_UploadReadSearchAndDelete(t *testing.T) {
-	t.Parallel()
-
-	h := newHarness(t)
-	h.createHandbook(t)
-
-	up := decode[gen.KnowledgeDocumentList](t, h.upload(t, srcHandbook, [2]string{leaveFile, leaveMD}, [2]string{"expenses.txt", "Receipts within 30 days."}),
-		http.StatusAccepted)
-	if got, want := docShapes(up.Documents), []string{"handbook/leave.md pending", "handbook/expenses.txt pending"}; !slices.Equal(got, want) {
-		t.Fatalf("uploaded = %v; want %v", got, want)
-	}
-
-	h.syncAll(t)
-
-	page := decode[gen.KnowledgeDocumentPage](t, h.request(t, http.MethodGet, handbookPath+"/documents?limit=1", "", nil), http.StatusOK)
-	if len(page.Documents) != 1 || page.NextAfter == nil {
-		t.Fatalf("first page = %+v; want one document and a next page", page)
-	}
-
-	rest := decode[gen.KnowledgeDocumentPage](t, h.request(t, http.MethodGet, handbookPath+"/documents?after="+*page.NextAfter, "", nil), http.StatusOK)
-	if got := docShapes(append(page.Documents, rest.Documents...)); rest.NextAfter != nil || len(got) != 2 || !slices.Contains(got, "handbook/leave.md indexed") {
-		t.Errorf("pages = %v, next %v; want both documents indexed, then no next page", got, rest.NextAfter)
-	}
-
-	leave := up.Documents[0].Id
-
-	got := decode[gen.KnowledgeDocumentText](t, h.request(t, http.MethodGet, documentsPath+"/"+leave, "", nil), http.StatusOK)
-	if got.Text != leaveMD || got.Document.Source != srcHandbook {
-		t.Errorf("document = %+v; want leave.md's text", got)
-	}
-
-	hits := decode[gen.KnowledgeSearchResult](t, h.request(t, http.MethodGet, searchPath+"?q=receipts", "", nil), http.StatusOK)
-	if len(hits.Hits) == 0 || hits.Hits[0].Source+"/"+hits.Hits[0].Title != "handbook/expenses.txt" || hits.Hits[0].Document == "" {
-		t.Errorf("search = %+v; want expenses.txt first", hits.Hits)
-	}
-
-	if r := h.request(t, http.MethodDelete, documentsPath+"/"+leave, "", nil); r.status != http.StatusNoContent {
-		t.Fatalf("delete = %d %s; want 204", r.status, r.body)
-	}
-
-	refused(t, "get after delete", h.request(t, http.MethodGet, documentsPath+"/"+leave, "", nil), http.StatusNotFound, "knowledge-document-not-found")
-}
-
-// Threat row 11: an uploaded original is served as an attachment browsers never render, whatever
-// it holds.
-func TestAPI_DocumentContentIsAttachment(t *testing.T) {
-	t.Parallel()
-
-	h := newHarness(t)
-	h.createHandbook(t)
-
-	page := `<html><script>alert(document.cookie)</script></html>`
-	up := decode[gen.KnowledgeDocumentList](t, h.upload(t, srcHandbook, [2]string{"page.html", page}), http.StatusAccepted)
-
-	r := h.request(t, http.MethodGet, documentsPath+"/"+up.Documents[0].Id+"/content", "", nil)
-	if r.status != http.StatusOK || string(r.body) != page {
-		t.Fatalf("content = %d %q; want the file as uploaded", r.status, r.body)
-	}
-
-	if d, params, err := mime.ParseMediaType(r.header.Get("Content-Disposition")); err != nil || d != "attachment" || params["filename"] != "page.html" {
-		t.Errorf("Content-Disposition = %q; want an attachment named page.html", r.header.Get("Content-Disposition"))
-	}
-
-	if r.header.Get("X-Content-Type-Options") != "nosniff" || r.header.Get("Content-Type") != "application/octet-stream" {
-		t.Errorf("headers = %v; want nosniff and application/octet-stream", r.header)
-	}
-}
-
 // Uploads the knowledge base refuses answer their codes, and a refused file stores none of the
 // request's files.
 func TestKnowledge_UploadRefusals(t *testing.T) {
@@ -306,7 +222,7 @@ func TestKnowledge_UploadRefusals(t *testing.T) {
 	h := newHarness(t)
 	h.createHandbook(t)
 
-	refused(t, "a type not indexed", h.upload(t, srcHandbook, [2]string{leaveFile, leaveMD}, [2]string{"deck.pptx", "PK"}),
+	refused(t, "a type not indexed", h.upload(t, srcHandbook, [2]string{leaveFile, leaveMD}, [2]string{"deck.key", "PK"}),
 		http.StatusUnsupportedMediaType, "unsupported-document-type")
 	refused(t, "a file over the limit", h.upload(t, srcHandbook, [2]string{"big.md", strings.Repeat("a", testUploadMax+1)}),
 		http.StatusRequestEntityTooLarge, "upload-too-large")
@@ -315,9 +231,9 @@ func TestKnowledge_UploadRefusals(t *testing.T) {
 	refused(t, "no files", h.upload(t, srcHandbook), http.StatusBadRequest, "")
 	refused(t, "no source", h.upload(t, "nothing", [2]string{leaveFile, leaveMD}), http.StatusNotFound, "knowledge-source-not-found")
 
-	page := decode[gen.KnowledgeDocumentPage](t, h.request(t, http.MethodGet, handbookPath+"/documents", "", nil), http.StatusOK)
-	if len(page.Documents) != 0 {
-		t.Errorf("documents after the refusals = %+v; want none", page.Documents)
+	files := decode[gen.KnowledgeFilePage](t, h.request(t, http.MethodGet, handbookPath+"/files", "", nil), http.StatusOK)
+	if len(files.Files) != 0 {
+		t.Errorf("files after the refusals = %+v; want none", files.Files)
 	}
 
 	if objects, err := h.kbObjects.List(t.Context(), ""); err != nil || len(objects) != 0 {
@@ -329,26 +245,6 @@ func TestKnowledge_UploadRefusals(t *testing.T) {
 		`","config":{"reader":"confluence","site":"acme.atlassian.net","email":"ada@example.com","spaces":"ENG"}}`, nil), http.StatusCreated)
 
 	refused(t, "an upload to a synced source", h.upload(t, "wiki", [2]string{leaveFile, leaveMD}), http.StatusConflict, "not-an-upload-source")
-}
-
-// A search answers what the gateway's knowledge__search does, over every source or the named
-// ones; it refuses an unknown source and a malformed query.
-func TestKnowledge_SearchRefusals(t *testing.T) {
-	t.Parallel()
-
-	h := newHarness(t)
-	h.createHandbook(t)
-	h.upload(t, srcHandbook, [2]string{leaveFile, leaveMD})
-	h.syncAll(t)
-
-	q := url.Values{"q": {"lead"}, "source": {srcHandbook}}
-	if hits := decode[gen.KnowledgeSearchResult](t, h.request(t, http.MethodGet, searchPath+"?"+q.Encode(), "", nil), http.StatusOK); len(hits.Hits) != 1 {
-		t.Errorf("search of handbook = %+v; want leave.md", hits.Hits)
-	}
-
-	refused(t, "an unknown source", h.request(t, http.MethodGet, searchPath+"?q=lead&source=wiki", "", nil), http.StatusNotFound, "knowledge-source-not-found")
-	refused(t, "an empty query", h.request(t, http.MethodGet, searchPath+"?q=+", "", nil), http.StatusBadRequest, "")
-	refused(t, "a limit over 20", h.request(t, http.MethodGet, searchPath+"?q=lead&limit=21", "", nil), http.StatusBadRequest, "")
 }
 
 // The stream relays a knowledge event under its name.
@@ -369,16 +265,16 @@ func TestAPI_StreamSendsKnowledgeEvents(t *testing.T) {
 	}
 }
 
-// A source with no snapshot answers a null latest_snapshot and no documents; after a sync both the
-// list and the get answer its newest snapshot, and documents is that snapshot's file count.
+// A source with no snapshot answers a null latest_snapshot; after a sync both the list and the get
+// answer its newest snapshot.
 func TestKnowledge_SourceLatestSnapshot(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 
 	created := h.createHandbook(t)
-	if created.LatestSnapshot != nil || created.Documents != 0 {
-		t.Errorf("new source = %+v, %d documents; want no snapshot", created.LatestSnapshot, created.Documents)
+	if created.LatestSnapshot != nil {
+		t.Errorf("new source = %+v; want no snapshot", created.LatestSnapshot)
 	}
 
 	if r := h.upload(t, srcHandbook, [2]string{leaveFile, leaveMD}); r.status != http.StatusAccepted {
@@ -396,8 +292,8 @@ func TestKnowledge_SourceLatestSnapshot(t *testing.T) {
 
 	for name, s := range map[string]gen.KnowledgeSource{"get": got, "list": list.Sources[0]} {
 		snap := s.LatestSnapshot
-		if snap == nil || snap.Files != 1 || snap.Failed != 0 || snap.Bytes <= 0 || snap.SyncedAt.IsZero() || s.Documents != 1 {
-			t.Errorf("%s: latest_snapshot = %+v, documents %d; want 1 file, 0 failed, some bytes, a time", name, snap, s.Documents)
+		if snap == nil || snap.Files != 1 || snap.Failed != 0 || snap.Bytes <= 0 || snap.SyncedAt.IsZero() {
+			t.Errorf("%s: latest_snapshot = %+v; want 1 file, 0 failed, some bytes, a time", name, snap)
 		}
 	}
 }

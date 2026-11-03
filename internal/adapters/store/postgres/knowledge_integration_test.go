@@ -33,28 +33,18 @@ func TestKnowledge_Conformance(t *testing.T) {
 	})
 }
 
-// knowledgeDoc gives org a synced source "runbooks" (on a connection "docs" of a kind that
-// syncs) with one document of one chunk.
+// knowledgeDoc gives org an upload source "runbooks" with one file whose name is text.
 func knowledgeDoc(t *testing.T, d connectionsDB, org domain.OrgID, text string) {
 	t.Helper()
 
 	ctx := domain.WithOrg(t.Context(), org)
-	c := NewConnections(d.store, testKey(t, "k1"))
 	k := NewKnowledge(d.store)
 
-	if _, err := c.Create(ctx, domain.NewConnection{Name: "docs", Kind: "kb-docs", Fields: map[string]string{}}, domain.LocalUser); err != nil {
+	if _, err := k.CreateSource(ctx, domain.NewKnowledgeSource{Name: "runbooks", Title: "Runbooks", Kind: domain.SourceUpload}, domain.LocalUser); err != nil {
 		t.Fatal(err)
 	}
 
-	src, err := k.CreateSource(ctx, domain.NewKnowledgeSource{Name: "runbooks", Title: "Runbooks", Kind: domain.SourceSynced, Connection: "docs"}, domain.LocalUser)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := k.PutDocument(ctx, domain.KnowledgeDocument{
-		Source: src.ID, ExternalID: "docs/a.md", Version: "v1", Title: "A", MIME: "text/markdown", Status: domain.DocumentIndexed,
-		SeenAt: time.Now(), CreatedBy: domain.EngineActor,
-	}, []domain.Chunk{{Text: text}}); err != nil {
+	if _, err := k.AddUpload(ctx, "runbooks", domain.KnowledgeUpload{Name: text, MIME: "text/markdown", Bytes: 3, Blob: domain.HashBlob([]byte(text))}, domain.LocalUser, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -98,11 +88,11 @@ func TestKnowledge_RLSAcrossOrgs(t *testing.T) {
 }
 
 // seesOnlyItsKnowledge checks, in a transaction of another organization than acme, that its
-// chunks are that organization's only, and that no row of acme's knowledge base is visible.
+// uploads are that organization's only, and that no row of acme's knowledge base is visible.
 func seesOnlyItsKnowledge(t *testing.T, tx pgx.Tx, acme domain.OrgID) error {
 	t.Helper()
 
-	rows, err := tx.Query(t.Context(), `SELECT text FROM knowledge_chunks`)
+	rows, err := tx.Query(t.Context(), `SELECT name FROM knowledge_uploads`)
 	if err != nil {
 		return err
 	}
@@ -113,10 +103,10 @@ func seesOnlyItsKnowledge(t *testing.T, tx pgx.Tx, acme domain.OrgID) error {
 	}
 
 	if len(texts) != 1 || texts[0] != "labs' own runbook" {
-		t.Errorf("labs' chunks = %q, want its own only", texts)
+		t.Errorf("labs' uploads = %q, want its own only", texts)
 	}
 
-	for _, table := range []string{"knowledge_sources", "knowledge_documents", "knowledge_chunks"} {
+	for _, table := range []string{"knowledge_sources", "knowledge_uploads"} {
 		var n int
 		if err := tx.QueryRow(t.Context(), "SELECT count(*) FROM "+table+" WHERE org_id = $1", string(acme)).Scan(&n); err != nil || n != 0 {
 			t.Errorf("labs sees %d rows of acme's %s, %v", n, table, err)
@@ -143,8 +133,7 @@ func TestKnowledge_AnUploadWaitsForTheDropOfItsContent(t *testing.T) {
 		}
 	}
 
-	doc, err := k.AddUpload(ctx, "policies", domain.KnowledgeDocument{Title: "policy.md", MIME: domain.MediaMarkdown, Bytes: 8, Blob: h}, domain.LocalUser)
-	if err != nil {
+	if _, err := k.AddUpload(ctx, "policies", domain.KnowledgeUpload{Name: "policy.md", MIME: domain.MediaMarkdown, Bytes: 8, Blob: h}, domain.LocalUser, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -153,13 +142,13 @@ func TestKnowledge_AnUploadWaitsForTheDropOfItsContent(t *testing.T) {
 	go func() {
 		<-dropping
 
-		_, err := k.AddUpload(ctx, "archive", domain.KnowledgeDocument{Title: "copy.md", MIME: domain.MediaMarkdown, Bytes: 8, Blob: h}, domain.LocalUser)
+		_, err := k.AddUpload(ctx, "archive", domain.KnowledgeUpload{Name: "copy.md", MIME: domain.MediaMarkdown, Bytes: 8, Blob: h}, domain.LocalUser, nil)
 		added <- err
 	}()
 
 	early := false
 
-	err = k.DeleteDocument(ctx, doc.ID, domain.LocalUser, func(context.Context, []domain.BlobHash) error {
+	err := k.DeleteUpload(ctx, "policies", "policy.md", domain.LocalUser, func(context.Context, []domain.BlobHash) error {
 		close(dropping)
 
 		select {
@@ -235,8 +224,7 @@ func TestPurgeOrg_RemovesKnowledge(t *testing.T) {
 	}
 
 	var n int
-	if err := d.admin.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM knowledge_sources) + (SELECT count(*) FROM knowledge_documents)
-		+ (SELECT count(*) FROM knowledge_chunks) + (SELECT count(*) FROM connections)`).Scan(&n); err != nil || n != 0 {
+	if err := d.admin.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM knowledge_sources) + (SELECT count(*) FROM knowledge_uploads) + (SELECT count(*) FROM connections)`).Scan(&n); err != nil || n != 0 {
 		t.Errorf("%d knowledge and connection rows left, %v; want none", n, err)
 	}
 }
@@ -340,48 +328,4 @@ func nextKnowledgeEvent(t *testing.T, notices <-chan ports.ItemNotice, org domai
 	}
 
 	return got
-}
-
-// noticeSource is the source the verdict's notice test judges a document of.
-const noticeSource = "handbook"
-
-// A verdict commits with its audit entry and sends its source's knowledge event, so the
-// stream's clients read the usage again.
-func TestNotices_VerdictIsAKnowledgeEvent(t *testing.T) {
-	t.Parallel()
-
-	d := newConnectionsDB(t)
-	k := NewKnowledge(d.store)
-	acme := newOrgID(t, d.store)
-	ctx := domain.WithOrg(t.Context(), acme)
-
-	src, err := k.CreateSource(ctx, domain.NewKnowledgeSource{Name: noticeSource, Title: "Handbook", Kind: domain.SourceUpload}, domain.LocalUser)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	doc, err := k.AddUpload(ctx, noticeSource, domain.KnowledgeDocument{
-		Title: "leave.md", MIME: domain.MediaMarkdown, Bytes: 3, Blob: domain.BlobHash(strings.Repeat("ab", 32)),
-	}, domain.LocalUser)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	notices := listening(t, NewNotices(d.store, nil), "") // the database is this test's: only its events
-	if n := next(t, notices); !n.Resync {
-		t.Fatalf("first notice = %+v; want Resync", n)
-	}
-
-	if _, err := k.GiveVerdict(ctx, domain.KnowledgeVerdict{Document: doc.ID, Verdict: domain.KnowledgeMisled, Note: "old", By: domain.LocalUser}); err != nil {
-		t.Fatal(err)
-	}
-
-	if got := nextKnowledgeEvent(t, notices, acme); got != (knowledgeEvent{SourceID: string(src.ID), Name: noticeSource, Status: "idle"}) {
-		t.Errorf("the verdict's event = %+v; want handbook's", got)
-	}
-
-	entries, err := d.store.AuditLog(ctx, ports.AuditQuery{Limit: 10, Action: domain.AuditKnowledgeVerdictGiven})
-	if err != nil || len(entries) != 1 || entries[0].TargetID != string(doc.ID) || entries[0].Data["verdict"] != "misled" {
-		t.Errorf("audit = %+v, %v; want the one knowledge_verdict.given on the document", entries, err)
-	}
 }

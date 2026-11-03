@@ -4688,7 +4688,8 @@ paths:
       description: >-
         Each part named files is one file at the path its file name gives, which may hold folders
         (runbooks/db/disk.md); a path that is not relative and clean is 400. Text, Markdown, HTML,
-        JSON or YAML of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at
+        JSON, YAML, PDF or an Office file (the last two are converted when goald has a conversion
+        service, else left out of the snapshot and listed) of at most GOAL_UPLOAD_MAX_BYTES (25 MiB by default), the whole request at
         most that and 1 MiB more. The upload makes the source due, and its next sync writes the
         snapshot that holds them. Every file is checked before any is stored: 413
         upload-too-large, 415 unsupported-document-type, 409 not-an-upload-source. Audited as

@@ -115,13 +115,9 @@ export type {
   ItemWaiting,
   KnowledgeCheck,
   KnowledgeCheckInput,
-  KnowledgeDocument,
-  KnowledgeDocumentPage,
-  KnowledgeDocumentText,
   KnowledgeEvent,
   KnowledgeFile,
   KnowledgeFilePage,
-  KnowledgeHit,
   KnowledgeReadCount,
   KnowledgeSource,
   KnowledgeSourceKind,
@@ -265,11 +261,6 @@ export type NotificationChannels = Schemas['NotificationChannels'];
 export type RepositoryList = Schemas['RepositoryList'];
 export type RepositoryOwner = Schemas['RepositoryOwner'];
 export type Repository = Schemas['Repository'];
-// The organization's knowledge usage (ADR 0027): where a source's documents were used, and the runs of one document.
-export type KnowledgeUsage = Schemas['KnowledgeUsage'];
-export type KnowledgeDocumentUsage = Schemas['KnowledgeDocumentUsage'];
-export type KnowledgeDocumentUsePage = Schemas['KnowledgeDocumentUsePage'];
-export type KnowledgeDocumentUse = Schemas['KnowledgeDocumentUse'];
 export type AgentSpend = Schemas['AgentSpend'];
 export type ModelSpend = Schemas['ModelSpend'];
 export type OrgSpend = Schemas['OrgSpend'];
