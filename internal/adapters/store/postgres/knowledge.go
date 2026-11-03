@@ -21,7 +21,7 @@ import (
 var _ ports.Knowledge = (*Knowledge)(nil)
 
 // Knowledge implements ports.Knowledge over 00054's knowledge_sources, knowledge_documents and
-// knowledge_chunks, as goal_app under row-level security: every statement sees the organization
+// knowledge_chunks and 00090's knowledge_snapshots, knowledge_files and knowledge_reads, as goal_app under row-level security: every statement sees the organization
 // in ctx only (a claim alone reads across organizations, through 00055's definer), and every
 // change people make appends its audit entry in its transaction. A search is one statement: the
 // nearest chunks by cosine distance (exact over small sources, else pgvector's HNSW index on
@@ -129,7 +129,7 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 		}
 
 		err = q.InsertKnowledgeSource(ctx, db.InsertKnowledgeSourceParams{
-			ID: id, Name: n.Name, Title: n.Title, Kind: string(n.Kind), ConnectionID: conn, SecretID: secret, Config: config,
+			ID: id, Name: n.Name, Title: n.Title, Kind: string(n.Kind), ConnectionID: conn, SecretID: secret, Config: config, ReadWhen: n.ReadWhen,
 			SyncEverySeconds: wholeSeconds(cmp.Or(n.SyncEvery, domain.DefaultSyncEvery)), CreatedBy: by.Ref(),
 		})
 		if violates(err, sourceNameKey) {
@@ -212,7 +212,7 @@ func (k *Knowledge) UpdateSource(ctx context.Context, name string, p domain.Know
 		return domain.KnowledgeSource{}, fmt.Errorf("update knowledge source: %w", err)
 	}
 
-	params := db.UpdateKnowledgeSourceParams{Name: name, Title: p.Title}
+	params := db.UpdateKnowledgeSourceParams{Name: name, Title: p.Title, ReadWhen: p.ReadWhen}
 
 	if p.Config != nil {
 		raw, err := json.Marshal(p.Config)
@@ -932,7 +932,8 @@ func sourceFrom(r db.KnowledgeSourcesRow) (domain.KnowledgeSource, error) {
 
 	return domain.KnowledgeSource{
 		ID: domain.KnowledgeSourceID(r.ID.String()), Name: r.Name, Title: r.Title, Kind: domain.KnowledgeSourceKind(r.Kind),
-		Connection: deref(r.Connection), Secret: deref(r.Secret), Config: config, SyncEvery: time.Duration(r.SyncEverySeconds) * time.Second,
+		Connection: deref(r.Connection), Secret: deref(r.Secret), Config: config, ReadWhen: r.ReadWhen,
+		CurrentSnapshot: snapshotID(r.CurrentSnapshotID), SyncEvery: time.Duration(r.SyncEverySeconds) * time.Second,
 		NextSyncAt: utc(r.NextSyncAt), LeaseUntil: utc(r.LeaseUntil), Status: domain.SyncStatus(r.Status),
 		LastSyncedAt: utc(r.LastSyncedAt), LastError: deref(r.LastError), EmbedModel: deref(r.EmbedModel),
 		Documents: int(r.Documents), CreatedBy: namedActor(r.CreatedBy, ""), CreatedAt: r.CreatedAt.UTC(), UpdatedAt: r.UpdatedAt.UTC(),

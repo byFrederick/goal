@@ -9,8 +9,9 @@ import (
 )
 
 // Knowledge is an organization's knowledge base (spec 4 §4.8, §5.6) for the organization in ctx:
-// its sources, their documents and the documents' chunks, searched by keywords and nearest
-// neighbours in one ranking. Every change people make is audited in its transaction. Syncs are
+// its sources, their snapshots, current files and read counts (ADR 0038), and until the cut-over
+// (ADR 0038 decision 16) their documents and the documents' chunks, searched by keywords and
+// nearest neighbours in one ranking. Every change people make is audited in its transaction. Syncs are
 // claimed with leases, so any goald may sync any source and one that dies leaves it to the
 // next once its lease ends.
 type Knowledge interface {
@@ -51,6 +52,28 @@ type Knowledge interface {
 	// success its model becomes r.EmbedModel. ErrLeaseLost, changing nothing, once another
 	// claim took the source.
 	FinishSync(ctx context.Context, l domain.SourceLease, r domain.SyncResult) error
+
+	// PutSnapshot records a sync's snapshot s of the lease's source with files, every file it
+	// holds, and makes it the source's current snapshot, in one transaction: files replace the
+	// current files, and the snapshots before stay until retention deletes them. It returns s as
+	// stored, with its zip's key (domain.KnowledgeSnapshotKey). Its rules are
+	// KnowledgeSnapshot.Check's (domain.ErrInvalid), and s.Source is the lease's; ErrLeaseLost,
+	// changing nothing, once another claim took the source.
+	PutSnapshot(ctx context.Context, l domain.SourceLease, s domain.KnowledgeSnapshot, files []domain.KnowledgeFile) (domain.KnowledgeSnapshot, error)
+	// Snapshots are the source name's snapshots, newest first. ErrNotFound for an unknown source.
+	Snapshots(ctx context.Context, source string) ([]domain.KnowledgeSnapshot, error)
+	// Files are one page of a source's current files (KnowledgeFileQuery): in path order, after
+	// q.After, at most q.Limit up to domain.MaxFilePage, and with q.Prefix those whose path, or
+	// title in any case, starts with it. ErrNotFound for an unknown source.
+	Files(ctx context.Context, q domain.KnowledgeFileQuery) ([]domain.KnowledgeFile, error)
+	// AddReads adds each count to the reads and searches of its source, path, factory and day
+	// (domain.KnowledgeDay), one row for each, in one transaction. Its rules are
+	// KnowledgeFileReads.Check's (domain.ErrInvalid); ErrNotFound, adding nothing, for an unknown
+	// source.
+	AddReads(ctx context.Context, reads []domain.KnowledgeFileReads) error
+	// FileReads are the source name's counts of the days from since (domain.KnowledgeDay) on, by
+	// day, path and factory. ErrNotFound for an unknown source.
+	FileReads(ctx context.Context, source string, since time.Time) ([]domain.KnowledgeFileReads, error)
 
 	// Versions are the versions of a source's documents by external id, those pending excluded:
 	// what a sync need not fetch again.
@@ -131,11 +154,21 @@ type Embedder interface {
 	Model() string
 }
 
-// SourceReader reads the documents of a source: an upload source's from the bucket, a synced
-// source's from its connection.
+// SourceReader reads the items of a source, one reader per kind (ADR 0038 decision 2): an upload
+// source's from the bucket, a repository's from its code host, Confluence's pages, and until the
+// cut-over a synced source's from its connection.
 type SourceReader interface {
-	// List yields every document of the source with its version, then stops; an error ends it.
+	// List yields every item of the source with its version, then stops; an error ends it.
 	List(ctx context.Context, s domain.SyncSpec) iter.Seq2[domain.SourceItem, error]
-	// Fetch returns a listed document's content.
+	// Fetch returns one listed item's content.
 	Fetch(ctx context.Context, s domain.SyncSpec, id string) (domain.SourceDoc, error)
+}
+
+// Converter turns an item that is neither Markdown nor text into Markdown, so every file of a
+// source is one an agent can read (ADR 0038 decision 2): HTML built in, PDF and Office files
+// through a conversion service. name is the item's file name, mediaType its media type.
+type Converter interface {
+	// Convert returns body as Markdown; domain.ErrUnsupportedDocument for a media type it does not
+	// convert.
+	Convert(ctx context.Context, name, mediaType string, body []byte) ([]byte, error)
 }

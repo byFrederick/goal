@@ -2,8 +2,8 @@
 // fake in porttest and the PostgreSQL adapter run it, so tests on the fake hold for the
 // database's rules: sources and their connections, leases that end so another goald takes the
 // sync over, documents replaced with their chunks, unseen documents deleted, uploads, the one
-// hybrid ranking and its sources filter, organizations kept apart, and knowledge use and
-// verdicts (uses.go).
+// hybrid ranking and its sources filter, organizations kept apart, knowledge use and verdicts
+// (uses.go), and ADR 0038's snapshots, current files and daily read counts (files.go).
 package knowledgetest
 
 import (
@@ -62,6 +62,12 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Usage_WindowCountsOnlyRunsInside", testUsageWindow},
 		{"Uses_OtherOrgSeesNothing", testUsesIsolation},
 		{"DocumentDelete_CascadesUsesAndVerdicts", testDeleteCascades},
+		{"Snapshots_NewReplacesCurrentFilesAndKeepsTheOld", testSnapshots},
+		{"Snapshots_RulesAndLostLeaseChangeNothing", testSnapshotRules},
+		{"Files_PageInPathOrderByPathOrTitlePrefix", testFilesPage},
+		{"Reads_AddToOneRowPerSourcePathFactoryAndDay", testReads},
+		{"Files_OtherOrgSeesNothing", testFilesIsolation},
+		{"Sources_RepositoryAndConfluenceWithReadWhen", testNewKinds},
 		{"Methods_NoOrgIsAnError", testNoOrg},
 	}
 
@@ -1022,6 +1028,16 @@ func testNoOrg(f *fixture) {
 		"MarkSeen":     func() error { return f.Knowledge.MarkSeen(ctx, lease, []string{"x"}, now) },
 		"DeleteUnseen": func() error { _, err := f.Knowledge.DeleteUnseen(ctx, lease, now); return err },
 		"Versions":     func() error { _, err := f.Knowledge.Versions(ctx, id); return err },
+		"PutSnapshot": func() error {
+			_, err := f.Knowledge.PutSnapshot(ctx, lease, domain.KnowledgeSnapshot{ID: snap1, Source: id, CreatedAt: now}, nil)
+			return err
+		},
+		"Snapshots": func() error { _, err := f.Knowledge.Snapshots(ctx, "abc"); return err },
+		"Files":     func() error { _, err := f.Knowledge.Files(ctx, domain.KnowledgeFileQuery{Source: "abc", Limit: 1}); return err },
+		"AddReads": func() error {
+			return f.Knowledge.AddReads(ctx, []domain.KnowledgeFileReads{{Source: id, Path: "a.md", Factory: factoryA, Day: now, Reads: 1}})
+		},
+		"FileReads": func() error { _, err := f.Knowledge.FileReads(ctx, "abc", now); return err },
 		"Documents":    func() error { _, err := f.Knowledge.Documents(ctx, "abc", "", 1); return err },
 		"Search": func() error {
 			_, err := f.Knowledge.Search(ctx, domain.KnowledgeQuery{Text: "x", Sources: []string{"abc"}, Limit: 1})

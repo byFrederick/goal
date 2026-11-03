@@ -3,7 +3,7 @@
 
 -- name: KnowledgeSources :many
 -- The organization's sources, or the one named or with the given id.
-SELECT s.id, s.name, s.title, s.kind, c.name AS connection, sc.name AS secret, s.config,
+SELECT s.id, s.name, s.title, s.kind, c.name AS connection, sc.name AS secret, s.config, s.read_when, s.current_snapshot_id,
        extract(epoch FROM s.sync_every)::bigint AS sync_every_seconds, s.next_sync_at, s.lease_until, s.status,
        s.last_synced_at, s.last_error, s.embed_model, s.created_by, s.created_at, s.updated_at,
        (SELECT count(*) FROM knowledge_documents d WHERE d.org_id = s.org_id AND d.source_id = s.id) AS documents
@@ -32,15 +32,16 @@ ORDER BY s.name;
 
 -- name: InsertKnowledgeSource :exec
 -- org_id comes from its default, goal_org(). A live source never syncs.
-INSERT INTO knowledge_sources (id, name, title, kind, connection_id, secret_id, config, sync_every, next_sync_at, created_by)
+INSERT INTO knowledge_sources (id, name, title, kind, connection_id, secret_id, config, read_when, sync_every, next_sync_at, created_by)
 VALUES (sqlc.arg(id), sqlc.arg(name), sqlc.arg(title), sqlc.arg(kind), sqlc.narg(connection_id), sqlc.narg(secret_id), sqlc.arg(config),
+        sqlc.arg(read_when),
         make_interval(secs => sqlc.arg(sync_every_seconds)::bigint),
         CASE WHEN sqlc.arg(kind)::text = 'live' THEN NULL ELSE now() END, sqlc.arg(created_by));
 
 -- name: UpdateKnowledgeSource :one
 UPDATE knowledge_sources
 SET title = coalesce(sqlc.narg(title)::text, title), config = coalesce(sqlc.narg(config)::jsonb, config),
-    secret_id = coalesce(sqlc.narg(secret_id)::uuid, secret_id),
+    secret_id = coalesce(sqlc.narg(secret_id)::uuid, secret_id), read_when = coalesce(sqlc.narg(read_when)::text, read_when),
     sync_every = CASE WHEN sqlc.narg(sync_every_seconds)::bigint IS NULL THEN sync_every
                       ELSE make_interval(secs => sqlc.narg(sync_every_seconds)::bigint) END,
     updated_at = now()
@@ -345,3 +346,60 @@ SELECT source_id, document_id, run_id, item_id, verdict, note, actor, at
 FROM knowledge_verdicts
 WHERE run_id = sqlc.arg(run_id)
 ORDER BY at, document_id, actor;
+
+-- Knowledge as files (00090): a source's snapshots, its current files and the daily read counts.
+
+-- name: InsertKnowledgeSnapshot :one
+-- org_id comes from its default, goal_org(); zip_key is generated from the ids.
+INSERT INTO knowledge_snapshots (id, source_id, files, failed, bytes, zip_bytes, changes, read_when, created_at)
+VALUES (sqlc.arg(id), sqlc.arg(source_id), sqlc.arg(files), sqlc.arg(failed), sqlc.arg(bytes), sqlc.arg(zip_bytes),
+        sqlc.arg(changes), sqlc.arg(read_when), sqlc.arg(created_at))
+RETURNING zip_key;
+
+-- name: DeleteKnowledgeFiles :exec
+DELETE FROM knowledge_files WHERE source_id = sqlc.arg(source_id);
+
+-- name: InsertKnowledgeFiles :exec
+-- A snapshot's files, one row per element of the arrays.
+INSERT INTO knowledge_files (source_id, path, title, bytes, version)
+SELECT sqlc.arg(source_id), (sqlc.arg(paths)::text[])[i], (sqlc.arg(titles)::text[])[i], (sqlc.arg(sizes)::bigint[])[i],
+       (sqlc.arg(versions)::text[])[i]
+FROM generate_series(1, cardinality(sqlc.arg(paths)::text[])) AS i;
+
+-- name: SetKnowledgeSnapshot :exec
+UPDATE knowledge_sources SET current_snapshot_id = sqlc.arg(snapshot_id) WHERE id = sqlc.arg(id);
+
+-- name: KnowledgeSnapshots :many
+-- A source's snapshots, newest first.
+SELECT id, source_id, files, failed, bytes, zip_bytes, changes, read_when, zip_key, created_at
+FROM knowledge_snapshots
+WHERE source_id = sqlc.arg(source_id)
+ORDER BY created_at DESC, id DESC;
+
+-- name: KnowledgeFiles :many
+-- One page of a source's current files in path order (byte order: path is COLLATE "C"), after a
+-- path, and with a prefix those whose path, or title in any case, starts with it.
+SELECT source_id, path, title, bytes, version
+FROM knowledge_files
+WHERE source_id = sqlc.arg(source_id) AND path > sqlc.arg(after)::text
+  AND (sqlc.arg(prefix)::text = '' OR starts_with(path, sqlc.arg(prefix)::text)
+       OR starts_with(lower(title), lower(sqlc.arg(prefix)::text)))
+ORDER BY path
+LIMIT sqlc.arg(max_rows);
+
+-- name: AddKnowledgeReads :exec
+-- Adds each element of the arrays to its source, path, factory and day's counts (days as
+-- YYYY-MM-DD). The caller merges counts of one key first: a statement updates a row once.
+INSERT INTO knowledge_reads (source_id, path, factory_id, day, reads, searches)
+SELECT (sqlc.arg(source_ids)::uuid[])[i], (sqlc.arg(paths)::text[])[i], (sqlc.arg(factory_ids)::uuid[])[i],
+       ((sqlc.arg(days)::text[])[i])::date, (sqlc.arg(reads)::int[])[i], (sqlc.arg(searches)::int[])[i]
+FROM generate_series(1, cardinality(sqlc.arg(source_ids)::uuid[])) AS i
+ON CONFLICT (org_id, source_id, path, factory_id, day)
+DO UPDATE SET reads = knowledge_reads.reads + excluded.reads, searches = knowledge_reads.searches + excluded.searches;
+
+-- name: KnowledgeFileReads :many
+-- A source's counts of the days from since on (YYYY-MM-DD), by day, path and factory.
+SELECT source_id, path, factory_id, day::text AS day, reads, searches
+FROM knowledge_reads
+WHERE source_id = sqlc.arg(source_id) AND day >= (sqlc.arg(since)::text)::date
+ORDER BY day, path, factory_id;

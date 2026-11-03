@@ -50,6 +50,11 @@ type fakeSource struct {
 	src    domain.KnowledgeSource
 	connID domain.ConnectionID
 	token  string // the lease's, "" when none holds it
+	// snapshots (oldest first), the current files by path and the read counts go with the
+	// source, as 00090's cascade takes them.
+	snapshots []domain.KnowledgeSnapshot
+	files     map[string]domain.KnowledgeFile
+	reads     map[readKey]domain.KnowledgeFileReads
 }
 
 type fakeDocument struct {
@@ -254,7 +259,7 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 		now := time.Now().UTC()
 		s := domain.KnowledgeSource{
 			ID: domain.KnowledgeSourceID(newV7()), Name: n.Name, Title: n.Title, Kind: n.Kind, Connection: n.Connection, Secret: n.Secret,
-			Config: maps.Clone(n.Config), SyncEvery: cmp.Or(n.SyncEvery, domain.DefaultSyncEvery), Status: domain.SyncIdle,
+			Config: maps.Clone(n.Config), ReadWhen: n.ReadWhen, SyncEvery: cmp.Or(n.SyncEvery, domain.DefaultSyncEvery), Status: domain.SyncIdle,
 			CreatedBy: by, CreatedAt: now, UpdatedAt: now,
 		}
 
@@ -344,6 +349,10 @@ func (k *Knowledge) UpdateSource(ctx context.Context, name string, p domain.Know
 
 		if p.SyncEvery != nil {
 			s.src.SyncEvery = *p.SyncEvery
+		}
+
+		if p.ReadWhen != nil {
+			s.src.ReadWhen = *p.ReadWhen
 		}
 
 		if p.Secret != nil {
