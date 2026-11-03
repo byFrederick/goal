@@ -395,7 +395,7 @@ function MostRead({ reads, pending }: { reads: Parameters<typeof mostRead>[0]; p
               {rows.map((r) => (
                 <tr
                   key={`${r.source}/${r.path}`}
-                  className="animate-row-in [&>td]:border-t [&>td]:border-line [&>td]:px-5 [&>td]:py-2.5"
+                  className="animate-row-in [&>td]:border-t [&>td]:border-line [&>td]:px-5 [&>td]:py-3"
                 >
                   <td className="min-w-0">
                     <Link

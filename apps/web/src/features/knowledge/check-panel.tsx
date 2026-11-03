@@ -106,7 +106,7 @@ function Row({ ok, title, children }: { ok: boolean; title: string; children?: R
         size={16}
         strokeWidth={1.75}
         aria-hidden="true"
-        className={ok ? 'mt-0.5 shrink-0 text-ok' : 'mt-0.5 shrink-0 text-rework'}
+        className={ok ? 'mt-1 shrink-0 text-ok-ink' : 'mt-1 shrink-0 text-rework-ink'}
       />
       <span className="flex min-w-0 flex-col">
         <span className="text-body break-words text-ink">{title}</span>

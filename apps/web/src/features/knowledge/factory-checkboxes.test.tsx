@@ -72,7 +72,10 @@ describe('listing a source in a factory’s draft', () => {
   });
 
   it('writes nothing when the draft lists it already, as a name or an entry', async () => {
-    files.get.mockResolvedValue({ text: 'spec:\n  knowledge:\n    sources:\n      - name: runbooks\n        readWhen: x\n', sha256: 'abc' });
+    files.get.mockResolvedValue({
+      text: 'spec:\n  knowledge:\n    sources:\n      - name: runbooks\n        readWhen: x\n',
+      sha256: 'abc',
+    });
 
     expect(await listInDraft('org-1', 'f-sre', 'runbooks')).toBe(false);
     expect(files.put).not.toHaveBeenCalled();

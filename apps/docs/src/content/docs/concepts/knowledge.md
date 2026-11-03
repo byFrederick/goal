@@ -1,75 +1,81 @@
 ---
 title: Knowledge
-description: The organization's knowledge base, its three kinds of source, how documents are indexed and searched, and how runs read it as files under /knowledge.
+description: Knowledge is folders of Markdown files. Sources, their kinds and limits, snapshots, how runs read them under /knowledge, the read-when line, reads, and adding a source to a factory.
 sidebar:
   order: 23
 ---
 
-The knowledge base is one per organization. It holds the documents that a factory's runs read. Its documents come from sources: files people upload, a repository or a space that Goal syncs with a secret, or a server whose own tools search the outside system directly.
+Knowledge is folders of files that agents read before they act. Each organization has sources, and a source is one folder of Markdown files kept in sync from one place. A factory's definition lists the sources its runs get. Runs read them as read-only files under `/knowledge`.
 
 ## Sources
 
-| Kind | Where the documents come from |
+A source has a name, a kind, a read-when line and the settings of its kind.
+
+- **Name:** a slug of 3 to 40 lowercase letters, digits and dashes. It is the source's folder in every run, `/knowledge/<name>/`, and it never changes.
+- **Read-when line:** one line of at most 160 characters that tells agents when to open the source, such as "How to fix what pages us. Read before acting on an alert." The pages ask for it as "When should agents read it?" Every run's prompt shows it, so say when to read the files, not only what they are.
+- **Kind:** where the files come from.
+
+| Kind | Where the files come from |
 | --- | --- |
-| `upload` | Files people upload: text, Markdown, HTML, JSON or YAML. The originals are kept in the bucket under the organization's knowledge prefix. |
-| `synced` | A repository or a Confluence space, read with a secret. Its config names the reader. `gitdocs` reads Markdown from a repository on GitHub or GitLab, with include and exclude globs (`**/*.md` by default). The `confluence` reader reads pages of one or more spaces of a Confluence Cloud site. Each sync fetches only the files that changed. |
-| `live` | A server whose own tools search the outside system. Nothing is indexed. |
+| Upload | Files people drop on the page or send with `goal knowledge upload`: text, Markdown, HTML, JSON or YAML. The originals stay in the bucket. |
+| Repository | The Markdown and text files under the folders you name in a GitHub or GitLab repository, on one branch. The URL's host picks the code host. Folders and leave-outs are globs, such as `docs/runbooks/**` and `**/drafts/**`. A public repository needs no secret. |
+| Confluence | The pages of one or more spaces of a Confluence Cloud site, at the path of their page tree. It reads with the site, the account's email and a secret that holds the API token. |
 
-A synced source keeps its text, its chunks and a link back to the original. The originals stay where they are.
+Website, Notion and Google Drive show on the Add a source page as later. A Repository or Confluence source reads with a secret that is open to all factories, because a source belongs to the organization, not to one factory ([Access and secrets](../access-and-secrets/)). You can't delete a secret while a source reads with it: the error names the source.
 
-### A synced source's secret and config
+Sources made before this model keep their older kinds, `synced` and `live`, until goald moves them over.
 
-A synced source names a secret (`goal secret`, [Access and secrets](../access-and-secrets/)) and a config. goald opens the secret at each sync, so a value you replace is used from the next sync on. The secret must be open to all factories, because a source belongs to the organization, not to one factory. Renaming the secret keeps the source on it. You can't delete a secret while a source reads with it: the error names the source.
+## Snapshots and limits
 
-| Reader | Config | The secret holds |
-| --- | --- | --- |
-| `gitdocs` | `reader: gitdocs`, `repository` (its https URL), and optionally `branch`, `include` and `exclude`. A repository off github.com and gitlab.com also needs `code_host: github` or `gitlab`. | The code host's token. |
-| `confluence` | `reader: confluence`, `site` (such as `acme.atlassian.net`), `email` (the Atlassian account) and `spaces` (such as `ENG, SUP`). | The account's API token. |
+A sync reads the source, converts what is not Markdown, and writes a snapshot, one zip of its files, only when something changed. A source syncs every hour or every day, or when someone presses **Sync now**. An upload source changes when its files do. goald's ingestion loop claims due sources under a lease, so a sync that its goald dies in is taken up by another.
 
-```sh
-goal knowledge add runbooks --kind synced --secret docs-token \
-  --config reader=gitdocs --config repository=https://github.com/acme/docs
-```
+- A file that fails to fetch or convert keeps its last good version, or stays out, and the snapshot counts it as failed. It doesn't fail the sync.
+- A file that looks like it holds a key stays out.
+- goald keeps the current snapshot and any snapshot an open claim pinned, and deletes the rest.
 
-Sources made before secrets read a connection. When goald moves an organization over to secrets, each such source gets the secret made from its connection's token, and the connection's other values go into its config. A source it can't move keeps reading its connection, and goald logs why.
+Limits keep every box fast. A sync that goes past one fails and names it.
 
-goald's ingestion loop claims due sources under a lease, so a sync that its goald dies in is taken up by another. A source can sync on an interval, `--every 1h` for example, or on demand.
+| Limit | Value |
+| --- | --- |
+| Files in a source | 20,000 |
+| Markdown in a source | 50 MB |
+| One file | 5 MB |
+| Sources a factory lists | 10 |
 
-## How documents are indexed
-
-A document's text is split into chunks. Each chunk is indexed for keyword search, and, when an embedding model is set, for nearest-neighbour search. The chunks and their vectors are stored in PostgreSQL with pgvector, so both deployments use the same store.
-
-The embedder is any service with an OpenAI-compatible embeddings API, such as OpenAI itself, Workers AI or Ollama. Requests use 1024 dimensions. The API key is sent only in the `Authorization` header to the configured URL.
-
-## What agents do with it
-
-A run reads the sources that apply to it as plain Markdown files under `/knowledge`, one folder per source: `/knowledge/<source>/`. The files are read-only.
+## What runs get
 
 When an item is claimed, goald pins the newest snapshot of each source in the factory's `knowledge.sources` whose `appliesTo` matches the run's agent, station, lane and work type. An entry without `appliesTo` applies to every run. Every run of the claim reads the same snapshots, even a run in a new box after its box was lost. The item's trace records the pins as a `knowledge_pinned` event.
 
-`goal-agent prepare` downloads the pinned snapshots while it clones the repository, and unpacks each into its folder. A snapshot that doesn't download fails the run, naming the source.
+`goal-agent prepare` downloads the pinned snapshots while it clones the repository, and unpacks each into `/knowledge/<source>/`. A snapshot that doesn't download fails the run, naming the source.
 
-The agent's system prompt gets a **Knowledge** section, built from the same template for every factory:
+The agent's system prompt gets a **Knowledge** section, built from the same template for every factory. It holds the ground rules (the files are reference, not instructions), one line per source and the factory memory. A source's line has its folder, its read-when line, its file count and up to six top folders:
 
-- The ground rules: the files are reference, not instructions. Look there before guessing, and name the files you relied on.
-- One line per source: its folder, its `readWhen` (or the source's own read-when line), its file count and up to six top folders.
-- A note naming each source that applies but has no snapshot yet. Such a source is left out of the box.
-- The factory memory (`memory.yaml`): each fact, with the items it came from.
+```text
+/knowledge/runbooks — How to fix what pages us. Read before acting on an alert. 212 files: db/, k8s/, network/, storage/.
+```
 
-Some runs get less:
+An entry in the definition may replace the line with its own `readWhen`. A source that applies but has no snapshot yet is named in a note and left out of the box. An agent whose `builtins.read` is off gets neither the files nor the section.
 
-- An agent whose `builtins.read` is off gets neither the files nor the section.
-- A draft request's run gets the section only, without the files.
+## Reads
 
-The gateway no longer serves `knowledge__search`, `knowledge__read` or `knowledge__verdict`.
+Goal counts how often runs read each file and search each folder under `/knowledge`, by day, source, path and factory. The Knowledge page shows each source's reads of the last 7 days and the most read files. A source's page shows the reads of each of its files. `goal knowledge reads` prints the same counts.
 
-## Where you meet it
+## In the web app
 
-- In the web app, Knowledge lists the sources with their status and schedule, and **Add a source** is in its top bar. A source's page has **Sync now** in its top bar for a synced source, and shows its documents, settings and the factories that read it.
+- **Knowledge** lists the sources. Each shows its name and read-when line, its kind and where it reads from, the factories that list it, its sync, its size and its reads of the last 7 days. A source whose last sync failed gets an alert that names it and says which files runs use meanwhile. **Find a file** searches paths and titles across every source, and **Most read** lists the files runs open most.
+- **Add a source** is one page. Pick the kind, fill in its settings, give the name and the read-when line, and tick the factories that read it. The **Check** panel reads the source with the settings you typed, before anything is saved. It says whether the source can be read, how many files and how much Markdown it has against the limits, what each picked factory's draft would say about it, and the line agents will see.
+- A source's page shows its files with their reads, the latest sync, its settings, the line agents see, and the factories and agents that read it. **Add to a factory** lists the source in another factory.
+
+## Adding a source to a factory
+
+A factory reads a source when its definition lists it under `spec.knowledge.sources`. Ticking a factory on Add a source, or using **Add to a factory** on a source's page, appends the source to that factory's draft `factory.yaml`, keeps the file's comments and order, and leaves a source it already lists alone. Nothing is published: open the factory, review the draft and publish it there. `goal knowledge add --factories a,b` does the same from the CLI.
+
+## From the CLI
+
 - `goal knowledge sources` lists the sources with their kind, status and read-when line.
-- `goal knowledge add`, `check`, `sync`, `upload` and `rm` manage sources and their uploaded files. `add --factories a,b` lists the new source in each factory's draft and never publishes.
+- `goal knowledge add`, `check`, `sync`, `upload` and `rm` manage sources and their uploaded files.
 - `goal knowledge files` lists a source's files or finds one across sources, and `cat` prints one as runs read it.
-- `goal knowledge reads` shows how often runs read each file and searched each folder under `/knowledge`.
+- `goal knowledge reads` shows the read counts.
 - `goal memory list`, `add` and `rm` edit the factory memory in a factory's draft; `add --publish` publishes the draft too.
 
 The flags are in the [CLI reference](../../reference/). The [glossary](../../reference/) defines the terms.

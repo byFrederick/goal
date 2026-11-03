@@ -26,7 +26,7 @@ import type {
 
 const dayMs = 86_400_000;
 const namePattern = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/;
-const kinds: readonly KnowledgeSourceKind[] = ['upload', 'synced', 'live'];
+const kinds: readonly KnowledgeSourceKind[] = ['upload', 'repository', 'confluence', 'synced', 'live'];
 /** The file types an upload takes, by extension (internal/knowledge.TypeOf). */
 const types: Record<string, string> = {
   '.txt': 'text/plain',
@@ -378,12 +378,22 @@ export function createKnowledge({
     if (!namePattern.test(name))
       return refuse(res, 400, `name "${name}" must be 3 to 40 lowercase letters, digits or dashes`);
     if (title.length === 0 || title.length > 120) return refuse(res, 400, 'a source title has 1 to 120 characters');
-    if (!kind) return refuse(res, 400, `source kind "${String(b.kind)}" is not upload, synced or live`);
-    if (kind === 'synced' && secret !== '' && connection === '') {
+    if (!kind)
+      return refuse(res, 400, `source kind "${String(b.kind)}" is not upload, repository, confluence, synced or live`);
+    if ((kind === 'synced' || kind === 'repository' || kind === 'confluence') && connection === '') {
       if (every < 900) return refuse(res, 400, 'a source syncs at most every 15 minutes');
       if (named(org.id, name))
         return refuse(res, 409, `knowledge source "${name}" is taken`, 'knowledge-source-name-taken');
-      return createOn(org, req, res, { name, title, kind, connection: '', secret, every, config: strings(b.config) });
+      return createOn(org, req, res, {
+        name,
+        title,
+        kind,
+        connection: '',
+        secret,
+        every,
+        config: strings(b.config),
+        readWhen: typeof b.read_when === 'string' ? b.read_when : '',
+      });
     }
     if ((kind === 'upload') !== (connection === '')) {
       return refuse(
@@ -400,7 +410,16 @@ export function createKnowledge({
     }
     if (named(org.id, name))
       return refuse(res, 409, `knowledge source "${name}" is taken`, 'knowledge-source-name-taken');
-    return createOn(org, req, res, { name, title, kind, connection, secret: '', every, config: strings(b.config) });
+    return createOn(org, req, res, {
+      name,
+      title,
+      kind,
+      connection,
+      secret: '',
+      every,
+      config: strings(b.config),
+      readWhen: typeof b.read_when === 'string' ? b.read_when : '',
+    });
   }
 
   function createOn(
@@ -415,6 +434,7 @@ export function createKnowledge({
       secret: string;
       every: number;
       config: Record<string, string>;
+      readWhen: string;
     },
   ) {
     const { name, title, kind, connection, secret, every } = v;
@@ -429,7 +449,7 @@ export function createKnowledge({
         ...(connection ? { connection } : {}),
         ...(secret ? { secret } : {}),
         config: v.config,
-        read_when: '',
+        read_when: v.readWhen,
         sync_every_seconds: every,
         status: 'idle',
         last_synced_at: null,

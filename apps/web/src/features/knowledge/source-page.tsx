@@ -197,7 +197,7 @@ function FilesCard({ source }: { source: KnowledgeSource }) {
               {rows.map((f) => (
                 <tr
                   key={f.path}
-                  className="animate-row-in align-top [&>td]:border-t [&>td]:border-line [&>td]:px-5 [&>td]:py-2.5"
+                  className="animate-row-in align-top [&>td]:border-t [&>td]:border-line [&>td]:px-5 [&>td]:py-3"
                 >
                   <td className="min-w-0">
                     <span translate="no" className="font-mono break-all">
@@ -323,7 +323,7 @@ function ReadByCard({ source, manage }: { source: KnowledgeSource; manage: boole
             {readers.map((r) => (
               <tr
                 key={r.id}
-                className="animate-row-in align-top [&>td]:border-t [&>td]:border-line [&>td]:px-5 [&>td]:py-2.5"
+                className="animate-row-in align-top [&>td]:border-t [&>td]:border-line [&>td]:px-5 [&>td]:py-3"
               >
                 <td translate="no" className="break-words">
                   {r.name}

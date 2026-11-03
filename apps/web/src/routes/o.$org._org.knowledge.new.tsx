@@ -6,8 +6,8 @@ import { PendingScreen } from '../app/states';
 import { NewSourcePage } from '../features/knowledge/new-source-page';
 import { type NewSourceSearch, newSourceSearch } from '../features/knowledge/search';
 
-// New source (spec 4 §10, canvas "Knowledge-Source-New"): upload, synced or live (?kind=). For
-// whoever may add one, the secrets load before the page (a synced source picks one); the sources
+// Add a source (ADR 0038 decision 12, canvas "Knowledge-New"): upload, repository or confluence (?kind=). For
+// whoever may add one, the secrets load before the page (a repository or Confluence source picks one); the sources
 // load beside it, so a name already taken says so.
 export const Route = createFileRoute('/o/$org/_org/knowledge/new')({
   pendingComponent: PendingScreen,
