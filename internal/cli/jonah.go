@@ -21,6 +21,7 @@ func jonahCommand(ctx context.Context, out *printer, getenv func(string) string,
 	if len(args) > 0 {
 		if handler, ok := map[string]command{
 			subShow: jonahShow, verbApprove: jonahApprove, jonahEditCmd: jonahEdit, verbReject: jonahReject, jonahLookCmd: jonahLook,
+			jonahTryCmd: jonahTry,
 		}[args[0]]; ok {
 			return handler(ctx, out, getenv, args[1:])
 		}
@@ -33,6 +34,7 @@ func jonahCommand(ctx context.Context, out *printer, getenv func(string) string,
 const (
 	jonahEditCmd = "edit"
 	jonahLookCmd = "look"
+	jonahTryCmd  = "try"
 )
 
 // jonahConflicts are the one-line messages of the 409 codes the Jonah operations document.
@@ -42,6 +44,7 @@ var jonahConflicts = map[string]string{
 	"draft-conflict":            "the draft's copy of a file changed since Jonah made this proposal: nothing was written",
 	"proposal-decided":          "the proposal was already decided: goal jonah show %d says how",
 	"review-in-flight":          "a review is already pending or running: wait for it to finish",
+	"proposal-not-tried":        "Jonah has not tried this proposal on past items yet: its first tries are queued soon, then try again",
 	"learning-budget-exhausted": "Jonah's runs used up its budget, learning.jonah.share of what the line spent in the last 7 days: try again when the window moves on",
 }
 
@@ -296,6 +299,104 @@ func jonahLook(ctx context.Context, out *printer, getenv func(string) string, ar
 	out.printf("review %s queued: goal jonah lists its proposals once it finishes\n", r.JSON202.Id)
 
 	return nil
+}
+
+// jonahTry is goal jonah try <number> [--factory F] [--yes] [--json]: print the estimate of
+// trying the proposal again (ADR 0039 decision 11), one more try per item it was tried on or
+// three for a model proposal, ask, then queue the tries. --yes queues them without asking; --json
+// prints goald's answers as they came, and without --yes the estimate only.
+func jonahTry(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	var yes, asJSON *bool
+
+	c, f, number, err := jonahProposalArgs(ctx, getenv, "jonah try", args, func(fs *flag.FlagSet) func() bool {
+		yes = fs.Bool("yes", false, "queue the tries without asking")
+		asJSON = fs.Bool("json", false, "print goald's answers as they came; without --yes, the estimate only")
+
+		return func() bool { return true }
+	})
+	if err != nil {
+		return err
+	}
+
+	t := tryAgain{c: c, factory: f, number: number, json: *asJSON}
+
+	est, err := t.try(ctx, out, false)
+	if err != nil || (*asJSON && !*yes) {
+		return err
+	}
+
+	if !*yes {
+		if ok, err := askYes(out, fmt.Sprintf("Queue %s of proposal #%d? [y/N] ", plural(est.Tries, "try"), number), "nothing was queued"); err != nil || !ok {
+			return err
+		}
+	}
+
+	_, err = t.try(ctx, out, true)
+
+	return err
+}
+
+// tryAgain is one goal jonah try: proposal number of factory.
+type tryAgain struct {
+	c       orgClient
+	factory string
+	number  int64
+	json    bool
+}
+
+// try asks goald for the estimate, or with confirm for the tries, and prints the answer: as it
+// came with --json, else the estimate or what was queued.
+func (t tryAgain) try(ctx context.Context, out *printer, confirm bool) (gen.TryProposalEstimate, error) {
+	body := gen.TryJonahProposalJSONRequestBody{}
+	if confirm {
+		body.Confirm = &confirm
+	}
+
+	res, err := t.c.TryJonahProposalWithResponse(ctx, t.c.org, t.factory, t.number, body)
+	if err != nil {
+		return gen.TryProposalEstimate{}, apiDown(err)
+	}
+
+	answer := res.JSON200
+	if confirm {
+		answer = res.JSON201
+	}
+
+	if answer == nil {
+		return gen.TryProposalEstimate{}, jonahProblem(res.HTTPResponse, res.ApplicationproblemJSONDefault, t.number)
+	}
+
+	switch {
+	case t.json:
+		out.printf("%s", res.Body)
+	case confirm:
+		out.printf("✓ %s of proposal #%d queued\n", plural(answer.Estimate.Tries, "try"), t.number)
+		out.printf("see them with: goal jonah show %d --factory %s\n", t.number, t.factory)
+	default:
+		printTryEstimate(out, answer.Estimate)
+	}
+
+	return answer.Estimate, nil
+}
+
+// printTryEstimate prints what trying a proposal again adds: each item with its station and tries,
+// then the tries, their cost and what is left of Jonah's budget.
+func printTryEstimate(out *printer, e gen.TryProposalEstimate) {
+	out.printf("try proposal #%d again on the %s it was tried on:\n", e.Number, plural(len(e.Items), "item"))
+
+	var tb bytes.Buffer
+
+	tw := tabwriter.NewWriter(&tb, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "ITEM\tSTATION\tTRIES\tTITLE")
+
+	for _, it := range e.Items {
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%d\t%s\n", it.ItemRef, it.Station, it.Tries, cut(oneLine(it.ItemTitle), 60))
+	}
+
+	_ = tw.Flush()
+
+	out.printf("%s", trimLines(tb.String()))
+	out.printf("%s, about %s; %s left of Jonah's budget\n", plural(e.Tries, "try"), usd(e.EstimateUsd), usd(e.BudgetLeftUsd))
 }
 
 // jonahProposalArgs parses <number> [--factory F] [--org O] and the flags extra declares (its

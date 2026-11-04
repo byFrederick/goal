@@ -69,8 +69,9 @@ import (
 )
 
 // jonahDeps serve the Jonah routes over store: decisions publish and edit through the same
-// authoring service as the builder, and Try another model reads versions through defs and checks
-// its edit with config's definition check against policies' models.
+// authoring service as the builder, Try another model reads versions through defs and checks
+// its edit with config's definition check against policies' models, and Try again reads what a
+// proposal changes through defs.
 func jonahDeps(store *postgres.Store, authors *authoring.Service, defs *definitions.Cache, policies ports.OrgPolicies, clock ports.Clock,
 	log *slog.Logger,
 ) *api.JonahDeps {
@@ -78,6 +79,8 @@ func jonahDeps(store *postgres.Store, authors *authoring.Service, defs *definiti
 		Proposals: store, Authoring: api.NewJonahAuthoring(authors), Audit: store, Clock: clock, Log: log,
 	}), Models: jonah.NewModelProposals(jonah.ModelDeps{
 		Store: store, Definitions: defs, Check: config.ProposalCheck{}, Policies: policies, Audit: store, Clock: clock, Log: log,
+	}), TryAgain: jonah.NewTryAgain(jonah.TryAgainDeps{
+		Store: store, Definitions: tryDefinitions{defs: defs}, Audit: store, Clock: clock, Log: log,
 	})}
 }
 
