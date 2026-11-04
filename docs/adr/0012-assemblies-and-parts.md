@@ -1,6 +1,6 @@
 # ADR 0012 — Assemblies and parts: a plan becomes a parent item whose parts are gated by planned edges
 
-Status: accepted · 2026-10-25 · Builds on the item dependencies of migration 00058 (`item_edges` and the claim gate)
+Status: accepted · 2026-10-25 · Amended by [ADR 0040](0040-one-door-for-every-source.md) (parts are filed through the same door as every item and record their origin) · Builds on the item dependencies of migration 00058 (`item_edges` and the claim gate)
 
 ## Context
 

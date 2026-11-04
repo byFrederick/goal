@@ -177,19 +177,34 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 @keyframes rise{from{opacity:0;transform:translateY(8px);filter:blur(3px)}}
 .stpn{display:none;font-size:12px;color:var(--ink2);margin-top:-6px}
 @media (max-width:560px){.stp li{flex:1 1 0;min-width:0;font-size:0;gap:0}.stpn{display:block}.tophd a{min-height:44px;display:inline-flex;align-items:center}}
+/* setup steps at every width */
+.fld input[type=range]{margin-left:0;margin-right:0}
+@media (max-width:640px){
+.lf{padding:16px 16px 24px}
+.foot{flex-wrap:wrap}
+.foot .btn{flex:1 1 auto;justify-content:center}
+.foot .btn.pri{margin-left:0}
+main .btn,main .sg3 button,main .seg button,main .pk,main button.in{min-height:44px}
+main button[aria-label^="Colour "],main button[aria-label^="Remove "],main button[aria-label="Fewer copies"],main button[aria-label="More copies"],main button[aria-label="Add a station here"]{min-width:44px;min-height:44px}
+.sw::after{content:"";position:absolute;inset:-13px -6px}
+.hint a{padding:15px 0}
+.fld>a{display:inline-flex;align-items:center;min-height:44px}
+}
+/* the preview hides when the page is one column */
+@media (max-width:1000px){.pv{display:none}}
 </style>
 </helmet>
 <div class="g ob ">
 <main class="lf">
 <div class="tophd"><a class="brand" href="V2-Start-Sign-Up.dc.html"><span class="omk"><svg width="19" height="19" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.6 6.9A8.2 8.2 0 1 0 20.2 12H13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"></path><circle cx="12.4" cy="12" r="2.9" fill="var(--yel)"></circle></svg></span>Goal</a><a class="ex" href="#">Save and finish later</a></div>
-<ol class="stp" aria-label="Setup, step 1 of 8"><li class="c" aria-current="step"><span></span>Organization</li><li class=""><span></span>Code</li><li class=""><span></span>Factory</li><li class=""><span></span>Line</li><li class=""><span></span>Budget</li><li class=""><span></span>Intake</li><li class=""><span></span>People</li><li class=""><span></span>First item</li></ol><p class="stpn" aria-hidden="true">Step 1 of 8: Organization</p>
+<ol class="stp" aria-label="Setup, step 1 of 8"><li class="c" aria-current="step"><span></span>Organization</li><li class=""><span></span>Factory</li><li class=""><span></span>Code</li><li class=""><span></span>Line</li><li class=""><span></span>Budget</li><li class=""><span></span>Intake</li><li class=""><span></span>People</li><li class=""><span></span>First item</li></ol><p class="stpn" aria-hidden="true">Step 1 of 8: Organization</p>
 <div class="form">
 <div><h1 class="ttl">Name your organization</h1><p class="lead">An organization holds your factories, the people who run them and what they connect to.</p></div>
 <div class="fld"><label class="lbl" for="on">Organization name</label><input class="in" id="on" type="text" value="Goal"></div>
 <div class="fld"><label class="lbl" for="os">Address</label><div class="inrow"><span>goal.byfrederick.work/o/</span><input id="os" type="text" value="goal"></div><span class="hint" style="color: var(--grn-ink); display: inline-flex; align-items: center; gap: 6px"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m2.5 6.2 2.2 2.2L9.5 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>Available</span></div>
 <div class="fld"><span class="lbl" id="use">What will your factories do?</span><div class="pick" role="group" aria-labelledby="use"><button class="pk" type="button" aria-pressed="true"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m2.5 6.2 2.2 2.2L9.5 3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>Build software</button><button class="pk" type="button" aria-pressed="false">Run operations</button><button class="pk" type="button" aria-pressed="false">Answer support</button><button class="pk" type="button" aria-pressed="false">Something else</button></div><span class="hint">Pick any. Goal suggests templates from this.</span></div>
 </div>
-<div class="foot"><a class="btn lg" href="V2-Start-Code.dc.html">Back</a><a class="btn lg pri" href="V2-Start-Repo.dc.html">Continue</a></div>
+<div class="foot"><a class="btn lg" href="V2-Start-Code.dc.html">Back</a><a class="btn lg pri" href="V2-Start-Template.dc.html">Continue</a></div>
 </main>
 <aside class="pv" aria-label="Preview of your factory"><div class="pvh"><b>Your factory, as you build it</b><span>Updates as you go</span></div><div class="pg2"><div class="pb on"><span class="k">Organization</span><span class="v">Goal</span><span class="m">goal.byfrederick.work/o/goal</span></div><div class="pb empty"><span class="ph" style="width: 40%"></span><span class="ph" style="width: 70%"></span></div></div><div class="pb empty" style="min-height: 168px; justify-content: center; align-items: center"><span class="m">The line appears when you pick a template</span></div><div class="pg3"><div class="pb empty" style="min-height: 150px"></div><div class="pb empty" style="min-height: 150px"></div><div class="pb empty" style="min-height: 150px"></div></div></aside>
 </div>
