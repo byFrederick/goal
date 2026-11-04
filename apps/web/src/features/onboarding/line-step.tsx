@@ -161,13 +161,20 @@ function LineBody({ org, search, factory }: { org: OrgSummary; search: Onboardin
 function StationCards() {
   const editor = useLineEditor();
   return (
-    <ol aria-label="The stations" className="m-0 flex list-none gap-3 overflow-x-auto p-0 pb-2">
-      {editor.stations.map((station) => (
-        <li key={editor.keyOf(station.id)} className="flex w-52 shrink-0 flex-col">
-          <StationCardBody station={station} />
-        </li>
-      ))}
-    </ol>
+    <section
+      aria-label="Stations"
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must be reachable by keyboard (axe scrollable-region-focusable).
+      tabIndex={0}
+      className="overflow-x-auto pb-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
+    >
+      <ol aria-label="The stations" className="m-0 flex list-none gap-3 w-max min-w-full p-0">
+        {editor.stations.map((station) => (
+          <li key={editor.keyOf(station.id)} className="flex w-52 shrink-0 flex-col">
+            <StationCardBody station={station} />
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 

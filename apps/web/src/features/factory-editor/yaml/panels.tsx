@@ -80,7 +80,7 @@ export function ProblemsPanel({ problems, onGo, headingId }: ProblemsPanelProps)
               <ProblemIcon severity={p.severity} />
               <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1 text-secondary">
                 <span className="sr-only">{severityText[p.severity]}: </span>
-                <span className="min-w-0 flex-1">{p.message}</span>
+                <span className="min-w-0 flex-1 basis-40 break-words">{p.message}</span>
                 {p.line > 0 ? (
                   <button
                     type="button"

@@ -142,6 +142,8 @@ describe('a template', () => {
   it('shows the lines it adds and waits for a secret before it can be added', () => {
     wrap(<TemplatePanel template={sentry} environment="default" onEnvironment={() => undefined} />);
     expect(screen.getByRole('heading', { name: 'Adds to environments/default.yaml' })).toBeTruthy();
+    const preview = screen.getByRole('region', { name: 'Adds to environments/default.yaml' });
+    expect(preview.getAttribute('tabindex')).toBe('0');
     expect(screen.getByText('url: https://mcp.sentry.dev/mcp')).toBeTruthy();
     expect(screen.getByText('Authorization: Bearer {{sentry-token}}')).toBeTruthy();
     expect(screen.getByText('architect, reviewer')).toBeTruthy();
