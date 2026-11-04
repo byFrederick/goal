@@ -204,7 +204,7 @@ A judge run (ADR 0025 decisions 2 and 3) scores one finished production run, or 
 
 ### Grade mode
 
-A grade run (ADR 0039 decision 10) decides whether a result fixed the reason an item went back. goald builds the bundle and checks the answer; goal-agent makes the call. The spec carries a `grade` block, and the bundle has no `repository` and no `definition` (refused otherwise). A spec with `grade` and another mode block (`draft_request`, `judge`, `jonah`) is refused. `item_id` may be empty.
+A grade run (ADR 0039 decision 10) decides whether a result fixed the reason an item went back. goald builds the bundle and checks the answer; goal-agent makes the call. The gateway serves the grade bundle for a task token of kind `grade`, which names the try and the result to grade (`internal/gateway/grade.go`). The spec carries a `grade` block, and the bundle has no `repository` and no `definition` (refused otherwise). A spec with `grade` and another mode block (`draft_request`, `judge`, `jonah`) is refused. `item_id` may be empty.
 
 ```json
 {
