@@ -52,11 +52,12 @@ SELECT * FROM work_items WHERE factory_id = sqlc.arg(factory_id) AND number = sq
 -- (follow_ups_waiting_filing_idx), locked; one another instance holds is skipped. Its root is the
 -- source item, or its assembly for a part. A follow-up of a cancelled source or root is taken
 -- whatever its trust, to be dropped; one of landed work (a done root) only from a trusted source.
+-- Only the follow-ups of factories goald has loaded are taken, since filing needs their line.
 SELECT sqlc.embed(f), COALESCE(s.parent_id, s.id)::uuid AS root_id
 FROM follow_ups f
 JOIN work_items s ON s.id = f.item_id
 LEFT JOIN work_items p ON p.id = s.parent_id
-WHERE f.state = 'waiting' AND f.target IN ('start', 'triage')
+WHERE f.state = 'waiting' AND f.target IN ('start', 'triage') AND f.factory_id = ANY(sqlc.arg(factories)::uuid[])
   AND (s.state = 'cancelled' OR p.state = 'cancelled'
        OR (COALESCE(p.state, s.state) = 'done' AND NOT s.untrusted))
 ORDER BY f.created_at, f.id

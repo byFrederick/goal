@@ -99,6 +99,34 @@ type Store interface {
 	// (decision 21).
 	DeliverNotes(ctx context.Context, factories []domain.NoteFactory, at time.Time, limit int) ([]domain.FollowUp, error)
 
+	// FileFollowUps files the waiting start and triage follow-ups of the context's organization
+	// whose work landed or was cancelled (ADR 0040 decisions 8, 9, 10 and 21), about limit of
+	// them, and returns them as they now are. lines are the organization's, which a start's
+	// factory is resolved against and its item filed on (domain.File). Each root item (one that is
+	// not a part) is one transaction: it claims the waiting follow-ups of the root and its parts
+	// (FOR UPDATE SKIP LOCKED, so instances share the sweep) and routes each with
+	// domain.LandFollowUp. A follow-up of cancelled work, or of a source MaxFollowUpGeneration
+	// deep, is dropped. A start is filed at the moment the root landed (its DoneAt) with
+	// domain.FollowUpFileRequest into the factory its start names, when domain.RouteStart allows
+	// it, its after refs resolve and the factory took fewer than domain.MaxFollowUpItemsADay
+	// follow-up items in the 24 hours before at (counted under an advisory lock on the
+	// factory); it is filed onto an open item already filed from the same source with that
+	// title instead (domain.FollowUpKey). Any other joins the source factory's collecting triage
+	// item (open, no run yet), filed with domain.TriageFileRequest when there is none, whose
+	// title, body, priority and generation are rewritten from all its follow-ups. A follow-up of
+	// an untrusted source's landed work is never claimed: it waits (decision 21).
+	FileFollowUps(ctx context.Context, lines []domain.Line, at time.Time, limit int) ([]domain.FollowUp, error)
+
+	// DropFollowUp drops a waiting follow-up of item, for domain.DropReason(by), and returns it.
+	// One that is not item's is ErrNotFound; one that is not waiting ErrConflict.
+	DropFollowUp(ctx context.Context, item domain.ItemID, id domain.FollowUpID, by domain.Actor, at time.Time) (domain.FollowUp, error)
+
+	// FileFollowUp files n, which domain.File checked, for follow-up id of item and makes the
+	// follow-up filed as it, in one transaction, as CreateItem does. Only a follow-up
+	// domain.Fileable allows may be filed, else ErrConflict; one that is not item's is
+	// ErrNotFound.
+	FileFollowUp(ctx context.Context, item domain.ItemID, id domain.FollowUpID, n domain.NewItem) (domain.FollowUp, domain.Item, error)
+
 	// Waiting returns up to limit queued or ready items at a station in pull order: expedite
 	// first, then priority (highest first), then age (oldest first).
 	Waiting(ctx context.Context, factory domain.FactoryID, station string, limit int) ([]domain.Item, error)

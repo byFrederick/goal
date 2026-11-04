@@ -39,6 +39,7 @@ type Store struct {
 	andon     []andonRecord
 	edges     []domain.Edge // item needs, in the order they were added
 	followUps []domain.FollowUp
+	joined    []domain.FollowUpID // follow-ups in the order they joined a triage item
 	views     map[domain.SavedViewID]savedViewRecord
 	jonah     jonahRows
 	ids       int

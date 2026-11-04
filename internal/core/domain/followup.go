@@ -189,7 +189,7 @@ func followUpTarget(forRaw, startRaw json.RawMessage) (FollowUpTarget, *ItemRef,
 		}
 
 		if err := p.check(); err != nil {
-			return FollowUpTriage, nil, nil, "start: " + reasonOf(err)
+			return FollowUpTriage, nil, nil, "start: " + ReasonOf(err)
 		}
 
 		return FollowUpStart, nil, &p, ""
@@ -248,8 +248,8 @@ func present(raw json.RawMessage) bool {
 	return len(raw) > 0 && !bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
 }
 
-// reasonOf is err's message without the ErrInvalid it wraps.
-func reasonOf(err error) string {
+// ReasonOf is err's message without the ErrInvalid it wraps.
+func ReasonOf(err error) string {
 	if errors.Is(err, ErrInvalid) {
 		return strings.TrimSuffix(err.Error(), ": "+ErrInvalid.Error())
 	}

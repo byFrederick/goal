@@ -166,7 +166,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	}
 	tests = append(append(append(tests, jonahTests...), fileTests...), startTests...)
 	tests = append(append(append(tests, triesTests...), keptTestsTests...), graderChecksTests...)
-	tests = append(tests, followUpsTests...)
+	tests = append(append(tests, followUpsTests...), followUpFilingTests...)
 
 	for _, tc := range tests {
 		runCase(t, newHarness, tc.name, tc.test)
