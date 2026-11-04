@@ -76,11 +76,12 @@ function Columns({ board, onMove, decides, finishedThisWeek, arrived }: ColumnsP
 /** From 768 px: the stations side by side, each a StationColumn on a shared row grid, each with its own Expedite box in a shared row; from 1280 px every station fits. */
 function DesktopColumns({ board, onMove, decides, finishedThisWeek, arrived }: ColumnsProps) {
   const showExpedite = drawsExpedite(board);
-  const tracks = `repeat(${board.stations.length}, minmax(128px, 1fr))`;
+  // 144 px a station, 128 px from 1280 px, where a board of seven stations fits without scrolling.
+  const tracks = `repeat(${board.stations.length}, minmax(var(--col-min), 1fr))`;
   return (
     <section aria-label="Stations" className="-mx-1 hidden min-w-0 overflow-x-auto px-1 pb-2 md:block">
       <div
-        className="grid gap-x-3 gap-y-2"
+        className="grid gap-x-3 gap-y-2 [--col-min:144px] xl:[--col-min:128px]"
         style={{
           gridTemplateColumns: tracks,
           gridTemplateRows: showExpedite ? 'auto auto 1fr' : 'auto 1fr',

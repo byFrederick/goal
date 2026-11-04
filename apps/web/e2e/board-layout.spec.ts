@@ -122,7 +122,12 @@ for (const theme of ['light', 'dark'] as const) {
       await page.setViewportSize({ width: size.width, height: size.height });
       await page.goto(size.path);
       // The desktop's columns are in the DOM too, hidden below 768 px: wait for the one on screen.
-      await expect(page.getByText(/^Ready, buffer/).filter({ visible: true }).first()).toBeVisible();
+      await expect(
+        page
+          .getByText(/^Ready, buffer/)
+          .filter({ visible: true })
+          .first(),
+      ).toBeVisible();
       await page.waitForLoadState('networkidle');
       await testInfo.attach(`board-${size.name}-${theme}`, {
         body: await page.screenshot({ fullPage: true }),
@@ -135,7 +140,7 @@ for (const theme of ['light', 'dark'] as const) {
 test('fits the top bar at 768 with New item inside the viewport', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'tablet-768', 'the 768 project');
   await page.goto('/o/acme/f/goal/board');
-  const button = page.getByRole('button', { name: 'New item' });
+  const button = page.getByRole('button', { name: 'New item', exact: true });
   await expect(button).toBeVisible();
   const box = await button.boundingBox();
   const width = page.viewportSize()?.width ?? 0;
@@ -329,7 +334,7 @@ for (const width of [1280, 1440]) {
             .filter((el) => el.getBoundingClientRect().right > column.getBoundingClientRect().right + 0.5)
             .map((el) => `${el.tagName.toLowerCase()} "${el.textContent?.slice(0, 40) ?? ''}"`),
         ),
-        ages: Array.from(document.querySelectorAll('article')).some((a) => /\b23 min\b/.test(a.textContent ?? '')),
+        ages: Array.from(document.querySelectorAll('article')).some((a) => /(?<!\d)23 min/.test(a.textContent ?? '')),
         longTitle: Array.from(document.querySelectorAll('article span.truncate')).some(
           (span) => (span.textContent?.length ?? 0) > 80,
         ),
