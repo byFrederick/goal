@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateDelta } from './jonah-format';
+import { estimateDelta, observationChip } from './jonah-format';
 
 describe('estimateDelta', () => {
   it('says a falling rate in points, and good', () => {
@@ -17,5 +17,13 @@ describe('estimateDelta', () => {
       text: '+5 h',
       good: false,
     });
+  });
+});
+
+describe('observationChip', () => {
+  it('says how far a watched cause has come, Proposed once one addresses it, and Not Jonah’s', () => {
+    expect(observationChip('watching', 3, 5)).toBe('Watching, 3 of 5');
+    expect(observationChip('proposed', 5, 5)).toBe('Proposed');
+    expect(observationChip('not_jonahs', 2, 5)).toBe("Not Jonah's");
   });
 });

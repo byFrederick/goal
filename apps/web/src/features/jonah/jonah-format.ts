@@ -78,6 +78,7 @@ export function basedOnText(runs: number): string {
 }
 
 /** An observation's chip: Proposed once it became a proposal, else how far it has come. */
-export function observationChip(state: 'watching' | 'proposed', count: number, proposeAfter: number) {
+export function observationChip(state: 'watching' | 'proposed' | 'not_jonahs', count: number, proposeAfter: number) {
+  if (state === 'not_jonahs') return "Not Jonah's";
   return state === 'proposed' ? 'Proposed' : `Watching, ${count} of ${proposeAfter}`;
 }
