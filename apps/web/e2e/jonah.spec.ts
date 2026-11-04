@@ -36,7 +36,7 @@ test('the tabs are Overview, Proposals and Tests, each at its own address', asyn
 
 test('each proposal links to its page', async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah');
-  await expect(page.getByRole('link', { name: /^Review/ }).first()).toHaveAttribute('href', /\/jonah\/proposals\/8$/);
+  await expect(page.getByRole('link', { name: /^Review/ }).first()).toHaveAttribute('href', /\/jonah\/proposals\/9$/);
 });
 
 test('Look for improvements now queues a review, and a second one is refused', async ({ page }) => {
