@@ -144,4 +144,16 @@ describe('the mock knowledge base', () => {
     const github = await call<Connection>('/v1/orgs/acme/connections/github');
     expect(github.body.used_by.knowledge_sources).toEqual(['dashboards', 'goal-docs', 'support-macros', 'repo-search']);
   });
+
+  it('answers a check with the first files, at most 8 and no more than the file count', async () => {
+    const { status, body } = await call<{ files: number; first_files: string[] }>(
+      '/v1/orgs/acme/knowledge/check',
+      'POST',
+      { name: 'runbooks', kind: 'repository', read_when: 'Before acting.', factories: [] },
+    );
+    expect(status).toBe(200);
+    expect(body.first_files.length).toBeGreaterThan(0);
+    expect(body.first_files.length).toBeLessThanOrEqual(8);
+    expect(body.first_files.length).toBeLessThanOrEqual(body.files);
+  });
 });
