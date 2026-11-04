@@ -16,12 +16,10 @@ import { getAccess } from './access';
 import { getBuilderMeta, getSkillFiles, type SkillKey, searchSkills } from './builder';
 import {
   ApiError,
-  estimateEvalRun,
   type FlowRange,
   getAgentStats,
   getAttention,
   getAuthConfig,
-  getBakeOff,
   getBoard,
   getConstraint,
   getFactoryActivity,
@@ -31,7 +29,6 @@ import {
   getItemParts,
   getItemTeardown,
   getJonahOverview,
-  getJudge,
   getLeadTime,
   getMe,
   getMetrics,
@@ -41,14 +38,12 @@ import {
   getTouchMetrics,
   getWeekly,
   type ItemFilter,
-  listBakeOffs,
-  listEvals,
   listFactories,
   listInvitations,
   listItemEvents,
   listItemRuns,
   listItems,
-  listJudges,
+  listKeptTests,
   listMembers,
   listOrgRuns,
   listOrgs,
@@ -251,16 +246,6 @@ export const keys = {
   runs: (org: string, filter?: RunsFilter) =>
     filter ? (['org', org, 'runs', filter] as const) : (['org', org, 'runs'] as const),
   parts: (org: string, item: string) => ['org', org, 'item', item, 'parts'] as const,
-  /**
-   * The prefix of a factory's eval cases, their estimate (Jonah's Evals) and its bake-offs. A `definition`
-   * event refreshes all of it; no stream event reports a bake-off's progress, so a bake-off is read again on
-   * focus and on its own actions.
-   */
-  evals: (org: string, factory: string) => ['org', org, 'factory', factory, 'evals'] as const,
-  /** The factory's bake-offs (under keys.evals): the list, and each bake-off by its id. */
-  bakeOffs: (org: string, factory: string) => [...keys.evals(org, factory), 'bake-offs'] as const,
-  /** The prefix of a factory's judges (Jonah's Judges). A `definition` event refreshes it. */
-  judges: (org: string, factory: string) => ['org', org, 'factory', factory, 'judges'] as const,
   /** The prefix of a factory's Jonah reads: the overview and the proposals. A `learning` or `definition` event refreshes it. */
   jonah: (org: string, factory: string) => ['org', org, 'factory', factory, 'jonah'] as const,
   /** The factory's intake (sources and triggers); item and definition events refresh it. */
@@ -654,41 +639,6 @@ export const itemQuery = (org: string, item: string) =>
   queryOptions({ queryKey: keys.item(org, item), queryFn: ({ signal }) => getItem(org, item, signal) });
 
 /** An assembly's parts: under the item's key, so the stream's item events refresh them. */
-/** The factory's eval cases of the current version and their summary (listEvals). */
-export const evalsQuery = (org: string, factory: string) =>
-  queryOptions({
-    queryKey: [...keys.evals(org, factory), 'cases'] as const,
-    queryFn: ({ signal }) => listEvals(org, factory, signal),
-  });
-
-/** The factory's bake-offs, newest first (listBakeOffs). */
-export const bakeOffsQuery = (org: string, factory: string) =>
-  queryOptions({
-    queryKey: [...keys.bakeOffs(org, factory), 'list'] as const,
-    queryFn: ({ signal }) => listBakeOffs(org, factory, signal),
-  });
-
-/** One bake-off with its arms and per-case tries (getBakeOff). */
-export const bakeOffQuery = (org: string, factory: string, bakeOff: string) =>
-  queryOptions({
-    queryKey: [...keys.bakeOffs(org, factory), bakeOff] as const,
-    queryFn: ({ signal }) => getBakeOff(org, factory, bakeOff, signal),
-  });
-
-/** The factory's judges of the current version, each with its 30 days (listJudges). */
-export const judgesQuery = (org: string, factory: string) =>
-  queryOptions({
-    queryKey: [...keys.judges(org, factory), 'list'] as const,
-    queryFn: ({ signal }) => listJudges(org, factory, signal),
-  });
-
-/** One judge of the current version with its file, its scores and where it runs (getJudge). */
-export const judgeQuery = (org: string, factory: string, judge: string) =>
-  queryOptions({
-    queryKey: [...keys.judges(org, factory), 'judge', judge] as const,
-    queryFn: ({ signal }) => getJudge(org, factory, judge, signal),
-  });
-
 /** Jonah's overview: the policy, the proposals waiting, this month's cost and the week's observations (getJonahOverview). */
 export const jonahOverviewQuery = (org: string, factory: string) =>
   queryOptions({
@@ -703,18 +653,18 @@ export const proposalsQuery = (org: string, factory: string, state?: ProposalSta
     queryFn: ({ signal }) => listProposals(org, factory, { state }, signal),
   });
 
+/** The factory's kept tests, grouped by the page by station (listKeptTests). Under keys.jonah, so a learning event refreshes it. */
+export const keptTestsQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.jonah(org, factory), 'kept-tests'] as const,
+    queryFn: ({ signal }) => listKeptTests(org, factory, signal),
+  });
+
 /** One proposal with its files and evidence (getProposal), under its number beside the lists. */
 export const proposalQuery = (org: string, factory: string, number: number) =>
   queryOptions({
     queryKey: [...keys.jonah(org, factory), 'proposals', number] as const,
     queryFn: ({ signal }) => getProposal(org, factory, number, signal),
-  });
-
-/** What a run of every case would cost about (estimateEvalRun): a read, so it is asked again on each refresh. */
-export const evalEstimateQuery = (org: string, factory: string) =>
-  queryOptions({
-    queryKey: [...keys.evals(org, factory), 'estimate'] as const,
-    queryFn: ({ signal }) => estimateEvalRun(org, factory, {}, signal),
   });
 
 export const partsQuery = (org: string, item: string) =>

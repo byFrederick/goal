@@ -24,19 +24,30 @@ const factory = {
 } as Factory;
 
 /** The tab bar at the address a Jonah route has, with the tab its page names. */
-function renderTabs(tab: JonahTab, path: string, search?: Record<string, string>) {
-  return renderFactoryPage({ page: () => <JonahTabs tab={tab} />, path, org, factory, search });
+function renderTabs(tab: JonahTab, path: string) {
+  return renderFactoryPage({ page: () => <JonahTabs tab={tab} />, path, org, factory });
 }
 
 describe('the Jonah tabs', () => {
+  it('links each tab to its own page', async () => {
+    renderTabs('overview', 'jonah/');
+    const nav = await screen.findByRole('navigation', { name: 'Jonah' });
+    const hrefs = within(nav)
+      .getAllByRole('link')
+      .map((a) => a.getAttribute('href'));
+    expect(hrefs).toEqual([
+      '/o/acme/f/software/jonah',
+      '/o/acme/f/software/jonah/proposals',
+      '/o/acme/f/software/jonah/tests',
+    ]);
+  });
+
   it.each([
-    ['Overview', 'overview', 'jonah/', undefined],
-    ['Proposals', 'proposals', 'jonah/', { tab: 'proposals' }],
-    ['Judges', 'judges', 'jonah/judges', undefined],
-    ['Evals', 'evals', 'jonah/evals', undefined],
-    ['Bake-offs', 'bake-offs', 'jonah/bake-offs', undefined],
-  ] as const)('marks only %s as current on its route', async (name, tab, path, search) => {
-    renderTabs(tab, path, search);
+    ['Overview', 'overview', 'jonah/'],
+    ['Proposals', 'proposals', 'jonah/proposals'],
+    ['Tests', 'tests', 'jonah/tests'],
+  ] as const)('marks only %s as current on its route', async (name, tab, path) => {
+    renderTabs(tab, path);
     const nav = await screen.findByRole('navigation', { name: 'Jonah' });
     const current = nav.querySelectorAll('[aria-current="page"]');
     expect(current).toHaveLength(1);
@@ -45,7 +56,7 @@ describe('the Jonah tabs', () => {
   });
 
   it('draws the underline variant: a rule under the row that scrolls in its own box', async () => {
-    renderTabs('judges', 'jonah/judges');
+    renderTabs('tests', 'jonah/tests');
     const nav = await screen.findByRole('navigation', { name: 'Jonah' });
     expect(nav.className).toContain('border-b');
     expect(nav.className).toContain('overflow-x-auto');

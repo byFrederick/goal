@@ -6,9 +6,8 @@ const failure = (status: number, code?: string) => new ApiError({ title: 'Failed
 
 describe('shouldRetry', () => {
   it('does not retry a 503 that says the feature is not built', () => {
-    expect(isUnavailable(failure(503, 'judges-unavailable'))).toBe(true);
-    expect(shouldRetry(0, failure(503, 'judges-unavailable'))).toBe(false);
-    expect(shouldRetry(0, failure(503, 'evals-unavailable'))).toBe(false);
+    expect(isUnavailable(failure(503, 'jonah-unavailable'))).toBe(true);
+    expect(shouldRetry(0, failure(503, 'jonah-unavailable'))).toBe(false);
   });
   it('does not retry a 4xx', () => {
     expect(shouldRetry(0, failure(404))).toBe(false);
