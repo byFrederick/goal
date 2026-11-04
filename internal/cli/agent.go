@@ -17,6 +17,7 @@ const (
 	codeModelNotAllowed = "model-not-allowed"
 	codeAgentNotTriable = "agent-not-triable"
 	codeNoFinishedItems = "no-finished-items"
+	codeBudgetExhausted = "learning-budget-exhausted"
 
 	subTryModel = "try-model"
 )

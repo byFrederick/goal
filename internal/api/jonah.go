@@ -141,12 +141,10 @@ func jonahProblem(err error) (gen.Problem, bool) {
 
 	if e, ok := errors.AsType[*modelBudgetError](err); ok {
 		p.ModelEstimate = &e.estimate
-		p.Estimate = &gen.EvalEstimate{Usd: e.estimate.EstimateUsd, Unpriced: []string{}}
 	}
 
 	if e, ok := errors.AsType[*tryBudgetError](err); ok {
 		p.TryEstimate = &e.estimate
-		p.Estimate = &gen.EvalEstimate{Usd: e.estimate.EstimateUsd, Unpriced: []string{}}
 	}
 
 	return p, true
@@ -1013,12 +1011,9 @@ func (a *JonahAuthoring) WriteFile(ctx context.Context, f domain.FactoryID, path
 	return saved.Revision, nil
 }
 
-// Publish publishes f's draft at revision; the eval gate's refusal keeps the draft.
-func (a *JonahAuthoring) Publish(ctx context.Context, f domain.FactoryID, revision int64, expected domain.DefinitionVersionID, message string) (domain.DefinitionVersion, bool, error) {
-	v, err := a.defs.Publish(ctx, f, authoring.PublishRequest{Revision: revision, ExpectedCurrent: expected, Message: message})
-	_, gated := errors.AsType[*authoring.EvalGateError](err)
-
-	return v, gated, err
+// Publish publishes f's draft at revision.
+func (a *JonahAuthoring) Publish(ctx context.Context, f domain.FactoryID, revision int64, expected domain.DefinitionVersionID, message string) (domain.DefinitionVersion, error) {
+	return a.defs.Publish(ctx, f, authoring.PublishRequest{Revision: revision, ExpectedCurrent: expected, Message: message})
 }
 
 // DraftChange is f's open draft as a change of its current version (jonah.Drafts): each file it

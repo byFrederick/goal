@@ -33,10 +33,8 @@ type Authoring interface {
 	// WriteFile writes path into the open draft, whatever is there, and returns the draft's
 	// revision after it.
 	WriteFile(ctx context.Context, f domain.FactoryID, path string, content []byte) (revision int64, err error)
-	// Publish publishes the draft at revision while expected is the current version. After a
-	// refusal, kept reports whether the draft stays open by design (the eval gate's), so it must
-	// not be discarded.
-	Publish(ctx context.Context, f domain.FactoryID, revision int64, expected domain.DefinitionVersionID, message string) (v domain.DefinitionVersion, kept bool, err error)
+	// Publish publishes the draft at revision while expected is the current version.
+	Publish(ctx context.Context, f domain.FactoryID, revision int64, expected domain.DefinitionVersionID, message string) (domain.DefinitionVersion, error)
 	// DiscardDraft discards the draft at revision.
 	DiscardDraft(ctx context.Context, f domain.FactoryID, revision int64) error
 }
@@ -149,15 +147,15 @@ func (dc *Decider) Approve(ctx context.Context, f domain.FactoryID, number int64
 }
 
 // publish writes files, p's edited files, into the draft at revision and publishes it,
-// discarding the draft after a refusal that does not keep it.
+// discarding the draft after a refusal.
 func (dc *Decider) publish(ctx context.Context, f domain.FactoryID, p domain.Proposal, files []editedFile, revision int64,
 	expected domain.DefinitionVersionID,
 ) (domain.DefinitionVersion, error) {
-	v, kept, err := func() (domain.DefinitionVersion, bool, error) {
+	v, err := func() (domain.DefinitionVersion, error) {
 		for _, file := range files {
 			r, err := dc.d.Authoring.WriteFile(ctx, f, file.Path, []byte(file.Content))
 			if err != nil {
-				return domain.DefinitionVersion{}, false, fmt.Errorf("write %s: %w", file.Path, err)
+				return domain.DefinitionVersion{}, fmt.Errorf("write %s: %w", file.Path, err)
 			}
 
 			revision = r
@@ -169,11 +167,9 @@ func (dc *Decider) publish(ctx context.Context, f domain.FactoryID, p domain.Pro
 		return v, nil
 	}
 
-	if !kept {
-		if derr := dc.d.Authoring.DiscardDraft(ctx, f, revision); derr != nil {
-			dc.log.WarnContext(ctx, "jonah proposal draft not discarded", slog.String("factory", string(f)),
-				slog.Int64("proposal", p.Number), slog.Any("error", derr))
-		}
+	if derr := dc.d.Authoring.DiscardDraft(ctx, f, revision); derr != nil {
+		dc.log.WarnContext(ctx, "jonah proposal draft not discarded", slog.String("factory", string(f)),
+			slog.Int64("proposal", p.Number), slog.Any("error", derr))
 	}
 
 	return domain.DefinitionVersion{}, fmt.Errorf("approve proposal %d: %w", p.Number, err)

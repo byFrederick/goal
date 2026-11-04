@@ -44,7 +44,7 @@ func jonahRefusal(status int, code string) gen.Problem {
 func TestJonah_ListPrintsTheProposals(t *testing.T) {
 	t.Parallel()
 
-	srv, sent := evalGoald(t, map[string]evalAnswer{
+	srv, sent := routeGoald(t, map[string]goaldAnswer{
 		listFactoriesRoute: {http.StatusOK, gen.FactoryList{Factories: []gen.Factory{{Id: "f1", Name: searchFactory}}}},
 		"GET " + webProposals: {http.StatusOK, gen.ProposalPage{Proposals: []gen.ProposalEntry{
 			proposalEntry(7, "Ask the reviewer to check the lease", gen.ProposalStateProposed, "agents/reviewer.md"),
@@ -104,7 +104,7 @@ func TestJonah_ShowPrintsADiff(t *testing.T) {
 		},
 	}
 
-	srv, sent := evalGoald(t, map[string]evalAnswer{"GET " + webProposals + "/7": {http.StatusOK, p}})
+	srv, sent := routeGoald(t, map[string]goaldAnswer{"GET " + webProposals + "/7": {http.StatusOK, p}})
 
 	got, err := goalJonah(t, srv.URL, subShow, "7", "--factory", searchFactory)
 	if err != nil {
@@ -131,7 +131,7 @@ func TestJonah_ShowPrintsADiff(t *testing.T) {
 func TestJonah_RejectNeedsAReason(t *testing.T) {
 	t.Parallel()
 
-	srv, sent := evalGoald(t, map[string]evalAnswer{
+	srv, sent := routeGoald(t, map[string]goaldAnswer{
 		"POST " + webProposals + "/7/reject": {http.StatusOK, gen.ProposalDecided{Number: 7, State: gen.ProposalStateRejected}},
 	})
 
@@ -163,7 +163,7 @@ func TestJonah_DecisionsAndLook(t *testing.T) {
 	t.Parallel()
 
 	five, rev := 5, int64(3)
-	srv, sent := evalGoald(t, map[string]evalAnswer{
+	srv, sent := routeGoald(t, map[string]goaldAnswer{
 		"POST " + webProposals + "/7/approve": {http.StatusOK, gen.ProposalDecided{Number: 7, State: gen.ProposalStatePublished, Version: &five}},
 		"POST " + webProposals + "/8/edit":    {http.StatusOK, gen.ProposalDecided{Number: 8, State: gen.ProposalStateApplied, DraftRevision: &rev}},
 		"POST " + webReviews: {http.StatusAccepted, gen.JonahReview{
@@ -215,7 +215,7 @@ func TestJonah_LookConflicts(t *testing.T) {
 		"review-in-flight":          "a review is already pending or running: wait for it to finish",
 		"learning-budget-exhausted": "Jonah's runs used up its budget, learning.jonah.share of what the line spent in the last 7 days: try again when the window moves on",
 	} {
-		srv, _ := evalGoald(t, map[string]evalAnswer{"POST " + webReviews: {http.StatusConflict, jonahRefusal(http.StatusConflict, code)}})
+		srv, _ := routeGoald(t, map[string]goaldAnswer{"POST " + webReviews: {http.StatusConflict, jonahRefusal(http.StatusConflict, code)}})
 
 		if _, err := goalJonah(t, srv.URL, jonahLookCmd, "--factory", searchFactory); err == nil || err.Error() != want {
 			t.Errorf("goal jonah look on %s = %v, want %q", code, err, want)
@@ -244,7 +244,7 @@ func TestJonah_ConflictsPrintOneLine(t *testing.T) {
 		t.Run(tc.code, func(t *testing.T) {
 			t.Parallel()
 
-			srv, _ := evalGoald(t, map[string]evalAnswer{"POST " + tc.path: {http.StatusConflict, jonahRefusal(http.StatusConflict, tc.code)}})
+			srv, _ := routeGoald(t, map[string]goaldAnswer{"POST " + tc.path: {http.StatusConflict, jonahRefusal(http.StatusConflict, tc.code)}})
 
 			var stdout, stderr bytes.Buffer
 
@@ -264,7 +264,7 @@ func TestJonah_ConflictsPrintOneLine(t *testing.T) {
 	t.Run("refused", func(t *testing.T) {
 		t.Parallel()
 
-		srv, _ := evalGoald(t, map[string]evalAnswer{
+		srv, _ := routeGoald(t, map[string]goaldAnswer{
 			"POST " + webProposals + "/7/approve": {http.StatusForbidden, jonahRefusal(http.StatusForbidden, "permission-denied")},
 		})
 

@@ -14,12 +14,6 @@ var Factory []byte
 //go:embed connection-kind.schema.json
 var ConnectionKind []byte
 
-// Evals is evals.schema.json, the contract for a definition's eval cases (evals/cases/*.yaml) and
-// its judges' front matter (evals/judges/*.md).
-//
-//go:embed evals.schema.json
-var Evals []byte
-
 // Environment is environment.schema.json, the contract for a definition's environment files
 // (environments/<name>.yaml, ADR 0037).
 //

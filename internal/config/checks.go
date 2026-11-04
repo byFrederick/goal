@@ -27,7 +27,6 @@ const (
 	checkContracts  = "contracts"  // every output contract is a schema the model API takes as a tool's input
 	// checkAvailability: what the definition declares that this install cannot serve yet.
 	checkAvailability = "availability"
-	checkEvals        = "evals"    // judges and eval cases are well formed (ADR 0025)
 	checkTriggers     = "triggers" // intake triggers' crons, time zones and templates are well formed (ADR 0026)
 	// checkEnvironments: environment files and {{secret}} references are well formed (ADR 0037).
 	checkEnvironments = "environments"
@@ -94,11 +93,10 @@ const (
 
 	codeBuiltinAsk = "builtin-ask-unavailable"
 
-	codeJudgeFrontMissing     = "judge-front-matter-missing"
-	codeJudgeOutcomeDuplicate = "judge-outcome-duplicate"
-	codeEvalNameInvalid       = "eval-name-invalid"
-	codeUnknownJudge          = "unknown-judge"
-	codePatchNotFound         = "patch-not-found"
+	// codeEvalsIgnored: an evals/ folder, which ADR 0039 decision 21 retired with judges and eval
+	// cases. A warning like field-ignored, never a removed form: a live version that has it keeps
+	// running.
+	codeEvalsIgnored = "evals-ignored"
 
 	codeCronInvalid          = "cron-invalid"
 	codeTimeZoneInvalid      = "time-zone-invalid"
@@ -159,7 +157,7 @@ func (c *checker) run() []domain.DefinitionProblem {
 	c.ignoredFields(ignoredKeys)
 	c.moved()
 	c.environments()
-	c.evals()
+	c.evalsIgnored()
 	c.triggers()
 	c.starter()
 
@@ -604,6 +602,24 @@ func (c *checker) ignoredFields(keys []ignoredKey) {
 	}
 }
 
+// EvalsDir is the folder that held a definition's judges and eval cases (ADR 0025), which ADR 0039
+// decision 21 retired: Load and Check ignore what it holds.
+const EvalsDir = "evals"
+
+// evalsIgnored warns, code evals-ignored, when the definition still has an evals/ folder. Like
+// ignoredFields it never goes through removed, so a live version that has one keeps running.
+func (c *checker) evalsIgnored() {
+	if fi, err := fs.Stat(c.f.files, EvalsDir); err != nil || !fi.IsDir() {
+		return
+	}
+
+	c.problems = append(c.problems, domain.DefinitionProblem{
+		Code: codeEvalsIgnored, Severity: domain.SeverityWarning, Check: checkIgnored, Section: domain.SectionFiles,
+		File:    EvalsDir + "/",
+		Message: EvalsDir + "/ is ignored: Jonah's kept tests replace eval cases and judges; remove it",
+	})
+}
+
 // movedKeys are the keys ADR 0037 moved to environment files and secret references, with where
 // each went.
 var movedKeys = []struct {
@@ -712,8 +728,9 @@ func (f *Factory) exists(rel string) bool {
 	return err == nil
 }
 
-// otherFileProblems reports YAML and JSON files besides factory.yaml (contracts, eval cases)
-// that do not parse. Hidden folders (a working copy's .goal/) are skipped.
+// otherFileProblems reports YAML and JSON files besides factory.yaml (contracts, environments)
+// that do not parse. Hidden folders (a working copy's .goal/) and evals/, which is ignored, are
+// skipped.
 func otherFileProblems(files fs.FS) []domain.DefinitionProblem {
 	var out []domain.DefinitionProblem
 
@@ -721,7 +738,7 @@ func otherFileProblems(files fs.FS) []domain.DefinitionProblem {
 		switch {
 		case err != nil:
 			return nil //nolint:nilerr // an unreadable entry is reported by whatever references it
-		case d.IsDir() && p != "." && strings.HasPrefix(d.Name(), "."):
+		case d.IsDir() && p != "." && strings.HasPrefix(d.Name(), "."), d.IsDir() && p == EvalsDir:
 			return fs.SkipDir
 		case d.IsDir() || p == FileName:
 			return nil

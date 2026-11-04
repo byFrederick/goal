@@ -207,17 +207,8 @@ type harness struct {
 	ingestor *knowledge.Ingestor
 	kbDocs   *docsReader
 	uploads  *knowledge.Uploads
-	// evals are the factories' eval runs, evalJudges the versions' judges as tests set them, and
-	// evalLoop the jonah eval loop that starts, prices and cancels runs over them.
-	evals      *porttest.Evals
-	evalJudges *porttest.Judges
-	evalLoop   *jonah.Evals
 	// versions is the definitions cache, which reads the line of a version a bake-off runs.
 	versions *definitions.Cache
-	// judges are the versions' judges as tests set them, judgeScores their scores; tries are
-	// queued by a jonah loop over them and the store's finished runs.
-	judges      *porttest.Judges
-	judgeScores *porttest.JudgeScores
 	// drafts are the factories' draft requests; nothing runs them, so tests finish them.
 	drafts *porttest.DraftRequests
 	// catalog are goald's tool templates; envTests keep the environments' MCP server tests, which
@@ -569,12 +560,15 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		deps.Auth = api.AuthConfig{Mode: api.AuthSession, EmailCodes: !in.noEmailCodes, Google: in.google}
 	}
 
-	deps.Judges = h.judgeDeps(tenancy)
 	deps.Jonah = &api.JonahDeps{Store: h.store, Watches: h.store, Tests: h.store, Tries: h.store, Decisions: jonah.NewDecider(jonah.DecideDeps{
 		Proposals: h.store, Authoring: api.NewJonahAuthoring(authors), Audit: tenancy, Clock: h.clock,
 	}), Models: h.models(defs, deps.OrgPolicies, tenancy), KeptDrafts: h.keptDrafts(authors, defs), TryAgain: h.tryAgain(defs, tenancy)}
 
-	handler, err := api.New(h.withEvals(deps, tenancy, opts))
+	for _, opt := range opts {
+		opt(h, &deps)
+	}
+
+	handler, err := api.New(deps)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -625,20 +619,6 @@ func (h *harness) startFeed(t *testing.T, in *signIn) (*api.Feed, func()) {
 		if err := <-done; err != nil {
 			t.Error(err)
 		}
-	}
-}
-
-// judgeDeps are h's judges and their scores, with a jonah loop over them and the store's finished
-// runs for tries.
-func (h *harness) judgeDeps(tenancy *porttest.Tenancy) *api.JudgeDeps {
-	h.judges, h.judgeScores = porttest.NewJudges(), porttest.NewJudgeScores(h.store)
-
-	return &api.JudgeDeps{
-		Judges: h.judges, Scores: h.judgeScores,
-		Tries: jonah.New(jonah.Deps{
-			Orgs: tenancy, Runs: h.store, Finished: porttest.NewFinishedRuns(h.store), Judges: h.judges, Scores: h.judgeScores,
-			Runner: porttest.NewJudgeRunner(nil), Clock: h.clock,
-		}, jonah.Config{}),
 	}
 }
 
