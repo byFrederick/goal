@@ -62,11 +62,11 @@ describe('the mock repository test', () => {
 });
 
 describe('the mock secrets', () => {
-  it('lists the ten secrets (the nine of the picture and slack-bot), with no value', async () => {
+  it('lists the eleven secrets (the nine of the picture, slack-bot and confluence-token), with no value', async () => {
     const { answer } = await mock().call('/secrets', 'GET');
     const list = answer.secrets as { name: string; uses: unknown[] }[];
 
-    expect(list).toHaveLength(10);
+    expect(list).toHaveLength(11);
     expect(list.find((s) => s.name === 'github-token')?.uses).toHaveLength(5);
     expect(JSON.stringify(answer)).not.toContain('"value":');
   });

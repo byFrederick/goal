@@ -168,6 +168,15 @@ function seeds(): Seed[] {
       uses: [def('support')],
     },
     {
+      name: 'confluence-token',
+      description: 'Confluence API token',
+      factories: null,
+      expiresInDays: null,
+      remindDays: 0,
+      usedAgo: 4 * hourMs,
+      uses: [{ kind: 'knowledge_source', name: 'product-specs' }],
+    },
+    {
       name: 'old-npm-token',
       description: 'npm publish token',
       factories: ['software'],

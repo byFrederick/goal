@@ -55,13 +55,13 @@ const reads: KnowledgeReadCount[] = [
   },
 ];
 
-function renderSource(can?: string[]) {
+function renderSource(can?: string[], source = runbooks) {
   return renderKnowledge({
     page: SourcePage,
     route: '$source',
     location: '/o/acme/knowledge/runbooks',
     seed: [
-      [knowledgeSourceQuery(summary.id, 'runbooks').queryKey, runbooks],
+      [knowledgeSourceQuery(summary.id, 'runbooks').queryKey, source],
       [knowledgeFilesQuery(summary.id, 'runbooks', '').queryKey, files],
       [knowledgeReadsQuery(summary.id, 'runbooks').queryKey, reads],
       [factoriesQuery(summary.id).queryKey, factories],
@@ -90,6 +90,33 @@ describe('the knowledge source page', () => {
     const readBy = screen.getByRole('table', { name: /Factories and agents that read runbooks/ });
     expect(within(readBy).getByText('SRE')).toBeTruthy();
     expect(within(readBy).getByText('investigator')).toBeTruthy();
+  });
+
+  it('offers the on-demand schedule, shows it chosen, and shows no next sync for it', async () => {
+    renderSource(undefined, { ...runbooks, sync_every_seconds: 0, next_sync_at: null });
+
+    const every = (await screen.findByLabelText('Sync every')) as HTMLSelectElement;
+    expect(every.value).toBe('0');
+    expect(within(every).getByRole('option', { name: 'Only when someone presses Sync' })).toBeTruthy();
+    expect(within(every).getAllByRole('option')).toHaveLength(5);
+    expect(screen.queryByText(/Next /)).toBeNull();
+  });
+
+  it('shows a Confluence source’s Root page, and refuses an id that is not digits', async () => {
+    const confluence = {
+      ...runbooks,
+      kind: 'confluence' as const,
+      config: { site: 'https://acme.atlassian.net', email: 'bot@example.com', spaces: 'ENG', root_page: '12345' },
+    };
+    renderSource(undefined, confluence);
+
+    const root = (await screen.findByLabelText('Root page (optional)')) as HTMLInputElement;
+    expect(root.value).toBe('12345');
+    expect(screen.getByText(/Only that page and the pages under it are read/)).toBeTruthy();
+    await userEvent.clear(root);
+    await userEvent.type(root, 'abc');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText('A page id is digits only, such as 12345.')).toBeTruthy();
   });
 
   it('adds the source to a factory’s draft from Add to a factory, and never publishes', async () => {
