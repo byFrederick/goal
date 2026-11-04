@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Validation } from '../../../api/types';
 import type { Model } from '../../../shared/definition/model';
@@ -40,7 +40,6 @@ describe('ChecksCard', () => {
       </TooltipProvider>,
     );
     expect(screen.getByText('Every file matches the schema')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Evals before publish' }).getAttribute('aria-disabled')).toBe('true');
   });
 
   it('says so when the checks cannot be read', () => {
@@ -52,22 +51,5 @@ describe('ChecksCard', () => {
   it('lists each passed check', () => {
     renderChecks(passing);
     expect(screen.getByText('Every file matches the schema')).toBeTruthy();
-  });
-
-  it('shows Evals before publish as unavailable: aria-disabled, not run, with the tip', async () => {
-    renderChecks(passing);
-    const evals = screen.getByRole('button', { name: 'Evals before publish' });
-    expect(evals.getAttribute('aria-disabled')).toBe('true');
-
-    evals.focus();
-    expect(await screen.findByText('Not available yet')).toBeTruthy();
-  });
-
-  it('does nothing when the unavailable Evals row is activated', () => {
-    renderChecks(passing);
-    const evals = screen.getByRole('button', { name: 'Evals before publish' });
-    fireEvent.click(evals);
-    expect(evals.getAttribute('aria-disabled')).toBe('true');
-    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

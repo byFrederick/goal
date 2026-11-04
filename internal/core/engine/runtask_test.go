@@ -156,7 +156,7 @@ func TestRunTask_RefusesWhatAJonahRunMayNotHave(t *testing.T) {
 		"no model":                        func(r *domain.RunRequest) { r.ModelConnection = "" },
 		"a jonah bundle without a window": func(r *domain.RunRequest) { r.WindowStart, r.WindowEnd = time.Time{}, time.Time{} },
 		"a window ending at its start":    func(r *domain.RunRequest) { r.WindowEnd = r.WindowStart },
-		"a window on another bundle":      func(r *domain.RunRequest) { r.Bundle = domain.TaskKindEval },
+		"a window on another bundle":      func(r *domain.RunRequest) { r.Bundle = domain.TaskKindTry },
 	}
 
 	for name, change := range tests {
