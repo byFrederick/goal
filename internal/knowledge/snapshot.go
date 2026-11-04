@@ -107,11 +107,9 @@ func (in *Ingestor) snapshot(ctx context.Context, c domain.SourceClaim, spec dom
 
 	stats.files, stats.fetched, stats.archived, stats.failed = len(b.files), b.fetched, b.archived, b.failed
 
-	write := b.changed(src.CurrentSnapshot == "")
-	if !write && src.CurrentSnapshot != "" {
-		if write, err = in.newReadWhen(ctx, src); err != nil {
-			return stats, err
-		}
+	write, err := in.shouldWrite(ctx, b, src)
+	if err != nil {
+		return stats, err
 	}
 
 	if !write {
@@ -129,6 +127,20 @@ func (in *Ingestor) snapshot(ctx context.Context, c domain.SourceClaim, spec dom
 	stats.written = true
 
 	return stats, nil
+}
+
+// shouldWrite reports whether the pass writes a snapshot: a file changed, or the read-when line
+// differs from the current snapshot's.
+func (in *Ingestor) shouldWrite(ctx context.Context, b *snapshotBuilder, src domain.KnowledgeSource) (bool, error) {
+	if b.changed(src.CurrentSnapshot == "") {
+		return true, nil
+	}
+
+	if src.CurrentSnapshot == "" {
+		return false, nil
+	}
+
+	return in.newReadWhen(ctx, src)
 }
 
 // newReadWhen reports whether src's read-when line differs from its current snapshot's, so a
