@@ -51,10 +51,10 @@ func val[T any](p *T) T {
 	return *p
 }
 
-// proposalFiles edit acme's writer prompt as v1 has it and add a rule.
-func proposalFiles() []domain.ProposalFile {
-	return []domain.ProposalFile{
-		{Path: writerFile, BaseSHA256: string(domain.HashBlob([]byte(writerPrompt))), Content: writerNew},
+// proposalFiles edit acme's writer prompt as v1 has it, by one replacement, and add a rule.
+func proposalFiles() []domain.ProposalEdit {
+	return []domain.ProposalEdit{
+		{Path: writerFile, Replacements: []domain.Replacement{{Old: writerPrompt, New: writerNew}}},
 		{Path: rulePath, Content: ruleNew},
 	}
 }
@@ -90,10 +90,10 @@ func (h *harness) review(t *testing.T, proposals []domain.NewProposal, observati
 }
 
 // proposeOne stores one proposal of files and returns its path.
-func (h *harness) proposeOne(t *testing.T, files []domain.ProposalFile) string {
+func (h *harness) proposeOne(t *testing.T, files []domain.ProposalEdit) string {
 	t.Helper()
 
-	p := h.review(t, []domain.NewProposal{{Title: "Ask for a screenshot", Files: files}})
+	p := h.review(t, []domain.NewProposal{{Title: "Ask for a screenshot", Edits: files}})
 
 	return acmeProposals + "/" + strconv.FormatInt(p[0].Number, 10)
 }
@@ -179,12 +179,12 @@ func TestJonah_ApproveRefusals(t *testing.T) {
 		}
 	})
 
-	t.Run("changed base", func(t *testing.T) {
+	t.Run("old text gone", func(t *testing.T) {
 		t.Parallel()
 
 		h := newHarness(t)
 		files := proposalFiles()
-		files[0].BaseSHA256 = string(domain.HashBlob([]byte("# writer, as it was once\n")))
+		files[0].Replacements = []domain.Replacement{{Old: "# writer, as it was once\n", New: writerNew}}
 		path := h.proposeOne(t, files)
 
 		code, p := problemOfCall(t, h, http.MethodPost, path+"/approve", "")
@@ -239,8 +239,8 @@ func TestJonah_EditProposal(t *testing.T) {
 		t.Errorf("%d %s entries, want 1", n, domain.AuditProposalApplied)
 	}
 
-	// The draft's copy of the writer's prompt changed: a second proposal of it conflicts.
-	second := h.proposeOne(t, proposalFiles()[:1])
+	// The draft has the rule now: a second proposal adding it as a new file conflicts.
+	second := h.proposeOne(t, proposalFiles()[1:])
 
 	code, p := problemOfCall(t, h, http.MethodPost, second+"/edit", "")
 	wantProblem(t, "edit over a changed draft", code, p, http.StatusConflict, "draft-conflict")
@@ -418,11 +418,11 @@ func TestJonah_Reads(t *testing.T) {
 	files := proposalFiles()
 	stored := h.review(t, []domain.NewProposal{
 		{
-			Title: "Ask for a screenshot", Summary: "Four UI changes came back without one.", Files: files,
+			Title: "Ask for a screenshot", Summary: "Four UI changes came back without one.", Edits: files,
 			Evidence: []domain.ProposalEvidence{{ItemID: domain.ItemID(it.Id), Station: reviewStation, Quote: "No screenshot."}},
 			Estimate: domain.ProposalEstimate{Metric: domain.MetricSentBackRate, Station: reviewStation, Before: 0.4, After: 0.2, CostPerItemUSD: 0.05},
 		},
-		{Title: "Tighten the rule", Files: files[1:]},
+		{Title: "Tighten the rule", Edits: files[1:]},
 	},
 		domain.NewObservation{Summary: "UI changes lack screenshots", Detail: "4 of 6", ItemIDs: []domain.ItemID{domain.ItemID(it.Id)}, Count: 4, Proposal: 1},
 		domain.NewObservation{Summary: "Tests skipped", Count: 2},
@@ -535,7 +535,7 @@ func (h *harness) wantProposalPages(t *testing.T, stored []domain.Proposal) {
 }
 
 // wantProposal checks proposal number of TestJonah_Reads, which edits files and rests on it.
-func (h *harness) wantProposal(t *testing.T, number int64, files []domain.ProposalFile, it gen.Item) {
+func (h *harness) wantProposal(t *testing.T, number int64, files []domain.ProposalEdit, it gen.Item) {
 	t.Helper()
 
 	p := h.getProposal(t, acmeProposals+"/"+strconv.FormatInt(number, 10))
@@ -544,11 +544,19 @@ func (h *harness) wantProposal(t *testing.T, number int64, files []domain.Propos
 	}
 
 	wantFiles := []gen.ProposalFile{
-		{Path: writerFile, BaseSha256: files[0].BaseSHA256, BaseContent: writerPrompt, Content: writerNew},
+		{Path: writerFile, BaseSha256: string(domain.HashBlob([]byte(writerPrompt))), BaseContent: writerPrompt, Content: writerNew},
 		{Path: rulePath, Content: ruleNew},
 	}
 	if !reflect.DeepEqual(p.Files, wantFiles) {
 		t.Errorf("files = %+v, want %+v", p.Files, wantFiles)
+	}
+
+	wantEdits := []gen.ProposalEdit{
+		{Path: writerFile, Replacements: &[]gen.Replacement{{Old: files[0].Replacements[0].Old, New: files[0].Replacements[0].New}}},
+		{Path: rulePath, Content: &files[1].Content},
+	}
+	if !reflect.DeepEqual(p.Edits, wantEdits) {
+		t.Errorf("edits = %+v, want %+v", p.Edits, wantEdits)
 	}
 
 	station := reviewStation

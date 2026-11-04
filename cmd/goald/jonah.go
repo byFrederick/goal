@@ -18,11 +18,13 @@ import (
 
 // jonahReviewLoop is the Jonah review loop (ADR 0034, ADR 0039 decision 3): daily reviews queued
 // from store, each queued review run by eng as a jonah-kind run on its version in defs, within s.JonahReview's times.
+// Its proposals are checked by config's definition check against the organization policy's models.
 func jonahReviewLoop(s settings, store *postgres.Store, defs *definitions.Cache, eng *engine.Engine, clock ports.Clock,
 	log *slog.Logger,
 ) *jonah.Reviews {
 	return jonah.NewReviews(jonah.ReviewDeps{
-		Orgs: store, Jonah: store, Definitions: defs, Runner: eng, Clock: clock, Log: log,
+		Orgs: store, Jonah: store, Definitions: defs, Runner: eng, Check: config.ProposalCheck{},
+		Policies: postgres.NewOrgPolicies(store, s.modelIDs()), Clock: clock, Log: log,
 	}, s.JonahReview)
 }
 
@@ -133,7 +135,7 @@ func jonahTryLoop(s settings, store *postgres.Store, defs *definitions.Cache, en
 }
 
 // tryDefinitions is jonah.TryDefinitions over the definitions cache: a proposal's line is its
-// version with the proposal's files written over it, and the stations it reaches are
+// version with the proposal's edits applied to it, and the stations it reaches are
 // factorymodel.StationsReached's between the two.
 type tryDefinitions struct{ defs *definitions.Cache }
 
@@ -141,18 +143,13 @@ func (d tryDefinitions) CurrentLines(ctx context.Context) ([]domain.Line, error)
 	return d.defs.CurrentLines(ctx)
 }
 
-func (d tryDefinitions) ProposedLine(ctx context.Context, v domain.DefinitionVersionID, files []domain.ProposalFile) (domain.Line, []string, error) {
-	set := make(map[string][]byte, len(files))
-	for _, f := range files {
-		set[f.Path] = []byte(f.Content)
-	}
-
+func (d tryDefinitions) ProposedLine(ctx context.Context, v domain.DefinitionVersionID, edits []domain.ProposalEdit) (domain.Line, []string, error) {
 	before, err := d.defs.VersionFiles(ctx, v)
 	if err != nil {
 		return domain.Line{}, nil, err
 	}
 
-	p, err := d.defs.Proposed(ctx, v, set)
+	p, err := d.defs.Proposed(ctx, v, edits)
 	if err != nil {
 		return domain.Line{}, nil, err
 	}
@@ -178,6 +175,6 @@ func snapshot(files map[string][]byte) factorymodel.Snapshot {
 // gatewayProposed is gateway.ProposedDefinitions over the definitions cache.
 type gatewayProposed struct{ defs *definitions.Cache }
 
-func (g gatewayProposed) Proposed(ctx context.Context, id domain.DefinitionVersionID, files map[string][]byte) (gateway.Definitions, error) {
-	return g.defs.Proposed(ctx, id, files)
+func (g gatewayProposed) Proposed(ctx context.Context, id domain.DefinitionVersionID, edits []domain.ProposalEdit) (gateway.Definitions, error) {
+	return g.defs.Proposed(ctx, id, edits)
 }

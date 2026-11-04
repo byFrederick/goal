@@ -2290,7 +2290,7 @@ export interface paths {
         put?: never;
         /**
          * Publish the proposal as a new version, as the caller (ADR 0034 decision 7)
-         * @description Opens a draft from the current version, writes the proposal's files and publishes it through the usual validation and gates. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when a file's current SHA-256 is not its base_sha256 (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate keeps the draft open). 404 proposal-not-found.
+         * @description Applies the proposal's edits again to the current version's files (ADR 0039 decision 6), opens a draft from the current version, writes the results and publishes it through the usual validation and gates. An unrelated change to an edited file since the review does not stop it. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when an edit no longer applies, because a replacement's old text no longer occurs exactly once in its file (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate keeps the draft open). 404 proposal-not-found.
          */
         post: operations["approveProposal"];
         delete?: never;
@@ -2316,8 +2316,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Write the proposal's files into the draft, opening one if none is open (decision 8)
-         * @description Sets the proposal applied; the caller continues in the builder. 409 draft-conflict when the draft's copy of a file is not its base_sha256 (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
+         * Apply the proposal's edits to the draft, opening one if none is open (decision 8)
+         * @description Applies the proposal's edits again to the draft's copy of each file and sets the proposal applied; the caller continues in the builder. 409 draft-conflict when an edit no longer applies to the draft's copy, because a replacement's old text no longer occurs exactly once (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
          */
         post: operations["editProposal"];
         delete?: never;
@@ -6009,11 +6009,14 @@ export interface components {
             id: string;
             summary: string;
             detail: string;
-            /** @description The items it rests on, as <factory name>#<number> */
+            /** @description The items it rests on, as <factory name>#<number>, gathered across reviews */
             item_refs: string[];
-            /** @enum {string} */
-            state: "watching" | "proposed";
-            /** @description How often the pattern was seen */
+            /**
+             * @description proposed: a proposal addresses it; watching: its count has not reached propose_after; not_jonahs: its cause is not a definition problem
+             * @enum {string}
+             */
+            state: "watching" | "proposed" | "not_jonahs";
+            /** @description How often the cause was seen */
             count: number;
             /** @description The count at which it becomes a proposal */
             propose_after: number;
@@ -6022,8 +6025,16 @@ export interface components {
              * @description The number of the proposal it became
              */
             proposal?: number;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When a review first noticed it
+             */
             created_at: string;
+            /**
+             * Format: date-time
+             * @description When a review last updated it
+             */
+            updated_at: string;
         };
         JonahReview: {
             id: string;
@@ -6050,7 +6061,7 @@ export interface components {
              * @description What the factory's jonah runs cost since the first of this UTC month
              */
             month_cost_usd: number;
-            /** @description The observations made since Monday 00:00 UTC, newest first */
+            /** @description The observations a review updated since Monday 00:00 UTC, the latest updated first */
             observations: components["schemas"]["JonahObservation"][];
             last_review?: components["schemas"]["JonahReview"];
         };
@@ -6092,13 +6103,27 @@ export interface components {
              */
             next?: number;
         };
+        /** @description One exact edit of a file; old occurs exactly once in it */
+        Replacement: {
+            old: string;
+            new: string;
+        };
+        /** @description One file a proposal changes (ADR 0039 decision 6): replacements, applied in order to the file as it is when the proposal is approved or edited into the draft, or the whole content of a new file. base_sha256 is set only on a whole file stored before proposals were replacements: it replaces the file while the file still has that SHA-256. */
+        ProposalEdit: {
+            path: string;
+            replacements?: components["schemas"]["Replacement"][];
+            /** @description The whole content of a new file; absent with replacements */
+            content?: string;
+            base_sha256?: string;
+        };
+        /** @description One edited file as it reads in the version the proposal was made against, before and after its edit */
         ProposalFile: {
             path: string;
-            /** @description The SHA-256 of the file the review read; empty for a new file */
+            /** @description The SHA-256 of the file in that version; empty for a new file */
             base_sha256: string;
             /** @description The file in the version the proposal was made against; empty for a new file */
             base_content: string;
-            /** @description The file's new content */
+            /** @description The file with the proposal's edit applied to base_content */
             content: string;
         };
         ProposalEvidence: {
@@ -6111,6 +6136,9 @@ export interface components {
         };
         Proposal: components["schemas"]["ProposalEntry"] & {
             summary: string;
+            /** @description What the proposal stores and Approve and Edit apply again, one per file in path order */
+            edits: components["schemas"]["ProposalEdit"][];
+            /** @description Each of edits applied to its file in made_against_version, in the same order */
             files: components["schemas"]["ProposalFile"][];
             evidence: components["schemas"]["ProposalEvidence"][];
             /** @description The number of the version the review read */

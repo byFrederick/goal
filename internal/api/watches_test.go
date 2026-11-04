@@ -17,7 +17,7 @@ func (h *harness) approvedWithWatch(t *testing.T) (string, domain.Proposal) {
 	t.Helper()
 
 	stored := h.review(t, []domain.NewProposal{{
-		Title: "Ask for a screenshot", Files: proposalFiles(),
+		Title: "Ask for a screenshot", Edits: proposalFiles(),
 		Estimate: domain.ProposalEstimate{Metric: domain.MetricSentBackRate, Station: reviewStation, Before: 0.3, After: 0.1},
 	}})
 	path := acmeProposals + "/" + strconv.FormatInt(stored[0].Number, 10)

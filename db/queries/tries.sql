@@ -1,4 +1,4 @@
--- Tries of past items (00101, ADR 0039 decisions 9 and 11). Row-level security scopes every query
+-- Tries of past items (00102, ADR 0039 decisions 9 and 11). Row-level security scopes every query
 -- to the organization.
 
 -- name: LockProposal :one

@@ -28,6 +28,9 @@ var jonahTests = []struct {
 	{"Jonah_ConcurrentClaimsTakeDifferentReviews", testJonahConcurrentClaims},
 	{"Jonah_ProposalsNumberedPerFactory", testJonahNumbers},
 	{"Jonah_PathOutsideAllowlistRefused", testJonahPathRefused},
+	{"Jonah_MalformedEditRefused", testJonahEditRefused},
+	{"Jonah_NewProposalSupersedesOnlyOverlapping", testJonahSupersede},
+	{"Jonah_ObservationsPersistAcrossReviews", testJonahObservationsPersist},
 	{"Jonah_DecideProposalOnlyOnce", testJonahDecide},
 	{"Jonah_UndoProposalOncePerProposal", testJonahUndo},
 	{"Jonah_OtherOrgInvisible", testJonahTenancy},
@@ -40,6 +43,9 @@ var jonahTests = []struct {
 
 // sha is a well-formed base_sha256.
 var sha = strings.Repeat("ab", 32)
+
+// jonahRef is Actor.Ref() of domain.JonahActor, who supersedes proposals.
+var jonahRef = domain.JonahActor.Ref()
 
 // queueReview queues a manual review of factory on a new version and fails the test on an error.
 func (f *fixture) queueReview(t *testing.T, factory domain.FactoryID, at time.Time) domain.JonahReview {
@@ -87,7 +93,7 @@ func (f *fixture) finishReview(t *testing.T, factory domain.FactoryID, at time.T
 func proposal(title string, paths ...string) domain.NewProposal {
 	p := domain.NewProposal{Title: title, Summary: "why " + title}
 	for _, path := range paths {
-		p.Files = append(p.Files, domain.ProposalFile{Path: path, BaseSHA256: sha, Content: "new " + path})
+		p.Edits = append(p.Edits, domain.ProposalEdit{Path: path, Replacements: []domain.Replacement{{Old: "old " + path, New: "new " + path}}})
 	}
 
 	return p
@@ -318,6 +324,8 @@ func testJonahNumbers(f *fixture) {
 	it := f.create(t, domain.NewItem{})
 
 	p1 := proposal("Ask for a screenshot", "agents/frontend-engineer.md", "rules/evidence.md")
+	p1.Edits = append(p1.Edits, domain.ProposalEdit{Path: "rules/new.md", Content: "", BaseSHA256: ""},
+		domain.ProposalEdit{Path: "rules/old.md", Content: "whole", BaseSHA256: sha})
 	p1.Evidence = []domain.ProposalEvidence{{ItemID: it.ID, EventID: 7, Station: stNext, Quote: "no screenshot"}}
 	p1.Estimate = domain.ProposalEstimate{Metric: domain.MetricSentBackRate, Station: stNext, Before: 0.4, After: 0.1, CostPerItemUSD: 0.02}
 
@@ -362,7 +370,7 @@ func (f *fixture) expectProposal(t *testing.T, stored domain.Proposal, review do
 		t.Errorf("proposal %d = %+v, want %s of review %s on %s, proposed", stored.Number, got, stored.ID, review.ID, review.VersionID)
 	}
 
-	if got.Title != n.Title || got.Summary != n.Summary || !reflect.DeepEqual(got.Files, n.Files) ||
+	if got.Title != n.Title || got.Summary != n.Summary || !reflect.DeepEqual(got.Edits, n.Edits) ||
 		!reflect.DeepEqual(got.Evidence, n.Evidence) || got.Estimate != n.Estimate || !got.CreatedAt.Equal(t0.Add(time.Minute)) {
 		t.Errorf("proposal %d = %+v, want what the review said: %+v", stored.Number, got, n)
 	}
@@ -427,7 +435,7 @@ func (f *fixture) expectPages(t *testing.T) {
 func testJonahPathRefused(f *fixture) {
 	t := f.t
 
-	for _, path := range []string{"evals/cases/a.yaml", "agents/../evals/x.md", "README.md", "factory.yaml.bak"} {
+	for _, path := range []string{"evals/cases/a.yaml", "agents/../evals/x.md", "README.md", "factory.yaml.bak", "skills/x/run.sh", "memory.yaml"} {
 		f.queueReview(t, f.factory, t0)
 		claimed := f.claimReview(t, t0)
 
@@ -971,5 +979,161 @@ func testJonahEvidenceMedians(f *fixture) {
 
 	if _, err := f.Jonah.StationRunMedians(t.Context(), f.factory, since, until); !errors.Is(err, domain.ErrNoOrg) {
 		t.Errorf("StationRunMedians without an org: %v, want ErrNoOrg", err)
+	}
+}
+
+// An edit with an empty old, or with both replacements and whole content, is refused, and the
+// review stores nothing.
+func testJonahEditRefused(f *fixture) {
+	t := f.t
+
+	for name, edit := range map[string]domain.ProposalEdit{
+		"empty old":        {Path: "rules/a.md", Replacements: []domain.Replacement{{Old: "", New: "x"}}},
+		"replacements too": {Path: "rules/a.md", Replacements: []domain.Replacement{{Old: "a", New: "b"}}, Content: "whole"},
+		"bad base":         {Path: "rules/a.md", Content: "whole", BaseSHA256: "abc"},
+	} {
+		f.queueReview(t, f.factory, t0)
+		claimed := f.claimReview(t, t0)
+
+		_, _, err := f.Jonah.FinishJonahReview(f.ctx(t), claimed, domain.JonahReviewResult{
+			State: domain.JonahDone, At: t0.Add(time.Second),
+			Proposals: []domain.NewProposal{{Title: "bad", Edits: []domain.ProposalEdit{edit}}},
+		})
+		if !errors.Is(err, domain.ErrInvalid) {
+			t.Fatalf("%s: %v, want ErrInvalid", name, err)
+		}
+
+		if got := f.proposals(t, ports.ProposalQuery{Factory: f.factory, Limit: 10}); len(got) != 0 {
+			t.Errorf("%s: proposals %v, want none", name, got)
+		}
+
+		if _, _, err := f.Jonah.FinishJonahReview(f.ctx(t), claimed, domain.JonahReviewResult{State: domain.JonahFailed, Error: "bad edit", At: t0.Add(time.Second)}); err != nil {
+			t.Fatalf("fail the review: %v", err)
+		}
+	}
+}
+
+// A new proposal supersedes, by Jonah and in the same transaction, the open proposals its edits
+// overlap (NewProposal.Supersedes), and only those: another open one stays proposed, and one
+// decided since stays as it was decided. An undo proposal supersedes the same way.
+func testJonahSupersede(f *fixture) {
+	t := f.t
+	_, first := f.finishReview(t, f.factory, t0, domain.JonahReviewResult{Proposals: []domain.NewProposal{
+		proposal("a", "rules/a.md"), proposal("b", "rules/b.md"), proposal("c", "rules/c.md"),
+	}})
+
+	f.decide(t, 3, domain.ProposalDecision{State: domain.ProposalRejected, RejectReason: "no", By: ada, At: t1})
+
+	next := proposal("a again", "rules/a.md")
+	next.Supersedes = []domain.ProposalID{first[0].ID, first[2].ID}
+
+	_, second := f.finishReview(t, f.factory, t1, domain.JonahReviewResult{Proposals: []domain.NewProposal{next}})
+
+	want := map[int64]domain.ProposalState{1: domain.ProposalSuperseded, 2: domain.ProposalProposed, 3: domain.ProposalRejected, 4: domain.ProposalProposed}
+	for number, state := range want {
+		got, err := f.Jonah.Proposal(f.ctx(t), f.factory, number)
+		if err != nil || got.State != state {
+			t.Errorf("proposal %d: %s, %v; want %s", number, got.State, err, state)
+		}
+	}
+
+	if got, _ := f.Jonah.Proposal(f.ctx(t), f.factory, 1); got.DecidedBy != jonahRef || !got.DecidedAt.Equal(t1.Add(time.Minute)) {
+		t.Errorf("superseded proposal decided by %q at %s, want %s at %s", got.DecidedBy, got.DecidedAt, jonahRef, t1.Add(time.Minute))
+	}
+
+	f.decide(t, 4, domain.ProposalDecision{State: domain.ProposalPublished, By: ada, At: t1})
+
+	undo := proposal("Undo proposal 4", "rules/b.md")
+	undo.Supersedes = []domain.ProposalID{first[1].ID}
+
+	if _, err := f.Jonah.UndoProposal(f.ctx(t), f.factory, second[0].ID, f.NewVersion(t, f.org, f.factory), undo, t1); err != nil {
+		t.Fatalf("UndoProposal: %v", err)
+	}
+
+	if got, _ := f.Jonah.Proposal(f.ctx(t), f.factory, 2); got.State != domain.ProposalSuperseded || got.DecidedBy != jonahRef {
+		t.Errorf("proposal 2 after the undo: %s by %q, want superseded by %s", got.State, got.DecidedBy, jonahRef)
+	}
+}
+
+// An observation persists across reviews (ADR 0039 decision 5): a later review that names an
+// open one updates it, joining its items, adding its count and setting it proposed or not
+// Jonah's; one that names an observation no longer open, or none, is a new one. OpenObservations
+// lists the watching and proposed ones.
+func testJonahObservationsPersist(f *fixture) {
+	t := f.t
+	a, b := f.create(t, domain.NewItem{}), f.create(t, domain.NewItem{})
+
+	first, _ := f.finishReview(t, f.factory, t0, domain.JonahReviewResult{Observations: []domain.NewObservation{
+		{Summary: "No screenshot", ItemIDs: []domain.ItemID{a.ID}, Count: 2},
+		{Summary: "Sandbox lost", Count: 1},
+	}})
+
+	open := f.openObservations(t, 2)
+	screenshot, sandbox := open[0], open[1]
+
+	if screenshot.Summary != "No screenshot" {
+		screenshot, sandbox = sandbox, screenshot
+	}
+
+	_, ps := f.finishReview(t, f.factory, t1, domain.JonahReviewResult{
+		Proposals: []domain.NewProposal{proposal("Ask for a screenshot", "rules/a.md")},
+		Observations: []domain.NewObservation{
+			{ID: screenshot.ID, Summary: "No screenshot on UI changes", ItemIDs: []domain.ItemID{a.ID, b.ID}, Count: 3, Proposal: 1},
+			{ID: sandbox.ID, Summary: "Sandbox lost", Count: 1, NotJonahs: true},
+		},
+	})
+
+	f.expectPersisted(t, first.ID, screenshot.ID, sandbox.ID, ps[0].ID, []domain.ItemID{a.ID, b.ID})
+
+	if open := f.openObservations(t, 1); open[0].ID != screenshot.ID {
+		t.Errorf("open observations %+v, want only %s", open, screenshot.ID)
+	}
+
+	f.finishReview(t, f.factory, t1.Add(time.Hour), domain.JonahReviewResult{Observations: []domain.NewObservation{
+		{ID: sandbox.ID, Summary: "Sandbox lost again", Count: 1},
+	}})
+
+	if n, _ := f.Jonah.Observations(f.ctx(t), f.factory, 10); len(n) != 3 {
+		t.Errorf("observations after naming a closed one: %d, want a new third", len(n))
+	}
+}
+
+// openObservations is the factory's open observations, failing the test unless there are n.
+func (f *fixture) openObservations(t *testing.T, n int) []domain.Observation {
+	t.Helper()
+
+	open, err := f.Jonah.OpenObservations(f.ctx(t), f.factory, 10)
+	if err != nil || len(open) != n {
+		t.Fatalf("OpenObservations: %+v, %v; want %d", open, err, n)
+	}
+
+	return open
+}
+
+// expectPersisted checks testJonahObservationsPersist's two observations after the second
+// review: screenshot, made by review first, updated to count 5 on items and proposed as
+// proposal; sandbox not Jonah's with count 2.
+func (f *fixture) expectPersisted(t *testing.T, first domain.JonahReviewID, screenshot, sandbox domain.ObservationID,
+	proposal domain.ProposalID, items []domain.ItemID,
+) {
+	t.Helper()
+
+	obs, err := f.Jonah.Observations(f.ctx(t), f.factory, 10)
+	if err != nil || len(obs) != 2 {
+		t.Fatalf("Observations: %+v, %v; want the 2 of the first review", obs, err)
+	}
+
+	got := map[domain.ObservationID]domain.Observation{obs[0].ID: obs[0], obs[1].ID: obs[1]}
+
+	s := got[screenshot]
+	if s.Count != 5 || !reflect.DeepEqual(s.ItemIDs, items) || s.State != domain.ObservationProposed ||
+		s.ProposalID != proposal || s.Summary != "No screenshot on UI changes" || s.ReviewID != first ||
+		!s.CreatedAt.Equal(t0.Add(time.Minute)) || !s.UpdatedAt.Equal(t1.Add(time.Minute)) {
+		t.Errorf("updated observation %+v, want count 5, items a and b, proposed as %s, made by %s at %s, updated at %s",
+			s, proposal, first, t0.Add(time.Minute), t1.Add(time.Minute))
+	}
+
+	if n := got[sandbox]; n.State != domain.ObservationNotJonahs || n.Count != 2 {
+		t.Errorf("not Jonah's observation %+v, want not_jonahs, count 2", n)
 	}
 }

@@ -152,8 +152,8 @@ func weekStart(now time.Time) time.Time {
 	return day.AddDate(0, 0, -((int(day.Weekday()) + 6) % 7))
 }
 
-// weekObservations are f's observations made since since, newest first, each with the number
-// of the proposal it became.
+// weekObservations are f's observations a review updated since since, the latest updated first,
+// each with the number of the proposal it became.
 func (s *server) weekObservations(ctx context.Context, f domain.FactoryID, policy domain.JonahPolicy, since time.Time) ([]gen.JonahObservation, error) {
 	obs, err := s.jonah.Store.Observations(ctx, f, overviewObservations)
 	if err != nil {
@@ -165,7 +165,7 @@ func (s *server) weekObservations(ctx context.Context, f domain.FactoryID, polic
 	out := []gen.JonahObservation{}
 
 	for _, o := range obs {
-		if o.CreatedAt.Before(since) {
+		if o.UpdatedAt.Before(since) {
 			continue
 		}
 
@@ -178,6 +178,7 @@ func (s *server) weekObservations(ctx context.Context, f domain.FactoryID, polic
 		e := gen.JonahObservation{
 			Id: string(o.ID), Summary: o.Summary, Detail: o.Detail, ItemRefs: s.itemRefs(ctx, f, o.ItemIDs),
 			State: gen.JonahObservationState(o.State), Count: o.Count, ProposeAfter: policy.ProposeAfter, CreatedAt: o.CreatedAt,
+			UpdatedAt: o.UpdatedAt,
 		}
 		if n, ok := numbers[o.ProposalID]; ok {
 			e.Proposal = &n
@@ -309,6 +310,7 @@ func (s *server) proposalOut(ctx context.Context, rec ports.FactoryRecord, p dom
 		MadeAgainstVersion: made.Number, PublishesAsVersion: rec.LastVersionNumber + 1,
 	}
 
+	out.Edits = proposalEditsOut(p.Edits)
 	if out.Files, err = s.proposalFilesOut(ctx, rec.ID, p, made.Number); err != nil {
 		return gen.Proposal{}, err
 	}
@@ -359,24 +361,58 @@ func (s *server) proposalOut(ctx context.Context, rec ports.FactoryRecord, p dom
 	return out, nil
 }
 
-// proposalFilesOut are p's files, each with its content in version made of f (empty for a new
-// file).
-func (s *server) proposalFilesOut(ctx context.Context, f domain.FactoryID, p domain.Proposal, made int) ([]gen.ProposalFile, error) {
-	out := make([]gen.ProposalFile, 0, len(p.Files))
+// proposalEditsOut are edits as the API gives them.
+func proposalEditsOut(edits []domain.ProposalEdit) []gen.ProposalEdit {
+	out := make([]gen.ProposalEdit, 0, len(edits))
 
-	for _, file := range p.Files {
-		base := ""
+	for _, e := range edits {
+		g := gen.ProposalEdit{Path: e.Path}
 
-		if file.BaseSHA256 != "" {
-			b, err := s.defs.VersionFile(ctx, f, authoring.VersionSelector{Kind: authoring.SelectNumber, Number: made}, file.Path)
-			if err != nil && !errors.Is(err, authoring.ErrFileNotFound) {
-				return nil, fmt.Errorf("read %s of v%d: %w", file.Path, made, err)
+		if e.Whole() {
+			g.Content = &e.Content
+			if e.BaseSHA256 != "" {
+				g.BaseSha256 = &e.BaseSHA256
+			}
+		} else {
+			reps := make([]gen.Replacement, 0, len(e.Replacements))
+			for _, r := range e.Replacements {
+				reps = append(reps, gen.Replacement{Old: r.Old, New: r.New})
 			}
 
-			base = string(b.Content)
+			g.Replacements = &reps
 		}
 
-		out = append(out, gen.ProposalFile{Path: file.Path, BaseSha256: file.BaseSHA256, BaseContent: base, Content: file.Content})
+		out = append(out, g)
+	}
+
+	return out
+}
+
+// proposalFilesOut are p's edited files in version made of f: each file's content there (empty
+// for a new file) and that content with its edit applied. An edit that does not apply there,
+// which a review's check refuses, shows the file unchanged.
+func (s *server) proposalFilesOut(ctx context.Context, f domain.FactoryID, p domain.Proposal, made int) ([]gen.ProposalFile, error) {
+	out := make([]gen.ProposalFile, 0, len(p.Edits))
+
+	for _, e := range p.Edits {
+		b, err := s.defs.VersionFile(ctx, f, authoring.VersionSelector{Kind: authoring.SelectNumber, Number: made}, e.Path)
+		if err != nil && !errors.Is(err, authoring.ErrFileNotFound) {
+			return nil, fmt.Errorf("read %s of v%d: %w", e.Path, made, err)
+		}
+
+		present := err == nil
+		base, sha := "", ""
+
+		if present {
+			base, sha = string(b.Content), string(domain.HashBlob(b.Content))
+		}
+
+		content, err := e.Apply([]byte(base), present)
+		if err != nil {
+			content = base
+		}
+
+		out = append(out, gen.ProposalFile{Path: e.Path, BaseSha256: sha, BaseContent: base, Content: content})
 	}
 
 	return out, nil

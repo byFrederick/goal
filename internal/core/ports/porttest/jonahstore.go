@@ -175,30 +175,88 @@ func (s *Store) storeReviewOutput(org domain.OrgID, r domain.JonahReview, res do
 	for k, n := range res.Proposals {
 		p := domain.Proposal{
 			ID: domain.ProposalID(s.newID()), FactoryID: r.FactoryID, Number: last + int64(k) + 1, ReviewID: r.ID, VersionID: r.VersionID,
-			State: domain.ProposalProposed, Title: n.Title, Summary: n.Summary, Files: slices.Clone(n.Files),
+			State: domain.ProposalProposed, Title: n.Title, Summary: n.Summary, Edits: cloneEdits(n.Edits),
 			Evidence: slices.Clone(n.Evidence), Estimate: n.Estimate, CreatedAt: res.At,
 		}
+		s.supersede(org, r.FactoryID, n.Supersedes, res.At)
+
 		stored = append(stored, p)
 		s.jonah.proposals = append(s.jonah.proposals, jonahRow[domain.Proposal]{org, p})
 	}
 
 	for _, n := range res.Observations {
-		o := domain.Observation{
-			ID: domain.ObservationID(s.newID()), FactoryID: r.FactoryID, ReviewID: r.ID, Summary: n.Summary, Detail: n.Detail,
-			ItemIDs: slices.Clone(n.ItemIDs), Count: n.Count, State: domain.ObservationWatching, CreatedAt: res.At,
-		}
-		if o.ItemIDs == nil {
-			o.ItemIDs = []domain.ItemID{}
+		var proposal domain.ProposalID
+		if n.Proposal > 0 {
+			proposal = stored[n.Proposal-1].ID
 		}
 
-		if n.Proposal > 0 {
-			o.State, o.ProposalID = domain.ObservationProposed, stored[n.Proposal-1].ID
+		if s.updateObservation(org, r.FactoryID, n, proposal, res.At) {
+			continue
+		}
+
+		o := domain.Observation{
+			ID: domain.ObservationID(s.newID()), FactoryID: r.FactoryID, ReviewID: r.ID, Summary: n.Summary, Detail: n.Detail,
+			ItemIDs: unionItems(nil, n.ItemIDs), Count: n.Count, State: n.State(), ProposalID: proposal, CreatedAt: res.At, UpdatedAt: res.At,
 		}
 
 		s.jonah.observations = append(s.jonah.observations, jonahRow[domain.Observation]{org, o})
 	}
 
 	return cloneProposals(stored)
+}
+
+// supersede sets the factory's proposals of ids that are still proposed superseded by Jonah at
+// at. Callers hold s.mu.
+func (s *Store) supersede(org domain.OrgID, factory domain.FactoryID, ids []domain.ProposalID, at time.Time) {
+	for i := range s.jonah.proposals {
+		p := &s.jonah.proposals[i]
+		if p.org == org && p.row.FactoryID == factory && p.row.State == domain.ProposalProposed && slices.Contains(ids, p.row.ID) {
+			p.row.State, p.row.DecidedBy, p.row.DecidedAt = domain.ProposalSuperseded, domain.JonahActor.Ref(), at
+		}
+	}
+}
+
+// updateObservation updates the open observation n names, as UpdateObservation does, and
+// reports whether there was one. Callers hold s.mu.
+func (s *Store) updateObservation(org domain.OrgID, factory domain.FactoryID, n domain.NewObservation, proposal domain.ProposalID, at time.Time) bool {
+	if n.ID == "" {
+		return false
+	}
+
+	for i := range s.jonah.observations {
+		o := &s.jonah.observations[i].row
+		if s.jonah.observations[i].org != org || o.FactoryID != factory || o.ID != n.ID || !o.State.Open() {
+			continue
+		}
+
+		o.Summary, o.Detail, o.ItemIDs, o.UpdatedAt = n.Summary, n.Detail, unionItems(o.ItemIDs, n.ItemIDs), at
+		o.Count = int(min(int64(o.Count)+int64(n.Count), math.MaxInt32))
+
+		if st := n.State(); st != domain.ObservationWatching {
+			o.State = st
+		}
+
+		if proposal != "" {
+			o.ProposalID = proposal
+		}
+
+		return true
+	}
+
+	return false
+}
+
+// unionItems are a's items and then b's not in a, at most 1000.
+func unionItems(a, b []domain.ItemID) []domain.ItemID {
+	out := []domain.ItemID{}
+
+	for _, it := range slices.Concat(a, b) {
+		if !slices.Contains(out, it) {
+			out = append(out, it)
+		}
+	}
+
+	return out[:min(len(out), 1000)]
 }
 
 // LastDoneJonahReview implements ports.JonahStore.
@@ -344,8 +402,20 @@ func (s *Store) Observations(ctx context.Context, factory domain.FactoryID, limi
 	}
 
 	slices.SortFunc(out, func(a, b domain.Observation) int {
-		return cmp.Or(b.CreatedAt.Compare(a.CreatedAt), cmp.Compare(b.ID, a.ID))
+		return cmp.Or(b.UpdatedAt.Compare(a.UpdatedAt), cmp.Compare(b.ID, a.ID))
 	})
+
+	return out[:min(len(out), max(limit, 0))], nil
+}
+
+// OpenObservations implements ports.JonahStore.
+func (s *Store) OpenObservations(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.Observation, error) {
+	all, err := s.Observations(ctx, factory, math.MaxInt)
+	if err != nil {
+		return nil, err
+	}
+
+	out := slices.DeleteFunc(all, func(o domain.Observation) bool { return !o.State.Open() })
 
 	return out[:min(len(out), max(limit, 0))], nil
 }
@@ -492,7 +562,16 @@ func (s *Store) StationFlow(ctx context.Context, factory domain.FactoryID, stati
 func cloneProposals(ps []domain.Proposal) []domain.Proposal {
 	out := slices.Clone(ps)
 	for i := range out {
-		out[i].Files, out[i].Evidence = slices.Clone(out[i].Files), slices.Clone(out[i].Evidence)
+		out[i].Edits, out[i].Evidence = cloneEdits(out[i].Edits), slices.Clone(out[i].Evidence)
+	}
+
+	return out
+}
+
+func cloneEdits(es []domain.ProposalEdit) []domain.ProposalEdit {
+	out := slices.Clone(es)
+	for i := range out {
+		out[i].Replacements = slices.Clone(out[i].Replacements)
 	}
 
 	return out
@@ -543,8 +622,9 @@ func (s *Store) UndoProposal(ctx context.Context, factory domain.FactoryID, undo
 
 	p := domain.Proposal{
 		ID: domain.ProposalID(s.newID()), FactoryID: factory, Number: last + 1, Undoes: undoes, VersionID: version,
-		State: domain.ProposalProposed, Title: n.Title, Summary: n.Summary, Files: slices.Clone(n.Files), CreatedAt: at,
+		State: domain.ProposalProposed, Title: n.Title, Summary: n.Summary, Edits: cloneEdits(n.Edits), CreatedAt: at,
 	}
+	s.supersede(org, factory, n.Supersedes, at)
 	s.jonah.proposals = append(s.jonah.proposals, jonahRow[domain.Proposal]{org, p})
 
 	return cloneProposals([]domain.Proposal{p})[0], nil

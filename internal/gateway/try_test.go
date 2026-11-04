@@ -68,7 +68,7 @@ func (h *harness) pastTry(t *testing.T) (domain.Item, domain.PastTry) {
 	}
 
 	_, ps, err := h.store.FinishJonahReview(ctx, rv, domain.JonahReviewResult{State: domain.JonahDone, At: now, Proposals: []domain.NewProposal{{
-		Title: "Test first", Files: []domain.ProposalFile{{Path: engineerPrompt, BaseSHA256: strings.Repeat("ab", 32), Content: "# engineer, test first\n"}},
+		Title: "Test first", Edits: []domain.ProposalEdit{{Path: engineerPrompt, Replacements: []domain.Replacement{{Old: "# engineer\n", New: "# engineer, test first\n"}}}},
 	}}})
 	if err != nil {
 		t.Fatal(err)
@@ -92,7 +92,7 @@ func (h *harness) tryClaims(try domain.PastTry) domain.TaskClaims {
 	return c
 }
 
-// A try's bundle (ADR 0039 decision 9) is the station's on the version with the proposal's files,
+// A try's bundle (ADR 0039 decision 9) is the station's on the version with the proposal's edits,
 // from the original run's recorded brief, the item's earlier outputs and its commit and base
 // commit, with the login that clones the repository. Its environment keeps its setup, tools and
 // env names, marked setup only, and drops its files and MCP servers; it has no connection, and

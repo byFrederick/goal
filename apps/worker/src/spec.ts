@@ -168,7 +168,7 @@ export type Judge = z.infer<typeof Judge>;
 
 /**
  * Jonah mode (ADR 0034, ADR 0039 decision 4): the review's policy. Everything it reads is a file
- * of the bundle under /goal (definition/, evidence/, proposals/, files.md, events.md).
+ * of the bundle under /goal (definition/, evidence/, proposals/, files.md, events.md, observations.md).
  */
 export const Jonah = z.object({
   /** The policy's proposeAfter: a daily review proposes an observation only when its count reaches it. */

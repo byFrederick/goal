@@ -163,7 +163,7 @@ type LockProposalRow struct {
 	Number int64
 }
 
-// Tries of past items (00101, ADR 0039 decisions 9 and 11). Row-level security scopes every query
+// Tries of past items (00102, ADR 0039 decisions 9 and 11). Row-level security scopes every query
 // to the organization.
 // The proposal whose tries are queued, locked so two sweeps queue its tries once.
 func (q *Queries) LockProposal(ctx context.Context, arg LockProposalParams) (LockProposalRow, error) {

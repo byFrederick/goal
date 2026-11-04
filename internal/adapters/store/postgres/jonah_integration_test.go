@@ -44,7 +44,7 @@ func seedJonah(ctx context.Context, t *testing.T, s *Store) (domain.FactoryID, d
 
 	if _, _, err := s.FinishJonahReview(ctx, claimed, domain.JonahReviewResult{
 		State: domain.JonahDone, At: jonahAt,
-		Proposals:    []domain.NewProposal{{Title: "a", Files: []domain.ProposalFile{{Path: ruleA, Content: "x"}}}},
+		Proposals:    []domain.NewProposal{{Title: "a", Edits: []domain.ProposalEdit{{Path: ruleA, Content: "x"}}}},
 		Observations: []domain.NewObservation{{Summary: "seen", Count: 1, Proposal: 1}},
 	}); err != nil {
 		t.Fatal(err)
@@ -68,8 +68,8 @@ func seedJonah(ctx context.Context, t *testing.T, s *Store) (domain.FactoryID, d
 }
 
 // The CHECKs refuse, as goal_app, a proposal the domain check would have refused first: a path
-// outside the allowlist or with a .. segment, files whose paths are not paths, too many bytes,
-// and a rejection without a reason.
+// outside the allowlist (a script among them) or with a .. segment, edits whose paths are not
+// paths, a malformed edit, too many bytes, and a rejection without a reason.
 func TestJonah_ProposalChecks(t *testing.T) {
 	t.Parallel()
 
@@ -77,8 +77,8 @@ func TestJonah_ProposalChecks(t *testing.T) {
 	ctx := domain.WithOrg(t.Context(), newOrgID(t, s))
 	_, review := seedJonah(ctx, t, s)
 
-	insert := func(paths []string, files []domain.ProposalFile) error {
-		raw, err := json.Marshal(files)
+	insert := func(paths []string, edits any) error {
+		raw, err := json.Marshal(edits)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -86,34 +86,47 @@ func TestJonah_ProposalChecks(t *testing.T) {
 		return s.inTx(ctx, func(q *db.Queries) error {
 			_, err := q.InsertProposal(ctx, db.InsertProposalParams{
 				ID: uuid.Must(uuid.NewV7()), FactoryID: review.FactoryID, Number: 99, ReviewID: &review.ID, VersionID: review.VersionID,
-				Title: "raw", Files: raw, Evidence: []byte("[]"), Estimate: []byte("{}"), Paths: paths, CreatedAt: jonahAt,
+				Title: "raw", Edits: raw, Evidence: []byte("[]"), Estimate: []byte("{}"), Paths: paths, CreatedAt: jonahAt,
 			})
 
 			return err
 		})
 	}
 
-	file := func(path, content string) domain.ProposalFile {
-		return domain.ProposalFile{Path: path, Content: content}
+	whole := func(path, content string) []domain.ProposalEdit {
+		return []domain.ProposalEdit{{Path: path, Content: content}}
 	}
+	replace := func(path, old, nw string) []domain.ProposalEdit {
+		return []domain.ProposalEdit{{Path: path, Replacements: []domain.Replacement{{Old: old, New: nw}}}}
+	}
+
+	const editPath = "path"
 
 	for name, tc := range map[string]struct {
 		paths []string
-		files []domain.ProposalFile
+		edits any
 	}{
-		"evals":          {[]string{"evals/cases/a.yaml"}, []domain.ProposalFile{file("evals/cases/a.yaml", "x")}},
-		"parent segment": {[]string{"agents/../evals/a.md"}, []domain.ProposalFile{file("agents/../evals/a.md", "x")}},
-		"no files":       {[]string{}, []domain.ProposalFile{}},
-		"paths differ":   {[]string{ruleA}, []domain.ProposalFile{file("rules/b.md", "x")}},
-		"too big":        {[]string{ruleA}, []domain.ProposalFile{file(ruleA, strings.Repeat("x", domain.MaxProposalFilesBytes+1))}},
-		"bad base hash":  {[]string{ruleA}, []domain.ProposalFile{{Path: ruleA, BaseSHA256: "abc", Content: "x"}}},
+		"evals":             {[]string{"evals/cases/a.yaml"}, whole("evals/cases/a.yaml", "x")},
+		"script":            {[]string{"skills/x/run.sh"}, replace("skills/x/run.sh", "a", "b")},
+		"other file":        {[]string{"agents/a.txt"}, whole("agents/a.txt", "x")},
+		"memory":            {[]string{"memory.yaml"}, whole("memory.yaml", "x")},
+		"parent segment":    {[]string{"agents/../evals/a.md"}, whole("agents/../evals/a.md", "x")},
+		"no edits":          {[]string{}, []domain.ProposalEdit{}},
+		"paths differ":      {[]string{ruleA}, whole("rules/b.md", "x")},
+		"too big":           {[]string{ruleA}, replace(ruleA, "a", strings.Repeat("x", domain.MaxProposalFilesBytes))},
+		"bad base hash":     {[]string{ruleA}, []domain.ProposalEdit{{Path: ruleA, BaseSHA256: "abc", Content: "x"}}},
+		"empty old":         {[]string{ruleA}, replace(ruleA, "", "b")},
+		"no replacements":   {[]string{ruleA}, []map[string]any{{editPath: ruleA, "replacements": []any{}}}},
+		"both":              {[]string{ruleA}, []map[string]any{{editPath: ruleA, "content": "x", "replacements": []any{map[string]any{"old": "a", "new": "b"}}}}},
+		"neither":           {[]string{ruleA}, []map[string]any{{editPath: ruleA}}},
+		"replacement shape": {[]string{ruleA}, []map[string]any{{editPath: ruleA, "replacements": []any{map[string]any{"old": "a"}}}}},
 	} {
-		if err := insert(tc.paths, tc.files); !isCheckViolationErr(err) {
+		if err := insert(tc.paths, tc.edits); !isCheckViolationErr(err) {
 			t.Errorf("%s: insert = %v, want a check violation", name, err)
 		}
 	}
 
-	if err := insert([]string{"factory.yaml"}, []domain.ProposalFile{file("factory.yaml", "x")}); err != nil {
+	if err := insert([]string{"factory.yaml", ruleA}, append(replace("factory.yaml", "wip: 2", "wip: 3"), whole(ruleA, "x")...)); err != nil {
 		t.Fatalf("an allowed proposal: %v", err)
 	}
 

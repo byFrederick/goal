@@ -34,6 +34,7 @@ type tryDefs struct {
 	mu      sync.Mutex
 	lines   map[domain.OrgID]domain.Line
 	reached map[string][]string // by the proposal's first path
+	stale   bool                // no proposal's edits apply
 }
 
 func (d *tryDefs) CurrentLines(ctx context.Context) ([]domain.Line, error) {
@@ -45,7 +46,7 @@ func (d *tryDefs) CurrentLines(ctx context.Context) ([]domain.Line, error) {
 	return []domain.Line{d.lines[org]}, nil
 }
 
-func (d *tryDefs) ProposedLine(ctx context.Context, v domain.DefinitionVersionID, files []domain.ProposalFile) (domain.Line, []string, error) {
+func (d *tryDefs) ProposedLine(ctx context.Context, v domain.DefinitionVersionID, edits []domain.ProposalEdit) (domain.Line, []string, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -56,7 +57,11 @@ func (d *tryDefs) ProposedLine(ctx context.Context, v domain.DefinitionVersionID
 		return domain.Line{}, nil, ports.ErrNotFound
 	}
 
-	if r, ok := d.reached[files[0].Path]; ok {
+	if d.stale {
+		return domain.Line{}, nil, fmt.Errorf("%s: %w", edits[0].Path, domain.ErrEditDoesNotApply)
+	}
+
+	if r, ok := d.reached[edits[0].Path]; ok {
 		return l, r, nil
 	}
 
@@ -172,7 +177,7 @@ func (w *tryWorld) propose(org domain.OrgID, path string, items ...domain.Item) 
 		w.t.Fatal(err)
 	}
 
-	n := domain.NewProposal{Title: "Change " + path, Files: []domain.ProposalFile{{Path: path, BaseSHA256: strings.Repeat("ab", 32), Content: "new\n"}}}
+	n := domain.NewProposal{Title: "Change " + path, Edits: []domain.ProposalEdit{{Path: path, Replacements: []domain.Replacement{{Old: "old\n", New: "new\n"}}}}}
 	for _, it := range items {
 		n.Evidence = append(n.Evidence, domain.ProposalEvidence{ItemID: it.ID, Station: stBuild, Quote: "no tests"})
 	}
@@ -284,6 +289,38 @@ func TestTries_SweepSkipsUntriableAndMemoryOnly(t *testing.T) {
 
 	if got := w.tries(org, untriable); len(got) != 0 {
 		t.Errorf("tries at a station whose environment has MCP servers = %+v; want none", got)
+	}
+}
+
+// A proposal whose edits no longer apply to its version is not tried: the sweep queues none, and
+// a try already queued ends with verdict error, never fail.
+func TestTries_EditsThatDoNotApplyAreNotTried(t *testing.T) {
+	t.Parallel()
+
+	w := newTryWorld(t, 1)
+	org := w.orgs[0]
+	it, _ := w.pastItem(org, rt0.Add(-time.Hour), true)
+	w.defs.stale = true
+
+	p := w.propose(org, writerPath, it)
+	w.sweep()
+
+	if got := w.tries(org, p); len(got) != 0 {
+		t.Errorf("tries of a proposal whose edits do not apply = %+v; want none", got)
+	}
+
+	w.defs.stale = false
+	w.sweep()
+
+	if got := w.tries(org, p); len(got) != 1 {
+		t.Fatalf("%d tries queued once the edits apply; want 1", len(got))
+	}
+
+	w.defs.stale = true
+
+	got := w.onlyTry(org)
+	if got.Verdict != domain.PastTryError || !strings.Contains(got.Error, "does not apply") || len(w.runner.requests()) != 0 {
+		t.Errorf("try = %+v after %d runs; want verdict error naming the edits, and no run", got, len(w.runner.requests()))
 	}
 }
 

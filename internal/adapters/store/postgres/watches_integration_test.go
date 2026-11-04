@@ -258,7 +258,7 @@ func TestWatches_WorseUntilUndone(t *testing.T) {
 	}
 
 	if _, err := s.UndoProposal(ctx, factory, p.ID, p.VersionID, domain.NewProposal{
-		Title: "Undo proposal 1: a", Files: []domain.ProposalFile{{Path: ruleA, Content: ""}},
+		Title: "Undo proposal 1: a", Edits: []domain.ProposalEdit{{Path: ruleA, Replacements: []domain.Replacement{{Old: "x", New: ""}}}},
 	}, watchAt); err != nil {
 		t.Fatal(err)
 	}

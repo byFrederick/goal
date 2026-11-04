@@ -9,8 +9,9 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
-// A proposal edits only factory.yaml, agents/, skills/, rules/ and contracts/ (ADR 0034 decision
-// 4), never evals/ or a path that climbs out of its directory.
+// A proposal edits only factory.yaml and the .md, .yaml and .json files under agents/, skills/,
+// rules/ and contracts/ (ADR 0039 decision 6): never evals/, a script or a path that climbs out of
+// its directory.
 func TestProposalPathAllowed(t *testing.T) {
 	t.Parallel()
 
@@ -20,6 +21,12 @@ func TestProposalPathAllowed(t *testing.T) {
 		"skills/deliver/SKILL.md":     true,
 		"rules/evidence.md":           true,
 		"contracts/change.json":       true,
+		"agents/reviewer.yaml":        true,
+		"skills/x/run.sh":             false,
+		"skills/x/tool.py":            false,
+		"agents/a.txt":                false,
+		"rules/a.md.sh":               false,
+		"memory.yaml":                 false,
 		"evals/cases/a.yaml":          false,
 		"evals/judges/x.md":           false,
 		"agents/../evals/x.md":        false,
@@ -39,23 +46,29 @@ func TestProposalPathAllowed(t *testing.T) {
 func TestProposal_Check(t *testing.T) {
 	t.Parallel()
 
-	ok := domain.NewProposal{Title: "Ask for a screenshot", Files: []domain.ProposalFile{{Path: "rules/evidence.md", Content: "x"}}}
+	ok := domain.NewProposal{Title: "Ask for a screenshot", Edits: []domain.ProposalEdit{
+		{Path: "rules/evidence.md", Replacements: []domain.Replacement{{Old: "a", New: "b"}}},
+		{Path: "rules/new.md", Content: "x"},
+	}}
 	if err := ok.Check(); err != nil {
 		t.Fatalf("a valid proposal: %v", err)
 	}
 
 	for name, change := range map[string]func(p *domain.NewProposal){
 		"no title":       func(p *domain.NewProposal) { p.Title = " " },
-		"no files":       func(p *domain.NewProposal) { p.Files = nil },
-		"evals path":     func(p *domain.NewProposal) { p.Files[0].Path = "evals/cases/a.yaml" },
-		"path twice":     func(p *domain.NewProposal) { p.Files = append(p.Files, p.Files[0]) },
-		"bad base hash":  func(p *domain.NewProposal) { p.Files[0].BaseSHA256 = "abc" },
-		"too many bytes": func(p *domain.NewProposal) { p.Files[0].Content = strings.Repeat("x", domain.MaxProposalFilesBytes+1) },
-		"nul byte":       func(p *domain.NewProposal) { p.Files[0].Content = "a\x00b" },
+		"no edits":       func(p *domain.NewProposal) { p.Edits = nil },
+		"evals path":     func(p *domain.NewProposal) { p.Edits[0].Path = "evals/cases/a.yaml" },
+		"script path":    func(p *domain.NewProposal) { p.Edits[0].Path = "skills/x/run.sh" },
+		"path twice":     func(p *domain.NewProposal) { p.Edits = append(p.Edits, p.Edits[0]) },
+		"empty old":      func(p *domain.NewProposal) { p.Edits[0].Replacements = []domain.Replacement{{New: "b"}} },
+		"bad base hash":  func(p *domain.NewProposal) { p.Edits[1].BaseSHA256 = "abc" },
+		"too many bytes": func(p *domain.NewProposal) { p.Edits[1].Content = strings.Repeat("x", domain.MaxProposalFilesBytes+1) },
+		"nul byte":       func(p *domain.NewProposal) { p.Edits[1].Content = "a\x00b" },
+		"nul in new":     func(p *domain.NewProposal) { p.Edits[0].Replacements = []domain.Replacement{{Old: "a", New: "\x00"}} },
 		"unknown metric": func(p *domain.NewProposal) { p.Estimate.Metric = "happiness" },
 	} {
 		p := ok
-		p.Files = append([]domain.ProposalFile(nil), ok.Files...)
+		p.Edits = append([]domain.ProposalEdit(nil), ok.Edits...)
 		change(&p)
 
 		if err := p.Check(); !errors.Is(err, domain.ErrInvalid) {
@@ -70,7 +83,7 @@ func TestJonahReviewResult_AndDecisionCheck(t *testing.T) {
 	t.Parallel()
 
 	at := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
-	p := domain.NewProposal{Title: "a", Files: []domain.ProposalFile{{Path: "rules/a.md"}}}
+	p := domain.NewProposal{Title: "a", Edits: []domain.ProposalEdit{{Path: ruleA}}}
 
 	res := domain.JonahReviewResult{
 		State: domain.JonahDone, At: at, Proposals: []domain.NewProposal{p},

@@ -87,6 +87,7 @@ const softwareObservations = (now: number): JonahObservation[] => [
     propose_after: 5,
     proposal: 7,
     created_at: new Date(now - 2 * 3_600_000).toISOString(),
+    updated_at: new Date(now - 2 * 3_600_000).toISOString(),
   },
   {
     id: 'obs-full-suite',
@@ -97,6 +98,7 @@ const softwareObservations = (now: number): JonahObservation[] => [
     count: 3,
     propose_after: 5,
     created_at: new Date(now - 26 * 3_600_000).toISOString(),
+    updated_at: new Date(now - 26 * 3_600_000).toISOString(),
   },
   {
     id: 'obs-rollback',
@@ -107,6 +109,7 @@ const softwareObservations = (now: number): JonahObservation[] => [
     count: 2,
     propose_after: 5,
     created_at: new Date(now - 30 * 3_600_000).toISOString(),
+    updated_at: new Date(now - 30 * 3_600_000).toISOString(),
   },
   {
     id: 'obs-plain-language',
@@ -117,6 +120,7 @@ const softwareObservations = (now: number): JonahObservation[] => [
     count: 1,
     propose_after: 5,
     created_at: new Date(now - 50 * 3_600_000).toISOString(),
+    updated_at: new Date(now - 50 * 3_600_000).toISOString(),
   },
 ];
 
@@ -162,6 +166,8 @@ const proposalSeven = (now: number): Proposal => ({
   summary: 'Four UI changes came back for want of a screenshot. The frontend engineer attaches one per changed screen.',
   made_against_version: 21,
   publishes_as_version: 22,
+  // The proposal page reads files; its edits come with the Jonah pages (software#600).
+  edits: [],
   files: [
     {
       path: 'agents/frontend-engineer.md',
@@ -233,6 +239,8 @@ const proposalEight = (now: number): Proposal => ({
   summary: 'Large requests take the longest to review. Splitting them into an assembly shortens that.',
   made_against_version: 21,
   publishes_as_version: 22,
+  // The proposal page reads files; its edits come with the Jonah pages (software#600).
+  edits: [],
   files: [
     {
       path: 'agents/architect.md',

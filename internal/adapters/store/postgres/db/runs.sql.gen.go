@@ -263,7 +263,7 @@ type InsertRunParams struct {
 
 // A run records the definition version it starts on; NULL only for runs from before versions.
 // kind is station for a line's run, jonah for a review's and try for a try of a past item; only
-// the last two may have no item (00079, 00101).
+// the last two may have no item (00079, 00102).
 func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) error {
 	_, err := q.db.Exec(ctx, insertRun,
 		arg.ID,

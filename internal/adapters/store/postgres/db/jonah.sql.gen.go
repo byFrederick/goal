@@ -58,7 +58,7 @@ UPDATE jonah_proposals
 SET state = $1, published_version_id = $2, reject_reason = $3,
     decided_by = $4, decided_at = $5::timestamptz
 WHERE factory_id = $6 AND number = $7 AND state = 'proposed'
-RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes
+RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes, edits
 `
 
 type DecideProposalParams struct {
@@ -93,7 +93,6 @@ func (q *Queries) DecideProposal(ctx context.Context, arg DecideProposalParams) 
 		&i.State,
 		&i.Title,
 		&i.Summary,
-		&i.Files,
 		&i.Evidence,
 		&i.Estimate,
 		&i.Paths,
@@ -103,6 +102,7 @@ func (q *Queries) DecideProposal(ctx context.Context, arg DecideProposalParams) 
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.Undoes,
+		&i.Edits,
 	)
 	return i, err
 }
@@ -384,7 +384,7 @@ type InsertJonahReviewParams struct {
 	CreatedAt   time.Time
 }
 
-// Jonah reviews, proposals and observations (00075), under row-level security: every statement
+// Jonah reviews, proposals and observations (00078, 00101), under row-level security: every statement
 // sees the transaction's organization only.
 // org_id comes from its default, goal_org(). No row when the factory has a review in flight.
 func (q *Queries) InsertJonahReview(ctx context.Context, arg InsertJonahReviewParams) (JonahReview, error) {
@@ -420,10 +420,12 @@ func (q *Queries) InsertJonahReview(ctx context.Context, arg InsertJonahReviewPa
 }
 
 const insertObservation = `-- name: InsertObservation :one
-INSERT INTO jonah_observations (id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at)
+INSERT INTO jonah_observations (id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at,
+                                updated_at)
 VALUES ($1, $2, $3, $4, $5,
-        $6::uuid[], $7, $8, $9, $10)
-RETURNING id, org_id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at
+        $6::uuid[], $7, $8, $9, $10,
+        $10)
+RETURNING id, org_id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at, updated_at
 `
 
 type InsertObservationParams struct {
@@ -465,17 +467,18 @@ func (q *Queries) InsertObservation(ctx context.Context, arg InsertObservationPa
 		&i.State,
 		&i.ProposalID,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const insertProposal = `-- name: InsertProposal :one
-INSERT INTO jonah_proposals (id, factory_id, number, review_id, version_id, title, summary, files, evidence, estimate,
+INSERT INTO jonah_proposals (id, factory_id, number, review_id, version_id, title, summary, edits, evidence, estimate,
                              paths, created_at)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9, $10, $11::text[],
         $12)
-RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes
+RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes, edits
 `
 
 type InsertProposalParams struct {
@@ -486,7 +489,7 @@ type InsertProposalParams struct {
 	VersionID uuid.UUID
 	Title     string
 	Summary   string
-	Files     []byte
+	Edits     []byte
 	Evidence  []byte
 	Estimate  []byte
 	Paths     []string
@@ -502,7 +505,7 @@ func (q *Queries) InsertProposal(ctx context.Context, arg InsertProposalParams) 
 		arg.VersionID,
 		arg.Title,
 		arg.Summary,
-		arg.Files,
+		arg.Edits,
 		arg.Evidence,
 		arg.Estimate,
 		arg.Paths,
@@ -519,7 +522,6 @@ func (q *Queries) InsertProposal(ctx context.Context, arg InsertProposalParams) 
 		&i.State,
 		&i.Title,
 		&i.Summary,
-		&i.Files,
 		&i.Evidence,
 		&i.Estimate,
 		&i.Paths,
@@ -529,15 +531,16 @@ func (q *Queries) InsertProposal(ctx context.Context, arg InsertProposalParams) 
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.Undoes,
+		&i.Edits,
 	)
 	return i, err
 }
 
 const insertUndoProposal = `-- name: InsertUndoProposal :one
-INSERT INTO jonah_proposals (id, factory_id, number, undoes, version_id, title, summary, files, paths, created_at)
+INSERT INTO jonah_proposals (id, factory_id, number, undoes, version_id, title, summary, edits, paths, created_at)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9::text[], $10)
-RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes
+RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes, edits
 `
 
 type InsertUndoProposalParams struct {
@@ -548,7 +551,7 @@ type InsertUndoProposalParams struct {
 	VersionID uuid.UUID
 	Title     string
 	Summary   string
-	Files     []byte
+	Edits     []byte
 	Paths     []string
 	CreatedAt time.Time
 }
@@ -564,7 +567,7 @@ func (q *Queries) InsertUndoProposal(ctx context.Context, arg InsertUndoProposal
 		arg.VersionID,
 		arg.Title,
 		arg.Summary,
-		arg.Files,
+		arg.Edits,
 		arg.Paths,
 		arg.CreatedAt,
 	)
@@ -579,7 +582,6 @@ func (q *Queries) InsertUndoProposal(ctx context.Context, arg InsertUndoProposal
 		&i.State,
 		&i.Title,
 		&i.Summary,
-		&i.Files,
 		&i.Evidence,
 		&i.Estimate,
 		&i.Paths,
@@ -589,6 +591,7 @@ func (q *Queries) InsertUndoProposal(ctx context.Context, arg InsertUndoProposal
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.Undoes,
+		&i.Edits,
 	)
 	return i, err
 }
@@ -712,8 +715,8 @@ func (q *Queries) LatestJonahReviews(ctx context.Context, arg LatestJonahReviews
 }
 
 const latestObservations = `-- name: LatestObservations :many
-SELECT id, org_id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at FROM jonah_observations WHERE factory_id = $1
-ORDER BY created_at DESC, id DESC
+SELECT id, org_id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at, updated_at FROM jonah_observations WHERE factory_id = $1
+ORDER BY updated_at DESC, id DESC
 LIMIT $2
 `
 
@@ -722,6 +725,7 @@ type LatestObservationsParams struct {
 	MaxObservations int32
 }
 
+// A factory's observations, the latest updated first.
 func (q *Queries) LatestObservations(ctx context.Context, arg LatestObservationsParams) ([]JonahObservation, error) {
 	rows, err := q.db.Query(ctx, latestObservations, arg.FactoryID, arg.MaxObservations)
 	if err != nil {
@@ -743,6 +747,52 @@ func (q *Queries) LatestObservations(ctx context.Context, arg LatestObservations
 			&i.State,
 			&i.ProposalID,
 			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const openObservations = `-- name: OpenObservations :many
+SELECT id, org_id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at, updated_at FROM jonah_observations WHERE factory_id = $1 AND state IN ('watching', 'proposed')
+ORDER BY updated_at DESC, id DESC
+LIMIT $2
+`
+
+type OpenObservationsParams struct {
+	FactoryID       uuid.UUID
+	MaxObservations int32
+}
+
+// A factory's watching and proposed observations, the latest updated first (jonah_observations_open_idx).
+func (q *Queries) OpenObservations(ctx context.Context, arg OpenObservationsParams) ([]JonahObservation, error) {
+	rows, err := q.db.Query(ctx, openObservations, arg.FactoryID, arg.MaxObservations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []JonahObservation
+	for rows.Next() {
+		var i JonahObservation
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrgID,
+			&i.FactoryID,
+			&i.ReviewID,
+			&i.Summary,
+			&i.Detail,
+			&i.ItemIds,
+			&i.Count,
+			&i.State,
+			&i.ProposalID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -755,7 +805,7 @@ func (q *Queries) LatestObservations(ctx context.Context, arg LatestObservations
 }
 
 const proposalByNumber = `-- name: ProposalByNumber :one
-SELECT id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes FROM jonah_proposals WHERE factory_id = $1 AND number = $2
+SELECT id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes, edits FROM jonah_proposals WHERE factory_id = $1 AND number = $2
 `
 
 type ProposalByNumberParams struct {
@@ -776,7 +826,6 @@ func (q *Queries) ProposalByNumber(ctx context.Context, arg ProposalByNumberPara
 		&i.State,
 		&i.Title,
 		&i.Summary,
-		&i.Files,
 		&i.Evidence,
 		&i.Estimate,
 		&i.Paths,
@@ -786,12 +835,13 @@ func (q *Queries) ProposalByNumber(ctx context.Context, arg ProposalByNumberPara
 		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.Undoes,
+		&i.Edits,
 	)
 	return i, err
 }
 
 const proposals = `-- name: Proposals :many
-SELECT id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes FROM jonah_proposals
+SELECT id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes, edits FROM jonah_proposals
 WHERE factory_id = $1
   AND ($2::text IS NULL OR state = $2::text)
   AND ($3::bigint IS NULL OR number < $3::bigint)
@@ -832,7 +882,6 @@ func (q *Queries) Proposals(ctx context.Context, arg ProposalsParams) ([]JonahPr
 			&i.State,
 			&i.Title,
 			&i.Summary,
-			&i.Files,
 			&i.Evidence,
 			&i.Estimate,
 			&i.Paths,
@@ -842,6 +891,7 @@ func (q *Queries) Proposals(ctx context.Context, arg ProposalsParams) ([]JonahPr
 			&i.DecidedAt,
 			&i.CreatedAt,
 			&i.Undoes,
+			&i.Edits,
 		); err != nil {
 			return nil, err
 		}
@@ -1049,4 +1099,87 @@ func (q *Queries) StationSentBack(ctx context.Context, arg StationSentBackParams
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const supersedeProposal = `-- name: SupersedeProposal :exec
+UPDATE jonah_proposals SET state = 'superseded', decided_by = $1, decided_at = $2::timestamptz
+WHERE factory_id = $3 AND id = $4 AND state = 'proposed'
+`
+
+type SupersedeProposalParams struct {
+	DecidedBy *string
+	DecidedAt time.Time
+	FactoryID uuid.UUID
+	ID        uuid.UUID
+}
+
+// Sets a proposal that is still proposed superseded by a newer one whose edits overlap its own
+// (ADR 0039 decision 6); one decided since is left as it is.
+func (q *Queries) SupersedeProposal(ctx context.Context, arg SupersedeProposalParams) error {
+	_, err := q.db.Exec(ctx, supersedeProposal,
+		arg.DecidedBy,
+		arg.DecidedAt,
+		arg.FactoryID,
+		arg.ID,
+	)
+	return err
+}
+
+const updateObservation = `-- name: UpdateObservation :one
+UPDATE jonah_observations o
+SET summary = $1, detail = $2,
+    item_ids = (SELECT coalesce((array_agg(i ORDER BY n))[1:1000], '{}')
+                FROM (SELECT i, min(n) AS n FROM unnest(o.item_ids || $3::uuid[]) WITH ORDINALITY AS u (i, n)
+                      GROUP BY i) AS d),
+    count = least(o.count::bigint + $4::bigint, 2147483647)::integer,
+    state = coalesce($5::text, o.state),
+    proposal_id = coalesce($6::uuid, o.proposal_id),
+    updated_at = $7
+WHERE o.factory_id = $8 AND o.id = $9 AND o.state IN ('watching', 'proposed')
+RETURNING id, org_id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at, updated_at
+`
+
+type UpdateObservationParams struct {
+	Summary    string
+	Detail     string
+	ItemIds    []uuid.UUID
+	Count      int64
+	State      *string
+	ProposalID *uuid.UUID
+	UpdatedAt  time.Time
+	FactoryID  uuid.UUID
+	ID         uuid.UUID
+}
+
+// A later review's update of an open observation (ADR 0039 decision 5): its items join the
+// observation's (at most 1000, the first kept), its count adds to the count, and a state and
+// proposal, when given, replace the observation's. No row when it is not open.
+func (q *Queries) UpdateObservation(ctx context.Context, arg UpdateObservationParams) (JonahObservation, error) {
+	row := q.db.QueryRow(ctx, updateObservation,
+		arg.Summary,
+		arg.Detail,
+		arg.ItemIds,
+		arg.Count,
+		arg.State,
+		arg.ProposalID,
+		arg.UpdatedAt,
+		arg.FactoryID,
+		arg.ID,
+	)
+	var i JonahObservation
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.FactoryID,
+		&i.ReviewID,
+		&i.Summary,
+		&i.Detail,
+		&i.ItemIds,
+		&i.Count,
+		&i.State,
+		&i.ProposalID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

@@ -15,10 +15,10 @@ type Tries interface {
 	PastTryInput(ctx context.Context, run domain.RunID) (domain.PastTryInput, error)
 }
 
-// ProposedDefinitions loads definition version id with files written over its own: what a try of
+// ProposedDefinitions loads definition version id with a proposal's edits applied to it: what a try of
 // a proposal runs on. cmd/goald adapts *definitions.Cache.Proposed to it.
 type ProposedDefinitions interface {
-	Proposed(ctx context.Context, id domain.DefinitionVersionID, files map[string][]byte) (Definitions, error)
+	Proposed(ctx context.Context, id domain.DefinitionVersionID, edits []domain.ProposalEdit) (Definitions, error)
 }
 
 // errNoTries answers a try token's bundle when the gateway has no Deps.Tries, Deps.Proposed or
@@ -26,7 +26,7 @@ type ProposedDefinitions interface {
 var errNoTries = errors.New("the gateway has no tries store")
 
 // tryBundle is a try of a past item's bundle (ADR 0039 decision 9): the station's bundle for the
-// try's agent on the token's version with the proposal's files written over it, whose brief is
+// try's agent on the token's version with the proposal's edits applied to it, whose brief is
 // the one the original run recorded and whose inputs are the item's outputs from the runs that
 // ended before it started. Its repository is the original run's commit, fetched by SHA, with the
 // login that clones it, which prepare drops before the agent starts. Its environment has no files
@@ -58,12 +58,7 @@ func (g *Gateway) tryBundle(ctx context.Context, c domain.TaskClaims) (runBundle
 		return runBundle{}, fmt.Errorf("try %s: proposal %d: %w", try.ID, try.ProposalNumber, err)
 	}
 
-	files := make(map[string][]byte, len(p.Files))
-	for _, f := range p.Files {
-		files[f.Path] = []byte(f.Content)
-	}
-
-	defs, err := g.proposed.Proposed(ctx, c.VersionID, files)
+	defs, err := g.proposed.Proposed(ctx, c.VersionID, p.Edits)
 	if err != nil {
 		return runBundle{}, fmt.Errorf("try %s: version %s with proposal %d: %w", try.ID, c.VersionID, p.Number, err)
 	}

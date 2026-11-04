@@ -68,6 +68,7 @@ const proposal7: Proposal = {
   created_at: '2026-10-28T10:00:00Z',
   paths: ['agents/frontend-engineer.md', 'rules/evidence.md'],
   agents: ['frontend-engineer'],
+  edits: [],
   estimate: { metric: 'sent_back_rate', station: 'frontend', before: 0.18, after: 0.1, cost_per_item_usd: 0.04 },
   evidence_count: 4,
   summary: 'Four UI changes came back for want of a screenshot.',

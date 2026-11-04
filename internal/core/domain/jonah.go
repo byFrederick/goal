@@ -15,10 +15,12 @@ import (
 var (
 	// ErrProposalDraftOpen refuses Approve while the factory has an open draft.
 	ErrProposalDraftOpen = errors.New("the factory has an open draft: publish or discard it first, or edit the proposal into it")
-	// ErrProposalStale refuses Approve when a file the proposal edits changed since its review.
-	ErrProposalStale = errors.New("a file the proposal edits changed since it was made")
-	// ErrProposalDraftConflict refuses Edit when the draft's copy of a file is not the proposal's base.
-	ErrProposalDraftConflict = errors.New("the draft's copy of a file the proposal edits is not the one it was made against")
+	// ErrProposalStale refuses Approve when an edit no longer applies to the current version: a
+	// replacement's old text no longer occurs exactly once (ADR 0039 decision 6).
+	ErrProposalStale = errors.New("a file the proposal edits changed so that its edits no longer apply")
+	// ErrProposalDraftConflict refuses Edit when an edit no longer applies to the draft's copy of
+	// its file.
+	ErrProposalDraftConflict = errors.New("the draft's copy of a file the proposal edits changed so that its edits no longer apply")
 	// ErrReviewInFlight refuses a manual review while one is pending or running.
 	ErrReviewInFlight = errors.New("a review of this factory is pending or running")
 	// ErrProposalNotPublished refuses Undo this change for a proposal that was never published.
@@ -60,6 +62,10 @@ const (
 // Jonahs reports whether a run of kind k is Jonah's: a review or a try. Jonah's runs work no item
 // and are paid from Jonah's share, never the line's spend (ADR 0039 decision 16).
 func (k RunKind) Jonahs() bool { return k == RunKindJonah || k == RunKindTry }
+
+// JonahActor is Jonah as the actor of what goald does for it: the daily reviews it queues and
+// the proposals its new ones supersede.
+var JonahActor = Actor{Kind: ActorSystem, ID: "jonah", Name: "Jonah"}
 
 // JonahReviewID identifies one Jonah review.
 type JonahReviewID string
@@ -242,9 +248,9 @@ var ProposalStates = []ProposalState{ProposalProposed, ProposalPublished, Propos
 // Valid reports whether s is a proposal state.
 func (s ProposalState) Valid() bool { return slices.Contains(ProposalStates, s) }
 
-// Limits of a proposal, as 00075's CHECKs hold them.
+// Limits of a proposal, as 00078's and 00101's CHECKs hold them.
 const (
-	// MaxProposalFilesBytes is the most the contents of a proposal's files may total: 256 KiB.
+	// MaxProposalFilesBytes is the most the text of a proposal's edits may total: 256 KiB.
 	MaxProposalFilesBytes = 256 << 10
 	maxProposalTitle      = 200
 	maxProposalSummary    = 4000
@@ -257,12 +263,13 @@ const (
 	maxRejectReason       = 2000
 )
 
-// proposalPathPattern is the allowlist of the paths a proposal may edit (ADR 0034 decision 4):
-// never evals/, which only a person changes.
-var proposalPathPattern = regexp.MustCompile(`^(factory\.yaml|agents/.+|skills/.+|rules/.+|contracts/.+)$`)
+// proposalPathPattern is the positive allowlist of the paths a proposal may edit (ADR 0039
+// decision 6): factory.yaml, whose paths goald checks apart, and the .md, .yaml and .json files
+// under agents/, skills/, rules/ and contracts/. Never evals/, a script or any other file.
+var proposalPathPattern = regexp.MustCompile(`^(factory\.yaml|(agents|skills|rules|contracts)/.+\.(md|yaml|json))$`)
 
 // ProposalPathAllowed reports whether a proposal may edit path: one under the allowlist, without
-// a . or .. segment or a control character. 00075's goal_jonah_paths_allowed checks the same.
+// a . or .. segment or a control character. 00101's goal_jonah_paths_allowed checks the same.
 func ProposalPathAllowed(path string) bool {
 	if !proposalPathPattern.MatchString(path) || strings.ContainsFunc(path, unicode.IsControl) {
 		return false
@@ -275,14 +282,6 @@ func ProposalPathAllowed(path string) bool {
 	}
 
 	return true
-}
-
-// ProposalFile is one file a proposal writes: its path, the SHA-256 of the file in the version
-// the review read (empty for a new file) and its new content.
-type ProposalFile struct {
-	Path       string `json:"path"`
-	BaseSHA256 string `json:"base_sha256"`
-	Content    string `json:"content"`
 }
 
 // ProposalEvidence is one sent-back event a proposal rests on, with its quoted reason.
@@ -346,8 +345,9 @@ func (f StationFlow) SentBackRate() (float64, bool) {
 	return float64(f.SentBack) / float64(f.Passed), true
 }
 
-// Proposal is one hypothesis of a review: a set of file edits to the version it was made
-// against, numbered per factory from 1.
+// Proposal is one hypothesis of a review: a set of exact edits to the definition, made against
+// a version and applied again to the version it is approved or edited into, numbered per factory
+// from 1.
 type Proposal struct {
 	ID        ProposalID
 	FactoryID FactoryID
@@ -357,7 +357,7 @@ type Proposal struct {
 	State     ProposalState
 	Title     string
 	Summary   string
-	Files     []ProposalFile
+	Edits     []ProposalEdit
 	Evidence  []ProposalEvidence
 	Estimate  ProposalEstimate
 	// Undoes is the proposal this one reverses (Undo this change, ADR 0039 decision 15); it has
@@ -371,25 +371,27 @@ type Proposal struct {
 	CreatedAt          time.Time
 }
 
-// Paths are the paths of p's files, in order.
-func (p Proposal) Paths() []string { return filePaths(p.Files) }
+// Paths are the paths of p's edits, in order.
+func (p Proposal) Paths() []string { return editPaths(p.Edits) }
 
-// NewProposal is a proposal a review outputs.
+// NewProposal is a proposal a review outputs. Supersedes are the open proposals whose edits
+// overlap its own (EditsOverlap): storing it sets each that is still proposed superseded.
 type NewProposal struct {
-	Title    string
-	Summary  string
-	Files    []ProposalFile
-	Evidence []ProposalEvidence
-	Estimate ProposalEstimate
+	Title      string
+	Summary    string
+	Edits      []ProposalEdit
+	Evidence   []ProposalEvidence
+	Estimate   ProposalEstimate
+	Supersedes []ProposalID
 }
 
-// Paths are the paths of n's files, in order.
-func (n NewProposal) Paths() []string { return filePaths(n.Files) }
+// Paths are the paths of n's edits, in order.
+func (n NewProposal) Paths() []string { return editPaths(n.Edits) }
 
-func filePaths(files []ProposalFile) []string {
-	out := make([]string, len(files))
-	for i, f := range files {
-		out[i] = f.Path
+func editPaths(edits []ProposalEdit) []string {
+	out := make([]string, len(edits))
+	for i, e := range edits {
+		out[i] = e.Path
 	}
 
 	return out
@@ -412,7 +414,7 @@ func (n NewProposal) Check() error {
 		bad("summary longer than %d characters", maxProposalSummary)
 	}
 
-	checkProposalFiles(n.Files, bad)
+	checkProposalEdits(n.Edits, bad)
 
 	if len(n.Evidence) > maxProposalEvidence {
 		bad("more than %d pieces of evidence", maxProposalEvidence)
@@ -439,39 +441,54 @@ func (n NewProposal) Check() error {
 	return errors.Join(errs...)
 }
 
-// checkProposalFiles reports to bad what makes files impossible to store: none, a path outside
-// the allowlist or twice, a malformed base_sha256, content that is not text, or too many bytes.
-func checkProposalFiles(files []ProposalFile, bad func(format string, args ...any)) {
-	if len(files) == 0 {
-		bad("no files")
+// checkProposalEdits reports to bad what makes edits impossible to store: none, a path outside
+// the allowlist or twice, a replacement with an empty old, a base_sha256 on replacements or a
+// malformed one, text that is not UTF-8, or too many bytes.
+func checkProposalEdits(edits []ProposalEdit, bad func(format string, args ...any)) {
+	if len(edits) == 0 {
+		bad("no edits")
 	}
 
 	seen := map[string]bool{}
 	total := 0
 
-	for _, f := range files {
-		switch {
-		case !ProposalPathAllowed(f.Path):
-			bad("path %q is not one a proposal may edit", f.Path)
-		case seen[f.Path]:
-			bad("path %q twice", f.Path)
-		}
+	for _, e := range edits {
+		checkProposalEdit(e, seen, bad)
 
-		seen[f.Path] = true
-
-		if f.BaseSHA256 != "" && !BlobHash(f.BaseSHA256).Valid() {
-			bad("base_sha256 of %s is not 64 lowercase hex", f.Path)
-		}
-
-		if !utf8.ValidString(f.Content) || strings.ContainsRune(f.Content, 0) {
-			bad("content of %s is not UTF-8 text", f.Path)
-		}
-
-		total += len(f.Content)
+		seen[e.Path] = true
+		total += e.size()
 	}
 
 	if total > MaxProposalFilesBytes {
-		bad("files total %d bytes, more than %d", total, MaxProposalFilesBytes)
+		bad("edits total %d bytes, more than %d", total, MaxProposalFilesBytes)
+	}
+}
+
+// checkProposalEdit reports to bad what makes e impossible to store, seen holding the paths of
+// the edits before it.
+func checkProposalEdit(e ProposalEdit, seen map[string]bool, bad func(format string, args ...any)) {
+	switch {
+	case !ProposalPathAllowed(e.Path):
+		bad("path %q is not one a proposal may edit", e.Path)
+	case seen[e.Path]:
+		bad("path %q twice", e.Path)
+	}
+
+	for _, r := range e.Replacements {
+		if r.Old == "" {
+			bad("a replacement of %s has no old text", e.Path)
+		}
+	}
+
+	switch {
+	case !e.Whole() && (e.Content != "" || e.BaseSHA256 != ""):
+		bad("an edit of %s has replacements and whole content", e.Path)
+	case e.BaseSHA256 != "" && !BlobHash(e.BaseSHA256).Valid():
+		bad("base_sha256 of %s is not 64 lowercase hex", e.Path)
+	}
+
+	if slices.ContainsFunc(e.texts(), func(s string) bool { return !utf8.ValidString(s) || strings.ContainsRune(s, 0) }) {
+		bad("an edit of %s is not UTF-8 text", e.Path)
 	}
 }
 
@@ -516,18 +533,24 @@ func (d ProposalDecision) Check() error {
 	return errors.Join(errs...)
 }
 
-// ObservationState is whether an observation became a proposal or is still watched until its
-// count reaches learning.jonah.proposeAfter ("Watching, 3 of 5").
+// ObservationState is where an observation is (ADR 0039 decision 5): proposed, when a proposal
+// addresses it; watching, until its count reaches learning.jonah.proposeAfter ("Watching, 3 of
+// 5"); or not Jonah's, when its cause is not a definition problem.
 type ObservationState string
 
 // Observation states.
 const (
-	ObservationWatching ObservationState = "watching"
-	ObservationProposed ObservationState = "proposed"
+	ObservationWatching  ObservationState = "watching"
+	ObservationProposed  ObservationState = "proposed"
+	ObservationNotJonahs ObservationState = "not_jonahs"
 )
 
-// Observation is a pattern a review noticed: a summary, a detail line, the items it rests on and
-// how often it was seen, and the proposal it became once proposed.
+// Open reports whether a review still updates an observation in s: watching or proposed.
+func (s ObservationState) Open() bool { return s == ObservationWatching || s == ObservationProposed }
+
+// Observation is a cause reviews noticed: a summary, a detail line, the items it rests on and a
+// count that grows across reviews, and the proposal it became once proposed. ReviewID is the
+// review that first noticed it; UpdatedAt the last review that updated it.
 type Observation struct {
 	ID         ObservationID
 	FactoryID  FactoryID
@@ -539,16 +562,34 @@ type Observation struct {
 	State      ObservationState
 	ProposalID ProposalID
 	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
-// NewObservation is an observation a review outputs. Proposal is the proposal of the same result
-// it became, counted from 1; 0 while it is watched.
+// NewObservation is an observation a review outputs. ID, when set, is the open observation it
+// updates: its items join that one's, Count adds to its count and its state is set again; without
+// an ID it is new. Proposal is the proposal of the same result it became, counted from 1; 0 while
+// it is watched. NotJonahs marks a cause that is not a definition problem.
 type NewObservation struct {
-	Summary  string
-	Detail   string
-	ItemIDs  []ItemID
-	Count    int
-	Proposal int
+	ID        ObservationID
+	Summary   string
+	Detail    string
+	ItemIDs   []ItemID
+	Count     int
+	Proposal  int
+	NotJonahs bool
+}
+
+// State is the state n gives its observation: proposed when it became a proposal, not Jonah's
+// when it is marked so, else watching.
+func (n NewObservation) State() ObservationState {
+	switch {
+	case n.Proposal > 0:
+		return ObservationProposed
+	case n.NotJonahs:
+		return ObservationNotJonahs
+	default:
+		return ObservationWatching
+	}
 }
 
 // Check reports what makes n impossible to store, wrapping ErrInvalid.

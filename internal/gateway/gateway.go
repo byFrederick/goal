@@ -82,7 +82,7 @@
 // # Tries of past items
 //
 // A token of kind domain.TaskKindTry is a try of a past item (ADR 0039 decision 9, try.go). Its
-// bundle is the station's on the version with the proposal's files written over it, from what
+// bundle is the station's on the version with the proposal's edits applied to it, from what
 // the original run recorded: its brief, the item's earlier outputs and its commit. Its agent gets
 // no connection, environment file or MCP server, and its environment's env is for setup alone.
 // Its MCP session lists no tool, and it records no event on the past item.
@@ -188,7 +188,7 @@ type Deps struct {
 	// answers a jonah token's bundle with 503 and changes nothing for other tokens.
 	Jonah Jonah
 	// Tries and Proposed give a try of a past item its bundle (try.go): the try's record and its
-	// version with the proposal's files written over it. Without both, or without Jonah, a try
+	// version with the proposal's edits applied to it. Without both, or without Jonah, a try
 	// token's bundle is 503.
 	Tries    Tries
 	Proposed ProposedDefinitions

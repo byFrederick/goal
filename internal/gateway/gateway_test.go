@@ -317,26 +317,39 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 	return h
 }
 
-// proposing gives a try's version with the proposal's files written over its own: here only the
-// agent prompts, which the tests propose.
+// proposing gives a try's version with the proposal's edits applied to it: here only to the agent
+// prompts, which the tests propose.
 type proposing struct{ base Definitions }
 
-func (p proposing) Proposed(_ context.Context, _ domain.DefinitionVersionID, files map[string][]byte) (Definitions, error) {
-	return proposed{Definitions: p.base, files: files}, nil
+func (p proposing) Proposed(_ context.Context, _ domain.DefinitionVersionID, edits []domain.ProposalEdit) (Definitions, error) {
+	return proposed{Definitions: p.base, edits: edits}, nil
 }
 
 type proposed struct {
 	Definitions
-	files map[string][]byte
+	edits []domain.ProposalEdit
 }
 
 func (p proposed) AgentFiles(ctx context.Context, id domain.DefinitionVersionID, agent domain.AgentSpec, output string) (map[string][]byte, error) {
 	out, err := p.Definitions.AgentFiles(ctx, id, agent, output)
-	if b, ok := p.files[strings.TrimPrefix(agent.PromptPath, "./")]; ok && err == nil {
-		out["prompt.md"] = b
+	if err != nil {
+		return nil, err
 	}
 
-	return out, err
+	for _, e := range p.edits {
+		if e.Path != strings.TrimPrefix(agent.PromptPath, "./") {
+			continue
+		}
+
+		edited, err := e.Apply(out["prompt.md"], true)
+		if err != nil {
+			return nil, err
+		}
+
+		out["prompt.md"] = []byte(edited)
+	}
+
+	return out, nil
 }
 
 func (h *harness) claims() domain.TaskClaims {

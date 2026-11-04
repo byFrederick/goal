@@ -18,10 +18,11 @@ import (
 type TryDefinitions interface {
 	// CurrentLines are the current versions' lines of the organization's factories.
 	CurrentLines(ctx context.Context) ([]domain.Line, error)
-	// ProposedLine is version's line with files written over its files, and the agent stations of
+	// ProposedLine is version's line with edits applied to its files, and the agent stations of
 	// it, in line order, that the change reaches (factorymodel.StationsReached). ErrNotFound when
-	// the organization has no such version.
-	ProposedLine(ctx context.Context, version domain.DefinitionVersionID, files []domain.ProposalFile) (domain.Line, []string, error)
+	// the organization has no such version, domain.ErrEditDoesNotApply when an edit does not apply
+	// to it.
+	ProposedLine(ctx context.Context, version domain.DefinitionVersionID, edits []domain.ProposalEdit) (domain.Line, []string, error)
 }
 
 // WaitingItems reads the items waiting at a station; ports.Store satisfies it.
@@ -159,8 +160,8 @@ func (s *Tries) sweepProposal(ctx context.Context, p domain.Proposal) error {
 		return nil
 	}
 
-	line, reached, err := s.d.Definitions.ProposedLine(ctx, p.VersionID, p.Files)
-	if errors.Is(err, ports.ErrNotFound) {
+	line, reached, err := s.d.Definitions.ProposedLine(ctx, p.VersionID, p.Edits)
+	if errors.Is(err, ports.ErrNotFound) || errors.Is(err, domain.ErrEditDoesNotApply) {
 		return nil
 	}
 
@@ -426,13 +427,13 @@ func (s *Tries) run(ctx context.Context, try domain.PastTry) (domain.PastTryResu
 		return domain.PastTryResult{}, fmt.Errorf("read proposal %d: %w", try.ProposalNumber, err)
 	}
 
-	line, _, err := s.d.Definitions.ProposedLine(ctx, p.VersionID, p.Files)
-	if errors.Is(err, ports.ErrNotFound) {
-		return tryError("definition version %s is gone", p.VersionID), nil
+	line, why, err := s.proposedLine(ctx, p)
+	if err != nil {
+		return domain.PastTryResult{}, err
 	}
 
-	if err != nil {
-		return domain.PastTryResult{}, fmt.Errorf("read version %s with proposal %d: %w", p.VersionID, p.Number, err)
+	if why != "" {
+		return tryError("%s", why), nil
 	}
 
 	in, err := s.d.Tries.PastTryInput(ctx, try.OriginalRunID)
@@ -470,6 +471,23 @@ func (s *Tries) run(ctx context.Context, try domain.PastTry) (domain.PastTryResu
 	}
 
 	return domain.PastTryResult{Diff: run.Diff, CostUSD: run.CostUSD, TryRunID: run.RunID}, nil
+}
+
+// proposedLine is p's version with its edits applied, or why a try of p cannot run on it: the
+// version is gone or the edits no longer apply.
+func (s *Tries) proposedLine(ctx context.Context, p domain.Proposal) (domain.Line, string, error) {
+	line, _, err := s.d.Definitions.ProposedLine(ctx, p.VersionID, p.Edits)
+
+	switch {
+	case errors.Is(err, ports.ErrNotFound):
+		return domain.Line{}, fmt.Sprintf("definition version %s is gone", p.VersionID), nil
+	case errors.Is(err, domain.ErrEditDoesNotApply):
+		return domain.Line{}, fmt.Sprintf("proposal %d does not apply to version %s: %v", p.Number, p.VersionID, err), nil
+	case err != nil:
+		return domain.Line{}, "", fmt.Errorf("read version %s with proposal %d: %w", p.VersionID, p.Number, err)
+	}
+
+	return line, "", nil
 }
 
 // tryRequest is try's run on line, from what orig recorded, or why it cannot run.
