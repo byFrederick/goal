@@ -657,6 +657,24 @@
                 }
               }
             },
+            "outputs": {
+              "type": "object",
+              "description": "Which station output fields goald reads besides the contract's own. The platform names no field; an omitted key maps none.",
+              "additionalProperties": false,
+              "properties": {
+                "followUps": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The top-level output field that holds follow-ups: work an agent noticed outside its item. goald keeps the first 10 entries of each accepted output on the item, each text once. An entry is a string (text for triage) or an object with text and optionally for, an open item <factory>#<number> to note, or start, {at, in, after} with a title and optionally type, lane, repositories and factory, an item of its own filed when the work lands; start wins over for. A station contract that declares the field must declare it as a plain array: no $ref, no maxItems and no required on its items."
+                }
+              }
+            },
+            "followUpsFrom": {
+              "type": "array",
+              "description": "The factories, by metadata.id, this factory accepts follow-ups from: their notes and their items. None by default.",
+              "uniqueItems": true,
+              "items": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+            },
             "retry": {
               "type": "object",
               "description": "How often a claim runs an item again after a failure that is not the item's fault. Omitted keys take their defaults.",

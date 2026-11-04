@@ -31,6 +31,19 @@ type FlowPolicy struct {
 	Retry RetryPolicy
 	// Dependencies maps the output fields that set an item's dependencies.
 	Dependencies DependencyPolicy
+	// Outputs maps the other output fields the engine reads.
+	Outputs OutputPolicy
+	// FollowUpsFrom are the factories this one accepts follow-ups from (board.flow.followUpsFrom,
+	// ADR 0040 decision 5); none by default.
+	FollowUpsFrom []FactoryID
+}
+
+// OutputPolicy is board.flow.outputs: which output fields the engine reads besides the
+// contract's own. The platform names no field; a definition maps them (AGENTS.md rule 1).
+type OutputPolicy struct {
+	// FollowUps is the output field that holds follow-ups (FollowUpsFrom), kept on the item from
+	// every accepted run; "" when no output holds any.
+	FollowUps string
 }
 
 // DependencyPolicy is board.flow.dependencies: which output fields set an item's dependencies.

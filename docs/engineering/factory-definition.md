@@ -79,7 +79,7 @@ A review station's output contract may carry an optional `violations` array, one
 
 ## Output contracts
 
-A station's output contract is the definition's own JSON Schema; goald validates each output against it and reads a few fields from an accepted one: the gate's verdict, `violations` (above), `lane` and `plan` ([ADR 0012](../adr/0012-assemblies-and-parts.md)), and the dependency field below.
+A station's output contract is the definition's own JSON Schema; goald validates each output against it and reads a few fields from an accepted one: the gate's verdict, `violations` (above), `lane` and `plan` ([ADR 0012](../adr/0012-assemblies-and-parts.md)), and the dependency and follow-ups fields below.
 
 ### Dependencies: `board.flow.dependencies.after`
 
@@ -101,6 +101,39 @@ board:
 - The output fails, as a malformed plan does (`contract_failed` naming the ref, one more attempt with the reason, then blocked), and no edge is written, when an entry is not an item ref, or names an item of another factory, an item that does not exist, one that is done or cancelled, the item itself or its own assembly, or an item that already waits for this one (the edge would close a cycle).
 
 **Planning-station convention.** When a request overlaps work in flight, a planning station does one of two things: name that item in the mapped `after` field, so the new work follows it, or declare the overlapping paths in `touches` (a single item) or in the plan's `paths` (each part), so the overlap hold serializes them. A factory's prompt for its planning agent should say so; goald enforces neither.
+
+### Follow-ups: `board.flow.outputs.followUps` and `board.flow.followUpsFrom`
+
+`board.flow.outputs.followUps` names the output property that holds follow-ups: work an agent noticed outside its item ([ADR 0040](../adr/0040-one-door-for-every-source.md), decisions 5 and 6). Any station's contract may have it. With the key unset, goald reads no follow-ups, and they stay text in the item's output.
+
+```yaml
+board:
+  flow:
+    outputs:
+      followUps: followups
+    followUpsFrom: [00000000-0000-4000-8000-000000000020]
+```
+
+```json
+{ "followups": [
+  "Add an index on agent_runs.item_id",
+  { "text": "The API needs this field too", "for": "acme#647" },
+  { "text": "Remove the old column", "start": { "in": "7d", "title": "Drop work_items.source" } }
+] }
+```
+
+- **Kept from every accepted run.** goald writes each accepted output's follow-ups to `follow_ups` in the transaction that accepts the output, with the run, station and agent that wrote them. A rerun of the station keeps the earlier ones. An output that fails its checks keeps none.
+- **Once per item.** A follow-up whose text matches one already kept for the item, after trimming, folding case and collapsing whitespace, is kept once.
+- **The first 10.** goald reads the first 10 entries of each output and ignores the rest. It reads them leniently, so an entry never fails the run.
+- **Entry shape.** An entry is a string or an object:
+  - A string is text only, for triage.
+  - An object has `text` (required) and optionally `for` or `start`. `for` is an open item `<factory>#<number>` that gets the follow-up as a note. `start` is `{at, in, after}` as an item's start, with `title` (required) and optionally `type`, `lane`, `repositories` and `factory`: the follow-up becomes an item of its own. With both, `start` wins. With neither, it goes to triage.
+  - A `for` or `start` that does not parse, or a `for` whose factory is longer than 100 characters, sends the follow-up to triage, with the reason.
+  - Any other entry, such as a number or an object without text, is kept as dropped, with the reason.
+- **Where it goes.** Each kept follow-up is `waiting` with its target (a note, a start or triage), `delivered`, `filed` with its item, or `dropped` with its reason. goald records the target as written. It does not yet deliver notes or file items from follow-ups, so every kept follow-up stays as it was written.
+- **Plain-array contract.** A station contract that declares the mapped property must declare it as a plain array of strings or objects: no `$ref`, no `maxItems`, and no `required` on its items. Load refuses any other declaration (`follow-ups-not-plain-array`), because a strict shape could fail a run over a note.
+
+`board.flow.followUpsFrom` lists the factories, by `metadata.id`, whose follow-ups this factory accepts. It is empty by default, so only the factory's own follow-ups reach it.
 
 ## Station context
 

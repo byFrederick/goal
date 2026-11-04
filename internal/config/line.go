@@ -163,7 +163,7 @@ func percent(s string) (float64, bool) {
 
 // flowPolicy maps board.flow; an unset release is push, unset assembly settings rebase,
 // rework, serialize and materialize, an unset transient retry cap domain.DefaultTransientAttempts
-// and unset dependency fields map no output field.
+// and unset dependency and output fields map no output field.
 func flowPolicy(fl Flow) domain.FlowPolicy {
 	p := domain.FlowPolicy{
 		Release: domain.ReleasePush, Constraint: fl.Constraint,
@@ -177,6 +177,14 @@ func flowPolicy(fl Flow) domain.FlowPolicy {
 	if d := fl.Dependencies; d != nil {
 		p.Dependencies.After = d.After
 		p.Dependencies.Paths = d.Paths
+	}
+
+	if o := fl.Outputs; o != nil {
+		p.Outputs.FollowUps = o.FollowUps
+	}
+
+	for _, id := range fl.FollowUpsFrom {
+		p.FollowUpsFrom = append(p.FollowUpsFrom, domain.FactoryID(id))
 	}
 
 	if fl.Release != "" {
