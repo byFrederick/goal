@@ -58,7 +58,6 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		test func(f *fixture)
 	}{
 		{"CreateItem_NumbersEachFactoryFromOne", testCreateItem},
-		{"CreateItem_RecordsOriginAndActor", testCreateItemRecordsOrigin},
 		{"UnknownIDs_NotFound", testNotFound},
 		{"Waiting_PullOrder", testWaiting},
 		{"ClaimNext_TakesFirstInPullOrder", testClaim},
@@ -75,7 +74,6 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Parts_AssembleRefusesAndWritesNothing", testAssembleRefused},
 		{"Parts_AssembleRefusesAPart", testAssembleRefusesAPart},
 		{"Parts_AssembleLinksRootPartsAfter", testAssembleLinksRootPartsAfter},
-		{"Assemble_PartsInheritGenerationAndUntrusted", testAssemblePartsInherit},
 		{"Parts_AssemblyClosesWithItsLastPart", testAssemblyClosesWithItsLastPart},
 		{"Parts_AssemblyCancelledWithItsParts", testAssemblyCancelledWithItsParts},
 		{"Parts_AssemblyClosesOnceWhenTwoLastPartsFinish", testAssemblyClosesOnce},
@@ -166,7 +164,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"SavedViews_OtherOrgSeesNothing", testSavedViewsOtherOrgSeesNothing},
 		{"OpenToolApprovals_ByConnection", testOpenToolApprovals},
 	}
-	tests = append(tests, jonahTests...)
+	tests = append(append(tests, jonahTests...), fileTests...)
 	tests = append(append(append(tests, triesTests...), keptTestsTests...), graderChecksTests...)
 
 	for _, tc := range tests {

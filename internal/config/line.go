@@ -77,6 +77,7 @@ func (f *Factory) Line() domain.Line {
 	}
 
 	l.WorkTypes = slices.Clone(s.Board.WorkTypes)
+
 	l.Flow = flowPolicy(fl)
 	if fl.Expedite != nil {
 		l.ExpediteTypes = slices.Clone(fl.Expedite.Types)

@@ -109,8 +109,7 @@ func File(l Line, r FileRequest) (NewItem, error) {
 	return n, nil
 }
 
-// checkOrigin checks r's origin, via, generation and untrusted, and that only a part names an
-// assembly and only a trigger a station.
+// checkOrigin checks r's origin and via, then its lineage.
 func checkOrigin(r FileRequest) error {
 	switch {
 	case !slices.Contains([]Origin{OriginPerson, OriginPlan, OriginTrigger, OriginFollowUp}, r.Origin):
@@ -119,6 +118,15 @@ func checkOrigin(r FileRequest) error {
 		return fmt.Errorf("only a person files through %q, not a %s: %w", r.Via, r.Origin, ErrInvalid)
 	case r.Via != "" && !slices.Contains([]Via{ViaWeb, ViaCLI, ViaAPI}, r.Via):
 		return fmt.Errorf("unknown via %q: %w", r.Via, ErrInvalid)
+	}
+
+	return checkLineage(r)
+}
+
+// checkLineage checks r's generation and untrusted against its origin, and that only a part
+// names an assembly and only a trigger a station.
+func checkLineage(r FileRequest) error {
+	switch {
 	case r.Generation < 0:
 		return fmt.Errorf("generation %d is negative: %w", r.Generation, ErrInvalid)
 	case r.Generation != 0 && (r.Origin == OriginPerson || r.Origin == OriginTrigger):
@@ -198,7 +206,8 @@ func (n NewItem) FiledBy() Actor {
 
 // FiledRecords are what a store writes with an item by filed: its created event (part_created
 // for a part, with its assembly and key), whose actor is by with by's ref in its data, and the
-// item.filed audit entry, with the item's origin and a person's via.
+// item.filed audit entry, with the item's origin and a person's via as filed_via (an entry's via
+// is the credential a write came through, pat:<id>, which the store adds).
 func FiledRecords(it Item, by Actor) (Event, AuditEntry) {
 	kind, data := EventCreated, map[string]any{"actor": by.Ref()}
 	if it.ParentID != "" {
@@ -207,7 +216,7 @@ func FiledRecords(it Item, by Actor) (Event, AuditEntry) {
 
 	audit := map[string]any{"origin": string(it.Origin), "number": it.Number}
 	if it.Via != "" {
-		audit["via"] = string(it.Via)
+		audit["filed_via"] = string(it.Via)
 	}
 
 	return Event{FactoryID: it.FactoryID, ItemID: it.ID, At: it.CreatedAt, Kind: kind, Station: it.Station, Actor: by.Name, Data: data},

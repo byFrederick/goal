@@ -184,9 +184,9 @@ func linkAfter(ctx context.Context, q *db.Queries, roots []db.WorkItem, after []
 	return events, nil
 }
 
-// insertPart files one part of the assembly parent, by by at at, through fileItem: the parent's
-// type, priority, class of service, base commit, generation and untrusted, queued at the
-// parent's station, the one that planned it, following each of after.
+// insertPart files one part of the assembly parent through fileItem, filed by the actor given
+// at at, with the parent's type, priority, class of service, base commit, generation and
+// untrusted, queued at the parent's station, the one that planned it, following each of after.
 func insertPart(ctx context.Context, q *db.Queries, parent db.WorkItem, p domain.NewPart, by domain.Actor, at time.Time, after []uuid.UUID, afterBy domain.Actor) (db.WorkItem, error) {
 	key := p.Key
 

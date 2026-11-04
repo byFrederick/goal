@@ -53,7 +53,9 @@ func fileItem(ctx context.Context, q *db.Queries, f filing) (db.WorkItem, error)
 	}
 
 	by := n.FiledBy()
+
 	var createdBy *string
+
 	if n.CreatedBy != (domain.Actor{}) {
 		ref := by.Ref()
 		createdBy = &ref

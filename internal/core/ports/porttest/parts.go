@@ -82,6 +82,7 @@ func (s *Store) assemble(org domain.OrgID, a ports.Assembly) (domain.Item, domai
 	for _, p := range a.Parts {
 		part, audit := s.file(org, partOf(it, p, a.By, t.At), filedPart{key: p.Key, paths: p.Paths, baseCommit: it.BaseCommit})
 		ids[p.Key] = part.ID
+
 		filed = append(filed, audit)
 	}
 
@@ -221,8 +222,8 @@ func (s *Store) addPart(org domain.OrgID, n ports.NewAssemblyPart) (domain.Item,
 	return clone(part), s.partsOf(it.ID), s.audit, filed, nil
 }
 
-// partOf is part p of the assembly it, filed by by at at, as the PostgreSQL store's insertPart
-// makes it.
+// partOf is part p of the assembly it, filed by the actor given at at, as the PostgreSQL store's
+// insertPart makes it.
 func partOf(it *domain.Item, p domain.NewPart, by domain.Actor, at time.Time) domain.NewItem {
 	return domain.NewItem{
 		FactoryID: it.FactoryID, ParentID: it.ID, Type: it.Type, Lane: p.Lane, Title: p.Title, Body: p.Brief,
