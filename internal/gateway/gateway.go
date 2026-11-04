@@ -187,11 +187,13 @@ type DraftRequests interface {
 	Get(ctx context.Context, id domain.DraftRequestID) (domain.DraftRequest, error)
 }
 
-// Drafts reads a factory's open draft and the blobs of its files, for the organization in ctx;
-// ports.DefinitionStore satisfies it. The gateway only reads them: writing a draft is authoring's.
+// Drafts reads a factory's open draft and the blobs of its files, and its published versions
+// (a Jonah review's versions.md), for the organization in ctx; ports.DefinitionStore satisfies it.
+// The gateway only reads them: writing a draft is authoring's.
 type Drafts interface {
 	Draft(ctx context.Context, f domain.FactoryID) (domain.DefinitionVersion, error)
 	Blob(ctx context.Context, h domain.BlobHash) ([]byte, error)
+	Versions(ctx context.Context, f domain.FactoryID, before, limit int) ([]domain.DefinitionVersion, error)
 }
 
 // Config bounds the gateway. Zero values take the defaults below.
