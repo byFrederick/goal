@@ -11,6 +11,9 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
+// pushEvent is the event the receipts' deliveries carry.
+const pushEvent = "push"
+
 // receiptTests are the suite's cases for the receiver's receipts, ledger and daily counts (ADR 0040
 // decisions 12 and 13).
 var receiptTests = []struct {
@@ -31,8 +34,8 @@ func (f *fixture) receive(w domain.WebhookEndpointID, id string, at time.Time, n
 	f.t.Helper()
 
 	r, err := f.in.Receive(f.ctx(), domain.NewReceipt{
-		WebhookID: w, ReceivedAt: at, Receipt: domain.ReceiptAccepted, DeliveryID: id, Event: "push", Named: named,
-		Headers: map[string]string{"X-GitHub-Event": "push", "X-Hub-Signature-256": "sha256=00"}, Body: []byte(`{"ref":"main"}`),
+		WebhookID: w, ReceivedAt: at, Receipt: domain.ReceiptAccepted, DeliveryID: id, Event: pushEvent, Named: named,
+		Headers: map[string]string{"X-GitHub-Event": pushEvent, "X-Hub-Signature-256": "sha256=00"}, Body: []byte(`{"ref":"main"}`),
 	})
 	if err != nil {
 		f.t.Fatalf("Receive %s: %v", id, err)
@@ -63,18 +66,34 @@ func testReceiveNamed(f *fixture) {
 		t.Fatalf("Receive = %+v; want accepted d-1 with a row", r)
 	}
 
-	d := f.row(w.ID, r.Row)
-	if d.DeliveryID != "d-1" || d.Event != "push" || d.Receipt != domain.ReceiptAccepted || d.Outcome != domain.DeliveryAccepted ||
-		!bytes.Equal(d.Body, []byte(`{"ref":"main"}`)) || d.Duplicates != 0 || !d.ReceivedAt.Equal(t0) {
-		t.Errorf("Delivery = %+v; want d-1, push, accepted, its body", d)
-	}
-
-	if _, ok := d.Headers["x-hub-signature-256"]; ok || d.Headers["x-github-event"] != "push" {
-		t.Errorf("Headers = %v; want x-github-event only", d.Headers)
-	}
+	f.expectAccepted(f.row(w.ID, r.Row))
 
 	if got, err := f.in.UnnamedDays(f.ctx(), w.ID, t0.Add(-48*time.Hour)); err != nil || len(got) != 0 {
 		t.Errorf("UnnamedDays = %+v, %v; want none", got, err)
+	}
+}
+
+// expectAccepted checks d is the delivery testReceiveNamed received, without its signature.
+func (f *fixture) expectAccepted(d domain.WebhookDelivery) {
+	f.t.Helper()
+
+	if d.DeliveryID != "d-1" || d.Event != pushEvent || d.Receipt != domain.ReceiptAccepted || d.Outcome != domain.DeliveryAccepted ||
+		!bytes.Equal(d.Body, []byte(`{"ref":"main"}`)) || d.Duplicates != 0 || !d.ReceivedAt.Equal(t0) {
+		f.t.Errorf("Delivery = %+v; want d-1, push, accepted, its body", d)
+	}
+
+	if _, ok := d.Headers["x-hub-signature-256"]; ok || d.Headers["x-github-event"] != pushEvent {
+		f.t.Errorf("Headers = %v; want x-github-event only", d.Headers)
+	}
+}
+
+// expectRefused checks d is testReceiveRefused's delivery: metadata only, its user agent kept.
+func (f *fixture) expectRefused(d domain.WebhookDelivery) {
+	f.t.Helper()
+
+	if d.Outcome != domain.DeliveryRefused || d.Receipt != domain.ReceiptRefused || len(d.Body) != 0 || d.DeliveryID != "" ||
+		d.Event != "" || d.Reason == "" || len(d.Headers) != 1 || d.Headers["user-agent"] != "GitHub-Hookshot" {
+		f.t.Errorf("Delivery = %+v; want metadata only", d)
 	}
 }
 
@@ -149,11 +168,7 @@ func testReceiveRefused(f *fixture) {
 			t.Fatalf("Receive refused = %+v, %v; want a refused row", r, err)
 		}
 
-		d := f.row(w.ID, r.Row)
-		if d.Outcome != domain.DeliveryRefused || d.Receipt != domain.ReceiptRefused || len(d.Body) != 0 || d.DeliveryID != "" ||
-			d.Event != "" || d.Reason == "" || len(d.Headers) != 1 || d.Headers["user-agent"] != "GitHub-Hookshot" {
-			t.Errorf("Delivery = %+v; want metadata only", d)
-		}
+		f.expectRefused(f.row(w.ID, r.Row))
 	}
 
 	if r := f.receive(w.ID, "d-1", t0, true); r.Receipt != domain.ReceiptAccepted {

@@ -264,7 +264,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// Platform admins, the security log and the sign-in clean-up: install-level, in no organization.
 	platform := postgres.NewPlatform(store)
 	// The docs site at /docs, from GOAL_DOCS_DIR (none without it), and Add a tool's templates.
-	site, templates, siteErr := ownContent(s.DocsDir)
+	site, templates, senderCatalog, siteErr := ownContent(s.DocsDir)
 
 	apiHandler, err := api.New(api.Deps{
 		Engine: eng, Items: store, Factories: defs, Definitions: authors, Versions: definitionStore, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
@@ -283,12 +283,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	// The receiver of the organization's webhooks (ADR 0040 decision 12): how each sender signs is
-	// the sender catalog's, and whether a trigger names a delivery the engine's loaded lines'.
-	receiver, err := webhookReceiver(s, intake, orgSecrets, eng, clock, log)
-	if err != nil {
-		return err
-	}
+	// POST /hooks/{webhook id}: the sender catalog checks signatures, the engine's lines name deliveries.
+	receiver := api.Receiver(api.ReceiverDeps{Intake: intake, Secrets: orgSecrets, Senders: senderCatalog, Names: eng, TrustedProxies: s.TrustedProxies, Clock: clock, Logger: log})
 
 	servers := httpServers(s, proxySecret, apiHandler, receiver, gatewayHandler(gw), web.Handler(web.Options{StrictTransport: s.strictTransport()}), site, log)
 
@@ -558,13 +554,15 @@ func sandboxes(ctx context.Context, s settings, log *slog.Logger) (runBoxes, err
 	}, nil
 }
 
-// ownContent is what goald serves from its own files: the docs site (docsSite) and the tool
-// templates it ships (catalog.Templates, ADR 0037 decision 15).
-func ownContent(docsDir string) (http.Handler, []domain.ToolTemplate, error) {
+// ownContent is what goald serves from its own files: the docs site (docsSite), the tool
+// templates it ships (catalog.Templates, ADR 0037 decision 15) and the webhook sender catalog
+// (senders.Load, ADR 0040 decision 12).
+func ownContent(docsDir string) (http.Handler, []domain.ToolTemplate, *senders.Catalog, error) {
 	site, siteErr := docsSite(docsDir)
 	templates, catalogErr := catalog.Templates()
+	senderCatalog, sendersErr := senders.Load()
 
-	return site, templates, errors.Join(siteErr, catalogErr)
+	return site, templates, senderCatalog, errors.Join(siteErr, catalogErr, sendersErr)
 }
 
 // docsSite serves the docs build in GOAL_DOCS_DIR at /docs (api.Docs); nil without one.
@@ -579,19 +577,6 @@ func docsSite(dir string) (http.Handler, error) {
 	}
 
 	return h, nil
-}
-
-// webhookReceiver serves POST /hooks/{webhook id} (api.Receiver) with the senders goald ships.
-func webhookReceiver(s settings, intake *postgres.Intake, secrets *postgres.Secrets, eng *engine.Engine, clock ports.Clock, log *slog.Logger,
-) (http.Handler, error) {
-	catalog, err := senders.Load()
-	if err != nil {
-		return nil, err
-	}
-
-	return api.Receiver(api.ReceiverDeps{
-		Intake: intake, Secrets: secrets, Senders: catalog, Names: eng, TrustedProxies: s.TrustedProxies, Clock: clock, Logger: log,
-	}), nil
 }
 
 // httpServers are goald's HTTP servers: the main listener and, with GOAL_GATEWAY_LISTEN, the

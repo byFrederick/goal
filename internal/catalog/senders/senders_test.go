@@ -24,6 +24,25 @@ const (
 	whsecPrevious = "whsec_dGVzdC1zdGFuZGFyZC1vbGQ="
 )
 
+// The cases every sender's table has.
+const (
+	caseGood           = "good"
+	caseWrong          = "wrong"
+	caseMissing        = "missing"
+	casePreviousKept   = "previous within 24h"
+	casePreviousLapsed = "previous after 24h"
+	caseNoID           = "no id hashes the body"
+)
+
+// Ids and events the tables use.
+const (
+	gitlabID   = "u-1"
+	standardID = "msg_1"
+	// standardIDHeader is Standard Webhooks' id header.
+	standardIDHeader = "webhook-id"
+	sentryEvent      = "issue"
+)
+
 var now = time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
 
 func load(t *testing.T) *senders.Catalog {
@@ -62,7 +81,7 @@ func bodyHash(b []byte) string {
 	return hex.EncodeToString(s[:])
 }
 
-// keyOf is a signing secret with its previous value kept until until (nil: none).
+// keyOf is a signing secret with its previous value kept until the instant given (nil: none).
 func keyOf(cur, prev string, until *time.Time) domain.SigningSecret {
 	if until == nil {
 		return domain.SigningSecret{Current: cur}
@@ -144,7 +163,7 @@ func TestSenders_ParseRefusesBadEntries(t *testing.T) {
 
 	head := "apiVersion: goal/v1\nkind: Sender\nmetadata: {name: github}\nspec:\n"
 
-	for name, spec := range map[string]string{
+	for name, spec := range map[string]string{ //nolint:gosec // catalog entries, not credentials
 		"unknown key":     "  scheme: hmac\n  signed: body\n  secret: text\n  signature: {header: X, encoding: hex}\n  extra: 1\n",
 		"unknown scheme":  "  scheme: rsa\n  signature: {header: X}\n",
 		"bad encoding":    "  scheme: hmac\n  signed: body\n  secret: text\n  signature: {header: X, encoding: base32}\n",
@@ -174,15 +193,15 @@ func TestSenders_GitHub(t *testing.T) {
 	want := domain.CheckedDelivery{ID: "d-1", Event: "ping"}
 
 	run(t, domain.SenderGitHub, []check{
-		{name: "good", headers: h(sig), body: body, key: keyOf(current, "", nil), want: want},
-		{name: "wrong", headers: h("sha256=" + hexMAC("other", []byte(body))), body: body, key: keyOf(current, "", nil), refused: true},
+		{name: caseGood, headers: h(sig), body: body, key: keyOf(current, "", nil), want: want},
+		{name: caseWrong, headers: h("sha256=" + hexMAC("other", []byte(body))), body: body, key: keyOf(current, "", nil), refused: true},
 		{name: "body changed", headers: h(sig), body: body + " ", key: keyOf(current, "", nil), refused: true},
-		{name: "missing", headers: map[string][]string{"x-github-event": {"push"}}, body: body, key: keyOf(current, "", nil), refused: true},
+		{name: caseMissing, headers: map[string][]string{"x-github-event": {"push"}}, body: body, key: keyOf(current, "", nil), refused: true},
 		{name: "no prefix", headers: h(hexMAC(current, []byte(body))), body: body, key: keyOf(current, "", nil), refused: true},
-		{name: "previous within 24h", headers: h(old), body: body, key: keyOf(current, previous, at(time.Hour)), want: want},
-		{name: "previous after 24h", headers: h(old), body: body, key: keyOf(current, previous, at(-time.Second)), refused: true},
+		{name: casePreviousKept, headers: h(old), body: body, key: keyOf(current, previous, at(time.Hour)), want: want},
+		{name: casePreviousLapsed, headers: h(old), body: body, key: keyOf(current, previous, at(-time.Second)), refused: true},
 		{
-			name: "no id hashes the body", body: body, key: keyOf(current, "", nil),
+			name: caseNoID, body: body, key: keyOf(current, "", nil),
 			headers: map[string][]string{"x-hub-signature-256": {sig}, "x-github-event": {"push"}},
 			want:    domain.CheckedDelivery{ID: bodyHash([]byte(body)), Event: "push"},
 		},
@@ -194,23 +213,23 @@ func TestSenders_GitLab(t *testing.T) {
 
 	body := `{"object_kind":"pipeline","object_attributes":{"id":7}}`
 	h := func(token string) map[string][]string {
-		return map[string][]string{"x-gitlab-token": {token}, "x-gitlab-event-uuid": {"u-1"}}
+		return map[string][]string{"x-gitlab-token": {token}, "x-gitlab-event-uuid": {gitlabID}}
 	}
-	want := domain.CheckedDelivery{ID: "u-1", Event: "pipeline"}
+	want := domain.CheckedDelivery{ID: gitlabID, Event: "pipeline"}
 
 	run(t, domain.SenderGitLab, []check{
-		{name: "good", headers: h(current), body: body, key: keyOf(current, "", nil), want: want},
-		{name: "wrong", headers: h("not-the-token"), body: body, key: keyOf(current, "", nil), refused: true},
-		{name: "missing", headers: map[string][]string{"x-gitlab-event-uuid": {"u-1"}}, body: body, key: keyOf(current, "", nil), refused: true},
-		{name: "previous within 24h", headers: h(previous), body: body, key: keyOf(current, previous, at(time.Minute)), want: want},
-		{name: "previous after 24h", headers: h(previous), body: body, key: keyOf(current, previous, at(-time.Minute)), refused: true},
+		{name: caseGood, headers: h(current), body: body, key: keyOf(current, "", nil), want: want},
+		{name: caseWrong, headers: h("not-the-token"), body: body, key: keyOf(current, "", nil), refused: true},
+		{name: caseMissing, headers: map[string][]string{"x-gitlab-event-uuid": {gitlabID}}, body: body, key: keyOf(current, "", nil), refused: true},
+		{name: casePreviousKept, headers: h(previous), body: body, key: keyOf(current, previous, at(time.Minute)), want: want},
+		{name: casePreviousLapsed, headers: h(previous), body: body, key: keyOf(current, previous, at(-time.Minute)), refused: true},
 		{
-			name: "no id hashes the body", body: body, key: keyOf(current, "", nil), headers: map[string][]string{"x-gitlab-token": {current}},
+			name: caseNoID, body: body, key: keyOf(current, "", nil), headers: map[string][]string{"x-gitlab-token": {current}},
 			want: domain.CheckedDelivery{ID: bodyHash([]byte(body)), Event: "pipeline"},
 		},
 		{
 			name: "not JSON has no event", body: "not json", key: keyOf(current, "", nil), headers: h(current),
-			want: domain.CheckedDelivery{ID: "u-1"},
+			want: domain.CheckedDelivery{ID: gitlabID},
 		},
 	})
 }
@@ -220,30 +239,30 @@ func TestSenders_Standard(t *testing.T) {
 
 	body := `{"type":"invoice.paid","data":{}}`
 	ts := strconv.FormatInt(now.Unix(), 10)
-	good := "v1," + standardMAC(t, whsecCurrent, "msg_1", ts, []byte(body))
-	old := "v1," + standardMAC(t, whsecPrevious, "msg_1", ts, []byte(body))
+	good := "v1," + standardMAC(t, whsecCurrent, standardID, ts, []byte(body))
+	old := "v1," + standardMAC(t, whsecPrevious, standardID, ts, []byte(body))
 	h := func(sig, ts string) map[string][]string {
-		return map[string][]string{"webhook-signature": {sig}, "webhook-id": {"msg_1"}, "webhook-timestamp": {ts}}
+		return map[string][]string{"webhook-signature": {sig}, standardIDHeader: {standardID}, "webhook-timestamp": {ts}}
 	}
 	key := keyOf(whsecCurrent, "", nil)
-	want := domain.CheckedDelivery{ID: "msg_1", Event: "invoice.paid"}
+	want := domain.CheckedDelivery{ID: standardID, Event: "invoice.paid"}
 	stale := strconv.FormatInt(now.Add(-6*time.Minute).Unix(), 10)
 
 	run(t, domain.SenderStandard, []check{
-		{name: "good", headers: h(good, ts), body: body, key: key, want: want},
-		{name: "wrong", headers: h("v1,"+standardMAC(t, whsecPrevious, "msg_1", ts, []byte(body)), ts), body: body, key: key, refused: true},
-		{name: "missing", headers: map[string][]string{"webhook-id": {"msg_1"}, "webhook-timestamp": {ts}}, body: body, key: key, refused: true},
+		{name: caseGood, headers: h(good, ts), body: body, key: key, want: want},
+		{name: caseWrong, headers: h("v1,"+standardMAC(t, whsecPrevious, standardID, ts, []byte(body)), ts), body: body, key: key, refused: true},
+		{name: caseMissing, headers: map[string][]string{standardIDHeader: {standardID}, "webhook-timestamp": {ts}}, body: body, key: key, refused: true},
 		{name: "several values, one good", headers: h("v1,AAAA v1a,xyz "+good, ts), body: body, key: key, want: want},
 		{name: "several values, none good", headers: h("v1,AAAA v2,"+good[3:], ts), body: body, key: key, refused: true},
-		{name: "timestamp 6 minutes off", headers: h("v1,"+standardMAC(t, whsecCurrent, "msg_1", stale, []byte(body)), stale), body: body, key: key, refused: true},
-		{name: "timestamp missing", headers: map[string][]string{"webhook-signature": {good}, "webhook-id": {"msg_1"}}, body: body, key: key, refused: true},
-		{name: "id changed", headers: map[string][]string{"webhook-signature": {good}, "webhook-id": {"msg_2"}, "webhook-timestamp": {ts}}, body: body, key: key, refused: true},
-		{name: "previous within 24h", headers: h(old, ts), body: body, key: keyOf(whsecCurrent, whsecPrevious, at(time.Hour)), want: want},
-		{name: "previous after 24h", headers: h(old, ts), body: body, key: keyOf(whsecCurrent, whsecPrevious, at(-time.Hour)), refused: true},
+		{name: "timestamp 6 minutes off", headers: h("v1,"+standardMAC(t, whsecCurrent, standardID, stale, []byte(body)), stale), body: body, key: key, refused: true},
+		{name: "timestamp missing", headers: map[string][]string{"webhook-signature": {good}, standardIDHeader: {standardID}}, body: body, key: key, refused: true},
+		{name: "id changed", headers: map[string][]string{"webhook-signature": {good}, standardIDHeader: {"msg_2"}, "webhook-timestamp": {ts}}, body: body, key: key, refused: true},
+		{name: casePreviousKept, headers: h(old, ts), body: body, key: keyOf(whsecCurrent, whsecPrevious, at(time.Hour)), want: want},
+		{name: casePreviousLapsed, headers: h(old, ts), body: body, key: keyOf(whsecCurrent, whsecPrevious, at(-time.Hour)), refused: true},
 		{
 			name: "event field when no type", body: `{"event":"deploy.done"}`, key: key,
-			headers: h("v1,"+standardMAC(t, whsecCurrent, "msg_1", ts, []byte(`{"event":"deploy.done"}`)), ts),
-			want:    domain.CheckedDelivery{ID: "msg_1", Event: "deploy.done"},
+			headers: h("v1,"+standardMAC(t, whsecCurrent, standardID, ts, []byte(`{"event":"deploy.done"}`)), ts),
+			want:    domain.CheckedDelivery{ID: standardID, Event: "deploy.done"},
 		},
 	})
 }
@@ -257,14 +276,14 @@ func TestSenders_PagerDuty(t *testing.T) {
 	want := domain.CheckedDelivery{ID: "01DEN", Event: "incident.triggered"}
 
 	run(t, domain.SenderPagerDuty, []check{
-		{name: "good", headers: h(good), body: body, key: keyOf(current, "", nil), want: want},
-		{name: "wrong", headers: h("v1=" + hexMAC("other", []byte(body))), body: body, key: keyOf(current, "", nil), refused: true},
-		{name: "missing", headers: map[string][]string{}, body: body, key: keyOf(current, "", nil), refused: true},
+		{name: caseGood, headers: h(good), body: body, key: keyOf(current, "", nil), want: want},
+		{name: caseWrong, headers: h("v1=" + hexMAC("other", []byte(body))), body: body, key: keyOf(current, "", nil), refused: true},
+		{name: caseMissing, headers: map[string][]string{}, body: body, key: keyOf(current, "", nil), refused: true},
 		{name: "several values, one good", headers: h("v1=00ff," + good), body: body, key: keyOf(current, "", nil), want: want},
-		{name: "previous within 24h", headers: h("v1=" + hexMAC(previous, []byte(body))), body: body, key: keyOf(current, previous, at(time.Hour)), want: want},
-		{name: "previous after 24h", headers: h("v1=" + hexMAC(previous, []byte(body))), body: body, key: keyOf(current, previous, at(-time.Hour)), refused: true},
+		{name: casePreviousKept, headers: h("v1=" + hexMAC(previous, []byte(body))), body: body, key: keyOf(current, previous, at(time.Hour)), want: want},
+		{name: casePreviousLapsed, headers: h("v1=" + hexMAC(previous, []byte(body))), body: body, key: keyOf(current, previous, at(-time.Hour)), refused: true},
 		{
-			name: "no id hashes the body", body: `{"event":{"event_type":"incident.resolved"}}`, key: keyOf(current, "", nil),
+			name: caseNoID, body: `{"event":{"event_type":"incident.resolved"}}`, key: keyOf(current, "", nil),
 			headers: h("v1=" + hexMAC(current, []byte(`{"event":{"event_type":"incident.resolved"}}`))),
 			want:    domain.CheckedDelivery{ID: bodyHash([]byte(`{"event":{"event_type":"incident.resolved"}}`)), Event: "incident.resolved"},
 		},
@@ -274,22 +293,22 @@ func TestSenders_PagerDuty(t *testing.T) {
 func TestSenders_Sentry(t *testing.T) {
 	t.Parallel()
 
-	body := `{"action":"created","data":{"issue":{"id":"1"}}}`
+	body := `{"action":"created","data":{sentryEvent:{"id":"1"}}}`
 	h := func(sig string) map[string][]string {
-		return map[string][]string{"sentry-hook-signature": {sig}, "sentry-hook-resource": {"issue"}, "request-id": {"r-1"}}
+		return map[string][]string{"sentry-hook-signature": {sig}, "sentry-hook-resource": {sentryEvent}, "request-id": {"r-1"}}
 	}
-	want := domain.CheckedDelivery{ID: "r-1", Event: "issue"}
+	want := domain.CheckedDelivery{ID: "r-1", Event: sentryEvent}
 
 	run(t, domain.SenderSentry, []check{
-		{name: "good", headers: h(hexMAC(current, []byte(body))), body: body, key: keyOf(current, "", nil), want: want},
-		{name: "wrong", headers: h(hexMAC("other", []byte(body))), body: body, key: keyOf(current, "", nil), refused: true},
-		{name: "missing", headers: map[string][]string{"sentry-hook-resource": {"issue"}}, body: body, key: keyOf(current, "", nil), refused: true},
-		{name: "previous within 24h", headers: h(hexMAC(previous, []byte(body))), body: body, key: keyOf(current, previous, at(time.Hour)), want: want},
-		{name: "previous after 24h", headers: h(hexMAC(previous, []byte(body))), body: body, key: keyOf(current, previous, at(-time.Hour)), refused: true},
+		{name: caseGood, headers: h(hexMAC(current, []byte(body))), body: body, key: keyOf(current, "", nil), want: want},
+		{name: caseWrong, headers: h(hexMAC("other", []byte(body))), body: body, key: keyOf(current, "", nil), refused: true},
+		{name: caseMissing, headers: map[string][]string{"sentry-hook-resource": {sentryEvent}}, body: body, key: keyOf(current, "", nil), refused: true},
+		{name: casePreviousKept, headers: h(hexMAC(previous, []byte(body))), body: body, key: keyOf(current, previous, at(time.Hour)), want: want},
+		{name: casePreviousLapsed, headers: h(hexMAC(previous, []byte(body))), body: body, key: keyOf(current, previous, at(-time.Hour)), refused: true},
 		{
-			name: "no id hashes the body", body: body, key: keyOf(current, "", nil),
-			headers: map[string][]string{"sentry-hook-signature": {hexMAC(current, []byte(body))}, "sentry-hook-resource": {"issue"}},
-			want:    domain.CheckedDelivery{ID: bodyHash([]byte(body)), Event: "issue"},
+			name: caseNoID, body: body, key: keyOf(current, "", nil),
+			headers: map[string][]string{"sentry-hook-signature": {hexMAC(current, []byte(body))}, "sentry-hook-resource": {sentryEvent}},
+			want:    domain.CheckedDelivery{ID: bodyHash([]byte(body)), Event: sentryEvent},
 		},
 	})
 }
@@ -304,11 +323,11 @@ func TestSenders_Token(t *testing.T) {
 
 	run(t, domain.SenderToken, []check{
 		{name: "good bearer", headers: bearer("Bearer " + current), body: body, key: keyOf(current, "", nil), token: paths, want: domain.CheckedDelivery{ID: "42", Event: "monitor.alert"}},
-		{name: "wrong", headers: bearer("Bearer nope"), body: body, key: keyOf(current, "", nil), token: paths, refused: true},
+		{name: caseWrong, headers: bearer("Bearer nope"), body: body, key: keyOf(current, "", nil), token: paths, refused: true},
 		{name: "no bearer prefix", headers: bearer(current), body: body, key: keyOf(current, "", nil), token: paths, refused: true},
-		{name: "missing", headers: map[string][]string{}, body: body, key: keyOf(current, "", nil), token: paths, refused: true},
-		{name: "previous within 24h", headers: bearer("Bearer " + previous), body: body, key: keyOf(current, previous, at(time.Hour)), token: paths, want: domain.CheckedDelivery{ID: "42", Event: "monitor.alert"}},
-		{name: "previous after 24h", headers: bearer("Bearer " + previous), body: body, key: keyOf(current, previous, at(-time.Hour)), token: paths, refused: true},
+		{name: caseMissing, headers: map[string][]string{}, body: body, key: keyOf(current, "", nil), token: paths, refused: true},
+		{name: casePreviousKept, headers: bearer("Bearer " + previous), body: body, key: keyOf(current, previous, at(time.Hour)), token: paths, want: domain.CheckedDelivery{ID: "42", Event: "monitor.alert"}},
+		{name: casePreviousLapsed, headers: bearer("Bearer " + previous), body: body, key: keyOf(current, previous, at(-time.Hour)), token: paths, refused: true},
 		{
 			name: "own header, no id path hashes the body", body: body, key: keyOf(current, "", nil), token: own,
 			headers: map[string][]string{"x-acme-token": {current}},

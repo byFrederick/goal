@@ -73,6 +73,44 @@ Publishing refuses a version whose environment file, `runtime.repository.token`,
 
 Replacing the value of a secret that signs a webhook keeps the previous value for 24 hours, sealed apart from the new one, so a delivery signed with either passes while you update the sender. Checking a signature opens the secret without a `secret.used` audit entry and leaves its last use as it was. `goal db rekey` reseals the previous value too and drops it once its 24 hours are over.
 
+### Receiving deliveries
+
+A sender posts each delivery to the webhook's address, `POST /hooks/{webhook id}`, with no session or API key. goald reads at most 1 MiB and checks the signature against the raw body before it reads anything in it. The current value of the secret passes, and so does the previous one for 24 hours after a replace.
+
+How each sender signs:
+
+| Sender | Signature | Delivery id | Event |
+| --- | --- | --- | --- |
+| `github` | `X-Hub-Signature-256`: `sha256=` and the hex HMAC-SHA256 of the body | `X-GitHub-Delivery` | `X-GitHub-Event` |
+| `gitlab` | `X-Gitlab-Token`: the secret's value as it is | `X-Gitlab-Event-UUID` | the body's `object_kind` |
+| `standard` | `webhook-signature`: one or more space-separated `v1,` values, each the base64 HMAC-SHA256 of `<webhook-id>.<webhook-timestamp>.<body>` under the base64 key after `whsec_`. A `webhook-timestamp` more than 5 minutes off is refused | `webhook-id` | the body's `type`, else `event` |
+| `pagerduty` | `X-PagerDuty-Signature`: one or more comma-separated `v1=` values, each the hex HMAC-SHA256 of the body | the body's `event.id` | the body's `event.event_type` |
+| `sentry` | `Sentry-Hook-Signature`: the hex HMAC-SHA256 of the body | `Request-ID` | `Sentry-Hook-Resource` |
+| `token` | `Authorization: Bearer <value>`, or the value alone in the webhook's own header | the webhook's id path in the body | the webhook's event path in the body |
+
+When a sender names no delivery id, the id is the hex SHA-256 of the body. An id over 200 characters is replaced by its hex SHA-256.
+
+The answers:
+
+| Status | When |
+| --- | --- |
+| 202 | Accepted. The body is `{"id": "<delivery id>", "receipt": "accepted"}`. |
+| 200 | The webhook already took this delivery id. Nothing is created, and the body says `"receipt": "duplicate"`. |
+| 401 | The signature, token or timestamp is missing or wrong. |
+| 404 | No enabled organization webhook has this id. |
+| 405 | A method other than `POST`. |
+| 413 | The body is over 1 MiB. |
+| 429 | Past 30 refused deliveries a minute to one webhook, or past 60 requests a minute from one address to unknown webhooks. `Retry-After` says when to try again. Each goald counts in its own memory. A signed delivery is never limited. |
+
+Each delivery gets a receipt: Accepted, Duplicate or Refused. What goald keeps:
+
+- **The ledger.** Every accepted delivery id goes into the webhook's ledger, without its body, for a year. A delivery replayed with the same id within that year is a duplicate, even after its row is gone.
+- **Deliveries a trigger names** keep their row, headers and body for 30 days. A trigger names a delivery when it is enabled, in a factory the webhook is open to, and its `on` names the webhook or the sender and event, such as `github.check_run`. GitHub's ping, sent when you add the webhook in GitHub, is kept too, with the reason "Received GitHub's ping".
+- **Deliveries no trigger names** keep only their ledger id and a count per day.
+- **Refused deliveries** keep their headers and the reason, with no body, for 30 days.
+
+No delivery keeps a signature or token header.
+
 ## What a run receives
 
 1. The run starts the agent's environment from the version the run is pinned to. A secret you replace applies to runs that start afterwards, and the tests of the MCP servers that use it run again.
