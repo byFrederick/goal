@@ -110,6 +110,7 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 		firingSkip:   indented(t, skipped),
 	}}
 	maps.Copy(g.bodies, webhookBodies(t, days, at))
+	maps.Copy(g.bodies, checkBodies(t, at))
 
 	reply := g.reply
 	base := "/v1/orgs/acme/factories/" + intakeFactory
@@ -147,6 +148,8 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 		}
 	})
 	g.webhookRoutes(mux, base)
+	mux.HandleFunc("GET "+base+"/intake/triggers/"+triggerNightly+"/checks", reply(bodyChecks, http.StatusOK))
+	mux.HandleFunc("POST "+base+"/intake/triggers/"+triggerNightly+"/checks", reply(bodyTried, http.StatusAccepted))
 
 	g.srv = httptest.NewServer(mux)
 	t.Cleanup(g.srv.Close)
@@ -166,6 +169,53 @@ func (g *intakeGoald) reply(name string, status int) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		_, _ = w.Write(g.bodies[name])
+	}
+}
+
+// The bodies of a trigger's checks and of a try check.
+const (
+	bodyChecks = "checks"
+	bodyTried  = "tried"
+	tryID      = "f-try"
+)
+
+// checkBodies are goald's answers about nightly's checks: a try, done, saying what it would do;
+// a failed check; and a done one that filed, reopened, noted and skipped.
+func checkBodies(t *testing.T, at time.Time) map[string][]byte {
+	t.Helper()
+
+	ref, old, reason := "#12", "#7", "the check run ended failed: timed out after 5m0s"
+	checked := at.Add(time.Minute)
+
+	try := gen.TriggerCheck{
+		Id: tryID, At: at.Add(time.Hour), CheckedAt: &checked, State: gen.TriggerCheckStateDone, Try: true, CostUsd: 0.04,
+		Filed:   []gen.TriggerCheckFiled{{Key: "INC-9", Title: "Checkout is slow"}},
+		Noted:   []gen.TriggerCheckNoted{},
+		Skipped: []gen.TriggerCheckSkip{{Key: "INC-3", Reason: "a test page"}},
+	}
+	failed := gen.TriggerCheck{
+		Id: "f-failed", At: at.Add(5 * time.Minute), State: gen.TriggerCheckStateFailed, CostUsd: 0.01, Reason: &reason,
+		Filed: []gen.TriggerCheckFiled{}, Noted: []gen.TriggerCheckNoted{}, Skipped: []gen.TriggerCheckSkip{},
+	}
+	done := gen.TriggerCheck{
+		Id: "f-done", At: at, CheckedAt: &checked, State: gen.TriggerCheckStateDone, CostUsd: 0.03,
+		Filed: []gen.TriggerCheckFiled{{Key: "INC-1", Title: "API returns 5xx", Ref: &ref}, {Key: "INC-2", Title: "Disk full\non db-1", Ref: &ref, Reopens: &old}},
+		Noted: []gen.TriggerCheckNoted{{Key: "INC-4", Ref: "#9", Text: "Still failing"}},
+		Skipped: []gen.TriggerCheckSkip{
+			{Key: "INC-5", Reason: "closed on Oct 25: fixed upstream"}, {Key: "INC-6", Reason: "over the limit"},
+		},
+	}
+	quiet := gen.TriggerCheck{
+		Id: "f-quiet", At: at.Add(-5 * time.Minute), CheckedAt: &checked, State: gen.TriggerCheckStateDone,
+		Filed: []gen.TriggerCheckFiled{}, Noted: []gen.TriggerCheckNoted{}, Skipped: []gen.TriggerCheckSkip{},
+	}
+
+	queued := try
+	queued.State, queued.CheckedAt, queued.Filed, queued.Skipped = gen.TriggerCheckStateQueued, nil, []gen.TriggerCheckFiled{}, []gen.TriggerCheckSkip{}
+
+	return map[string][]byte{
+		bodyChecks: indented(t, gen.TriggerCheckList{Checks: []gen.TriggerCheck{try, failed, done, quiet}}),
+		bodyTried:  indented(t, queued),
 	}
 }
 
@@ -394,6 +444,41 @@ func TestTriggers_TryProblem(t *testing.T) {
 	}
 }
 
+// A check trigger's checks print newest first: when, state and cost, then what each filed (with
+// the item, or would file for a try), noted and skipped with why, a failure's reason, and Nothing
+// new for a check that found nothing.
+func TestTriggers_Checks(t *testing.T) {
+	t.Parallel()
+
+	g := newIntakeGoald(t)
+
+	out, _, err := goalIntake(t, g.srv.URL, cmdTriggers, "checks", intakeFactory, triggerNightly, "--limit", "5")
+	if err != nil {
+		t.Fatalf("goal triggers checks = %v", err)
+	}
+
+	if _, q := g.last(); q.Get("limit") != "5" {
+		t.Errorf("goal triggers checks sent %v; want limit 5", q)
+	}
+
+	checkGolden(t, "triggers-checks", out)
+}
+
+// A try without --event posts a try check, waits for it among the trigger's checks, and prints
+// what it would do and that nothing was filed, noted or saved.
+func TestTriggers_TryCheck(t *testing.T) {
+	t.Parallel()
+
+	g := newIntakeGoald(t)
+
+	out, _, err := goalIntake(t, g.srv.URL, cmdTriggers, subTry, intakeFactory, triggerNightly)
+	if err != nil {
+		t.Fatalf("goal triggers try = %v", err)
+	}
+
+	checkGolden(t, "triggers-try-check", out)
+}
+
 // The organization's webhooks print with their sender, state, address, secret's name, the
 // factories they are open to (by name, with their repositories), the triggers that use them and
 // their 7-day totals.
@@ -615,7 +700,10 @@ func TestIntakeCommands_Usage(t *testing.T) {
 		{cmdTriggers, subList, intakeFactory, argExtra},
 		{cmdTriggers, subShow, intakeFactory},
 		{cmdTriggers, subShow, intakeFactory, triggerNightly, argExtra},
-		{cmdTriggers, subTry, intakeFactory, triggerNightly},
+		{cmdTriggers, subTry, intakeFactory, triggerNightly, "--wait", "0s"},
+		{cmdTriggers, "checks", intakeFactory},
+		{cmdTriggers, "checks", intakeFactory, triggerNightly, argExtra},
+		{cmdTriggers, "checks", intakeFactory, triggerNightly, "--limit", "101"},
 		{cmdTriggers, subTry, intakeFactory, flagEvent, firingCreate},
 		{cmdTriggers, subTry, intakeFactory, triggerNightly, argExtra, flagEvent, firingCreate},
 		{cmdWebhooks},

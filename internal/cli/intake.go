@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -11,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 )
@@ -26,15 +29,16 @@ const (
 // intakeTitleWidth is how much of an event's title a row of goal triggers show keeps.
 const intakeTitleWidth = 60
 
-// triggersCommand is goal triggers list|show|try: a factory's triggers (ADR 0026) as its current
-// definition declares them, with what they created, and a dry run of one against a past event
-// (ADR 0028 decision 2). Triggers change only through the definition (goal factory push).
+// triggersCommand is goal triggers list|show|try|checks: a factory's triggers (ADR 0026) as its
+// current definition declares them, with what they created, a dry run of one against a past event
+// (ADR 0028 decision 2) or of its check, and its checks (ADR 0040 decision 19). Triggers change
+// only through the definition (goal factory push).
 func triggersCommand(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	if len(args) == 0 {
 		return errUsage
 	}
 
-	handler, ok := map[string]command{subList: triggersList, subShow: triggersShow, "try": triggersTry}[args[0]]
+	handler, ok := map[string]command{subList: triggersList, subShow: triggersShow, "try": triggersTry, "checks": triggersChecks}[args[0]]
 	if !ok {
 		return errUsage
 	}
@@ -209,19 +213,25 @@ func printTrigger(out *printer, factory string, d *gen.IntakeTriggerDetail) {
 }
 
 // triggersTry is goal triggers try <factory> <trigger> --event ID [--json]: what the trigger would
-// do now with one of its 20 newest events. Nothing is created.
+// do now with one of its 20 newest events. Nothing is created. Without --event it tries the
+// trigger's check (tryCheck).
 func triggersTry(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs, orgFlag, asJSON := intakeFlags("triggers try")
 	event := fs.String("event", "", "the event's id (the ID column of goal triggers show)")
+	wait := fs.Duration("wait", defaultCheckWait, "for a check: how long to wait for it")
 
 	pos, err := parseInterspersed(fs, args)
-	if err != nil || len(pos) != 2 || *event == "" {
+	if err != nil || len(pos) != 2 || *wait <= 0 {
 		return errUsage
 	}
 
 	c, err := connect(ctx, getenv, *orgFlag)
 	if err != nil {
 		return err
+	}
+
+	if *event == "" {
+		return tryCheck(ctx, out, c, pos[0], pos[1], *asJSON, *wait, pollEvery)
 	}
 
 	res, err := c.TryIntakeTriggerWithResponse(ctx, c.org, pos[0], pos[1], gen.TriggerTryRequest{Firing: *event})
@@ -293,6 +303,196 @@ func printTry(out *printer, trigger string, tr *gen.TriggerTry) {
 	}
 
 	out.printf("Nothing was created: this was a dry run\n")
+}
+
+// defaultCheckWait is how long goal triggers try waits for a check by default: a check's default
+// timeout, 5 minutes, and a minute for it to be leased and recorded.
+const defaultCheckWait = 6 * time.Minute
+
+// tryCheck posts a try check of the trigger and reads its checks every interval until the try is
+// done or failed, or wait has passed, then prints it (printTriggerCheck). A try still queued or running
+// then says so and where to read it later.
+func tryCheck(ctx context.Context, out *printer, c orgClient, factory, trigger string, asJSON bool, wait, every time.Duration) error {
+	res, err := c.TryTriggerCheckWithResponse(ctx, c.org, factory, trigger)
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if res.JSON202 == nil {
+		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	id := res.JSON202.Id
+	deadline := time.Now().Add(wait)
+
+	t := time.NewTicker(every)
+	defer t.Stop()
+
+	for {
+		list, err := c.ListTriggerChecksWithResponse(ctx, c.org, factory, trigger, &gen.ListTriggerChecksParams{})
+		if err != nil {
+			return apiDown(err)
+		}
+
+		if list.JSON200 == nil {
+			return problem(list.HTTPResponse, list.ApplicationproblemJSONDefault)
+		}
+
+		i := slices.IndexFunc(list.JSON200.Checks, func(ch gen.TriggerCheck) bool { return ch.Id == id })
+		if i >= 0 && finished(list.JSON200.Checks[i]) {
+			return printTried(out, factory, trigger, list.JSON200.Checks[i], asJSON)
+		}
+
+		if time.Now().After(deadline) {
+			out.printf("The try check of %s is still %s after %s; read it later with goal triggers checks %s %s\n", trigger, checkState(list.JSON200.Checks, i), wait, factory, trigger)
+
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return errors.New("stopped waiting; the try check keeps running in goald")
+		case <-t.C:
+		}
+	}
+}
+
+// finished reports whether ch is done or failed.
+func finished(ch gen.TriggerCheck) bool {
+	return ch.State == gen.TriggerCheckStateDone || ch.State == gen.TriggerCheckStateFailed
+}
+
+// checkState is checks[i]'s state, queued when it is not among them yet.
+func checkState(checks []gen.TriggerCheck, i int) string {
+	if i < 0 {
+		return string(gen.TriggerCheckStateQueued)
+	}
+
+	return string(checks[i].State)
+}
+
+// printTried prints a finished try check, then that nothing was filed, noted or saved.
+func printTried(out *printer, factory, trigger string, ch gen.TriggerCheck, asJSON bool) error {
+	if asJSON {
+		b, err := json.Marshal(ch)
+		if err != nil {
+			return fmt.Errorf("print the try check: %w", err)
+		}
+
+		out.printf("%s\n", b)
+
+		return nil
+	}
+
+	out.printf("Try check of %s:\n", trigger)
+	printTriggerCheck(out, factory, ch)
+	out.printf("Nothing was filed, noted or saved: this was a try\n")
+
+	return nil
+}
+
+// triggersChecks is goal triggers checks <factory> <trigger> [--limit N] [--json]: the trigger's
+// checks, newest first.
+func triggersChecks(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs, orgFlag, asJSON := intakeFlags("triggers checks")
+	limit := fs.Int("limit", 0, "how many checks, 1 to 100 (default 20)")
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 2 || *limit < 0 || *limit > 100 {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *orgFlag)
+	if err != nil {
+		return err
+	}
+
+	params := &gen.ListTriggerChecksParams{}
+	if *limit > 0 {
+		params.Limit = limit
+	}
+
+	res, err := c.ListTriggerChecksWithResponse(ctx, c.org, pos[0], pos[1], params)
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if res.JSON200 == nil {
+		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	if *asJSON {
+		out.printf("%s", res.Body)
+
+		return nil
+	}
+
+	if len(res.JSON200.Checks) == 0 {
+		out.printf("No checks yet\n")
+
+		return nil
+	}
+
+	for _, ch := range res.JSON200.Checks {
+		printTriggerCheck(out, pos[0], ch)
+	}
+
+	return nil
+}
+
+// printTriggerCheck prints one check: when, its state (a try marked), its cost, then a row for each
+// item it filed, note it wrote and key it skipped, with why, "Nothing new" for a done check with
+// none, or why it failed. Text from the source goes through oneLine, so it cannot break the layout.
+func printTriggerCheck(out *printer, factory string, ch gen.TriggerCheck) {
+	state := string(ch.State)
+	if ch.Try {
+		state += ", try"
+	}
+
+	out.printf("%s  %s  %s\n", stamp(ch.At), state, usd(ch.CostUsd))
+
+	if ch.Reason != nil {
+		out.printf("  Failed: %s\n", oneLine(*ch.Reason))
+	}
+
+	if ch.State != gen.TriggerCheckStateDone {
+		return
+	}
+
+	if len(ch.Filed)+len(ch.Noted)+len(ch.Skipped) == 0 {
+		out.printf("  Nothing new\n")
+
+		return
+	}
+
+	var b bytes.Buffer
+
+	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+
+	for _, f := range ch.Filed {
+		item := "would file"
+		if f.Ref != nil {
+			item = factory + *f.Ref
+		}
+
+		if f.Reopens != nil {
+			item += ", reopens " + factory + *f.Reopens
+		}
+
+		_, _ = fmt.Fprintf(tw, "  Filed\t%s\t%s\t%s\n", cut(oneLine(f.Key), intakeTitleWidth), item, cut(oneLine(f.Title), intakeTitleWidth))
+	}
+
+	for _, n := range ch.Noted {
+		_, _ = fmt.Fprintf(tw, "  Noted\t%s\t%s\t%s\n", cut(oneLine(n.Key), intakeTitleWidth), factory+n.Ref, cut(oneLine(n.Text), intakeTitleWidth))
+	}
+
+	for _, s := range ch.Skipped {
+		_, _ = fmt.Fprintf(tw, "  Skipped\t%s\t-\t%s\n", cut(oneLine(s.Key), intakeTitleWidth), cut(oneLine(s.Reason), intakeTitleWidth))
+	}
+
+	_ = tw.Flush()
+
+	out.printf("%s", b.String())
 }
 
 // creates is what a trigger creates: its work type, the station it starts at, and expedite and
