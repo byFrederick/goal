@@ -167,6 +167,8 @@ const (
 	AuditItemAnswered = "item.answered"
 	// AuditItemPartAdded is a part added to an open assembly (part, key).
 	AuditItemPartAdded = "item.part_added"
+	// AuditItemFiled is an item filed through domain.File (origin, and via for a person's).
+	AuditItemFiled = "item.filed"
 	// AuditTargetItem is the target kind of entries about an item.
 	AuditTargetItem = "item"
 )

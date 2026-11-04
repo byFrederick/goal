@@ -41,6 +41,8 @@ func itemFrom(w db.WorkItem) (domain.Item, error) {
 		State: domain.ItemState(w.State), Class: domain.ClassOfService(w.ClassOfService), Priority: int(w.Priority),
 		ReworkCount: int(w.ReworkCount), CostUSD: w.CostUsd, Outputs: outputs,
 		CreatedAt: w.CreatedAt.UTC(), UpdatedAt: w.UpdatedAt.UTC(), Source: domain.ItemSource(deref(w.Source)), Trigger: deref(w.Trigger),
+		Origin: domain.Origin(w.Origin), Via: domain.Via(deref(w.Via)), CreatedBy: deref(w.CreatedBy),
+		Generation: int(w.Generation), Untrusted: w.Untrusted,
 	}
 
 	if w.ParentID != nil {

@@ -129,6 +129,7 @@ func TestEvidence_ItemFiles(t *testing.T) {
 		person(domain.EventNote, evBuild, evAt(6), map[string]any{evText: "Mind the timeout."}),
 	)
 	it.Events[0].RunID = "r1"
+	it.Item.Origin = domain.OriginPlan
 
 	files := build(t, domain.EvidenceInput{
 		Items:    []domain.EvidenceItem{it},
@@ -141,7 +142,7 @@ func TestEvidence_ItemFiles(t *testing.T) {
 	}
 
 	expectHas(t, "items/7.md", f,
-		"# #7 Item 7", "- Type: task", "- Lane: backend", "> Do the thing.",
+		"# #7 Item 7", "- Type: task", "- Lane: backend", "- Origin: plan", "> Do the thing.",
 		"| r1 | build | engineer | model-a | v3 | 12 | $0.40 | finished | handbook (snap-1) |",
 		"| r2 | review | reviewer | model-a | v3 | 3 | $0.10 | sent_back | none |",
 		"| r3 | build | engineer | model-a | ver-unknown | 5 | $0.20 | failed | none |",

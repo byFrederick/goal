@@ -51,6 +51,10 @@ Work types decide the kind of item and its class. They do not change how an item
 - A trigger in `board.triggers` creates an item when its event, schedule or webhook delivery passes the trigger's checks. The item starts at the station the trigger names.
 - A station's output can plan an assembly, and the engine creates its parts. See [assemblies and parts](/docs/concepts/assemblies-and-parts/).
 
+Every item is checked the same way however it arrives: its title can't be empty, its type must be one of the declared work types, and its lane must be one that a station routes by, when any station routes by lane. A request that fails a check is refused with `400 Bad Request`, and a plan with such a part blocks the item that planned it.
+
+Each item records where it came from as its `origin`: `person`, `plan` for a part, `trigger`, or `follow-up`. It also records who filed it. For a person's item, it records whether it was filed on the web, from the CLI or with an API key. The API answers an item's `origin`. Items filed before origins were recorded got theirs from how they were submitted, and those with no record of it show `person`.
+
 ## Where items show up
 
 - The **Board** screen shows items in columns by station.

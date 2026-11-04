@@ -194,7 +194,7 @@ func (e *Engine) SetLane(ctx context.Context, id domain.ItemID, lane string, by 
 		return domain.Item{}, fmt.Errorf("set the lane of %s: %w", id, err)
 	}
 
-	routes := routedLanes(l)
+	routes := l.RoutedLanes()
 
 	switch {
 	case closed(it):
@@ -217,18 +217,6 @@ func (e *Engine) SetLane(ctx context.Context, id domain.ItemID, lane string, by 
 		Events: []domain.Event{decision(it, domain.EventLaneSet, now, by, data)},
 		Audit:  itemAudit(it, now, by, domain.AuditItemLaneSet, data),
 	})
-}
-
-// routedLanes are the lanes the stations of l route by, sorted; none when no station routes.
-func routedLanes(l domain.Line) []string {
-	var lanes []string
-	for _, s := range l.Stations {
-		lanes = append(lanes, slices.Collect(maps.Keys(s.Route))...)
-	}
-
-	slices.Sort(lanes)
-
-	return slices.Compact(lanes)
 }
 
 // Pause stops an open item where it is: it becomes blocked with a paused event (the reason is

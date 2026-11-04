@@ -840,6 +840,30 @@ func (e IntakeTriggerSource) Valid() bool {
 	}
 }
 
+// Defines values for ItemOrigin.
+const (
+	ItemOriginFollowUp ItemOrigin = "follow-up"
+	ItemOriginPerson   ItemOrigin = "person"
+	ItemOriginPlan     ItemOrigin = "plan"
+	ItemOriginTrigger  ItemOrigin = "trigger"
+)
+
+// Valid indicates whether the value is a known member of the ItemOrigin enum.
+func (e ItemOrigin) Valid() bool {
+	switch e {
+	case ItemOriginFollowUp:
+		return true
+	case ItemOriginPerson:
+		return true
+	case ItemOriginPlan:
+		return true
+	case ItemOriginTrigger:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ItemLinkKind.
 const (
 	Linked  ItemLinkKind = "linked"
@@ -4090,6 +4114,9 @@ type Item struct {
 	Needs  *[]ItemLink `json:"needs,omitempty"`
 	Number int64       `json:"number"`
 
+	// Origin Where the item came from: a person filed it, a plan made it a part, a trigger or follow-ups filed it (ADR 0040)
+	Origin *ItemOrigin `json:"origin,omitempty"`
+
 	// Outputs Each station's output, by station id
 	Outputs  map[string]interface{} `json:"outputs"`
 	ParentId *string                `json:"parent_id,omitempty"`
@@ -4124,6 +4151,9 @@ type Item struct {
 	// Waiting Why the item is not claimed yet; getItem only, absent unless it is queued or ready with an open need
 	Waiting *ItemWaiting `json:"waiting,omitempty"`
 }
+
+// ItemOrigin Where the item came from: a person filed it, a plan made it a part, a trigger or follow-ups filed it (ADR 0040)
+type ItemOrigin string
 
 // ItemAnswer A person's answer to an item's open question; exactly one of answer and choice
 type ItemAnswer struct {

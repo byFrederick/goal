@@ -496,7 +496,7 @@ func (w *world) oneRun(t *testing.T, line domain.Line) map[string]string {
 
 	ctx := w.ctx(t)
 
-	if _, err := e.Submit(ctx, domain.NewItem{FactoryID: factoryUUID, Type: "feature", Title: "Add the flag"}); err != nil {
+	if _, err := e.Submit(ctx, domain.FileRequest{Origin: domain.OriginPerson, FactoryID: factoryUUID, Type: "feature", Title: "Add the flag"}); err != nil {
 		t.Fatal(err)
 	}
 

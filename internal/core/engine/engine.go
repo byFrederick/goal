@@ -450,25 +450,21 @@ func (e *Engine) Run(ctx context.Context) error {
 // Wait blocks until every agent run started by this instance's ticks has finished.
 func (e *Engine) Wait() { e.runs.Wait() }
 
-// Submit creates an item at the first station of its factory's line. The factory must belong
-// to the organization in ctx; any other is ports.ErrNotFound.
-func (e *Engine) Submit(ctx context.Context, n domain.NewItem) (domain.Item, error) {
-	l, err := e.lineIn(ctx, n.FactoryID)
+// Submit files an item on its factory's line through domain.File, which places it at the first
+// station and refuses what the line does not take with domain.ErrInvalid. The factory must
+// belong to the organization in ctx; any other is ports.ErrNotFound.
+func (e *Engine) Submit(ctx context.Context, r domain.FileRequest) (domain.Item, error) {
+	l, err := e.lineIn(ctx, r.FactoryID)
 	if err != nil {
 		return domain.Item{}, err
 	}
 
-	// The type is one of the line's work types, or "" when the factory declares none.
-	if n.Title == "" {
-		return domain.Item{}, errors.New("submit: an item needs a title")
-	}
+	r.At = e.clock.Now()
 
-	first, err := l.First()
+	n, err := domain.File(l, r)
 	if err != nil {
-		return domain.Item{}, err
+		return domain.Item{}, fmt.Errorf("submit: %w", err)
 	}
-
-	n.Station, n.State, n.Class, n.CreatedAt = first.ID, first.Arrival(), l.ClassFor(n.Type), e.clock.Now()
 
 	it, err := e.store.CreateItem(ctx, n)
 	if err != nil {

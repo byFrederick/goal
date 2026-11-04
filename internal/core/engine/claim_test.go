@@ -31,7 +31,7 @@ func (h *harness) submitTo(t *testing.T, e *engine.Engine, org domain.OrgID, fac
 	t.Helper()
 
 	for range n {
-		if _, err := e.Submit(domain.WithOrg(t.Context(), org), domain.NewItem{FactoryID: factory, Title: anItem, Type: typeFeature}); err != nil {
+		if _, err := e.Submit(domain.WithOrg(t.Context(), org), domain.FileRequest{Origin: domain.OriginPerson, FactoryID: factory, Title: anItem, Type: typeFeature}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -161,7 +161,7 @@ func TestSweep_CoversEveryActiveOrg(t *testing.T) {
 	h.claimAsDeadInstance(t, h.submit(t, domain.NewItem{}), stWork)
 
 	it, err := h.engineWith(t, h.store, 0, other).Submit(domain.WithOrg(t.Context(), org),
-		domain.NewItem{FactoryID: otherFactory, Title: anItem, Type: typeFeature})
+		domain.FileRequest{Origin: domain.OriginPerson, FactoryID: otherFactory, Title: anItem, Type: typeFeature})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,12 +180,12 @@ func TestSubmit_IntoAFactoryOfAnotherOrgIsNotFound(t *testing.T) {
 
 	h, _, org := twoOrgs(t, porttest.Succeed(`{}`))
 
-	_, err := h.e.Submit(domain.WithOrg(t.Context(), org), domain.NewItem{FactoryID: factoryID, Title: "x", Type: typeFeature})
+	_, err := h.e.Submit(domain.WithOrg(t.Context(), org), domain.FileRequest{Origin: domain.OriginPerson, FactoryID: factoryID, Title: "x", Type: typeFeature})
 	if !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("Submit from another organization = %v, want ErrNotFound", err)
 	}
 
-	if _, err := h.e.Submit(t.Context(), domain.NewItem{FactoryID: factoryID, Title: "x", Type: typeFeature}); !errors.Is(err, domain.ErrNoOrg) {
+	if _, err := h.e.Submit(t.Context(), domain.FileRequest{Origin: domain.OriginPerson, FactoryID: factoryID, Title: "x", Type: typeFeature}); !errors.Is(err, domain.ErrNoOrg) {
 		t.Errorf("Submit without an organization = %v, want ErrNoOrg", err)
 	}
 }

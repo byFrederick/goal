@@ -4457,6 +4457,11 @@ export interface components {
             part_paths?: string[];
             /** @description The assembly the item is a part of, and its place among the parts in plan order; getItem only, absent unless the item is a part. The parts themselves are listItemParts */
             assembly?: components["schemas"]["PartOf"];
+            /**
+             * @description Where the item came from: a person filed it, a plan made it a part, a trigger or follow-ups filed it (ADR 0040)
+             * @enum {string}
+             */
+            origin?: "person" | "plan" | "trigger" | "follow-up";
             type: string;
             lane?: string;
             title: string;

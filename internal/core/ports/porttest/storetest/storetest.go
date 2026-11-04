@@ -164,7 +164,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"SavedViews_OtherOrgSeesNothing", testSavedViewsOtherOrgSeesNothing},
 		{"OpenToolApprovals_ByConnection", testOpenToolApprovals},
 	}
-	tests = append(tests, jonahTests...)
+	tests = append(append(tests, jonahTests...), fileTests...)
 	tests = append(append(append(tests, triesTests...), keptTestsTests...), graderChecksTests...)
 
 	for _, tc := range tests {
@@ -353,7 +353,7 @@ func testCreateItem(f *fixture) {
 	want := domain.Item{
 		ID: a.ID, OrgID: f.org, FactoryID: f.factory, Number: 1, Type: typeTask, Lane: laneBackend, Title: "a", Body: "details",
 		Station: stWork, State: domain.StateQueued, Class: domain.ClassStandard, Priority: 3,
-		Outputs: map[string]json.RawMessage{}, CreatedAt: t0, UpdatedAt: t0,
+		Outputs: map[string]json.RawMessage{}, CreatedAt: t0, UpdatedAt: t0, Origin: domain.OriginPerson,
 	}
 	sameItem(t, a, want)
 	sameItem(t, f.item(t, a.ID), want)
@@ -364,6 +364,7 @@ func testCreateItem(f *fixture) {
 
 	sameEvents(t, f.Events(t, a.ID), []domain.Event{{
 		FactoryID: f.factory, ItemID: a.ID, At: t0, Kind: domain.EventCreated, Station: stWork, Actor: domain.ActorEngine,
+		Data: map[string]any{dataActor: domain.EngineActor.Ref()},
 	}})
 }
 

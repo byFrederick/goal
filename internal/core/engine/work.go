@@ -728,7 +728,7 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output
 			t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
 		}
 
-		e.assemble(ctx, log, c, ports.Assembly{Transition: t, Parts: chk.plan, After: itemIDs(chk.after), AfterBy: agentActor(c)})
+		e.assemble(ctx, log, c, ports.Assembly{Transition: t, Parts: chk.plan, After: itemIDs(chk.after), AfterBy: agentActor(c), By: agentActor(c)})
 
 		return
 	case v != nil && c.noMerge && c.station.Action == domain.ActionMerge:
@@ -783,12 +783,19 @@ func (e *Engine) violations(ctx context.Context, log *slog.Logger, c claimed, ou
 
 // assemble makes the claimed item an assembly with the parts of its plan, queued at the station
 // that planned them; the item stays there, in state assembly. A part cannot plan an assembly
-// (assemblies do not nest), so its plan blocks it. A lost acknowledgement is only logged: the
+// (assemblies do not nest), so its plan blocks it, as does a part domain.File refuses. A lost acknowledgement is only logged: the
 // store's Assemble is idempotent, so the parts exist at most once.
 func (e *Engine) assemble(ctx context.Context, log *slog.Logger, c claimed, a ports.Assembly) {
 	if c.item.ParentID != "" {
 		e.block(ctx, log, c, "a part cannot plan an assembly")
 		return
+	}
+
+	for _, p := range a.Parts {
+		if err := checkPart(c.line, c.item, a.By, p); err != nil {
+			e.block(ctx, log, c, "assemble: part "+p.Key+": "+err.Error())
+			return
+		}
 	}
 
 	a.Transition.To = domain.Position{Station: c.station.ID, State: domain.StateAssembly}
