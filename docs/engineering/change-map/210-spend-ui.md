@@ -8,4 +8,4 @@ The spend screen under `apps/web/src/features/spend/`, its route `apps/web/src/r
 
 ## Run
 
-`pnpm --dir apps/web run typecheck`, `lint` and `test`; `task docs:check`. Playwright (`task web:e2e`) where a browser is available
+`pnpm --dir apps/web run typecheck`, `lint` and `test`; `task docs:check`. CI's e2e job runs Playwright (`task web:e2e`)

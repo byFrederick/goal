@@ -21,7 +21,7 @@ The UI follows `docs/design/MASTER.md` exactly. How the app is laid out (routes,
 7. **Make it accessible.** Use labels, visible focus and keyboard paths. Icons beside words are `aria-hidden`. Respect `prefers-reduced-motion`.
 8. **Feed the mock.** Give `apps/web/mock` the shapes the screen needs, so `GOAL_API=mock task web:dev` shows every state.
 9. **Write the tests.** Write Vitest and Testing Library tests beside the component: each state, what each control does, and the permission cases. A critical flow also gets a Playwright spec in `apps/web/e2e`.
-10. **Run the checks.** Run `task web:check`. Run `task web:e2e` where a browser is installed; where none is, say in the pull request that the Playwright suite was not run.
+10. **Run the checks.** Run `task web:check`. The box has no browser, so CI's e2e job runs the Playwright suite; name the specs you added or changed in the pull request as [goal-deliver](../goal-deliver/SKILL.md) step 4 says.
 11. **Run MASTER.md's Pre-Delivery Checklist**, and fix what it finds.
 12. **Docs as built.** Update `docs/engineering/frontend.md` and the spec for the screen.
 13. **Deliver** with [goal-deliver](../goal-deliver/SKILL.md).
