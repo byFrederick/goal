@@ -1289,7 +1289,14 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           ]
         : [],
     );
-    return [...items, ...warnings];
+    const worse = jonah.worseWatches(f.org_id, f.id).map(
+      (w): InboxEntry => ({
+        ...entry(f, 'watch_worse', w.id, w.since),
+        station: w.watch.station,
+        watch: w.watch,
+      }),
+    );
+    return [...items, ...warnings, ...worse];
   };
 
   const kindOrder: InboxEntry['kind'][] = [
@@ -1300,6 +1307,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     'rework_warning',
     'blocked',
     'expedite',
+    'watch_worse',
   ];
 
   /**
