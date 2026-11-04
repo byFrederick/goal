@@ -21,12 +21,14 @@ function ColumnCard({
   draggable,
   assemblyParts,
   arrived,
+  dimmed = false,
 }: {
   item: ItemCard;
   onMove: ((item: ItemCard) => void) | undefined;
   draggable: boolean;
   assemblyParts: PartsSummary | undefined;
   arrived: boolean;
+  dimmed?: boolean;
 }) {
   const card = (drag: CardDrag | undefined) => (
     <BoardCard
@@ -35,6 +37,7 @@ function ColumnCard({
       drag={drag}
       assemblyParts={assemblyParts}
       arrived={arrived}
+      dimmed={dimmed}
     />
   );
   return draggable ? <DraggableCard item={item}>{card}</DraggableCard> : card(undefined);
@@ -178,7 +181,7 @@ export function StationColumn({
 }: StationColumnProps) {
   const constraint = station.id === board.constraint;
   const partsOf = (id: string | undefined) => board.assemblies.find((a) => a.id === id)?.parts ?? undefined;
-  const card = (item: ItemCard) => (
+  const card = (item: ItemCard, dimmed = false) => (
     <ColumnCard
       key={item.id}
       item={item}
@@ -186,6 +189,7 @@ export function StationColumn({
       draggable={draggable}
       assemblyParts={partsOf(item.assembly?.id)}
       arrived={arrived?.(item.id) ?? false}
+      dimmed={dimmed}
     />
   );
 
@@ -214,7 +218,7 @@ export function StationColumn({
           className="m-0 flex min-h-11 min-w-0 flex-col gap-2 rounded-cell border-0 bg-amber-tint p-2 transition-colors duration-(--duration-quick)"
         >
           {inBoard === undefined || inBoard === 1 ? <ExpediteLabel /> : null}
-          {expedite.map(card)}
+          {expedite.map((item) => card(item))}
         </fieldset>
       ) : null}
       <div className="flex min-h-10 w-full min-w-0 flex-col gap-2 self-start rounded-cell bg-panel p-2">
@@ -231,11 +235,11 @@ export function StationColumn({
                 )
               ) : null}
               {group.kind === 'ready' ? (
-                <div className="flex min-w-0 flex-col gap-2 opacity-70" data-group="ready">
-                  {shown.map(card)}
+                <div className="flex min-w-0 flex-col gap-2" data-group="ready">
+                  {shown.map((item) => card(item, true))}
                 </div>
               ) : (
-                shown.map(card)
+                shown.map((item) => card(item))
               )}
               {group.kind === 'in-progress' && group.items.length > columnLimit ? (
                 <button

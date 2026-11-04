@@ -2,6 +2,7 @@
 // that are not built yet. Not run in the box (no browser): run it against the mock server outside the box.
 import { expect, type Page, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll, lengthenTitles } from './support';
+import { expectTarget44 } from './support-boxes';
 
 const runs = '/o/acme/runs';
 
@@ -127,5 +128,32 @@ for (const { width, height } of [
       return t.scrollWidth <= box.clientWidth && box.scrollWidth <= box.clientWidth;
     });
     expect(fits).toBe(true);
+  });
+}
+
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`gives a Runs title link a 44 px target at 390 px, ${colorScheme}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.emulateMedia({ colorScheme });
+    await openRuns(page);
+    await expectTarget44(page.getByRole('table').locator('tbody tr a').first(), 'the first Runs title link');
+    await expectAccessible(page);
+  });
+}
+
+for (const { width, height } of [
+  { width: 390, height: 900 },
+  { width: 1440, height: 1000 },
+]) {
+  test(`keeps a Runs row as tall as without the title link's hit area at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await openRuns(page);
+    const row = page.getByRole('table').locator('tbody tr').first();
+    const link = row.locator('a').first();
+    const before = (await row.boundingBox())?.height ?? 0;
+    await link.evaluate((el) => el.classList.remove('max-md:-my-4', 'max-md:py-4'));
+    const after = (await row.boundingBox())?.height ?? 0;
+    expect(before).toBeGreaterThan(0);
+    expect(Math.abs(before - after)).toBeLessThanOrEqual(0.5);
   });
 }

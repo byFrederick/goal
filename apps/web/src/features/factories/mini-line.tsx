@@ -85,8 +85,10 @@ function HomeLine({
   return (
     <section
       aria-label={`${name} line`}
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must be reachable by keyboard (axe scrollable-region-focusable).
+      tabIndex={0}
       className={cn(
-        'min-w-0 overflow-x-auto transition-opacity duration-(--duration-fast) ease-(--ease-out) motion-reduce:transition-none',
+        'min-w-0 overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run transition-opacity duration-(--duration-fast) ease-(--ease-out) motion-reduce:transition-none',
         stopped && 'opacity-60',
       )}
     >
