@@ -10,6 +10,7 @@ import { holds } from '../../shared/permissions';
 import { WaitLine } from '../../shared/waiting-for';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { SegmentMeter } from '../../ui/segment-meter';
 import { WorkingLine } from '../../ui/working-line';
 import type { OpenAssembly } from './board-filters';
 import { cardState, isExpedite, waitsOn } from './stats';
@@ -258,15 +259,15 @@ export function AssemblyLine({
 /** One pip per part of the assembly; the merged parts are filled. Decorative: the count says the same. */
 function PartPips({ total, merged }: { total: number; merged: number }) {
   return (
-    <span aria-hidden="true" className="flex shrink-0 gap-1">
-      {Array.from({ length: total }, (_, i) => (
-        <i
-          // biome-ignore lint/suspicious/noArrayIndexKey: the pips are fixed slots by position, never reordered
-          key={i}
-          className={cn('block h-1 w-2 rounded-chip', i < merged ? 'bg-ink' : 'bg-rule')}
-        />
-      ))}
-    </span>
+    <SegmentMeter
+      total={total}
+      filled={merged}
+      segmentWidth={8}
+      height={4}
+      gap={4}
+      tones={{ filled: 'bg-ink', empty: 'bg-rule' }}
+      className="max-w-[60%] shrink"
+    />
   );
 }
 
