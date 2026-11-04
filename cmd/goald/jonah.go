@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"time"
 
@@ -136,7 +137,8 @@ func jonahTryLoop(s settings, store *postgres.Store, defs *definitions.Cache, en
 
 // tryDefinitions is jonah.TryDefinitions over the definitions cache: a proposal's line is its
 // version with the proposal's edits applied to it, and the stations it reaches are
-// factorymodel.StationsReached's between the two.
+// factorymodel.StationsReached's between the two; its output is validated against the proposed
+// files' contracts (definitions.Proposed.Validate).
 type tryDefinitions struct{ defs *definitions.Cache }
 
 func (d tryDefinitions) CurrentLines(ctx context.Context) ([]domain.Line, error) {
@@ -160,6 +162,17 @@ func (d tryDefinitions) ProposedLine(ctx context.Context, v domain.DefinitionVer
 	}
 
 	return p.Line(), factorymodel.StationsReached(snapshot(before), snapshot(after)), nil
+}
+
+func (d tryDefinitions) ValidateProposed(ctx context.Context, v domain.DefinitionVersionID, edits []domain.ProposalEdit, contract string,
+	output json.RawMessage,
+) error {
+	p, err := d.defs.Proposed(ctx, v, edits)
+	if err != nil {
+		return err
+	}
+
+	return p.Validate(ctx, v, contract, output)
 }
 
 // snapshot is files as a factorymodel.Snapshot.

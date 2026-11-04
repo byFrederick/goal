@@ -28,6 +28,12 @@ const (
 
 var tryHead = strings.Repeat("c", 40)
 
+// tryDiff is the diff the graded tries' runs leave.
+const tryDiff = "diff --git a/notes.go b/notes.go\n"
+
+// contractNote is the output contract the try tests build a station with.
+const contractNote = "note"
+
 // tryDefs is TryDefinitions over each organization's one line: ProposedLine answers the line of
 // the version and the stations reached[version] names, every agent station by default.
 type tryDefs struct {
@@ -35,6 +41,39 @@ type tryDefs struct {
 	lines   map[domain.OrgID]domain.Line
 	reached map[string][]string // by the proposal's first path
 	stale   bool                // no proposal's edits apply
+	// validate answers ValidateProposed; nil passes every output. validated counts its calls.
+	validate  func(contract string, edits []domain.ProposalEdit, output json.RawMessage) error
+	validated int
+}
+
+func (d *tryDefs) ValidateProposed(_ context.Context, v domain.DefinitionVersionID, edits []domain.ProposalEdit, contract string,
+	output json.RawMessage,
+) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.validated++
+
+	if v != tryVersion {
+		return ports.ErrNotFound
+	}
+
+	if d.validate == nil {
+		return nil
+	}
+
+	return d.validate(contract, edits, output)
+}
+
+// build changes org's build station with change.
+func (d *tryDefs) build(org domain.OrgID, change func(*domain.Station)) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	l := d.lines[org]
+	l.Stations = slices.Clone(l.Stations)
+	change(&l.Stations[1])
+	d.lines[org] = l
 }
 
 func (d *tryDefs) CurrentLines(ctx context.Context) ([]domain.Line, error) {
@@ -574,5 +613,119 @@ func TestTries_FinishedRunStoresDiffAndCost(t *testing.T) {
 
 	if after, err := w.store.Item(w.ctx(org), it.ID); err != nil || after.CostUSD != 100 {
 		t.Errorf("past item cost = %v, %v; want 100, unchanged", after.CostUSD, err)
+	}
+}
+
+// A try whose run succeeded but failed one of its station's checks, which the proposed line names
+// and its box ran, is not fixed, with the check's command, exit code and output tail as its
+// reason, and keeps its diff and cost; the grader never sees it.
+func TestTries_FailingCheckIsNotFixed(t *testing.T) {
+	t.Parallel()
+
+	w := newTryWorld(t, 1)
+	org := w.orgs[0]
+	checks := []string{"make lint", "make test"}
+
+	w.defs.build(org, func(s *domain.Station) { s.Checks = checks })
+	w.queued(org, 1)
+	w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
+		return domain.RunResult{
+			Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), CostUSD: 0.25, Diff: tryDiff, RunID: tryRunID,
+			FailedCheck: &domain.FailedCheck{Command: "make test", ExitCode: 2, Output: "FAIL TestNotes"},
+		}, nil
+	}
+
+	got := w.onlyTry(org)
+	if got.Verdict != domain.PastTryNotFixed || !strings.HasPrefix(got.Reason, "check `make test` exited 2") ||
+		!strings.Contains(got.Reason, "FAIL TestNotes") || got.Diff != tryDiff || got.CostUSD != 0.25 || got.Error != "" {
+		t.Errorf("try = %+v; want not fixed, the failing check first in its reason, its diff and cost", got)
+	}
+
+	if reqs := w.runner.requests(); len(reqs) != 1 || !slices.Equal(reqs[0].Checks, checks) {
+		t.Errorf("requests = %+v; want one naming the station's checks %q", reqs, checks)
+	}
+}
+
+// A try's output is checked against the station's contract as the proposal changes it: one that
+// fails it is not fixed, the contract and its error first in the reason; a contract the proposal
+// no longer has makes the try an error, not a failing one.
+func TestTries_ContractOfTheProposalIsChecked(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name    string
+		err     error
+		verdict domain.PastTryVerdict
+		want    string
+	}{
+		{
+			name: "a violation", err: fmt.Errorf("%w: note: missing title", ports.ErrContractViolation), verdict: domain.PastTryNotFixed,
+			want: "the output does not satisfy contract note",
+		},
+		{name: "a contract that is gone", err: errors.New(`unknown contract "note"`), verdict: domain.PastTryError, want: "contract note"},
+	} {
+		w := newTryWorld(t, 1)
+		org := w.orgs[0]
+		w.defs.build(org, func(s *domain.Station) { s.Output = contractNote })
+		w.queued(org, 1)
+
+		var seen []domain.ProposalEdit
+
+		w.defs.validate = func(contract string, edits []domain.ProposalEdit, output json.RawMessage) error {
+			if contract != contractNote || string(output) != `{}` {
+				return fmt.Errorf("validated %s with %s; want note with the run's output", contract, output)
+			}
+
+			seen = edits
+
+			return tt.err
+		}
+
+		got := w.onlyTry(org)
+
+		text := got.Reason
+		if tt.verdict == domain.PastTryError {
+			text = got.Error
+		}
+
+		if got.Verdict != tt.verdict || !strings.HasPrefix(text, tt.want) {
+			t.Errorf("%s: try = %+v; want verdict %s starting %q", tt.name, got, tt.verdict, tt.want)
+		}
+
+		if len(seen) != 1 || seen[0].Path != writerPath {
+			t.Errorf("%s: validated with edits %+v; want the proposal's", tt.name, seen)
+		}
+	}
+}
+
+// A try whose output passes its contract and checks, or whose agent run failed, stays done with
+// no verdict, for the grader; a failed run's output is not validated.
+func TestTries_PassingChecksAwaitTheGrader(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name      string
+		status    domain.RunStatus
+		validated int
+	}{
+		{name: "passing", status: domain.RunSucceeded, validated: 1},
+		{name: "a failed run", status: domain.RunFailed, validated: 0},
+	} {
+		w := newTryWorld(t, 1)
+		org := w.orgs[0]
+		w.defs.build(org, func(s *domain.Station) { s.Output, s.Checks = contractNote, []string{"make test"} })
+		w.queued(org, 1)
+		w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
+			return domain.RunResult{Status: tt.status, Output: json.RawMessage(`{}`), Diff: tryDiff, RunID: tryRunID}, nil
+		}
+
+		got := w.onlyTry(org)
+		if got.State != domain.PastTryDone || got.Verdict != "" || got.Reason != "" || got.Diff != tryDiff {
+			t.Errorf("%s: try = %+v; want done with no verdict, for the grader", tt.name, got)
+		}
+
+		if w.defs.validated != tt.validated {
+			t.Errorf("%s: %d validations; want %d", tt.name, w.defs.validated, tt.validated)
+		}
 	}
 }

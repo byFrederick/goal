@@ -245,7 +245,7 @@ func (s *Store) FinishPastTry(ctx context.Context, claimed domain.PastTry, r dom
 
 	err = s.inTx(ctx, func(q *db.Queries) error {
 		_, err := q.FinishTry(ctx, db.FinishTryParams{
-			Verdict: verdict, Error: r.Error, Diff: r.Diff, CostUsd: r.CostUSD, TryRunID: run, FinishedAt: r.At, ID: id,
+			Verdict: verdict, Error: r.Error, Reason: r.Reason, Diff: r.Diff, CostUsd: r.CostUSD, TryRunID: run, FinishedAt: r.At, ID: id,
 			LeaseUntil: claimed.LeaseUntil,
 		})
 		if notFound(err) {
@@ -343,7 +343,7 @@ func pastTryFrom(t db.Try, number int64) domain.PastTry {
 	out := domain.PastTry{
 		ID: domain.PastTryID(t.ID.String()), FactoryID: domain.FactoryID(t.FactoryID.String()), ProposalID: domain.ProposalID(t.ProposalID.String()),
 		ProposalNumber: number, ItemID: domain.ItemID(t.ItemID.String()), Station: t.Station, OriginalRunID: domain.RunID(t.OriginalRunID.String()),
-		Model: t.Model, State: domain.PastTryState(t.State), Verdict: domain.PastTryVerdict(deref(t.Verdict)), Error: t.Error, Diff: t.Diff,
+		Model: t.Model, State: domain.PastTryState(t.State), Verdict: domain.PastTryVerdict(deref(t.Verdict)), Error: t.Error, Reason: t.Reason, Diff: t.Diff,
 		CostUSD: t.CostUsd, Attempts: int(t.Attempts), CreatedAt: t.CreatedAt.UTC(),
 	}
 

@@ -150,6 +150,10 @@ func TestRunRequest_CheckTry(t *testing.T) {
 		ok     bool
 	}{
 		{name: "a try", change: func(*RunRequest) {}, ok: true},
+		{name: "with its station's checks", change: func(r *RunRequest) { r.Checks = []string{"go test ./..."} }, ok: true},
+		{name: "a station run with checks", change: func(r *RunRequest) {
+			r.Kind, r.Item, r.Bundle, r.TryOf, r.Commit, r.Checks = RunKindStation, "item-1", "", "", "", []string{"go test ./..."}
+		}},
 		{name: "on a model connection", change: func(r *RunRequest) {
 			r.ModelKey, r.ModelConnection, r.Repository.Connection = "", testModelConn, "code"
 		}, ok: true},

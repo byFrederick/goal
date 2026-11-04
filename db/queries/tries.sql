@@ -49,7 +49,7 @@ RETURNING t.id;
 -- name: FinishTry :one
 -- Ends a running try under the lease its claim returned. No row when the lease is lost.
 UPDATE tries
-SET state = 'done', verdict = sqlc.narg(verdict), error = sqlc.arg(error), diff = sqlc.arg(diff), cost_usd = sqlc.arg(cost_usd),
+SET state = 'done', verdict = sqlc.narg(verdict), error = sqlc.arg(error), reason = sqlc.arg(reason), diff = sqlc.arg(diff), cost_usd = sqlc.arg(cost_usd),
     try_run_id = sqlc.narg(try_run_id), finished_at = sqlc.arg(finished_at)::timestamptz, lease_until = NULL
 WHERE id = sqlc.arg(id) AND state = 'running' AND lease_until = sqlc.arg(lease_until)::timestamptz
 RETURNING id;
