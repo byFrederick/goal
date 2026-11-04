@@ -80,8 +80,8 @@ func (e *Engine) withNotes(ctx context.Context, item domain.ItemID, notes []doma
 }
 
 // notesSection is the notes left for an item's run: people's (note), framed as people's words,
-// then other items' agents' (item_note, ADR 0040 decision 7), framed as another agent's words;
-// neither is Goal's instructions. Empty without notes.
+// then other items' agents' and checks' (item_note, ADR 0040 decisions 7 and 19), framed as
+// another agent's words; neither is Goal's instructions. Empty without notes.
 func notesSection(notes []domain.Event) string {
 	var people, items strings.Builder
 
@@ -93,7 +93,12 @@ func notesSection(notes []domain.Event) string {
 			from, _ := n.Data[domain.KeyNoteFromItem].(string)
 			agent, _ := n.Data[domain.KeyNoteAgent].(string)
 			station, _ := n.Data[domain.KeyNoteStation].(string)
-			fmt.Fprintf(&items, "\n- Note from the %s agent at %s on %s: %s", agent, station, from, text)
+
+			if trigger, _ := n.Data[domain.KeyNoteTrigger].(string); trigger != "" {
+				fmt.Fprintf(&items, "\n- Note from the %s agent's check of trigger %s: %s", agent, trigger, text)
+			} else {
+				fmt.Fprintf(&items, "\n- Note from the %s agent at %s on %s: %s", agent, station, from, text)
+			}
 
 			continue
 		}

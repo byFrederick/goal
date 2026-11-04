@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/engine"
+	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
@@ -340,4 +342,112 @@ func TestRunTask_CheckRefused(t *testing.T) {
 	}
 
 	h.expectSandboxes(t, 0)
+}
+
+// A check's answer is applied: a new key files an item through the door (origin trigger, by the
+// check's agent, untrusted unless create.trusted), and the same key on a later check, its item
+// open, becomes a note on it.
+func TestChecks_AnswerApplied(t *testing.T) {
+	t.Parallel()
+
+	for _, trusted := range []bool{false, true} {
+		t.Run(map[bool]string{false: "untrusted", true: "trusted"}[trusted], func(t *testing.T) {
+			t.Parallel()
+
+			answer := `{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx on /v1"}]}`
+			tr := checkTrigger(incidents)
+			tr.Create.Trusted, tr.Create.Station = trusted, stApprove
+			h := checkHarness(t, lineOf(domain.Station{ID: stApprove, Kind: domain.KindHuman}), porttest.Succeed(answer), tr) // the item waits for a person
+
+			h.fireAt(t, t0.Add(2*time.Minute))
+			h.tick(t)
+			h.wait(t, h.e)
+
+			f := h.firing(t, incidents, at0900)
+			if f.Applied == nil || len(f.Applied.Filed) != 1 || f.Applied.Filed[0].Ref == "" {
+				t.Fatalf("firing = %+v; want one item filed", f)
+			}
+
+			items, err := h.store.ListItems(inOrg(t), ports.ItemQuery{FactoryID: factoryID, Limit: 10})
+			if err != nil || len(items) != 1 {
+				t.Fatalf("items = %+v, %v; want one", items, err)
+			}
+
+			it := items[0]
+			if it.Origin != domain.OriginTrigger || it.Trigger != incidents || it.CreatedBy != "agent:"+agWorker || it.Untrusted == trusted ||
+				it.Title != "API down" || it.Station != stApprove {
+				t.Errorf("item = %+v; want origin trigger of %s by agent:%s at %s, untrusted %v", it, incidents, agWorker, stApprove, !trusted)
+			}
+
+			h.expectNoteOnSecondCheck(t, it)
+		})
+	}
+}
+
+// expectNoteOnSecondCheck fires and runs the next check, whose same answer finds it open: it
+// becomes an item_note on it and no item is filed.
+func (h *harness) expectNoteOnSecondCheck(t *testing.T, it domain.Item) {
+	t.Helper()
+
+	h.clock.Advance(5 * time.Minute)
+	h.fireAt(t, t0.Add(7*time.Minute))
+	h.tick(t)
+	h.wait(t, h.e)
+
+	if f := h.firing(t, incidents, "2026-10-23T09:05:00Z"); f.Applied == nil || len(f.Applied.Noted) != 1 || len(f.Applied.Filed) != 0 {
+		t.Fatalf("second check = %+v, applied %+v; want a note and nothing filed", f, f.Applied)
+	}
+
+	events, err := h.store.ItemEvents(inOrg(t), it.ID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, e := range events {
+		if e.Kind == domain.EventItemNote && e.Data["text"] == "API down\n\n5xx on /v1" && e.Data[domain.KeyNoteTrigger] == incidents {
+			return
+		}
+	}
+
+	t.Errorf("events = %+v; want the check's item_note", events)
+}
+
+// Try queues a try check, which runs as any check and files nothing; a second try while it is
+// queued is ErrStillChecking, and a trigger without a check ErrNoCheck.
+func TestChecks_TryFilesNothing(t *testing.T) {
+	t.Parallel()
+
+	plain := checkTrigger("plain")
+	plain.Check = nil
+	h := checkHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)),
+		porttest.Succeed(`{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}], "state": {"since": "x"}}`), checkTrigger(incidents), plain)
+
+	f, err := h.e.TryCheck(inOrg(t), factoryID, incidents, domain.LocalUser)
+	if err != nil || !f.Try || f.CheckState != domain.CheckQueued {
+		t.Fatalf("TryCheck = %+v, %v; want a queued try", f, err)
+	}
+
+	if _, err := h.e.TryCheck(inOrg(t), factoryID, incidents, domain.LocalUser); !errors.Is(err, engine.ErrStillChecking) {
+		t.Errorf("second TryCheck = %v; want ErrStillChecking", err)
+	}
+
+	if _, err := h.e.TryCheck(inOrg(t), factoryID, "plain", domain.LocalUser); !errors.Is(err, engine.ErrNoCheck) {
+		t.Errorf("TryCheck of a trigger without a check = %v; want ErrNoCheck", err)
+	}
+
+	h.tick(t)
+	h.wait(t, h.e)
+
+	got := h.firing(t, incidents, f.IdempotencyKey)
+	if got.CheckState != domain.CheckDone || got.Applied == nil || len(got.Applied.Filed) != 1 || got.Applied.Filed[0].Ref != "" {
+		t.Errorf("try = %+v; want done, saying it would file INC-1", got)
+	}
+
+	if n := h.items(t); n != 0 {
+		t.Errorf("%d items after a try; want none", n)
+	}
+
+	if in, err := h.intake.CheckInput(inOrg(t), factoryID, incidents, t0); err != nil || string(in.State) != "null" {
+		t.Errorf("saved state after a try = %s, %v; want none", in.State, err)
+	}
 }
