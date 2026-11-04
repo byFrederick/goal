@@ -99,19 +99,30 @@ func (g *Gateway) checkBundle(ctx context.Context, c domain.TaskClaims) (runBund
 
 	b.Files[path.Join("agent", "output.schema.json")] = []byte(domain.CheckAnswerSchema)
 
-	if line.OnSecrets() {
-		err = g.addEnvironment(ctx, c, line, agent, &b)
-	} else {
-		err = g.addConnections(ctx, c, line, agent, &b)
-	}
-
-	if err != nil {
+	if err := g.checkReach(ctx, c, line, agent, &b); err != nil {
 		return runBundle{}, err
 	}
 
-	askOff(&b)
-
 	return b, nil
+}
+
+// checkReach adds the agent's environment on secrets, or its connections, to b, with every ask
+// tool off.
+func (g *Gateway) checkReach(ctx context.Context, c domain.TaskClaims, line domain.Line, agent domain.AgentSpec, b *runBundle) error {
+	var err error
+	if line.OnSecrets() {
+		err = g.addEnvironment(ctx, c, line, agent, b)
+	} else {
+		err = g.addConnections(ctx, c, line, agent, b)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	askOff(b)
+
+	return nil
 }
 
 // readOnly is the allow rules without those of the built-in tools that edit or run.

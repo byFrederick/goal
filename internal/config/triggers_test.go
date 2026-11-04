@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 )
@@ -290,6 +291,9 @@ func TestLoad_KeepsDeliveryRefusals(t *testing.T) {
 	}
 }
 
+// checkAgent is the agent the check rows' checks run.
+const checkAgent = "worker"
+
 // withCheck is withTriggers with nightly-sweep firing on cron and running a check by agent with
 // the extra check lines.
 func withCheck(cron, agent, extra string) string {
@@ -325,43 +329,57 @@ func TestCheck_TriggerCheckCronFloor(t *testing.T) {
 		extra     map[string]string
 		code      string
 	}{
-		{"every 5 minutes", withCheck("*/5 * * * *", "worker", ""), nil, ""},
-		{"every 2 minutes", withCheck("*/2 * * * *", "worker", ""), nil, codeCheckCronTooOften},
-		{"two minutes apart in an hour", withCheck("0,2 9 * * *", "worker", ""), nil, codeCheckCronTooOften},
+		{"every 5 minutes", withCheck("*/5 * * * *", checkAgent, ""), nil, ""},
+		{"every 2 minutes", withCheck("*/2 * * * *", checkAgent, ""), nil, codeCheckCronTooOften},
+		{"two minutes apart in an hour", withCheck("0,2 9 * * *", checkAgent, ""), nil, codeCheckCronTooOften},
 		{"every 2 minutes without a check", withTriggers(`        cron: "0 6 * * MON-FRI"`, `        cron: "*/2 * * * *"`), nil, ""},
 		{"unknown agent", withCheck("*/5 * * * *", "ghost", ""), nil, codeUnknownAgent},
-		{"brief file missing", replaced(withCheck("*/5 * * * *", "worker", ""), "brief: Look for new incidents.", "brief: ./triggers/incidents.md"), nil, codeBriefNotFound},
-		{"brief file", replaced(withCheck("*/5 * * * *", "worker", ""), "brief: Look for new incidents.", "brief: ./triggers/incidents.md"),
-			map[string]string{"triggers/incidents.md": "Look for new incidents.\n"}, ""},
-		{"timeout over an hour", withCheck("*/5 * * * *", "worker", ", timeout: 2h"), nil, codeCheckTimeoutInvalid},
+		{"brief file missing", replaced(withCheck("*/5 * * * *", checkAgent, ""), "brief: Look for new incidents.", "brief: ./triggers/incidents.md"), nil, codeBriefNotFound},
+		{
+			"brief file", replaced(withCheck("*/5 * * * *", checkAgent, ""), "brief: Look for new incidents.", "brief: ./triggers/incidents.md"),
+			map[string]string{"triggers/incidents.md": "Look for new incidents.\n"},
+			"",
+		},
+		{"timeout over an hour", withCheck("*/5 * * * *", checkAgent, ", timeout: 2h"), nil, codeCheckTimeoutInvalid},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, problems := Check(checkTree(tt.doc, tt.extra))
-
-			var errs []domain.DefinitionProblem
-
-			for _, p := range problems {
-				if p.Severity == domain.SeverityError {
-					errs = append(errs, p)
-				}
-			}
-
+			errs := errorsOf(checkTree(tt.doc, tt.extra))
 			if tt.code == "" && len(errs) > 0 || tt.code != "" && (len(errs) != 1 || errs[0].Code != tt.code) {
 				t.Errorf("errors = %+v; want %q", errs, tt.code)
 			}
 		})
 	}
+}
 
-	f, err := Load(checkTree(replaced(withCheck("*/5 * * * *", "worker", ""), "brief: Look for new incidents.", "brief: ./triggers/incidents.md"),
+// errorsOf are the error problems of the definition files.
+func errorsOf(files fstest.MapFS) []domain.DefinitionProblem {
+	_, problems := Check(files)
+
+	var errs []domain.DefinitionProblem
+
+	for _, p := range problems {
+		if p.Severity == domain.SeverityError {
+			errs = append(errs, p)
+		}
+	}
+
+	return errs
+}
+
+// A check loads with its brief file's text and the defaults.
+func TestCheck_TriggerCheckLoads(t *testing.T) {
+	t.Parallel()
+
+	f, err := Load(checkTree(replaced(withCheck("*/5 * * * *", checkAgent, ""), "brief: Look for new incidents.", "brief: ./triggers/incidents.md"),
 		map[string]string{"triggers/incidents.md": "Look for new incidents.\n"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	tr, _ := f.Line().Trigger("nightly-sweep")
-	if c := tr.Check; c == nil || c.Agent != "worker" || c.Brief != "Look for new incidents.\n" || c.MaxUSD != domain.DefaultCheckMaxUSD || c.Timeout != domain.DefaultCheckTimeout {
+	if c := tr.Check; c == nil || c.Agent != checkAgent || c.Brief != "Look for new incidents.\n" || c.MaxUSD != domain.DefaultCheckMaxUSD || c.Timeout != domain.DefaultCheckTimeout {
 		t.Errorf("check = %+v; want the worker with the brief file's text and the defaults", tr.Check)
 	}
 }
@@ -389,10 +407,10 @@ func TestCheck_TriggerCheckWarnsWriteTools(t *testing.T) {
 		env       string
 		want      string
 	}{
-		{"read-only", withCheck("*/5 * * * *", "worker", ""), readOnlyEnv, ""},
-		{"edit allowed", replaced(withCheck("*/5 * * * *", "worker", ""), agentPrompt, agentPrompt+"      builtins: { read: allowed, edit: allowed }\n"), "", "builtins.edit"},
-		{"run allowed", replaced(withCheck("*/5 * * * *", "worker", ""), agentPrompt, agentPrompt+"      builtins: { run: allowed }\n"), "", "builtins.run"},
-		{"an MCP tool allowed", withCheck("*/5 * * * *", "worker", ""), openEnv, "mcp pager"},
+		{"read-only", withCheck("*/5 * * * *", checkAgent, ""), readOnlyEnv, ""},
+		{"edit allowed", replaced(withCheck("*/5 * * * *", checkAgent, ""), agentPrompt, agentPrompt+"      builtins: { read: allowed, edit: allowed }\n"), "", "builtins.edit"},
+		{"run allowed", replaced(withCheck("*/5 * * * *", checkAgent, ""), agentPrompt, agentPrompt+"      builtins: { run: allowed }\n"), "", "builtins.run"},
+		{"an MCP tool allowed", withCheck("*/5 * * * *", checkAgent, ""), openEnv, "mcp pager"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()

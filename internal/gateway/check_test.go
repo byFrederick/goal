@@ -99,6 +99,22 @@ func TestBundle_Check(t *testing.T) {
 		t.Fatalf("spec = %+v; want new-incidents' check with its brief and max_usd 0.2, no item or station", s)
 	}
 
+	expectCheckFiles(t, b)
+	expectCheckTools(t, b)
+	expectNoKeys(t, body)
+
+	sess, err := h.gw.session(domain.WithOrg(t.Context(), h.org), c)
+	if err != nil || !sess.noTools {
+		t.Errorf("session = %+v, %v; want one that lists no tool", sess, err)
+	}
+}
+
+// expectCheckFiles fails the test unless b carries the check's input, the engineer's prompt and
+// the answer contract.
+func expectCheckFiles(t *testing.T, b runBundle) {
+	t.Helper()
+
+	s := b.Spec
 	if got, _ := json.Marshal(s.Check.Input); !strings.Contains(string(got), `"INC-1"`) || !strings.Contains(string(got), `"since"`) {
 		t.Errorf("check input = %s; want the open items and the saved state", got)
 	}
@@ -106,7 +122,14 @@ func TestBundle_Check(t *testing.T) {
 	if string(b.Files["agent/output.schema.json"]) != domain.CheckAnswerSchema || len(b.Files["agent/prompt.md"]) == 0 {
 		t.Errorf("files = %v; want the engineer's prompt and the answer contract", keys(b.Files))
 	}
+}
 
+// expectCheckTools fails the test unless b denies the built-ins that edit or run and keeps Read,
+// serves its environment's ask tools as off, and has nothing of an item's run.
+func expectCheckTools(t *testing.T, b runBundle) {
+	t.Helper()
+
+	s := b.Spec
 	for _, tool := range []string{"Write", "Edit", "Bash"} {
 		if slices.Contains(s.ToolsAllow, tool) || !slices.Contains(s.ToolsDeny, tool) {
 			t.Errorf("tools allow %v, deny %v; want %s denied", s.ToolsAllow, s.ToolsDeny, tool)
@@ -116,6 +139,16 @@ func TestBundle_Check(t *testing.T) {
 	if !slices.Contains(s.ToolsAllow, "Read") {
 		t.Errorf("tools allow %v; want Read kept", s.ToolsAllow)
 	}
+
+	expectAskOff(t, b)
+}
+
+// expectAskOff fails the test unless b's environment serves the pager's ask tools as off and b has
+// nothing of an item's run.
+func expectAskOff(t *testing.T, b runBundle) {
+	t.Helper()
+
+	s := b.Spec
 
 	if s.Environment == nil || len(s.Environment.MCPServers) != 1 {
 		t.Fatalf("environment = %+v; want the pager server", s.Environment)
@@ -129,13 +162,6 @@ func TestBundle_Check(t *testing.T) {
 
 	if b.Repository != nil || len(b.Git) != 0 || s.Knowledge != nil || len(s.Rules) != 0 || len(s.GrantedCalls) != 0 {
 		t.Errorf("bundle = %+v; want no repository, git login, knowledge, rule or granted call", b)
-	}
-
-	expectNoKeys(t, body)
-
-	sess, err := h.gw.session(domain.WithOrg(t.Context(), h.org), c)
-	if err != nil || !sess.noTools {
-		t.Errorf("session = %+v, %v; want one that lists no tool", sess, err)
 	}
 }
 
@@ -151,7 +177,7 @@ func TestBundle_CheckRefused(t *testing.T) {
 	}{
 		"no checks":     {harnessDeps{noChecks: true}, func(*domain.TaskClaims) {}, http.StatusServiceUnavailable},
 		"other trigger": {harnessDeps{}, func(c *domain.TaskClaims) { c.Trigger = "nightly" }, http.StatusForbidden},
-		"other agent":   {harnessDeps{}, func(c *domain.TaskClaims) { c.Agent = "reviewer" }, http.StatusForbidden},
+		"other agent":   {harnessDeps{}, func(c *domain.TaskClaims) { c.Agent = "watcher" }, http.StatusForbidden},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

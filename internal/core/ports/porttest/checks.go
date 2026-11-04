@@ -197,9 +197,37 @@ func (in *Intake) CheckInput(ctx context.Context, factory domain.FactoryID, trig
 	}
 
 	out := domain.CheckInput{Open: []domain.CheckOpenItem{}, Closed: []domain.CheckClosed{}, LastDecisions: json.RawMessage("null"), State: json.RawMessage("null")}
+	keys := in.checkFiringsInput(org, factory, trigger, &out)
+
+	in.store.mu.Lock()
+	defer in.store.mu.Unlock()
+
+	var items []domain.Item
+
+	for _, it := range in.store.items {
+		if it.OrgID == org && it.FactoryID == factory && it.Trigger == trigger {
+			items = append(items, *it)
+		}
+	}
+
+	slices.SortFunc(items, func(a, b domain.Item) int { return cmp.Or(b.CreatedAt.Compare(a.CreatedAt), cmp.Compare(b.ID, a.ID)) })
+
+	for _, it := range items {
+		in.addItemLocked(&out, it, keys[it.ID], now)
+	}
+
+	slices.SortStableFunc(out.Closed, func(a, b domain.CheckClosed) int { return b.At.Compare(a.At) })
+
+	return out, nil
+}
+
+// checkFiringsInput sets out's last decisions and saved state from the trigger's firings and
+// returns the key of each item they filed: its firing's dedupe value.
+func (in *Intake) checkFiringsInput(org domain.OrgID, factory domain.FactoryID, trigger string, out *domain.CheckInput) map[domain.ItemID]string {
 	keys := map[domain.ItemID]string{}
 
 	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
 
 	var last domain.TriggerFiring
 
@@ -225,45 +253,30 @@ func (in *Intake) CheckInput(ctx context.Context, factory domain.FactoryID, trig
 		out.State = slices.Clone(s)
 	}
 
-	in.d.mu.Unlock()
+	return keys
+}
 
-	in.store.mu.Lock()
-	defer in.store.mu.Unlock()
+// addItemLocked adds it to out: to the closed keys when it closed within the window, to the open
+// items while there are fewer than the most. Callers hold in.store.mu.
+func (in *Intake) addItemLocked(out *domain.CheckInput, it domain.Item, key string, now time.Time) {
+	ref := fmt.Sprintf("#%d", it.Number)
 
-	var items []domain.Item
-
-	for _, it := range in.store.items {
-		if it.OrgID == org && it.FactoryID == factory && it.Trigger == trigger {
-			items = append(items, *it)
+	switch closedAt := cmp.Or(it.DoneAt, it.UpdatedAt); {
+	case it.State == domain.StateDone || it.State == domain.StateCancelled:
+		if closedAt.Before(now.Add(-domain.CheckClosedWindow)) || len(out.Closed) >= domain.MaxCheckClosed {
+			return
 		}
+
+		out.Closed = append(out.Closed, domain.CheckClosed{
+			Key: key, Ref: ref, How: string(it.State), Why: in.lastTextLocked(it.ID, "reason", domain.EventDone, domain.EventCancelled),
+			At: closedAt.UTC(),
+		})
+	case len(out.Open) < domain.MaxCheckOpenItems:
+		out.Open = append(out.Open, domain.CheckOpenItem{
+			Key: key, Ref: ref, Title: it.Title, State: string(it.State),
+			LastNote: in.lastTextLocked(it.ID, "text", domain.EventNote, domain.EventItemNote),
+		})
 	}
-
-	slices.SortFunc(items, func(a, b domain.Item) int { return cmp.Or(b.CreatedAt.Compare(a.CreatedAt), cmp.Compare(b.ID, a.ID)) })
-
-	for _, it := range items {
-		ref := fmt.Sprintf("#%d", it.Number)
-
-		switch closedAt := cmp.Or(it.DoneAt, it.UpdatedAt); {
-		case it.State == domain.StateDone || it.State == domain.StateCancelled:
-			if closedAt.Before(now.Add(-domain.CheckClosedWindow)) || len(out.Closed) >= domain.MaxCheckClosed {
-				continue
-			}
-
-			out.Closed = append(out.Closed, domain.CheckClosed{
-				Key: keys[it.ID], Ref: ref, How: string(it.State), Why: in.lastTextLocked(it.ID, "reason", domain.EventDone, domain.EventCancelled),
-				At: closedAt.UTC(),
-			})
-		case len(out.Open) < domain.MaxCheckOpenItems:
-			out.Open = append(out.Open, domain.CheckOpenItem{
-				Key: keys[it.ID], Ref: ref, Title: it.Title, State: string(it.State),
-				LastNote: in.lastTextLocked(it.ID, "text", domain.EventNote, domain.EventItemNote),
-			})
-		}
-	}
-
-	slices.SortStableFunc(out.Closed, func(a, b domain.CheckClosed) int { return b.At.Compare(a.At) })
-
-	return out, nil
 }
 
 // lastTextLocked is field of the item's newest event of one of kinds, "" for none. Callers hold

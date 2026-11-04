@@ -121,7 +121,15 @@ func TestChecks_LeaseAndRun(t *testing.T) {
 		t.Fatalf("firing = %+v; want done with its run, cost and decisions, without the state", f)
 	}
 
-	run, err := h.store.Run(inOrg(t), f.RunID)
+	h.expectCheckRun(t, f.RunID)
+}
+
+// expectCheckRun fails the test unless id is agWorker's run without an item or a station, whose
+// token is a check token of incidents, and the next check gets its saved state and decisions.
+func (h *harness) expectCheckRun(t *testing.T, id domain.RunID) {
+	t.Helper()
+
+	run, err := h.store.Run(inOrg(t), id)
 	if err != nil || run.ItemID != "" || run.Station != "" || run.Agent != agWorker {
 		t.Errorf("check run = %+v, %v; want %s's run without an item or a station", run, err, agWorker)
 	}
@@ -205,6 +213,7 @@ func TestChecks_BudgetStopCancels(t *testing.T) {
 	t.Parallel()
 
 	release := make(chan struct{})
+
 	t.Cleanup(func() { close(release) })
 
 	h := checkHarness(t, budgeted(10, domain.BudgetStop, 1), porttest.Block(release, `{}`), checkTrigger(incidents))
@@ -270,8 +279,7 @@ func checkRequest() domain.RunRequest {
 }
 
 // A check run records a run of kind check without an item, clones nothing, signs a check token
-// naming its trigger and no item or station, and writes no item event; one with an item, a
-// repository or knowledge is refused.
+// naming its trigger and no item or station, and writes no item event.
 func TestRunTask_Check(t *testing.T) {
 	t.Parallel()
 
@@ -291,14 +299,31 @@ func TestRunTask_Check(t *testing.T) {
 		t.Errorf("sandbox = %+v; want %s's, without an item or a station", box, agWorker)
 	}
 
-	c := h.claims(t, runs[0].Env[envTaskToken])
-	if c.Kind != domain.TaskKindCheck || c.Trigger != incidents || c.ItemID != "" || c.Station != "" || len(c.Knowledge) != 0 {
-		t.Errorf("token claims = %+v; want a check token of %s with no item, station or knowledge", c, incidents)
-	}
+	h.expectCheckToken(t, runs[0].Env[envTaskToken])
 
 	if events := h.store.Events(""); len(events) != 0 {
 		t.Errorf("events without an item = %+v; want none", events)
 	}
+
+	h.expectSandboxes(t, 0)
+}
+
+// expectCheckToken fails the test unless token is a check token of incidents with no item,
+// station or knowledge.
+func (h *harness) expectCheckToken(t *testing.T, token string) {
+	t.Helper()
+
+	c := h.claims(t, token)
+	if c.Kind != domain.TaskKindCheck || c.Trigger != incidents || c.ItemID != "" || c.Station != "" || len(c.Knowledge) != 0 {
+		t.Errorf("token claims = %+v; want a check token of %s with no item, station or knowledge", c, incidents)
+	}
+}
+
+// A check run with an item, a repository or knowledge, or without its trigger, is refused.
+func TestRunTask_CheckRefused(t *testing.T) {
+	t.Parallel()
+
+	h := checkHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)), porttest.Succeed(`{}`), checkTrigger(incidents))
 
 	for name, edit := range map[string]func(*domain.RunRequest){
 		"an item":      func(r *domain.RunRequest) { r.Item = "item-1" },

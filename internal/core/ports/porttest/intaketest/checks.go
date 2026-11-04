@@ -22,7 +22,7 @@ var checkTests = []struct {
 	{"Check_InputListsOpenAndClosedItems", testCheckInput},
 }
 
-// checkFiring is a schedule firing of nightly at at that queues a check.
+// checkFiring is a schedule firing of nightly for the instant at, which queues a check.
 func (f *fixture) checkFiring(at time.Time) domain.TriggerFiring {
 	f.t.Helper()
 
@@ -109,6 +109,14 @@ func testClaimCheck(f *fixture) {
 	if err := f.in.FinishCheck(f.ctx(), stolen, done); !errors.Is(err, ports.ErrLeaseLost) {
 		t.Errorf("FinishCheck under another token = %v, want ErrLeaseLost", err)
 	}
+
+	f.finishDone(queued, l, done)
+}
+
+// finishDone finishes queued's check under l with done, reads it back done with its run, cost and
+// decisions, and checks that a failed check after it keeps its state and decisions as the input.
+func (f *fixture) finishDone(queued domain.TriggerFiring, l domain.CheckLease, done domain.CheckResult) {
+	t := f.t
 
 	if err := f.in.FinishCheck(f.ctx(), l, done); err != nil {
 		t.Fatalf("FinishCheck: %v", err)
@@ -212,9 +220,14 @@ func testCheckInput(f *fixture) {
 		t.Errorf("decisions, state = %s, %s; want null and null", in.LastDecisions, in.State)
 	}
 
+	f.expectClosedGone()
+}
+
+// expectClosedGone checks that 8 days on the closed key is out of the input and the open item in.
+func (f *fixture) expectClosedGone() {
 	later, err := f.in.CheckInput(f.ctx(), f.factory, nightly, t0.Add(8*24*time.Hour))
 	if err != nil || len(later.Closed) != 0 || len(later.Open) != 1 {
-		t.Errorf("CheckInput 8 days on = %+v, %v; want no closed key and the open item", later, err)
+		f.t.Errorf("CheckInput 8 days on = %+v, %v; want no closed key and the open item", later, err)
 	}
 }
 

@@ -177,6 +177,7 @@ func (e *Engine) runTriggerCheck(ctx context.Context, l domain.Line, lease domai
 
 	go func() {
 		defer close(beat)
+
 		e.beatCheck(beatCtx, lease, stop)
 	}()
 
@@ -275,6 +276,7 @@ func (e *Engine) checkRequest(ctx context.Context, l domain.Line, t domain.Trigg
 	r := c.request("")
 	r.Kind, r.Bundle, r.Trigger, r.Lease, r.Repository, r.Branch, r.Base, r.Knowledge = domain.RunKindCheck, domain.TaskKindCheck, t.Name, nil, domain.Repository{}, "", "", nil
 	r.Timeout = t.Check.Timeout
+
 	if c.boxLimit > 0 {
 		r.Timeout = min(r.Timeout, c.boxLimit)
 	}

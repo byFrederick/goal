@@ -283,25 +283,8 @@ func (a CheckAnswer) check() error {
 		return err
 	}
 
-	files := map[string]bool{}
-
-	for i, f := range a.File {
-		switch {
-		case badText(f.Key, maxCheckKey) || badText(f.Title, maxCheckTitle) || badText(f.Brief, maxCheckBrief):
-			return fmt.Errorf("file %d needs a key, a title and a brief of at most %d, %d and %d characters: %w", i, maxCheckKey, maxCheckTitle, maxCheckBrief, ErrInvalid)
-		case files[f.Key]:
-			return fmt.Errorf("file %d: key %q is filed twice: %w", i, f.Key, ErrInvalid)
-		case len(f.Repositories) > maxCheckList:
-			return fmt.Errorf("file %d names more than %d repositories: %w", i, maxCheckList, ErrInvalid)
-		case utf8.RuneCountInString(f.Reopen) > maxCheckReason:
-			return fmt.Errorf("file %d: reopen is at most %d characters: %w", i, maxCheckReason, ErrInvalid)
-		}
-
-		if err := checkStart(f.Start); err != nil {
-			return fmt.Errorf("file %d: %w", i, err)
-		}
-
-		files[f.Key] = true
+	if err := checkFiles(a.File); err != nil {
+		return err
 	}
 
 	for i, n := range a.Note {
@@ -318,6 +301,33 @@ func (a CheckAnswer) check() error {
 
 	if len(a.File)+len(a.Note)+len(a.Skip) > 3*maxCheckList {
 		return fmt.Errorf("an answer has at most %d entries: %w", 3*maxCheckList, ErrInvalid)
+	}
+
+	return nil
+}
+
+// checkFiles refuses a file without its key, title or brief within their limits, a key filed
+// twice, too many repositories, a long reopen or a start that is neither a time nor a wait.
+func checkFiles(fs []CheckFile) error {
+	files := map[string]bool{}
+
+	for i, f := range fs {
+		switch {
+		case badText(f.Key, maxCheckKey) || badText(f.Title, maxCheckTitle) || badText(f.Brief, maxCheckBrief):
+			return fmt.Errorf("file %d needs a key, a title and a brief of at most %d, %d and %d characters: %w", i, maxCheckKey, maxCheckTitle, maxCheckBrief, ErrInvalid)
+		case files[f.Key]:
+			return fmt.Errorf("file %d: key %q is filed twice: %w", i, f.Key, ErrInvalid)
+		case len(f.Repositories) > maxCheckList:
+			return fmt.Errorf("file %d names more than %d repositories: %w", i, maxCheckList, ErrInvalid)
+		case utf8.RuneCountInString(f.Reopen) > maxCheckReason:
+			return fmt.Errorf("file %d: reopen is at most %d characters: %w", i, maxCheckReason, ErrInvalid)
+		}
+
+		if err := checkStart(f.Start); err != nil {
+			return fmt.Errorf("file %d: %w", i, err)
+		}
+
+		files[f.Key] = true
 	}
 
 	return nil
