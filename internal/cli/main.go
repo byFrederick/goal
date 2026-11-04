@@ -30,10 +30,18 @@ const usage = `usage:
                                                   service); --compose runs goald and the auth service as
                                                   compose services too, and returns once they are healthy
   goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach]
+           [--at <time> | --in <wait>] [--after <item>]...
                                                   submit a work item and follow it until a human or done
                                                   (--type: one of the factory's work types; default its
-                                                  first, none when it declares none)
+                                                  first, none when it declares none); with a start it
+                                                  waits at the first station and is not followed:
+                                                  --at a time (RFC 3339, or 2026-11-05T09:00 in your time
+                                                  zone), --in a wait (36h, 7d, 2w), --after an item that
+                                                  must be done first (repeatable); at most 365 days ahead
   goal follow <item>                              follow an item's events again
+  goal start <item> --at <time> | --in <wait> | --now
+                                                  change when an item that has not started may start, or
+                                                  start it now (its --after items still hold it)
   goal item <item> [--teardown]                   show an item with its outputs as JSON, and its human
                                                   touches (who acted, where, planned or not, why) on stderr;
                                                   --teardown prints where its lead time, cost and human
@@ -308,7 +316,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, jonah, test, agent, spend, triggers, webhooks) acts in one
+Every command that talks to goald (run, follow, start, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, jonah, test, agent, spend, triggers, webhooks) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
@@ -391,7 +399,7 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 
 	// The commands on one item, and the command groups, by name.
 	if handler, ok := map[string]command{
-		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbLane: laneItem, verbPause: pauseItem, verbCancel: cancelItem, verbDeny: denyItem,
+		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbLane: laneItem, verbStart: startItem, verbPause: pauseItem, verbCancel: cancelItem, verbDeny: denyItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
 		"connection": connectionCommand, "secret": secretCommand, "env": envCommand, "access": access, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "memory": memoryCommand, "repository": repositoryCommand, "search": search, "runs": runs, "eval": evalMoved, "bake-off": bakeOffMoved, "spend": spend,
 		"judge": judgeMoved, "jonah": jonahCommand, cmdTest: testCommand, "agent": agentCommand, "triggers": triggersCommand, "webhooks": webhooksCommand, cmdStandingRules: standingRulesCommand,
