@@ -564,11 +564,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		Proposals: h.store, Authoring: api.NewJonahAuthoring(authors), Audit: tenancy, Clock: h.clock,
 	}), Models: h.models(defs, deps.OrgPolicies, tenancy), KeptDrafts: h.keptDrafts(authors, defs), TryAgain: h.tryAgain(defs, tenancy)}
 
-	for _, opt := range opts {
-		opt(h, &deps)
-	}
-
-	handler, err := api.New(deps)
+	handler, err := api.New(h.with(deps, opts))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -620,6 +616,15 @@ func (h *harness) startFeed(t *testing.T, in *signIn) (*api.Feed, func()) {
 			t.Error(err)
 		}
 	}
+}
+
+// with is d changed by each of opts.
+func (h *harness) with(d api.Deps, opts []func(*harness, *api.Deps)) api.Deps {
+	for _, opt := range opts {
+		opt(h, &d)
+	}
+
+	return d
 }
 
 // sharedRules are the engine's connections with the standing rules kept in the API's (h.conns),
