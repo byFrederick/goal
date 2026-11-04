@@ -1587,7 +1587,10 @@ export interface paths {
         /** One page of a factory's items, newest first */
         get: operations["listItems"];
         put?: never;
-        /** Submit a work item to a factory's first station */
+        /**
+         * Submit a work item to a factory's first station
+         * @description With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+         */
         post: operations["submitItem"];
         delete?: never;
         options?: never;
@@ -2953,6 +2956,35 @@ export interface paths {
          */
         post: operations["setItemLane"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/items/{item}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change when an item that has not started may start
+         * @description at or in replaces the item's start; after alone keeps it and adds the items as linked dependencies by the caller (one the item already needs is kept, a done one is left out). A start_changed event records the change. Problems: 400 for a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory; 409 item-closed (done or cancelled), item-started (it left the first station, or an agent took it there), edge-cycle (an after item already needs it) or item-changed.
+         */
+        put: operations["setItemStart"];
+        post?: never;
+        /**
+         * Start an item now
+         * @description Clears the item's start time, so the first station releases it on its next tick (within seconds); its after items still hold it until they are done, and the needs endpoints remove them. A start_changed event without start_at records it. Problems: 409 item-closed, item-started or item-changed, as for setItemStart.
+         */
+        delete: operations["clearItemStart"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4413,6 +4445,22 @@ export interface components {
             lane?: string;
             /** @default 0 */
             priority?: number;
+            /** @description When the item may start; absent, as soon as it can */
+            start?: components["schemas"]["Start"];
+        };
+        /** @description When an item may start (ADR 0040): at a time, after a wait, after other items, or a time and items. at and in cannot both be set. The start is at most 365 days ahead. */
+        Start: {
+            /** @description An RFC 3339 time, or a date and time without a zone (2026-11-05T09:00, 2026-11-05 09:00 or 2026-11-05), read in the caller's time zone from their notification settings; UTC for an API key or when they saved none */
+            at?: string;
+            /** @description A wait from now in whole hours, days or weeks, as in 36h, 7d or 2w; it becomes at */
+            in?: string;
+            /** @description The items it starts after, each an id (a UUID) or <factory>#<number>, as in goal#2, of the same factory */
+            after?: string[];
+        };
+        /** @description When an item that has not started may start */
+        ItemStart: {
+            /** Format: date-time */
+            at: string;
         };
         Rejection: {
             /** @description What the agent must change */
@@ -4462,6 +4510,8 @@ export interface components {
              * @enum {string}
              */
             origin?: "person" | "plan" | "trigger" | "follow-up";
+            /** @description When the item may start, absent when it may start now; it waits at the first station until then (ADR 0040). Its after items are its needs */
+            start?: components["schemas"]["ItemStart"];
             type: string;
             lane?: string;
             title: string;
@@ -12570,6 +12620,64 @@ export interface operations {
         };
         responses: {
             /** @description The item with its new lane */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    setItemStart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Start"];
+            };
+        };
+        responses: {
+            /** @description The item with its new start */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    clearItemStart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The item without a start time */
             200: {
                 headers: {
                     [name: string]: unknown;

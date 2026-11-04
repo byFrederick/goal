@@ -4135,6 +4135,9 @@ type Item struct {
 	Ref         string `json:"ref"`
 	ReworkCount int    `json:"rework_count"`
 
+	// Start When the item may start, absent when it may start now; it waits at the first station until then (ADR 0040). Its after items are its needs
+	Start *ItemStart `json:"start,omitempty"`
+
 	// State assembly: the item was split into parts (its children) and closes when they are; never claimed (ADR 0012)
 	State   ItemState `json:"state"`
 	Station string    `json:"station"`
@@ -4330,6 +4333,11 @@ type ItemSpan struct {
 	// State assembly: the item was split into parts (its children) and closes when they are; never claimed (ADR 0012)
 	State   ItemState `json:"state"`
 	Station string    `json:"station"`
+}
+
+// ItemStart When an item that has not started may start
+type ItemStart struct {
+	At time.Time `json:"at"`
 }
 
 // ItemState assembly: the item was split into parts (its children) and closes when they are; never claimed (ADR 0012)
@@ -5230,7 +5238,10 @@ type NewItem struct {
 	Body     *string `json:"body,omitempty"`
 	Lane     *string `json:"lane,omitempty"`
 	Priority *int    `json:"priority,omitempty"`
-	Title    string  `json:"title"`
+
+	// Start When the item may start; absent, as soon as it can
+	Start *Start `json:"start,omitempty"`
+	Title string `json:"title"`
 
 	// Type One of the factory's work types; absent or empty, the first it declares, or none when it declares none
 	Type *string `json:"type,omitempty"`
@@ -6670,6 +6681,18 @@ type StandingRule struct {
 // StandingRuleList defines model for StandingRuleList.
 type StandingRuleList struct {
 	Rules []StandingRule `json:"rules"`
+}
+
+// Start When an item may start (ADR 0040): at a time, after a wait, after other items, or a time and items. at and in cannot both be set. The start is at most 365 days ahead.
+type Start struct {
+	// After The items it starts after, each an id (a UUID) or <factory>#<number>, as in goal#2, of the same factory
+	After *[]string `json:"after,omitempty"`
+
+	// At An RFC 3339 time, or a date and time without a zone (2026-11-05T09:00, 2026-11-05 09:00 or 2026-11-05), read in the caller's time zone from their notification settings; UTC for an API key or when they saved none
+	At *string `json:"at,omitempty"`
+
+	// In A wait from now in whole hours, days or weeks, as in 36h, 7d or 2w; it becomes at
+	In *string `json:"in,omitempty"`
 }
 
 // Station defines model for Station.
@@ -8331,6 +8354,9 @@ type PauseItemJSONRequestBody = PauseRequest
 // RejectItemJSONRequestBody defines body for RejectItem for application/json ContentType.
 type RejectItemJSONRequestBody = Rejection
 
+// SetItemStartJSONRequestBody defines body for SetItemStart for application/json ContentType.
+type SetItemStartJSONRequestBody = Start
+
 // DecideToolApprovalJSONRequestBody defines body for DecideToolApproval for application/json ContentType.
 type DecideToolApprovalJSONRequestBody = ToolDecision
 
@@ -9502,12 +9528,16 @@ type ClientInterface interface {
 
 	// SubmitItemWithBody Submit a work item to a factory's first station
 	//
+	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
 	SubmitItemWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SubmitItem Submit a work item to a factory's first station
+	//
+	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -10064,6 +10094,31 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 	ListItemRuns(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ClearItemStart Start an item now
+	//
+	// Clears the item's start time, so the first station releases it on its next tick (within seconds); its after items still hold it until they are done, and the needs endpoints remove them. A start_changed event without start_at records it. Problems: 409 item-closed, item-started or item-changed, as for setItemStart.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/items/{item}/start (the `ClearItemStart` operationId).
+	ClearItemStart(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetItemStartWithBody Change when an item that has not started may start
+	//
+	// at or in replaces the item's start; after alone keeps it and adds the items as linked dependencies by the caller (one the item already needs is kept, a done one is left out). A start_changed event records the change. Problems: 400 for a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory; 409 item-closed (done or cancelled), item-started (it left the first station, or an agent took it there), edge-cycle (an after item already needs it) or item-changed.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/items/{item}/start (the `SetItemStart` operationId).
+	SetItemStartWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetItemStart Change when an item that has not started may start
+	//
+	// at or in replaces the item's start; after alone keeps it and adds the items as linked dependencies by the caller (one the item already needs is kept, a done one is left out). A start_changed event records the change. Problems: 400 for a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory; 409 item-closed (done or cancelled), item-started (it left the first station, or an agent took it there), edge-cycle (an after item already needs it) or item-changed.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/items/{item}/start (the `SetItemStart` operationId).
+	SetItemStart(ctx context.Context, org OrgRef, item ItemRef, body SetItemStartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetItemTeardown Where an item's lead time, cost and human help went
 	//
@@ -12475,6 +12530,8 @@ func (c *Client) ListItems(ctx context.Context, org OrgRef, factory FactoryRef, 
 
 // SubmitItemWithBody Submit a work item to a factory's first station
 //
+// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+//
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
@@ -12491,6 +12548,8 @@ func (c *Client) SubmitItemWithBody(ctx context.Context, org OrgRef, factory Fac
 }
 
 // SubmitItem Submit a work item to a factory's first station
+//
+// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -13758,6 +13817,61 @@ func (c *Client) RetryItem(ctx context.Context, org OrgRef, item ItemRef, reqEdi
 // Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 func (c *Client) ListItemRuns(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListItemRunsRequest(c.Server, org, item)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ClearItemStart Start an item now
+//
+// Clears the item's start time, so the first station releases it on its next tick (within seconds); its after items still hold it until they are done, and the needs endpoints remove them. A start_changed event without start_at records it. Problems: 409 item-closed, item-started or item-changed, as for setItemStart.
+//
+// Corresponds with DELETE /v1/orgs/{org}/items/{item}/start (the `ClearItemStart` operationId).
+func (c *Client) ClearItemStart(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewClearItemStartRequest(c.Server, org, item)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetItemStartWithBody Change when an item that has not started may start
+//
+// at or in replaces the item's start; after alone keeps it and adds the items as linked dependencies by the caller (one the item already needs is kept, a done one is left out). A start_changed event records the change. Problems: 400 for a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory; 409 item-closed (done or cancelled), item-started (it left the first station, or an agent took it there), edge-cycle (an after item already needs it) or item-changed.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/items/{item}/start (the `SetItemStart` operationId).
+func (c *Client) SetItemStartWithBody(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetItemStartRequestWithBody(c.Server, org, item, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetItemStart Change when an item that has not started may start
+//
+// at or in replaces the item's start; after alone keeps it and adds the items as linked dependencies by the caller (one the item already needs is kept, a done one is left out). A start_changed event records the change. Problems: 400 for a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory; 409 item-closed (done or cancelled), item-started (it left the first station, or an agent took it there), edge-cycle (an after item already needs it) or item-changed.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/items/{item}/start (the `SetItemStart` operationId).
+func (c *Client) SetItemStart(ctx context.Context, org OrgRef, item ItemRef, body SetItemStartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetItemStartRequest(c.Server, org, item, body)
 	if err != nil {
 		return nil, err
 	}
@@ -22239,6 +22353,101 @@ func NewListItemRunsRequest(server string, org OrgRef, item ItemRef) (*http.Requ
 	return req, nil
 }
 
+// NewClearItemStartRequest constructs an http.Request for the ClearItemStart method
+func NewClearItemStartRequest(server string, org OrgRef, item ItemRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/start", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSetItemStartRequest calls the generic SetItemStart builder with application/json body
+func NewSetItemStartRequest(server string, org OrgRef, item ItemRef, body SetItemStartJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSetItemStartRequestWithBody(server, org, item, "application/json", bodyReader)
+}
+
+// NewSetItemStartRequestWithBody constructs an http.Request for the SetItemStart method, with any body, and a specified content type
+func NewSetItemStartRequestWithBody(server string, org OrgRef, item ItemRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/start", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetItemTeardownRequest constructs an http.Request for the GetItemTeardown method
 func NewGetItemTeardownRequest(server string, org OrgRef, item ItemRef) (*http.Request, error) {
 	var err error
@@ -26252,12 +26461,16 @@ type ClientWithResponsesInterface interface {
 
 	// SubmitItemWithBodyWithResponse Submit a work item to a factory's first station
 	//
+	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
 	SubmitItemWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SubmitItemResponse, error)
 
 	// SubmitItemWithResponse Submit a work item to a factory's first station
+	//
+	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -26888,6 +27101,33 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/runs (the `ListItemRuns` operationId).
 	ListItemRunsWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ListItemRunsResponse, error)
+
+	// ClearItemStartWithResponse Start an item now
+	//
+	// Clears the item's start time, so the first station releases it on its next tick (within seconds); its after items still hold it until they are done, and the needs endpoints remove them. A start_changed event without start_at records it. Problems: 409 item-closed, item-started or item-changed, as for setItemStart.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/items/{item}/start (the `ClearItemStart` operationId).
+	ClearItemStartWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ClearItemStartResponse, error)
+
+	// SetItemStartWithBodyWithResponse Change when an item that has not started may start
+	//
+	// at or in replaces the item's start; after alone keeps it and adds the items as linked dependencies by the caller (one the item already needs is kept, a done one is left out). A start_changed event records the change. Problems: 400 for a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory; 409 item-closed (done or cancelled), item-started (it left the first station, or an agent took it there), edge-cycle (an after item already needs it) or item-changed.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/items/{item}/start (the `SetItemStart` operationId).
+	SetItemStartWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetItemStartResponse, error)
+
+	// SetItemStartWithResponse Change when an item that has not started may start
+	//
+	// at or in replaces the item's start; after alone keeps it and adds the items as linked dependencies by the caller (one the item already needs is kept, a done one is left out). A start_changed event records the change. Problems: 400 for a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory; 409 item-closed (done or cancelled), item-started (it left the first station, or an agent took it there), edge-cycle (an after item already needs it) or item-changed.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/items/{item}/start (the `SetItemStart` operationId).
+	SetItemStartWithResponse(ctx context.Context, org OrgRef, item ItemRef, body SetItemStartJSONRequestBody, reqEditors ...RequestEditorFn) (*SetItemStartResponse, error)
 
 	// GetItemTeardownWithResponse Where an item's lead time, cost and human help went
 	//
@@ -33929,6 +34169,116 @@ func (r ListItemRunsResponse) ContentType() string {
 	return ""
 }
 
+type ClearItemStartResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Item
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Conflict
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ClearItemStartResponse) GetJSON200() *Item {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r ClearItemStartResponse) GetApplicationproblemJSON409() *Conflict {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ClearItemStartResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ClearItemStartResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ClearItemStartResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ClearItemStartResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ClearItemStartResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SetItemStartResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Item
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Conflict
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SetItemStartResponse) GetJSON200() *Item {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r SetItemStartResponse) GetApplicationproblemJSON409() *Conflict {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SetItemStartResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SetItemStartResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SetItemStartResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SetItemStartResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SetItemStartResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetItemTeardownResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -38232,6 +38582,8 @@ func (c *ClientWithResponses) ListItemsWithResponse(ctx context.Context, org Org
 
 // SubmitItemWithBodyWithResponse Submit a work item to a factory's first station
 //
+// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/items (the `SubmitItem` operationId).
@@ -38244,6 +38596,8 @@ func (c *ClientWithResponses) SubmitItemWithBodyWithResponse(ctx context.Context
 }
 
 // SubmitItemWithResponse Submit a work item to a factory's first station
+//
+// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -39305,6 +39659,51 @@ func (c *ClientWithResponses) ListItemRunsWithResponse(ctx context.Context, org 
 		return nil, err
 	}
 	return ParseListItemRunsResponse(rsp)
+}
+
+// ClearItemStartWithResponse Start an item now
+//
+// Clears the item's start time, so the first station releases it on its next tick (within seconds); its after items still hold it until they are done, and the needs endpoints remove them. A start_changed event without start_at records it. Problems: 409 item-closed, item-started or item-changed, as for setItemStart.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/items/{item}/start (the `ClearItemStart` operationId).
+func (c *ClientWithResponses) ClearItemStartWithResponse(ctx context.Context, org OrgRef, item ItemRef, reqEditors ...RequestEditorFn) (*ClearItemStartResponse, error) {
+	rsp, err := c.ClearItemStart(ctx, org, item, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseClearItemStartResponse(rsp)
+}
+
+// SetItemStartWithBodyWithResponse Change when an item that has not started may start
+//
+// at or in replaces the item's start; after alone keeps it and adds the items as linked dependencies by the caller (one the item already needs is kept, a done one is left out). A start_changed event records the change. Problems: 400 for a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory; 409 item-closed (done or cancelled), item-started (it left the first station, or an agent took it there), edge-cycle (an after item already needs it) or item-changed.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/items/{item}/start (the `SetItemStart` operationId).
+func (c *ClientWithResponses) SetItemStartWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetItemStartResponse, error) {
+	rsp, err := c.SetItemStartWithBody(ctx, org, item, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetItemStartResponse(rsp)
+}
+
+// SetItemStartWithResponse Change when an item that has not started may start
+//
+// at or in replaces the item's start; after alone keeps it and adds the items as linked dependencies by the caller (one the item already needs is kept, a done one is left out). A start_changed event records the change. Problems: 400 for a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory; 409 item-closed (done or cancelled), item-started (it left the first station, or an agent took it there), edge-cycle (an after item already needs it) or item-changed.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/items/{item}/start (the `SetItemStart` operationId).
+func (c *ClientWithResponses) SetItemStartWithResponse(ctx context.Context, org OrgRef, item ItemRef, body SetItemStartJSONRequestBody, reqEditors ...RequestEditorFn) (*SetItemStartResponse, error) {
+	rsp, err := c.SetItemStart(ctx, org, item, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetItemStartResponse(rsp)
 }
 
 // GetItemTeardownWithResponse Where an item's lead time, cost and human help went
@@ -44918,6 +45317,86 @@ func ParseListItemRunsResponse(rsp *http.Response) (*ListItemRunsResponse, error
 	return response, nil
 }
 
+// ParseClearItemStartResponse parses an HTTP response from a ClearItemStartWithResponse call
+func ParseClearItemStartResponse(rsp *http.Response) (*ClearItemStartResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ClearItemStartResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Item
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSetItemStartResponse parses an HTTP response from a SetItemStartWithResponse call
+func ParseSetItemStartResponse(rsp *http.Response) (*SetItemStartResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SetItemStartResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Item
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetItemTeardownResponse parses an HTTP response from a GetItemTeardownWithResponse call
 func ParseGetItemTeardownResponse(rsp *http.Response) (*GetItemTeardownResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -47304,6 +47783,12 @@ type ServerInterface interface {
 	// ListItemRuns An item's agent runs, oldest first (at most 200)
 	// (GET /v1/orgs/{org}/items/{item}/runs)
 	ListItemRuns(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// ClearItemStart Start an item now
+	// (DELETE /v1/orgs/{org}/items/{item}/start)
+	ClearItemStart(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
+	// SetItemStart Change when an item that has not started may start
+	// (PUT /v1/orgs/{org}/items/{item}/start)
+	SetItemStart(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
 	// GetItemTeardown Where an item's lead time, cost and human help went
 	// (GET /v1/orgs/{org}/items/{item}/teardown)
 	GetItemTeardown(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
@@ -53015,6 +53500,76 @@ func (siw *ServerInterfaceWrapper) ListItemRuns(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// ClearItemStart operation middleware
+func (siw *ServerInterfaceWrapper) ClearItemStart(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ClearItemStart(w, r, org, item)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetItemStart operation middleware
+func (siw *ServerInterfaceWrapper) SetItemStart(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetItemStart(w, r, org, item)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetItemTeardown operation middleware
 func (siw *ServerInterfaceWrapper) GetItemTeardown(w http.ResponseWriter, r *http.Request) {
 
@@ -55528,6 +56083,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/reject", wrapper.RejectItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/move", wrapper.MoveItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/lane", wrapper.SetItemLane)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/start", wrapper.ClearItemStart)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/start", wrapper.SetItemStart)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/pause", wrapper.PauseItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/cancel", wrapper.CancelItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/retry", wrapper.RetryItem)
@@ -61128,6 +61685,119 @@ func (response ListItemRunsdefaultApplicationProblemPlusJSONResponse) VisitListI
 	return err
 }
 
+type ClearItemStartRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+}
+
+type ClearItemStartResponseObject interface {
+	VisitClearItemStartResponse(w http.ResponseWriter) error
+}
+
+type ClearItemStart200JSONResponse Item
+
+func (response ClearItemStart200JSONResponse) VisitClearItemStartResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClearItemStart409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response ClearItemStart409ApplicationProblemPlusJSONResponse) VisitClearItemStartResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClearItemStartdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ClearItemStartdefaultApplicationProblemPlusJSONResponse) VisitClearItemStartResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetItemStartRequestObject struct {
+	Org  OrgRef  `json:"org"`
+	Item ItemRef `json:"item"`
+	Body *SetItemStartJSONRequestBody
+}
+
+type SetItemStartResponseObject interface {
+	VisitSetItemStartResponse(w http.ResponseWriter) error
+}
+
+type SetItemStart200JSONResponse Item
+
+func (response SetItemStart200JSONResponse) VisitSetItemStartResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetItemStart409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response SetItemStart409ApplicationProblemPlusJSONResponse) VisitSetItemStartResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetItemStartdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response SetItemStartdefaultApplicationProblemPlusJSONResponse) VisitSetItemStartResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetItemTeardownRequestObject struct {
 	Org  OrgRef  `json:"org"`
 	Item ItemRef `json:"item"`
@@ -63999,6 +64669,12 @@ type StrictServerInterface interface {
 	// ListItemRuns An item's agent runs, oldest first (at most 200)
 	// (GET /v1/orgs/{org}/items/{item}/runs)
 	ListItemRuns(ctx context.Context, request ListItemRunsRequestObject) (ListItemRunsResponseObject, error)
+	// ClearItemStart Start an item now
+	// (DELETE /v1/orgs/{org}/items/{item}/start)
+	ClearItemStart(ctx context.Context, request ClearItemStartRequestObject) (ClearItemStartResponseObject, error)
+	// SetItemStart Change when an item that has not started may start
+	// (PUT /v1/orgs/{org}/items/{item}/start)
+	SetItemStart(ctx context.Context, request SetItemStartRequestObject) (SetItemStartResponseObject, error)
 	// GetItemTeardown Where an item's lead time, cost and human help went
 	// (GET /v1/orgs/{org}/items/{item}/teardown)
 	GetItemTeardown(ctx context.Context, request GetItemTeardownRequestObject) (GetItemTeardownResponseObject, error)
@@ -68086,6 +68762,67 @@ func (sh *strictHandler) ListItemRuns(w http.ResponseWriter, r *http.Request, or
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListItemRunsResponseObject); ok {
 		if err := validResponse.VisitListItemRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ClearItemStart operation middleware
+func (sh *strictHandler) ClearItemStart(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
+	var request ClearItemStartRequestObject
+
+	request.Org = org
+	request.Item = item
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ClearItemStart(ctx, request.(ClearItemStartRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ClearItemStart")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ClearItemStartResponseObject); ok {
+		if err := validResponse.VisitClearItemStartResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetItemStart operation middleware
+func (sh *strictHandler) SetItemStart(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef) {
+	var request SetItemStartRequestObject
+
+	request.Org = org
+	request.Item = item
+
+	var body SetItemStartJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetItemStart(ctx, request.(SetItemStartRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetItemStart")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetItemStartResponseObject); ok {
+		if err := validResponse.VisitSetItemStartResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -234,6 +234,32 @@ clearAndon           pat-demoted      404 factory-not-found    404 org-not-found
 clearAndon           pat-removed      401 unauthenticated      401 unauthenticated
 clearAndon           pat-platform     200                      404 org-not-found
 clearAndon           pat-deleted-org  401 unauthenticated      401 unauthenticated
+clearItemStart       anonymous        401 unauthenticated      401 unauthenticated
+clearItemStart       owner            200                      404 org-not-found
+clearItemStart       admin            200                      404 org-not-found
+clearItemStart       viewer           403 forbidden            404 org-not-found
+clearItemStart       approver         200                      404 org-not-found
+clearItemStart       editor           200                      404 org-not-found
+clearItemStart       member-no-roles  404 item-not-found       404 org-not-found
+clearItemStart       other-org-owner  404 org-not-found        200
+clearItemStart       platform-admin   404 org-not-found        404 org-not-found
+clearItemStart       stale-owner      200                      404 org-not-found
+clearItemStart       key-scoped       403 forbidden            404 org-not-found
+clearItemStart       key-restricted   404 item-not-found       404 org-not-found
+clearItemStart       key-other-org    404 org-not-found        200
+clearItemStart       key-expired      401 unauthenticated      401 unauthenticated
+clearItemStart       key-revoked      401 unauthenticated      401 unauthenticated
+clearItemStart       bearer-owner     200                      404 org-not-found
+clearItemStart       pat-approver     200                      404 org-not-found
+clearItemStart       pat-owner        200                      404 org-not-found
+clearItemStart       pat-viewer       403 forbidden            404 org-not-found
+clearItemStart       pat-other-org    404 org-not-found        200
+clearItemStart       pat-expired      401 unauthenticated      401 unauthenticated
+clearItemStart       pat-revoked      401 unauthenticated      401 unauthenticated
+clearItemStart       pat-demoted      404 item-not-found       404 org-not-found
+clearItemStart       pat-removed      401 unauthenticated      401 unauthenticated
+clearItemStart       pat-platform     200                      404 org-not-found
+clearItemStart       pat-deleted-org  401 unauthenticated      401 unauthenticated
 clearSignupDomain    anonymous        401 unauthenticated      401 unauthenticated
 clearSignupDomain    owner            200                      404 org-not-found
 clearSignupDomain    admin            403 forbidden            404 org-not-found
@@ -4342,6 +4368,32 @@ setItemLane          pat-demoted      404 item-not-found       404 org-not-found
 setItemLane          pat-removed      401 unauthenticated      401 unauthenticated
 setItemLane          pat-platform     200                      404 org-not-found
 setItemLane          pat-deleted-org  401 unauthenticated      401 unauthenticated
+setItemStart         anonymous        401 unauthenticated      401 unauthenticated
+setItemStart         owner            200                      404 org-not-found
+setItemStart         admin            200                      404 org-not-found
+setItemStart         viewer           403 forbidden            404 org-not-found
+setItemStart         approver         200                      404 org-not-found
+setItemStart         editor           200                      404 org-not-found
+setItemStart         member-no-roles  404 item-not-found       404 org-not-found
+setItemStart         other-org-owner  404 org-not-found        200
+setItemStart         platform-admin   404 org-not-found        404 org-not-found
+setItemStart         stale-owner      200                      404 org-not-found
+setItemStart         key-scoped       403 forbidden            404 org-not-found
+setItemStart         key-restricted   404 item-not-found       404 org-not-found
+setItemStart         key-other-org    404 org-not-found        200
+setItemStart         key-expired      401 unauthenticated      401 unauthenticated
+setItemStart         key-revoked      401 unauthenticated      401 unauthenticated
+setItemStart         bearer-owner     200                      404 org-not-found
+setItemStart         pat-approver     200                      404 org-not-found
+setItemStart         pat-owner        200                      404 org-not-found
+setItemStart         pat-viewer       403 forbidden            404 org-not-found
+setItemStart         pat-other-org    404 org-not-found        200
+setItemStart         pat-expired      401 unauthenticated      401 unauthenticated
+setItemStart         pat-revoked      401 unauthenticated      401 unauthenticated
+setItemStart         pat-demoted      404 item-not-found       404 org-not-found
+setItemStart         pat-removed      401 unauthenticated      401 unauthenticated
+setItemStart         pat-platform     200                      404 org-not-found
+setItemStart         pat-deleted-org  401 unauthenticated      401 unauthenticated
 setNotificationSettings anonymous        401 unauthenticated      401 unauthenticated
 setNotificationSettings owner            200                      404 org-not-found
 setNotificationSettings admin            200                      404 org-not-found
