@@ -3,7 +3,9 @@ package knowledge_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"iter"
+	"slices"
 	"strings"
 	"testing"
 
@@ -54,7 +56,8 @@ func TestCheck_ListsUnsavedSettings(t *testing.T) {
 	repo := domain.KnowledgeSource{Name: "guides", Kind: domain.SourceRepository, Secret: checkToken, Config: map[string]string{domain.SourceRepositoryKey: "https://git.example.com/acme/guides"}}
 
 	got, err := w.ingestor(nil).Check(ctx, repo)
-	w.want("the check", got, err == nil, got.Error == "", got.Files == 2, w.docs.secret == checkValue)
+	w.want("the check", got, err == nil, got.Error == "", got.Files == 2, w.docs.secret == checkValue,
+		slices.Equal(got.FirstFiles, []string{"b.md", deployMD}))
 	w.want("the sources after", w.snapshots(repoSource), len(w.snapshots(repoSource)) == 0)
 
 	if _, err := w.kb.Source(ctx, "guides"); !errors.Is(err, ports.ErrNotFound) {
@@ -65,15 +68,29 @@ func TestCheck_ListsUnsavedSettings(t *testing.T) {
 	narrow.Secret = "narrow-token"
 
 	got, err = w.ingestor(nil).Check(ctx, narrow)
-	w.want("a secret open to some factories only", got, err == nil, strings.Contains(got.Error, "open to some factories only"), got.Files == 0)
+	w.want("a secret open to some factories only", got, err == nil, strings.Contains(got.Error, "open to some factories only"), got.Files == 0, len(got.FirstFiles) == 0)
 
 	leaky := knowledge.NewIngestor(knowledge.IngestorConfig{
 		Knowledge: w.kb, Secrets: w.secrets, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: leakyReader{}}, Clock: w.clock,
 	})
 
 	got, err = leaky.Check(ctx, repo)
-	w.want("a listing that fails", got, err == nil, strings.Contains(got.Error, "bad credentials"), !strings.Contains(got.Error, checkValue))
+	w.want("a listing that fails", got, err == nil, strings.Contains(got.Error, "bad credentials"), !strings.Contains(got.Error, checkValue),
+		len(got.FirstFiles) == 0)
 
 	got, err = w.ingestor(nil).Check(ctx, domain.KnowledgeSource{Name: "drops", Kind: domain.SourceUpload})
-	w.want("an upload source not saved", got, err == nil, got.Error == "", got.Files == 0)
+	w.want("an upload source not saved", got, err == nil, got.Error == "", got.Files == 0, len(got.FirstFiles) == 0)
+
+	// Past 8 files it keeps counting but names the first 8 only, none holding the secret's value.
+	many := map[string]string{}
+	for i := range 10 {
+		many[fmt.Sprintf("f%02d.md", i)] = "# F"
+	}
+
+	w.docs.set(many)
+
+	got, err = w.ingestor(nil).Check(ctx, repo)
+	w.want("a listing of 10 files", got, err == nil, got.Files == 10,
+		slices.Equal(got.FirstFiles, []string{"f00.md", "f01.md", "f02.md", "f03.md", "f04.md", "f05.md", "f06.md", "f07.md"}),
+		!strings.Contains(strings.Join(got.FirstFiles, "\n"), checkValue))
 }

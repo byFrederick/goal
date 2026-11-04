@@ -8565,6 +8565,8 @@ export interface components {
             access: components["schemas"]["KnowledgeCheckAccess"];
             /** @description How many files it lists; 0 when access failed */
             files: number;
+            /** @description The paths, as the sync would write them under /knowledge/<name>/, of the first 8 files the listing yields, in listing order. Empty when access failed or for an upload source not saved yet. */
+            first_files: string[];
             /**
              * Format: int64
              * @description Their Markdown's size, only when goald knows it: the current snapshot of a source of that name and kind that exists. A listing does not say how big each file is.

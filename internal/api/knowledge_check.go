@@ -74,6 +74,7 @@ func (s *server) CheckKnowledgeSource(ctx context.Context, req gen.CheckKnowledg
 
 	out.Access = gen.KnowledgeCheckAccess{Ok: res.Error == "", Error: optional(res.Error)}
 	out.Files = res.Files
+	out.FirstFiles = append([]string{}, res.FirstFiles...)
 
 	if out.Files > domain.MaxSourceFiles {
 		out.OverLimit = append(out.OverLimit, "files")

@@ -10503,10 +10503,17 @@ components:
           items: { type: string }
     KnowledgeCheck:
       type: object
-      required: [access, files, limits, over_limit, warnings, line]
+      required: [access, files, first_files, limits, over_limit, warnings, line]
       properties:
         access: { $ref: "#/components/schemas/KnowledgeCheckAccess" }
         files: { type: integer, description: How many files it lists; 0 when access failed }
+        first_files:
+          type: array
+          description: >-
+            The paths, as the sync would write them under /knowledge/<name>/, of the first 8 files
+            the listing yields, in listing order. Empty when access failed or for an upload source
+            not saved yet.
+          items: { type: string }
         bytes:
           type: integer
           format: int64

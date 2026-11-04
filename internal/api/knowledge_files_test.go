@@ -224,6 +224,16 @@ func TestKnowledge_Check(t *testing.T) {
 		t.Errorf("check = %s; want access, 2 files, no warning and the line", asJSON(t, got))
 	}
 
+	if want := []string{"runbooks/disk.md", "runbooks/cpu.md"}; !slices.Equal(got.FirstFiles, want) {
+		t.Errorf("check's first files = %v; want %v", got.FirstFiles, want)
+	}
+
+	// An upload source not saved lists nothing, answered as an empty list and never null.
+	upload := h.request(t, http.MethodPost, knowledgePath+"/check", `{"name":"drops","kind":"upload"}`, nil)
+	if !strings.Contains(string(upload.body), `"first_files":[]`) {
+		t.Errorf("an unsaved upload source's check = %s; want first_files []", upload.body)
+	}
+
 	if _, err := h.kb.Source(ctx, "guides"); err == nil {
 		t.Error("the checked source was stored")
 	}
