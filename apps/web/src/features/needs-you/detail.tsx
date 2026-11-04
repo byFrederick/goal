@@ -419,7 +419,7 @@ function AlertLinks({ entry, canUndo }: { entry: InboxEntry; canUndo: boolean })
   const factory = entry.factory.name;
   const proposal = entry.kind === 'watch_worse' ? entry.watch?.proposal : undefined;
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex min-w-0 flex-wrap gap-2">
       {proposal !== undefined ? (
         <>
           {canUndo ? <UndoThisChange number={proposal} factoryId={entry.factory.id} factoryName={factory} /> : null}

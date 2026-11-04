@@ -163,7 +163,7 @@ function renderPage({
 /** The phone's width: matchMedia answers the phone query with a match. */
 function phoneWidth() {
   window.matchMedia = ((query: string) => ({
-    matches: query === '(max-width: 767px)',
+    matches: query === '(max-width: 767px)' || query === '(max-width: 1023px)',
     media: query,
     addEventListener: () => {},
     removeEventListener: () => {},
@@ -884,5 +884,24 @@ describe('Needs you: a proposal that made its number worse', () => {
 
     await screen.findAllByText('Proposal 14 made send-backs worse');
     expect(screen.queryByRole('button', { name: /Undo this change/ })).toBeNull();
+  });
+});
+
+describe('Needs you: truncated row text carries its full text', () => {
+  it('gives the row title and where-line a title attribute', async () => {
+    const long = 'A very long title that the row cuts off with an ellipsis when the list is narrow';
+    const entry: InboxEntry = { ...decision, item: card({ title: long }) };
+    renderPage({
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([entry])],
+        [factoriesQuery(org.id).queryKey, factories()],
+      ],
+    });
+
+    const title = await screen.findByTitle(long);
+    expect(title.className).toContain('truncate');
+    const where = title.nextElementSibling as HTMLElement;
+    expect(where.className).toContain('truncate');
+    expect(where.getAttribute('title')).toBe(where.textContent);
   });
 });

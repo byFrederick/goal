@@ -34,7 +34,7 @@ goal deny acme-line#3 --note "Use the staging server"
 
 On the item page and in Needs you, the Approve button approves, the Deny button denies, and an Always allow checkbox appears when you may set it.
 
-On a phone, Needs you shows the list first. Choosing an entry opens only that entry, with Back in the top bar to return to the list where you left it.
+On a phone or a tablet (below 1024 px), Needs you shows the list first. Choosing an entry opens only that entry, with Back in the top bar to return to the list where you left it.
 
 ## Fix an alert about a source or a conversion
 
