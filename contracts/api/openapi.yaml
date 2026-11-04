@@ -2893,8 +2893,9 @@ paths:
         The review reads what finished since the last done review's window ended (30 days back
         before the first) on the current version; goald's review loop runs it, retrying a failed
         run twice. 409 review-in-flight while a review is pending or running;
-        learning-budget-exhausted while the factory's jonah runs over the last 7 days cost
-        learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+        learning-budget-exhausted while Jonah's runs over the last 7 days cost its budget or more:
+        learning.jonah.share (default 5%) of what the line's other runs cost over those 7 days, so
+        a line that spent nothing has none. 404 version-not-found before the first publish.
       responses:
         "202":
           description: The queued review
@@ -7478,13 +7479,23 @@ components:
     JonahPolicy:
       type: object
       description: The current version's learning.jonah, with its defaults where it sets none
-      required: [enabled, propose_after, weekly_usd, approver_roles]
+      required: [enabled, propose_after, share, budget_usd, approver_roles]
       properties:
         enabled: { type: boolean }
         propose_after:
           type: integer
-          description: Sent-back touches that queue a review, and how often an observation is seen before it is proposed
-        weekly_usd: { type: number, format: double, description: What review runs may cost over 7 days }
+          description: Items with the same cause an observation needs before it becomes a proposal
+        share:
+          type: number
+          format: double
+          description: learning.jonah.share as a fraction (5% is 0.05) of what the line spent over the last 7 days
+        budget_usd:
+          type: number
+          format: double
+          description: >-
+            Jonah's budget now: share times what the line's runs other than Jonah's cost over the
+            last 7 days. Each review may spend a fifth of it, and Jonah's spend never triggers
+            runtime.budget.onExhausted
         model: { type: string, description: "The review run's model: learning.jonah.model, else runtime.model; absent when neither is set" }
         approver_roles:
           type: array
@@ -9525,7 +9536,13 @@ components:
               type: object
               description: expedite, constraint, release, andon, targets
               additionalProperties: {}
-            librarian: { type: string, nullable: true }
+            librarian:
+              type: string
+              nullable: true
+              deprecated: true
+              description: >-
+                Ignored: learning.librarian is retired (ADR 0039, warning field-ignored). goald
+                always answers null and ignores a value written here
         agents:
           type: object
           properties:

@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -220,8 +221,51 @@ func TestLine_LandingStation(t *testing.T) {
 func TestDefaultJonahPolicy(t *testing.T) {
 	t.Parallel()
 
-	want := JonahPolicy{Enabled: true, ProposeAfter: 5, WeeklyUSD: 10}
+	want := JonahPolicy{Enabled: true, ProposeAfter: 3, Share: 0.05}
 	if got := DefaultJonahPolicy(); got != want {
 		t.Errorf("DefaultJonahPolicy() = %+v, want %+v", got, want)
 	}
 }
+
+// Jonah's budget is its share of the line's spend, each review is capped at a fifth of it, and a
+// review's cap is what is left under that, at least a cent (ADR 0039 decision 16).
+func TestJonahPolicy_Budget(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		share         float64
+		spend         JonahSpend
+		wantBudget    float64
+		wantPerReview float64
+		wantCap       float64
+		wantExhausted bool
+	}{
+		{name: "nothing spent", share: 0.05, spend: JonahSpend{LineUSD: 200}, wantBudget: 10, wantPerReview: 2, wantCap: 2},
+		{name: "little left", share: 0.05, spend: JonahSpend{LineUSD: 200, JonahUSD: 9.5}, wantBudget: 10, wantPerReview: 2, wantCap: 0.5},
+		{name: "used up", share: 0.05, spend: JonahSpend{LineUSD: 200, JonahUSD: 10}, wantBudget: 10, wantPerReview: 2, wantCap: 0.01, wantExhausted: true},
+		{name: "no line spend", share: 0.05, spend: JonahSpend{}, wantCap: 0.01, wantExhausted: true},
+		{name: "share off", share: 0, spend: JonahSpend{LineUSD: 200}, wantCap: 0.01, wantExhausted: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			b := JonahPolicy{Share: tt.share}.Budget(tt.spend)
+			if !near(b.BudgetUSD, tt.wantBudget) || !near(b.PerReviewUSD, tt.wantPerReview) || !near(b.SpentUSD, tt.spend.JonahUSD) {
+				t.Errorf("budget = %+v, want $%v, $%v per review", b, tt.wantBudget, tt.wantPerReview)
+			}
+
+			if got := b.ReviewCap(); !near(got, tt.wantCap) {
+				t.Errorf("ReviewCap() = %v, want %v", got, tt.wantCap)
+			}
+
+			if got := b.Exhausted(); got != tt.wantExhausted {
+				t.Errorf("Exhausted() = %v, want %v", got, tt.wantExhausted)
+			}
+		})
+	}
+}
+
+func near(a, b float64) bool { return math.Abs(a-b) < 1e-9 }

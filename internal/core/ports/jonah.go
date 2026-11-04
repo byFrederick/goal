@@ -184,9 +184,10 @@ type JonahStore interface {
 	// OpenObservations is the factory's watching and proposed observations, the latest updated
 	// first, at most limit: those a review reads and may update (ADR 0039 decision 5).
 	OpenObservations(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.Observation, error)
-	// JonahSpendSince sums the cost of the factory's runs of kind jonah started at or after
-	// since: the weekly budget's spend (decision 2).
-	JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
+	// JonahSpendSince sums the cost of the factory's runs started at or after since: LineUSD of
+	// every kind but jonah, JonahUSD of kind jonah. Jonah's budget is a share of the first, and
+	// the second is what it spent (ADR 0039 decision 16).
+	JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (domain.JonahSpend, error)
 	// SentBackBetween is the factory's sent-back touches (a person's rejected or gate_rejected)
 	// at or after since and before until, oldest first (by at, then event id), at most limit:
 	// a review's events and the evidence it may cite. Each names its item's number and title,

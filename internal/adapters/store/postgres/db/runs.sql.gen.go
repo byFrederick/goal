@@ -118,7 +118,7 @@ func (q *Queries) CountOrgRuns(ctx context.Context, arg CountOrgRunsParams) (int
 const factorySpendSince = `-- name: FactorySpendSince :one
 SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
 FROM agent_runs
-WHERE factory_id = $1 AND started_at >= $2
+WHERE factory_id = $1 AND started_at >= $2 AND kind <> 'jonah'
 `
 
 type FactorySpendSinceParams struct {
@@ -126,8 +126,9 @@ type FactorySpendSinceParams struct {
 	Since     time.Time
 }
 
-// The cost of the runs a factory started at or after since, for its weekly budget. Row-level
-// security scopes it to the organization; agent_runs_factory_started_idx serves the range.
+// The cost of the runs a factory started at or after since, for its weekly budget: Jonah's runs
+// never trigger onExhausted (ADR 0039 decision 16), so they are left out. Row-level security
+// scopes it to the organization; agent_runs_factory_started_idx serves the range.
 func (q *Queries) FactorySpendSince(ctx context.Context, arg FactorySpendSinceParams) (float64, error) {
 	row := q.db.QueryRow(ctx, factorySpendSince, arg.FactoryID, arg.Since)
 	var spend_usd float64

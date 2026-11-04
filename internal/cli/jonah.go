@@ -42,7 +42,7 @@ var jonahConflicts = map[string]string{
 	"draft-conflict":            "the draft's copy of a file changed since Jonah made this proposal: nothing was written",
 	"proposal-decided":          "the proposal was already decided: goal jonah show %d says how",
 	"review-in-flight":          "a review is already pending or running: wait for it to finish",
-	"learning-budget-exhausted": "Jonah's runs reached the factory's weekly budget (learning.jonah.weeklyUsd): try again when the last 7 days cost less",
+	"learning-budget-exhausted": "Jonah's runs used up its budget, learning.jonah.share of what the line spent in the last 7 days: try again when the window moves on",
 }
 
 // jonahProblem is goald's refusal of a Jonah operation on proposal number (0 for none): a

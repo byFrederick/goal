@@ -650,8 +650,9 @@ func (f *fixture) kindRun(t *testing.T, it domain.Item, kind domain.RunKind, at 
 	}
 }
 
-// JonahSpendSince sums the factory's jonah runs from since, the bound included: not station runs,
-// runs before since or another factory's.
+// JonahSpendSince sums the factory's runs from since, the bound included, into the line's (every
+// kind but jonah) and Jonah's: not runs before since or another factory's. SpendSince, which the
+// weekly budget's onExhausted reads, leaves the jonah runs out (ADR 0039 decision 16).
 func testJonahSpend(f *fixture) {
 	t := f.t
 	it := f.create(t, domain.NewItem{})
@@ -661,16 +662,18 @@ func testJonahSpend(f *fixture) {
 	f.kindRun(t, it, domain.RunKindJonah, t1, 1.5)
 	f.kindRun(t, it, domain.RunKindJonah, t1.Add(time.Hour), 0.25)
 	f.kindRun(t, it, domain.RunKindStation, t1, 3)
+	f.kindRun(t, it, domain.RunKindStation, t1.Add(-time.Second), 16)
 	f.kindRun(t, it, "", t1, 4)
 	f.kindRun(t, elsewhere, domain.RunKindJonah, t1, 8)
+	f.kindRun(t, elsewhere, domain.RunKindStation, t1, 32)
 
-	usd, err := f.Jonah.JonahSpendSince(f.ctx(t), f.factory, t1)
-	if err != nil || roundTo(usd, 4) != 1.75 {
-		t.Errorf("JonahSpendSince = %v, %v; want 1.75", usd, err)
+	s, err := f.Jonah.JonahSpendSince(f.ctx(t), f.factory, t1)
+	if err != nil || roundTo(s.JonahUSD, 4) != 1.75 || roundTo(s.LineUSD, 4) != 7 {
+		t.Errorf("JonahSpendSince = %+v, %v; want $1.75 of Jonah's and $7 of the line's", s, err)
 	}
 
-	if all := f.spendSince(t, f.factory, t1); roundTo(all, 4) != 8.75 {
-		t.Errorf("SpendSince = %v, want 8.75: every kind counts there", all)
+	if all := f.spendSince(t, f.factory, t1); roundTo(all, 4) != 7 {
+		t.Errorf("SpendSince = %v, want 7: jonah runs never count toward onExhausted", all)
 	}
 }
 

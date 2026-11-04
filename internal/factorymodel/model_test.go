@@ -94,7 +94,6 @@ func TestFromYAML_ReadsTheSections(t *testing.T) {
 		"browser":    m.Connections[1],
 		"tickets":    dig(m.Connections, 0, "legacy"),
 		"gate":       dig(m.Line, "stations", 3, "gate"),
-		"librarian":  m.Line["librarian"],
 		"budget":     m.Review["budget"],
 	})
 
@@ -104,12 +103,16 @@ func TestFromYAML_ReadsTheSections(t *testing.T) {
 		`"tools":{"browser__click":{"agents":["engineer"],"scope":"preview"}}},` +
 		`"budget":{"daily_usd":20,"per_item_usd":2.5},` +
 		`"engineer":{"edit":"allowed","read":"allowed","run":{"commands":["pnpm","go"],"mode":"allowed"},"web":"ask"},` +
-		`"gate":{"max_rework":2,"on_reject":"build"},"librarian":"reviewer",` +
+		`"gate":{"max_rework":2,"on_reject":"build"},` +
 		`"purpose":"Builds and reviews changes to the acme example shop.",` +
 		`"repository":{"token":"env:ACME_REPO_TOKEN","url":"https://code.example.com/acme/shop.git"},"tickets":true}`
 
 	if string(got) != want {
 		t.Errorf("model =\n%s\nwant\n%s", got, want)
+	}
+
+	if l, ok := m.Line["librarian"]; ok {
+		t.Errorf("line librarian = %v; learning.librarian is ignored (ADR 0039) and has no field", l)
 	}
 
 	for pointer, lines := range map[string][2]int{

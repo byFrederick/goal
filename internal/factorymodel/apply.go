@@ -118,15 +118,8 @@ func applySection(t *tree, s Section, v any) {
 		val, present := part(v, b)
 		p := b.path
 
-		switch b.key {
-		case keyPurpose:
+		if b.key == keyPurpose {
 			p = purposeTarget(t.root, val)
-		case keyLibrarian:
-			if empty(val) {
-				removeLibrarian(t.root)
-
-				continue
-			}
 		}
 
 		set(t.root, p, b.shape, val, present && !empty(val))
@@ -153,20 +146,6 @@ func renameKey(m *yaml.Node, from, to string) {
 		if m.Content[i].Value == from {
 			m.Content[i].Value = to
 		}
-	}
-}
-
-// removeLibrarian drops learning.librarian, and learning when nothing else is left in it.
-func removeLibrarian(root *yaml.Node) {
-	learning := lookup(root, []string{keySpec, keyLearning})
-	if learning == nil {
-		return
-	}
-
-	deleteKey(learning, keyLibrarian)
-
-	if len(learning.Content) == 0 {
-		deleteKey(lookup(root, []string{keySpec}), keyLearning)
 	}
 }
 

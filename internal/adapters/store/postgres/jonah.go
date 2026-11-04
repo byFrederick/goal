@@ -552,24 +552,24 @@ func observationsFrom(rows []db.JonahObservation) []domain.Observation {
 }
 
 // JonahSpendSince implements ports.JonahStore.
-func (s *Store) JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error) {
+func (s *Store) JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (domain.JonahSpend, error) {
 	if _, ok := domain.OrgFrom(ctx); !ok {
-		return 0, domain.ErrNoOrg
+		return domain.JonahSpend{}, domain.ErrNoOrg
 	}
 
 	f, err := parseID("factory", string(factory))
 	if err != nil {
-		return 0, fmt.Errorf("jonah spend: %w", err)
+		return domain.JonahSpend{}, fmt.Errorf("jonah spend: %w", err)
 	}
 
-	usd, err := fetch(ctx, s.read, func(q *db.Queries) (float64, error) {
+	row, err := fetch(ctx, s.read, func(q *db.Queries) (db.JonahSpendSinceRow, error) {
 		return q.JonahSpendSince(ctx, db.JonahSpendSinceParams{FactoryID: f, Since: since})
 	})
 	if err != nil {
-		return 0, fmt.Errorf("jonah spend of factory %s: %w", factory, err)
+		return domain.JonahSpend{}, fmt.Errorf("jonah spend of factory %s: %w", factory, err)
 	}
 
-	return usd, nil
+	return domain.JonahSpend{LineUSD: row.LineUsd, JonahUSD: row.JonahUsd}, nil
 }
 
 // SentBackBetween implements ports.JonahStore over item_touches and lease_spans.

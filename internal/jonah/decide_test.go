@@ -228,7 +228,39 @@ func newDecideFixture(t *testing.T) (*decideFixture, context.Context) {
 		t.Fatal(err)
 	}
 
+	f.run(ctx, t, domain.RunKindStation, 200) // the line's spend: Jonah's budget is $10
+
 	return f, ctx
+}
+
+// run records a finished run of the factory of kind that cost usd, started an hour before t0: a
+// station run is on an item still in progress, a jonah run on none.
+func (f *decideFixture) run(ctx context.Context, t *testing.T, kind domain.RunKind, usd float64) {
+	t.Helper()
+
+	at := t0.Add(-time.Hour)
+	n := ports.NewRun{FactoryID: factory, Agent: "builder", StartedAt: at, Kind: kind}
+
+	if kind == domain.RunKindStation {
+		it, err := f.store.CreateItem(ctx, domain.NewItem{
+			FactoryID: factory, Title: "work in progress", Station: stationBuild, State: domain.StateInProgress,
+			Class: domain.ClassStandard, CreatedAt: at,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		n.ItemID, n.Station = it.ID, stationBuild
+	}
+
+	id, err := f.store.StartRun(ctx, n)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.store.FinishRun(ctx, id, domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd}, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (f *decideFixture) state(ctx context.Context, t *testing.T) domain.Proposal {
@@ -463,7 +495,14 @@ func TestDecide_QueueReview(t *testing.T) {
 		t.Errorf("second review = %v, want ErrReviewInFlight", err)
 	}
 
-	policy.WeeklyUSD = 0 // no spend at all is already the budget
+	none := policy
+	none.Share = 0 // a share of nothing is already used up
+
+	if _, err := f.dc.QueueReview(ctx, factory, versionID(1), none); !errors.Is(err, domain.ErrLearningBudgetExhausted) {
+		t.Errorf("review with no share = %v, want ErrLearningBudgetExhausted", err)
+	}
+
+	f.run(ctx, t, domain.RunKindJonah, 10) // 5% of the line's $200
 
 	if _, err := f.dc.QueueReview(ctx, factory, versionID(1), policy); !errors.Is(err, domain.ErrLearningBudgetExhausted) {
 		t.Errorf("review over budget = %v, want ErrLearningBudgetExhausted", err)

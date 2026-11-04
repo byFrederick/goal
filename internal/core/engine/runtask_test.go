@@ -227,7 +227,7 @@ func (h *harness) expectJonahRun(t *testing.T, id domain.RunID) {
 		t.Errorf("run = %+v; want a finished run of agent %s on %s without an item, with its cost", run, agJonah, v1)
 	}
 
-	if usd, err := h.store.JonahSpendSince(inOrg(t), factoryID, t0); err != nil || usd != 0.25 {
-		t.Errorf("JonahSpendSince = %v, %v; want 0.25: the run is of kind jonah", usd, err)
+	if s, err := h.store.JonahSpendSince(inOrg(t), factoryID, t0); err != nil || s.JonahUSD != 0.25 {
+		t.Errorf("JonahSpendSince = %+v, %v; want 0.25 of Jonah's: the run is of kind jonah", s, err)
 	}
 }

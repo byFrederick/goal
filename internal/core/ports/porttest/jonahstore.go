@@ -419,25 +419,30 @@ func (s *Store) OpenObservations(ctx context.Context, factory domain.FactoryID, 
 }
 
 // JonahSpendSince implements ports.JonahStore.
-func (s *Store) JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error) {
+func (s *Store) JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (domain.JonahSpend, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
-		return 0, err
+		return domain.JonahSpend{}, err
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var usd float64
+	var out domain.JonahSpend
 
 	for id, r := range s.runs {
-		if s.runVisible(r, org) && r.FactoryID == factory && s.jonah.runKinds[id] == domain.RunKindJonah &&
-			!r.StartedAt.Before(since) {
-			usd += r.Result.CostUSD
+		if !s.runVisible(r, org) || r.FactoryID != factory || r.StartedAt.Before(since) {
+			continue
+		}
+
+		if s.jonah.runKinds[id] == domain.RunKindJonah {
+			out.JonahUSD += r.Result.CostUSD
+		} else {
+			out.LineUSD += r.Result.CostUSD
 		}
 	}
 
-	return usd, nil
+	return out, nil
 }
 
 // sentBack reports whether t is a sent-back touch: a person's rejected or gate_rejected.

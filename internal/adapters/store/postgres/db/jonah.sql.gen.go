@@ -597,9 +597,10 @@ func (q *Queries) InsertUndoProposal(ctx context.Context, arg InsertUndoProposal
 }
 
 const jonahSpendSince = `-- name: JonahSpendSince :one
-SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
+SELECT coalesce(sum(cost_usd) FILTER (WHERE kind <> 'jonah'), 0)::float8 AS line_usd,
+  coalesce(sum(cost_usd) FILTER (WHERE kind = 'jonah'), 0)::float8 AS jonah_usd
 FROM agent_runs
-WHERE factory_id = $1 AND kind = 'jonah' AND started_at >= $2
+WHERE factory_id = $1 AND started_at >= $2
 `
 
 type JonahSpendSinceParams struct {
@@ -607,12 +608,19 @@ type JonahSpendSinceParams struct {
 	Since     time.Time
 }
 
-// The cost of the factory's review runs started at or after since, on agent_runs_jonah_idx.
-func (q *Queries) JonahSpendSince(ctx context.Context, arg JonahSpendSinceParams) (float64, error) {
+type JonahSpendSinceRow struct {
+	LineUsd  float64
+	JonahUsd float64
+}
+
+// The cost of the factory's runs started at or after since, the line's (every kind but jonah) and
+// Jonah's: Jonah's budget is a share of the first (ADR 0039 decision 16). Row-level security
+// scopes it to the organization; agent_runs_factory_started_idx serves the range.
+func (q *Queries) JonahSpendSince(ctx context.Context, arg JonahSpendSinceParams) (JonahSpendSinceRow, error) {
 	row := q.db.QueryRow(ctx, jonahSpendSince, arg.FactoryID, arg.Since)
-	var spend_usd float64
-	err := row.Scan(&spend_usd)
-	return spend_usd, err
+	var i JonahSpendSinceRow
+	err := row.Scan(&i.LineUsd, &i.JonahUsd)
+	return i, err
 }
 
 const lastDoneJonahReview = `-- name: LastDoneJonahReview :one
