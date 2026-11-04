@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "errors": [],
+  "result": {
+    "bindings": [
+      { "type": "plain_text", "name": "GOAL_PUBLIC_URL", "text": "https://example.com" },
+      { "type": "secrets_store_secret", "name": "GOAL_EMBED_KEY", "store_id": "test-store", "secret_name": "goal-test-OLD_KEY" },
+      { "type": "secrets_store_secret", "name": "GOAL_GATEWAY_KEY", "store_id": "test-store", "secret_name": "goal-test-GATEWAY_KEY" }
+    ]
+  }
+}

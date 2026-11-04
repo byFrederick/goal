@@ -54,20 +54,32 @@ tasks:
     cmds:
       - sh deploy/terraform/tests/sops-roundtrip.sh
 
+  tf:guard-test:
+    desc: Run the bound-secrets guard (deploy/terraform/scripts/bound-secrets-guard.sh) against its fixture plans and Worker settings, offline
+    cmds:
+      - sh deploy/terraform/tests/bound-secrets-guard-test.sh
+
   tf:check:
-    desc: Everything task check runs on deploy/terraform/ (fmt -check, validate, tflint, terraform test, the sops round trip), offline
+    desc: Everything task check runs on deploy/terraform/ (fmt -check, validate, tflint, terraform test, the sops round trip, the bound-secrets guard's test), offline
     dir: deploy/terraform
     cmds:
       - terraform fmt -check -recursive
       - task: tf:test
       - task: tf:lint
       - task: tf:sops-test
+      - task: tf:guard-test
 
   tf:plan:
     desc: terraform plan of production against its R2 state, changing no infrastructure (extra flags after --)
     cmds:
       - task: tf:run
         vars: { TF_COMMAND: plan }
+
+  tf:show:
+    desc: terraform show against production's R2 state (task tf:show -- -json tfplan prints a saved plan as JSON, sensitive values in the clear; the Terraform workflows pipe it into the bound-secrets guard)
+    cmds:
+      - task: tf:run
+        vars: { TF_COMMAND: show }
 
   tf:apply:
     desc: terraform apply of production (shows the plan and asks, or applies a saved plan; extra flags after --). Run by the apply-on-merge workflow (.github/workflows/terraform-apply.yml); agents never run it, the owner only for bootstrap and break-glass

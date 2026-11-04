@@ -1,0 +1,21 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.13.0",
+  "resource_changes": [
+    {
+      "address": "module.secrets.cloudflare_secrets_store_secret.this[\"NEW_KEY\"]",
+      "type": "cloudflare_secrets_store_secret",
+      "change": { "actions": ["create"], "before": null, "after": { "name": "goal-test-NEW_KEY" } }
+    },
+    {
+      "address": "module.secrets.cloudflare_secrets_store_secret.this[\"UNUSED_KEY\"]",
+      "type": "cloudflare_secrets_store_secret",
+      "change": { "actions": ["delete"], "before": { "name": "goal-test-UNUSED_KEY" }, "after": null }
+    },
+    {
+      "address": "random_password.generated[\"gateway_key\"]",
+      "type": "random_password",
+      "change": { "actions": ["delete"], "before": { "length": 48 }, "after": null }
+    }
+  ]
+}

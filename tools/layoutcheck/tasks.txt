@@ -55,8 +55,10 @@ test-integration
 tf:apply
 tf:check
 tf:fmt
+tf:guard-test
 tf:lint
 tf:plan
+tf:show
 tf:sops-test
 tf:test
 tf:validate
