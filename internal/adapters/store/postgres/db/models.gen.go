@@ -407,4 +407,5 @@ type WorkItem struct {
 	Untrusted         bool
 	StartAt           *time.Time
 	StartedAt         *time.Time
+	Triage            bool
 }

@@ -49,7 +49,8 @@ type FileRequest struct {
 	// Priority is ignored for a part, which takes its assembly's.
 	Priority int
 	// Station, State and Class are where a trigger places its item; the line's first station,
-	// its arrival state and the type's class when empty. Only a trigger sets them.
+	// its arrival state and the type's class when empty. Only a trigger sets them, and a
+	// follow-up its Class (always standard, ADR 0040 decision 8).
 	Station string
 	State   ItemState
 	Class   ClassOfService
@@ -124,7 +125,7 @@ func File(l Line, r FileRequest) (NewItem, error) {
 	return n, nil
 }
 
-// checkOrigin checks r's origin and via, then its lineage.
+// checkOrigin checks r's origin, via and class, then its lineage.
 func checkOrigin(r FileRequest) error {
 	switch {
 	case !slices.Contains([]Origin{OriginPerson, OriginPlan, OriginTrigger, OriginFollowUp}, r.Origin):
@@ -133,6 +134,8 @@ func checkOrigin(r FileRequest) error {
 		return fmt.Errorf("only a person files through %q, not a %s: %w", r.Via, r.Origin, ErrInvalid)
 	case r.Via != "" && !slices.Contains([]Via{ViaWeb, ViaCLI, ViaAPI}, r.Via):
 		return fmt.Errorf("unknown via %q: %w", r.Via, ErrInvalid)
+	case r.Class != "" && r.Origin != OriginTrigger && r.Origin != OriginFollowUp:
+		return fmt.Errorf("only a trigger or a follow-up sets its item's class: %w", ErrInvalid)
 	}
 
 	return checkLineage(r)
@@ -150,7 +153,7 @@ func checkLineage(r FileRequest) error {
 		return fmt.Errorf("a person's item is never untrusted: %w", ErrInvalid)
 	case (r.Assembly != nil) != (r.Origin == OriginPlan):
 		return fmt.Errorf("only a part has an assembly: %w", ErrInvalid)
-	case (r.Station != "" || r.State != "" || r.Class != "") && r.Origin != OriginTrigger:
+	case (r.Station != "" || r.State != "") && r.Origin != OriginTrigger:
 		return fmt.Errorf("only a trigger places its item: %w", ErrInvalid)
 	}
 

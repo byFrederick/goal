@@ -69,6 +69,8 @@ type Engine interface {
 	SetLane(ctx context.Context, id domain.ItemID, lane string, by domain.Actor) (domain.Item, error)
 	SetStart(ctx context.Context, id domain.ItemID, r domain.StartRequest, by domain.Actor) (domain.Item, error)
 	StartNow(ctx context.Context, id domain.ItemID, by domain.Actor) (domain.Item, error)
+	DropFollowUp(ctx context.Context, item domain.ItemID, id domain.FollowUpID, by domain.Actor) (domain.FollowUp, error)
+	FileFollowUp(ctx context.Context, item domain.ItemID, id domain.FollowUpID, r domain.FileRequest) (domain.Item, error)
 	Pause(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Cancel(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)
@@ -720,7 +722,7 @@ func problemOf(err error) gen.Problem {
 	// definitions' (all wrap ports.ErrNameTaken); the secrets' and the credentials' before the
 	// connections' (all wrap ports.ErrNoMasterKey).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, exportProblem, policyProblem, notificationProblem, signupDomainProblem, edgeProblem, partProblem, secretProblem, environmentTestProblem, repositoryTestProblem, credentialProblem, webhookProblem, viewProblem, connectionProblem, knowledgeProblem, watchProblem, keptTestProblem, jonahProblem, definitionProblem,
+		fixedProblem, followUpProblem, exportProblem, policyProblem, notificationProblem, signupDomainProblem, edgeProblem, partProblem, secretProblem, environmentTestProblem, repositoryTestProblem, credentialProblem, webhookProblem, viewProblem, connectionProblem, knowledgeProblem, watchProblem, keptTestProblem, jonahProblem, definitionProblem,
 		controlProblem, questionProblem, toolApprovalProblem, agentProblem, draftRequestProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {

@@ -708,6 +708,51 @@ func (e FileChangeOp) Valid() bool {
 	}
 }
 
+// Defines values for FollowUpState.
+const (
+	FollowUpStateDelivered FollowUpState = "delivered"
+	FollowUpStateDropped   FollowUpState = "dropped"
+	FollowUpStateFiled     FollowUpState = "filed"
+	FollowUpStateWaiting   FollowUpState = "waiting"
+)
+
+// Valid indicates whether the value is a known member of the FollowUpState enum.
+func (e FollowUpState) Valid() bool {
+	switch e {
+	case FollowUpStateDelivered:
+		return true
+	case FollowUpStateDropped:
+		return true
+	case FollowUpStateFiled:
+		return true
+	case FollowUpStateWaiting:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FollowUpTarget.
+const (
+	FollowUpTargetNote   FollowUpTarget = "note"
+	FollowUpTargetStart  FollowUpTarget = "start"
+	FollowUpTargetTriage FollowUpTarget = "triage"
+)
+
+// Valid indicates whether the value is a known member of the FollowUpTarget enum.
+func (e FollowUpTarget) Valid() bool {
+	switch e {
+	case FollowUpTargetNote:
+		return true
+	case FollowUpTargetStart:
+		return true
+	case FollowUpTargetTriage:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HealthStatus.
 const (
 	HealthStatusOk HealthStatus = "ok"
@@ -3882,6 +3927,19 @@ type FileContent struct {
 	union json.RawMessage
 }
 
+// FileFollowUpRequest defines model for FileFollowUpRequest.
+type FileFollowUpRequest struct {
+	Body *string `json:"body,omitempty"`
+	Lane *string `json:"lane,omitempty"`
+
+	// Start When the item may start; absent, as soon as it can
+	Start *Start `json:"start,omitempty"`
+	Title string `json:"title"`
+
+	// Type One of the factory's work types; absent or empty, the first it declares, or none when it declares none
+	Type *string `json:"type,omitempty"`
+}
+
 // FileInfo defines model for FileInfo.
 type FileInfo struct {
 	Path   string `json:"path"`
@@ -3898,6 +3956,36 @@ type FileList struct {
 
 // FileMap Files by slash-separated relative path
 type FileMap map[string]FileContent
+
+// FollowUp Work an agent noticed outside its item, kept on the item (ADR 0040): a note for an open item, a start for an item of its own when the work lands, or text for the factory's triage item
+type FollowUp struct {
+	Agent     string    `json:"agent"`
+	CreatedAt time.Time `json:"created_at"`
+
+	// FiledItemId The item it was filed as or onto, a triage item for target triage
+	FiledItemId *string `json:"filed_item_id,omitempty"`
+	Id          string  `json:"id"`
+
+	// ItemId The source item
+	ItemId string `json:"item_id"`
+
+	// Reason Why it was dropped, or why it went to triage instead of where it said
+	Reason *string       `json:"reason,omitempty"`
+	State  FollowUpState `json:"state"`
+
+	// Station The station whose run wrote it
+	Station string `json:"station"`
+
+	// Target Where it goes, or went; absent for one dropped as it was read
+	Target *FollowUpTarget `json:"target,omitempty"`
+	Text   string          `json:"text"`
+}
+
+// FollowUpState defines model for FollowUp.State.
+type FollowUpState string
+
+// FollowUpTarget Where it goes, or went; absent for one dropped as it was read
+type FollowUpTarget string
 
 // GateTally defines model for GateTally.
 type GateTally struct {
@@ -7913,6 +8001,9 @@ type FactoryRef = string
 // FilePath defines model for FilePath.
 type FilePath = string
 
+// FollowUpRef defines model for FollowUpRef.
+type FollowUpRef = string
+
 // IfMatch defines model for IfMatch.
 type IfMatch = string
 
@@ -8505,6 +8596,9 @@ type AnswerItemJSONRequestBody = ItemAnswer
 
 // CancelItemJSONRequestBody defines body for CancelItem for application/json ContentType.
 type CancelItemJSONRequestBody = CancelRequest
+
+// FileFollowUpJSONRequestBody defines body for FileFollowUp for application/json ContentType.
+type FileFollowUpJSONRequestBody = FileFollowUpRequest
 
 // SetItemLaneJSONRequestBody defines body for SetItemLane for application/json ContentType.
 type SetItemLaneJSONRequestBody = SetLaneRequest
@@ -10106,6 +10200,31 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/events (the `ListItemEvents` operationId).
 	ListItemEvents(ctx context.Context, org OrgRef, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DropFollowUp Drop a waiting follow-up of an item so it is never delivered or filed
+	//
+	// The follow-up becomes dropped, its reason naming the caller ("dropped by user:<id>"). File can file it again later. Problems: 404 follow-up-not-found for a follow-up that is not this item's; 409 follow-up-state when it is not waiting.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/drop (the `DropFollowUp` operationId).
+	DropFollowUp(ctx context.Context, org OrgRef, item ItemRef, followUp FollowUpRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// FileFollowUpWithBody File an item from a dropped follow-up or one in a closed triage item
+	//
+	// Files an item in the source item's factory at its first station, as createItem does, with origin follow-up, the caller as its filer, a generation one above the source's and the source's untrusted flag; the follow-up becomes filed with that item. Only a dropped follow-up, or one whose triage item is done or cancelled, can be filed. Problems: 400 for what the factory does not take (a type, a lane, a start); 404 follow-up-not-found for a follow-up that is not this item's; 409 follow-up-state for any other follow-up.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/file (the `FileFollowUp` operationId).
+	FileFollowUpWithBody(ctx context.Context, org OrgRef, item ItemRef, followUp FollowUpRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// FileFollowUp File an item from a dropped follow-up or one in a closed triage item
+	//
+	// Files an item in the source item's factory at its first station, as createItem does, with origin follow-up, the caller as its filer, a generation one above the source's and the source's untrusted flag; the follow-up becomes filed with that item. Only a dropped follow-up, or one whose triage item is done or cancelled, can be filed. Problems: 400 for what the factory does not take (a type, a lane, a start); 404 follow-up-not-found for a follow-up that is not this item's; 409 follow-up-state for any other follow-up.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/file (the `FileFollowUp` operationId).
+	FileFollowUp(ctx context.Context, org OrgRef, item ItemRef, followUp FollowUpRef, body FileFollowUpJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SetItemLaneWithBody Set an open item's lane
 	//
@@ -13700,6 +13819,61 @@ func (c *Client) CancelItem(ctx context.Context, org OrgRef, item ItemRef, body 
 // Corresponds with GET /v1/orgs/{org}/items/{item}/events (the `ListItemEvents` operationId).
 func (c *Client) ListItemEvents(ctx context.Context, org OrgRef, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListItemEventsRequest(c.Server, org, item, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DropFollowUp Drop a waiting follow-up of an item so it is never delivered or filed
+//
+// The follow-up becomes dropped, its reason naming the caller ("dropped by user:<id>"). File can file it again later. Problems: 404 follow-up-not-found for a follow-up that is not this item's; 409 follow-up-state when it is not waiting.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/drop (the `DropFollowUp` operationId).
+func (c *Client) DropFollowUp(ctx context.Context, org OrgRef, item ItemRef, followUp FollowUpRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDropFollowUpRequest(c.Server, org, item, followUp)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// FileFollowUpWithBody File an item from a dropped follow-up or one in a closed triage item
+//
+// Files an item in the source item's factory at its first station, as createItem does, with origin follow-up, the caller as its filer, a generation one above the source's and the source's untrusted flag; the follow-up becomes filed with that item. Only a dropped follow-up, or one whose triage item is done or cancelled, can be filed. Problems: 400 for what the factory does not take (a type, a lane, a start); 404 follow-up-not-found for a follow-up that is not this item's; 409 follow-up-state for any other follow-up.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/file (the `FileFollowUp` operationId).
+func (c *Client) FileFollowUpWithBody(ctx context.Context, org OrgRef, item ItemRef, followUp FollowUpRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFileFollowUpRequestWithBody(c.Server, org, item, followUp, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// FileFollowUp File an item from a dropped follow-up or one in a closed triage item
+//
+// Files an item in the source item's factory at its first station, as createItem does, with origin follow-up, the caller as its filer, a generation one above the source's and the source's untrusted flag; the follow-up becomes filed with that item. Only a dropped follow-up, or one whose triage item is done or cancelled, can be filed. Problems: 400 for what the factory does not take (a type, a lane, a start); 404 follow-up-not-found for a follow-up that is not this item's; 409 follow-up-state for any other follow-up.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/file (the `FileFollowUp` operationId).
+func (c *Client) FileFollowUp(ctx context.Context, org OrgRef, item ItemRef, followUp FollowUpRef, body FileFollowUpJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewFileFollowUpRequest(c.Server, org, item, followUp, body)
 	if err != nil {
 		return nil, err
 	}
@@ -22164,6 +22338,115 @@ func NewListItemEventsRequest(server string, org OrgRef, item ItemRef, params *L
 	return req, nil
 }
 
+// NewDropFollowUpRequest constructs an http.Request for the DropFollowUp method
+func NewDropFollowUpRequest(server string, org OrgRef, item ItemRef, followUp FollowUpRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "followUp", followUp, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/follow-ups/%s/drop", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewFileFollowUpRequest calls the generic FileFollowUp builder with application/json body
+func NewFileFollowUpRequest(server string, org OrgRef, item ItemRef, followUp FollowUpRef, body FileFollowUpJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewFileFollowUpRequestWithBody(server, org, item, followUp, "application/json", bodyReader)
+}
+
+// NewFileFollowUpRequestWithBody constructs an http.Request for the FileFollowUp method, with any body, and a specified content type
+func NewFileFollowUpRequestWithBody(server string, org OrgRef, item ItemRef, followUp FollowUpRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "item", item, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "followUp", followUp, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/items/%s/follow-ups/%s/file", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewSetItemLaneRequest calls the generic SetItemLane builder with application/json body
 func NewSetItemLaneRequest(server string, org OrgRef, item ItemRef, body SetItemLaneJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -27682,6 +27965,33 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/items/{item}/events (the `ListItemEvents` operationId).
 	ListItemEventsWithResponse(ctx context.Context, org OrgRef, item ItemRef, params *ListItemEventsParams, reqEditors ...RequestEditorFn) (*ListItemEventsResponse, error)
+
+	// DropFollowUpWithResponse Drop a waiting follow-up of an item so it is never delivered or filed
+	//
+	// The follow-up becomes dropped, its reason naming the caller ("dropped by user:<id>"). File can file it again later. Problems: 404 follow-up-not-found for a follow-up that is not this item's; 409 follow-up-state when it is not waiting.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/drop (the `DropFollowUp` operationId).
+	DropFollowUpWithResponse(ctx context.Context, org OrgRef, item ItemRef, followUp FollowUpRef, reqEditors ...RequestEditorFn) (*DropFollowUpResponse, error)
+
+	// FileFollowUpWithBodyWithResponse File an item from a dropped follow-up or one in a closed triage item
+	//
+	// Files an item in the source item's factory at its first station, as createItem does, with origin follow-up, the caller as its filer, a generation one above the source's and the source's untrusted flag; the follow-up becomes filed with that item. Only a dropped follow-up, or one whose triage item is done or cancelled, can be filed. Problems: 400 for what the factory does not take (a type, a lane, a start); 404 follow-up-not-found for a follow-up that is not this item's; 409 follow-up-state for any other follow-up.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/file (the `FileFollowUp` operationId).
+	FileFollowUpWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, followUp FollowUpRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FileFollowUpResponse, error)
+
+	// FileFollowUpWithResponse File an item from a dropped follow-up or one in a closed triage item
+	//
+	// Files an item in the source item's factory at its first station, as createItem does, with origin follow-up, the caller as its filer, a generation one above the source's and the source's untrusted flag; the follow-up becomes filed with that item. Only a dropped follow-up, or one whose triage item is done or cancelled, can be filed. Problems: 400 for what the factory does not take (a type, a lane, a start); 404 follow-up-not-found for a follow-up that is not this item's; 409 follow-up-state for any other follow-up.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/file (the `FileFollowUp` operationId).
+	FileFollowUpWithResponse(ctx context.Context, org OrgRef, item ItemRef, followUp FollowUpRef, body FileFollowUpJSONRequestBody, reqEditors ...RequestEditorFn) (*FileFollowUpResponse, error)
 
 	// SetItemLaneWithBodyWithResponse Set an open item's lane
 	//
@@ -34370,6 +34680,116 @@ func (r ListItemEventsResponse) ContentType() string {
 	return ""
 }
 
+type DropFollowUpResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *FollowUp
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Conflict
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DropFollowUpResponse) GetJSON200() *FollowUp {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r DropFollowUpResponse) GetApplicationproblemJSON409() *Conflict {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DropFollowUpResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DropFollowUpResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DropFollowUpResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DropFollowUpResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DropFollowUpResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type FileFollowUpResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Item
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Conflict
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r FileFollowUpResponse) GetJSON201() *Item {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r FileFollowUpResponse) GetApplicationproblemJSON409() *Conflict {
+	return r.ApplicationproblemJSON409
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r FileFollowUpResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r FileFollowUpResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r FileFollowUpResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r FileFollowUpResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r FileFollowUpResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type SetItemLaneResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -40532,6 +40952,51 @@ func (c *ClientWithResponses) ListItemEventsWithResponse(ctx context.Context, or
 	return ParseListItemEventsResponse(rsp)
 }
 
+// DropFollowUpWithResponse Drop a waiting follow-up of an item so it is never delivered or filed
+//
+// The follow-up becomes dropped, its reason naming the caller ("dropped by user:<id>"). File can file it again later. Problems: 404 follow-up-not-found for a follow-up that is not this item's; 409 follow-up-state when it is not waiting.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/drop (the `DropFollowUp` operationId).
+func (c *ClientWithResponses) DropFollowUpWithResponse(ctx context.Context, org OrgRef, item ItemRef, followUp FollowUpRef, reqEditors ...RequestEditorFn) (*DropFollowUpResponse, error) {
+	rsp, err := c.DropFollowUp(ctx, org, item, followUp, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDropFollowUpResponse(rsp)
+}
+
+// FileFollowUpWithBodyWithResponse File an item from a dropped follow-up or one in a closed triage item
+//
+// Files an item in the source item's factory at its first station, as createItem does, with origin follow-up, the caller as its filer, a generation one above the source's and the source's untrusted flag; the follow-up becomes filed with that item. Only a dropped follow-up, or one whose triage item is done or cancelled, can be filed. Problems: 400 for what the factory does not take (a type, a lane, a start); 404 follow-up-not-found for a follow-up that is not this item's; 409 follow-up-state for any other follow-up.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/file (the `FileFollowUp` operationId).
+func (c *ClientWithResponses) FileFollowUpWithBodyWithResponse(ctx context.Context, org OrgRef, item ItemRef, followUp FollowUpRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*FileFollowUpResponse, error) {
+	rsp, err := c.FileFollowUpWithBody(ctx, org, item, followUp, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFileFollowUpResponse(rsp)
+}
+
+// FileFollowUpWithResponse File an item from a dropped follow-up or one in a closed triage item
+//
+// Files an item in the source item's factory at its first station, as createItem does, with origin follow-up, the caller as its filer, a generation one above the source's and the source's untrusted flag; the follow-up becomes filed with that item. Only a dropped follow-up, or one whose triage item is done or cancelled, can be filed. Problems: 400 for what the factory does not take (a type, a lane, a start); 404 follow-up-not-found for a follow-up that is not this item's; 409 follow-up-state for any other follow-up.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/file (the `FileFollowUp` operationId).
+func (c *ClientWithResponses) FileFollowUpWithResponse(ctx context.Context, org OrgRef, item ItemRef, followUp FollowUpRef, body FileFollowUpJSONRequestBody, reqEditors ...RequestEditorFn) (*FileFollowUpResponse, error) {
+	rsp, err := c.FileFollowUp(ctx, org, item, followUp, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseFileFollowUpResponse(rsp)
+}
+
 // SetItemLaneWithBodyWithResponse Set an open item's lane
 //
 // The lane picks the agent at the stations that route by lane; the item stays at its station and in its state, and a lane_set event (from, to) records the change. The lane is trimmed; when any station of the item's line routes by lane, it must be one of the lanes routed. 400 lane-required or unknown-lane; 409 item-closed (done or cancelled), item-in-progress (pause or move it first: its agent was chosen by the old lane), item-is-assembly (its parts carry their own lanes), same-lane or item-changed.
@@ -46159,6 +46624,86 @@ func ParseListItemEventsResponse(rsp *http.Response) (*ListItemEventsResponse, e
 	return response, nil
 }
 
+// ParseDropFollowUpResponse parses an HTTP response from a DropFollowUpWithResponse call
+func ParseDropFollowUpResponse(rsp *http.Response) (*DropFollowUpResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DropFollowUpResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FollowUp
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseFileFollowUpResponse parses an HTTP response from a FileFollowUpWithResponse call
+func ParseFileFollowUpResponse(rsp *http.Response) (*FileFollowUpResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &FileFollowUpResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Item
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseSetItemLaneResponse parses an HTTP response from a SetItemLaneWithResponse call
 func ParseSetItemLaneResponse(rsp *http.Response) (*SetItemLaneResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -49278,6 +49823,12 @@ type ServerInterface interface {
 	// ListItemEvents One page of an item's history, oldest first
 	// (GET /v1/orgs/{org}/items/{item}/events)
 	ListItemEvents(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, params ListItemEventsParams)
+	// DropFollowUp Drop a waiting follow-up of an item so it is never delivered or filed
+	// (POST /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/drop)
+	DropFollowUp(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, followUp FollowUpRef)
+	// FileFollowUp File an item from a dropped follow-up or one in a closed triage item
+	// (POST /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/file)
+	FileFollowUp(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, followUp FollowUpRef)
 	// SetItemLane Set an open item's lane
 	// (POST /v1/orgs/{org}/items/{item}/lane)
 	SetItemLane(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef)
@@ -54623,6 +55174,94 @@ func (siw *ServerInterfaceWrapper) ListItemEvents(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// DropFollowUp operation middleware
+func (siw *ServerInterfaceWrapper) DropFollowUp(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "followUp" -------------
+	var followUp FollowUpRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "followUp", r.PathValue("followUp"), &followUp, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "followUp", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DropFollowUp(w, r, org, item, followUp)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// FileFollowUp operation middleware
+func (siw *ServerInterfaceWrapper) FileFollowUp(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "item" -------------
+	var item ItemRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "item", r.PathValue("item"), &item, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "item", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "followUp" -------------
+	var followUp FollowUpRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "followUp", r.PathValue("followUp"), &followUp, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "followUp", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.FileFollowUp(w, r, org, item, followUp)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SetItemLane operation middleware
 func (siw *ServerInterfaceWrapper) SetItemLane(w http.ResponseWriter, r *http.Request) {
 
@@ -57911,6 +58550,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/start", wrapper.SetItemStart)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/pause", wrapper.PauseItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/cancel", wrapper.CancelItem)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/follow-ups/{followUp}/drop", wrapper.DropFollowUp)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/follow-ups/{followUp}/file", wrapper.FileFollowUp)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/retry", wrapper.RetryItem)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/items/{item}/merge", wrapper.MergeItem)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/builder/meta", wrapper.GetBuilderMeta)
@@ -62866,6 +63507,121 @@ func (response ListItemEventsdefaultApplicationProblemPlusJSONResponse) VisitLis
 	return err
 }
 
+type DropFollowUpRequestObject struct {
+	Org      OrgRef      `json:"org"`
+	Item     ItemRef     `json:"item"`
+	FollowUp FollowUpRef `json:"followUp"`
+}
+
+type DropFollowUpResponseObject interface {
+	VisitDropFollowUpResponse(w http.ResponseWriter) error
+}
+
+type DropFollowUp200JSONResponse FollowUp
+
+func (response DropFollowUp200JSONResponse) VisitDropFollowUpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DropFollowUp409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response DropFollowUp409ApplicationProblemPlusJSONResponse) VisitDropFollowUpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DropFollowUpdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DropFollowUpdefaultApplicationProblemPlusJSONResponse) VisitDropFollowUpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type FileFollowUpRequestObject struct {
+	Org      OrgRef      `json:"org"`
+	Item     ItemRef     `json:"item"`
+	FollowUp FollowUpRef `json:"followUp"`
+	Body     *FileFollowUpJSONRequestBody
+}
+
+type FileFollowUpResponseObject interface {
+	VisitFileFollowUpResponse(w http.ResponseWriter) error
+}
+
+type FileFollowUp201JSONResponse Item
+
+func (response FileFollowUp201JSONResponse) VisitFileFollowUpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type FileFollowUp409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response FileFollowUp409ApplicationProblemPlusJSONResponse) VisitFileFollowUpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type FileFollowUpdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response FileFollowUpdefaultApplicationProblemPlusJSONResponse) VisitFileFollowUpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type SetItemLaneRequestObject struct {
 	Org  OrgRef  `json:"org"`
 	Item ItemRef `json:"item"`
@@ -66733,6 +67489,12 @@ type StrictServerInterface interface {
 	// ListItemEvents One page of an item's history, oldest first
 	// (GET /v1/orgs/{org}/items/{item}/events)
 	ListItemEvents(ctx context.Context, request ListItemEventsRequestObject) (ListItemEventsResponseObject, error)
+	// DropFollowUp Drop a waiting follow-up of an item so it is never delivered or filed
+	// (POST /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/drop)
+	DropFollowUp(ctx context.Context, request DropFollowUpRequestObject) (DropFollowUpResponseObject, error)
+	// FileFollowUp File an item from a dropped follow-up or one in a closed triage item
+	// (POST /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/file)
+	FileFollowUp(ctx context.Context, request FileFollowUpRequestObject) (FileFollowUpResponseObject, error)
 	// SetItemLane Set an open item's lane
 	// (POST /v1/orgs/{org}/items/{item}/lane)
 	SetItemLane(ctx context.Context, request SetItemLaneRequestObject) (SetItemLaneResponseObject, error)
@@ -70496,6 +71258,69 @@ func (sh *strictHandler) ListItemEvents(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListItemEventsResponseObject); ok {
 		if err := validResponse.VisitListItemEventsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DropFollowUp operation middleware
+func (sh *strictHandler) DropFollowUp(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, followUp FollowUpRef) {
+	var request DropFollowUpRequestObject
+
+	request.Org = org
+	request.Item = item
+	request.FollowUp = followUp
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DropFollowUp(ctx, request.(DropFollowUpRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DropFollowUp")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DropFollowUpResponseObject); ok {
+		if err := validResponse.VisitDropFollowUpResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// FileFollowUp operation middleware
+func (sh *strictHandler) FileFollowUp(w http.ResponseWriter, r *http.Request, org OrgRef, item ItemRef, followUp FollowUpRef) {
+	var request FileFollowUpRequestObject
+
+	request.Org = org
+	request.Item = item
+	request.FollowUp = followUp
+
+	var body FileFollowUpJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.FileFollowUp(ctx, request.(FileFollowUpRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "FileFollowUp")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(FileFollowUpResponseObject); ok {
+		if err := validResponse.VisitFileFollowUpResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

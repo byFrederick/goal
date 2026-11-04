@@ -112,6 +112,8 @@ type Item struct {
 	// zero until then. Lead time counts from it.
 	StartAt   time.Time
 	StartedAt time.Time
+	// Triage marks a factory's triage item, which collects follow-ups (ADR 0040 decision 10).
+	Triage bool
 }
 
 // LeadFrom is when the item's lead time starts: StartedAt, or CreatedAt when it has not started

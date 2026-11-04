@@ -988,6 +988,32 @@ discardDraft         pat-demoted      404 factory-not-found    404 org-not-found
 discardDraft         pat-removed      401 unauthenticated      401 unauthenticated
 discardDraft         pat-platform     200                      404 org-not-found
 discardDraft         pat-deleted-org  401 unauthenticated      401 unauthenticated
+dropFollowUp         anonymous        401 unauthenticated      401 unauthenticated
+dropFollowUp         owner            200                      404 org-not-found
+dropFollowUp         admin            200                      404 org-not-found
+dropFollowUp         viewer           403 forbidden            404 org-not-found
+dropFollowUp         approver         200                      404 org-not-found
+dropFollowUp         editor           200                      404 org-not-found
+dropFollowUp         member-no-roles  404 item-not-found       404 org-not-found
+dropFollowUp         other-org-owner  404 org-not-found        200
+dropFollowUp         platform-admin   404 org-not-found        404 org-not-found
+dropFollowUp         stale-owner      200                      404 org-not-found
+dropFollowUp         key-scoped       200                      404 org-not-found
+dropFollowUp         key-restricted   404 item-not-found       404 org-not-found
+dropFollowUp         key-other-org    404 org-not-found        200
+dropFollowUp         key-expired      401 unauthenticated      401 unauthenticated
+dropFollowUp         key-revoked      401 unauthenticated      401 unauthenticated
+dropFollowUp         bearer-owner     200                      404 org-not-found
+dropFollowUp         pat-approver     403 forbidden            404 org-not-found
+dropFollowUp         pat-owner        200                      404 org-not-found
+dropFollowUp         pat-viewer       403 forbidden            404 org-not-found
+dropFollowUp         pat-other-org    404 org-not-found        200
+dropFollowUp         pat-expired      401 unauthenticated      401 unauthenticated
+dropFollowUp         pat-revoked      401 unauthenticated      401 unauthenticated
+dropFollowUp         pat-demoted      404 item-not-found       404 org-not-found
+dropFollowUp         pat-removed      401 unauthenticated      401 unauthenticated
+dropFollowUp         pat-platform     200                      404 org-not-found
+dropFollowUp         pat-deleted-org  401 unauthenticated      401 unauthenticated
 editProposal         anonymous        401 unauthenticated      401 unauthenticated
 editProposal         owner            200                      404 org-not-found
 editProposal         admin            200                      404 org-not-found
@@ -1066,6 +1092,32 @@ exportSpend          pat-demoted      200                      404 org-not-found
 exportSpend          pat-removed      401 unauthenticated      401 unauthenticated
 exportSpend          pat-platform     200                      404 org-not-found
 exportSpend          pat-deleted-org  401 unauthenticated      401 unauthenticated
+fileFollowUp         anonymous        401 unauthenticated      401 unauthenticated
+fileFollowUp         owner            200                      404 org-not-found
+fileFollowUp         admin            200                      404 org-not-found
+fileFollowUp         viewer           403 forbidden            404 org-not-found
+fileFollowUp         approver         200                      404 org-not-found
+fileFollowUp         editor           200                      404 org-not-found
+fileFollowUp         member-no-roles  404 item-not-found       404 org-not-found
+fileFollowUp         other-org-owner  404 org-not-found        200
+fileFollowUp         platform-admin   404 org-not-found        404 org-not-found
+fileFollowUp         stale-owner      200                      404 org-not-found
+fileFollowUp         key-scoped       403 forbidden            404 org-not-found
+fileFollowUp         key-restricted   404 item-not-found       404 org-not-found
+fileFollowUp         key-other-org    404 org-not-found        200
+fileFollowUp         key-expired      401 unauthenticated      401 unauthenticated
+fileFollowUp         key-revoked      401 unauthenticated      401 unauthenticated
+fileFollowUp         bearer-owner     200                      404 org-not-found
+fileFollowUp         pat-approver     200                      404 org-not-found
+fileFollowUp         pat-owner        200                      404 org-not-found
+fileFollowUp         pat-viewer       403 forbidden            404 org-not-found
+fileFollowUp         pat-other-org    404 org-not-found        200
+fileFollowUp         pat-expired      401 unauthenticated      401 unauthenticated
+fileFollowUp         pat-revoked      401 unauthenticated      401 unauthenticated
+fileFollowUp         pat-demoted      404 item-not-found       404 org-not-found
+fileFollowUp         pat-removed      401 unauthenticated      401 unauthenticated
+fileFollowUp         pat-platform     200                      404 org-not-found
+fileFollowUp         pat-deleted-org  401 unauthenticated      401 unauthenticated
 findKnowledgeFiles   anonymous        401 unauthenticated      401 unauthenticated
 findKnowledgeFiles   owner            200                      404 org-not-found
 findKnowledgeFiles   admin            200                      404 org-not-found
