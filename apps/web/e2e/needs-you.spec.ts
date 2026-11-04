@@ -14,6 +14,15 @@ test('the page lists what waits on you, with the count in the top bar', async ({
   await expectNoHorizontalScroll(page);
 });
 
+test('the Alerts tab lists the failing source and the conversion that waits on the factory', async ({ page }) => {
+  await page.goto('/o/acme/needs-you');
+  await page.getByRole('radio', { name: /^Alerts/ }).check({ force: true });
+  await expect(page).toHaveURL(/type=alert/);
+  const list = page.getByRole('list', { name: /Waiting on you/ });
+  await expect(list.getByText('dashboards does not sync')).toBeVisible();
+  await expect(list.getByText(/conversion|aws-prod/i).first()).toBeVisible();
+});
+
 test('the Decisions tab writes its type to the URL and hides the alerts', async ({ page }) => {
   await page.goto('/o/acme/needs-you');
   await page.getByRole('radio', { name: /^Decisions/ }).check({ force: true });

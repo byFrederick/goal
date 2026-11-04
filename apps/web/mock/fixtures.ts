@@ -418,6 +418,7 @@ const published = (id: string, number: number, at: string): VersionRef => ({
  * at the level, sorted, as goald answers the local user and an owner.
  */
 export const orgCan = [
+  'access:read',
   'api_key:manage',
   'api_key:read',
   'audit:read',
@@ -437,6 +438,8 @@ export const orgCan = [
   'org:transfer',
   'personal_token:manage',
   'personal_token:read',
+  'secret:manage',
+  'secret:read',
 ];
 export const factoryCan = [
   'andon:manage',
