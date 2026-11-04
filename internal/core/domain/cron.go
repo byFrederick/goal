@@ -10,7 +10,8 @@ import (
 
 // Cron is a standard five-field cron (minute, hour, day of the month, month and weekday) read in a
 // time zone, as a schedule trigger declares it (ADR 0026 decision 1). It takes numbers, *, ranges
-// (a-b), steps (*/n, a-b/n), lists and month and weekday names, like internal/config's check.
+// (a-b), steps (*/n, a-b/n), lists and month and weekday names, and nothing looser (no
+// @descriptors, no ?, no seconds); internal/config checks a definition's cron with CronProblem.
 // When both the day of month and the day of week are restricted (neither starts with *), a day matching either matches,
 // as in cron(8).
 type Cron struct {
@@ -48,21 +49,12 @@ func ParseCron(expr, timeZone string) (Cron, error) {
 		loc = l
 	}
 
+	sets, problem := cronSets(expr)
+	if problem != "" {
+		return Cron{}, fmt.Errorf("cron %q: %s: %w", expr, problem, ErrInvalid)
+	}
+
 	fields := strings.Fields(expr)
-	if len(fields) != len(cronSpecs) {
-		return Cron{}, fmt.Errorf("cron %q has %d fields, not 5: %w", expr, len(fields), ErrInvalid)
-	}
-
-	var sets [5]uint64
-
-	for i, f := range fields {
-		set, err := cronSpecs[i].parse(f)
-		if err != nil {
-			return Cron{}, fmt.Errorf("cron %q: %s %w", expr, cronSpecs[i].name, err)
-		}
-
-		sets[i] = set
-	}
 
 	return Cron{
 		minute: sets[0], hour: sets[1], dom: sets[2], month: sets[3], dow: sets[4],
@@ -70,7 +62,37 @@ func ParseCron(expr, timeZone string) (Cron, error) {
 	}, nil
 }
 
-func (cs cronSpec) parse(field string) (uint64, error) {
+// CronProblem says why expr is not a standard five-field cron, naming the field, and "" when
+// ParseCron reads it: config's check of a schedule trigger's cron, so the two never disagree.
+func CronProblem(expr string) string {
+	_, problem := cronSets(expr)
+
+	return problem
+}
+
+// cronSets are the values each of expr's five fields matches, or why it has none.
+func cronSets(expr string) ([5]uint64, string) {
+	var sets [5]uint64
+
+	fields := strings.Fields(expr)
+	if len(fields) != len(cronSpecs) {
+		return sets, fmt.Sprintf("it has %d fields, not 5", len(fields))
+	}
+
+	for i, f := range fields {
+		set, problem := cronSpecs[i].parse(f)
+		if problem != "" {
+			return sets, cronSpecs[i].name + " " + problem
+		}
+
+		sets[i] = set
+	}
+
+	return sets, ""
+}
+
+// parse is the set of values field matches, or why it is not a field of cs.
+func (cs cronSpec) parse(field string) (uint64, string) {
 	var set uint64
 
 	for part := range strings.SplitSeq(field, ",") {
@@ -80,7 +102,7 @@ func (cs cronSpec) parse(field string) (uint64, error) {
 		if stepped {
 			n, err := strconv.Atoi(stepText)
 			if err != nil || n < 1 {
-				return 0, fmt.Errorf("%q has a step that is not a whole number of at least 1: %w", part, ErrInvalid)
+				return 0, fmt.Sprintf("%q has a step that is not a whole number of at least 1", part)
 			}
 
 			step = n
@@ -91,7 +113,7 @@ func (cs cronSpec) parse(field string) (uint64, error) {
 		if base != "*" {
 			from, to, ranged := strings.Cut(base, "-")
 			if !ranged && stepped {
-				return 0, fmt.Errorf("%q steps from a single value: %w", part, ErrInvalid)
+				return 0, fmt.Sprintf("%q steps from a single value; use a range or *", part)
 			}
 
 			if !ranged {
@@ -105,9 +127,9 @@ func (cs cronSpec) parse(field string) (uint64, error) {
 
 			switch {
 			case !okLo || !okHi:
-				return 0, fmt.Errorf("%q is not a value in %d-%d: %w", part, cs.lo, cs.hi, ErrInvalid)
+				return 0, fmt.Sprintf("%q is not a value in %d-%d", part, cs.lo, cs.hi)
 			case lo > hi:
-				return 0, fmt.Errorf("%q runs backwards: %w", part, ErrInvalid)
+				return 0, fmt.Sprintf("%q runs backwards", part)
 			}
 		}
 
@@ -116,7 +138,7 @@ func (cs cronSpec) parse(field string) (uint64, error) {
 		}
 	}
 
-	return set, nil
+	return set, ""
 }
 
 func (cs cronSpec) value(s string) (int, bool) {
@@ -171,6 +193,21 @@ func (c Cron) Latest(after, upTo time.Time) time.Time {
 	}
 
 	return last
+}
+
+// Between is how many instants c matches later than after and at or before upTo, at most limit,
+// with the first and the last of those it counted: a schedule's gap (ADR 0040 decision 16). n is
+// 0, and first and last zero, when there is none.
+func (c Cron) Between(after, upTo time.Time, limit int) (first, last time.Time, n int) {
+	for t := c.Next(after); !t.IsZero() && !t.After(upTo) && n < limit; t = c.Next(t) {
+		if n == 0 {
+			first = t
+		}
+
+		last, n = t, n+1
+	}
+
+	return first, last, n
 }
 
 func (c Cron) dayMatches(t time.Time) bool {

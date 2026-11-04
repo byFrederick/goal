@@ -254,6 +254,8 @@ func TestIntake_RLSAndGrants(t *testing.T) {
 		}
 	}
 
+	firingsPrunedAndChecked(t, d, in, acme, labs, s.Endpoint.FactoryID)
+
 	// Without an organization, goal_app reaches an endpoint's organization and the prune only
 	// through the definers.
 	if org, err := in.EndpointOrg(t.Context(), s.Endpoint.ID); err != nil || org != acme {
@@ -262,6 +264,31 @@ func TestIntake_RLSAndGrants(t *testing.T) {
 
 	if n, err := in.PruneDeliveries(t.Context(), time.Now().Add(domain.DeliveryRetention+time.Hour)); err != nil || n != 1 {
 		t.Errorf("PruneDeliveries = %d, %v; want 1", n, err)
+	}
+}
+
+// firingsPrunedAndChecked checks migration 00121 and the firings' prune (ADR 0040 decision 16):
+// the database refuses a missed firing without instants and a count on any other outcome, labs
+// prunes none of acme's firings, and acme's goal_app deletes its old ones through PruneFirings.
+func firingsPrunedAndChecked(t *testing.T, d connectionsDB, in *Intake, acme, labs domain.OrgID, factory domain.FactoryID) {
+	t.Helper()
+
+	for _, row := range []string{`'missed', 0`, `'skipped', 2`, `'missed', -1`} {
+		stmt := `INSERT INTO trigger_firings (id, factory_id, trigger, source, event_key, idempotency_key, outcome, missed, at)
+			VALUES (gen_random_uuid(), '` + string(factory) + `', 'nightly-audit', 'schedule', 'schedule', 'bad', ` + row + `, now())`
+		if err := inOrgTx(t, d.store.pool, acme, func(tx pgx.Tx) error { _, err := tx.Exec(t.Context(), stmt); return err }); err == nil {
+			t.Errorf("the database took a firing of outcome and count %s", row)
+		}
+	}
+
+	later := time.Now().Add(domain.FiringRetention + time.Hour)
+
+	if n, err := in.PruneFirings(domain.WithOrg(t.Context(), labs), factory, later); err != nil || n != 0 {
+		t.Errorf("labs PruneFirings = %d, %v; want none of acme's", n, err)
+	}
+
+	if n, err := in.PruneFirings(domain.WithOrg(t.Context(), acme), factory, later); err != nil || n != 1 {
+		t.Errorf("PruneFirings = %d, %v; want acme's one firing", n, err)
 	}
 }
 

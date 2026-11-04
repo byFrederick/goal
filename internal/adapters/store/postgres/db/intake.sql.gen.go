@@ -216,9 +216,9 @@ func (q *Queries) InsertReceivedDelivery(ctx context.Context, arg InsertReceived
 }
 
 const insertTriggerFiring = `-- name: InsertTriggerFiring :one
-INSERT INTO trigger_firings (id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, at)
+INSERT INTO trigger_firings (id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, missed, at)
 VALUES ($1, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11)
+        $7, $8, $9, $10, $11, $12)
 ON CONFLICT (org_id, factory_id, trigger, idempotency_key) DO NOTHING
 RETURNING id
 `
@@ -234,6 +234,7 @@ type InsertTriggerFiringParams struct {
 	Outcome        string
 	Reason         string
 	ItemID         *uuid.UUID
+	Missed         int32
 	At             time.Time
 }
 
@@ -250,6 +251,7 @@ func (q *Queries) InsertTriggerFiring(ctx context.Context, arg InsertTriggerFiri
 		arg.Outcome,
 		arg.Reason,
 		arg.ItemID,
+		arg.Missed,
 		arg.At,
 	)
 	var id uuid.UUID
@@ -593,6 +595,27 @@ func (q *Queries) OrgWebhooks(ctx context.Context) ([]OrgWebhooksRow, error) {
 	return items, nil
 }
 
+const pruneTriggerFirings = `-- name: PruneTriggerFirings :execrows
+DELETE FROM trigger_firings f
+WHERE f.factory_id = $1 AND f.at < $2
+  AND NOT EXISTS (SELECT 1 FROM work_items w WHERE w.id = f.item_id AND w.state NOT IN ('done', 'cancelled'))
+`
+
+type PruneTriggerFiringsParams struct {
+	FactoryID uuid.UUID
+	Before    time.Time
+}
+
+// The factory's firings from before the instant, but for those whose item is still open, which
+// only.dedupe reads (ADR 0040 decision 16).
+func (q *Queries) PruneTriggerFirings(ctx context.Context, arg PruneTriggerFiringsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, pruneTriggerFirings, arg.FactoryID, arg.Before)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const pruneWebhookDeliveries = `-- name: PruneWebhookDeliveries :one
 SELECT goal_prune_webhook_deliveries($1::timestamptz)::bigint AS deleted
 `
@@ -822,7 +845,7 @@ func (q *Queries) TriggerFailureStreak(ctx context.Context, arg TriggerFailureSt
 }
 
 const triggerFiringByKey = `-- name: TriggerFiringByKey :one
-SELECT id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, at FROM trigger_firings
+SELECT id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, missed, at FROM trigger_firings
 WHERE factory_id = $1 AND trigger = $2 AND idempotency_key = $3
 `
 
@@ -843,6 +866,7 @@ type TriggerFiringByKeyRow struct {
 	Outcome        string
 	Reason         string
 	ItemID         *uuid.UUID
+	Missed         int32
 	At             time.Time
 }
 
@@ -860,13 +884,14 @@ func (q *Queries) TriggerFiringByKey(ctx context.Context, arg TriggerFiringByKey
 		&i.Outcome,
 		&i.Reason,
 		&i.ItemID,
+		&i.Missed,
 		&i.At,
 	)
 	return i, err
 }
 
 const triggerFirings = `-- name: TriggerFirings :many
-SELECT f.id, f.factory_id, f.trigger, f.source, f.event_key, f.idempotency_key, f.dedupe, f.outcome, f.reason, f.item_id, f.at,
+SELECT f.id, f.factory_id, f.trigger, f.source, f.event_key, f.idempotency_key, f.dedupe, f.outcome, f.reason, f.item_id, f.missed, f.at,
        coalesce(w.number, 0)::bigint AS item_number,
        EXISTS (SELECT 1 FROM item_events e WHERE e.item_id = f.item_id AND e.kind = 'merged') AS merged
 FROM trigger_firings f
@@ -893,6 +918,7 @@ type TriggerFiringsRow struct {
 	Outcome        string
 	Reason         string
 	ItemID         *uuid.UUID
+	Missed         int32
 	At             time.Time
 	ItemNumber     int64
 	Merged         bool
@@ -919,6 +945,7 @@ func (q *Queries) TriggerFirings(ctx context.Context, arg TriggerFiringsParams) 
 			&i.Outcome,
 			&i.Reason,
 			&i.ItemID,
+			&i.Missed,
 			&i.At,
 			&i.ItemNumber,
 			&i.Merged,
@@ -1148,6 +1175,52 @@ type WebhookDeliveryRow struct {
 func (q *Queries) WebhookDelivery(ctx context.Context, arg WebhookDeliveryParams) (WebhookDeliveryRow, error) {
 	row := q.db.QueryRow(ctx, webhookDelivery, arg.EndpointID, arg.ID)
 	var i WebhookDeliveryRow
+	err := row.Scan(
+		&i.ID,
+		&i.EndpointID,
+		&i.ReceivedAt,
+		&i.Headers,
+		&i.Body,
+		&i.Outcome,
+		&i.Reason,
+		&i.ItemID,
+		&i.DeliveryID,
+		&i.Event,
+		&i.Receipt,
+		&i.Duplicates,
+	)
+	return i, err
+}
+
+const webhookDeliveryBySender = `-- name: WebhookDeliveryBySender :one
+SELECT id, endpoint_id, received_at, headers, body, outcome, reason, item_id, delivery_id, event, receipt, duplicates FROM webhook_deliveries
+WHERE endpoint_id = $1 AND delivery_id = $2::text
+`
+
+type WebhookDeliveryBySenderParams struct {
+	EndpointID uuid.UUID
+	DeliveryID string
+}
+
+type WebhookDeliveryBySenderRow struct {
+	ID         uuid.UUID
+	EndpointID uuid.UUID
+	ReceivedAt time.Time
+	Headers    []byte
+	Body       []byte
+	Outcome    string
+	Reason     string
+	ItemID     *uuid.UUID
+	DeliveryID *string
+	Event      string
+	Receipt    *string
+	Duplicates int32
+}
+
+// The webhook's kept delivery with the sender's id, for trying a trigger on it.
+func (q *Queries) WebhookDeliveryBySender(ctx context.Context, arg WebhookDeliveryBySenderParams) (WebhookDeliveryBySenderRow, error) {
+	row := q.db.QueryRow(ctx, webhookDeliveryBySender, arg.EndpointID, arg.DeliveryID)
+	var i WebhookDeliveryBySenderRow
 	err := row.Scan(
 		&i.ID,
 		&i.EndpointID,

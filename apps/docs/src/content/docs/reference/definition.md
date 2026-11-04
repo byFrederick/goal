@@ -141,24 +141,24 @@ object, required.
     - `only`: object. Checks made before an item is created, in this order.
       - `failuresInARow`: integer. Passes when the same check failed on the last n events for it.
       - `dedupe`: string matching `^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`. An event field, dotted (check.name); passes when no open item this trigger created holds the same value of it.
-      - `modelAgrees`: object. The model check, run last: passes when a model answers yes to the question about the event, which it reads as untrusted data.
-        - `question`: string, required. The yes or no question the model answers about the event: not blank, at most 500 characters.
-        - `key`: string. The {{secret}} that pays for the check; runtime.modelKey when unset.
+      - `modelAgrees`: object. Ignored (ADR 0040): the model check is removed. A trigger that has it skips every event that reaches it, and the definition loads with the warning field-ignored: turn the trigger into a check.
+        - `question`: string, required. The yes or no question the model answered. Ignored.
+        - `key`: string. The {{secret}} that paid for the check. Ignored.
         - `connection`: string. Removed by ADR 0037 (moved-to-environment): set key. Accepted so versions published before still load and run until Goal converts them.
-        - `model`: string. The model asked; the default model when unset.
+        - `model`: string. The model asked. Ignored.
     - `create`: object, required. The item the trigger creates.
       - `type`: string, required. One of board.workTypes.
       - `station`: string, required. The station id the item starts at.
       - `lane`: string. The item's lane: a key of that station's route.
       - `expedite`: boolean. Put the item in the expedite flow.
-      - `title`: string. The item's title; {{field}} placeholders take the event's normalized fields, and {{payload.&lt;path&gt;}} any field of its body.
-      - `brief`: string. The item's brief; {{field}} and {{payload.&lt;path&gt;}} placeholders take the event's values, which reach agents only as untrusted data.
+      - `title`: string. The item's title; {{field}} placeholders take the event's normalized fields, and {{payload.&lt;path&gt;}} any field of its body, each quoted, on one line and at most 200 characters. The title is cut to 300 characters.
+      - `brief`: string. The item's brief, or the path of a Markdown file in the definition that holds it (./triggers/&lt;name&gt;.md), as an agent's prompt is; {{field}} and {{payload.&lt;path&gt;}} placeholders take the event's values, which reach agents only as untrusted data.
       - `trusted`: boolean. File the item a delivery makes as trusted, so a person need not merge its work. Refused for the gitlab and token senders, and on a GitHub webhook unless filter.authors is set.
     - `limits`: object. Caps on what the trigger creates.
       - `perDay`: integer. At most this many items created by the trigger since the start of the UTC day.
       - `perHour`: integer. At most this many items created by the trigger in the hour before an event. Defaults to 10 for an event trigger; a schedule has none.
       - `pauseOnBudget`: boolean. Skip events while the factory's budget is spent (today the weekly budget).
-  - `intake`: array of object. Deprecated and ignored: nothing reads it, and board.triggers replaces it (ADR 0026). Still accepted so existing definitions load.
+  - `intake`: array of object. Ignored: board.triggers replaces it (ADR 0026, ADR 0040). Still accepted so existing definitions load, with the warning field-ignored.
     - `source`: one of `"manual"`, `"github-issues"`, `"schedule"`, `"webhook"`, `"email"`, required.
     - `repo`: string.
     - `labels`: array of string.

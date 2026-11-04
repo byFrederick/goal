@@ -570,3 +570,52 @@ func TestTryTrigger_Refusals(t *testing.T) {
 		t.Errorf("trigger.tried entries = %d, want none for refused tries", len(tried))
 	}
 }
+
+// Intake answers the definition's disabled triggers as its suggestions, in definition order, so
+// the web names no station or work type of its own (ADR 0040 decision 17).
+func TestIntake_SuggestionsAreTheDisabledTriggers(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	var in gen.Intake
+	if code := h.call(t, http.MethodGet, intakePath, "", &in); code != http.StatusOK {
+		t.Fatalf("intake = %d", code)
+	}
+
+	if len(in.Suggestions) != 1 {
+		t.Fatalf("suggestions = %+v; want deploy-failed only", in.Suggestions)
+	}
+
+	s := in.Suggestions[0]
+	if got := fmt.Sprintf("%s: %s on %s, when %q, creates %s at %s expedite %v titled %q", s.Name, s.Source, s.On, s.When,
+		s.Create.Type, s.Create.Station, s.Create.Expedite, s.Create.Title); got != `deploy-failed: webhook on ci-hooks.deploy, when "ci-hooks.deploy", creates fix at inbox expedite false titled "A deploy failed"` {
+		t.Errorf("suggestion = %s", got)
+	}
+}
+
+// A schedule's missed gap shows among the trigger's events with its outcome, its reason and how
+// many instants it covers (ADR 0040 decision 16).
+func TestIntakeTrigger_MissedEvent(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	if _, _, err := h.intake.RecordFiring(inOrg(t), domain.TriggerFiring{
+		FactoryID: acmeID, Trigger: nightlyName, Source: domain.TriggerSchedule, EventKey: domain.OnSchedule,
+		IdempotencyKey: "missed/2026-10-20T04:00:00Z", Outcome: domain.FiringMissed, Missed: 3,
+		Reason: "3 instants were not fired", At: oct(22, 4),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var d gen.IntakeTriggerDetail
+	if code := h.call(t, http.MethodGet, intakePath+"/triggers/"+nightlyName, "", &d); code != http.StatusOK || len(d.Events) != 1 {
+		t.Fatalf("trigger = %d %+v; want its one event", code, d.Events)
+	}
+
+	if e := d.Events[0]; e.Outcome != gen.IntakeEventOutcomeMissed || e.Missed != 3 || e.ItemNumber != nil ||
+		e.Reason == nil || *e.Reason != "3 instants were not fired" {
+		t.Errorf("event = %+v; want missed, 3 instants, with its reason", e)
+	}
+}

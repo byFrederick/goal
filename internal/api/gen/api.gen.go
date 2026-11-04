@@ -829,6 +829,7 @@ func (e InboxEntryKind) Valid() bool {
 const (
 	IntakeEventOutcomeCreated IntakeEventOutcome = "created"
 	IntakeEventOutcomeMerged  IntakeEventOutcome = "merged"
+	IntakeEventOutcomeMissed  IntakeEventOutcome = "missed"
 	IntakeEventOutcomeSkipped IntakeEventOutcome = "skipped"
 )
 
@@ -838,6 +839,8 @@ func (e IntakeEventOutcome) Valid() bool {
 	case IntakeEventOutcomeCreated:
 		return true
 	case IntakeEventOutcomeMerged:
+		return true
+	case IntakeEventOutcomeMissed:
 		return true
 	case IntakeEventOutcomeSkipped:
 		return true
@@ -1947,6 +1950,27 @@ func (e TriedTryVerdict) Valid() bool {
 	case TriedTryVerdictNotFixed:
 		return true
 	case TriedTryVerdictUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TriggerSuggestionSource.
+const (
+	TriggerSuggestionSourceGithub   TriggerSuggestionSource = "github"
+	TriggerSuggestionSourceSchedule TriggerSuggestionSource = "schedule"
+	TriggerSuggestionSourceWebhook  TriggerSuggestionSource = "webhook"
+)
+
+// Valid indicates whether the value is a known member of the TriggerSuggestionSource enum.
+func (e TriggerSuggestionSource) Valid() bool {
+	switch e {
+	case TriggerSuggestionSourceGithub:
+		return true
+	case TriggerSuggestionSourceSchedule:
+		return true
+	case TriggerSuggestionSourceWebhook:
 		return true
 	default:
 		return false
@@ -4134,6 +4158,9 @@ type Intake struct {
 		Webhook  int `json:"webhook"`
 	} `json:"sources"`
 
+	// Suggestions The triggers the definition ships disabled, in definition order: what Intake and the onboarding Intake step offer to turn on, so no client names a station, agent or work type of its own. Each is also in triggers.
+	Suggestions []TriggerSuggestion `json:"suggestions"`
+
 	// To The UTC day the newest of them was created; null without items
 	To *openapi_types.Date `json:"to"`
 
@@ -4143,6 +4170,7 @@ type Intake struct {
 
 // IntakeEvent defines model for IntakeEvent.
 type IntakeEvent struct {
+	// At When it fired; for missed, the gap's last instant
 	At time.Time `json:"at"`
 
 	// Event The event key it matched
@@ -4154,17 +4182,20 @@ type IntakeEvent struct {
 	// ItemNumber The item it created; null when it created none or that item is gone
 	ItemNumber *int64 `json:"item_number"`
 
-	// Outcome created an item; merged once that item has been merged; skipped with the reason
+	// Missed How many schedule instants a missed event covers; 0 for any other outcome
+	Missed int `json:"missed"`
+
+	// Outcome created an item; merged once that item has been merged; skipped with the reason; missed: a schedule's instants passed by more than 5 minutes while no goald ran, and none was fired late
 	Outcome IntakeEventOutcome `json:"outcome"`
 
-	// Reason Why it was skipped; null otherwise
+	// Reason Why it was skipped or what it missed; null otherwise
 	Reason *string `json:"reason"`
 
 	// Title The event's value of the trigger's only.dedupe field, or its event key without one
 	Title string `json:"title"`
 }
 
-// IntakeEventOutcome created an item; merged once that item has been merged; skipped with the reason
+// IntakeEventOutcome created an item; merged once that item has been merged; skipped with the reason; missed: a schedule's instants passed by more than 5 minutes while no goald ran, and none was fired late
 type IntakeEventOutcome string
 
 // IntakeTrigger defines model for IntakeTrigger.
@@ -7451,7 +7482,31 @@ type TriedTryState string
 // TriedTryVerdict fixed or not_fixed: whether the try fixed what sent the item back; unknown: its grade can't be trusted; error: the try could not be carried out (error says why). Absent while the try waits to run or to be graded.
 type TriedTryVerdict string
 
-// TriggerTry What the trigger would do with the event now. Every string shaped by the event (the item's title and brief, the model's reason, a step's reason) is text to show as text, never markup.
+// TriggerSuggestion defines model for TriggerSuggestion.
+type TriggerSuggestion struct {
+	Create struct {
+		Expedite bool    `json:"expedite"`
+		Lane     *string `json:"lane"`
+		Station  string  `json:"station"`
+
+		// Title create.title as written, with its {{field}} placeholders; empty when the definition sets none
+		Title string `json:"title"`
+		Type  string `json:"type"`
+	} `json:"create"`
+	Name string `json:"name"`
+
+	// On The trigger's event key, as in the definition
+	On     string                  `json:"on"`
+	Source TriggerSuggestionSource `json:"source"`
+
+	// When As IntakeTrigger's when: the cron and its time zone for a schedule, the event key otherwise
+	When string `json:"when"`
+}
+
+// TriggerSuggestionSource defines model for TriggerSuggestion.Source.
+type TriggerSuggestionSource string
+
+// TriggerTry What the saved trigger would do with the event now. Every string shaped by the event (the item's title and brief, a step's reason) is text to show as text, never markup.
 type TriggerTry struct {
 	// Firing The firing tried
 	Firing string `json:"firing"`
@@ -7472,7 +7527,7 @@ type TriggerTry struct {
 	// Matched The event reached the trigger (its when step passed)
 	Matched bool `json:"matched"`
 
-	// ModelCheck The model check's answer; null when it did not run or gave no answer
+	// ModelCheck Deprecated and always null; the model check is removed (ADR 0040 decision 18)
 	ModelCheck *struct {
 		// CostUsd What the check cost
 		CostUsd      float64 `json:"cost_usd"`
@@ -7493,7 +7548,7 @@ type TriggerTry struct {
 	// Reason The reason a skipped firing would record (the step, a colon and why); null for would_create
 	Reason *string `json:"reason"`
 
-	// Steps In the order they run: when, each configured only condition (failuresInARow, dedupe, then modelAgrees), create, then each configured limit (perDay, pauseOnBudget). Steps after the one that skipped are not_reached.
+	// Steps In the order they run: when, each configured only condition (failuresInARow, dedupe, then a deprecated modelAgrees, which always skips), create, then each configured limit (perDay, pauseOnBudget). Steps after the one that skipped are not_reached.
 	Steps []TriggerTryStep `json:"steps"`
 }
 
@@ -7502,7 +7557,7 @@ type TriggerTryOutcome string
 
 // TriggerTryRequest defines model for TriggerTryRequest.
 type TriggerTryRequest struct {
-	// Firing The id of one of the trigger's 20 newest events
+	// Firing The id of one of the trigger's 20 newest events: a schedule's, or a delivery's while its webhook keeps it (30 days)
 	Firing string `json:"firing"`
 }
 
@@ -9767,7 +9822,7 @@ type ClientInterface interface {
 
 	// GetIntake Where the factory's newest items came from, and its triggers
 	//
-	// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+	// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake (the `GetIntake` operationId).
 	GetIntake(ctx context.Context, org OrgRef, factory FactoryRef, params *GetIntakeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -9781,7 +9836,7 @@ type ClientInterface interface {
 
 	// TryIntakeTriggerWithBody Try the trigger with one of its past events, creating nothing
 	//
-	// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+	// A dry run (ADR 0028 decision 2): the trigger, as the current definition saves it, evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. A firing keeps no event's fields, so a schedule's event is rebuilt from its instant and a delivery's from the body its webhook still keeps (30 days), read only from a webhook open to the factory (ADR 0040 decision 18). 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a missed event, or a delivery whose body is no longer kept.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -9790,7 +9845,7 @@ type ClientInterface interface {
 
 	// TryIntakeTrigger Try the trigger with one of its past events, creating nothing
 	//
-	// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+	// A dry run (ADR 0028 decision 2): the trigger, as the current definition saves it, evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. A firing keeps no event's fields, so a schedule's event is rebuilt from its instant and a delivery's from the body its webhook still keeps (30 days), read only from a webhook open to the factory (ADR 0040 decision 18). 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a missed event, or a delivery whose body is no longer kept.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -12815,7 +12870,7 @@ func (c *Client) TestEnvironment(ctx context.Context, org OrgRef, factory Factor
 
 // GetIntake Where the factory's newest items came from, and its triggers
 //
-// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
 //
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake (the `GetIntake` operationId).
 func (c *Client) GetIntake(ctx context.Context, org OrgRef, factory FactoryRef, params *GetIntakeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -12849,7 +12904,7 @@ func (c *Client) GetIntakeTrigger(ctx context.Context, org OrgRef, factory Facto
 
 // TryIntakeTriggerWithBody Try the trigger with one of its past events, creating nothing
 //
-// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+// A dry run (ADR 0028 decision 2): the trigger, as the current definition saves it, evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. A firing keeps no event's fields, so a schedule's event is rebuilt from its instant and a delivery's from the body its webhook still keeps (30 days), read only from a webhook open to the factory (ADR 0040 decision 18). 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a missed event, or a delivery whose body is no longer kept.
 //
 // Takes any type of body and a specified content type.
 //
@@ -12868,7 +12923,7 @@ func (c *Client) TryIntakeTriggerWithBody(ctx context.Context, org OrgRef, facto
 
 // TryIntakeTrigger Try the trigger with one of its past events, creating nothing
 //
-// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+// A dry run (ADR 0028 decision 2): the trigger, as the current definition saves it, evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. A firing keeps no event's fields, so a schedule's event is rebuilt from its instant and a delivery's from the body its webhook still keeps (30 days), read only from a webhook open to the factory (ADR 0040 decision 18). 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a missed event, or a delivery whose body is no longer kept.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -27460,7 +27515,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetIntakeWithResponse Where the factory's newest items came from, and its triggers
 	//
-	// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+	// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -27478,7 +27533,7 @@ type ClientWithResponsesInterface interface {
 
 	// TryIntakeTriggerWithBodyWithResponse Try the trigger with one of its past events, creating nothing
 	//
-	// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+	// A dry run (ADR 0028 decision 2): the trigger, as the current definition saves it, evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. A firing keeps no event's fields, so a schedule's event is rebuilt from its instant and a delivery's from the body its webhook still keeps (30 days), read only from a webhook open to the factory (ADR 0040 decision 18). 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a missed event, or a delivery whose body is no longer kept.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -27487,7 +27542,7 @@ type ClientWithResponsesInterface interface {
 
 	// TryIntakeTriggerWithResponse Try the trigger with one of its past events, creating nothing
 	//
-	// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+	// A dry run (ADR 0028 decision 2): the trigger, as the current definition saves it, evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. A firing keeps no event's fields, so a schedule's event is rebuilt from its instant and a delivery's from the body its webhook still keeps (30 days), read only from a webhook open to the factory (ADR 0040 decision 18). 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a missed event, or a delivery whose body is no longer kept.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -40098,7 +40153,7 @@ func (c *ClientWithResponses) TestEnvironmentWithResponse(ctx context.Context, o
 
 // GetIntakeWithResponse Where the factory's newest items came from, and its triggers
 //
-// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -40128,7 +40183,7 @@ func (c *ClientWithResponses) GetIntakeTriggerWithResponse(ctx context.Context, 
 
 // TryIntakeTriggerWithBodyWithResponse Try the trigger with one of its past events, creating nothing
 //
-// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+// A dry run (ADR 0028 decision 2): the trigger, as the current definition saves it, evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. A firing keeps no event's fields, so a schedule's event is rebuilt from its instant and a delivery's from the body its webhook still keeps (30 days), read only from a webhook open to the factory (ADR 0040 decision 18). 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a missed event, or a delivery whose body is no longer kept.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -40143,7 +40198,7 @@ func (c *ClientWithResponses) TryIntakeTriggerWithBodyWithResponse(ctx context.C
 
 // TryIntakeTriggerWithResponse Try the trigger with one of its past events, creating nothing
 //
-// A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+// A dry run (ADR 0028 decision 2): the trigger, as the current definition saves it, evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. A firing keeps no event's fields, so a schedule's event is rebuilt from its instant and a delivery's from the body its webhook still keeps (30 days), read only from a webhook open to the factory (ADR 0040 decision 18). 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a missed event, or a delivery whose body is no longer kept.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //

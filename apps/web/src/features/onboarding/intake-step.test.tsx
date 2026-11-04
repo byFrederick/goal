@@ -104,6 +104,7 @@ function intakeOf(triggers: IntakeTrigger[]): Intake {
     to: null,
     sources: { github: 0, people: 0, cli: 0, api: 0, schedule: 0, webhook: 0 },
     triggers,
+    suggestions: [],
   };
 }
 

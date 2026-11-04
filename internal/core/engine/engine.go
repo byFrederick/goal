@@ -127,9 +127,6 @@ type Deps struct {
 	// Events are the senders' event tables, which a delivery's fields are read by
 	// (deliveries.go); nil reads none, so deliveries match on their event and payload only.
 	Events ports.SenderEvents
-	// ModelCheck asks a model a trigger's only.modelAgrees question (modelcheck.go); nil skips
-	// every event of a trigger with one, "Model check failed" (ADR 0028 decision 3).
-	ModelCheck ports.ModelCheck
 	// Audit takes the trigger.tried entry of each trigger dry run (try.go); nil leaves TryTrigger
 	// failing with errNoAudit.
 	Audit ports.Audit
@@ -247,13 +244,12 @@ type Engine struct {
 	intake      ports.Intake
 	events      ports.SenderEvents
 	// holder names this instance's claims of delivery evaluations (deliveries.go).
-	holder     string
-	modelCheck ports.ModelCheck
-	audit      ports.Audit
-	outbox     ports.NotificationOutbox
-	clock      ports.Clock
-	log        *slog.Logger
-	cfg        Config
+	holder string
+	audit  ports.Audit
+	outbox ports.NotificationOutbox
+	clock  ports.Clock
+	log    *slog.Logger
+	cfg    Config
 
 	mu    sync.RWMutex
 	lines map[domain.FactoryID]domain.Line
@@ -321,7 +317,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 	return &Engine{
 		events: d.Events, holder: holder,
 		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, connections: d.Connections,
-		credentials: d.Credentials, orgSecrets: d.OrgSecrets, codehosts: d.CodeHosts, minters: d.Minters, policies: d.Policies, knowledge: d.Knowledge, intake: d.Intake, modelCheck: d.ModelCheck, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
+		credentials: d.Credentials, orgSecrets: d.OrgSecrets, codehosts: d.CodeHosts, minters: d.Minters, policies: d.Policies, knowledge: d.Knowledge, intake: d.Intake, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
 		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{}, warned: map[domain.FactoryID]bool{},
 	}, nil
 }

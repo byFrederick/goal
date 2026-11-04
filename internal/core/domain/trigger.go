@@ -95,9 +95,10 @@ type TriggerOnly struct {
 	// Dedupe is an event field: the check passes when no open item of the trigger has the same
 	// value of it; "" is no check.
 	Dedupe string
-	// ModelAgrees, run last and only when the others passed, passes when a model answers yes; nil
-	// is no check.
-	ModelAgrees *ModelAgrees
+	// ModelAgrees is a deprecated only.modelAgrees (ADR 0040 decision 18): the model check is
+	// gone, and a trigger that has one skips every event that reaches its step, with
+	// ModelCheckRemoved as the reason, until it is turned into a check.
+	ModelAgrees bool
 }
 
 // TriggerCreate is the item a trigger creates. Title and Brief are templates whose {{field}}
@@ -150,6 +151,20 @@ type IntakeEvent struct {
 	Bot    bool
 	// IdempotencyKey is the event's id, or the scheduled instant: a trigger fires once per key.
 	IdempotencyKey string
+}
+
+// Suggestions are l's disabled triggers, in declaration order: the triggers its definition
+// offers to turn on (ADR 0040 decision 17), so no client names a station, agent or work type.
+func (l Line) Suggestions() []Trigger {
+	var out []Trigger
+
+	for _, t := range l.Triggers {
+		if !t.Enabled {
+			out = append(out, t)
+		}
+	}
+
+	return out
 }
 
 // ParseOn reads a trigger's on: (ADR 0040 decision 14): the sender form <sender>.<event> gives
@@ -267,6 +282,22 @@ func truncate(s string, limit int) string {
 	}
 
 	return string([]rune(s)[:limit])
+}
+
+// MaxItemTitle is the most characters an item's title has (work_items.title).
+const MaxItemTitle = 300
+
+// EventTitle is the title of the item a trigger named name creates from ev with create.title tpl
+// (ADR 0040 decision 16): tpl rendered with each event value quoted, at most 200 characters and
+// on one line (RenderEventTemplate), trimmed and cut to MaxItemTitle; the trigger's name in words
+// when that is empty.
+func EventTitle(tpl string, ev IntakeEvent, name string) string {
+	title := truncate(strings.TrimSpace(RenderEventTemplate(tpl, ev, true)), MaxItemTitle)
+	if title == "" {
+		return Humanize(name)
+	}
+
+	return title
 }
 
 // RenderTemplate replaces each {{field}} placeholder of tpl (spaces inside the braces allowed)

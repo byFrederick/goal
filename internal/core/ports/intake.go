@@ -71,6 +71,10 @@ type Intake interface {
 	// Delivery is the endpoint's delivery id, with its headers and body. ErrNotFound when the
 	// endpoint has none with that id.
 	Delivery(ctx context.Context, endpoint domain.WebhookEndpointID, id domain.WebhookDeliveryID) (domain.WebhookDelivery, error)
+	// DeliveryBySender is the webhook's kept delivery whose sender's id is deliveryID
+	// (domain.WebhookDelivery.DeliveryID), with its body, for trying a trigger on it. ErrNotFound
+	// when the webhook keeps none with that id: never received, refused, or pruned.
+	DeliveryBySender(ctx context.Context, webhook domain.WebhookEndpointID, deliveryID string) (domain.WebhookDelivery, error)
 	// DeliveryDays counts the deliveries of the endpoints open to the factory (ListEndpoints), or
 	// of the organization's webhooks for factory "", received at or after since,
 	// per endpoint and UTC day, by endpoint then day; a day without deliveries has no entry.
@@ -151,6 +155,10 @@ type Intake interface {
 	// Firings are at most limit of the trigger's firings, newest first (at, then id), each with
 	// its item's number and whether that item has a merged event.
 	Firings(ctx context.Context, factory domain.FactoryID, trigger string, limit int) ([]domain.FiringEntry, error)
+	// PruneFirings deletes the factory's firings from before before, except those whose item is
+	// still open (neither done nor cancelled), which only.dedupe reads, and returns how many went
+	// (ADR 0040 decision 16).
+	PruneFirings(ctx context.Context, factory domain.FactoryID, before time.Time) (int, error)
 }
 
 // SenderEvents are the senders' event tables (ADR 0040 decision 14): which normalized fields an

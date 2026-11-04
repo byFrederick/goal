@@ -354,6 +354,27 @@ func (in *Intake) Delivery(ctx context.Context, endpoint domain.WebhookEndpointI
 	}
 }
 
+// DeliveryBySender implements ports.Intake.
+func (in *Intake) DeliveryBySender(ctx context.Context, webhook domain.WebhookEndpointID, deliveryID string) (domain.WebhookDelivery, error) {
+	wid, err := parseID("webhook", string(webhook))
+	if err != nil {
+		return domain.WebhookDelivery{}, err
+	}
+
+	r, err := fetch(ctx, in.s.read, func(q *db.Queries) (db.WebhookDeliveryBySenderRow, error) {
+		return q.WebhookDeliveryBySender(ctx, db.WebhookDeliveryBySenderParams{EndpointID: wid, DeliveryID: deliveryID})
+	})
+
+	switch {
+	case notFound(err):
+		return domain.WebhookDelivery{}, fmt.Errorf("delivery %s of webhook %s: %w", deliveryID, webhook, ports.ErrNotFound)
+	case err != nil:
+		return domain.WebhookDelivery{}, fmt.Errorf("delivery %s of webhook %s: %w", deliveryID, webhook, err)
+	default:
+		return deliveryFrom(db.WebhookDeliveriesRow(r))
+	}
+}
+
 // DeliveryDays implements ports.Intake.
 func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.DeliveryDay, error) {
 	var fid *uuid.UUID
@@ -549,7 +570,8 @@ func (in *Intake) RecordFiring(ctx context.Context, f domain.TriggerFiring) (dom
 	err = in.s.inTx(ctx, func(q *db.Queries) error {
 		_, err := q.InsertTriggerFiring(ctx, db.InsertTriggerFiringParams{
 			ID: id, FactoryID: factory, Trigger: f.Trigger, Source: string(f.Source), EventKey: f.EventKey,
-			IdempotencyKey: f.IdempotencyKey, Dedupe: f.Dedupe, Outcome: string(f.Outcome), Reason: f.Reason, ItemID: item, At: f.At,
+			IdempotencyKey: f.IdempotencyKey, Dedupe: f.Dedupe, Outcome: string(f.Outcome), Reason: f.Reason, ItemID: item,
+			Missed: int32(min(max(f.Missed, 0), math.MaxInt32)), At: f.At,
 		})
 
 		switch {
@@ -813,11 +835,29 @@ func (in *Intake) Firings(ctx context.Context, factory domain.FactoryID, trigger
 	for _, r := range rows {
 		out = append(out, domain.FiringEntry{Firing: firingFrom(db.TriggerFiringByKeyRow{
 			ID: r.ID, FactoryID: r.FactoryID, Trigger: r.Trigger, Source: r.Source, EventKey: r.EventKey, IdempotencyKey: r.IdempotencyKey,
-			Dedupe: r.Dedupe, Outcome: r.Outcome, Reason: r.Reason, ItemID: r.ItemID, At: r.At,
+			Dedupe: r.Dedupe, Outcome: r.Outcome, Reason: r.Reason, ItemID: r.ItemID, Missed: r.Missed, At: r.At,
 		}), ItemNumber: r.ItemNumber, Merged: r.Merged})
 	}
 
 	return out, nil
+}
+
+// PruneFirings implements ports.Intake, in the organization in ctx, through goal_app's DELETE
+// grant on trigger_firings.
+func (in *Intake) PruneFirings(ctx context.Context, factory domain.FactoryID, before time.Time) (int, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return 0, err
+	}
+
+	n, err := fetch(ctx, in.s.inTx, func(q *db.Queries) (int64, error) {
+		return q.PruneTriggerFirings(ctx, db.PruneTriggerFiringsParams{FactoryID: fid, Before: before})
+	})
+	if err != nil {
+		return 0, fmt.Errorf("prune firings of factory %s: %w", factory, err)
+	}
+
+	return int(n), nil
 }
 
 // newSecret generates a signing secret for endpoint id of org and seals it under the active key.
@@ -901,7 +941,7 @@ func firingFrom(r db.TriggerFiringByKeyRow) domain.TriggerFiring {
 	f := domain.TriggerFiring{
 		ID: r.ID.String(), FactoryID: domain.FactoryID(r.FactoryID.String()), Trigger: r.Trigger, Source: domain.TriggerSource(r.Source),
 		EventKey: r.EventKey, IdempotencyKey: r.IdempotencyKey, Dedupe: r.Dedupe, Outcome: domain.FiringOutcome(r.Outcome),
-		Reason: r.Reason, At: r.At.UTC(),
+		Reason: r.Reason, Missed: int(r.Missed), At: r.At.UTC(),
 	}
 
 	if r.ItemID != nil {

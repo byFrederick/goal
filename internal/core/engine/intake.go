@@ -18,9 +18,10 @@ var errNoIntake = errors.New("engine: no intake state (Deps.Intake)")
 // Intake hands an event to the triggers of its factory's current line (ADR 0026) and returns
 // one firing for each trigger it reached, in declaration order: every enabled trigger whose on:
 // and filter match it (domain.Trigger.Matches). A trigger it does not reach records nothing. For
-// each one reached, the checks run in order (only.failuresInARow, only.dedupe, only.modelAgrees,
-// limits.perDay, limits.perHour, limits.pauseOnBudget); the first that fails records a skipped firing whose reason starts with
-// its step, and when all pass the trigger creates its item and records a created firing with it.
+// each one reached, the checks run in order (only.failuresInARow, only.dedupe, a deprecated
+// only.modelAgrees, limits.perDay, limits.perHour, limits.pauseOnBudget); the first that fails
+// records a skipped firing whose reason starts with its step, and when all pass the trigger
+// creates its item and records a created firing with it.
 // Replaying an event with the same idempotency key returns the firing recorded first and creates
 // nothing. The factory must belong to the organization in ctx; any other is ports.ErrNotFound.
 // A trigger that fails does not stop the others: their firings are returned with the errors
@@ -102,7 +103,7 @@ func (e *Engine) fire(ctx context.Context, l domain.Line, t domain.Trigger, ev d
 
 	attrs := []any{
 		slog.String("org_id", string(l.OrgID)), slog.String("factory", string(l.FactoryID)), slog.String("trigger", t.Name),
-		slog.String("outcome", string(got.Outcome)), slog.String("reason", loggedReason(got.Reason)), slog.String("item", string(got.ItemID)),
+		slog.String("outcome", string(got.Outcome)), slog.String("reason", got.Reason), slog.String("item", string(got.ItemID)),
 	}
 
 	if !fresh {
@@ -115,11 +116,11 @@ func (e *Engine) fire(ctx context.Context, l domain.Line, t domain.Trigger, ev d
 }
 
 // evaluate runs t on ev at now as intake does, and as a try does (ADR 0028 decision 1): When,
-// only.failuresInARow, only.dedupe, only.modelAgrees (last of only, so the model is asked only
-// about events that would otherwise go on), Create (it renders the item, creating nothing), then
-// limits.perDay and limits.pauseOnBudget. It stops at the first step that skips the event. It only
-// reads, but for the model check's connection.used entry. Reasons hold no event text, but for the
-// model's reason and a dedupe skip's item id.
+// only.failuresInARow, only.dedupe, only.modelAgrees (last of only; the model check is removed, so
+// it skips every event that reaches it with domain.ModelCheckRemoved, ADR 0040 decision 18),
+// Create (it renders the item, creating nothing), then limits.perDay, limits.perHour and
+// limits.pauseOnBudget. It stops at the first step that skips the event, and only reads. Reasons
+// hold no event text, but for a dedupe skip's item id.
 func (e *Engine) evaluate(ctx context.Context, l domain.Line, t domain.Trigger, ev domain.IntakeEvent, now time.Time) (domain.TriggerEvaluation, error) {
 	out := domain.NewTriggerEvaluation(t)
 
@@ -136,17 +137,10 @@ func (e *Engine) evaluate(ctx context.Context, l domain.Line, t domain.Trigger, 
 		return out, err
 	}
 
-	if t.Only.ModelAgrees != nil {
-		ans, reason := e.modelAgrees(ctx, l, t, ev)
-		out.Model = ans
+	if t.Only.ModelAgrees {
+		out.Skip(domain.StepModel, domain.ModelCheckRemoved)
 
-		if ans == nil || !ans.Worth {
-			out.Skip(domain.StepModel, reason)
-
-			return out, nil
-		}
-
-		out.Pass(domain.StepModel, reason)
+		return out, nil
 	}
 
 	it, err := renderItem(l, t, ev)
@@ -221,16 +215,6 @@ func (e *Engine) onlyChecks(ctx context.Context, l domain.Line, t domain.Trigger
 	return false, nil
 }
 
-// loggedReason is a firing's reason as the log holds it: a model check's without the model's
-// words, which the event shaped.
-func loggedReason(reason string) string {
-	if strings.HasPrefix(reason, domain.StepModel+": ") {
-		return domain.StepModel
-	}
-
-	return reason
-}
-
 // limitChecks runs limits.perDay, limits.perHour, then limits.pauseOnBudget, into out.
 func (e *Engine) limitChecks(ctx context.Context, l domain.Line, t domain.Trigger, now time.Time, out *domain.TriggerEvaluation) error {
 	for _, c := range []struct {
@@ -283,8 +267,8 @@ func (e *Engine) limitChecks(ctx context.Context, l domain.Line, t domain.Trigge
 
 // renderItem is t's item for ev: at create.station in its arrival state, of create.type and
 // create.lane, expedite when create.expedite says so (else as the line classes the type). Its
-// title is create.title rendered with plain values (the trigger's name when that is empty), its
-// body create.brief rendered with quoted values and then the event's fields, with the payload
+// title is create.title rendered with quoted values (domain.EventTitle: the trigger's name when
+// that is empty), its body create.brief rendered with quoted values and then the event's fields, with the payload
 // values its templates read, in a block marked as untrusted data (ADR 0026 decision 5), so
 // domain.Item.Work carries both.
 func renderItem(l domain.Line, t domain.Trigger, ev domain.IntakeEvent) (domain.TriggerItem, error) {
@@ -298,10 +282,7 @@ func renderItem(l domain.Line, t domain.Trigger, ev domain.IntakeEvent) (domain.
 		class = domain.ClassExpedite
 	}
 
-	title := strings.TrimSpace(domain.RenderEventTemplate(t.Create.Title, ev, false))
-	if title == "" {
-		title = domain.Humanize(t.Name)
-	}
+	title := domain.EventTitle(t.Create.Title, ev, t.Name)
 
 	body := domain.UntrustedEventBlock(withUsedPayload(t, ev))
 	if brief := strings.TrimSpace(domain.RenderEventTemplate(t.Create.Brief, ev, true)); brief != "" {

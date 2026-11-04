@@ -26,6 +26,7 @@ const events: IntakeEvent[] = [
     outcome: 'created',
     item_number: 151,
     reason: null,
+    missed: 0,
   },
   {
     id: 'firing-s2',
@@ -35,6 +36,7 @@ const events: IntakeEvent[] = [
     outcome: 'skipped',
     item_number: null,
     reason: 'once',
+    missed: 0,
   },
 ];
 

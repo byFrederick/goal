@@ -12,6 +12,7 @@ const software: Intake = {
   from: '2026-10-20',
   to: '2026-10-26',
   sources: { github: 22, people: 11, cli: 0, api: 0, schedule: 7, webhook: 2 },
+  suggestions: [],
   triggers: [
     {
       name: 'issues-labeled-factory',
@@ -112,5 +113,5 @@ function triggersOf(yamlText: string): IntakeTrigger[] {
 /** The intake of the factory with this name, from its current version's factory.yaml when it has no fixture. */
 export function intakeOf(factory: string, yamlText: string): Intake {
   if (factory === 'software') return software;
-  return { items: 0, from: null, to: null, sources: none, triggers: triggersOf(yamlText) };
+  return { items: 0, from: null, to: null, sources: none, suggestions: [], triggers: triggersOf(yamlText) };
 }

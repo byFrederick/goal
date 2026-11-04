@@ -3,7 +3,8 @@ package domain
 import "fmt"
 
 // The steps of a trigger's evaluation, in the order they run (ADR 0028 decision 1): When, each
-// configured Only if condition (the model check last), Create, then each configured limit.
+// configured Only if condition (a deprecated model check last), Create, then each configured
+// limit.
 const (
 	StepWhen     = "when"
 	StepFailures = "only.failuresInARow"
@@ -14,6 +15,10 @@ const (
 	StepPerHour  = "limits.perHour"
 	StepBudget   = "limits.pauseOnBudget"
 )
+
+// ModelCheckRemoved is only.modelAgrees's reason: the model check is gone (ADR 0040 decision 18),
+// so a trigger that still has one skips its events, as a check that gave no answer did.
+const ModelCheckRemoved = "the model check is removed; turn this trigger into a check (check:) to have an agent decide"
 
 // DedupeSkip is only.dedupe's reason when item is open for the same value of field.
 func DedupeSkip(item ItemID, field string) string {
@@ -79,7 +84,7 @@ const (
 )
 
 // TriggerStep is one step of an evaluation. Reason is a sentence a person reads, without the
-// step's name; a model check's is the model's, so it is shaped by the event and untrusted.
+// step's name.
 type TriggerStep struct {
 	Step    string
 	Outcome StepOutcome
@@ -94,23 +99,21 @@ type TriggerItem struct {
 	State   ItemState
 	Lane    string
 	Class   ClassOfService
-	// Title is create.title rendered with plain values; Body is create.brief rendered with quoted
+	// Title is create.title rendered with quoted values (EventTitle); Body is create.brief rendered with quoted
 	// values, then the event's fields in a block marked as untrusted data (UntrustedEventBlock).
 	Title, Body string
 }
 
 // TriggerEvaluation is a trigger's evaluation of one event (ADR 0028 decision 1): each of its
-// steps in order, the item Create rendered (nil when Create was not reached) and the model check's
-// answer (nil when the check did not run or gave no answer).
+// steps in order and the item Create rendered (nil when Create was not reached).
 type TriggerEvaluation struct {
 	Steps []TriggerStep
 	Item  *TriggerItem
-	Model *ModelAnswer
 }
 
 // NewTriggerEvaluation is t's evaluation before any step ran: each step t has, every one not
 // reached. A check is one of t's steps when it is configured: only.failuresInARow above 0,
-// only.dedupe, only.modelAgrees, limits.perDay and limits.perHour above 0, and limits.pauseOnBudget.
+// only.dedupe, a deprecated only.modelAgrees, limits.perDay and limits.perHour above 0, and limits.pauseOnBudget.
 func NewTriggerEvaluation(t Trigger) TriggerEvaluation {
 	steps := []string{StepWhen}
 
@@ -122,7 +125,7 @@ func NewTriggerEvaluation(t Trigger) TriggerEvaluation {
 		steps = append(steps, StepDedupe)
 	}
 
-	if t.Only.ModelAgrees != nil {
+	if t.Only.ModelAgrees {
 		steps = append(steps, StepModel)
 	}
 

@@ -661,13 +661,13 @@ func TestLine_Triggers(t *testing.T) {
 	want := []domain.Trigger{
 		{
 			Name: "morning-sweep", Enabled: true, On: domain.OnSchedule, Cron: "0 8 * * MON-FRI", TimeZone: "Europe/Berlin",
-			Create: domain.TriggerCreate{Type: "question", Station: "inbox", Title: "Inbox sweep"},
+			Create: domain.TriggerCreate{Type: "question", Station: "inbox", Title: "Inbox sweep", Brief: supportSweepBrief},
 		},
 		{
 			Name: "shop-incident", Enabled: true, On: "shop-alerts.failed",
 			Filter: domain.TriggerFilter{Repo: []string{"acme/shop"}, SkipBots: true},
 			Only: domain.TriggerOnly{
-				FailuresInARow: 2, Dedupe: "service", ModelAgrees: &domain.ModelAgrees{Question: "Is this a real outage rather than a blip?"},
+				FailuresInARow: 2, Dedupe: "service", ModelAgrees: true,
 			},
 			Create: domain.TriggerCreate{
 				Type: workIncident, Station: "triage", Expedite: true, Title: "{{service}} is failing", Brief: "Alert: {{alert.summary}}",

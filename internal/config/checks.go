@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -67,6 +68,7 @@ const (
 	codeUnknownContract   = "unknown-contract"
 	codeUnknownStation    = "unknown-station"
 	codePromptNotFound    = "prompt-not-found"
+	codeBriefNotFound     = "brief-not-found"
 	codeSkillNotFound     = "skill-not-found"
 	codeContractNotFound  = "contract-not-found"
 	codeUnknownLane       = "unknown-lane"
@@ -107,10 +109,9 @@ const (
 	// running.
 	codeEvalsIgnored = "evals-ignored"
 
-	codeCronInvalid          = "cron-invalid"
-	codeTimeZoneInvalid      = "time-zone-invalid"
-	codePlaceholderInvalid   = "placeholder-invalid"
-	codeModelQuestionInvalid = "model-question-invalid"
+	codeCronInvalid        = "cron-invalid"
+	codeTimeZoneInvalid    = "time-zone-invalid"
+	codePlaceholderInvalid = "placeholder-invalid"
 
 	// codeOnNeedsEvent: on: names a sender with no event (github, not github.check_run).
 	codeOnNeedsEvent = "on-needs-event"
@@ -170,7 +171,7 @@ func (c *checker) run() []domain.DefinitionProblem {
 	c.tools()
 	c.outputContracts()
 	c.removedForms()
-	c.ignoredFields(ignoredKeys)
+	c.ignoredFields(append(slices.Clone(ignoredKeys), c.ignoredTriggerKeys()...))
 	c.moved()
 	c.environments()
 	c.evalsIgnored()
@@ -679,17 +680,39 @@ func (c *checker) removedForms() {
 	}
 }
 
-// ignoredKey is a key a decision retired, with what replaces it.
+// ignoredKey is a key a decision retired, with what replaces it and what to do ("remove it"
+// when fix is "").
 type ignoredKey struct {
 	path []string
 	why  string
+	fix  string
 }
 
-// ignoredKeys are the keys ADR 0039 retired (decision 17).
+// ignoredKeys are the keys ADR 0039 retired (decision 17), and board.intake, which ADR 0040
+// retired (decision 18).
 var ignoredKeys = []ignoredKey{
-	{at("spec", "learning", "jonah", "weeklyUsd"), "Jonah's budget is learning.jonah.share of what the line spent in the last 7 days"},
-	{at("spec", "learning", "librarian"), "Jonah proposes knowledge from the line"},
-	{at("spec", "learning", "kaizen"), "Jonah reviews the line once a day"},
+	{path: at("spec", "learning", "jonah", "weeklyUsd"), why: "Jonah's budget is learning.jonah.share of what the line spent in the last 7 days"},
+	{path: at("spec", "learning", "librarian"), why: "Jonah proposes knowledge from the line"},
+	{path: at("spec", "learning", "kaizen"), why: "Jonah reviews the line once a day"},
+	{path: at("spec", "board", "intake"), why: "board.triggers files the items"},
+}
+
+// ignoredTriggerKeys are each trigger's only.modelAgrees, which ADR 0040 retired (decision 18):
+// the trigger skips the events that reach it until it is turned into a check.
+func (c *checker) ignoredTriggerKeys() []ignoredKey {
+	var out []ignoredKey
+
+	for i, t := range c.f.Spec.Board.Triggers {
+		if t.Only != nil && t.Only.ModelAgrees != nil {
+			out = append(out, ignoredKey{
+				path: at("spec", "board", "triggers", i, "only", "modelAgrees"),
+				why:  "the model check is removed, so trigger " + t.Name + " skips the events that reach it",
+				fix:  "turn this into a check",
+			})
+		}
+	}
+
+	return out
 }
 
 // ignoredFields warns, code field-ignored, about each key of keys the definition still has. It
@@ -698,7 +721,7 @@ var ignoredKeys = []ignoredKey{
 func (c *checker) ignoredFields(keys []ignoredKey) {
 	for _, k := range keys {
 		if c.f.hasKey(k.path) {
-			c.warnf(checkIgnored, codeFieldIgnored, k.path, "%s is ignored: %s; remove it", strings.Join(k.path[1:], "."), k.why)
+			c.warnf(checkIgnored, codeFieldIgnored, k.path, "%s is ignored: %s; %s", strings.Join(k.path[1:], "."), k.why, cmp.Or(k.fix, "remove it"))
 		}
 	}
 }
@@ -819,6 +842,20 @@ func (f *Factory) hasKey(path []string) bool {
 	key, val := f.doc.lookup(path)
 
 	return val != nil && key != nil && key.Value == path[len(path)-1]
+}
+
+// briefText is the text of the brief file rel (BriefFile), and whether it exists.
+func (f *Factory) briefText(rel string) (string, bool) {
+	if f.files == nil {
+		return "", false
+	}
+
+	b, err := fs.ReadFile(f.files, path.Clean(rel))
+	if err != nil {
+		return "", false
+	}
+
+	return string(b), true
 }
 
 // exists reports whether rel names a file in the factory's tree. Spec paths are written

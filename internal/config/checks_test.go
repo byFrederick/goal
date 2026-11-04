@@ -376,7 +376,10 @@ func TestCheck_FixesPatchTheirSection(t *testing.T) {
 func TestCheck_IgnoredFieldsWarnAndDoNotRefuse(t *testing.T) {
 	t.Parallel()
 
-	doc := baseFactory + "  learning:\n" +
+	// board.intake and only.modelAgrees, retired by ADR 0040 decision 18, warn the same way.
+	board := replaced(withTriggers("dedupe: check.name }", `dedupe: check.name, modelAgrees: { question: "Is it real?" } }`),
+		"  board:\n", "  board:\n    intake: [{ source: manual }]\n")
+	doc := board + "  learning:\n" +
 		"    librarian: { agent: ghost, writes: [ghosts] }\n" +
 		"    kaizen: { schedule: weekly }\n" +
 		"    jonah: { weeklyUsd: 25 }\n"
@@ -392,7 +395,8 @@ func TestCheck_IgnoredFieldsWarnAndDoNotRefuse(t *testing.T) {
 	var want []int
 
 	for i, l := range strings.Split(doc, "\n") {
-		if strings.HasPrefix(l, "    librarian:") || strings.HasPrefix(l, "    kaizen:") || strings.HasPrefix(l, "    jonah:") {
+		if strings.HasPrefix(l, "    librarian:") || strings.HasPrefix(l, "    kaizen:") || strings.HasPrefix(l, "    jonah:") ||
+			strings.HasPrefix(l, "    intake:") || strings.Contains(l, "modelAgrees") {
 			want = append(want, i+1)
 		}
 	}
@@ -408,6 +412,24 @@ func TestCheck_IgnoredFieldsWarnAndDoNotRefuse(t *testing.T) {
 
 	if l.Jonah.Share != domain.DefaultJonahPolicy().Share {
 		t.Errorf("share = %v; weeklyUsd must not change it", l.Jonah.Share)
+	}
+
+	checkModelAgreesIgnored(t, l, problems)
+}
+
+// checkModelAgreesIgnored checks that red-main keeps its modelAgrees, so it keeps skipping its
+// events, and that its warning says to turn it into a check.
+func checkModelAgreesIgnored(t *testing.T, l domain.Line, problems []domain.DefinitionProblem) {
+	t.Helper()
+
+	if !l.Triggers[1].Only.ModelAgrees {
+		t.Error("red-main lost its modelAgrees; it must keep skipping its events")
+	}
+
+	for _, p := range problems {
+		if p.Code == codeFieldIgnored && strings.Contains(p.Message, "modelAgrees") && !strings.Contains(p.Message, "turn this into a check") {
+			t.Errorf("modelAgrees warns %q; want it to say turn this into a check", p.Message)
+		}
 	}
 }
 

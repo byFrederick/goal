@@ -248,7 +248,6 @@ func tryAnswers() (gen.TriggerTry, gen.TriggerTry) {
 	create := gen.TriggerTry{Firing: firingCreate, Matched: true, Outcome: gen.TriggerTryOutcome("would_create"), Steps: []gen.TriggerTryStep{
 		{Step: "when", Outcome: stepPassed, Reason: reason("the schedule fired at 2026-10-26T08:00:00Z")},
 		{Step: "only.dedupe", Outcome: stepPassed, Reason: reason("no open item has the title")},
-		{Step: "only.modelAgrees", Outcome: stepPassed, Reason: reason("the docs changed\nsince the last sweep")},
 		{Step: verbCreate, Outcome: stepPassed},
 		{Step: "limits.perDay", Outcome: stepPassed, Reason: reason("1 of 3 today")},
 		{Step: "limits.pauseOnBudget", Outcome: stepPassed, Reason: reason("$4.20 of $50.00 this week")},
@@ -261,19 +260,10 @@ func tryAnswers() (gen.TriggerTry, gen.TriggerTry) {
 		Title    string  `json:"title"`
 		Type     string  `json:"type"`
 	}{Brief: "Sweep the docs.", Station: "triage", Title: "Nightly docs sweep", Type: "task"}
-	create.ModelCheck = &struct {
-		CostUsd      float64 `json:"cost_usd"`
-		InputTokens  int     `json:"input_tokens"`
-		Model        string  `json:"model"`
-		OutputTokens int     `json:"output_tokens"`
-		Reason       string  `json:"reason"`
-		Worth        bool    `json:"worth"`
-	}{CostUsd: 0.0123, InputTokens: 1200, Model: cliHaiku, OutputTokens: 40, Reason: "the docs changed\nsince the last sweep", Worth: true}
 
 	skip := gen.TriggerTry{Firing: firingSkip, Matched: true, Outcome: gen.TriggerTryOutcome("skipped"), Reason: reason("only.dedupe: an open item has the title"), Steps: []gen.TriggerTryStep{
 		{Step: "when", Outcome: stepPassed, Reason: reason("the schedule fired at 2026-10-25T08:00:00Z")},
 		{Step: "only.dedupe", Outcome: "skipped", Reason: reason("an open item has the title")},
-		{Step: "only.modelAgrees", Outcome: stepNotReached},
 		{Step: verbCreate, Outcome: stepNotReached},
 		{Step: "limits.perDay", Outcome: stepNotReached},
 	}}

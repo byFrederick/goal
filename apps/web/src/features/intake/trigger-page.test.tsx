@@ -116,6 +116,7 @@ const detail: IntakeTriggerDetail = {
       outcome: 'created',
       item_number: 150,
       reason: null,
+      missed: 0,
     },
     {
       id: 'firing-2',
@@ -125,6 +126,7 @@ const detail: IntakeTriggerDetail = {
       outcome: 'merged',
       item_number: 133,
       reason: null,
+      missed: 0,
     },
     {
       id: 'firing-3',
@@ -134,6 +136,7 @@ const detail: IntakeTriggerDetail = {
       outcome: 'skipped',
       item_number: null,
       reason: 'once',
+      missed: 0,
     },
   ],
 };

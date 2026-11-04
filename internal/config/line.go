@@ -73,7 +73,12 @@ func (f *Factory) Line() domain.Line {
 	}
 
 	for _, t := range s.Board.Triggers {
-		l.Triggers = append(l.Triggers, trigger(t))
+		tr := trigger(t)
+		if file, ok := BriefFile(t.Create.Brief); ok {
+			tr.Create.Brief, _ = f.briefText(file)
+		}
+
+		l.Triggers = append(l.Triggers, tr)
 	}
 
 	l.WorkTypes = slices.Clone(s.Board.WorkTypes)
@@ -347,9 +352,7 @@ func trigger(t Trigger) domain.Trigger {
 
 	if o := t.Only; o != nil {
 		out.Only = domain.TriggerOnly{FailuresInARow: o.FailuresInARow, Dedupe: o.Dedupe}
-		if m := o.ModelAgrees; m != nil {
-			out.Only.ModelAgrees = &domain.ModelAgrees{Question: strings.TrimSpace(m.Question), Connection: m.Connection, Model: m.Model}
-		}
+		out.Only.ModelAgrees = o.ModelAgrees != nil
 	}
 
 	if l := t.Limits; l != nil {
