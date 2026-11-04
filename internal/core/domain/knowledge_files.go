@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -379,6 +380,40 @@ func CheckFilePath(p string) error {
 	}
 
 	return nil
+}
+
+// maxTitleSlug is a title slug's most characters.
+const maxTitleSlug = 200
+
+// Slug is a title as a file or folder name: lower-case letters and digits, the rest dashes, at
+// most 200 characters; "page" for none.
+func Slug(title string) string {
+	var sb strings.Builder
+
+	dash := false
+
+	for _, r := range strings.ToLower(title) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			sb.WriteRune(r)
+
+			dash = false
+		} else if !dash && sb.Len() > 0 {
+			sb.WriteByte('-')
+
+			dash = true
+		}
+	}
+
+	s := strings.TrimSuffix(sb.String(), "-")
+	if s == "" {
+		return "page"
+	}
+
+	if utf8.RuneCountInString(s) > maxTitleSlug {
+		s = string([]rune(s)[:maxTitleSlug])
+	}
+
+	return s
 }
 
 // CheckReadWhen refuses a read-when line longer than MaxReadWhen characters or of more than one
