@@ -295,12 +295,11 @@ export function AssemblyTableRow({
                 {stations}
               </span>
             ) : null}
-            <span className="inline-flex min-w-0 max-w-full items-center gap-2 text-secondary text-ink-soft">
+            <span className="inline-flex w-40 min-w-0 max-w-full items-center gap-2 text-secondary text-ink-soft">
               {summary ? (
                 <SegmentMeter
                   total={summary.total}
                   filled={summary.merged}
-                  segmentWidth={16}
                   height={4}
                   gap={1}
                   tones={{ filled: 'bg-ink', empty: 'bg-rule' }}
