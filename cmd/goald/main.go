@@ -53,6 +53,7 @@ import (
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/catalog"
+	"github.com/byFrederick/goal/internal/catalog/senders"
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -263,7 +264,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// Platform admins, the security log and the sign-in clean-up: install-level, in no organization.
 	platform := postgres.NewPlatform(store)
 	// The docs site at /docs, from GOAL_DOCS_DIR (none without it), and Add a tool's templates.
-	site, templates, siteErr := ownContent(s.DocsDir)
+	site, templates, senderCatalog, siteErr := ownContent(s.DocsDir)
 
 	apiHandler, err := api.New(api.Deps{
 		Engine: eng, Items: store, Factories: defs, Definitions: authors, Versions: definitionStore, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
@@ -282,7 +283,10 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	servers := httpServers(s, proxySecret, apiHandler, gatewayHandler(gw), web.Handler(web.Options{StrictTransport: s.strictTransport()}), site, log)
+	// POST /hooks/{webhook id}: the sender catalog checks signatures, the engine's lines name deliveries.
+	receiver := api.Receiver(api.ReceiverDeps{Intake: intake, Secrets: orgSecrets, Senders: senderCatalog, Names: eng, TrustedProxies: s.TrustedProxies, Clock: clock, Logger: log})
+
+	servers := httpServers(s, proxySecret, apiHandler, receiver, gatewayHandler(gw), web.Handler(web.Options{StrictTransport: s.strictTransport()}), site, log)
 
 	j, err := newJobs(s, store, orgSecrets, objects, platform, clock, kb.ingestor, defs, eng, authors, intake, log)
 	if err != nil {
@@ -551,13 +555,15 @@ func sandboxes(ctx context.Context, s settings, log *slog.Logger) (runBoxes, err
 	}, nil
 }
 
-// ownContent is what goald serves from its own files: the docs site (docsSite) and the tool
-// templates it ships (catalog.Templates, ADR 0037 decision 15).
-func ownContent(docsDir string) (http.Handler, []domain.ToolTemplate, error) {
+// ownContent is what goald serves from its own files: the docs site (docsSite), the tool
+// templates it ships (catalog.Templates, ADR 0037 decision 15) and the webhook sender catalog
+// (senders.Load, ADR 0040 decision 12).
+func ownContent(docsDir string) (http.Handler, []domain.ToolTemplate, *senders.Catalog, error) {
 	site, siteErr := docsSite(docsDir)
 	templates, catalogErr := catalog.Templates()
+	senderCatalog, sendersErr := senders.Load()
 
-	return site, templates, errors.Join(siteErr, catalogErr)
+	return site, templates, senderCatalog, errors.Join(siteErr, catalogErr, sendersErr)
 }
 
 // docsSite serves the docs build in GOAL_DOCS_DIR at /docs (api.Docs); nil without one.
@@ -579,8 +585,8 @@ func docsSite(dir string) (http.Handler, error) {
 // endpoints (/api/auth/*, api.AuthProxy). Every request to the main one but the health check and
 // the agents' gateway must name goald (DNS rebinding); the gateway's serves nothing that a Host
 // could matter to.
-func httpServers(s settings, proxySecret string, apiHandler, gw, spa, site http.Handler, log *slog.Logger) []*http.Server {
-	primary, gatewayOnly := routes(s.GatewayListen != "", apiHandler, gw, spa, site)
+func httpServers(s settings, proxySecret string, apiHandler, hooks, gw, spa, site http.Handler, log *slog.Logger) []*http.Server {
+	primary, gatewayOnly := routes(s.GatewayListen != "", apiHandler, hooks, gw, spa, site)
 	if s.Auth == authSession {
 		primary = api.AuthProxy(api.AuthProxyConfig{Upstream: s.AuthUpstream, TrustedProxies: s.TrustedProxies, Secret: proxySecret, Logger: log}, primary)
 	}
@@ -593,20 +599,22 @@ func httpServers(s settings, proxySecret string, apiHandler, gw, spa, site http.
 	return servers
 }
 
-// routes are the handlers of goald's listeners: the main one serves the API, the SPA, the docs
-// site at /docs and everything under it (site, from GOAL_DOCS_DIR; 404 when site is nil, never
+// routes are the handlers of goald's listeners: the main one serves the API, the webhook receiver
+// at /hooks/ (hooks, ahead of the SPA, without a session), the SPA, the docs site at /docs and
+// everything under it (site, from GOAL_DOCS_DIR; 404 when site is nil, never
 // the SPA's index) and, when the gateway has no listener of its own, the agents' gateway at /mcp,
 // /run and /run/tool-approval (gw serves them all).
 // With one (separate), the gateway listener serves only those (everything else 404) and the main
 // one answers them with 404, so the gateway address agents are given reaches nothing else;
 // gatewayOnly is nil without one.
-func routes(separate bool, apiHandler, gw, spa, site http.Handler) (primary, gatewayOnly http.Handler) {
+func routes(separate bool, apiHandler, hooks, gw, spa, site http.Handler) (primary, gatewayOnly http.Handler) {
 	if site == nil {
 		site = http.NotFoundHandler()
 	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", apiHandler)
+	mux.Handle(api.HooksPath, hooks)
 	mux.Handle("/", spa)
 	mux.Handle(api.DocsPath, site)
 	mux.Handle(api.DocsPath+"/", site)

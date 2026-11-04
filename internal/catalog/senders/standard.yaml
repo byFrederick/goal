@@ -1,0 +1,25 @@
+# Standard Webhooks (https://github.com/standard-webhooks/standard-webhooks): an HMAC-SHA256 of
+# "<webhook-id>.<webhook-timestamp>.<body>" under the base64 key after whsec_, in base64 after v1,
+# with several space-separated values allowed, and a timestamp at most 5 minutes off.
+apiVersion: goal/v1
+kind: Sender
+metadata:
+  name: standard
+  title: Standard Webhooks
+spec:
+  scheme: hmac
+  signature:
+    header: webhook-signature
+    prefix: "v1,"
+    separator: " "
+    encoding: base64
+  signed: id.timestamp.body
+  secret: whsec
+  id:
+    header: webhook-id
+  timestamp:
+    header: webhook-timestamp
+    tolerance: 5m
+  event:
+    paths: [type, event]
+  events: {}

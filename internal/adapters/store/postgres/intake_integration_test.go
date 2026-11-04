@@ -260,7 +260,7 @@ func TestIntake_RLSAndGrants(t *testing.T) {
 		t.Errorf("EndpointOrg = %q, %v; want %q", org, err, acme)
 	}
 
-	if n, err := in.PruneDeliveries(t.Context(), time.Now().Add(time.Hour)); err != nil || n != 1 {
+	if n, err := in.PruneDeliveries(t.Context(), time.Now().Add(domain.DeliveryRetention+time.Hour)); err != nil || n != 1 {
 		t.Errorf("PruneDeliveries = %d, %v; want 1", n, err)
 	}
 }
@@ -402,6 +402,77 @@ func purgeRemovesWebhooks(t *testing.T, d connectionsDB, org domain.OrgID) {
 	var n int
 	if err := d.admin.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM webhook_endpoints) + (SELECT count(*) FROM webhook_openings)`).Scan(&n); err != nil || n != 0 {
 		t.Errorf("%d webhook rows left after the purge, %v; want none", n, err)
+	}
+}
+
+// Migration 00118: another organization sees no ledger id or daily count; goal_app may change a
+// delivery's duplicates and a count's count only, deletes ledger ids but no count; the database
+// refuses a signature header, a refused delivery with a body and a second row for one delivery id;
+// without an organization the ledger's prune goes through its definer.
+func TestIntake_ReceiverRLSAndGrants(t *testing.T) {
+	t.Parallel()
+
+	d := newConnectionsDB(t)
+	acme, labs := newOrgID(t, d.store), newOrgID(t, d.store)
+	w := seedWebhook(t, d, acme, "github-acme")
+	in := NewIntake(d.store, testKey(t, "k1"))
+	ctx := domain.WithOrg(t.Context(), acme)
+	old := time.Now().Add(-domain.LedgerRetention - 48*time.Hour)
+
+	for _, n := range []domain.NewReceipt{
+		{WebhookID: w.ID, ReceivedAt: time.Now(), Receipt: domain.ReceiptAccepted, DeliveryID: "d-1", Event: "push", Named: true},
+		{WebhookID: w.ID, ReceivedAt: old, Receipt: domain.ReceiptAccepted, DeliveryID: "d-2", Event: "push"},
+	} {
+		if _, err := in.Receive(ctx, n); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := inOrgTx(t, d.store.pool, labs, func(tx pgx.Tx) error {
+		for _, table := range []string{"webhook_delivery_ids", "webhook_delivery_counts", "webhook_deliveries"} {
+			var n int
+			if err := tx.QueryRow(t.Context(), `SELECT count(*) FROM `+table).Scan(&n); err != nil || n != 0 {
+				t.Errorf("labs sees %d rows of %s, %v; want none", n, table, err)
+			}
+		}
+
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, stmt := range []string{
+		`UPDATE webhook_deliveries SET duplicates = duplicates + 1`,
+		`UPDATE webhook_delivery_counts SET count = count + 1`,
+		`DELETE FROM webhook_delivery_ids WHERE delivery_id = 'nothing'`,
+	} {
+		if err := inOrgTx(t, d.store.pool, acme, func(tx pgx.Tx) error { _, err := tx.Exec(t.Context(), stmt); return err }); err != nil {
+			t.Errorf("goal_app could not run %s: %v", stmt, err)
+		}
+	}
+
+	appRefuses(t, d, acme, []string{
+		`UPDATE webhook_deliveries SET delivery_id = 'other'`,
+		`UPDATE webhook_deliveries SET receipt = 'duplicate'`,
+		`UPDATE webhook_deliveries SET event = 'other'`,
+		`UPDATE webhook_delivery_ids SET delivery_id = 'other'`,
+		`UPDATE webhook_delivery_counts SET day = current_date`,
+		`DELETE FROM webhook_delivery_counts`,
+		`INSERT INTO webhook_delivery_ids (webhook_id, delivery_id, received_at) VALUES ('` + string(w.ID) + `', '', now())`,
+		`INSERT INTO webhook_deliveries (id, endpoint_id, received_at, outcome, receipt, delivery_id) VALUES (gen_random_uuid(), '` +
+			string(w.ID) + `', now(), 'accepted', 'accepted', 'd-1')`,
+		`INSERT INTO webhook_deliveries (id, endpoint_id, received_at, outcome, receipt, body) VALUES (gen_random_uuid(), '` +
+			string(w.ID) + `', now(), 'refused', 'refused', 'x')`,
+		`INSERT INTO webhook_deliveries (id, endpoint_id, received_at, outcome, receipt) VALUES (gen_random_uuid(), '` +
+			string(w.ID) + `', now(), 'accepted', 'accepted')`,
+		`INSERT INTO webhook_deliveries (id, endpoint_id, received_at, outcome, headers) VALUES (gen_random_uuid(), '` +
+			string(w.ID) + `', now(), 'refused', '{"webhook-signature": "v1,AA=="}')`,
+		`INSERT INTO webhook_deliveries (id, endpoint_id, received_at, outcome, headers) VALUES (gen_random_uuid(), '` +
+			string(w.ID) + `', now(), 'refused', '{"authorization": "Bearer x"}')`,
+	})
+
+	if n, err := in.PruneDeliveries(t.Context(), time.Now()); err != nil || n != 2 {
+		t.Errorf("PruneDeliveries = %d, %v; want d-2's ledger id and its day's count", n, err)
 	}
 }
 

@@ -54,6 +54,42 @@ func (q *Queries) ConvertedNameTaken(ctx context.Context, arg ConvertedNameTaken
 	return column_1, err
 }
 
+const countDuplicate = `-- name: CountDuplicate :one
+UPDATE webhook_deliveries SET duplicates = duplicates + 1
+WHERE endpoint_id = $1 AND delivery_id = $2::text
+RETURNING id
+`
+
+type CountDuplicateParams struct {
+	EndpointID uuid.UUID
+	DeliveryID string
+}
+
+// The row a delivery id first came with counts one more duplicate; no row when there is none.
+func (q *Queries) CountDuplicate(ctx context.Context, arg CountDuplicateParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, countDuplicate, arg.EndpointID, arg.DeliveryID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const countUnnamedDelivery = `-- name: CountUnnamedDelivery :exec
+INSERT INTO webhook_delivery_counts (webhook_id, day, count)
+VALUES ($1, ($2::timestamptz AT TIME ZONE 'UTC')::date, 1)
+ON CONFLICT (org_id, webhook_id, day) DO UPDATE SET count = webhook_delivery_counts.count + 1
+`
+
+type CountUnnamedDeliveryParams struct {
+	WebhookID  uuid.UUID
+	ReceivedAt time.Time
+}
+
+// One more delivery no enabled trigger named, on its UTC day.
+func (q *Queries) CountUnnamedDelivery(ctx context.Context, arg CountUnnamedDeliveryParams) error {
+	_, err := q.db.Exec(ctx, countUnnamedDelivery, arg.WebhookID, arg.ReceivedAt)
+	return err
+}
+
 const deleteWebhookEndpoint = `-- name: DeleteWebhookEndpoint :execrows
 DELETE FROM webhook_endpoints WHERE id = $1
 `
@@ -78,6 +114,27 @@ type DeleteWebhookOpeningParams struct {
 func (q *Queries) DeleteWebhookOpening(ctx context.Context, arg DeleteWebhookOpeningParams) error {
 	_, err := q.db.Exec(ctx, deleteWebhookOpening, arg.WebhookID, arg.FactoryID)
 	return err
+}
+
+const insertLedgerID = `-- name: InsertLedgerID :one
+INSERT INTO webhook_delivery_ids (webhook_id, delivery_id, received_at)
+VALUES ($1, $2, $3)
+ON CONFLICT (org_id, webhook_id, delivery_id) DO NOTHING
+RETURNING delivery_id
+`
+
+type InsertLedgerIDParams struct {
+	WebhookID  uuid.UUID
+	DeliveryID string
+	ReceivedAt time.Time
+}
+
+// The webhook's ledger takes an accepted delivery id; no row when it already holds it.
+func (q *Queries) InsertLedgerID(ctx context.Context, arg InsertLedgerIDParams) (string, error) {
+	row := q.db.QueryRow(ctx, insertLedgerID, arg.WebhookID, arg.DeliveryID, arg.ReceivedAt)
+	var delivery_id string
+	err := row.Scan(&delivery_id)
+	return delivery_id, err
 }
 
 const insertOrgWebhook = `-- name: InsertOrgWebhook :one
@@ -116,6 +173,46 @@ func (q *Queries) InsertOrgWebhook(ctx context.Context, arg InsertOrgWebhookPara
 	var i InsertOrgWebhookRow
 	err := row.Scan(&i.SecretID, &i.CreatedAt)
 	return i, err
+}
+
+const insertReceivedDelivery = `-- name: InsertReceivedDelivery :one
+INSERT INTO webhook_deliveries (id, endpoint_id, received_at, headers, body, outcome, reason, delivery_id, event, receipt)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10)
+RETURNING id
+`
+
+type InsertReceivedDeliveryParams struct {
+	ID         uuid.UUID
+	EndpointID uuid.UUID
+	ReceivedAt time.Time
+	Headers    []byte
+	Body       []byte
+	Outcome    string
+	Reason     string
+	DeliveryID *string
+	Event      string
+	Receipt    *string
+}
+
+// A delivery the receiver keeps a row of (00118): an accepted one with its id, event and body, or
+// a refused one with metadata only.
+func (q *Queries) InsertReceivedDelivery(ctx context.Context, arg InsertReceivedDeliveryParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertReceivedDelivery,
+		arg.ID,
+		arg.EndpointID,
+		arg.ReceivedAt,
+		arg.Headers,
+		arg.Body,
+		arg.Outcome,
+		arg.Reason,
+		arg.DeliveryID,
+		arg.Event,
+		arg.Receipt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const insertTriggerFiring = `-- name: InsertTriggerFiring :one
@@ -508,6 +605,19 @@ func (q *Queries) PruneWebhookDeliveries(ctx context.Context, before time.Time) 
 	return deleted, err
 }
 
+const pruneWebhookLedger = `-- name: PruneWebhookLedger :one
+SELECT goal_prune_webhook_ledger($1::timestamptz)::bigint AS deleted
+`
+
+// Every organization's ledger ids received before the instant and counts of days before it,
+// through the definer.
+func (q *Queries) PruneWebhookLedger(ctx context.Context, before time.Time) (int64, error) {
+	row := q.db.QueryRow(ctx, pruneWebhookLedger, before)
+	var deleted int64
+	err := row.Scan(&deleted)
+	return deleted, err
+}
+
 const resealWebhookSecret = `-- name: ResealWebhookSecret :exec
 UPDATE webhook_endpoints SET key_id = $1, nonce = $2, ciphertext = $3
 WHERE id = $4
@@ -870,6 +980,44 @@ func (q *Queries) TriggerStats(ctx context.Context, arg TriggerStatsParams) ([]T
 	return items, nil
 }
 
+const unnamedDeliveryDays = `-- name: UnnamedDeliveryDays :many
+SELECT webhook_id, (day::timestamp AT TIME ZONE 'UTC')::timestamptz AS day, count FROM webhook_delivery_counts
+WHERE webhook_id = $1 AND day >= ($2::timestamptz AT TIME ZONE 'UTC')::date
+ORDER BY day
+`
+
+type UnnamedDeliveryDaysParams struct {
+	WebhookID uuid.UUID
+	Since     time.Time
+}
+
+type UnnamedDeliveryDaysRow struct {
+	WebhookID uuid.UUID
+	Day       time.Time
+	Count     int32
+}
+
+// A webhook's daily counts of deliveries no trigger named, from the UTC day of the instant on.
+func (q *Queries) UnnamedDeliveryDays(ctx context.Context, arg UnnamedDeliveryDaysParams) ([]UnnamedDeliveryDaysRow, error) {
+	rows, err := q.db.Query(ctx, unnamedDeliveryDays, arg.WebhookID, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UnnamedDeliveryDaysRow
+	for rows.Next() {
+		var i UnnamedDeliveryDaysRow
+		if err := rows.Scan(&i.WebhookID, &i.Day, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateOrgWebhook = `-- name: UpdateOrgWebhook :exec
 UPDATE webhook_endpoints SET name = $1, enabled = $2 WHERE id = $3
 `
@@ -903,7 +1051,7 @@ func (q *Queries) UpsertWebhookOpening(ctx context.Context, arg UpsertWebhookOpe
 }
 
 const webhookDeliveries = `-- name: WebhookDeliveries :many
-SELECT id, endpoint_id, received_at, headers, body, outcome, reason, item_id FROM webhook_deliveries
+SELECT id, endpoint_id, received_at, headers, body, outcome, reason, item_id, delivery_id, event, receipt, duplicates FROM webhook_deliveries
 WHERE endpoint_id = $1
   AND ($2::timestamptz IS NULL OR (received_at, id) < ($2::timestamptz, $3::uuid))
 ORDER BY received_at DESC, id DESC
@@ -926,6 +1074,10 @@ type WebhookDeliveriesRow struct {
 	Outcome    string
 	Reason     string
 	ItemID     *uuid.UUID
+	DeliveryID *string
+	Event      string
+	Receipt    *string
+	Duplicates int32
 }
 
 // An endpoint's deliveries newest first, after the cursor (received_at, id); a zero cursor, an
@@ -953,6 +1105,10 @@ func (q *Queries) WebhookDeliveries(ctx context.Context, arg WebhookDeliveriesPa
 			&i.Outcome,
 			&i.Reason,
 			&i.ItemID,
+			&i.DeliveryID,
+			&i.Event,
+			&i.Receipt,
+			&i.Duplicates,
 		); err != nil {
 			return nil, err
 		}
@@ -965,7 +1121,7 @@ func (q *Queries) WebhookDeliveries(ctx context.Context, arg WebhookDeliveriesPa
 }
 
 const webhookDelivery = `-- name: WebhookDelivery :one
-SELECT id, endpoint_id, received_at, headers, body, outcome, reason, item_id FROM webhook_deliveries
+SELECT id, endpoint_id, received_at, headers, body, outcome, reason, item_id, delivery_id, event, receipt, duplicates FROM webhook_deliveries
 WHERE endpoint_id = $1 AND id = $2
 `
 
@@ -983,6 +1139,10 @@ type WebhookDeliveryRow struct {
 	Outcome    string
 	Reason     string
 	ItemID     *uuid.UUID
+	DeliveryID *string
+	Event      string
+	Receipt    *string
+	Duplicates int32
 }
 
 func (q *Queries) WebhookDelivery(ctx context.Context, arg WebhookDeliveryParams) (WebhookDeliveryRow, error) {
@@ -997,6 +1157,10 @@ func (q *Queries) WebhookDelivery(ctx context.Context, arg WebhookDeliveryParams
 		&i.Outcome,
 		&i.Reason,
 		&i.ItemID,
+		&i.DeliveryID,
+		&i.Event,
+		&i.Receipt,
+		&i.Duplicates,
 	)
 	return i, err
 }
