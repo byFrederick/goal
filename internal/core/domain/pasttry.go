@@ -38,6 +38,14 @@ const (
 	MaxPastTryError = 2000
 )
 
+// PastTryStartRef is the ref prepare points at the commit a try's agent starts from, once the
+// recorded commit is checked out and brought up to date with its base (apps/worker/src/prepare.ts).
+const PastTryStartRef = "refs/goal/try-start"
+
+// PastTryDiffScript is the shell command the engine runs in a try's workspace once its agent
+// ended: the change against PastTryStartRef, new files included, committed or not.
+const PastTryDiffScript = "git add --all --intent-to-add && git diff --no-color --no-ext-diff --binary " + PastTryStartRef
+
 // PastTry is one try of a proposal on a past item: a rerun of Station, where the proposal reaches,
 // from what OriginalRun recorded (its brief and commit), in a box with only the model key.
 type PastTry struct {

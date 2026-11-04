@@ -27,7 +27,7 @@ import (
 // A try of a past item (ADR 0039 decision 9) holds no lease and works no item either. Its agent
 // gets the model's access only: its environment keeps its env, which the worker gives setup alone,
 // and loses its files and MCP servers. Once the agent ended, its change against the commit prepare
-// checked out is read from the box (`goal-agent diff`) into the result's Diff; a diff that cannot
+// checked out is read from the box (domain.PastTryDiffScript) into the result's Diff; a diff that cannot
 // be read is an error, as the try's infrastructure failed.
 //
 // A Jonah run (ADR 0034 decision 1) holds no lease and works no item, so no item event is written
@@ -273,8 +273,8 @@ func (e *Engine) agent(ctx context.Context, t runTask, runID domain.RunID, env m
 // tryDiffTimeout bounds reading a try's diff from its box.
 const tryDiffTimeout = 2 * time.Minute
 
-// tryDiff is a try's change against the commit prepare checked out, as `goal-agent diff` prints it
-// in the box: scrubbed of the run's secrets, and an error when the command fails or prints more
+// tryDiff is a try's change against the commit prepare checked out, as domain.PastTryDiffScript
+// prints it in the box: scrubbed of the run's secrets, and an error when the command fails or prints more
 // than domain.MaxPastTryDiff bytes.
 func (e *Engine) tryDiff(ctx context.Context, t runTask, runID domain.RunID, scrub scrubber) (string, error) {
 	p, err := t.box.sandbox.Exec(ctx, ports.Exec{Argv: argvDiff, Env: map[string]string{}, Dir: workspaceDir, Timeout: tryDiffTimeout})
@@ -293,7 +293,7 @@ func (e *Engine) tryDiff(ctx context.Context, t runTask, runID domain.RunID, scr
 	case readErr != nil:
 		return "", fmt.Errorf("read the try's diff: %w", readErr)
 	case st.TimedOut || st.Code != 0:
-		return "", fmt.Errorf("read the try's diff: goal-agent diff exited %d: %s", st.Code, scrub.string(strings.TrimSpace(st.StderrTail)))
+		return "", fmt.Errorf("read the try's diff: git diff exited %d: %s", st.Code, scrub.string(strings.TrimSpace(st.StderrTail)))
 	case len(out) > domain.MaxPastTryDiff:
 		return "", fmt.Errorf("read the try's diff: it is over %d bytes", domain.MaxPastTryDiff)
 	}
