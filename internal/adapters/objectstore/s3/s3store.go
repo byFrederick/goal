@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
@@ -71,9 +72,10 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 
 // Store is one bucket. It is safe for concurrent use.
 type Store struct {
-	client *s3.Client
-	bucket string
-	region string
+	client  *s3.Client
+	presign *s3.PresignClient
+	bucket  string
+	region  string
 	// unconditional is set once the server answered a conditional write with 501.
 	unconditional atomic.Bool
 }
@@ -106,7 +108,23 @@ func New(ctx context.Context, cfg Config) (*Store, error) {
 		}
 	})
 
-	return &Store{client: client, bucket: cfg.Bucket, region: ac.Region}, nil
+	return &Store{client: client, presign: s3.NewPresignClient(client), bucket: cfg.Bucket, region: ac.Region}, nil
+}
+
+// PresignGet implements ports.ObjectStore with a SigV4 query-signed GET, signed locally with the
+// store's credentials.
+func (s *Store) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	if ttl <= 0 {
+		return "", fmt.Errorf("presign %s for %s: %w", key, ttl, domain.ErrInvalid)
+	}
+
+	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)},
+		s3.WithPresignExpires(ttl))
+	if err != nil {
+		return "", fmt.Errorf("presign %s: %w", key, err)
+	}
+
+	return req.URL, nil
 }
 
 // Bucket returns the bucket's name.
