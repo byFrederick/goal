@@ -36,6 +36,8 @@ type Knowledge struct {
 
 type knowledgeOrg struct {
 	sources map[string]*fakeSource // by name
+	// pinned are the snapshots running agent runs pinned (Pin).
+	pinned map[domain.KnowledgeSnapshotID]bool
 }
 
 type fakeSource struct {
@@ -135,7 +137,7 @@ func (k *Knowledge) readsConnection(org domain.OrgID, id domain.ConnectionID) bo
 func (k *Knowledge) org(org domain.OrgID) *knowledgeOrg {
 	o, ok := k.orgs[org]
 	if !ok {
-		o = &knowledgeOrg{sources: map[string]*fakeSource{}}
+		o = &knowledgeOrg{sources: map[string]*fakeSource{}, pinned: map[domain.KnowledgeSnapshotID]bool{}}
 		k.orgs[org] = o
 	}
 

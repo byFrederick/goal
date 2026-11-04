@@ -109,10 +109,10 @@ func (e *Engine) open(ctx context.Context, t runTask, runID domain.RunID, env ma
 	return line, nil
 }
 
-// boxLife is how long a run's sandbox may live: as long as both attempts of a claim may, since a
-// retry runs in the same sandbox, and never longer than the organization policy's box time limit.
+// boxLife is how long a run's sandbox may live: as long as a claim may (Config.LongestClaim), since
+// a retry runs in the same sandbox, and never longer than the organization policy's box time limit.
 func boxLife(req domain.RunRequest, cfg Config) time.Duration {
-	life := maxAttempts*cfg.TaskTimeout + cfg.LeaseTTL
+	life := cfg.LongestClaim()
 	if req.BoxLimit > 0 {
 		life = min(life, req.BoxLimit)
 	}

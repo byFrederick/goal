@@ -30,6 +30,9 @@ type Harness struct {
 	Audit   ports.Audit
 	// NewOrg returns a new organization.
 	NewOrg func(t *testing.T) domain.OrgID
+	// Pin makes a running agent run of org pin snapshot snap, as its knowledge_pinned event does
+	// (domain.EventKnowledgePinned).
+	Pin func(t *testing.T, org domain.OrgID, snap domain.KnowledgeSnapshotID)
 }
 
 // Run runs the suite. Tests run in parallel and call newHarness once each; harnesses must be
@@ -56,6 +59,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"OtherOrg_SeesNothing", testIsolation},
 		{"Snapshots_NewReplacesCurrentFilesAndKeepsTheOld", testSnapshots},
 		{"Snapshots_RulesAndLostLeaseChangeNothing", testSnapshotRules},
+		{"Snapshots_RetentionKeepsCurrentPinnedAndYoung", testSnapshotRetention},
 		{"Files_PageInPathOrderByPathOrTitlePrefix", testFilesPage},
 		{"Reads_AddToOneRowPerSourcePathFactoryAndDay", testReads},
 		{"Files_OtherOrgSeesNothing", testFilesIsolation},
