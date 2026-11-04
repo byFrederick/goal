@@ -160,6 +160,7 @@ ${goalRules.map(([name]) => `    - { name: ${name}, source: ./rules/${name}.md }
       connections: [github]
   board:
     workTypes: [feature, fix, refactor, infra, design]
+    intake: [{ source: github-issues, repo: acme/goal, labels: [goal] }]
     stations:
       - { id: inbox, name: Inbox, kind: queue }
       - { id: spec, name: Spec, kind: agent, agent: spec-writer, wip: 2 }
