@@ -97,8 +97,8 @@ usage:
                                                   the rest as read; refused when the policy changed since
                                                   it was read (--deny-command replaces the list)
   goal standing-rules list [--revoked] [--json]   the organization's standing rules: which agent role may
-                                                  call which connection tool without asking, who made it
-                                                  and when (--revoked: the revoked ones too)
+                                                  call which connection or MCP server tool without asking,
+                                                  who made it and when (--revoked: the revoked ones too)
   goal standing-rules revoke <rule>               revoke one: the agent asks first again for that tool
   goal key list                                   the organization's API keys: hint, scopes, factories,
                                                   ceiling, expiry, last use
@@ -168,7 +168,9 @@ usage:
   goal knowledge reads [--source S] [--days N]    how often runs read each file and searched each folder
                                                   under /knowledge over the window (default 7 days, at
                                                   most 90), by factory, the most read first
-  goal memory list <factory>                      the factory memory in its draft (memory.yaml), numbered
+  goal memory list <factory>                      the factory memory (memory.yaml), numbered: the open
+                                                  draft's, or the current version's when no draft is
+                                                  open; it opens no draft
   goal memory add <factory> "<text>" [--from <factory>#<n>] [--publish]
                                                   add a fact to the draft's memory.yaml, dated today
                                                   (--from: the items it came from, comma-separated;

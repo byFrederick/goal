@@ -273,11 +273,12 @@ spec:
 
 `config.Knowledge.Names()` gives the names in order; `config.Check` keeps each entry as `config.KnowledgeSource`. Run start does not read `appliesTo` or `readWhen` yet.
 
-**Checks.** `config.Check` reports the first two rows. The secrets check (`authoring.SecretsCheck`) reports the rest at publish and in validation, against the organization's source rows:
+**Checks.** `config.Check` reports the first three rows. The secrets check (`authoring.SecretsCheck`) reports the rest at publish and in validation, against the organization's source rows:
 
 | Code | Severity | When |
 | --- | --- | --- |
 | `knowledge-too-many` | error | `knowledge.sources` lists more than 10 sources |
+| `knowledge-source-duplicate` | error | `knowledge.sources` lists a source more than once, as a name or as an object, which would have a box unpack it twice; located at the second entry. Remove that entry. |
 | `unknown-agent`, `unknown-station`, `unknown-lane`, `unknown-work-type` | error | an `appliesTo` entry the definition does not declare, located at that entry (`knowledge source runbooks: appliesTo.stations: unknown station "ghost"`) |
 | `knowledge-source-unknown` | error | the organization has no source of the name; the fix removes the entry |
 | `knowledge-secret-not-in-scope` | error | the source reads with a secret whose factory scope leaves the factory out, so listing it would hand the factory that secret's reach |

@@ -43,7 +43,7 @@
           "properties": {
             "sources": {
               "type": "array",
-              "description": "The organization's knowledge sources the factory's runs read (ADR 0038 decision 5), at most 10 (knowledge-too-many). An entry is a source's name, or an object that also says which runs read it (appliesTo) and when (readWhen).",
+              "description": "The organization's knowledge sources the factory's runs read (ADR 0038 decision 5), at most 10 (knowledge-too-many), each listed once (knowledge-source-duplicate). An entry is a source's name, or an object that also says which runs read it (appliesTo) and when (readWhen).",
               "items": { "$ref": "#/$defs/knowledgeSource" }
             }
           }

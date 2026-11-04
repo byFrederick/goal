@@ -72,6 +72,8 @@ const (
 
 	// codeKnowledgeTooMany: knowledge.sources lists more than domain.MaxFactorySources.
 	codeKnowledgeTooMany = "knowledge-too-many"
+	// codeKnowledgeSourceDuplicate: knowledge.sources lists a source name more than once.
+	codeKnowledgeSourceDuplicate = "knowledge-source-duplicate"
 	// codeMemoryTooLong and codeMemoryTooBig: a memory.yaml entry's text is over
 	// domain.MaxMemoryText characters; the file is over domain.MaxMemoryBytes or MaxMemoryEntries.
 	codeMemoryTooLong = "memory-too-long"
@@ -222,9 +224,9 @@ func dup(c *checker, what string, ids []string, list, sub, key string) {
 	}
 }
 
-// knowledge checks knowledge.sources: at most domain.MaxFactorySources, and each entry's appliesTo
-// names only what the definition declares. Whether the organization has the sources is
-// authoring's.
+// knowledge checks knowledge.sources: at most domain.MaxFactorySources, each source once, and
+// each entry's appliesTo names only what the definition declares. Whether the organization has
+// the sources is authoring's.
 func (c *checker) knowledge() {
 	k := c.f.Spec.Knowledge
 	if k == nil {
@@ -237,7 +239,15 @@ func (c *checker) knowledge() {
 			n, domain.MaxFactorySources)
 	}
 
+	seen := make(map[string]bool, len(k.Sources))
 	for i, s := range k.Sources {
+		if seen[s.Name] {
+			c.errorf(checkReferences, codeKnowledgeSourceDuplicate, at("spec", "knowledge", "sources", i),
+				"knowledge source %s is listed more than once, so a box would unpack it twice; remove this entry", s.Name)
+		}
+
+		seen[s.Name] = true
+
 		c.scope("knowledge source "+s.Name, s.AppliesTo, func(key string, j int) []string {
 			return at("spec", "knowledge", "sources", i, "appliesTo", key, j)
 		})

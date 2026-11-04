@@ -1,7 +1,6 @@
 package porttest
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -37,6 +36,8 @@ type Knowledge struct {
 
 type knowledgeOrg struct {
 	sources map[string]*fakeSource // by name
+	// pinned are the snapshots running agent runs pinned (Pin).
+	pinned map[domain.KnowledgeSnapshotID]bool
 }
 
 type fakeSource struct {
@@ -136,7 +137,7 @@ func (k *Knowledge) readsConnection(org domain.OrgID, id domain.ConnectionID) bo
 func (k *Knowledge) org(org domain.OrgID) *knowledgeOrg {
 	o, ok := k.orgs[org]
 	if !ok {
-		o = &knowledgeOrg{sources: map[string]*fakeSource{}}
+		o = &knowledgeOrg{sources: map[string]*fakeSource{}, pinned: map[domain.KnowledgeSnapshotID]bool{}}
 		k.orgs[org] = o
 	}
 
@@ -222,7 +223,7 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 		now := time.Now().UTC()
 		s := domain.KnowledgeSource{
 			ID: domain.KnowledgeSourceID(newV7()), Name: n.Name, Title: n.Title, Kind: n.Kind, Connection: n.Connection, Secret: n.Secret,
-			Config: maps.Clone(n.Config), ReadWhen: n.ReadWhen, SyncEvery: cmp.Or(n.SyncEvery, domain.DefaultSyncEvery), Status: domain.SyncIdle,
+			Config: maps.Clone(n.Config), ReadWhen: n.ReadWhen, SyncEvery: n.Every(), Status: domain.SyncIdle,
 			CreatedBy: by, CreatedAt: now, UpdatedAt: now,
 		}
 
@@ -312,23 +313,39 @@ func (k *Knowledge) UpdateSource(ctx context.Context, name string, p domain.Know
 
 		if p.SyncEvery != nil {
 			s.src.SyncEvery = *p.SyncEvery
+			s.src.NextSyncAt = patchedNextSync(s.src, time.Now().UTC())
 		}
 
-		if p.ReadWhen != nil {
-			s.src.ReadWhen = *p.ReadWhen
-		}
+		now := time.Now().UTC()
+		newReadWhen(&s.src, p.ReadWhen, now)
 
 		if p.Secret != nil {
 			s.src.Secret = *p.Secret
 		}
 
-		s.src.UpdatedAt = time.Now().UTC()
+		s.src.UpdatedAt = now
 		out = o.view(s)
 
 		return nil
 	})
 
 	return out, err
+}
+
+// newReadWhen sets src's read-when line to line when it differs, and then makes a source that
+// writes snapshots (upload, repository, Confluence) due at now.
+func newReadWhen(src *domain.KnowledgeSource, line *string, now time.Time) {
+	if line == nil || *line == src.ReadWhen {
+		return
+	}
+
+	src.ReadWhen = *line
+
+	switch src.Kind {
+	case domain.SourceUpload, domain.SourceRepository, domain.SourceConfluence:
+		src.NextSyncAt = &now
+	case domain.SourceSynced, domain.SourceLive:
+	}
 }
 
 // ConvertSource implements ports.Knowledge.
@@ -441,6 +458,19 @@ func (k *Knowledge) SyncNow(ctx context.Context, name string) error {
 	})
 }
 
+// patchedNextSync is src's next sync once its interval changed to src.SyncEvery: none on demand, now
+// for one that waited for Sync, else as it was.
+func patchedNextSync(src domain.KnowledgeSource, now time.Time) *time.Time {
+	switch {
+	case src.SyncEvery == domain.SyncOnDemand:
+		return nil
+	case src.Kind != domain.SourceLive && src.NextSyncAt == nil:
+		return &now
+	default:
+		return src.NextSyncAt
+	}
+}
+
 // ClaimSource implements ports.Knowledge: the source due first of every organization's.
 func (k *Knowledge) ClaimSource(_ context.Context, now, until time.Time) (*domain.SourceClaim, error) {
 	k.mu.Lock()
@@ -476,9 +506,10 @@ func (k *Knowledge) ClaimSource(_ context.Context, now, until time.Time) (*domai
 	}, nil
 }
 
-// claimable is the claim's rule: not live, its lease ended, and due.
+// claimable is the claim's rule: not live, its lease ended, and due; an on-demand source waiting
+// for Sync never is.
 func claimable(s domain.KnowledgeSource, now time.Time) bool {
-	if s.Kind == domain.SourceLive || (s.LeaseUntil != nil && s.LeaseUntil.After(now)) {
+	if s.Kind == domain.SourceLive || s.NextSyncAt == nil || (s.LeaseUntil != nil && s.LeaseUntil.After(now)) {
 		return false
 	}
 
@@ -542,7 +573,12 @@ func (k *Knowledge) FinishSync(ctx context.Context, l domain.SourceLease, r doma
 			s.src.SyncFailures++
 		}
 
-		if s.src.NextSyncAt.Equal(r.Due) {
+		switch {
+		case s.src.NextSyncAt == nil || !s.src.NextSyncAt.Equal(r.Due):
+			// Made on demand, or due again, since the claim: that stands.
+		case s.src.SyncEvery == domain.SyncOnDemand:
+			s.src.NextSyncAt = nil
+		default:
 			next := at.Add(s.src.SyncEvery)
 			s.src.NextSyncAt = &next
 		}

@@ -16,6 +16,7 @@ import { Callout } from '../../ui/callout';
 import { cn } from '../../ui/cn';
 import { Field, Input } from '../../ui/field';
 import { Spinner } from '../../ui/spinner';
+import { touchLink } from '../../ui/touch-target';
 import { type OnboardingSearch, repoOf, repositoryUrl } from './code-search';
 import { codeCard, organizationCard } from './factory-preview';
 import { OnboardingLayout } from './onboarding-layout';
@@ -158,7 +159,12 @@ export function CodeStep({ org, search }: { org: OrgSummary; search: OnboardingS
           help={
             <>
               A fine-grained token for this repository: Contents and Pull requests, read and write.{' '}
-              <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">
+              <a
+                href="https://github.com/settings/personal-access-tokens/new"
+                target="_blank"
+                rel="noreferrer"
+                className={touchLink}
+              >
                 Create one on GitHub
               </a>
             </>

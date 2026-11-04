@@ -49,11 +49,12 @@ async function upload<T>(source: string, files: Record<string, string>): Promise
 }
 
 describe('the mock knowledge base', () => {
-  it('starts acme with the three synced sources the knowledge picture shows', async () => {
+  it('starts acme with the four sources the knowledge picture shows', async () => {
     const { body } = await call<KnowledgeSourceList>(sources);
     expect(body.sources.map((s) => [s.name, s.kind, s.status, s.latest_snapshot?.files ?? 0])).toEqual([
       ['dashboards', 'synced', 'failed', 1],
       ['goal-docs', 'synced', 'idle', 5],
+      ['product-specs', 'confluence', 'failed', 1],
       ['support-macros', 'synced', 'idle', 1],
     ]);
     const files = await call<KnowledgeFilePage>(`${sources}/goal-docs/files`);
@@ -103,6 +104,23 @@ describe('the mock knowledge base', () => {
     );
   });
 
+  it('takes sync_every_seconds 0 with no next sync, and stores a Confluence root_page', async () => {
+    const made = await call<KnowledgeSource>(sources, 'POST', {
+      name: 'wiki-pages',
+      title: 'Wiki pages',
+      kind: 'confluence',
+      secret: 'confluence-token',
+      sync_every_seconds: 0,
+      config: { site: 'https://acme.atlassian.net', email: 'bot@example.com', spaces: 'ENG', root_page: '777' },
+    });
+    expect(made.status).toBe(201);
+    expect(made.body).toMatchObject({ sync_every_seconds: 0, next_sync_at: null, config: { root_page: '777' } });
+    const later = await call<KnowledgeSource>(`${sources}/wiki-pages`, 'PATCH', { sync_every_seconds: 3600 });
+    expect(later.body.next_sync_at).not.toBeNull();
+    const back = await call<KnowledgeSource>(`${sources}/wiki-pages`, 'PATCH', { sync_every_seconds: 0 });
+    expect(back.body.next_sync_at).toBeNull();
+  });
+
   it('refuses as goald does', async () => {
     const refusals: [string, string, unknown, number, string?][] = [
       [sources, 'POST', { name: 'dashboards', title: 'Again', kind: 'upload' }, 409, 'knowledge-source-name-taken'],
@@ -143,5 +161,17 @@ describe('the mock knowledge base', () => {
     expect((await call<Problem>(`${sources}/repo-search/sync`, 'POST')).body.code).toBe('knowledge-source-live');
     const github = await call<Connection>('/v1/orgs/acme/connections/github');
     expect(github.body.used_by.knowledge_sources).toEqual(['dashboards', 'goal-docs', 'support-macros', 'repo-search']);
+  });
+
+  it('answers a check with the first files, at most 8 and no more than the file count', async () => {
+    const { status, body } = await call<{ files: number; first_files: string[] }>(
+      '/v1/orgs/acme/knowledge/check',
+      'POST',
+      { name: 'runbooks', kind: 'repository', read_when: 'Before acting.', factories: [] },
+    );
+    expect(status).toBe(200);
+    expect(body.first_files.length).toBeGreaterThan(0);
+    expect(body.first_files.length).toBeLessThanOrEqual(8);
+    expect(body.first_files.length).toBeLessThanOrEqual(body.files);
   });
 });

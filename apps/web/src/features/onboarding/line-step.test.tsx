@@ -180,6 +180,7 @@ describe('step 4, shape the line', () => {
     renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
     expect((await screen.findByRole('status')).textContent).toBe('Loading');
     const stations = await screen.findByRole('list', { name: 'The stations' });
+    expect(screen.getByRole('region', { name: 'Stations' }).getAttribute('tabindex')).toBe('0');
     const names = within(stations)
       .getAllByRole('region')
       .map((r) => r.getAttribute('aria-label'));

@@ -1,6 +1,6 @@
 ---
 title: Factory settings
-description: Set a factory's repository and its token, model key, environments, box size, tools, budgets, flow targets and flow choices from its Settings page, and publish them as a new version.
+description: Set a factory's repository and its token, model key, environments, budgets, flow targets and flow choices from its Settings page, and publish them as a new version.
 ---
 
 You end with the factory's repository, runtime, budgets and flow set as you want them, published as a new version. The Settings page edits the same definition as the Definition editor, for the fields below.
@@ -40,12 +40,12 @@ The page shows the repository URL, a chip that says whether the token works, the
 
 ### Runtime
 
+A line at the top says "Box size, CLIs and what agents reach live in environments." The word "environments" links to the Definition's Environments section, where each environment's size, image, tools and setup are set. Settings no longer edits them.
+
 | Field | Sets | Notes |
 |---|---|---|
-| Size of each run's box | `runtime.size` | `small` (1 CPU, 2 GiB), `medium` (2 CPU, 4 GiB) or `large` (4 CPU, 8 GiB). Medium when unset. |
 | Model key | `runtime.modelKey` | The secret that gives every run its model. It shows here with a Change link to Secrets; set it in the YAML view. |
 | Environments | `environments/<name>.yaml` | One chip per environment with the number of agents that use it, and an Edit link to the Definition's Environments section. |
-| Tools | `runtime.tools` | mise tool specs, such as `go`, `go@1.26.10` or `npm:@acme/cli@2`. Each run installs them after the repository's own `mise.toml`. Press Enter to add one. A value that is not a tool spec is refused. |
 
 ### Budgets and targets
 
@@ -87,6 +87,9 @@ Jonah reviews the line once a day and proposes changes for you to approve. The s
 | Proposes after, items | `learning.jonah.proposeAfter` | From 1 to 50. How many items with the same cause Jonah needs before it makes a proposal. 3 by default. |
 
 A value out of range shows its message and is not saved. Like every group, Jonah saves into the draft and Save changes publishes it. The fields are read-only without `definition:edit`.
+### Notifications
+
+A read-only Slack row. It shows "Sent with the secret `slack-bot`." when the organization has chosen a Slack secret, and "Slack is off" when it has not. Slack sends direct messages only, so a factory has no channel of its own. The secret is organization-wide: a person who holds `org:manage` sees a "Change in organization settings" link to pick or turn it off there. Without that permission the row has no link. If the setting cannot be read, the row says "Couldn’t load the Slack setting."
 
 ## Related
 

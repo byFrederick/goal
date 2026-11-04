@@ -19,8 +19,9 @@ import (
 )
 
 // memoryCommand runs goal memory list | add | rm: a factory's memory, its memory.yaml (ADR 0038
-// decision 6). Each change writes the factory's draft, opening one when none is open, and never
-// publishes, but add --publish publishes the draft after it.
+// decision 6). list reads the open draft's, or the current version's, and opens no draft. Each
+// change writes the factory's draft, opening one when none is open, and never publishes, but add
+// --publish publishes the draft after it.
 func memoryCommand(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	if len(args) == 0 {
 		return errUsage
@@ -49,7 +50,7 @@ func memoryList(ctx context.Context, out *printer, getenv func(string) string, a
 		return err
 	}
 
-	d, err := openDraftFile(ctx, c, pos[0], config.MemoryFile)
+	d, err := readMemoryFile(ctx, c, pos[0])
 	if err != nil {
 		return err
 	}
@@ -234,6 +235,44 @@ func openDraftFile(ctx context.Context, c orgClient, ref, path string) (*draftFi
 		return nil, problem(opened.HTTPResponse, opened.ApplicationproblemJSONDefault)
 	}
 
+	return readDraftFile(ctx, c, f, path)
+}
+
+// readMemoryFile reads memory.yaml of the factory ref's open draft, or of its current version
+// when no draft is open, without opening one; empty when neither has the file.
+func readMemoryFile(ctx context.Context, c orgClient, ref string) (*draftFile, error) {
+	f, err := getFactory(ctx, c, ref)
+	if err != nil {
+		return nil, err
+	}
+
+	if f.Draft != nil {
+		return readDraftFile(ctx, c, f, config.MemoryFile)
+	}
+
+	d := &draftFile{factory: f, path: config.MemoryFile}
+	if f.Current == nil {
+		return d, nil
+	}
+
+	res, err := c.GetVersionFileWithResponse(ctx, c.org, f.Id, strconv.Itoa(f.Current.Number), config.MemoryFile)
+	if err != nil {
+		return nil, apiDown(err)
+	}
+
+	switch {
+	case res.StatusCode() == http.StatusOK:
+		d.content = res.Body
+	case problemCode(res.ApplicationproblemJSONDefault) == authoring.CodeFileNotFound:
+	default:
+		return nil, problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	return d, nil
+}
+
+// readDraftFile reads path of f's open draft.
+func readDraftFile(ctx context.Context, c orgClient, f *gen.Factory, path string) (*draftFile, error) {
 	res, err := c.GetDraftFileWithResponse(ctx, c.org, f.Id, path)
 	if err != nil {
 		return nil, apiDown(err)

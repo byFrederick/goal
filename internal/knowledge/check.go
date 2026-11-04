@@ -14,7 +14,9 @@ const checkTimeout = 30 * time.Second
 
 // Check lists src, a source whose settings are not saved yet, as its sync would: with its kind's
 // reader and its secret opened in goald, refused when the secret is open to some factories only
-// (secretReader). It stores nothing and counts the items listed, at most domain.MaxSourceFiles+1.
+// (secretReader). It stores nothing and counts the items listed, at most domain.MaxSourceFiles+1,
+// naming the first domain.CheckFirstFiles as the sync would write them (itemPath); an item whose
+// path is not a file's, which the sync leaves out, is counted but not named.
 // A source it cannot read answers with the reason, never holding the secret's value; the error is
 // for ctx ending only. An upload source not saved yet lists nothing.
 func (in *Ingestor) Check(ctx context.Context, src domain.KnowledgeSource) (domain.SourceCheck, error) {
@@ -32,9 +34,18 @@ func (in *Ingestor) Check(ctx context.Context, src domain.KnowledgeSource) (doma
 
 	var out domain.SourceCheck
 
-	for _, err := range reader.List(ctx, spec) {
+	taken := map[string]bool{}
+
+	for item, err := range reader.List(ctx, spec) {
 		if err != nil {
 			return in.checkFailed(ctx, spec, err)
+		}
+
+		if len(out.FirstFiles) < domain.CheckFirstFiles {
+			if p := itemPath(src.Kind, item, taken); domain.CheckFilePath(p) == nil {
+				taken[p] = true
+				out.FirstFiles = append(out.FirstFiles, p)
+			}
 		}
 
 		if out.Files++; out.Files > domain.MaxSourceFiles {

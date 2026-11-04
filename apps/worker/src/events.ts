@@ -68,14 +68,29 @@ export function clip(s: string, max: number): string {
 /** The input field that names the file or folder of each tool goald counts reads of. */
 const pathFields: Record<string, string> = { Read: 'file_path', Grep: 'path', Glob: 'path' };
 
-/** The path a Read, Grep or Glob call names; undefined for other tools or without one. */
+/** The leading folders of an absolute glob pattern, before the first segment with a glob character. */
+function patternFolder(pattern: string): string | undefined {
+  if (!pattern.startsWith('/')) return undefined;
+  const segments = pattern.split('/');
+  const wild = segments.findIndex((s) => /[*?[{]/.test(s));
+  if (wild === -1) return pattern;
+  return segments.slice(0, wild).join('/') || '/';
+}
+
+/**
+ * The path a Read, Grep or Glob call names; undefined for other tools or without one. A Glob with
+ * only an absolute pattern reports the pattern's leading folders, so goald counts it as a search.
+ */
 export function toolPath(tool: string, input: unknown): string | undefined {
   const field = pathFields[tool];
   if (field === undefined || typeof input !== 'object' || input === null) {
     return undefined;
   }
-  const value = (input as Record<string, unknown>)[field];
-  return typeof value === 'string' && value !== '' ? value : undefined;
+  const args = input as Record<string, unknown>;
+  const value = args[field];
+  if (typeof value === 'string' && value !== '') return value;
+  if (tool === 'Glob' && typeof args.pattern === 'string') return patternFolder(args.pattern);
+  return undefined;
 }
 
 type Usage = Omit<Extract<WorkerEvent, { type: 'usage' }>, 'type' | 'at'>;

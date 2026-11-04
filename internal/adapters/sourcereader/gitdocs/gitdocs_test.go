@@ -50,6 +50,7 @@ const (
 	readmeMD = "README.md"
 	deployMD = "docs/deploy.md"
 	pagingMD = "docs/oncall/paging.md"
+	ideaMD   = "docs/drafts/idea.md"
 
 	// project is the repository the stand-ins serve.
 	project = "acme/docs"
@@ -81,6 +82,9 @@ type codeHost struct {
 	truncated bool
 	// afterPage runs, under mu, after GitLab served a tree page: a push meanwhile.
 	afterPage func(page int)
+	// archives counts the archives served; archive shapes them (archive_test.go).
+	archives int
+	archive  archiveShape
 }
 
 func newCodeHost(t *testing.T, files map[string]string) *codeHost {
@@ -172,7 +176,16 @@ func (h *codeHost) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		h.gitlab(w, r, strings.TrimPrefix(p, "/api/v4/projects/"+url.PathEscape(project)))
+		rest := strings.TrimPrefix(p, "/api/v4/projects/"+url.PathEscape(project))
+		if rest == "/repository/archive.zip" {
+			h.gitlabArchive(w, r)
+
+			return
+		}
+
+		h.gitlab(w, r, rest)
+	case strings.HasPrefix(p, "/codeload/"):
+		h.codeload(w, r, strings.TrimPrefix(p, "/codeload/"))
 	default:
 		http.NotFound(w, r)
 	}
@@ -235,6 +248,8 @@ func (h *codeHost) github(w http.ResponseWriter, r *http.Request, rest string) {
 		answer(w, http.StatusOK, map[string]any{"sha": blobID(ref), "tree": tree, "truncated": h.truncated})
 	case strings.HasPrefix(rest, "/contents/") && r.Header.Get("Accept") == "application/vnd.github.raw+json":
 		h.raw(w, r, strings.TrimPrefix(rest, "/contents/"))
+	case rest == "/zipball" || strings.HasPrefix(rest, "/zipball/"):
+		h.zipball(w, r, strings.TrimPrefix(strings.TrimPrefix(rest, "/zipball"), "/"))
 	default:
 		http.NotFound(w, r)
 	}
@@ -369,12 +384,12 @@ func listErr(t *testing.T, r *gitdocs.Reader, spec domain.SyncSpec) error {
 }
 
 var docs = map[string]string{
-	readmeMD:              "# Docs\n\nThe docs of Acme.\n",
-	deployMD:              "# Deploy\n\nRun task deploy from a clean main.\n",
-	pagingMD:              "# Paging\n\nPage the on-call through PagerDuty.\n",
-	"docs/drafts/idea.md": "# Idea\n\nNot ready.\n",
-	"docs/api.yaml":       "openapi: 3.1.0\n",
-	"main.go":             "package main\n",
+	readmeMD:        "# Docs\n\nThe docs of Acme.\n",
+	deployMD:        "# Deploy\n\nRun task deploy from a clean main.\n",
+	pagingMD:        "# Paging\n\nPage the on-call through PagerDuty.\n",
+	ideaMD:          "# Idea\n\nNot ready.\n",
+	"docs/api.yaml": "openapi: 3.1.0\n",
+	"main.go":       "package main\n",
 }
 
 // TestReader_SyncsIncrementallyByBlobID syncs a source through the ingestion loop twice on each
@@ -438,7 +453,7 @@ func TestReader_List(t *testing.T) {
 	}{
 		{
 			name: "the default glob reads Markdown on the default branch", config: map[string]string{},
-			want: []string{readmeMD, deployMD, "docs/drafts/idea.md", pagingMD},
+			want: []string{readmeMD, deployMD, ideaMD, pagingMD},
 		},
 		{name: "a branch", config: map[string]string{cfgBranch: "release/v1"}, want: []string{"docs/v1.md"}},
 		{name: "a glob without a directory matches at the root only", config: map[string]string{cfgInclude: "*.md"}, want: []string{readmeMD}},
@@ -500,7 +515,7 @@ func TestReader_GitLabListsOneCommit(t *testing.T) {
 	r := gitdocs.New(gitdocs.Config{Transport: h.transport(true)})
 	got := list(t, r, h.spec(t, kindGitLab, map[string]string{cfgRepository: h.repository()}))
 
-	if ids, want := slices.Sorted(maps.Keys(got)), []string{readmeMD, deployMD, "docs/drafts/idea.md", pagingMD}; !slices.Equal(ids, want) {
+	if ids, want := slices.Sorted(maps.Keys(got)), []string{readmeMD, deployMD, ideaMD, pagingMD}; !slices.Equal(ids, want) {
 		t.Errorf("listed %v across a push, want %v (the tree when the listing began)", ids, want)
 	}
 }

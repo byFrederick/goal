@@ -3,7 +3,7 @@
 // grouped as Read, Change and Delete by their names; before a test, the file's own rules show.
 import { Link } from '@tanstack/react-router';
 import { Loader2 } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { ServerTest } from '../../../api/types';
 import { useFactoryParams } from '../../../shared/factory';
 import { plural } from '../../../shared/format';
@@ -63,24 +63,50 @@ export function knownTools(server: McpServer, test: ServerTest | undefined): str
   return test?.ok ? test.tools : Object.keys(server.tools);
 }
 
+function statusOf(test: ServerTest | undefined, testing: boolean): string {
+  if (testing) return 'Testing…';
+  if (!test) return 'Not tested';
+  if (!test.tested) return 'Runs in the box';
+  return test.ok ? `${test.tools.length} found` : `Failed: ${test.error ?? 'no answer'}`;
+}
+
 function StatusLine({ test, testing }: { test: ServerTest | undefined; testing: boolean }) {
+  const text = statusOf(test, testing);
+  // When the status changes in place the new text swaps in (MOTION.md, A status changes in place); the
+  // first draw does not animate, so a list of cards does not move when it appears.
+  const [seen, setSeen] = useState({ text, generation: 0 });
+  let { generation } = seen;
+  if (seen.text !== text) {
+    generation += 1;
+    setSeen({ text, generation });
+  }
+  const swap = generation > 0 && 'motion-safe:animate-text-states-swap motion-reduce:animate-fade-in';
   if (testing) {
     return (
-      <span className="inline-flex items-center gap-2 text-secondary text-muted">
+      <span key={generation} className={cn('inline-flex items-center gap-2 text-secondary text-muted', swap)}>
         <Loader2 size={13} aria-hidden="true" className="animate-spin" />
-        Testing…
+        {text}
       </span>
     );
   }
-  if (!test) return <span className="text-secondary text-muted">Not tested</span>;
-  if (!test.tested) return <span className="text-secondary text-muted">Runs in the box</span>;
+  if (!test || !test.tested)
+    return (
+      <span key={generation} className={cn('text-secondary text-muted', swap)}>
+        {text}
+      </span>
+    );
   return (
     <span
+      key={generation}
       role="status"
-      className={cn('inline-flex items-center gap-2 text-secondary', test.ok ? 'text-ink-soft' : 'text-rework-ink')}
+      className={cn(
+        'inline-flex items-center gap-2 text-secondary',
+        test.ok ? 'text-ink-soft' : 'text-rework-ink',
+        swap,
+      )}
     >
       <span aria-hidden="true" className={cn('size-1.5 rounded-full', test.ok ? 'bg-ok' : 'bg-rework')} />
-      {test.ok ? `${test.tools.length} found` : `Failed: ${test.error ?? 'no answer'}`}
+      {text}
     </span>
   );
 }
@@ -184,8 +210,18 @@ function ServerRow({
   const orphans = rules.filter((r) => !listed.has(r.tool));
   const secrets = [...new Set([...Object.values(server.headers), ...Object.values(server.env)].flatMap(secretsIn))];
   const counts = countsText(server, tools);
+  // The Test button sits in the card's body, so a card that was just tested opens to show it (and its
+  // tools); the person can close it again.
+  const [open, setOpen] = useState(false);
+  const [answered, setAnswered] = useState(Boolean(test));
+  if (Boolean(test) !== answered) {
+    setAnswered(Boolean(test));
+    if (test) setOpen(true);
+  }
   return (
     <Disclosure
+      open={open}
+      onOpenChange={setOpen}
       triggerClassName="items-start py-3 md:items-center"
       summary={
         <span className="flex min-w-0 flex-1 items-start gap-3 md:items-center">

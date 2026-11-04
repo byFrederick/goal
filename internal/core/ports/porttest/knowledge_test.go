@@ -39,6 +39,7 @@ func TestKnowledge_Conformance(t *testing.T) {
 
 				return o.ID
 			},
+			Pin: func(_ *testing.T, org domain.OrgID, snap domain.KnowledgeSnapshotID) { kb.Pin(org, snap) },
 		}
 	})
 }

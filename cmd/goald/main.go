@@ -191,7 +191,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 
 	definitionStore := postgres.NewDefinitions(pool, objects, log)
-	kb := openKnowledge(s, store, connections, orgSecrets, objects, clock, log)
+	kb := openKnowledge(s, store, connections, orgSecrets, objects, clock, engineConfig(s, "").LongestClaim(), log)
 
 	// The organization policy (ADR 0024) is a ceiling over every definition: publishing checks a
 	// version's models against it, and the engine applies it at each run's start.
@@ -229,7 +229,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Policies: policies, Events: store, Clock: clock, Logger: log,
 		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, Watches: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore, Tries: store, Proposed: gatewayProposed{defs: defs}, Grades: jonahGrades(store),
-	}, gateway.Config{Key: []byte(key)})
+	}, gateway.Config{Key: []byte(key), KnowledgeURLTTL: knowledgeURLTTL(s)})
 	if err != nil {
 		return err
 	}
@@ -242,9 +242,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
 		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Clock: clock,
 		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Audit: store, NotificationOutbox: store, Logger: log,
-	}, engine.Config{
-		TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: boxes.gateway, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns,
-	})
+	}, engineConfig(s, boxes.gateway))
 	if err != nil {
 		return err
 	}
@@ -376,6 +374,13 @@ type knowledgeBase struct {
 	ingestor *knowledge.Ingestor
 }
 
+// engineConfig is the engine's behaviour with sandboxes reaching the gateway at gatewayURL. The
+// knowledge base keeps a replaced snapshot for its LongestClaim, which needs no gateway (ADR 0038
+// decision 3).
+func engineConfig(s settings, gatewayURL string) engine.Config {
+	return engine.Config{TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: gatewayURL, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns}
+}
+
 // openKnowledge wires the knowledge base: uploads of at most GOAL_UPLOAD_MAX_BYTES each, read
 // from the bucket; PDF and Office files converted by Workers AI when GOAL_WORKERS_AI_URL is set;
 // GOAL_KB_WORKERS workers syncing due sources. Upload, repository and Confluence sources sync
@@ -385,7 +390,7 @@ type knowledgeBase struct {
 // connection, through the public-only transport: gitdocs (GitHub and GitLab repositories) or
 // confluence (the spaces of a Confluence Cloud site).
 func openKnowledge(s settings, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets, objects ports.ObjectStore,
-	clock ports.Clock, log *slog.Logger,
+	clock ports.Clock, keep time.Duration, log *slog.Logger,
 ) knowledgeBase {
 	kb := postgres.NewKnowledge(store)
 
@@ -416,7 +421,7 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 		kb: kb, uploads: uploads,
 		ingestor: knowledge.NewIngestor(knowledge.IngestorConfig{
 			Knowledge: kb, Connections: connections, Secrets: secrets, Uploads: uploads,
-			Readers: readers, Objects: objects, Converter: converter, Clock: clock, Log: log, Workers: s.KBWorkers,
+			Readers: readers, Objects: objects, Converter: converter, Clock: clock, Log: log, Workers: s.KBWorkers, Keep: keep,
 		}),
 	}
 }
@@ -493,6 +498,21 @@ type runBoxes struct {
 	sandboxes ports.Sandboxes
 	gateway   string
 	close     func()
+}
+
+// cloudKnowledgeURLTTL is how long a cloud box's signed knowledge snapshot URL stays valid: longer
+// than prepare's download, shorter than the claim.
+const cloudKnowledgeURLTTL = 15 * time.Minute
+
+// knowledgeURLTTL is the gateway's KnowledgeURLTTL: cloud boxes download their knowledge
+// snapshots from signed bucket URLs, local Docker boxes, which cannot reach the bucket, from the
+// gateway's /run/knowledge (ADR 0038 decision 7).
+func knowledgeURLTTL(s settings) time.Duration {
+	if s.Sandbox == sandboxCloudflare {
+		return cloudKnowledgeURLTTL
+	}
+
+	return 0
 }
 
 // sandboxes wires the runs' sandboxes (spec 4 §5.1). On Docker, boxes reach the gateway through

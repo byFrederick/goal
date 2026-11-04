@@ -50,6 +50,7 @@ describe('the onboarding layout', () => {
         .getAllByRole('listitem')
         .map((li) => li.textContent),
     ).toEqual(['Organization', 'Code', 'Factory', 'Line', 'Budget', 'Intake', 'People', 'First item']);
+    expect(screen.getByRole('region', { name: 'Setup steps' }).getAttribute('tabindex')).toBe('0');
     const current = within(steps)
       .getAllByRole('listitem')
       .filter((li) => li.getAttribute('aria-current') === 'step');

@@ -10142,19 +10142,20 @@ components:
         config:
           type: object
           description: >-
-            What its reader reads (a repository, a branch and path globs; a Confluence space). A
-            synced source on a secret also names its reader (reader: gitdocs or confluence) and,
-            for confluence, the site and the account's email.
+            What its reader reads (a repository, a branch and path globs; Confluence spaces and,
+            with root_page, only one page's tree). A synced source on a secret also names its
+            reader (reader: gitdocs or confluence) and, for confluence, the site and the account's
+            email.
           additionalProperties: { type: string }
         read_when: { type: string, description: "The line that tells agents when to open it; empty when it has none" }
-        sync_every_seconds: { type: integer, description: How often it syncs }
+        sync_every_seconds: { type: integer, minimum: 0, description: "How often it syncs, in seconds: at least 900, or 0 when it syncs only when someone presses Sync" }
         status:
           type: string
           enum: [idle, syncing, failed]
           description: syncing while a goald holds it; failed after a sync that stopped (last_error says why)
         last_error: { type: string }
         last_synced_at: { type: string, format: date-time, nullable: true }
-        next_sync_at: { type: string, format: date-time, nullable: true, description: "When it is due next; null for a live source" }
+        next_sync_at: { type: string, format: date-time, nullable: true, description: "When it is due next; null for a live source, and for an on-demand source (sync_every_seconds 0) until someone presses Sync" }
         latest_snapshot:
           description: Its newest snapshot; null before the first sync
           nullable: true
@@ -10221,10 +10222,11 @@ components:
             What its reader reads. A synced source names its reader (reader: gitdocs or
             confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or
             on the host code_host names: github or gitlab), branch, include and exclude;
-            confluence reads site, email and spaces.
+            confluence reads site, email and spaces (space keys separated by commas), and the
+            optional root_page (a page id: only that page and the pages under it).
           additionalProperties: { type: string }
         read_when: { $ref: "#/components/schemas/KnowledgeReadWhen" }
-        sync_every_seconds: { type: integer, minimum: 900, description: "How often it syncs (default 3600)" }
+        sync_every_seconds: { type: integer, minimum: 0, description: "How often it syncs, in seconds: at least 900 (default 3600), or 0 to sync only when someone presses Sync. A new source syncs once when it is created either way" }
     KnowledgeReadWhen:
       type: string
       maxLength: 160
@@ -10241,7 +10243,7 @@ components:
           type: object
           description: Replaces the config
           additionalProperties: { type: string }
-        sync_every_seconds: { type: integer, minimum: 900 }
+        sync_every_seconds: { type: integer, minimum: 0, description: "How often it syncs, in seconds: at least 900, or 0 to sync only when someone presses Sync. 0 clears the next sync; an interval on an on-demand source makes it due at once" }
     KnowledgeFile:
       type: object
       description: One file of a source's current snapshot
@@ -10298,10 +10300,17 @@ components:
           items: { type: string }
     KnowledgeCheck:
       type: object
-      required: [access, files, limits, over_limit, warnings, line]
+      required: [access, files, first_files, limits, over_limit, warnings, line]
       properties:
         access: { $ref: "#/components/schemas/KnowledgeCheckAccess" }
         files: { type: integer, description: How many files it lists; 0 when access failed }
+        first_files:
+          type: array
+          description: >-
+            The paths, as the sync would write them under /knowledge/<name>/, of the first 8 files
+            the listing yields, in listing order. Empty when access failed or for an upload source
+            not saved yet.
+          items: { type: string }
         bytes:
           type: integer
           format: int64

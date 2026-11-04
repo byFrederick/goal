@@ -4501,6 +4501,9 @@ type KnowledgeCheck struct {
 	// Files How many files it lists; 0 when access failed
 	Files int `json:"files"`
 
+	// FirstFiles The paths, as the sync would write them under /knowledge/<name>/, of the first 8 files the listing yields, in listing order. Empty when access failed or for an upload source not saved yet.
+	FirstFiles []string `json:"first_files"`
+
 	// Limits A source's limits (ADR 0038 decision 4)
 	Limits KnowledgeLimits `json:"limits"`
 
@@ -4650,7 +4653,7 @@ type KnowledgeSnapshotSummary struct {
 
 // KnowledgeSource One source of the organization's knowledge base (spec 4 §4.8)
 type KnowledgeSource struct {
-	// Config What its reader reads (a repository, a branch and path globs; a Confluence space). A synced source on a secret also names its reader (reader: gitdocs or confluence) and, for confluence, the site and the account's email.
+	// Config What its reader reads (a repository, a branch and path globs; Confluence spaces and, with root_page, only one page's tree). A synced source on a secret also names its reader (reader: gitdocs or confluence) and, for confluence, the site and the account's email.
 	Config map[string]string `json:"config"`
 
 	// Connection The connection a live source reads, or a synced one not yet on a secret; absent for an upload source
@@ -4672,7 +4675,7 @@ type KnowledgeSource struct {
 	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
 	Name KnowledgeSourceName `json:"name"`
 
-	// NextSyncAt When it is due next; null for a live source
+	// NextSyncAt When it is due next; null for a live source, and for an on-demand source (sync_every_seconds 0) until someone presses Sync
 	NextSyncAt *time.Time `json:"next_sync_at"`
 
 	// ReadWhen The line that tells agents when to open it; empty when it has none
@@ -4684,7 +4687,7 @@ type KnowledgeSource struct {
 	// Status syncing while a goald holds it; failed after a sync that stopped (last_error says why)
 	Status KnowledgeSourceStatus `json:"status"`
 
-	// SyncEverySeconds How often it syncs
+	// SyncEverySeconds How often it syncs, in seconds: at least 900, or 0 when it syncs only when someone presses Sync
 	SyncEverySeconds int `json:"sync_every_seconds"`
 
 	// SyncFailures How many syncs failed in a row; a successful one resets it, and three show the source in Needs you
@@ -4736,9 +4739,11 @@ type KnowledgeSourcePatch struct {
 	ReadWhen *KnowledgeReadWhen `json:"read_when,omitempty"`
 
 	// Secret A synced source's new secret: it reads with it from its next sync
-	Secret           *SecretName `json:"secret,omitempty"`
-	SyncEverySeconds *int        `json:"sync_every_seconds,omitempty"`
-	Title            *string     `json:"title,omitempty"`
+	Secret *SecretName `json:"secret,omitempty"`
+
+	// SyncEverySeconds How often it syncs, in seconds: at least 900, or 0 to sync only when someone presses Sync. 0 clears the next sync; an interval on an on-demand source makes it due at once
+	SyncEverySeconds *int    `json:"sync_every_seconds,omitempty"`
+	Title            *string `json:"title,omitempty"`
 }
 
 // KnowledgeSourceReader defines model for KnowledgeSourceReader.
@@ -5203,7 +5208,7 @@ type NewItem struct {
 
 // NewKnowledgeSource defines model for NewKnowledgeSource.
 type NewKnowledgeSource struct {
-	// Config What its reader reads. A synced source names its reader (reader: gitdocs or confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or on the host code_host names: github or gitlab), branch, include and exclude; confluence reads site, email and spaces.
+	// Config What its reader reads. A synced source names its reader (reader: gitdocs or confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or on the host code_host names: github or gitlab), branch, include and exclude; confluence reads site, email and spaces (space keys separated by commas), and the optional root_page (a page id: only that page and the pages under it).
 	Config *map[string]string `json:"config,omitempty"`
 
 	// Connection The connection a live source reads
@@ -5221,7 +5226,7 @@ type NewKnowledgeSource struct {
 	// Secret The secret a synced source reads with: the code host's token for gitdocs, the API token for confluence. It must be open to all factories.
 	Secret *SecretName `json:"secret,omitempty"`
 
-	// SyncEverySeconds How often it syncs (default 3600)
+	// SyncEverySeconds How often it syncs, in seconds: at least 900 (default 3600), or 0 to sync only when someone presses Sync. A new source syncs once when it is created either way
 	SyncEverySeconds *int   `json:"sync_every_seconds,omitempty"`
 	Title            string `json:"title"`
 }

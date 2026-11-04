@@ -1,7 +1,8 @@
 // Knowledge (ADR 0038 decision 12) against the mock: the sources list with Find a file and Most read,
 // Add a source (Upload, Repository, Confluence, the Check and the factory checkboxes), and a source's
 // page with its files, latest sync, settings, the line agents see and who reads it. The mock starts with
-// acme's sources (dashboards, whose last sync failed; goal-docs and support-macros) and no upload
+// acme's sources (dashboards and product-specs, whose last syncs failed; goal-docs; and support-macros,
+// which syncs only on demand) and no upload
 // source, so a flow that needs one creates `handbook` first. Not run in the build box (no browser).
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test';
 import { status } from './editor';
@@ -179,5 +180,72 @@ for (const theme of ['light', 'dark'] as const) {
         await expect(page).toHaveScreenshot(`knowledge-${name}-${theme}-${width}.png`, { fullPage: true });
       });
     }
+  }
+}
+
+for (const scheme of ['light', 'dark'] as const) {
+  for (const width of [1440, 1280, 1024, 768, 390] as const) {
+    test.describe(`First files, ${scheme} at ${width} px`, () => {
+      test.use({ viewport: { width, height: 900 }, colorScheme: scheme });
+
+      test('the Check lists the first files with "and N more", and the page fits', async ({ page }) => {
+        await page.goto('/o/acme/knowledge/new?kind=repository');
+        await page.getByLabel('Name', { exact: true }).fill('runbooks');
+        await page.getByLabel('When should agents read it?').fill('How to fix what pages us. Read before acting.');
+        await page.getByRole('button', { name: 'Check' }).click();
+        const card = page.getByRole('region', { name: 'First files' });
+        await expect(card).toContainText('db/disk.md');
+        await expect(card).toContainText('and 9 more');
+        await fits(page);
+      });
+    });
+  }
+}
+
+// ADR 0038 decisions 1 and 2: sync only on demand, a Confluence root page, and Replace value on the alert.
+const widths = [1440, 1280, 1024, 768, 390] as const;
+
+for (const scheme of ['light', 'dark'] as const) {
+  for (const width of widths) {
+    test.describe(`source options at ${width} px in ${scheme} mode`, () => {
+      test.beforeEach(async ({ page }, testInfo) => {
+        test.skip(testInfo.project.name !== 'desktop-1440', 'the matrix sets its own viewports');
+        await page.setViewportSize({ width, height: 900 });
+        await page.emulateMedia({ colorScheme: scheme });
+      });
+
+      test('Add a source offers Only when someone presses Sync, and Confluence a Root page', async ({ page }) => {
+        await page.goto('/o/acme/knowledge/new?kind=confluence');
+        await expect(page.getByLabel('Root page (optional)')).toBeVisible();
+        const every = page.getByLabel('Sync every');
+        await every.selectOption({ label: 'Only when someone presses Sync' });
+        await expect(every).toHaveValue('0');
+        await page.getByLabel('Root page (optional)').fill('abc');
+        await page.getByRole('button', { name: 'Add source' }).click();
+        await expect(page.getByText('A page id is digits only, such as 12345.')).toBeVisible();
+        await fits(page);
+      });
+
+      test('a source page keeps the on-demand choice and the root page, with no next sync', async ({ page }) => {
+        await page.goto('/o/acme/knowledge/support-macros');
+        await expect(page.getByLabel('Sync every')).toHaveValue('0');
+        await expect(page.getByText(/Next /)).toHaveCount(0);
+        await page.goto('/o/acme/knowledge/product-specs');
+        await expect(page.getByLabel('Root page (optional)')).toHaveValue('12345');
+        await fits(page);
+      });
+
+      test('a failing source with a secret offers Replace value before Open source', async ({ page }) => {
+        await page.goto('/o/acme/knowledge');
+        const alert = page.getByRole('alert').filter({ hasText: 'product-specs' });
+        await expect(alert.getByRole('link')).toHaveText(['Replace value', 'Open source']);
+        await expect(page.getByRole('alert').filter({ hasText: 'dashboards' }).getByRole('link')).toHaveText([
+          'Open source',
+        ]);
+        await alert.getByRole('link', { name: 'Replace value' }).click();
+        await expect(page).toHaveURL(/\/o\/acme\/secrets\/confluence-token/);
+        await expect(page.getByRole('heading', { name: 'confluence-token' })).toBeVisible();
+      });
+    });
   }
 }

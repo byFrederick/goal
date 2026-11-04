@@ -1,6 +1,6 @@
 ## When you change
 
-The watch on every change ([ADR 0039](../../adr/0039-jonah-learns-from-the-line.md) decisions 14 and 15): `jonah.Watcher` in `internal/jonah/watch.go`, `domain.Watch`, its interval and verdicts in `internal/core/domain/watch.go` (`WatchMaxAge`, `WatchMaxItems`), the `Watches` port in `internal/core/ports/watches.go`, its adapter (`internal/adapters/store/postgres/watches.go`, `db/queries/watches.sql`, `db/migrations/00100_watches.sql`) or `watchEvery` and `runWatches` in `cmd/goald/jonah.go`
+The watch on every change ([ADR 0039](../../adr/0039-jonah-learns-from-the-line.md) decisions 14 and 15): `jonah.Watcher` in `internal/jonah/watch.go`, `domain.Watch`, its interval and verdicts in `internal/core/domain/watch.go` (`WatchMaxAge`, `WatchMaxItems`), the `Watches` port in `internal/core/ports/watches.go`, its adapter (`internal/adapters/store/postgres/watches.go`, `db/queries/watches.sql`, `db/migrations/00111_watches.sql`) or `watchEvery` and `runWatches` in `cmd/goald/jonah.go`
 
 ## Also change
 

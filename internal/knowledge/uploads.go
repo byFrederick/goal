@@ -99,8 +99,24 @@ func (u *Uploads) DeleteUpload(ctx context.Context, source, name string, by doma
 	return u.kb.DeleteUpload(ctx, source, name, by, u.drop)
 }
 
-// DeleteSource deletes a source with its uploads and the objects no other upload holds.
+// DeleteSource deletes a source with its uploads and the objects no other upload holds. Its
+// snapshots' zips (domain.KnowledgeSourcePrefix) go first: a failure leaves the source, whose
+// rows without zips read as not synced, to be deleted again.
 func (u *Uploads) DeleteSource(ctx context.Context, name string, by domain.Actor) error {
+	org, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return domain.ErrNoOrg
+	}
+
+	src, err := u.kb.Source(ctx, name)
+	if err != nil {
+		return err
+	}
+
+	if _, err := u.objects.DeletePrefix(ctx, domain.KnowledgeSourcePrefix(org, src.ID)); err != nil {
+		return fmt.Errorf("delete knowledge source %q: its snapshots: %w", name, err)
+	}
+
 	return u.kb.DeleteSource(ctx, name, by, u.drop)
 }
 

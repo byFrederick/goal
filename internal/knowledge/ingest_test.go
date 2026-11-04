@@ -1,6 +1,7 @@
 package knowledge_test
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"iter"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -58,6 +60,8 @@ type reader struct {
 	secret  string // the value of the secret it was given
 	block   map[string]chan struct{}
 	down    bool // every fetch fails, as a server answering 503
+	// titles and folders, by path, list a document under another title and in a folder.
+	titles, folders map[string]string
 }
 
 func (r *reader) set(docs map[string]string) {
@@ -85,12 +89,13 @@ func (r *reader) List(_ context.Context, s domain.SyncSpec) iter.Seq2[domain.Sou
 		r.secret = s.Secret.Value
 	}
 
-	docs := maps.Clone(r.docs)
+	docs, titles, folders := maps.Clone(r.docs), maps.Clone(r.titles), maps.Clone(r.folders)
 	r.mu.Unlock()
 
 	return func(yield func(domain.SourceItem, error) bool) {
 		for _, p := range slices.Sorted(maps.Keys(docs)) {
-			if !yield(domain.SourceItem{ID: p, Version: string(domain.HashBlob([]byte(docs[p]))), Title: p, URL: "https://git.example.com/" + p}, nil) {
+			item := domain.SourceItem{ID: p, Version: string(domain.HashBlob([]byte(docs[p]))), Title: cmp.Or(titles[p], p), Folder: folders[p], URL: "https://git.example.com/" + p}
+			if !yield(item, nil) {
 				return
 			}
 		}
@@ -121,6 +126,54 @@ func (r *reader) Fetch(ctx context.Context, _ domain.SyncSpec, id string) (domai
 	}
 
 	return domain.SourceDoc{SourceItem: domain.SourceItem{ID: id, MIME: domain.MediaMarkdown}, Body: []byte(body)}, nil
+}
+
+// archiving is a reader that also reads an archive (ports.ArchiveReader). An archive yields
+// every asked item whose content is still the version listed, except those in skip. With
+// breakAfter above 0 it fails as a whole after yielding that many.
+type archiving struct {
+	*reader
+
+	archives   int
+	skip       map[string]bool
+	breakAfter int
+}
+
+func (a *archiving) Archive(_ context.Context, _ domain.SyncSpec, items []domain.SourceItem) iter.Seq2[domain.SourceDoc, error] {
+	a.mu.Lock()
+	a.archives++
+	docs := maps.Clone(a.docs)
+	a.mu.Unlock()
+
+	return func(yield func(domain.SourceDoc, error) bool) {
+		n := 0
+
+		for _, item := range items {
+			body, ok := docs[item.ID]
+			if !ok || a.skip[item.ID] || string(domain.HashBlob([]byte(body))) != item.Version {
+				continue
+			}
+
+			if a.breakAfter > 0 && n == a.breakAfter {
+				yield(domain.SourceDoc{}, errors.New("the archive is cut short"))
+
+				return
+			}
+
+			n++
+
+			if !yield(domain.SourceDoc{SourceItem: domain.SourceItem{ID: item.ID, MIME: domain.MediaMarkdown}, Body: []byte(body)}, nil) {
+				return
+			}
+		}
+	}
+}
+
+func (a *archiving) count() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	return a.archives
 }
 
 // world is one organization's knowledge base on the port fakes, with a repository source
@@ -185,8 +238,13 @@ func (w *world) ingestor(kb ports.Knowledge) *knowledge.Ingestor {
 		kb = w.kb
 	}
 
+	return w.ingestorReading(kb, w.docs)
+}
+
+// ingestorReading syncs kb's repository and Confluence sources with r.
+func (w *world) ingestorReading(kb ports.Knowledge, r ports.SourceReader) *knowledge.Ingestor {
 	return knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: kb, Secrets: w.secrets, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: w.docs, "confluence": w.docs},
+		Knowledge: kb, Secrets: w.secrets, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: r, "confluence": r},
 		Objects: w.objects, Clock: w.clock, TempDir: w.t.TempDir(),
 	})
 }
@@ -706,4 +764,175 @@ func snapshotsOf(w *world, source string) []domain.KnowledgeSnapshot {
 	}
 
 	return s
+}
+
+// failingObjects is the bucket whose deletions fail while fail is set.
+type failingObjects struct {
+	*porttest.ObjectStore
+
+	fail atomic.Bool
+}
+
+var errBucketDown = errors.New("the bucket is unavailable")
+
+func (o *failingObjects) Delete(ctx context.Context, key string) error {
+	if o.fail.Load() {
+		return errBucketDown
+	}
+
+	return o.ObjectStore.Delete(ctx, key)
+}
+
+func (o *failingObjects) DeletePrefix(ctx context.Context, prefix string) (int, error) {
+	if o.fail.Load() {
+		return 0, errBucketDown
+	}
+
+	return o.ObjectStore.DeletePrefix(ctx, prefix)
+}
+
+// snapshotIDs are the source's snapshots, newest first.
+func (w *world) snapshotIDs(source string) []domain.KnowledgeSnapshotID {
+	w.t.Helper()
+
+	snaps, err := w.kb.Snapshots(w.ctx(), source)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	out := make([]domain.KnowledgeSnapshotID, 0, len(snaps))
+	for _, s := range snaps {
+		out = append(out, s.ID)
+	}
+
+	return out
+}
+
+// hasZip reports whether the bucket holds the zip of the source's snapshot id.
+func (w *world) hasZip(src domain.KnowledgeSource, id domain.KnowledgeSnapshotID) bool {
+	_, err := w.objects.Get(w.ctx(), domain.KnowledgeSnapshotKey(w.org, src.ID, id))
+
+	return err == nil
+}
+
+// A sync deletes the snapshots retention no longer keeps, the zip before the row; it keeps the
+// current one, one a running run pinned and one replaced inside the window, and a deletion that
+// fails leaves the row for the next sync without failing this one.
+func TestIngestor_RetentionDeletesTheZipBeforeTheRow(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	ctx := w.ctx()
+	objs := &failingObjects{ObjectStore: w.objects}
+	in := knowledge.NewIngestor(knowledge.IngestorConfig{
+		Knowledge: w.kb, Uploads: w.uploads, Objects: objs, Clock: w.clock, TempDir: t.TempDir(), Keep: 2 * time.Hour,
+	})
+
+	// Four versions of the handbook: old at 0, pinned at 1h, young at 2h, current at 7h. With a
+	// window of 2h at 7h, old (replaced at 1h) and pinned (replaced at 2h) are past it, young
+	// (replaced at 7h) is not.
+	fake, ok := w.kb.(*porttest.Knowledge)
+	if !ok {
+		t.Fatalf("the knowledge base is a %T", w.kb)
+	}
+
+	var ids []domain.KnowledgeSnapshotID
+
+	for i, wait := range []time.Duration{0, time.Hour, time.Hour, 5 * time.Hour} {
+		w.clock.Advance(wait)
+
+		if i == 3 {
+			fake.Pin(w.org, ids[1])
+			objs.fail.Store(true)
+		}
+
+		if _, err := w.uploads.Upload(ctx, "handbook", "leave.md", []byte("# Leave\n\nVersion "+strconv.Itoa(i)), admin); err != nil {
+			t.Fatal(err)
+		}
+
+		w.syncDue(in)
+		ids = append(ids, w.source("handbook").CurrentSnapshot)
+	}
+
+	src := w.source("handbook")
+	w.want("the source after a sync whose retention failed", src, src.Status == domain.SyncIdle, src.LastError == "", src.SyncFailures == 0)
+
+	got := w.snapshotIDs("handbook")
+	w.want("the snapshots after the zip's deletion failed", got, slices.Equal(got, []domain.KnowledgeSnapshotID{ids[3], ids[2], ids[1], ids[0]}))
+	w.want("the old snapshot's zip after its deletion failed", nil, w.hasZip(src, ids[0]))
+
+	// The next sync deletes it, zip and row.
+	objs.fail.Store(false)
+	w.clock.Advance(time.Hour + time.Minute)
+	w.syncDue(in)
+
+	got = w.snapshotIDs("handbook")
+	w.want("the snapshots after retention", got, slices.Equal(got, []domain.KnowledgeSnapshotID{ids[3], ids[2], ids[1]}))
+	w.want("the old snapshot's zip after retention", nil, !w.hasZip(src, ids[0]))
+
+	for _, id := range ids[1:] {
+		w.want("the zip of a snapshot retention keeps", id, w.hasZip(src, id))
+	}
+}
+
+// Deleting a source deletes its snapshots' zips first, and only its own: another source's zips
+// and the uploads' originals another source still holds stay. When the bucket fails, the source
+// stays.
+func TestUploads_DeleteSourceDeletesItsSnapshotZips(t *testing.T) {
+	t.Parallel()
+
+	const manuals = "manuals"
+
+	w := newWorld(t)
+	ctx := w.ctx()
+
+	if _, err := w.kb.CreateSource(ctx, domain.NewKnowledgeSource{Name: manuals, Title: "Manuals", Kind: domain.SourceUpload}, admin); err != nil {
+		t.Fatal(err)
+	}
+
+	body := []byte("# Policy\n\nBe kind.")
+
+	for _, source := range []string{"handbook", manuals} {
+		if _, err := w.uploads.Upload(ctx, source, "policy.md", body, admin); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	w.syncDue(w.ingestor(nil))
+
+	handbook, other := w.source("handbook"), w.source(manuals)
+	w.want("the zips after the sync", nil, w.hasZip(handbook, handbook.CurrentSnapshot), w.hasZip(other, other.CurrentSnapshot))
+
+	objs := &failingObjects{ObjectStore: w.objects}
+	uploads := knowledge.NewUploads(w.kb, objs, 0)
+
+	objs.fail.Store(true)
+
+	if err := uploads.DeleteSource(ctx, "handbook", admin); !errors.Is(err, errBucketDown) {
+		t.Errorf("DeleteSource with the bucket down = %v, want %v", err, errBucketDown)
+	}
+
+	w.source("handbook")
+
+	objs.fail.Store(false)
+
+	if err := uploads.DeleteSource(ctx, "handbook", admin); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := w.kb.Source(ctx, "handbook"); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("Source after its deletion = %v, want %v", err, ports.ErrNotFound)
+	}
+
+	left, err := w.objects.List(ctx, domain.KnowledgeSourcePrefix(w.org, handbook.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w.want("the deleted source's zips", left, len(left) == 0)
+	w.want("the other source's zip", nil, w.hasZip(other, other.CurrentSnapshot))
+
+	if _, err := w.objects.Get(ctx, domain.KnowledgeKey(w.org, domain.HashBlob(body))); err != nil {
+		t.Errorf("the original the other source still holds: %v", err)
+	}
 }

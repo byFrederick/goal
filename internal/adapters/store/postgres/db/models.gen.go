@@ -234,9 +234,9 @@ type JonahProposal struct {
 	DecidedBy          *string
 	DecidedAt          *time.Time
 	CreatedAt          time.Time
-	Undoes             *uuid.UUID
 	Edits              []byte
 	Agent              *string
+	Undoes             *uuid.UUID
 }
 
 type JonahReview struct {

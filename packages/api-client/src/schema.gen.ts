@@ -8171,13 +8171,13 @@ export interface components {
             connection?: string;
             /** @description The secret a synced source reads with, opened at each sync; absent for an upload or live source and a synced one still on its connection */
             secret?: string;
-            /** @description What its reader reads (a repository, a branch and path globs; a Confluence space). A synced source on a secret also names its reader (reader: gitdocs or confluence) and, for confluence, the site and the account's email. */
+            /** @description What its reader reads (a repository, a branch and path globs; Confluence spaces and, with root_page, only one page's tree). A synced source on a secret also names its reader (reader: gitdocs or confluence) and, for confluence, the site and the account's email. */
             config: {
                 [key: string]: string;
             };
             /** @description The line that tells agents when to open it; empty when it has none */
             read_when: string;
-            /** @description How often it syncs */
+            /** @description How often it syncs, in seconds: at least 900, or 0 when it syncs only when someone presses Sync */
             sync_every_seconds: number;
             /**
              * @description syncing while a goald holds it; failed after a sync that stopped (last_error says why)
@@ -8189,7 +8189,7 @@ export interface components {
             last_synced_at: string | null;
             /**
              * Format: date-time
-             * @description When it is due next; null for a live source
+             * @description When it is due next; null for a live source, and for an on-demand source (sync_every_seconds 0) until someone presses Sync
              */
             next_sync_at: string | null;
             /** @description Its newest snapshot; null before the first sync */
@@ -8249,12 +8249,12 @@ export interface components {
             connection?: string;
             /** @description The secret a synced source reads with: the code host's token for gitdocs, the API token for confluence. It must be open to all factories. */
             secret?: components["schemas"]["SecretName"];
-            /** @description What its reader reads. A synced source names its reader (reader: gitdocs or confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or on the host code_host names: github or gitlab), branch, include and exclude; confluence reads site, email and spaces. */
+            /** @description What its reader reads. A synced source names its reader (reader: gitdocs or confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or on the host code_host names: github or gitlab), branch, include and exclude; confluence reads site, email and spaces (space keys separated by commas), and the optional root_page (a page id: only that page and the pages under it). */
             config?: {
                 [key: string]: string;
             };
             read_when?: components["schemas"]["KnowledgeReadWhen"];
-            /** @description How often it syncs (default 3600) */
+            /** @description How often it syncs, in seconds: at least 900 (default 3600), or 0 to sync only when someone presses Sync. A new source syncs once when it is created either way */
             sync_every_seconds?: number;
         };
         /** @description One line that tells agents when to open the source, as "How to fix what pages us. Read before acting on an alert." */
@@ -8268,6 +8268,7 @@ export interface components {
             config?: {
                 [key: string]: string;
             };
+            /** @description How often it syncs, in seconds: at least 900, or 0 to sync only when someone presses Sync. 0 clears the next sync; an interval on an on-demand source makes it due at once */
             sync_every_seconds?: number;
         };
         /** @description One file of a source's current snapshot */
@@ -8317,6 +8318,8 @@ export interface components {
             access: components["schemas"]["KnowledgeCheckAccess"];
             /** @description How many files it lists; 0 when access failed */
             files: number;
+            /** @description The paths, as the sync would write them under /knowledge/<name>/, of the first 8 files the listing yields, in listing order. Empty when access failed or for an upload source not saved yet. */
+            first_files: string[];
             /**
              * Format: int64
              * @description Their Markdown's size, only when goald knows it: the current snapshot of a source of that name and kind that exists. A listing does not say how big each file is.

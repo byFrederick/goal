@@ -10,7 +10,8 @@ export const touchTarget =
   'relative max-md:before:absolute max-md:before:-inset-y-2 max-md:before:inset-x-0 max-md:before:content-[""]';
 
 /**
- * For a bare text link (a row title): 12 px of padding above and below, taken back by the same
- * negative margin, so the line stays where it was and the link answers across at least 44 px.
+ * For a bare text link (a row title): 16 px of padding above and below, taken back by the same
+ * negative margin, so the line stays where it was and the link answers across at least 44 px
+ * (an 18 px line plus 16 px each side).
  */
-export const touchLink = 'max-md:-my-3 max-md:py-3';
+export const touchLink = 'max-md:-my-4 max-md:py-4';

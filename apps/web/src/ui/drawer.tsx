@@ -43,7 +43,7 @@ export function DrawerContent({ title, description, children }: DrawerContentPro
             {description ? <D.Description className="m-0 text-sm text-muted">{description}</D.Description> : null}
           </div>
           <D.Close
-            className="-mt-1 -mr-1 inline-flex size-10 shrink-0 items-center justify-center rounded-control text-ink transition-colors hover:bg-hover"
+            className="-mt-1 -mr-1 inline-flex size-11 shrink-0 md:size-10 items-center justify-center rounded-control text-ink transition-colors hover:bg-hover"
             aria-label="Close"
           >
             <X size={18} strokeWidth={1.5} aria-hidden="true" />

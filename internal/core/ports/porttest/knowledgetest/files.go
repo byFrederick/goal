@@ -17,6 +17,7 @@ const (
 	snap1 domain.KnowledgeSnapshotID = "01900000-0000-7000-8000-0000000000a1"
 	snap2 domain.KnowledgeSnapshotID = "01900000-0000-7000-8000-0000000000a2"
 	snap3 domain.KnowledgeSnapshotID = "01900000-0000-7000-8000-0000000000a3"
+	snap4 domain.KnowledgeSnapshotID = "01900000-0000-7000-8000-0000000000a4"
 )
 
 // Paths of files the tests use.
@@ -210,6 +211,66 @@ func testSnapshotRules(f *fixture) {
 	f.refused("Files of an unknown source", err, ports.ErrNotFound)
 }
 
+// testSnapshotRetention: retention keeps a source's current snapshot, one a running run pinned
+// and one replaced inside the window, and deletes the rest; it never deletes the current one,
+// and a lease another claim took changes nothing.
+func testSnapshotRetention(f *fixture) {
+	ctx := f.ctx()
+	src := f.upload(handbook)
+	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Microsecond)
+	c := f.claimSource(src, t0)
+	a := file(fileA, "A", "v1", 10)
+
+	// old is replaced at t0+1h, pinned at t0+2h, young at t0+5h; current is current.
+	for _, s := range []struct {
+		id domain.KnowledgeSnapshotID
+		at time.Duration
+	}{{snap1, 0}, {snap2, time.Hour}, {snap3, 2 * time.Hour}, {snap4, 5 * time.Hour}} {
+		f.putSnapshot(c, snapshot(s.id, src.ID, t0.Add(s.at), a), a)
+	}
+
+	f.Pin(f.t, f.org, snap2)
+
+	expired, err := f.Knowledge.ExpiredSnapshots(ctx, c.Lease, t0.Add(3*time.Hour))
+	f.must(err)
+	f.want("ExpiredSnapshots", expired, len(expired) == 1, len(expired) == 1 && expired[0].ID == snap1,
+		len(expired) == 1 && expired[0].Key == domain.KnowledgeSnapshotKey(f.org, src.ID, snap1))
+
+	early, err := f.Knowledge.ExpiredSnapshots(ctx, c.Lease, t0.Add(time.Hour-time.Microsecond))
+	f.must(err)
+	f.want("ExpiredSnapshots before the old one was replaced", early, len(early) == 0)
+
+	// The current snapshot is never deleted, even when asked.
+	f.must(f.Knowledge.DeleteSnapshots(ctx, c.Lease, []domain.KnowledgeSnapshotID{snap1, snap4}))
+
+	snaps, err := f.Knowledge.Snapshots(ctx, handbook)
+	f.must(err)
+
+	ids := make([]domain.KnowledgeSnapshotID, 0, len(snaps))
+	for _, s := range snaps {
+		ids = append(ids, s.ID)
+	}
+
+	f.want("Snapshots after the deletion", ids, slices.Equal(ids, []domain.KnowledgeSnapshotID{snap4, snap3, snap2}))
+	f.want("the source after the deletion", nil, f.get(f.org, handbook).CurrentSnapshot == snap4)
+
+	again, err := f.Knowledge.ExpiredSnapshots(ctx, c.Lease, t0.Add(3*time.Hour))
+	f.must(err)
+	f.want("ExpiredSnapshots after the deletion", again, len(again) == 0)
+
+	// Another claim takes the source once the lease ends.
+	f.claimSource(src, t0.Add(11*time.Minute))
+
+	_, err = f.Knowledge.ExpiredSnapshots(ctx, c.Lease, t0.Add(24*time.Hour))
+	f.refused("ExpiredSnapshots under a lease another claim took", err, ports.ErrLeaseLost)
+	f.refused("DeleteSnapshots under a lease another claim took",
+		f.Knowledge.DeleteSnapshots(ctx, c.Lease, []domain.KnowledgeSnapshotID{snap3}), ports.ErrLeaseLost)
+
+	snaps, err = f.Knowledge.Snapshots(ctx, handbook)
+	f.must(err)
+	f.want("Snapshots after the refusals", snaps, len(snaps) == 3)
+}
+
 // testFilesPage: files page in byte order of their paths, after a path, and filter by a prefix
 // of the path or, in any case, of the title.
 func testFilesPage(f *fixture) {
@@ -359,7 +420,8 @@ func testFilesIsolation(f *fixture) {
 }
 
 // testNewKinds: repository and Confluence sources are created, read their secret by name and
-// carry their read-when line, which a patch changes.
+// carry their read-when line, which a patch changes: a new line makes the source due at once, a
+// patch of the title or of the same line does not.
 func testNewKinds(f *fixture) {
 	ctx := f.ctx()
 
@@ -379,11 +441,31 @@ func testNewKinds(f *fixture) {
 	})
 	f.want("a Confluence source", wiki, wiki.Kind == domain.SourceConfluence, wiki.Secret == docsSecret)
 
+	// Sync both once, so neither is due.
+	now := time.Now().Add(time.Second)
+	for c := f.claim(now, time.Minute); c != nil; c = f.claim(now, time.Minute) {
+		f.finish(*c, now, "")
+	}
+
+	due := f.get(f.org, "repo-docs").NextSyncAt
+	f.want("repo-docs after its sync", due, due != nil, due.After(now))
+
+	title, same := "Repository docs", repo.ReadWhen
+
+	got, err := f.Knowledge.UpdateSource(ctx, "repo-docs", domain.KnowledgeSourcePatch{Title: &title}, admin)
+	f.must(err)
+	f.want("UpdateSource of only the title keeps the next sync", got.NextSyncAt, equalTime(got.NextSyncAt, *due))
+
+	got, err = f.Knowledge.UpdateSource(ctx, "repo-docs", domain.KnowledgeSourcePatch{ReadWhen: &same}, admin)
+	f.must(err)
+	f.want("UpdateSource of the same read-when line keeps the next sync", got.NextSyncAt, equalTime(got.NextSyncAt, *due))
+
 	line := "Read for how we deploy."
 
-	got, err := f.Knowledge.UpdateSource(ctx, "repo-docs", domain.KnowledgeSourcePatch{ReadWhen: &line}, admin)
+	got, err = f.Knowledge.UpdateSource(ctx, "repo-docs", domain.KnowledgeSourcePatch{ReadWhen: &line}, admin)
 	f.must(err)
-	f.want("UpdateSource of the read-when line", got, got.ReadWhen == line, f.get(f.org, "repo-docs").ReadWhen == line)
+	f.want("UpdateSource of the read-when line", got, got.ReadWhen == line, f.get(f.org, "repo-docs").ReadWhen == line,
+		got.NextSyncAt != nil, !got.NextSyncAt.After(time.Now()))
 
 	_, err = f.Knowledge.CreateSource(ctx, domain.NewKnowledgeSource{Name: "wiki-two", Title: "Wiki", Kind: domain.SourceConfluence}, admin)
 	f.refused("CreateSource of Confluence without a secret", err, domain.ErrInvalid)

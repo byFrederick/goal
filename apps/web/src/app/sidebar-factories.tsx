@@ -79,7 +79,7 @@ function FactoryGroup({
   const [toggled, setToggled] = useState<boolean | null>(null);
   const expanded = toggled ?? current;
   const pagesId = useId();
-  const { factory, mark, attention, label } = square;
+  const { factory, mark, attention, nameLabel } = square;
   const params = { org: org.slug, factory: factory.name };
   // Jonah's waiting count is read for the expanded factory only; without it (a 503 while Jonah is off, or an error) the row shows no count.
   const jonah = useQuery({ ...jonahOverviewQuery(org.id, factory.id), enabled: expanded });
@@ -93,7 +93,7 @@ function FactoryGroup({
           params={params}
           activeOptions={{ exact: true }}
           onClick={onNavigate}
-          aria-label={label}
+          aria-label={nameLabel}
           className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-body font-control text-ink no-underline hover:bg-hover"
         >
           <FactoryBadge mark={mark} />

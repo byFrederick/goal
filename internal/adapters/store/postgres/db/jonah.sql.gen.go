@@ -58,7 +58,7 @@ UPDATE jonah_proposals
 SET state = $1, published_version_id = $2, reject_reason = $3,
     decided_by = $4, decided_at = $5::timestamptz
 WHERE factory_id = $6 AND number = $7 AND state = 'proposed'
-RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes, edits, agent
+RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, edits, agent, undoes
 `
 
 type DecideProposalParams struct {
@@ -101,9 +101,9 @@ func (q *Queries) DecideProposal(ctx context.Context, arg DecideProposalParams) 
 		&i.DecidedBy,
 		&i.DecidedAt,
 		&i.CreatedAt,
-		&i.Undoes,
 		&i.Edits,
 		&i.Agent,
+		&i.Undoes,
 	)
 	return i, err
 }
@@ -426,7 +426,7 @@ INSERT INTO jonah_proposals (id, factory_id, number, agent, version_id, title, s
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9, $10, $11::text[],
         $12)
-RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes, edits, agent
+RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, edits, agent, undoes
 `
 
 type InsertModelProposalParams struct {
@@ -480,9 +480,9 @@ func (q *Queries) InsertModelProposal(ctx context.Context, arg InsertModelPropos
 		&i.DecidedBy,
 		&i.DecidedAt,
 		&i.CreatedAt,
-		&i.Undoes,
 		&i.Edits,
 		&i.Agent,
+		&i.Undoes,
 	)
 	return i, err
 }
@@ -546,7 +546,7 @@ INSERT INTO jonah_proposals (id, factory_id, number, review_id, version_id, titl
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9, $10, $11::text[],
         $12)
-RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes, edits, agent
+RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, edits, agent, undoes
 `
 
 type InsertProposalParams struct {
@@ -598,9 +598,9 @@ func (q *Queries) InsertProposal(ctx context.Context, arg InsertProposalParams) 
 		&i.DecidedBy,
 		&i.DecidedAt,
 		&i.CreatedAt,
-		&i.Undoes,
 		&i.Edits,
 		&i.Agent,
+		&i.Undoes,
 	)
 	return i, err
 }
@@ -609,7 +609,7 @@ const insertUndoProposal = `-- name: InsertUndoProposal :one
 INSERT INTO jonah_proposals (id, factory_id, number, undoes, version_id, title, summary, edits, paths, created_at)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9::text[], $10)
-RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes, edits, agent
+RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, edits, agent, undoes
 `
 
 type InsertUndoProposalParams struct {
@@ -659,9 +659,9 @@ func (q *Queries) InsertUndoProposal(ctx context.Context, arg InsertUndoProposal
 		&i.DecidedBy,
 		&i.DecidedAt,
 		&i.CreatedAt,
-		&i.Undoes,
 		&i.Edits,
 		&i.Agent,
+		&i.Undoes,
 	)
 	return i, err
 }
@@ -875,7 +875,7 @@ func (q *Queries) OpenObservations(ctx context.Context, arg OpenObservationsPara
 }
 
 const proposalByNumber = `-- name: ProposalByNumber :one
-SELECT id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes, edits, agent FROM jonah_proposals WHERE factory_id = $1 AND number = $2
+SELECT id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, edits, agent, undoes FROM jonah_proposals WHERE factory_id = $1 AND number = $2
 `
 
 type ProposalByNumberParams struct {
@@ -904,15 +904,15 @@ func (q *Queries) ProposalByNumber(ctx context.Context, arg ProposalByNumberPara
 		&i.DecidedBy,
 		&i.DecidedAt,
 		&i.CreatedAt,
-		&i.Undoes,
 		&i.Edits,
 		&i.Agent,
+		&i.Undoes,
 	)
 	return i, err
 }
 
 const proposals = `-- name: Proposals :many
-SELECT id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes, edits, agent FROM jonah_proposals
+SELECT id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, edits, agent, undoes FROM jonah_proposals
 WHERE factory_id = $1
   AND ($2::text IS NULL OR state = $2::text)
   AND ($3::bigint IS NULL OR number < $3::bigint)
@@ -961,9 +961,9 @@ func (q *Queries) Proposals(ctx context.Context, arg ProposalsParams) ([]JonahPr
 			&i.DecidedBy,
 			&i.DecidedAt,
 			&i.CreatedAt,
-			&i.Undoes,
 			&i.Edits,
 			&i.Agent,
+			&i.Undoes,
 		); err != nil {
 			return nil, err
 		}

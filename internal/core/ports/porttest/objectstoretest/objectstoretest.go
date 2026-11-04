@@ -1,5 +1,5 @@
-// Package objectstoretest is the conformance suite for ports.ObjectStore's ranged read and
-// streamed write (ADR 0038 decision 3). The in-memory fake in porttest and the S3/R2 adapter run
+// Package objectstoretest is the conformance suite for ports.ObjectStore's ranged read, streamed
+// write (ADR 0038 decision 3) and presigned read (decision 7). The in-memory fake in porttest and the S3/R2 adapter run
 // it, so a test that reads part of a knowledge snapshot's zip, or streams one in, on the fake
 // holds for the bucket.
 package objectstoretest
@@ -9,7 +9,9 @@ import (
 	"crypto/rand"
 	"errors"
 	"io"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
@@ -36,6 +38,7 @@ func Run(t *testing.T, newStore func(t *testing.T) ports.ObjectStore) {
 		{"PutStream_LargerThanAPart", testStreamLarge},
 		{"PutStream_SmallAndEmptyReplace", testStreamSmall},
 		{"PutStream_ReaderErrorLeavesTheKey", testStreamReaderError},
+		{"PresignGet", testPresignGet},
 	}
 
 	for _, tc := range tests {
@@ -276,5 +279,26 @@ func testStreamReaderError(f fixture) {
 
 	if got := readRange(t, s, digitsKey, 0, -1); got != digits {
 		t.Errorf("after a failed PutStream the object is %q, want it as it was", got)
+	}
+}
+
+func testPresignGet(f fixture) {
+	t, s := f.t, f.s
+
+	putDigits(t, s)
+
+	u, err := s.PresignGet(t.Context(), digitsKey, 15*time.Minute)
+	if err != nil {
+		t.Fatalf("PresignGet: %v", err)
+	}
+
+	if !strings.Contains(u, digitsKey) {
+		t.Errorf("PresignGet = a URL that does not name %s", digitsKey)
+	}
+
+	for _, ttl := range []time.Duration{0, -time.Second} {
+		if _, err := s.PresignGet(t.Context(), digitsKey, ttl); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("PresignGet with ttl %s = %v, want ErrInvalid", ttl, err)
+		}
 	}
 }

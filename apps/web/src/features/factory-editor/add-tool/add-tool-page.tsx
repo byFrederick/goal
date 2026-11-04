@@ -96,7 +96,7 @@ function AddTool() {
         <PageHeader
           title="Add a tool"
           description={
-            <p className={cn(descriptionClass, picked && 'max-md:hidden')}>
+            <p className={cn(descriptionClass, picked && 'max-lg:hidden')}>
               Pick one and Goal writes it into an environment file in your draft. Nothing changes until you publish.
             </p>
           }
@@ -111,20 +111,20 @@ function AddTool() {
         ) : (
           <Skeleton ready={catalog.data !== undefined} placeholder={<CatalogPlaceholder />}>
             <ReadOnly when={!editable}>
-              <div className="grid min-w-0 overflow-hidden rounded-card border border-line bg-card md:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+              <div className="grid min-w-0 overflow-hidden rounded-card border border-line bg-card lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
                 <CatalogList
                   templates={templates}
                   selected={selected}
                   environment={environment}
                   spec={spec}
-                  className={cn('border-line bg-shell md:border-r', picked && 'max-md:hidden')}
+                  className={cn('border-line bg-shell lg:border-r', picked && 'max-lg:hidden')}
                 />
-                <div className={cn('min-w-0 p-4 md:p-7', !picked && 'max-md:hidden')}>
+                <div className={cn('min-w-0 p-4 md:p-7', !picked && 'max-lg:hidden')}>
                   <Link
                     to="/o/$org/f/$factory/definition/add-tool"
                     params={{ org: org.slug, factory: params.factory }}
                     search={{ environment }}
-                    className="press mb-3 inline-flex min-h-11 items-center gap-1 text-body text-ink no-underline hover:text-link md:hidden"
+                    className="press mb-3 inline-flex min-h-11 items-center gap-1 text-body text-ink no-underline hover:text-link lg:hidden"
                   >
                     <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
                     Tools
@@ -160,7 +160,7 @@ function AddTool() {
 function CatalogPlaceholder() {
   const block = 'rounded-control bg-hover';
   return (
-    <div className="grid min-w-0 gap-4 md:grid-cols-[320px_minmax(0,1fr)]">
+    <div className="grid min-w-0 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
       <div className={cn(block, 'h-96')} />
       <div className={cn(block, 'h-96')} />
     </div>

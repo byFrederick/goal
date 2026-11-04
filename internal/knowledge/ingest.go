@@ -42,7 +42,8 @@ const (
 // reads upload sources. Objects stores the snapshots upload, repository and Confluence sources
 // sync into, written first in TempDir ("" is the system's); nil writes none, and repository and
 // Confluence sources then fail. Converter turns what is neither text nor HTML into Markdown; nil
-// refuses it.
+// refuses it. Keep is how long a replaced snapshot stays (ADR 0038 decision 3): the longest a
+// claim that may have pinned it can last; 0 deletes none.
 type IngestorConfig struct {
 	Knowledge   ports.Knowledge
 	Connections Connections
@@ -58,6 +59,7 @@ type IngestorConfig struct {
 	Workers int
 	Lease   time.Duration
 	Tick    time.Duration
+	Keep    time.Duration
 }
 
 // Ingestor syncs the sources that are due, in every live organization in one order (the source
@@ -193,7 +195,7 @@ func (in *Ingestor) sync(ctx context.Context, c domain.SourceClaim) error {
 
 	in.cfg.Log.InfoContext(ctx, "knowledge sync", slog.String("source", src.Name), slog.String("source_id", string(src.ID)),
 		slog.Int("files", stats.snapshot.files), slog.Int("files_fetched", stats.snapshot.fetched),
-		slog.Int("files_failed", stats.snapshot.failed), slog.Bool("snapshot", stats.snapshot.written),
+		slog.Int("files_archived", stats.snapshot.archived), slog.Int("files_failed", stats.snapshot.failed), slog.Bool("snapshot", stats.snapshot.written),
 		slog.Float64("seconds", r.At.Sub(started).Seconds()), slog.String("error", r.Error))
 
 	err = in.cfg.Knowledge.FinishSync(context.WithoutCancel(ctx), c.Lease, r)
@@ -270,8 +272,57 @@ func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim) (syncStats, 
 	}
 
 	stats.snapshot, err = in.snapshot(ctx, c, spec, reader)
+	if !errors.Is(err, ports.ErrLeaseLost) && ctx.Err() == nil {
+		in.retain(ctx, c)
+	}
 
 	return stats, err
+}
+
+// retain deletes the source's snapshots retention no longer keeps (ADR 0038 decision 3): those
+// not current, pinned by no running run and replaced cfg.Keep ago or longer. Each zip goes before
+// its row, so a crash between the two leaves a row whose zip is gone, which reads as not synced
+// and the next sync deletes, never a zip no row names. A failure is logged and fails no sync.
+func (in *Ingestor) retain(ctx context.Context, c domain.SourceClaim) {
+	if in.cfg.Keep <= 0 {
+		return
+	}
+
+	log := in.cfg.Log.With(slog.String("source", c.Source.Name), slog.String("source_id", string(c.Source.ID)))
+
+	expired, err := in.cfg.Knowledge.ExpiredSnapshots(ctx, c.Lease, in.cfg.Clock.Now().Add(-in.cfg.Keep))
+	if err != nil {
+		log.WarnContext(ctx, "knowledge retention", slog.Any("error", err))
+
+		return
+	}
+
+	var (
+		gone []domain.KnowledgeSnapshotID
+		errs []error
+	)
+
+	for _, s := range expired {
+		if err := in.cfg.Objects.Delete(ctx, s.Key); err != nil {
+			errs = append(errs, fmt.Errorf("delete %s: %w", s.Key, err))
+
+			continue
+		}
+
+		gone = append(gone, s.ID)
+	}
+
+	if len(gone) > 0 {
+		if err := in.cfg.Knowledge.DeleteSnapshots(ctx, c.Lease, gone); err != nil {
+			errs = append(errs, err)
+			gone = nil
+		}
+	}
+
+	if len(gone) > 0 || len(errs) > 0 {
+		log.InfoContext(ctx, "knowledge retention", slog.Int("snapshots_deleted", len(gone)),
+			slog.Int("snapshots_expired", len(expired)), slog.Any("error", errors.Join(errs...)))
+	}
 }
 
 // reader is what reads src: the uploads; a repository's or Confluence source's kind's reader,

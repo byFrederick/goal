@@ -1,7 +1,16 @@
 import { describe, expect, test } from 'vitest';
 import { ApiError } from '../../api/client';
 import type { KnowledgeSource } from '../../api/types';
-import { everyLabel, formatBytes, nameFor, refusalText, refusedFile, sourceStatus, syncTimes } from './words';
+import {
+  everyLabel,
+  formatBytes,
+  nameFor,
+  refusalText,
+  refusedFile,
+  sourceStatus,
+  syncChoices,
+  syncTimes,
+} from './words';
 
 const now = Date.parse('2026-10-24T12:00:00Z');
 const at = (ms: number) => new Date(now + ms).toISOString();
@@ -67,6 +76,15 @@ describe('syncTimes', () => {
     expect(syncTimes(source({ kind: 'upload' }), now)).toEqual({ last: '1 h ago', next: 'When files are added' });
     expect(syncTimes(source({ kind: 'live' }), now)).toEqual({ last: 'Searched at question time' });
     expect(syncTimes(source({ status: 'syncing' }), now)).toEqual({ last: 'Running' });
+  });
+});
+
+describe('on-demand sync', () => {
+  test('0 seconds is the first schedule, worded, and shows no next sync', () => {
+    expect(syncChoices[0]).toEqual({ seconds: 0, label: 'Only when someone presses Sync' });
+    expect(everyLabel(0)).toBe('Only when someone presses Sync');
+    expect(syncTimes(source({ sync_every_seconds: 0, next_sync_at: null }), now)).toEqual({ last: '1 h ago' });
+    expect(syncTimes(source({ sync_every_seconds: 0, next_sync_at: at(hour) }), now).next).toBeUndefined();
   });
 });
 

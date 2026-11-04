@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -53,7 +54,13 @@ const (
 // KnowledgeSnapshotKey is the bucket key of a source's snapshot zip:
 // orgs/<org-id>/knowledge/<source-id>/<snapshot-id>.zip.
 func KnowledgeSnapshotKey(org OrgID, source KnowledgeSourceID, snapshot KnowledgeSnapshotID) string {
-	return OrgPrefix(org) + "knowledge/" + string(source) + "/" + string(snapshot) + ".zip"
+	return KnowledgeSourcePrefix(org, source) + string(snapshot) + ".zip"
+}
+
+// KnowledgeSourcePrefix is the bucket prefix of every snapshot zip of a source:
+// orgs/<org-id>/knowledge/<source-id>/. An upload's original (KnowledgeKey) is outside it.
+func KnowledgeSourcePrefix(org OrgID, source KnowledgeSourceID) string {
+	return OrgPrefix(org) + "knowledge/" + string(source) + "/"
 }
 
 // KnowledgeSnapshot is one zip a sync wrote: its files, the Markdown they hold and the zip's own
@@ -250,6 +257,71 @@ func (t *KnowledgeTally) Reads(ids map[string]KnowledgeSourceID, factory Factory
 	return out
 }
 
+// MaxKnowledgeTouchedPaths bounds the paths KnowledgeTally.Touched lists across all sources, so a
+// run that read thousands of files records an event of bounded size.
+const MaxKnowledgeTouchedPaths = 200
+
+// KnowledgeTouched is what one run did in one pinned source: the files it read (Reads) and the
+// folders or files it searched (Searches), each once and sorted, and how many more paths it
+// touched that were left out past MaxKnowledgeTouchedPaths (More).
+type KnowledgeTouched struct {
+	Source   string
+	Reads    []string
+	Searches []string
+	More     int
+}
+
+// Touched is what the run did in each source it touched, by source name; past
+// MaxKnowledgeTouchedPaths paths in all, the rest are left out and counted in each source's More.
+func (t *KnowledgeTally) Touched() []KnowledgeTouched {
+	keys := make([]KnowledgeTouch, 0, len(t.counts))
+	for k := range t.counts {
+		keys = append(keys, k)
+	}
+
+	slices.SortFunc(keys, func(a, b KnowledgeTouch) int {
+		return cmp.Or(strings.Compare(a.Source, b.Source), cmpBool(a.Search, b.Search), strings.Compare(a.Path, b.Path))
+	})
+
+	var out []KnowledgeTouched
+
+	left := MaxKnowledgeTouchedPaths
+
+	for _, k := range keys {
+		if len(out) == 0 || out[len(out)-1].Source != k.Source {
+			out = append(out, KnowledgeTouched{Source: k.Source})
+		}
+
+		s := &out[len(out)-1]
+
+		switch {
+		case left == 0:
+			s.More++
+			continue
+		case k.Search:
+			s.Searches = append(s.Searches, k.Path)
+		default:
+			s.Reads = append(s.Reads, k.Path)
+		}
+
+		left--
+	}
+
+	return out
+}
+
+// cmpBool orders false before true.
+func cmpBool(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case a:
+		return 1
+	default:
+		return -1
+	}
+}
+
 // KnowledgeDay is the day t counts on: its UTC date, at midnight.
 func KnowledgeDay(t time.Time) time.Time {
 	y, m, d := t.UTC().Date()
@@ -381,6 +453,40 @@ func CheckFilePath(p string) error {
 	return nil
 }
 
+// maxTitleSlug is a title slug's most characters.
+const maxTitleSlug = 200
+
+// Slug is a title as a file or folder name: lower-case letters and digits, the rest dashes, at
+// most 200 characters; "page" for none.
+func Slug(title string) string {
+	var sb strings.Builder
+
+	dash := false
+
+	for _, r := range strings.ToLower(title) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			sb.WriteRune(r)
+
+			dash = false
+		} else if !dash && sb.Len() > 0 {
+			sb.WriteByte('-')
+
+			dash = true
+		}
+	}
+
+	s := strings.TrimSuffix(sb.String(), "-")
+	if s == "" {
+		return "page"
+	}
+
+	if utf8.RuneCountInString(s) > maxTitleSlug {
+		s = string([]rune(s)[:maxTitleSlug])
+	}
+
+	return s
+}
+
 // CheckReadWhen refuses a read-when line longer than MaxReadWhen characters or of more than one
 // line. Errors wrap ErrInvalid.
 func CheckReadWhen(s string) error {
@@ -426,11 +532,16 @@ func repositoryKey(raw string) string {
 
 // SourceCheck is what listing a source with settings not saved yet found (ADR 0038 decision 12's
 // Check): Error says why it could not be listed ("" when it could), and Files how many items it
-// lists, counting at most MaxSourceFiles+1, past which a sync fails.
+// lists, counting at most MaxSourceFiles+1, past which a sync fails. FirstFiles are the paths, as
+// the sync would write them, of the first CheckFirstFiles files listed, in listing order.
 type SourceCheck struct {
-	Error string
-	Files int
+	Error      string
+	Files      int
+	FirstFiles []string
 }
+
+// CheckFirstFiles is how many of a Check's files it names.
+const CheckFirstFiles = 8
 
 // KnowledgeEntry is one source of a factory's knowledge.sources (ADR 0038 decision 5): the source's
 // name, the runs it applies to (a zero AppliesTo is every run, matched as rules are) and the line
