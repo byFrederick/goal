@@ -17,9 +17,12 @@ describe('the type of an entry', () => {
     expect(typeOf(kind('tool_approval'))).toBe('approval');
   });
 
-  it.each(['andon', 'rework_warning', 'blocked', 'expedite'])('shows %s as an Alert', (k) => {
-    expect(typeOf(kind(k))).toBe('alert');
-  });
+  it.each(['andon', 'rework_warning', 'blocked', 'expedite', 'knowledge_source', 'conversion'])(
+    'shows %s as an Alert',
+    (k) => {
+      expect(typeOf(kind(k))).toBe('alert');
+    },
+  );
 
   it('shows a kind this build does not know as a generic row', () => {
     expect(typeOf(kind('sync_failed'))).toBe('generic');

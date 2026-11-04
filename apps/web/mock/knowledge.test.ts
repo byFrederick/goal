@@ -49,13 +49,19 @@ async function upload<T>(source: string, files: Record<string, string>): Promise
 }
 
 describe('the mock knowledge base', () => {
-  it('starts acme with the four sources the knowledge picture shows', async () => {
+  it('starts acme with the six sources of the knowledge picture, one of each kind but live', async () => {
     const { body } = await call<KnowledgeSourceList>(sources);
     expect(body.sources.map((s) => [s.name, s.kind, s.status, s.latest_snapshot?.files ?? 0])).toEqual([
+      ['brand-guide', 'upload', 'idle', 2],
       ['dashboards', 'synced', 'failed', 1],
+      ['engineering-handbook', 'repository', 'idle', 2],
       ['goal-docs', 'synced', 'idle', 5],
       ['product-specs', 'confluence', 'failed', 1],
       ['support-macros', 'synced', 'idle', 1],
+    ]);
+    expect(body.sources.filter((s) => s.status === 'failed').map((s) => [s.name, s.sync_failures])).toEqual([
+      ['dashboards', 3],
+      ['product-specs', 3],
     ]);
     const files = await call<KnowledgeFilePage>(`${sources}/goal-docs/files`);
     expect(files.body.files.map((f) => f.path)).toContain('AGENTS.md');
