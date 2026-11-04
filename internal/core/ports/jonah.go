@@ -233,10 +233,24 @@ type ProposalQuery struct {
 // ctx; *postgres.Store and *porttest.Store implement it next to ports.Store. A try is claimed
 // under a lease, so any instance may run it and a dead one's try is claimed again.
 type PastTries interface {
-	// QueuePastTries queues tries of the factory's proposal, all of them or none: ErrConflict when
-	// the proposal has tries already or an item and attempt is given twice, ErrNotFound when the proposal, an item or a run is not the
-	// organization's, and domain.ErrInvalid when a try fails Check. It returns them in order.
+	// QueuePastTries queues tries of the factory's proposal, all of them or none, each set to the
+	// proposal: of items it cites, and of kept tests with the content key of what they run on.
+	// ErrConflict when the proposal has tries already or an item, kept test and attempt is given
+	// twice, ErrNotFound when the proposal, an item, a run or a kept test is not the organization's,
+	// and domain.ErrInvalid when a try fails Check. It returns them in order.
 	QueuePastTries(ctx context.Context, factory domain.FactoryID, proposal domain.ProposalID, tries []domain.NewPastTry, at time.Time) ([]domain.PastTry, error)
+	// QueuePublishTries queues a publish's tries of the factory's kept tests (ADR 0039 decision
+	// 12): with no proposal, each running on version with edits, the open draft as whole files.
+	// Every try names its kept test and content key. A try whose kept test, content key and attempt
+	// a publish's try has already is skipped, so queuing is idempotent; the rest are queued all or
+	// none. ErrNotFound when an item, a run or a kept test is not the organization's,
+	// domain.ErrInvalid when a try fails Check or names a proposal. It returns those it queued, in
+	// order.
+	QueuePublishTries(ctx context.Context, factory domain.FactoryID, version domain.DefinitionVersionID, edits []domain.ProposalEdit,
+		tries []domain.NewPastTry, at time.Time) ([]domain.PastTry, error)
+	// KeptTestTries is the factory's kept-test tries whose content key is key, from any proposal
+	// or publish, oldest first: what a publish of that content reuses.
+	KeptTestTries(ctx context.Context, factory domain.FactoryID, key string) ([]domain.PastTry, error)
 	// AddPastTries adds tries to the factory's proposal for Try again (ADR 0039 decision 11), all
 	// of them or none, under the proposal's lock: for each add, Tries copies of the item's try with
 	// the highest attempt (its station, original run and model), at the attempts after it, so a
@@ -249,7 +263,7 @@ type PastTries interface {
 	// PastTry is one try with its proposal's number. ErrNotFound when there is none.
 	PastTry(ctx context.Context, id domain.PastTryID) (domain.PastTry, error)
 	// ClaimPastTry takes the factory's oldest queued try, or running one whose lease ended by now,
-	// skipping tries another transaction holds, while fewer than limit of the factory's tries run
+	// a publish's (with no proposal) before any proposal's, skipping tries another transaction holds, while fewer than limit of the factory's tries run
 	// under a lease that has not ended: running until now+lease, with one more attempt.
 	// ErrNotFound when nothing is claimable.
 	ClaimPastTry(ctx context.Context, factory domain.FactoryID, now time.Time, lease time.Duration, limit int) (domain.PastTry, error)
@@ -294,7 +308,8 @@ type KeptTests interface {
 	// ErrNotFound when the item is not the organization's or not the factory's, ErrConflict when
 	// the item is kept at that station already.
 	KeepTest(ctx context.Context, n domain.NewKeptTest) (domain.KeptTest, error)
-	// KeptTests is the factory's kept tests, only station's when station is set, newest first.
+	// KeptTests is the factory's kept tests, only station's when station is set, newest first,
+	// each with its LastResult: its newest finished try of any source, nil when it has none.
 	KeptTests(ctx context.Context, factory domain.FactoryID, station string) ([]domain.KeptTest, error)
 	// RemoveKeptTest removes the factory's kept test id. ErrNotFound when the factory has none.
 	RemoveKeptTest(ctx context.Context, factory domain.FactoryID, id domain.KeptTestID) error

@@ -624,6 +624,27 @@ func (e DefinitionProblemSeverity) Valid() bool {
 	}
 }
 
+// Defines values for DraftKeptTestsState.
+const (
+	DraftKeptTestsStateBudgetUsed DraftKeptTestsState = "budget_used"
+	DraftKeptTestsStateDone       DraftKeptTestsState = "done"
+	DraftKeptTestsStateTrying     DraftKeptTestsState = "trying"
+)
+
+// Valid indicates whether the value is a known member of the DraftKeptTestsState enum.
+func (e DraftKeptTestsState) Valid() bool {
+	switch e {
+	case DraftKeptTestsStateBudgetUsed:
+		return true
+	case DraftKeptTestsStateDone:
+		return true
+	case DraftKeptTestsStateTrying:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DraftRequestStatus.
 const (
 	DraftRequestStatusDone    DraftRequestStatus = "done"
@@ -1134,6 +1155,51 @@ func (e JudgeScoreState) Valid() bool {
 	case JudgeScoreStateRunning:
 		return true
 	case JudgeScoreStateScored:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KeptTestLastResultResult.
+const (
+	KeptTestLastResultResultError  KeptTestLastResultResult = "error"
+	KeptTestLastResultResultFailed KeptTestLastResultResult = "failed"
+	KeptTestLastResultResultPassed KeptTestLastResultResult = "passed"
+)
+
+// Valid indicates whether the value is a known member of the KeptTestLastResultResult enum.
+func (e KeptTestLastResultResult) Valid() bool {
+	switch e {
+	case KeptTestLastResultResultError:
+		return true
+	case KeptTestLastResultResultFailed:
+		return true
+	case KeptTestLastResultResultPassed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KeptTestResult.
+const (
+	KeptTestResultError   KeptTestResult = "error"
+	KeptTestResultFailed  KeptTestResult = "failed"
+	KeptTestResultPassed  KeptTestResult = "passed"
+	KeptTestResultRunning KeptTestResult = "running"
+)
+
+// Valid indicates whether the value is a known member of the KeptTestResult enum.
+func (e KeptTestResult) Valid() bool {
+	switch e {
+	case KeptTestResultError:
+		return true
+	case KeptTestResultFailed:
+		return true
+	case KeptTestResultPassed:
+		return true
+	case KeptTestResultRunning:
 		return true
 	default:
 		return false
@@ -1950,24 +2016,6 @@ func (e TouchReason) Valid() bool {
 	case TouchReasonRequiredGate:
 		return true
 	case TouchReasonWrongDecision:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for TriedKeptTestResult.
-const (
-	TriedKeptTestResultFailed TriedKeptTestResult = "failed"
-	TriedKeptTestResultPassed TriedKeptTestResult = "passed"
-)
-
-// Valid indicates whether the value is a known member of the TriedKeptTestResult enum.
-func (e TriedKeptTestResult) Valid() bool {
-	switch e {
-	case TriedKeptTestResultFailed:
-		return true
-	case TriedKeptTestResultPassed:
 		return true
 	default:
 		return false
@@ -3738,6 +3786,36 @@ type Draft struct {
 	UpdatedBy Actor `json:"updated_by"`
 }
 
+// DraftKeptTest defines model for DraftKeptTest.
+type DraftKeptTest struct {
+	// Error Why it could not be tried or carried out
+	Error *string `json:"error,omitempty"`
+
+	// Reason Why it passed or failed
+	Reason *string `json:"reason,omitempty"`
+
+	// Result Null while no try of the draft's content was started
+	Result *KeptTestResult `json:"result"`
+
+	// RunId The try's own run
+	RunId *string `json:"run_id,omitempty"`
+
+	// Test A past item kept, at a station it passed the first time, as a test (ADR 0039 decision 12)
+	Test KeptTest `json:"test"`
+}
+
+// DraftKeptTests defines model for DraftKeptTests.
+type DraftKeptTests struct {
+	// State trying: a test's try is queued or running; done: every started try is done, or none was started; budget_used: a try is still queued and Jonah's budget over the last 7 days is used up
+	State DraftKeptTestsState `json:"state"`
+
+	// Tests The kept tests at the stations the draft reaches, then those that can't be tried
+	Tests []DraftKeptTest `json:"tests"`
+}
+
+// DraftKeptTestsState trying: a test's try is queued or running; done: every started try is done, or none was started; budget_used: a try is still queued and Jonah's budget over the last 7 days is used up
+type DraftKeptTestsState string
+
 // DraftModel defines model for DraftModel.
 type DraftModel struct {
 	// Edited The model pointers the draft changed against its base (or starting tree), each with the value there, null where it had none: the fields' Edited · Undo
@@ -5074,8 +5152,11 @@ type KeptTest struct {
 	KeptAt time.Time    `json:"kept_at"`
 
 	// KeptBy The actor ref of who kept it
-	KeptBy  string `json:"kept_by"`
-	Station string `json:"station"`
+	KeptBy string `json:"kept_by"`
+
+	// LastResult Its newest finished try's result; null for a test never run
+	LastResult *KeptTestLastResult `json:"last_result"`
+	Station    string              `json:"station"`
 }
 
 // KeptTestItem defines model for KeptTestItem.
@@ -5085,10 +5166,26 @@ type KeptTestItem struct {
 	Title  string `json:"title"`
 }
 
+// KeptTestLastResult A kept test's newest finished try, from a proposal or a publish
+type KeptTestLastResult struct {
+	// At When the try finished
+	At     time.Time                `json:"at"`
+	Result KeptTestLastResultResult `json:"result"`
+
+	// RunId The try's own run; absent when it never ran
+	RunId *string `json:"run_id,omitempty"`
+}
+
+// KeptTestLastResultResult defines model for KeptTestLastResult.Result.
+type KeptTestLastResultResult string
+
 // KeptTestList defines model for KeptTestList.
 type KeptTestList struct {
 	Tests []KeptTest `json:"tests"`
 }
+
+// KeptTestResult running: its try is queued or runs; passed: the try passed the station's contract and checks and, at a gate, approved as the item did there; failed: it did not, or its run failed; error: the try could not be carried out, which is never a failure
+type KeptTestResult string
 
 // KnowledgeCheck defines model for KnowledgeCheck.
 type KnowledgeCheck struct {
@@ -6586,7 +6683,7 @@ type ProposalTried struct {
 	// Items Each past item tried, in the order its tries were queued
 	Items []TriedItem `json:"items"`
 
-	// KeptTests The station's kept tests run on the proposal, each passed or failed; empty until kept tests run on proposals
+	// KeptTests The proposal's tries of the kept tests at the stations it reaches (ADR 0039 decision 12), in the order they were queued; empty when it reaches none or was tried before kept tests ran on proposals
 	KeptTests []TriedKeptTest `json:"kept_tests"`
 
 	// Seconds From the first try queued to the last one finished; absent until every try is done
@@ -7790,14 +7887,24 @@ type TriedItem struct {
 
 // TriedKeptTest defines model for TriedKeptTest.
 type TriedKeptTest struct {
-	Result TriedKeptTestResult `json:"result"`
+	// Attempt The try's attempt
+	Attempt int `json:"attempt"`
+
+	// Error Why the try could not be carried out
+	Error *string `json:"error,omitempty"`
+
+	// Reason Why it passed or failed; absent while it runs
+	Reason *string `json:"reason,omitempty"`
+
+	// Result running: its try is queued or runs; passed: the try passed the station's contract and checks and, at a gate, approved as the item did there; failed: it did not, or its run failed; error: the try could not be carried out, which is never a failure
+	Result KeptTestResult `json:"result"`
+
+	// Station The station the test is kept at
+	Station string `json:"station"`
 
 	// Test The kept test's item number
 	Test int64 `json:"test"`
 }
-
-// TriedKeptTestResult defines model for TriedKeptTest.Result.
-type TriedKeptTestResult string
 
 // TriedTry defines model for TriedTry.
 type TriedTry struct {
@@ -9887,6 +9994,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `PutDraftFile` operationId).
 	PutDraftFileWithBody(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, params *PutDraftFileParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDraftKeptTests Read the open draft's kept tests and their results
+	//
+	// The same answer as startDraftKeptTests, and it starts nothing: a test not yet started has result null. 404 no-draft when no draft is open.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/kept-tests (the `GetDraftKeptTests` operationId).
+	GetDraftKeptTests(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StartDraftKeptTests Start the kept tests the open draft reaches (ADR 0039 decision 12)
+	//
+	// The publish dialog calls this when it opens. Goal finds the stations the draft reaches (the agent stations whose agent gets something different) and queues one try of each kept test there, on the current version with the draft's files. A test that has a try of exactly the draft's content already, from a tried proposal or an earlier publish, reuses it and queues nothing, so calling this again starts nothing new. Tries of a publish are claimed before a proposal's, and still wait while an item waits at an agent station or Jonah's budget is used up. A failing test warns and never blocks a publish: publishDraft does not read these results. A test that can't be tried (its station's agent needs MCP servers or secrets, the draft deletes a file, or Jonah is off) is answered with result error and why. 404 no-draft when no draft is open.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/kept-tests (the `StartDraftKeptTests` operationId).
+	StartDraftKeptTests(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetDraftKnowledgePreview The Knowledge prompt section one agent gets from the draft
 	//
@@ -12776,6 +12897,40 @@ func (c *Client) GetDraftFile(ctx context.Context, org OrgRef, factory FactoryRe
 // Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `PutDraftFile` operationId).
 func (c *Client) PutDraftFileWithBody(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, params *PutDraftFileParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutDraftFileRequestWithBody(c.Server, org, factory, path, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetDraftKeptTests Read the open draft's kept tests and their results
+//
+// The same answer as startDraftKeptTests, and it starts nothing: a test not yet started has result null. 404 no-draft when no draft is open.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/kept-tests (the `GetDraftKeptTests` operationId).
+func (c *Client) GetDraftKeptTests(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDraftKeptTestsRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// StartDraftKeptTests Start the kept tests the open draft reaches (ADR 0039 decision 12)
+//
+// The publish dialog calls this when it opens. Goal finds the stations the draft reaches (the agent stations whose agent gets something different) and queues one try of each kept test there, on the current version with the draft's files. A test that has a try of exactly the draft's content already, from a tried proposal or an earlier publish, reuses it and queues nothing, so calling this again starts nothing new. Tries of a publish are claimed before a proposal's, and still wait while an item waits at an agent station or Jonah's budget is used up. A failing test warns and never blocks a publish: publishDraft does not read these results. A test that can't be tried (its station's agent needs MCP servers or secrets, the draft deletes a file, or Jonah is off) is answered with result error and why. 404 no-draft when no draft is open.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/kept-tests (the `StartDraftKeptTests` operationId).
+func (c *Client) StartDraftKeptTests(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStartDraftKeptTestsRequest(c.Server, org, factory)
 	if err != nil {
 		return nil, err
 	}
@@ -19264,6 +19419,88 @@ func NewPutDraftFileRequestWithBody(server string, org OrgRef, factory FactoryRe
 			req.Header.Set("If-None-Match", headerParam1)
 		}
 
+	}
+
+	return req, nil
+}
+
+// NewGetDraftKeptTestsRequest constructs an http.Request for the GetDraftKeptTests method
+func NewGetDraftKeptTestsRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/kept-tests", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewStartDraftKeptTestsRequest constructs an http.Request for the StartDraftKeptTests method
+func NewStartDraftKeptTestsRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/draft/kept-tests", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -27901,6 +28138,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path} (the `PutDraftFile` operationId).
 	PutDraftFileWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, path FilePath, params *PutDraftFileParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutDraftFileResponse, error)
 
+	// GetDraftKeptTestsWithResponse Read the open draft's kept tests and their results
+	//
+	// The same answer as startDraftKeptTests, and it starts nothing: a test not yet started has result null. 404 no-draft when no draft is open.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/kept-tests (the `GetDraftKeptTests` operationId).
+	GetDraftKeptTestsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetDraftKeptTestsResponse, error)
+
+	// StartDraftKeptTestsWithResponse Start the kept tests the open draft reaches (ADR 0039 decision 12)
+	//
+	// The publish dialog calls this when it opens. Goal finds the stations the draft reaches (the agent stations whose agent gets something different) and queues one try of each kept test there, on the current version with the draft's files. A test that has a try of exactly the draft's content already, from a tried proposal or an earlier publish, reuses it and queues nothing, so calling this again starts nothing new. Tries of a publish are claimed before a proposal's, and still wait while an item waits at an agent station or Jonah's budget is used up. A failing test warns and never blocks a publish: publishDraft does not read these results. A test that can't be tried (its station's agent needs MCP servers or secrets, the draft deletes a file, or Jonah is off) is answered with result error and why. 404 no-draft when no draft is open.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/kept-tests (the `StartDraftKeptTests` operationId).
+	StartDraftKeptTestsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*StartDraftKeptTestsResponse, error)
+
 	// GetDraftKnowledgePreviewWithResponse The Knowledge prompt section one agent gets from the draft
 	//
 	// "What agents see" in the editor: the section goald builds for a run of agent, from the same code as a run's. It lists the draft's sources that apply to the agent (with station and lane and work_type, as a run's appliesTo is matched), each with its entry's readWhen or its snapshot's, its file count and top folders, names those with no snapshot as not synced yet, and gives memory.yaml's facts. It reads each source's current snapshot, while a run reads the snapshot its claim pinned, so a run started earlier may see another. 404 agent-not-found for an agent the draft does not declare, 409 yaml-invalid while factory.yaml does not parse or satisfy the schema, 404 no-draft.
@@ -32466,6 +32721,102 @@ func (r PutDraftFileResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PutDraftFileResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetDraftKeptTestsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DraftKeptTests
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetDraftKeptTestsResponse) GetJSON200() *DraftKeptTests {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetDraftKeptTestsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetDraftKeptTestsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDraftKeptTestsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDraftKeptTestsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDraftKeptTestsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type StartDraftKeptTestsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DraftKeptTests
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r StartDraftKeptTestsResponse) GetJSON200() *DraftKeptTests {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r StartDraftKeptTestsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r StartDraftKeptTestsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r StartDraftKeptTestsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r StartDraftKeptTestsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r StartDraftKeptTestsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -40592,6 +40943,36 @@ func (c *ClientWithResponses) PutDraftFileWithBodyWithResponse(ctx context.Conte
 	return ParsePutDraftFileResponse(rsp)
 }
 
+// GetDraftKeptTestsWithResponse Read the open draft's kept tests and their results
+//
+// The same answer as startDraftKeptTests, and it starts nothing: a test not yet started has result null. 404 no-draft when no draft is open.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/draft/kept-tests (the `GetDraftKeptTests` operationId).
+func (c *ClientWithResponses) GetDraftKeptTestsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*GetDraftKeptTestsResponse, error) {
+	rsp, err := c.GetDraftKeptTests(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDraftKeptTestsResponse(rsp)
+}
+
+// StartDraftKeptTestsWithResponse Start the kept tests the open draft reaches (ADR 0039 decision 12)
+//
+// The publish dialog calls this when it opens. Goal finds the stations the draft reaches (the agent stations whose agent gets something different) and queues one try of each kept test there, on the current version with the draft's files. A test that has a try of exactly the draft's content already, from a tried proposal or an earlier publish, reuses it and queues nothing, so calling this again starts nothing new. Tries of a publish are claimed before a proposal's, and still wait while an item waits at an agent station or Jonah's budget is used up. A failing test warns and never blocks a publish: publishDraft does not read these results. A test that can't be tried (its station's agent needs MCP servers or secrets, the draft deletes a file, or Jonah is off) is answered with result error and why. 404 no-draft when no draft is open.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/draft/kept-tests (the `StartDraftKeptTests` operationId).
+func (c *ClientWithResponses) StartDraftKeptTestsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*StartDraftKeptTestsResponse, error) {
+	rsp, err := c.StartDraftKeptTests(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStartDraftKeptTestsResponse(rsp)
+}
+
 // GetDraftKnowledgePreviewWithResponse The Knowledge prompt section one agent gets from the draft
 //
 // "What agents see" in the editor: the section goald builds for a run of agent, from the same code as a run's. It lists the draft's sources that apply to the agent (with station and lane and work_type, as a run's appliesTo is matched), each with its entry's readWhen or its snapshot's, its file count and top folders, names those with no snapshot as not synced yet, and gives memory.yaml's facts. It reads each source's current snapshot, while a run reads the snapshot its claim pinned, so a run started earlier may see another. 404 agent-not-found for an agent the draft does not declare, 409 yaml-invalid while factory.yaml does not parse or satisfy the schema, 404 no-draft.
@@ -45484,6 +45865,72 @@ func ParsePutDraftFileResponse(rsp *http.Response) (*PutDraftFileResponse, error
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest SaveResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetDraftKeptTestsResponse parses an HTTP response from a GetDraftKeptTestsWithResponse call
+func ParseGetDraftKeptTestsResponse(rsp *http.Response) (*GetDraftKeptTestsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDraftKeptTestsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DraftKeptTests
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseStartDraftKeptTestsResponse parses an HTTP response from a StartDraftKeptTestsWithResponse call
+func ParseStartDraftKeptTestsResponse(rsp *http.Response) (*StartDraftKeptTestsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &StartDraftKeptTestsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DraftKeptTests
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -50600,6 +51047,12 @@ type ServerInterface interface {
 	// PutDraftFile Write one file of the draft exactly as sent (YAML mode)
 	// (PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path})
 	PutDraftFile(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, path FilePath, params PutDraftFileParams)
+	// GetDraftKeptTests Read the open draft's kept tests and their results
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/kept-tests)
+	GetDraftKeptTests(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// StartDraftKeptTests Start the kept tests the open draft reaches (ADR 0039 decision 12)
+	// (POST /v1/orgs/{org}/factories/{factory}/draft/kept-tests)
+	StartDraftKeptTests(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
 	// GetDraftKnowledgePreview The Knowledge prompt section one agent gets from the draft
 	// (GET /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview)
 	GetDraftKnowledgePreview(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetDraftKnowledgePreviewParams)
@@ -53256,6 +53709,76 @@ func (siw *ServerInterfaceWrapper) PutDraftFile(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PutDraftFile(w, r, org, factory, path, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDraftKeptTests operation middleware
+func (siw *ServerInterfaceWrapper) GetDraftKeptTests(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDraftKeptTests(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StartDraftKeptTests operation middleware
+func (siw *ServerInterfaceWrapper) StartDraftKeptTests(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartDraftKeptTests(w, r, org, factory)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -59568,6 +60091,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/tree", wrapper.ReplaceDraftTree)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/validate", wrapper.ValidateDraft)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/publish", wrapper.PublishDraft)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/kept-tests", wrapper.GetDraftKeptTests)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/kept-tests", wrapper.StartDraftKeptTests)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/requests", wrapper.ListDraftRequests)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/requests", wrapper.CreateDraftRequest)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/draft/requests/{draft_request}", wrapper.GetDraftRequest)
@@ -62097,6 +62622,86 @@ type PutDraftFiledefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PutDraftFiledefaultApplicationProblemPlusJSONResponse) VisitPutDraftFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDraftKeptTestsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type GetDraftKeptTestsResponseObject interface {
+	VisitGetDraftKeptTestsResponse(w http.ResponseWriter) error
+}
+
+type GetDraftKeptTests200JSONResponse DraftKeptTests
+
+func (response GetDraftKeptTests200JSONResponse) VisitGetDraftKeptTestsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDraftKeptTestsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetDraftKeptTestsdefaultApplicationProblemPlusJSONResponse) VisitGetDraftKeptTestsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartDraftKeptTestsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type StartDraftKeptTestsResponseObject interface {
+	VisitStartDraftKeptTestsResponse(w http.ResponseWriter) error
+}
+
+type StartDraftKeptTests200JSONResponse DraftKeptTests
+
+func (response StartDraftKeptTests200JSONResponse) VisitStartDraftKeptTestsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartDraftKeptTestsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response StartDraftKeptTestsdefaultApplicationProblemPlusJSONResponse) VisitStartDraftKeptTestsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -68488,6 +69093,12 @@ type StrictServerInterface interface {
 	// PutDraftFile Write one file of the draft exactly as sent (YAML mode)
 	// (PUT /v1/orgs/{org}/factories/{factory}/draft/files/{path})
 	PutDraftFile(ctx context.Context, request PutDraftFileRequestObject) (PutDraftFileResponseObject, error)
+	// GetDraftKeptTests Read the open draft's kept tests and their results
+	// (GET /v1/orgs/{org}/factories/{factory}/draft/kept-tests)
+	GetDraftKeptTests(ctx context.Context, request GetDraftKeptTestsRequestObject) (GetDraftKeptTestsResponseObject, error)
+	// StartDraftKeptTests Start the kept tests the open draft reaches (ADR 0039 decision 12)
+	// (POST /v1/orgs/{org}/factories/{factory}/draft/kept-tests)
+	StartDraftKeptTests(ctx context.Context, request StartDraftKeptTestsRequestObject) (StartDraftKeptTestsResponseObject, error)
 	// GetDraftKnowledgePreview The Knowledge prompt section one agent gets from the draft
 	// (GET /v1/orgs/{org}/factories/{factory}/draft/knowledge-preview)
 	GetDraftKnowledgePreview(ctx context.Context, request GetDraftKnowledgePreviewRequestObject) (GetDraftKnowledgePreviewResponseObject, error)
@@ -70650,6 +71261,60 @@ func (sh *strictHandler) PutDraftFile(w http.ResponseWriter, r *http.Request, or
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PutDraftFileResponseObject); ok {
 		if err := validResponse.VisitPutDraftFileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetDraftKeptTests operation middleware
+func (sh *strictHandler) GetDraftKeptTests(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request GetDraftKeptTestsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetDraftKeptTests(ctx, request.(GetDraftKeptTestsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetDraftKeptTests")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetDraftKeptTestsResponseObject); ok {
+		if err := validResponse.VisitGetDraftKeptTestsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StartDraftKeptTests operation middleware
+func (sh *strictHandler) StartDraftKeptTests(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request StartDraftKeptTestsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StartDraftKeptTests(ctx, request.(StartDraftKeptTestsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StartDraftKeptTests")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StartDraftKeptTestsResponseObject); ok {
+		if err := validResponse.VisitStartDraftKeptTestsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -233,6 +233,12 @@ type harness struct {
 
 // models is Try another model over the harness's store and the definitions cache defs, as goald
 // wires it.
+func (h *harness) keptDrafts(authors *authoring.Service, defs *definitions.Cache) *jonah.KeptDrafts {
+	return jonah.NewKeptDrafts(jonah.KeptDraftDeps{
+		Drafts: api.NewJonahAuthoring(authors), Definitions: tryLines{defs}, Kept: h.store, Tries: h.store, Spend: h.store, Clock: h.clock,
+	})
+}
+
 func (h *harness) models(defs *definitions.Cache, policies ports.OrgPolicies, audit ports.Audit) *jonah.ModelProposals {
 	return jonah.NewModelProposals(jonah.ModelDeps{
 		Store: h.store, Definitions: modelLines{Cache: defs, h: h}, Check: config.ProposalCheck{}, Policies: policies, Audit: audit, Clock: h.clock,
@@ -566,7 +572,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	deps.Judges = h.judgeDeps(tenancy)
 	deps.Jonah = &api.JonahDeps{Store: h.store, Watches: h.store, Tests: h.store, Tries: h.store, Decisions: jonah.NewDecider(jonah.DecideDeps{
 		Proposals: h.store, Authoring: api.NewJonahAuthoring(authors), Audit: tenancy, Clock: h.clock,
-	}), Models: h.models(defs, deps.OrgPolicies, tenancy), TryAgain: h.tryAgain(defs, tenancy)}
+	}), Models: h.models(defs, deps.OrgPolicies, tenancy), KeptDrafts: h.keptDrafts(authors, defs), TryAgain: h.tryAgain(defs, tenancy)}
 
 	handler, err := api.New(h.withEvals(deps, tenancy, opts))
 	if err != nil {

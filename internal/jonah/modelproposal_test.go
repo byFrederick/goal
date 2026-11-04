@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -430,5 +431,62 @@ func TestModelProposals_Refusals(t *testing.T) {
 				t.Errorf("a refusal stored %d proposals", len(ps))
 			}
 		})
+	}
+}
+
+// A model proposal also tries each kept test at the agent's stations, three times on the new
+// model with the content key of the version it changes, and its estimate counts those tries; a
+// kept test at another agent's station gets none.
+func TestModelProposals_ConfirmQueuesThreeTriesPerKeptTest(t *testing.T) {
+	t.Parallel()
+
+	w := newModelWorld(t)
+	a := w.doneItem(rt0.Add(-time.Hour), 1, 0)
+
+	k, err := w.store.KeepTest(w.ctx(), domain.NewKeptTest{FactoryID: factory, ItemID: a.ID, Station: stBuild, KeptBy: domain.LocalUser, KeptAt: rt0})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := w.store.KeepTest(w.ctx(), domain.NewKeptTest{FactoryID: factory, ItemID: a.ID, Station: stReview, KeptBy: domain.LocalUser, KeptAt: rt0}); err != nil {
+		t.Fatal(err)
+	}
+
+	est, p, err := w.propose(true)
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+
+	if est.Tries != 2*domain.ModelTriesPerItem || est.EstimateUSD != 2*domain.ModelTriesPerItem {
+		t.Errorf("estimate %d tries at $%v, want 6 at $6: three of the item and three of its kept test", est.Tries, est.EstimateUSD)
+	}
+
+	w.expectKeptTries(p, k.ID)
+}
+
+// expectKeptTries fails the test unless p's kept-test tries are three of test, at build on the new
+// model, with the content key of the files p's edits make.
+func (w *modelWorld) expectKeptTries(p domain.Proposal, test domain.KeptTestID) {
+	w.t.Helper()
+
+	edited, err := domain.ApplyEdits(w.defs.files, p.Edits)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	tries, err := w.store.ProposalPastTries(w.ctx(), p.ID)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	tries = slices.DeleteFunc(tries, func(tr domain.PastTry) bool { return tr.KeptTestID == "" })
+	if len(tries) != domain.ModelTriesPerItem {
+		w.t.Fatalf("kept-test tries = %+v, want three", tries)
+	}
+
+	for i, tr := range tries {
+		if tr.KeptTestID != test || tr.Attempt != i+1 || tr.Model != modelNew || tr.Station != stBuild || tr.ContentKey != domain.ContentKey(edited) {
+			w.t.Errorf("kept-test try %+v, want attempt %d of test %s at %s on %s with the proposed content's key", tr, i+1, test, stBuild, modelNew)
+		}
 	}
 }

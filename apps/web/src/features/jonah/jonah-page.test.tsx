@@ -112,7 +112,7 @@ const full7 = {
       },
     ],
     cost_usd: 2,
-    kept_tests: [{ test: 418, result: 'passed' }],
+    kept_tests: [{ test: 418, station: 'frontend', attempt: 1, result: 'passed' }],
   },
 } as Proposal;
 const full8 = {

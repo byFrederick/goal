@@ -131,8 +131,8 @@ func jonahTryLoop(s settings, store *postgres.Store, defs *definitions.Cache, en
 	log *slog.Logger,
 ) *jonah.Tries {
 	return jonah.NewTries(jonah.TryDeps{
-		Orgs: store, Jonah: store, Tries: store, Definitions: tryDefinitions{defs: defs}, Waiting: store, Events: store, Runs: store,
-		Runner: eng, Clock: clock, Log: log,
+		Orgs: store, Jonah: store, Tries: store, Kept: store, Definitions: tryDefinitions{defs: defs}, Waiting: store,
+		Events: store, Runs: store, Runner: eng, Clock: clock, Log: log,
 	}, s.JonahTry)
 }
 
@@ -179,6 +179,21 @@ func (d tryDefinitions) ValidateProposed(ctx context.Context, v domain.Definitio
 	}
 
 	return p.Validate(ctx, v, contract, output)
+}
+
+// ContentKey is domain.ContentKey of v's files with edits applied (definitions.Proposed).
+func (d tryDefinitions) ContentKey(ctx context.Context, v domain.DefinitionVersionID, edits []domain.ProposalEdit) (string, error) {
+	p, err := d.defs.Proposed(ctx, v, edits)
+	if err != nil {
+		return "", err
+	}
+
+	files, err := p.VersionFiles(ctx, v)
+	if err != nil {
+		return "", err
+	}
+
+	return domain.ContentKey(files), nil
 }
 
 // snapshot is files as a factorymodel.Snapshot.

@@ -20,6 +20,7 @@ var triesTests = []struct {
 	{"Tries_QueuedOncePerProposal", testTriesQueuedOnce},
 	{"Tries_ThreePerItem", testTriesThreePerItem},
 	{"Tries_TryAgain", testTriesTryAgain},
+	{"Tries_TryAgainCopiesNoKeptTestTry", testTriesTryAgainSkipsKept},
 	{"Tries_AgentDoneItemsNewestFirst", testTriesAgentDoneItems},
 	{"Tries_ClaimCappedPerFactoryAndLeased", testTriesClaim},
 	{"Tries_FinishStoresVerdictAndReason", testTriesGraded},
@@ -29,6 +30,8 @@ var triesTests = []struct {
 	{"Tries_InputHasBriefAndEarlierOutputs", testTriesInput},
 	{"Tries_TryRunWithoutItemIsJonahs", testTriesRunWithoutItem},
 	{"Tries_OtherOrgInvisible", testTriesTenancy},
+	{"Tries_PublishTriesClaimedFirst", testTriesPublishFirst},
+	{"Tries_KeptTestTryReusedByContent", testTriesReusedByContent},
 }
 
 // head is a well-formed recorded commit.
@@ -509,19 +512,48 @@ func testTriesTryAgain(f *fixture) {
 	}
 }
 
+// Try again copies a cited item's try, never a kept-test try of the same item: its attempts follow
+// the cited item's highest, and the copy names no kept test.
+func testTriesTryAgainSkipsKept(f *fixture) {
+	t, t2 := f.t, t1.Add(time.Hour)
+	p := f.triedProposal(t, t1)
+	it := f.create(t, domain.NewItem{})
+	k := f.keep(t, it, stWork, 1)
+
+	cited := f.keptTry(t, k, "", 1)
+	cited.KeptTestID, cited.ProposalID = "", p.ID
+	kept := f.keptTry(t, k, "key-1", 3)
+
+	queued, err := f.Tries.QueuePastTries(f.ctx(t), f.factory, p.ID, []domain.NewPastTry{cited, kept}, t1)
+	if err != nil {
+		t.Fatalf("QueuePastTries: %v", err)
+	}
+
+	added, err := f.Tries.AddPastTries(f.ctx(t), f.factory, p.ID, []domain.PastTryAdd{{ItemID: it.ID, Tries: 1}}, t2)
+	if err != nil {
+		t.Fatalf("AddPastTries: %v", err)
+	}
+
+	expectCopies(t, added, queued[:1], []int{2}, t2)
+
+	if added[0].KeptTestID != "" {
+		t.Errorf("added try names kept test %s; want none", added[0].KeptTestID)
+	}
+}
+
 // expectCopies fails t unless added are queued copies of from, one each, at attempts, made at at.
 func expectCopies(t *testing.T, added, from []domain.PastTry, attempts []int, at time.Time) {
 	t.Helper()
 
-	if len(added) != len(from) {
+	if len(added) != len(from) || len(attempts) != len(from) {
 		t.Fatalf("AddPastTries = %+v; want %d tries", added, len(from))
 	}
 
-	for i, g := range added {
-		w := from[i]
-		if g.ItemID != w.ItemID || g.Attempt != attempts[i] || g.State != domain.PastTryQueued || g.Station != w.Station ||
+	for i, w := range from {
+		g, attempt := added[i], attempts[i]
+		if g.ItemID != w.ItemID || g.Attempt != attempt || g.State != domain.PastTryQueued || g.Station != w.Station ||
 			g.OriginalRunID != w.OriginalRunID || g.Model != w.Model || g.ProposalNumber != w.ProposalNumber || !g.CreatedAt.Equal(at) {
-			t.Errorf("added[%d] = %+v; want a queued copy of %+v at attempt %d", i, g, w, attempts[i])
+			t.Errorf("added[%d] = %+v; want a queued copy of %+v at attempt %d", i, g, w, attempt)
 		}
 	}
 }
@@ -577,5 +609,116 @@ func expectAgentItem(t *testing.T, g domain.AgentItem, a domain.Item, newest dom
 	if g.Run.ID != newest || g.ItemNumber != a.Number || g.ItemTitle != a.Title || !reflect.DeepEqual(g.SentBackAt, []string{stNext}) ||
 		g.CostUSD != 2 || !g.DoneAt.Equal(t1) {
 		t.Errorf("AgentDoneItems[1] = %+v, want a's newest run, one send-back at %s, $2 and done at t1", g, stNext)
+	}
+}
+
+// publishEdits are a publish's try's edits: the draft's changed file, whole.
+var publishEdits = []domain.ProposalEdit{{Path: "agents/worker.md", Content: "# worker, test first\n", BaseSHA256: strings.Repeat("a", 64)}}
+
+// keptTry is a kept-test try of k's item at stWork, of a recorded run, with content key key.
+func (f *fixture) keptTry(t *testing.T, k domain.KeptTest, key string, attempt int) domain.NewPastTry {
+	t.Helper()
+
+	run := f.pastRun(t, domain.Item{ID: k.ItemID, FactoryID: k.FactoryID}, stWork, t0, true, "")
+
+	return domain.NewPastTry{KeptTestID: k.ID, ContentKey: key, ItemID: k.ItemID, Attempt: attempt, Station: stWork, OriginalRunID: run, Model: model}
+}
+
+// A publish's try has no proposal and keeps its version and edits; the claim takes it before a
+// proposal's tries queued earlier.
+func testTriesPublishFirst(f *fixture) {
+	t := f.t
+	p := f.triedProposal(t, t1)
+	older := f.newTries(t, p, f.create(t, domain.NewItem{}))
+	k := f.keep(t, f.create(t, domain.NewItem{}), stWork, 1)
+
+	queued := f.queuePublish(t, p.VersionID, 1, f.keptTry(t, k, "key-1", 1))
+
+	got, err := f.Tries.PastTry(f.ctx(t), queued[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.ProposalID != "" || got.ProposalNumber != 0 || got.KeptTestID != k.ID || got.ContentKey != "key-1" ||
+		got.VersionID != p.VersionID || !reflect.DeepEqual(got.Edits, publishEdits) {
+		t.Errorf("PastTry of a publish's try = %+v; want no proposal, test %s, key-1, version %s and its edits", got, k.ID, p.VersionID)
+	}
+
+	claimed, err := f.Tries.ClaimPastTry(f.ctx(t), f.factory, t1.Add(time.Hour), ttl, 2)
+	if err != nil || claimed.ID != queued[0].ID {
+		t.Fatalf("ClaimPastTry = %+v, %v; want the publish's try before proposal %d's older one", claimed, err, p.Number)
+	}
+
+	next, err := f.Tries.ClaimPastTry(f.ctx(t), f.factory, t1.Add(time.Hour), ttl, 2)
+	if err != nil || next.ID != older[0].ID {
+		t.Errorf("ClaimPastTry = %+v, %v; want the proposal's try next", next, err)
+	}
+
+	bad := f.keptTry(t, k, "key-1", 2)
+	bad.ProposalID = p.ID
+	_, err = f.Tries.QueuePublishTries(f.ctx(t), f.factory, p.VersionID, publishEdits, []domain.NewPastTry{bad}, t1)
+	expect(t, "QueuePublishTries of a proposal's try", err, domain.ErrInvalid)
+}
+
+// A proposal's kept-test try and a publish's of the same content key are both the key's tries;
+// queuing a publish's again queues none, and removing the test removes its tries.
+func testTriesReusedByContent(f *fixture) {
+	t := f.t
+	p := f.triedProposal(t, t1)
+	it := f.create(t, domain.NewItem{})
+	k := f.keep(t, it, stWork, 1)
+	other := f.keep(t, f.create(t, domain.NewItem{}), stWork, 2)
+
+	cited := f.keptTry(t, k, "", 1)
+	cited.KeptTestID, cited.ProposalID = "", p.ID
+	kept := f.keptTry(t, k, "key-1", 1)
+
+	ofProposal, err := f.Tries.QueuePastTries(f.ctx(t), f.factory, p.ID, []domain.NewPastTry{cited, kept}, t1)
+	if err != nil || len(ofProposal) != 2 || ofProposal[1].KeptTestID != k.ID || ofProposal[1].ProposalNumber != p.Number {
+		t.Fatalf("QueuePastTries of a cited item's try and its kept test's = %+v, %v; want both", ofProposal, err)
+	}
+
+	publish := f.keptTry(t, other, "key-1", 1)
+	first := f.queuePublish(t, p.VersionID, 1, publish)
+	f.queuePublish(t, p.VersionID, 0, publish)
+	f.queuePublish(t, p.VersionID, 1, f.keptTry(t, other, "key-2", 1))
+
+	f.expectKeyTries(t, "key-1", ofProposal[1].ID, first[0].ID)
+
+	if err := f.Kept.RemoveKeptTest(f.ctx(t), f.factory, k.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	f.expectKeyTries(t, "key-1", first[0].ID)
+}
+
+// queuePublish queues tries as a publish's on version and fails t unless it queued want of them.
+func (f *fixture) queuePublish(t *testing.T, version domain.DefinitionVersionID, want int, tries ...domain.NewPastTry) []domain.PastTry {
+	t.Helper()
+
+	got, err := f.Tries.QueuePublishTries(f.ctx(t), f.factory, version, publishEdits, tries, t1.Add(time.Minute))
+	if err != nil || len(got) != want {
+		t.Fatalf("QueuePublishTries = %+v, %v; want %d queued", got, err, want)
+	}
+
+	return got
+}
+
+// expectKeyTries fails t unless the factory's kept-test tries of key are want, in order.
+func (f *fixture) expectKeyTries(t *testing.T, key string, want ...domain.PastTryID) {
+	t.Helper()
+
+	got, err := f.Tries.KeptTestTries(f.ctx(t), f.factory, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ids := make([]domain.PastTryID, len(got))
+	for i, g := range got {
+		ids[i] = g.ID
+	}
+
+	if !reflect.DeepEqual(ids, want) {
+		t.Errorf("KeptTestTries of %s = %v, want %v", key, ids, want)
 	}
 }

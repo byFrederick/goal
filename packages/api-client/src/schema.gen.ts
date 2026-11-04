@@ -1239,6 +1239,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/draft/kept-tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read the open draft's kept tests and their results
+         * @description The same answer as startDraftKeptTests, and it starts nothing: a test not yet started has result null. 404 no-draft when no draft is open.
+         */
+        get: operations["getDraftKeptTests"];
+        put?: never;
+        /**
+         * Start the kept tests the open draft reaches (ADR 0039 decision 12)
+         * @description The publish dialog calls this when it opens. Goal finds the stations the draft reaches (the agent stations whose agent gets something different) and queues one try of each kept test there, on the current version with the draft's files. A test that has a try of exactly the draft's content already, from a tried proposal or an earlier publish, reuses it and queues nothing, so calling this again starts nothing new. Tries of a publish are claimed before a proposal's, and still wait while an item waits at an agent station or Jonah's budget is used up. A failing test warns and never blocks a publish: publishDraft does not read these results. A test that can't be tried (its station's agent needs MCP servers or secrets, the draft deletes a file, or Jonah is off) is answered with result error and why. 404 no-draft when no draft is open.
+         */
+        post: operations["startDraftKeptTests"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/draft/requests": {
         parameters: {
             query?: never;
@@ -6399,7 +6428,7 @@ export interface components {
              * @description From the first try queued to the last one finished; absent until every try is done
              */
             seconds?: number;
-            /** @description The station's kept tests run on the proposal, each passed or failed; empty until kept tests run on proposals */
+            /** @description The proposal's tries of the kept tests at the stations it reaches (ADR 0039 decision 12), in the order they were queued; empty when it reaches none or was tried before kept tests ran on proposals */
             kept_tests: components["schemas"]["TriedKeptTest"][];
             /** @description How often the grader read the items' original and final results right; absent until the grader is checked */
             grader?: components["schemas"]["TriedGrader"];
@@ -6437,8 +6466,52 @@ export interface components {
              * @description The kept test's item number
              */
             test: number;
+            /** @description The station the test is kept at */
+            station: string;
+            /** @description The try's attempt */
+            attempt: number;
+            result: components["schemas"]["KeptTestResult"];
+            /** @description Why it passed or failed; absent while it runs */
+            reason?: string;
+            /** @description Why the try could not be carried out */
+            error?: string;
+        };
+        /**
+         * @description running: its try is queued or runs; passed: the try passed the station's contract and checks and, at a gate, approved as the item did there; failed: it did not, or its run failed; error: the try could not be carried out, which is never a failure
+         * @enum {string}
+         */
+        KeptTestResult: "running" | "passed" | "failed" | "error";
+        /** @description A kept test's newest finished try, from a proposal or a publish */
+        KeptTestLastResult: {
             /** @enum {string} */
-            result: "passed" | "failed";
+            result: "passed" | "failed" | "error";
+            /**
+             * Format: date-time
+             * @description When the try finished
+             */
+            at: string;
+            /** @description The try's own run; absent when it never ran */
+            run_id?: string;
+        };
+        DraftKeptTests: {
+            /**
+             * @description trying: a test's try is queued or running; done: every started try is done, or none was started; budget_used: a try is still queued and Jonah's budget over the last 7 days is used up
+             * @enum {string}
+             */
+            state: "trying" | "done" | "budget_used";
+            /** @description The kept tests at the stations the draft reaches, then those that can't be tried */
+            tests: components["schemas"]["DraftKeptTest"][];
+        };
+        DraftKeptTest: {
+            test: components["schemas"]["KeptTest"];
+            /** @description Null while no try of the draft's content was started */
+            result: components["schemas"]["KeptTestResult"] | null;
+            /** @description Why it passed or failed */
+            reason?: string;
+            /** @description Why it could not be tried or carried out */
+            error?: string;
+            /** @description The try's own run */
+            run_id?: string;
         };
         TriedGrader: {
             /**
@@ -6487,6 +6560,8 @@ export interface components {
             kept_by: string;
             /** Format: date-time */
             kept_at: string;
+            /** @description Its newest finished try's result; null for a test never run */
+            last_result: components["schemas"]["KeptTestLastResult"] | null;
         };
         KeptTestItem: {
             id: string;
@@ -11006,6 +11081,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Version"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getDraftKeptTests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The kept tests the draft reaches, with their results so far */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftKeptTests"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    startDraftKeptTests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The kept tests the draft reaches, with their results so far */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftKeptTests"];
                 };
             };
             default: components["responses"]["Problem"];

@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -72,15 +73,25 @@ const PastTryStartRef = "refs/goal/try-start"
 // ended: the change against PastTryStartRef, new files included, committed or not.
 const PastTryDiffScript = "git add --all --intent-to-add && git diff --no-color --no-ext-diff --binary " + PastTryStartRef
 
-// PastTry is one try of a proposal on a past item: a rerun of Station, where the proposal reaches,
-// from what OriginalRun recorded (its brief and commit), in a box with only the model key.
+// PastTry is one try on a past item: a rerun of Station, where a change reaches, from what
+// OriginalRun recorded (its brief and commit), in a box with only the model key. A proposal's try
+// runs on the proposal's version and edits; a publish's try of a kept test (ADR 0039 decision 12)
+// has no proposal and keeps its own VersionID and Edits, the draft as whole files.
 type PastTry struct {
-	ID         PastTryID
-	FactoryID  FactoryID
+	ID        PastTryID
+	FactoryID FactoryID
+	// ProposalID is the proposal tried; empty for a publish's try.
 	ProposalID ProposalID
-	// ProposalNumber is the proposal's number in its factory, read with the try.
+	// ProposalNumber is the proposal's number in its factory, read with the try; 0 without one.
 	ProposalNumber int64
-	ItemID         ItemID
+	// KeptTestID is the kept test the try runs, empty for a try of an item a proposal cites.
+	KeptTestID KeptTestID
+	// ContentKey is a kept-test try's domain.ContentKey of the definition it runs on.
+	ContentKey string
+	// VersionID and Edits are what a publish's try runs on; empty for a proposal's.
+	VersionID DefinitionVersionID
+	Edits     []ProposalEdit
+	ItemID    ItemID
 	// Attempt numbers the proposal's tries of the item, from 1: a model proposal has
 	// ModelTriesPerItem of each.
 	Attempt       int
@@ -104,9 +115,12 @@ type PastTry struct {
 	FinishedAt time.Time
 }
 
-// NewPastTry is one try to queue. Attempt 0 is the first, as 1 is.
+// NewPastTry is one try to queue. Attempt 0 is the first, as 1 is. A kept test's try names the
+// test and the ContentKey of what it runs on; a publish's has no proposal.
 type NewPastTry struct {
 	ProposalID    ProposalID
+	KeptTestID    KeptTestID
+	ContentKey    string
 	ItemID        ItemID
 	Attempt       int
 	Station       string
@@ -147,8 +161,12 @@ func CheckPastTryAdds(adds []PastTryAdd) error {
 
 // Check reports what makes n impossible to queue, wrapping ErrInvalid.
 func (n NewPastTry) Check() error {
-	if n.ProposalID == "" || n.ItemID == "" || n.Station == "" || n.OriginalRunID == "" || n.Model == "" {
-		return fmt.Errorf("past try: it needs a proposal, an item, a station, an original run and a model: %w", ErrInvalid)
+	if (n.ProposalID == "" && n.KeptTestID == "") || n.ItemID == "" || n.Station == "" || n.OriginalRunID == "" || n.Model == "" {
+		return fmt.Errorf("past try: it needs a proposal or a kept test, an item, a station, an original run and a model: %w", ErrInvalid)
+	}
+
+	if n.KeptTestID != "" && (n.ContentKey == "" || len(n.ContentKey) > MaxContentKey) {
+		return fmt.Errorf("past try: a kept test's try needs its content key: %w", ErrInvalid)
 	}
 
 	if n.Attempt < 0 || n.Attempt > ModelTriesPerItem {
@@ -158,8 +176,95 @@ func (n NewPastTry) Check() error {
 	return nil
 }
 
+// CheckPublish is Check for a publish's try: it names a kept test and no proposal.
+func (n NewPastTry) CheckPublish() error {
+	if n.ProposalID != "" || n.KeptTestID == "" {
+		return fmt.Errorf("past try: a publish's try has a kept test and no proposal: %w", ErrInvalid)
+	}
+
+	return n.Check()
+}
+
 // TryAttempt is n's attempt as stored: 1 when it names none.
 func (n NewPastTry) TryAttempt() int { return max(n.Attempt, 1) }
+
+// MaxContentKey bounds a content key, in bytes (tries.content_key).
+const MaxContentKey = 100
+
+// ContentKey is the key of a definition's content, files by path: ManifestSHA256 of their
+// manifest. Two definitions share a key exactly when their files match, so a publish of a tried
+// proposal's content finds the proposal's kept-test tries (ADR 0039 decision 12).
+func ContentKey(files map[string][]byte) string {
+	m := make(Manifest, len(files))
+	for p, b := range files {
+		m[p] = HashBlob(b)
+	}
+
+	return string(ManifestSHA256(m))
+}
+
+// ApplyEdits is files with edits applied in order, as a proposal's try runs on them: a new map,
+// files unchanged. ErrEditDoesNotApply when an edit does not apply.
+func ApplyEdits(files map[string][]byte, edits []ProposalEdit) (map[string][]byte, error) {
+	out := make(map[string][]byte, len(files)+len(edits))
+	maps.Copy(out, files)
+
+	for _, e := range edits {
+		content, ok := out[e.Path]
+
+		edited, err := e.Apply(content, ok)
+		if err != nil {
+			return nil, err
+		}
+
+		out[e.Path] = []byte(edited)
+	}
+
+	return out, nil
+}
+
+// KeptTestResult is how a kept test's try came out (ADR 0039 decision 12).
+type KeptTestResult string
+
+// Kept-test results: running while its try is queued or runs, passed when it passed code grading
+// and, at a gate, approved (verdict fixed), failed otherwise (not_fixed), and error when it could
+// not be carried out, never failed.
+const (
+	KeptTestRunning KeptTestResult = "running"
+	KeptTestPassed  KeptTestResult = "passed"
+	KeptTestFailed  KeptTestResult = "failed"
+	KeptTestError   KeptTestResult = "error"
+)
+
+// KeptResult is t's result as a kept test's try: running until it is done, then by its verdict.
+// A done try with no verdict or unknown, which a kept test's never is, is error.
+func (t PastTry) KeptResult() KeptTestResult {
+	switch {
+	case t.State != PastTryDone:
+		return KeptTestRunning
+	case t.Verdict == PastTryFixed:
+		return KeptTestPassed
+	case t.Verdict == PastTryNotFixed:
+		return KeptTestFailed
+	default:
+		return KeptTestError
+	}
+}
+
+// KeptResultOf is the result of a kept test's tries of one content, as a publish shows it: running
+// while any runs, failed when any failed, passed when any passed, error otherwise, with the try
+// that decided it; false when there are none.
+func KeptResultOf(tries []PastTry) (KeptTestResult, PastTry, bool) {
+	for _, r := range []KeptTestResult{KeptTestRunning, KeptTestFailed, KeptTestPassed, KeptTestError} {
+		for _, t := range tries {
+			if t.KeptResult() == r {
+				return r, t, true
+			}
+		}
+	}
+
+	return "", PastTry{}, false
+}
 
 // PastTryResult is how a claimed try ended: done, with no verdict and its run's diff and cost,
 // graded with its reason, or with verdict error and why.

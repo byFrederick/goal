@@ -66,6 +66,15 @@ func (d *tryDefs) ValidateProposed(_ context.Context, v domain.DefinitionVersion
 	return d.validate(contract, edits, output)
 }
 
+// ContentKey is a key of v and the first edit's path, as two contents that match share one.
+func (d *tryDefs) ContentKey(_ context.Context, v domain.DefinitionVersionID, edits []domain.ProposalEdit) (string, error) {
+	if len(edits) == 0 {
+		return "key-" + string(v), nil
+	}
+
+	return "key-" + string(v) + "-" + edits[0].Path, nil
+}
+
 // build changes org's build station with change.
 func (d *tryDefs) build(org domain.OrgID, change func(*domain.Station)) {
 	d.mu.Lock()
@@ -162,7 +171,8 @@ func newTryWorld(t *testing.T, orgs int) *tryWorld {
 	}
 
 	w.loop = jonah.NewTries(jonah.TryDeps{
-		Orgs: w.tn, Jonah: store, Tries: store, Definitions: w.defs, Waiting: store, Events: store, Runs: store, Runner: w.runner, Clock: clock,
+		Orgs: w.tn, Jonah: store, Tries: store, Kept: store, Definitions: w.defs, Waiting: store, Events: store, Runs: store,
+		Runner: w.runner, Clock: clock,
 	}, jonah.TryConfig{Timeout: tryTimeout, Margin: time.Minute})
 
 	return w
@@ -696,7 +706,7 @@ func TestTries_FailingCheckIsNotFixed(t *testing.T) {
 	w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
 		return domain.RunResult{
 			Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), CostUSD: 0.25, Diff: tryDiff, RunID: tryRunID,
-			FailedCheck: &domain.FailedCheck{Command: "make test", ExitCode: 2, Output: "FAIL TestNotes"},
+			FailedCheck: &domain.FailedCheck{Command: checkMakeTest, ExitCode: 2, Output: "FAIL TestNotes"},
 		}, nil
 	}
 
@@ -1100,6 +1110,129 @@ func (w *tryWorld) jonahSpent(ctx context.Context, f domain.FactoryID, usd float
 		w.t.Fatal(err)
 	}
 }
+
+// keep keeps it as a test of org's factory at station.
+func (w *tryWorld) keep(org domain.OrgID, it domain.Item, station string) domain.KeptTest {
+	w.t.Helper()
+
+	k, err := w.store.KeepTest(w.ctx(org), domain.NewKeptTest{FactoryID: w.factories[org], ItemID: it.ID, Station: station, KeptBy: domain.LocalUser, KeptAt: rt0})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	return k
+}
+
+// A proposal that reaches a triable station gets a try of each kept test there, next to its cited
+// items', with the content key of what it runs on; a kept test at a station it does not reach gets
+// none, and a proposal that cites no item still tries the kept tests.
+func TestTries_SweepQueuesKeptTestsOfReachedStations(t *testing.T) {
+	t.Parallel()
+
+	w := newTryWorld(t, 1)
+	org := w.orgs[0]
+	cited, _ := w.pastItem(org, rt0.Add(-3*time.Hour), true)
+	kept, keptRun := w.pastItem(org, rt0.Add(-2*time.Hour), true)
+	k := w.keep(org, kept, stBuild)
+	w.keep(org, cited, stSpec) // a human station the proposal does not reach
+
+	p := w.propose(org, writerPath, cited)
+	w.sweep()
+	w.sweep()
+
+	got := w.tries(org, p)
+	if len(got) != 2 || got[0].KeptTestID != "" || got[0].ItemID != cited.ID {
+		t.Fatalf("tries = %+v; want the cited item's, then the kept test's", got)
+	}
+
+	if kt := got[1]; kt.KeptTestID != k.ID || kt.ItemID != kept.ID || kt.OriginalRunID != keptRun || kt.Station != stBuild ||
+		kt.ContentKey != "key-"+string(tryVersion)+"-"+writerPath || kt.ProposalID != p.ID {
+		t.Errorf("kept-test try = %+v; want test %s of its item's run at %s with the proposal's content key", kt, k.ID, stBuild)
+	}
+
+	alone := w.propose(org, writerPath)
+	w.sweep()
+
+	if got := w.tries(org, alone); len(got) != 1 || got[0].KeptTestID != k.ID {
+		t.Errorf("tries of a proposal citing no item = %+v; want the kept test's alone", got)
+	}
+}
+
+// A kept test passes (fixed) only when its try passes code grading and, at a gate, approves as
+// the item did there; it fails (not fixed, with why) otherwise, a failed run included, and an
+// infrastructure failure is error, never failed. A publish's try runs on its own version and edits.
+func TestTries_KeptTestPassesOnlyWithChecksAndGateVerdict(t *testing.T) {
+	t.Parallel()
+
+	ok := func(output string) domain.RunResult {
+		return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(output), RunID: tryRunID}
+	}
+
+	for _, tt := range []struct {
+		name    string
+		gate    bool
+		res     domain.RunResult
+		err     error
+		verdict domain.PastTryVerdict
+		why     string
+	}{
+		{name: "passing checks", res: ok(`{}`), verdict: domain.PastTryFixed, why: "it passed"},
+		{name: "a failing check", res: domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), FailedCheck: &domain.FailedCheck{
+			Command: checksMakeTest[0], ExitCode: 1,
+		}}, verdict: domain.PastTryNotFixed, why: "check `make test` exited 1"},
+		{name: "a failed run", res: domain.RunResult{Status: domain.RunFailed, Error: "max turns"}, verdict: domain.PastTryNotFixed, why: "the run failed: max turns"},
+		{name: "a lost box", err: fmt.Errorf("agent: %w", ports.ErrSandboxLost), verdict: domain.PastTryError, why: "sandbox"},
+		{name: "a gate that approves", gate: true, res: ok(`{"decision":"approve"}`), verdict: domain.PastTryFixed, why: "approved"},
+		{name: "a gate that rejects", gate: true, res: ok(`{"decision":"reject","reason":"no tests"}`), verdict: domain.PastTryNotFixed, why: "the gate rejected it: no tests"},
+		{name: "a gate with no verdict", gate: true, res: ok(`{}`), verdict: domain.PastTryNotFixed, why: "not a gate verdict"},
+	} {
+		w := newTryWorld(t, 1)
+		org := w.orgs[0]
+		w.defs.build(org, func(s *domain.Station) {
+			s.Checks = checksMakeTest
+			if tt.gate {
+				s.Gate = &domain.Gate{OnReject: stSpec, MaxRework: 1}
+			}
+		})
+
+		it, run := w.pastItem(org, rt0.Add(-time.Hour), true)
+		k := w.keep(org, it, stBuild)
+		edits := []domain.ProposalEdit{{Path: writerPath, Content: "# writer, test first\n", BaseSHA256: strings.Repeat("a", 64)}}
+
+		_, err := w.store.QueuePublishTries(w.ctx(org), w.factories[org], tryVersion, edits, []domain.NewPastTry{{
+			KeptTestID: k.ID, ContentKey: "key", ItemID: it.ID, Station: stBuild, OriginalRunID: run, Model: reviewModel,
+		}}, rt0)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) { return tt.res, tt.err }
+
+		if n := w.work(); n != 1 {
+			t.Fatalf("%s: Work finished %d tries; want 1", tt.name, n)
+		}
+
+		got, err := w.store.KeptTestTries(w.ctx(org), w.factories[org], "key")
+		if err != nil || len(got) != 1 {
+			t.Fatalf("%s: KeptTestTries = %+v, %v", tt.name, got, err)
+		}
+
+		text := got[0].Reason
+		if tt.verdict == domain.PastTryError {
+			text = got[0].Error
+		}
+
+		if got[0].Verdict != tt.verdict || !strings.Contains(text, tt.why) {
+			t.Errorf("%s: try = %+v; want verdict %s saying %q", tt.name, got[0], tt.verdict, tt.why)
+		}
+	}
+}
+
+// checksMakeTest are the grading tests' station checks.
+var checksMakeTest = []string{checkMakeTest}
+
+// checkMakeTest is a station check the grading tests name.
+const checkMakeTest = "make test"
 
 // A try at a gate station, where the proposal changes the gate's own agent, rules or contract, is
 // graded by what people did with the item after its original run, never by a model nor by the

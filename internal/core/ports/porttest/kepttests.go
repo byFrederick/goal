@@ -45,10 +45,28 @@ func (s *Store) KeepTest(ctx context.Context, n domain.NewKeptTest) (domain.Kept
 	return s.keptTestOut(k), nil
 }
 
-// keptTestOut is k with its item's number and title. Callers hold s.mu.
+// keptTestOut is k with its item's number and title and its newest finished try's result. Callers
+// hold s.mu.
 func (s *Store) keptTestOut(k domain.KeptTest) domain.KeptTest {
 	if it, ok := s.items[k.ItemID]; ok {
 		k.ItemNumber, k.ItemTitle = it.Number, it.Title
+	}
+
+	var last *domain.PastTry
+
+	for i := range s.jonah.tries {
+		t := &s.jonah.tries[i].row
+		if t.KeptTestID != k.ID || t.State != domain.PastTryDone {
+			continue
+		}
+
+		if last == nil || t.FinishedAt.After(last.FinishedAt) || (t.FinishedAt.Equal(last.FinishedAt) && t.ID > last.ID) {
+			last = t
+		}
+	}
+
+	if last != nil {
+		k.LastResult = &domain.KeptTestLast{Result: last.KeptResult(), At: last.FinishedAt, RunID: last.TryRunID}
 	}
 
 	return k
@@ -102,6 +120,9 @@ func (s *Store) RemoveKeptTest(ctx context.Context, factory domain.FactoryID, id
 	if len(s.jonah.keptTests) == n {
 		return fmt.Errorf("remove kept test %s: %w", id, ports.ErrNotFound)
 	}
+
+	// Its tries go with it, as tries_kept_test_fkey cascades.
+	s.jonah.tries = slices.DeleteFunc(s.jonah.tries, func(r jonahRow[domain.PastTry]) bool { return r.org == org && r.row.KeptTestID == id })
 
 	return nil
 }

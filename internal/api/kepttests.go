@@ -11,6 +11,7 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/jonah"
 )
 
 // Kept tests (ADR 0039 decision 12): a past item a person keeps, at a station it passed the first
@@ -229,10 +230,80 @@ func (s *server) passedFirstTime(ctx context.Context, store KeptTestStore, item 
 	return nil
 }
 
-// keptTestOut is k as the API shows it.
+// keptTestOut is k as the API shows it, with its last result.
 func keptTestOut(k domain.KeptTest) gen.KeptTest {
-	return gen.KeptTest{
+	out := gen.KeptTest{
 		Id: string(k.ID), Item: gen.KeptTestItem{Id: string(k.ItemID), Number: k.ItemNumber, Title: k.ItemTitle},
 		Station: k.Station, KeptBy: k.KeptBy.Ref(), KeptAt: k.KeptAt,
 	}
+
+	if l := k.LastResult; l != nil {
+		out.LastResult = &gen.KeptTestLastResult{Result: gen.KeptTestLastResultResult(l.Result), At: l.At, RunId: optional(string(l.RunID))}
+	}
+
+	return out
+}
+
+// draftKeptTests is the open draft's kept tests: errJonahUnavailable when this goald runs none.
+func (s *server) draftKeptTests() (DraftKeptTests, error) {
+	if s.jonah == nil || s.jonah.KeptDrafts == nil {
+		return nil, errJonahUnavailable
+	}
+
+	return s.jonah.KeptDrafts, nil
+}
+
+func (s *server) StartDraftKeptTests(ctx context.Context, req gen.StartDraftKeptTestsRequestObject) (gen.StartDraftKeptTestsResponseObject, error) {
+	rec, err := s.jonahWrite(ctx, req.Factory)
+	if err != nil {
+		return nil, err
+	}
+
+	kd, err := s.draftKeptTests()
+	if err != nil {
+		return nil, err
+	}
+
+	got, err := kd.Start(ctx, rec.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.StartDraftKeptTests200JSONResponse(draftKeptTestsOut(got)), nil
+}
+
+func (s *server) GetDraftKeptTests(ctx context.Context, req gen.GetDraftKeptTestsRequestObject) (gen.GetDraftKeptTestsResponseObject, error) {
+	rec, err := s.jonahFactory(ctx, req.Factory)
+	if err != nil {
+		return nil, err
+	}
+
+	kd, err := s.draftKeptTests()
+	if err != nil {
+		return nil, err
+	}
+
+	got, err := kd.Read(ctx, rec.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.GetDraftKeptTests200JSONResponse(draftKeptTestsOut(got)), nil
+}
+
+// draftKeptTestsOut is d as the API shows it.
+func draftKeptTestsOut(d jonah.DraftTests) gen.DraftKeptTests {
+	out := gen.DraftKeptTests{State: gen.DraftKeptTestsState(d.State), Tests: make([]gen.DraftKeptTest, len(d.Tests))}
+
+	for i, t := range d.Tests {
+		e := gen.DraftKeptTest{Test: keptTestOut(t.Test), Reason: optional(t.Reason), Error: optional(t.Error), RunId: optional(string(t.RunID))}
+		if t.Result != "" {
+			r := gen.KeptTestResult(t.Result)
+			e.Result = &r
+		}
+
+		out.Tests[i] = e
+	}
+
+	return out
 }

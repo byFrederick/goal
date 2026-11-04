@@ -30,6 +30,10 @@ type TryDefinitions interface {
 	// checked, as for a contract the proposed version does not have.
 	ValidateProposed(ctx context.Context, version domain.DefinitionVersionID, edits []domain.ProposalEdit, contract string,
 		output json.RawMessage) error
+	// ContentKey is domain.ContentKey of version's files with edits applied: what a kept test's
+	// try records, so a publish of the same content reuses it (ADR 0039 decision 12). The errors
+	// are ProposedLine's.
+	ContentKey(ctx context.Context, version domain.DefinitionVersionID, edits []domain.ProposalEdit) (string, error)
 }
 
 // ItemEvents reads an item's events, paged; ports.Store satisfies it.
@@ -42,11 +46,13 @@ type WaitingItems interface {
 	Waiting(ctx context.Context, factory domain.FactoryID, station string, limit int) ([]domain.Item, error)
 }
 
-// TryDeps are the ports the try loop works through. Log may be nil.
+// TryDeps are the ports the try loop works through. Log may be nil, and Kept nil tries no kept
+// tests.
 type TryDeps struct {
 	Orgs        Orgs
 	Jonah       ports.JonahStore
 	Tries       ports.PastTries
+	Kept        ports.KeptTests
 	Definitions TryDefinitions
 	Waiting     WaitingItems
 	// Events reads the items' events a try at a gate station is graded by.
@@ -107,7 +113,8 @@ func NewTries(d TryDeps, c TryConfig) *Tries {
 // organization that has none: those that change what a triable station's agent gets
 // (ProposedLine's reached stations whose agent domain.Line.TriableAgent accepts). Each such
 // proposal gets one try per item it cites, at most domain.MaxPastTryItems, newest first, each of
-// the item's newest run there that was a claim's first. A memory-only or flow-only proposal, or
+// the item's newest run there that was a claim's first, and one try of each kept test at those
+// stations (ADR 0039 decision 12) with the content key of what it runs on. A memory-only or flow-only proposal, or
 // one that reaches only stations that can't be tried, gets none. Queuing is all or none per
 // proposal and once, so the sweep is idempotent. A factory or organization that fails does not
 // hold up the others.
@@ -186,16 +193,25 @@ func (s *Tries) sweepProposal(ctx context.Context, p domain.Proposal) error {
 	}
 
 	targets, err := s.targets(ctx, p, line, reached)
-	if err != nil || len(targets) == 0 {
+	if err != nil {
 		return err
 	}
 
-	tries := make([]domain.NewPastTry, len(targets))
+	kept, err := s.keptTries(ctx, p, line, reached)
+	if err != nil {
+		return err
+	}
+
+	tries := make([]domain.NewPastTry, len(targets), len(targets)+len(kept))
 	for i, t := range targets {
 		a, _ := line.Agent(t.run.Agent)
 		tries[i] = domain.NewPastTry{
 			ProposalID: p.ID, ItemID: t.item, Station: t.run.Station, OriginalRunID: t.run.ID, Model: cmp.Or(a.Model, line.Runtime.Model),
 		}
+	}
+
+	if tries = append(tries, kept...); len(tries) == 0 {
+		return nil
 	}
 
 	queued, err := s.d.Tries.QueuePastTries(ctx, p.FactoryID, p.ID, tries, s.d.Clock.Now().UTC())
@@ -211,6 +227,32 @@ func (s *Tries) sweepProposal(ctx context.Context, p domain.Proposal) error {
 		slog.Int("tries", len(queued)))
 
 	return nil
+}
+
+// keptTries are p's tries of the kept tests at line's reached stations that can be tried, one
+// each, with the content key of p's version and edits.
+func (s *Tries) keptTries(ctx context.Context, p domain.Proposal, line domain.Line, reached []string) ([]domain.NewPastTry, error) {
+	if s.d.Kept == nil {
+		return nil, nil
+	}
+
+	targets, _, err := keptTargets(ctx, s.d.Kept, s.d.Tries, p.FactoryID, line, reached)
+	if err != nil || len(targets) == 0 {
+		return nil, err
+	}
+
+	key, err := s.d.Definitions.ContentKey(ctx, p.VersionID, p.Edits)
+	if err != nil {
+		return nil, fmt.Errorf("read the content key: %w", err)
+	}
+
+	out := make([]domain.NewPastTry, len(targets))
+	for i, t := range targets {
+		out[i] = t.try(line, key, 1, "")
+		out[i].ProposalID = p.ID
+	}
+
+	return out, nil
 }
 
 // targets are the runs p's tries rerun: for each item p cites, its newest first run of a claim at
@@ -430,7 +472,8 @@ func (s *Tries) finish(ctx context.Context, current domain.Line, try domain.Past
 	}
 
 	s.log.InfoContext(ctx, "jonah try finished", slog.String("try_id", string(try.ID)), slog.String("factory", string(try.FactoryID)),
-		slog.Int64("proposal", try.ProposalNumber), slog.String("verdict", string(res.Verdict)), slog.Float64("cost_usd", res.CostUSD))
+		slog.Int64("proposal", try.ProposalNumber), slog.String("kept_test", string(try.KeptTestID)), slog.String("verdict", string(res.Verdict)),
+		slog.Float64("cost_usd", res.CostUSD))
 
 	return true, nil
 }
@@ -452,16 +495,16 @@ func (s *Tries) run(ctx context.Context, current domain.Line, try domain.PastTry
 		return tryError("the try did not finish in %d attempts", MaxTryAttempts), nil
 	}
 
-	p, err := s.d.Jonah.Proposal(ctx, try.FactoryID, try.ProposalNumber)
-	if errors.Is(err, ports.ErrNotFound) {
-		return tryError("proposal %d is gone", try.ProposalNumber), nil
-	}
-
+	sub, why, err := s.subject(ctx, try)
 	if err != nil {
-		return domain.PastTryResult{}, fmt.Errorf("read proposal %d: %w", try.ProposalNumber, err)
+		return domain.PastTryResult{}, err
 	}
 
-	line, why, err := s.proposedLine(ctx, p)
+	if why != "" {
+		return tryError("%s", why), nil
+	}
+
+	line, why, err := s.proposedLine(ctx, sub)
 	if err != nil {
 		return domain.PastTryResult{}, err
 	}
@@ -496,7 +539,7 @@ func (s *Tries) run(ctx context.Context, current domain.Line, try domain.PastTry
 		return res, err
 	}
 
-	return s.grade(ctx, current, p, line, try, in.Run, run)
+	return s.grade(ctx, current, sub, line, try, in.Run, run)
 }
 
 // notCarriedOut is the result of a try's run that RunTask could not carry out or that was
@@ -521,15 +564,41 @@ func notCarriedOut(ctx context.Context, run domain.RunResult, err error) (domain
 	return res, true, nil
 }
 
+// tried is what a try runs on: a proposal's version and edits, or a publish's own (ADR 0039
+// decision 12), named as its errors say it.
+type tried struct {
+	name    string
+	version domain.DefinitionVersionID
+	edits   []domain.ProposalEdit
+}
+
+// subject is what try runs on, or why it cannot run: its proposal is gone.
+func (s *Tries) subject(ctx context.Context, try domain.PastTry) (tried, string, error) {
+	if try.ProposalID == "" {
+		return tried{name: "the publish's draft", version: try.VersionID, edits: try.Edits}, "", nil
+	}
+
+	p, err := s.d.Jonah.Proposal(ctx, try.FactoryID, try.ProposalNumber)
+	if errors.Is(err, ports.ErrNotFound) {
+		return tried{}, fmt.Sprintf("proposal %d is gone", try.ProposalNumber), nil
+	}
+
+	if err != nil {
+		return tried{}, "", fmt.Errorf("read proposal %d: %w", try.ProposalNumber, err)
+	}
+
+	return tried{name: fmt.Sprintf("proposal %d", p.Number), version: p.VersionID, edits: p.Edits}, "", nil
+}
+
 // grade is the result of try's run that ended, with its diff, cost and run (ADR 0039 decision 10).
 // Code grades it first when the run succeeded, as the station checks a line's run: its output
-// against the station's contract as p changes it, then the station's checks, which RunTask ran in
+// against the station's contract as sub changes it, then the station's checks, which RunTask ran in
 // the try's box. The first that fails makes it not fixed with what failed as its reason. A contract
-// that cannot be checked makes it an error, and a cancelled ctx an error. A try at a gate station,
-// whose proposal changes the gate's own agent, rules or contract, is then graded by people
+// that cannot be checked makes it an error, and a cancelled ctx an error. A kept test's try is then
+// graded to the end here (gradeKept). Any other try at a gate station is graded by people
 // (gradeByPeople). Any other try whose run failed passes no code grading, so it is not fixed; one
 // that passes both has its run recorded (RecordPastTryRun) and goes to the grader (gradeByModel).
-func (s *Tries) grade(ctx context.Context, current domain.Line, p domain.Proposal, line domain.Line, try domain.PastTry, orig domain.Run,
+func (s *Tries) grade(ctx context.Context, current domain.Line, sub tried, line domain.Line, try domain.PastTry, orig domain.Run,
 	run domain.RunResult,
 ) (domain.PastTryResult, error) {
 	res := domain.PastTryResult{Diff: run.Diff, CostUSD: run.CostUSD, TryRunID: run.RunID}
@@ -537,9 +606,13 @@ func (s *Tries) grade(ctx context.Context, current domain.Line, p domain.Proposa
 
 	if run.Status == domain.RunSucceeded {
 		var err error
-		if res, err = s.gradeByCode(ctx, p, st, run, res); err != nil || res.Verdict != "" {
+		if res, err = s.gradeByCode(ctx, sub, st, run, res); err != nil || res.Verdict != "" {
 			return res, err
 		}
+	}
+
+	if try.KeptTestID != "" {
+		return gradeKept(res, st, run), nil
 	}
 
 	if st.Gate != nil {
@@ -566,12 +639,12 @@ func (s *Tries) grade(ctx context.Context, current domain.Line, p domain.Proposa
 	return s.gradeByModel(ctx, current, recorded, orig, res)
 }
 
-// gradeByCode is res graded by st's contract as p changes it, then by st's checks: not fixed when
-// one fails, an error when the contract cannot be checked, and unchanged when both pass.
-func (s *Tries) gradeByCode(ctx context.Context, p domain.Proposal, st domain.Station, run domain.RunResult, res domain.PastTryResult,
+// gradeByCode is res graded by st's contract as sub changes it, then by st's checks: not fixed
+// when one fails, an error when the contract cannot be checked, and unchanged when both pass.
+func (s *Tries) gradeByCode(ctx context.Context, sub tried, st domain.Station, run domain.RunResult, res domain.PastTryResult,
 ) (domain.PastTryResult, error) {
 	if st.Output != "" {
-		err := s.d.Definitions.ValidateProposed(ctx, p.VersionID, p.Edits, st.Output, run.Output)
+		err := s.d.Definitions.ValidateProposed(ctx, sub.version, sub.edits, st.Output, run.Output)
 
 		switch {
 		case errors.Is(err, ports.ErrContractViolation):
@@ -591,6 +664,34 @@ func (s *Tries) gradeByCode(ctx context.Context, p domain.Proposal, st domain.St
 	res.Reason = truncate(res.Reason, domain.MaxPastTryReason)
 
 	return res, nil
+}
+
+// gradeKept finishes the grade of a kept test's try at st (ADR 0039 decision 12) that code grading
+// left without a verdict, which neither the grader nor people's verdicts grade: the item passed st
+// the first time, so the try passes (fixed) only when its run succeeded and, at a gate, approved as
+// the item was; otherwise it fails (not fixed) with why.
+func gradeKept(res domain.PastTryResult, st domain.Station, run domain.RunResult) domain.PastTryResult {
+	switch {
+	case run.Status != domain.RunSucceeded:
+		res.Verdict, res.Reason = domain.PastTryNotFixed, "the run failed: "+cmp.Or(run.Error, string(run.Status))
+	case st.Gate == nil:
+		res.Verdict, res.Reason = domain.PastTryFixed, "it passed the station's contract and checks"
+	default:
+		v, err := domain.ParseVerdict(run.Output)
+
+		switch {
+		case err != nil:
+			res.Verdict, res.Reason = domain.PastTryNotFixed, fmt.Sprintf("the output is not a gate verdict: %v", err)
+		case v.Decision != domain.Approve:
+			res.Verdict, res.Reason = domain.PastTryNotFixed, "the gate rejected it: "+v.Reason
+		default:
+			res.Verdict, res.Reason = domain.PastTryFixed, "it passed the station's contract and checks, and the gate approved it as it did the item"
+		}
+	}
+
+	res.Reason = truncate(res.Reason, domain.MaxPastTryReason)
+
+	return res
 }
 
 // gradeByPeople grades res, a try at a gate station, by what people did with its item after orig
@@ -658,18 +759,18 @@ func (s *Tries) itemEvents(ctx context.Context, id domain.ItemID) ([]domain.Even
 	}
 }
 
-// proposedLine is p's version with its edits applied, or why a try of p cannot run on it: the
+// proposedLine is sub's version with its edits applied, or why a try of it cannot run on it: the
 // version is gone or the edits no longer apply.
-func (s *Tries) proposedLine(ctx context.Context, p domain.Proposal) (domain.Line, string, error) {
-	line, _, err := s.d.Definitions.ProposedLine(ctx, p.VersionID, p.Edits)
+func (s *Tries) proposedLine(ctx context.Context, sub tried) (domain.Line, string, error) {
+	line, _, err := s.d.Definitions.ProposedLine(ctx, sub.version, sub.edits)
 
 	switch {
 	case errors.Is(err, ports.ErrNotFound):
-		return domain.Line{}, fmt.Sprintf("definition version %s is gone", p.VersionID), nil
+		return domain.Line{}, fmt.Sprintf("definition version %s is gone", sub.version), nil
 	case errors.Is(err, domain.ErrEditDoesNotApply):
-		return domain.Line{}, fmt.Sprintf("proposal %d does not apply to version %s: %v", p.Number, p.VersionID, err), nil
+		return domain.Line{}, fmt.Sprintf("%s does not apply to version %s: %v", sub.name, sub.version, err), nil
 	case err != nil:
-		return domain.Line{}, "", fmt.Errorf("read version %s with proposal %d: %w", p.VersionID, p.Number, err)
+		return domain.Line{}, "", fmt.Errorf("read version %s with %s: %w", sub.version, sub.name, err)
 	}
 
 	return line, "", nil

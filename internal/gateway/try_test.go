@@ -194,3 +194,49 @@ func expectTryRepository(t *testing.T, b runBundle) {
 		t.Errorf("repository %+v with logins %+v; want the recorded commits and the repository token's login", r, b.Git)
 	}
 }
+
+// A publish's try of a kept test (ADR 0039 decision 12) has no proposal: its bundle is the
+// station's on its own version with its own edits, the draft's files; a token of another version
+// is refused.
+func TestBundle_TryOfAPublishGetsTheDraftsFiles(t *testing.T) {
+	t.Parallel()
+
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: secretsBundleYAML("https://github.com/acme/api.git", ""), files: secretsBundleFiles})
+	_, proposed := h.pastTry(t)
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	k, err := h.store.KeepTest(ctx, domain.NewKeptTest{FactoryID: factoryID, ItemID: proposed.ItemID, Station: tryStation, KeptBy: domain.LocalUser, KeptAt: h.clock.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	edits := []domain.ProposalEdit{{Path: engineerPrompt, Content: "# engineer, from the draft\n", BaseSHA256: string(domain.HashBlob([]byte("# engineer\n")))}}
+
+	tries, err := h.store.QueuePublishTries(ctx, factoryID, version, edits, []domain.NewPastTry{{
+		KeptTestID: k.ID, ContentKey: "key", ItemID: proposed.ItemID, Station: tryStation, OriginalRunID: proposed.OriginalRunID, Model: proposed.Model,
+	}}, h.clock.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, h.tryClaims(tries[0])))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", status, body)
+	}
+
+	var b runBundle
+	if err := json.Unmarshal(body, &b); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := string(b.Files["agent/prompt.md"]); got != "# engineer, from the draft\n" {
+		t.Errorf("prompt %q; want the draft's", got)
+	}
+
+	other := h.tryClaims(tries[0])
+	other.VersionID = "another-version"
+
+	if status, _, _ := request(t, http.MethodGet, h.runServer(t), h.token(t, other)); status != http.StatusForbidden {
+		t.Errorf("status of a token of another version = %d, want 403", status)
+	}
+}
