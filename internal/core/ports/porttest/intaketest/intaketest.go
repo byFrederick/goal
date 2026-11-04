@@ -77,6 +77,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	}
 
 	tests = append(tests, webhookTests...)
+	tests = append(tests, receiptTests...)
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -562,8 +563,8 @@ func testDeliveryRules(f *fixture) {
 	}
 }
 
-// PruneDeliveries deletes the deliveries received before the instant, in every organization, and
-// keeps the rest, the instant itself included.
+// PruneDeliveries deletes the deliveries received more than domain.DeliveryRetention before now,
+// in every organization, and keeps the rest, the cut itself included.
 func testPrune(f *fixture) {
 	t := f.t
 	s := f.endpoint(hooks, domain.WebhookGeneric)
@@ -577,7 +578,7 @@ func testPrune(f *fixture) {
 	theirs := labs.endpoint(hooks, domain.WebhookGeneric)
 	labs.deliver(theirs.Endpoint.ID, cut.Add(-time.Minute))
 
-	n, err := f.in.PruneDeliveries(context.Background(), cut)
+	n, err := f.in.PruneDeliveries(context.Background(), t0)
 	if err != nil || n != 2 {
 		t.Errorf("PruneDeliveries = %d, %v; want the 2 older rows", n, err)
 	}
@@ -1110,6 +1111,11 @@ func testNoOrg(f *fixture) {
 		"WebhookByName":     func() error { _, err := f.in.WebhookByName(ctx, orgHook); return err },
 		"PatchWebhook":      func() error { _, err := f.in.PatchWebhook(ctx, id, domain.WebhookPatch{}); return err },
 		"WebhookSecretUses": func() error { _, err := f.in.WebhookSecretUses(ctx); return err },
+		"Receive": func() error {
+			_, err := f.in.Receive(ctx, domain.NewReceipt{WebhookID: id, ReceivedAt: t0, Receipt: domain.ReceiptAccepted, DeliveryID: "d"})
+			return err
+		},
+		"UnnamedDays": func() error { _, err := f.in.UnnamedDays(ctx, id, t0); return err },
 	}
 
 	for name, call := range calls {

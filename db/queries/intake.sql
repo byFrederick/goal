@@ -115,17 +115,50 @@ INSERT INTO webhook_deliveries (id, endpoint_id, received_at, headers, body, out
 VALUES (sqlc.arg(id), sqlc.arg(endpoint_id), sqlc.arg(received_at), sqlc.arg(headers), sqlc.arg(body), sqlc.arg(outcome),
         sqlc.arg(reason), sqlc.narg(item_id));
 
+-- name: InsertReceivedDelivery :one
+-- A delivery the receiver keeps a row of (00116): an accepted one with its id, event and body, or
+-- a refused one with metadata only.
+INSERT INTO webhook_deliveries (id, endpoint_id, received_at, headers, body, outcome, reason, delivery_id, event, receipt)
+VALUES (sqlc.arg(id), sqlc.arg(endpoint_id), sqlc.arg(received_at), sqlc.arg(headers), sqlc.arg(body), sqlc.arg(outcome),
+        sqlc.arg(reason), sqlc.narg(delivery_id), sqlc.arg(event), sqlc.arg(receipt))
+RETURNING id;
+
+-- name: InsertLedgerID :one
+-- The webhook's ledger takes an accepted delivery id; no row when it already holds it.
+INSERT INTO webhook_delivery_ids (webhook_id, delivery_id, received_at)
+VALUES (sqlc.arg(webhook_id), sqlc.arg(delivery_id), sqlc.arg(received_at))
+ON CONFLICT (org_id, webhook_id, delivery_id) DO NOTHING
+RETURNING delivery_id;
+
+-- name: CountDuplicate :one
+-- The row a delivery id first came with counts one more duplicate; no row when there is none.
+UPDATE webhook_deliveries SET duplicates = duplicates + 1
+WHERE endpoint_id = sqlc.arg(endpoint_id) AND delivery_id = sqlc.arg(delivery_id)::text
+RETURNING id;
+
+-- name: CountUnnamedDelivery :exec
+-- One more delivery no enabled trigger named, on its UTC day.
+INSERT INTO webhook_delivery_counts (webhook_id, day, count)
+VALUES (sqlc.arg(webhook_id), (sqlc.arg(received_at)::timestamptz AT TIME ZONE 'UTC')::date, 1)
+ON CONFLICT (org_id, webhook_id, day) DO UPDATE SET count = webhook_delivery_counts.count + 1;
+
+-- name: UnnamedDeliveryDays :many
+-- A webhook's daily counts of deliveries no trigger named, from the UTC day of the instant on.
+SELECT webhook_id, (day::timestamp AT TIME ZONE 'UTC')::timestamptz AS day, count FROM webhook_delivery_counts
+WHERE webhook_id = sqlc.arg(webhook_id) AND day >= (sqlc.arg(since)::timestamptz AT TIME ZONE 'UTC')::date
+ORDER BY day;
+
 -- name: WebhookDeliveries :many
 -- An endpoint's deliveries newest first, after the cursor (received_at, id); a zero cursor, an
 -- id of all zeros at the latest instant, starts at the newest.
-SELECT id, endpoint_id, received_at, headers, body, outcome, reason, item_id FROM webhook_deliveries
+SELECT id, endpoint_id, received_at, headers, body, outcome, reason, item_id, delivery_id, event, receipt, duplicates FROM webhook_deliveries
 WHERE endpoint_id = sqlc.arg(endpoint_id)
   AND (sqlc.narg(after_at)::timestamptz IS NULL OR (received_at, id) < (sqlc.narg(after_at)::timestamptz, sqlc.arg(after_id)::uuid))
 ORDER BY received_at DESC, id DESC
 LIMIT sqlc.arg(max_rows);
 
 -- name: WebhookDelivery :one
-SELECT id, endpoint_id, received_at, headers, body, outcome, reason, item_id FROM webhook_deliveries
+SELECT id, endpoint_id, received_at, headers, body, outcome, reason, item_id, delivery_id, event, receipt, duplicates FROM webhook_deliveries
 WHERE endpoint_id = sqlc.arg(endpoint_id) AND id = sqlc.arg(id);
 
 -- name: WebhookDeliveryDays :many
@@ -146,6 +179,11 @@ ORDER BY 1, 2;
 -- name: PruneWebhookDeliveries :one
 -- Every organization's deliveries received before the instant, through the definer.
 SELECT goal_prune_webhook_deliveries(sqlc.arg(before)::timestamptz)::bigint AS deleted;
+
+-- name: PruneWebhookLedger :one
+-- Every organization's ledger ids received before the instant and counts of days before it,
+-- through the definer.
+SELECT goal_prune_webhook_ledger(sqlc.arg(before)::timestamptz)::bigint AS deleted;
 
 -- name: InsertTriggerFiring :one
 -- Returns nothing (no rows) when the trigger already has a firing with this key.
