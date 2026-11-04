@@ -39,7 +39,22 @@ A proposal is one hypothesis with file edits. Each edit has the whole new conten
 - Approve opens a draft from the current version, writes the proposal's files into it and publishes it as the person who approved. It is refused when the factory already has an open draft, or when a file changed since Jonah read it, so a stale proposal cannot overwrite newer work.
 - Edit writes the proposal into the draft, so the person can continue in the builder.
 - Reject needs a reason, and later reviews read it.
-- To undo a published proposal, restore the earlier version.
+- To undo a published proposal, use Undo this change (see the next section). Restore also works, but it reverts everything published since.
+
+## The watch on every change
+
+Goal watches every published version at each station it changes. A station's outcome for an item counts for the definition version of that item's run at the station, so an item that started before a publish still counts for the version it ran on.
+
+- **What is compared.** For a Jonah proposal, the number it said it would move (its estimate's metric at its station). For a person's publish, the send-back rate and the cost per item at each station the change reaches. A change reaches a station when it changes what the station's agent gets: its agent file, a rule that applies to it, a skill it loads, its contract or its model.
+- **Before and after.** Before covers the versions since the last change that reached the station. After runs from the change until the next change that reaches the station, so publishes that touch other stations do not end it.
+- **The verdict** comes from a 90% interval of after minus before, where lower is better. It reads *Helped* or *Worse* when the interval clears the minimum effect: 5 points for a rate, 10% of before for cost or lead time. It reads *No change* when the interval lies inside that minimum, and *Too early* otherwise, with the items counted on each side. A watch that is still too early after 14 days, or after 150 items following the change, ends as *No clear change*. The verdict is final then.
+- goald recomputes the watches every 15 minutes. The API shows them in each version's `watches` and in a proposal's `watch`.
+
+### Undo this change
+
+When a Jonah proposal's own number gets worse, Needs you shows a `watch_worse` entry that is not tied to an item. A person's publish never raises one; its watches show on the version.
+
+Undo this change (`POST …/jonah/proposals/{number}/undo`, which needs `definition:edit`) writes a new proposal that reverses the published edits against the current version, whatever has been published since. The new proposal names the one it undoes, waits in Proposals like any other and publishes only when a person approves it. A file the proposal added stays in place; the reversed edits stop referring to it. The undo is refused with `undo-conflict`, naming the file, when the text the change wrote no longer appears exactly once. While an undo of the proposal is open, the Needs you entry goes away and a second undo is refused with `undo-open`.
 
 The decision behind reviews is ADR 0034 (`docs/adr/0034-jonah-proposals.md` in the repository). The evals and judges are described by ADR 0002 and ADR 0025 there.
 

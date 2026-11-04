@@ -104,8 +104,10 @@ func (o StationOutcome) Sample(m ProposalMetric) float64 {
 		return 0
 	case MetricCostPerItem:
 		return o.CostUSD
-	default:
+	case MetricLeadTimeP85:
 		return o.LeadTime.Seconds()
+	default:
+		return 0
 	}
 }
 
@@ -152,8 +154,10 @@ func WatchIntervalOf(m ProposalMetric, before, after []float64) (WatchInterval, 
 		return proportionInterval(before, after), true
 	case MetricCostPerItem:
 		return welchInterval(before, after), true
-	default:
+	case MetricLeadTimeP85:
 		return bootstrapInterval(before, after), true
+	default:
+		return WatchInterval{}, false
 	}
 }
 
@@ -421,15 +425,19 @@ func lineHunks(a, b []string) []lineHunk {
 		return []lineHunk{{pre, len(a) - suf, pre, len(b) - suf}}
 	}
 
-	// lcs[i][j] is the longest common subsequence of x[i:] and y[j:].
+	return walkHunks(x, y, lcsTable(x, y), pre)
+}
+
+// lcsTable is lcs[i][j], the longest common subsequence of x[i:] and y[j:].
+func lcsTable(x, y []string) [][]int32 {
 	lcs := make([][]int32, len(x)+1)
 	for i := range lcs {
 		lcs[i] = make([]int32, len(y)+1)
 	}
 
-	for i := len(x) - 1; i >= 0; i-- {
+	for i, xi := range slices.Backward(x) {
 		for j := len(y) - 1; j >= 0; j-- {
-			if x[i] == y[j] {
+			if xi == y[j] {
 				lcs[i][j] = lcs[i+1][j+1] + 1
 			} else {
 				lcs[i][j] = max(lcs[i+1][j], lcs[i][j+1])
@@ -437,6 +445,11 @@ func lineHunks(a, b []string) []lineHunk {
 		}
 	}
 
+	return lcs
+}
+
+// walkHunks follows lcs through x and y and returns their changed runs, offset by pre lines.
+func walkHunks(x, y []string, lcs [][]int32, pre int) []lineHunk {
 	var (
 		out  []lineHunk
 		open *lineHunk

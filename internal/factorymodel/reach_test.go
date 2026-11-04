@@ -7,6 +7,13 @@ import (
 	"testing"
 )
 
+// The stations and the reviewer's prompt of reachDoc.
+const (
+	reachBuild   = "build"
+	reachReview  = "review"
+	reviewerFile = "agents/reviewer.md"
+)
+
 // reachDoc is a line of two agent stations: build, whose engineer loads the lint skill and
 // answers the answer contract, and review, which the secrets rule applies to.
 const reachDoc = `apiVersion: goal/v1
@@ -35,7 +42,7 @@ func reachFiles(extra map[string]string) map[string]string {
 	out := map[string]string{
 		factoryFile:                    reachDoc,
 		"agents/engineer.md":           "Build it.\n",
-		"agents/reviewer.md":           "Review it.\n",
+		reviewerFile:                   "Review it.\n",
 		"skills/lint/SKILL.md":         "---\nname: lint\ndescription: Lint the change.\n---\n\nRun the linter.\n",
 		"rules/secrets.md":             "---\ndescription: Keep secrets out.\nappliesTo: { stations: [review] }\n---\n\nNever print a secret.\n",
 		"contracts/answer.schema.json": `{"type": "object", "properties": {"summary": {"type": "string"}}}`,
@@ -59,16 +66,16 @@ func TestStationsReached(t *testing.T) {
 		want []string
 	}{
 		{"nothing changed", nil, nil},
-		{"the agent file", map[string]string{"agents/engineer.md": "Build it with tests.\n"}, []string{"build"}},
-		{"a rule that applies", map[string]string{"rules/secrets.md": "---\ndescription: Keep secrets out.\nappliesTo: { stations: [review] }\n---\n\nNever log a secret.\n"}, []string{"review"}},
-		{"a rule's scope", map[string]string{"rules/secrets.md": "---\ndescription: Keep secrets out.\n---\n\nNever print a secret.\n"}, []string{"build", "review"}},
-		{"a loaded skill", map[string]string{"skills/lint/SKILL.md": "---\nname: lint\ndescription: Lint the change.\n---\n\nRun the linter twice.\n"}, []string{"build"}},
-		{"the contract", map[string]string{"contracts/answer.schema.json": `{"type": "object", "properties": {"summary": {"type": "string"}, "pr": {"type": "string"}}}`}, []string{"build"}},
-		{"the agent's model", doc("prompt: ./agents/reviewer.md }", "prompt: ./agents/reviewer.md, model: claude-opus-5-5 }"), []string{"review"}},
-		{"the runtime's model reaches every agent without one", doc("model: claude-sonnet-5-5", "model: claude-haiku-5-5"), []string{"build", "review"}},
-		{"the station's agent", doc("agent: reviewer, wip: 2", "agent: engineer, wip: 2"), []string{"review"}},
+		{"the agent file", map[string]string{"agents/engineer.md": "Build it with tests.\n"}, []string{reachBuild}},
+		{"a rule that applies", map[string]string{"rules/secrets.md": "---\ndescription: Keep secrets out.\nappliesTo: { stations: [review] }\n---\n\nNever log a secret.\n"}, []string{reachReview}},
+		{"a rule's scope", map[string]string{"rules/secrets.md": "---\ndescription: Keep secrets out.\n---\n\nNever print a secret.\n"}, []string{reachBuild, reachReview}},
+		{"a loaded skill", map[string]string{"skills/lint/SKILL.md": "---\nname: lint\ndescription: Lint the change.\n---\n\nRun the linter twice.\n"}, []string{reachBuild}},
+		{"the contract", map[string]string{"contracts/answer.schema.json": `{"type": "object", "properties": {"summary": {"type": "string"}, "pr": {"type": "string"}}}`}, []string{reachBuild}},
+		{"the agent's model", doc("prompt: ./agents/reviewer.md }", "prompt: ./agents/reviewer.md, model: claude-opus-5-5 }"), []string{reachReview}},
+		{"the runtime's model reaches every agent without one", doc("model: claude-sonnet-5-5", "model: claude-haiku-5-5"), []string{reachBuild, reachReview}},
+		{"the station's agent", doc("agent: reviewer, wip: 2", "agent: engineer, wip: 2"), []string{reachReview}},
 		{"a WIP limit reaches no agent", doc("wip: 2", "wip: 3"), nil},
-		{"another agent's file", map[string]string{"agents/reviewer.md": "Review it closely.\n"}, []string{"review"}},
+		{"another agent's file", map[string]string{reviewerFile: "Review it closely.\n"}, []string{reachReview}},
 	}
 
 	for _, tc := range tests {
@@ -85,7 +92,7 @@ func TestStationsReached(t *testing.T) {
 		t.Parallel()
 
 		got := StationsReached(snapshot(map[string]string{factoryFile: "spec: ["}), snapshot(reachFiles(nil)))
-		if !reflect.DeepEqual(got, []string{"build", "review"}) {
+		if !reflect.DeepEqual(got, []string{reachBuild, reachReview}) {
 			t.Errorf("StationsReached = %q, want every agent station", got)
 		}
 	})

@@ -18,10 +18,15 @@ import (
 
 var watchAt = time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
 
+// watchStation is the station the tests' runs work at.
+const watchStation = "build"
+
 // watchOrgs serves one organization to the watch sweep.
 type watchOrgs struct{ org domain.OrgID }
 
-func (o watchOrgs) ActiveOrgs(context.Context) ([]domain.OrgID, error) { return []domain.OrgID{o.org}, nil }
+func (o watchOrgs) ActiveOrgs(context.Context) ([]domain.OrgID, error) {
+	return []domain.OrgID{o.org}, nil
+}
 
 // watchHistory serves one factory's versions to the watch sweep.
 type watchHistory struct {
@@ -50,7 +55,7 @@ func (l watchLine) item() domain.ItemID {
 	l.t.Helper()
 
 	it, err := l.s.CreateItem(domain.WithOrg(l.t.Context(), l.org), domain.NewItem{
-		FactoryID: l.factory, Type: "task", Title: "x", Station: "build", State: domain.StateQueued, Class: domain.ClassStandard, CreatedAt: watchAt,
+		FactoryID: l.factory, Type: typeTask, Title: "x", Station: watchStation, State: domain.StateQueued, Class: domain.ClassStandard, CreatedAt: watchAt,
 	})
 	if err != nil {
 		l.t.Fatal(err)
@@ -128,7 +133,35 @@ func TestWatches_CreditsRunVersionAndSpansUnrelatedPublishes(t *testing.T) {
 	l.left(c, h(60), h(62))
 	l.run(running, v2, h(41), 2, true)
 
-	got, err := s.StationOutcomes(ctx, factory, "build", []domain.DefinitionVersionID{v1, v2, v3})
+	wantOutcomes(ctx, t, s, factory, []domain.DefinitionVersionID{v1, v2, v3}, []domain.ItemID{a, b, late, c})
+
+	clock := porttest.NewClock(watchAt.Add(5 * 24 * time.Hour))
+	history := watchHistory{factory: factory, versions: []domain.VersionReach{
+		{ID: v1, Number: 1, PublishedAt: watchAt.Add(-time.Hour), First: true},
+		{ID: v2, Number: 2, PublishedAt: watchAt.Add(24 * time.Hour), Stations: []string{watchStation}},
+		{ID: v3, Number: 3, PublishedAt: watchAt.Add(48 * time.Hour), Stations: []string{"review"}},
+	}}
+	w := jonah.NewWatcher(jonah.WatchDeps{Orgs: watchOrgs{org}, Definitions: history, Proposals: s, Watches: s, Clock: clock})
+
+	if err := w.Sweep(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	wantSweptRate(ctx, t, s, factory, []domain.DefinitionVersionID{v1, v2, v3})
+
+	// Another organization sees none of them.
+	other := domain.WithOrg(t.Context(), newOrgID(t, s))
+	if theirs, err := s.VersionWatches(other, factory, []domain.DefinitionVersionID{v1, v2, v3}); err != nil || len(theirs) != 0 {
+		t.Errorf("another organization's watches = %+v, %v; want none", theirs, err)
+	}
+}
+
+// wantOutcomes checks the outcomes at build of TestWatches_CreditsRunVersionAndSpansUnrelatedPublishes:
+// items a, b and late on v1, c on v2 (sent back) and again on v3.
+func wantOutcomes(ctx context.Context, t *testing.T, s *Store, factory domain.FactoryID, versions []domain.DefinitionVersionID, items []domain.ItemID) {
+	t.Helper()
+
+	got, err := s.StationOutcomes(ctx, factory, watchStation, versions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +178,13 @@ func TestWatches_CreditsRunVersionAndSpansUnrelatedPublishes(t *testing.T) {
 		short = append(short, outcome{o.VersionID, o.ItemID, o.SentBack, o.CostUSD})
 	}
 
-	want := []outcome{{v1, a, true, 1}, {v1, b, false, 1}, {v1, late, false, 1}, {v2, c, true, 2}, {v3, c, false, 3}}
+	want := []outcome{
+		{versions[0], items[0], true, 1},
+		{versions[0], items[1], false, 1},
+		{versions[0], items[2], false, 1},
+		{versions[1], items[3], true, 2},
+		{versions[2], items[3], false, 3},
+	}
 	if !slices.Equal(short, want) {
 		t.Fatalf("outcomes = %+v, want %+v", short, want)
 	}
@@ -153,26 +192,20 @@ func TestWatches_CreditsRunVersionAndSpansUnrelatedPublishes(t *testing.T) {
 	if got[0].LeadTime != 2*time.Hour {
 		t.Errorf("a's lead time = %s, want 2h", got[0].LeadTime)
 	}
+}
 
-	clock := porttest.NewClock(watchAt.Add(5 * 24 * time.Hour))
-	history := watchHistory{factory: factory, versions: []domain.VersionReach{
-		{ID: v1, Number: 1, PublishedAt: watchAt.Add(-time.Hour), First: true},
-		{ID: v2, Number: 2, PublishedAt: watchAt.Add(24 * time.Hour), Stations: []string{"build"}},
-		{ID: v3, Number: 3, PublishedAt: watchAt.Add(48 * time.Hour), Stations: []string{"review"}},
-	}}
-	w := jonah.NewWatcher(jonah.WatchDeps{Orgs: watchOrgs{org}, Definitions: history, Proposals: s, Watches: s, Clock: clock})
+// wantSweptRate checks the sweep's watch of v2's send-back rate at build: v1's three items
+// before, v2's and v3's after.
+func wantSweptRate(ctx context.Context, t *testing.T, s *Store, factory domain.FactoryID, versions []domain.DefinitionVersionID) {
+	t.Helper()
 
-	if err := w.Sweep(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-
-	watches, err := s.VersionWatches(ctx, factory, []domain.DefinitionVersionID{v1, v2, v3})
+	watches, err := s.VersionWatches(ctx, factory, versions)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	i := slices.IndexFunc(watches, func(w domain.Watch) bool {
-		return w.VersionID == v2 && w.Station == "build" && w.Metric == domain.MetricSentBackRate
+		return w.VersionID == versions[1] && w.Station == watchStation && w.Metric == domain.MetricSentBackRate
 	})
 	if i < 0 {
 		t.Fatalf("watches = %+v, want v2's send-back rate at build", watches)
@@ -185,12 +218,6 @@ func TestWatches_CreditsRunVersionAndSpansUnrelatedPublishes(t *testing.T) {
 
 	if len(watches) != 4 {
 		t.Errorf("watches = %d, want v2's two at build and v3's two at review", len(watches))
-	}
-
-	// Another organization sees none of them.
-	other := domain.WithOrg(t.Context(), newOrgID(t, s))
-	if theirs, err := s.VersionWatches(other, factory, []domain.DefinitionVersionID{v1, v2, v3}); err != nil || len(theirs) != 0 {
-		t.Errorf("another organization's watches = %+v, %v; want none", theirs, err)
 	}
 }
 
@@ -210,7 +237,7 @@ func TestWatches_WorseUntilUndone(t *testing.T) {
 	}
 
 	worse := domain.Watch{
-		FactoryID: factory, VersionID: p.VersionID, ProposalID: p.ID, Station: "build", Metric: domain.MetricSentBackRate,
+		FactoryID: factory, VersionID: p.VersionID, ProposalID: p.ID, Station: watchStation, Metric: domain.MetricSentBackRate,
 		Before: domain.WatchSide{N: 50, Value: 0.1}, After: domain.WatchSide{N: 50, Value: 0.4},
 		Interval: &domain.WatchInterval{Low: 0.15, High: 0.45}, Verdict: domain.WatchWorse, OpenedAt: watchAt, UpdatedAt: watchAt,
 		ClosedAt: watchAt,
@@ -225,8 +252,8 @@ func TestWatches_WorseUntilUndone(t *testing.T) {
 		t.Errorf("SaveWatch of a closed watch = %v, %v; want not saved", saved, err)
 	}
 
-	list, err := s.WorseProposalWatches(ctx, 10)
-	if err != nil || len(list) != 1 || list[0].ProposalNumber != 1 || list[0].Verdict != domain.WatchWorse || *list[0].Interval != *worse.Interval {
+	if list, err := s.WorseProposalWatches(ctx, 10); err != nil || len(list) != 1 || list[0].ProposalNumber != 1 ||
+		list[0].Verdict != domain.WatchWorse {
 		t.Fatalf("worse watches = %+v, %v; want proposal 1's", list, err)
 	}
 

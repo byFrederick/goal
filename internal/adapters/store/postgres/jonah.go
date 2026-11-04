@@ -567,7 +567,7 @@ func proposalFrom(r db.JonahProposal) (domain.Proposal, error) {
 	out := domain.Proposal{
 		ID: domain.ProposalID(r.ID.String()), FactoryID: domain.FactoryID(r.FactoryID.String()), Number: r.Number,
 		VersionID: domain.DefinitionVersionID(r.VersionID.String()),
-		State: domain.ProposalState(r.State), Title: r.Title, Summary: r.Summary, RejectReason: r.RejectReason,
+		State:     domain.ProposalState(r.State), Title: r.Title, Summary: r.Summary, RejectReason: r.RejectReason,
 		DecidedBy: deref(r.DecidedBy), CreatedAt: r.CreatedAt.UTC(),
 	}
 

@@ -2,6 +2,7 @@ package jonah_test
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -29,7 +30,14 @@ type watchFixture struct {
 	clock   *porttest.Clock
 	watcher *jonah.Watcher
 	history *history
-	ctx     context.Context
+	org     domain.OrgID
+}
+
+// ctx is the fixture's organization, as a person.
+func (f *watchFixture) ctx(t *testing.T) context.Context {
+	t.Helper()
+
+	return domain.WithActor(domain.WithOrg(t.Context(), f.org), domain.LocalUser)
 }
 
 const day = 24 * time.Hour
@@ -52,12 +60,12 @@ func newWatchFixture(t *testing.T) *watchFixture {
 
 	h := &history{versions: []domain.VersionReach{
 		{ID: versionID(1), Number: 1, PublishedAt: t0, First: true},
-		{ID: versionID(2), Number: 2, PublishedAt: t0.Add(day), Stations: []string{"build"}},
+		{ID: versionID(2), Number: 2, PublishedAt: t0.Add(day), Stations: []string{stBuild}},
 		{ID: versionID(3), Number: 3, PublishedAt: t0.Add(2 * day), Stations: []string{"review"}},
 	}}
 
 	return &watchFixture{
-		store: store, clock: clock, history: h, ctx: domain.WithActor(domain.WithOrg(t.Context(), o.ID), domain.LocalUser),
+		store: store, clock: clock, history: h, org: o.ID,
 		watcher: jonah.NewWatcher(jonah.WatchDeps{Orgs: tn, Definitions: h, Proposals: store, Watches: store, Clock: clock}),
 	}
 }
@@ -78,7 +86,7 @@ func outcomes(version domain.DefinitionVersionID, n int, sent bool, usd float64)
 func (f *watchFixture) watches(t *testing.T) map[string]domain.Watch {
 	t.Helper()
 
-	got, err := f.store.VersionWatches(f.ctx, factory, []domain.DefinitionVersionID{versionID(1), versionID(2), versionID(3)})
+	got, err := f.store.VersionWatches(f.ctx(t), factory, []domain.DefinitionVersionID{versionID(1), versionID(2), versionID(3)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,33 +106,17 @@ func TestWatch_PersonsPublishAtEachStationItReaches(t *testing.T) {
 	t.Parallel()
 
 	f := newWatchFixture(t)
+
 	build := append(outcomes(versionID(1), 40, false, 1), outcomes(versionID(2), 30, true, 2)...)
 	build = append(build, outcomes(versionID(3), 30, true, 2)...)
-	f.store.SetStationOutcomes(factory, "build", build)
+	f.store.SetStationOutcomes(factory, stBuild, build)
 	f.store.SetStationOutcomes(factory, "review", outcomes(versionID(3), 5, false, 1))
 
 	if err := f.watcher.Sweep(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 
-	got := f.watches(t)
-	if len(got) != 4 {
-		t.Fatalf("watches = %v, want sent_back_rate and cost_per_item of v2 at build and of v3 at review", got)
-	}
-
-	rate := got["v2/build/sent_back_rate"]
-	if rate.Before.N != 40 || rate.After.N != 60 || rate.Before.Value != 0 || rate.After.Value != 0.5 || rate.Interval == nil ||
-		rate.Verdict != domain.WatchWorse || rate.ProposalID != "" || !rate.ClosedAt.IsZero() || !rate.OpenedAt.Equal(t0.Add(day)) {
-		t.Errorf("v2's rate at build = %+v, want 40 before at 0, 60 after at 0.5, worse and open", rate)
-	}
-
-	if cost := got["v2/build/cost_per_item"]; cost.Verdict != domain.WatchWorse || cost.After.N != 60 {
-		t.Errorf("v2's cost at build = %+v, want worse over 60 after", cost)
-	}
-
-	if review := got["v3/review/sent_back_rate"]; review.Before.N != 0 || review.After.N != 5 || review.Verdict != domain.WatchTooEarly {
-		t.Errorf("v3's rate at review = %+v, want too early with 0 before and 5 after", review)
-	}
+	wantPersonsWatches(t, f.watches(t))
 
 	// A second sweep changes nothing: the sweep is idempotent.
 	if err := f.watcher.Sweep(t.Context()); err != nil {
@@ -136,14 +128,44 @@ func TestWatch_PersonsPublishAtEachStationItReaches(t *testing.T) {
 	}
 }
 
+// wantPersonsWatches checks the watches of TestWatch_PersonsPublishAtEachStationItReaches.
+func wantPersonsWatches(t *testing.T, got map[string]domain.Watch) {
+	t.Helper()
+
+	if len(got) != 4 {
+		t.Fatalf("watches = %v, want sent_back_rate and cost_per_item of v2 at build and of v3 at review", got)
+	}
+
+	rate := got["v2/build/sent_back_rate"]
+	want := domain.Watch{
+		FactoryID: factory, VersionID: versionID(2), Station: stBuild, Metric: domain.MetricSentBackRate,
+		Before: domain.WatchSide{N: 40}, After: domain.WatchSide{N: 60, Value: 0.5}, Verdict: domain.WatchWorse,
+		OpenedAt: t0.Add(day), UpdatedAt: t0.Add(5 * day),
+	}
+	interval := rate.Interval
+	rate.Interval = nil
+
+	if interval == nil || !reflect.DeepEqual(rate, want) {
+		t.Errorf("v2's rate at build = %+v (interval %v), want %+v with an interval", rate, interval, want)
+	}
+
+	if cost := got["v2/build/cost_per_item"]; cost.Verdict != domain.WatchWorse || cost.After.N != 60 {
+		t.Errorf("v2's cost at build = %+v, want worse over 60 after", cost)
+	}
+
+	if review := got["v3/review/sent_back_rate"]; review.Before.N != 0 || review.After.N != 5 || review.Verdict != domain.WatchTooEarly {
+		t.Errorf("v3's rate at review = %+v, want too early with 0 before and 5 after", review)
+	}
+}
+
 // A Jonah proposal's publish is watched on its own number only, at its station, and the watch
 // names the proposal.
 func TestWatch_ProposalWatchesItsOwnNumber(t *testing.T) {
 	t.Parallel()
 
 	f := newWatchFixture(t)
-	p := publishedProposal(f.ctx, t, f.store, versionID(2), domain.ProposalEstimate{Metric: domain.MetricLeadTimeP85, Station: "build"})
-	f.store.SetStationOutcomes(factory, "build", append(outcomes(versionID(1), 10, false, 1), outcomes(versionID(2), 10, false, 1)...))
+	p := publishedProposal(f.ctx(t), t, f.store, versionID(2), domain.ProposalEstimate{Metric: domain.MetricLeadTimeP85, Station: stBuild})
+	f.store.SetStationOutcomes(factory, stBuild, append(outcomes(versionID(1), 10, false, 1), outcomes(versionID(2), 10, false, 1)...))
 
 	if err := f.watcher.Sweep(t.Context()); err != nil {
 		t.Fatal(err)
@@ -166,7 +188,7 @@ func TestWatch_ClosesAfterFourteenDays(t *testing.T) {
 	t.Parallel()
 
 	f := newWatchFixture(t)
-	f.store.SetStationOutcomes(factory, "build", append(outcomes(versionID(1), 3, false, 1), outcomes(versionID(2), 3, true, 1)...))
+	f.store.SetStationOutcomes(factory, stBuild, append(outcomes(versionID(1), 3, false, 1), outcomes(versionID(2), 3, true, 1)...))
 	f.clock.Advance(domain.WatchMaxAge - 4*day) // to v2's fourteenth day
 
 	if err := f.watcher.Sweep(t.Context()); err != nil {
@@ -178,7 +200,7 @@ func TestWatch_ClosesAfterFourteenDays(t *testing.T) {
 		t.Fatalf("rate at 14 days = %+v, want no clear change and closed", rate)
 	}
 
-	f.store.SetStationOutcomes(factory, "build", append(outcomes(versionID(1), 50, false, 1), outcomes(versionID(2), 50, true, 1)...))
+	f.store.SetStationOutcomes(factory, stBuild, append(outcomes(versionID(1), 50, false, 1), outcomes(versionID(2), 50, true, 1)...))
 	f.clock.Advance(time.Hour)
 
 	if err := f.watcher.Sweep(t.Context()); err != nil {

@@ -11,7 +11,7 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
-// StationsReached are the agent stations of to, in line order, that the change from from reaches
+// StationsReached are the agent stations of to, in line order, that the change since from reaches
 // (ADR 0039 decision 14): those where what the station's agent gets differs, its agent file, a
 // rule that applies to it, a skill it loads, its contract or its model. A station new in to is
 // reached. When from does not load, every agent station of to is; when to does not, none is.
@@ -123,6 +123,7 @@ func skillInputs(f *config.Factory, m domain.Manifest, name string) []string {
 	dir := clean(s.Source) + "/"
 
 	paths := make([]string, 0)
+
 	for p := range m {
 		if strings.HasPrefix(p, dir) {
 			paths = append(paths, p)

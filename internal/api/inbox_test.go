@@ -173,6 +173,7 @@ func checkLineEntries(t *testing.T, got gen.Inbox) {
 
 	for _, e := range got.Entries {
 		switch e.Kind {
+		case gen.InboxEntryKindWatchWorse: // TestInbox_WatchWorseOnlyForProposalsOwnMetric checks these
 		case gen.InboxEntryKindAndon:
 			if e.Andon == nil || e.Andon.Reason != andonReason || e.Item != nil {
 				t.Errorf("andon entry = %+v; want acme's pull", e)

@@ -402,6 +402,8 @@ func (n NewProposal) Check() error {
 
 	switch n.Estimate.Metric {
 	case "", MetricSentBackRate, MetricLeadTimeP85:
+	case MetricCostPerItem:
+		bad("estimate metric %q is a watch's, not a proposal's", n.Estimate.Metric)
 	default:
 		bad("estimate metric %q is not sent_back_rate or lead_time_p85", n.Estimate.Metric)
 	}

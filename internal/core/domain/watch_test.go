@@ -33,6 +33,8 @@ func spread(mid, width float64, n int) []float64 {
 }
 
 func TestWatchInterval(t *testing.T) {
+	t.Parallel()
+
 	near := func(got, want, tol float64) bool { return math.Abs(got-want) <= tol }
 
 	tests := []struct {
@@ -55,6 +57,8 @@ func TestWatchInterval(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			got, ok := domain.WatchIntervalOf(tc.metric, tc.before, tc.after)
 			if ok != tc.ok {
 				t.Fatalf("ok = %v, want %v (%+v)", ok, tc.ok, got)
@@ -76,6 +80,8 @@ func TestWatchInterval(t *testing.T) {
 }
 
 func TestWatchVerdict(t *testing.T) {
+	t.Parallel()
+
 	day := 24 * time.Hour
 	side := func(n int, v float64) domain.WatchSide { return domain.WatchSide{N: n, Value: v} }
 	iv := func(lo, hi float64) *domain.WatchInterval { return &domain.WatchInterval{Low: lo, High: hi} }
@@ -105,6 +111,8 @@ func TestWatchVerdict(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			if got := domain.WatchVerdictOf(tc.metric, tc.before, tc.after, tc.interval, tc.age); got != tc.want {
 				t.Errorf("verdict = %s, want %s", got, tc.want)
 			}
@@ -113,6 +121,8 @@ func TestWatchVerdict(t *testing.T) {
 }
 
 func TestWatchSideOf(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		metric  domain.ProposalMetric
 		samples []float64
@@ -132,6 +142,8 @@ func TestWatchSideOf(t *testing.T) {
 }
 
 func TestUndoReplacements(t *testing.T) {
+	t.Parallel()
+
 	base := "# Build\n\nWrite the code.\nRun the tests.\nOpen a pull request.\n\n## Notes\n\nBe brief.\n"
 	published := "# Build\n\nWrite the code.\nRun the tests twice.\nOpen a pull request.\n\n## Notes\n\nBe brief.\nCite the spec.\n"
 
@@ -147,12 +159,16 @@ func TestUndoReplacements(t *testing.T) {
 	undo := domain.ReverseReplacements(reps)
 
 	t.Run("reverses the change", func(t *testing.T) {
+		t.Parallel()
+
 		if got, err := domain.ApplyReplacements(published, undo); err != nil || got != base {
 			t.Errorf("undo = %q, %v; want the base", got, err)
 		}
 	})
 
 	t.Run("works after an unrelated publish", func(t *testing.T) {
+		t.Parallel()
+
 		later := "# Build the change\n\nWrite the code.\nRun the tests twice.\nOpen a pull request.\n\n## Notes\n\nBe brief.\nCite the spec.\nAsk when unsure.\n"
 		want := "# Build the change\n\nWrite the code.\nRun the tests.\nOpen a pull request.\n\n## Notes\n\nBe brief.\nAsk when unsure.\n"
 
@@ -162,6 +178,8 @@ func TestUndoReplacements(t *testing.T) {
 	})
 
 	t.Run("refuses when the changed text is gone", func(t *testing.T) {
+		t.Parallel()
+
 		rewritten := "# Build\n\nWrite the code.\nRun every test.\n"
 		if _, err := domain.ApplyReplacements(rewritten, undo); !errors.Is(err, domain.ErrReplacementMissing) {
 			t.Errorf("err = %v, want ErrReplacementMissing", err)
@@ -169,6 +187,8 @@ func TestUndoReplacements(t *testing.T) {
 	})
 
 	t.Run("refuses when the changed text occurs twice", func(t *testing.T) {
+		t.Parallel()
+
 		twice := published + published
 		if _, err := domain.ApplyReplacements(twice, undo); !errors.Is(err, domain.ErrReplacementMissing) {
 			t.Errorf("err = %v, want ErrReplacementMissing", err)
@@ -176,6 +196,8 @@ func TestUndoReplacements(t *testing.T) {
 	})
 
 	t.Run("context makes each old text unique", func(t *testing.T) {
+		t.Parallel()
+
 		before := "a\nx\nb\nx\nc\n"
 		after := "a\nx\nb\ny\nc\n"
 
@@ -186,6 +208,8 @@ func TestUndoReplacements(t *testing.T) {
 	})
 
 	t.Run("no change is no replacement", func(t *testing.T) {
+		t.Parallel()
+
 		if rs := domain.ReplacementsOf(base, base); len(rs) != 0 {
 			t.Errorf("replacements = %+v, want none", rs)
 		}

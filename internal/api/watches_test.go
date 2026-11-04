@@ -70,22 +70,9 @@ func TestInbox_WatchWorseOnlyForProposalsOwnMetric(t *testing.T) {
 	path, p := h.approvedWithWatch(t)
 
 	h.saveWatch(t, p.PublishedVersionID, p.ID, reviewStation, domain.MetricSentBackRate, domain.WatchWorse)
-	h.saveWatch(t, p.PublishedVersionID, "", "build", domain.MetricCostPerItem, domain.WatchWorse) // a person's publish's
+	h.saveWatch(t, p.PublishedVersionID, "", stBuild, domain.MetricCostPerItem, domain.WatchWorse) // a person's publish's
 
-	worse := worseEntries(h.inbox(t, ""))
-	if len(worse) != 1 {
-		t.Fatalf("watch_worse entries = %+v, want the proposal's own number only", worse)
-	}
-
-	e := worse[0]
-	if e.Item != nil || e.Id != "watch_worse:"+string(p.ID) || val(e.Station) != reviewStation || e.Watch == nil {
-		t.Fatalf("entry = %+v, want proposal %s's watch at review about no item", e, p.ID)
-	}
-
-	if w := *e.Watch; val(w.Proposal) != p.Number || w.Metric != gen.WatchMetricSentBackRate || w.Before.Items != 60 ||
-		w.After.Value != 0.35 || w.Interval == nil || w.Interval.Low != 0.12 || w.Verdict != gen.Worse {
-		t.Errorf("entry's watch = %+v, want proposal %d's worse send-back rate with its sides and interval", w, p.Number)
-	}
+	wantWorseEntry(t, worseEntries(h.inbox(t, "")), p)
 
 	if got := h.getProposal(t, path); got.Watch == nil || got.Watch.Verdict != gen.Worse || got.Watch.Station != reviewStation {
 		t.Errorf("the proposal's watch = %+v, want its own number, worse", got.Watch)
@@ -108,18 +95,37 @@ func TestInbox_WatchWorseOnlyForProposalsOwnMetric(t *testing.T) {
 	wantProblem(t, "a second undo", code, prob, http.StatusConflict, "undo-open")
 }
 
+// wantWorseEntry checks that worse is one watch_worse entry of p's own number at review.
+func wantWorseEntry(t *testing.T, worse []gen.InboxEntry, p domain.Proposal) {
+	t.Helper()
+
+	if len(worse) != 1 {
+		t.Fatalf("watch_worse entries = %+v, want the proposal's own number only", worse)
+	}
+
+	e := worse[0]
+	if e.Item != nil || e.Id != "watch_worse:"+string(p.ID) || val(e.Station) != reviewStation || e.Watch == nil {
+		t.Fatalf("entry = %+v, want proposal %s's watch at review about no item", e, p.ID)
+	}
+
+	if w := *e.Watch; val(w.Proposal) != p.Number || w.Metric != gen.WatchMetricSentBackRate || w.Before.Items != 60 ||
+		w.After.Value != 0.35 || w.Interval == nil || w.Interval.Low != 0.12 || w.Verdict != gen.Worse {
+		t.Errorf("entry's watch = %+v, want proposal %d's worse send-back rate with its sides and interval", w, p.Number)
+	}
+}
+
 // Versions carry their watches, and Undo this change refuses a proposal never published.
 func TestJonah_VersionWatchesAndUndoRefusal(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 	_, p := h.approvedWithWatch(t)
-	h.saveWatch(t, p.PublishedVersionID, "", "build", domain.MetricSentBackRate, domain.WatchTooEarly)
+	h.saveWatch(t, p.PublishedVersionID, "", stBuild, domain.MetricSentBackRate, domain.WatchTooEarly)
 
 	page := decode[gen.VersionPage](t, h.request(t, http.MethodGet, "/v1/orgs/acme/factories/acme/versions", "", nil), http.StatusOK)
 
 	i := slices.IndexFunc(page.Versions, func(v gen.Version) bool { return val(v.Number) == 2 })
-	if i < 0 || page.Versions[i].Watches == nil || len(*page.Versions[i].Watches) != 1 || (*page.Versions[i].Watches)[0].Station != "build" {
+	if i < 0 || page.Versions[i].Watches == nil || len(*page.Versions[i].Watches) != 1 || (*page.Versions[i].Watches)[0].Station != stBuild {
 		t.Fatalf("versions = %+v, want v2 with its watch at build", page.Versions)
 	}
 

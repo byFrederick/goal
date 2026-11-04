@@ -22,7 +22,7 @@ type jonahRows struct {
 	watches      []jonahRow[domain.Watch]
 	// outcomes are the station outcomes SetStationOutcomes gave, by factory and station.
 	outcomes map[domain.FactoryID]map[string][]domain.StationOutcome
-	runKinds     map[domain.RunID]domain.RunKind
+	runKinds map[domain.RunID]domain.RunKind
 }
 
 // jonahRow is one Jonah row of an organization.

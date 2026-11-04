@@ -228,28 +228,9 @@ func (s *Store) UndoProposal(ctx context.Context, factory domain.FactoryID, undo
 		return domain.Proposal{}, fmt.Errorf("undo proposal: %w", err)
 	}
 
-	p := db.InsertUndoProposalParams{Title: n.Title, Summary: n.Summary, Paths: n.Paths(), CreatedAt: at}
-
-	var err error
-
-	if p.ID, err = newID(); err != nil {
-		return domain.Proposal{}, err
-	}
-
-	if p.FactoryID, err = parseID("factory", string(factory)); err != nil {
+	p, err := undoProposalParams(factory, undoes, version, n, at)
+	if err != nil {
 		return domain.Proposal{}, fmt.Errorf("undo proposal: %w", err)
-	}
-
-	if p.VersionID, err = parseID("definition version", string(version)); err != nil {
-		return domain.Proposal{}, fmt.Errorf("undo proposal: %w", err)
-	}
-
-	if p.Undoes, err = optionalID("proposal", string(undoes)); err != nil || p.Undoes == nil {
-		return domain.Proposal{}, fmt.Errorf("undo proposal: no proposal %q to undo: %w", undoes, ports.ErrNotFound)
-	}
-
-	if p.Files, err = json.Marshal(n.Files); err != nil {
-		return domain.Proposal{}, fmt.Errorf("undo proposal files: %w", err)
 	}
 
 	row, err := fetch(ctx, s.inTx, func(q *db.Queries) (db.JonahProposal, error) {
@@ -277,6 +258,36 @@ func (s *Store) UndoProposal(ctx context.Context, factory domain.FactoryID, undo
 	return proposalFrom(row)
 }
 
+func undoProposalParams(factory domain.FactoryID, undoes domain.ProposalID, version domain.DefinitionVersionID, n domain.NewProposal,
+	at time.Time,
+) (db.InsertUndoProposalParams, error) {
+	p := db.InsertUndoProposalParams{Title: n.Title, Summary: n.Summary, Paths: n.Paths(), CreatedAt: at}
+
+	var err error
+
+	if p.ID, err = newID(); err != nil {
+		return p, err
+	}
+
+	if p.FactoryID, err = parseID("factory", string(factory)); err != nil {
+		return p, err
+	}
+
+	if p.VersionID, err = parseID("definition version", string(version)); err != nil {
+		return p, err
+	}
+
+	if p.Undoes, err = optionalID("proposal", string(undoes)); err != nil || p.Undoes == nil {
+		return p, fmt.Errorf("no proposal %q to undo: %w", undoes, ports.ErrNotFound)
+	}
+
+	if p.Files, err = json.Marshal(n.Files); err != nil {
+		return p, fmt.Errorf("files: %w", err)
+	}
+
+	return p, nil
+}
+
 // parseIDs parses ids of kind.
 func parseIDs[T ~string](kind string, ids []T) ([]uuid.UUID, error) {
 	out := make([]uuid.UUID, 0, len(ids))
@@ -292,4 +303,3 @@ func parseIDs[T ~string](kind string, ids []T) ([]uuid.UUID, error) {
 
 	return out, nil
 }
-
