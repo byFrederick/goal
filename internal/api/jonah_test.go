@@ -291,6 +291,11 @@ func TestJonah_QueueReview(t *testing.T) {
 
 	h := newHarness(t)
 
+	code, p := problemOfCall(t, h, http.MethodPost, acmeJonah+"/reviews", "")
+	wantProblem(t, "a review of a line that spent nothing", code, p, http.StatusConflict, "learning-budget-exhausted")
+
+	h.kindRun(t, domain.RunKindStation, 200) // Jonah's budget is $10
+
 	var r gen.JonahReview
 	if code := h.call(t, http.MethodPost, acmeJonah+"/reviews", "", &r); code != http.StatusAccepted {
 		t.Fatalf("queue review = %d, want 202", code)
@@ -304,7 +309,7 @@ func TestJonah_QueueReview(t *testing.T) {
 		t.Errorf("%d %s entries, want 1", n, domain.AuditReviewQueued)
 	}
 
-	code, p := problemOfCall(t, h, http.MethodPost, acmeJonah+"/reviews", "")
+	code, p = problemOfCall(t, h, http.MethodPost, acmeJonah+"/reviews", "")
 	wantProblem(t, "a second review while one is pending", code, p, http.StatusConflict, "review-in-flight")
 
 	claimed, err := h.store.ClaimJonahReview(inOrg(t), h.clock.Now(), time.Minute)
@@ -330,11 +335,18 @@ func TestJonah_QueueReview(t *testing.T) {
 	h.jonahRun(t, 10)
 
 	code, p = problemOfCall(t, h, http.MethodPost, acmeJonah+"/reviews", "")
-	wantProblem(t, "a review over the weekly budget", code, p, http.StatusConflict, "learning-budget-exhausted")
+	wantProblem(t, "a review over Jonah's budget", code, p, http.StatusConflict, "learning-budget-exhausted")
 }
 
 // jonahRun records a finished review run of acme that cost usd, started an hour ago.
 func (h *harness) jonahRun(t *testing.T, usd float64) {
+	t.Helper()
+
+	h.kindRun(t, domain.RunKindJonah, usd)
+}
+
+// kindRun records a finished run of kind of acme that cost usd, started an hour ago.
+func (h *harness) kindRun(t *testing.T, kind domain.RunKind, usd float64) {
 	t.Helper()
 
 	ctx := inOrg(t)
@@ -347,7 +359,7 @@ func (h *harness) jonahRun(t *testing.T, usd float64) {
 
 	id, err := h.store.StartRun(ctx, ports.NewRun{
 		FactoryID: acmeID, DefinitionVersionID: h.acmeRecord(t).Current.ID, ItemID: it.ID, Station: stInbox, Agent: writerAgent,
-		StartedAt: at, Kind: domain.RunKindJonah,
+		StartedAt: at, Kind: kind,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -413,7 +425,7 @@ func TestJonah_Reads(t *testing.T) {
 		{Title: "Tighten the rule", Files: files[1:]},
 	},
 		domain.NewObservation{Summary: "UI changes lack screenshots", Detail: "4 of 6", ItemIDs: []domain.ItemID{domain.ItemID(it.Id)}, Count: 4, Proposal: 1},
-		domain.NewObservation{Summary: "Tests skipped", Count: 3},
+		domain.NewObservation{Summary: "Tests skipped", Count: 2},
 	)
 
 	if _, err := h.store.DecideProposal(inOrg(t), acmeID, stored[1].Number, domain.ProposalDecision{
@@ -423,6 +435,7 @@ func TestJonah_Reads(t *testing.T) {
 	}
 
 	h.jonahRun(t, 1.5)
+	h.kindRun(t, domain.RunKindStation, 200)
 
 	h.wantOverview(t, stored[0].Number, it.Ref)
 	h.wantProposalPages(t, stored)
@@ -439,7 +452,8 @@ func (h *harness) wantOverview(t *testing.T, proposal int64, ref string) {
 		t.Fatalf("overview = %d, want 200", code)
 	}
 
-	wantPolicy := gen.JonahPolicy{Enabled: true, ProposeAfter: 5, WeeklyUsd: 10, ApproverRoles: []string{roleOwner, "admin", "editor"}}
+	// The line spent $200 in the last 7 days: 5% of it is Jonah's $10.
+	wantPolicy := gen.JonahPolicy{Enabled: true, ProposeAfter: 3, Share: 0.05, BudgetUsd: 10, ApproverRoles: []string{roleOwner, "admin", "editor"}}
 	if !reflect.DeepEqual(ov.Policy, wantPolicy) {
 		t.Errorf("policy = %+v, want %+v", ov.Policy, wantPolicy)
 	}
@@ -462,7 +476,7 @@ func (h *harness) wantOverview(t *testing.T, proposal int64, ref string) {
 
 	slices.SortFunc(got, func(a, b seen) int { return strings.Compare(a.State, b.State) })
 
-	want := []seen{{"UI changes lack screenshots", "proposed", 4, 5, proposal, ref}, {"Tests skipped", "watching", 3, 5, 0, ""}}
+	want := []seen{{"UI changes lack screenshots", "proposed", 4, 3, proposal, ref}, {"Tests skipped", "watching", 2, 3, 0, ""}}
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("observations = %+v, want %+v", got, want)

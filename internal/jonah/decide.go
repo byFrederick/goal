@@ -48,7 +48,7 @@ type Proposals interface {
 	UndoProposal(ctx context.Context, factory domain.FactoryID, undoes domain.ProposalID, version domain.DefinitionVersionID, n domain.NewProposal, at time.Time) (domain.Proposal, error)
 	QueueJonahReview(ctx context.Context, n domain.NewJonahReview) (domain.JonahReview, error)
 	LastDoneJonahReview(ctx context.Context, factory domain.FactoryID) (domain.JonahReview, error)
-	JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
+	JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (domain.JonahSpend, error)
 }
 
 // DecideDeps are the ports decisions work through. Log may be nil.
@@ -68,7 +68,8 @@ type Decider struct {
 
 // Windows of a manual review and its budget.
 const (
-	// BudgetWindow is how far back the weekly budget counts review runs (decision 2).
+	// BudgetWindow is how far back Jonah's budget counts the line's and Jonah's runs (ADR 0039
+	// decision 16).
 	BudgetWindow = domain.JonahBudgetWindow
 	// FirstWindow is how far back a factory's first review reads sent-back touches.
 	FirstWindow = 30 * 24 * time.Hour
@@ -371,8 +372,8 @@ func (dc *Decider) reversed(ctx context.Context, f domain.FactoryID, p domain.Pr
 
 // QueueReview queues a manual review of f on version, under policy (decision 2): it reads what
 // finished since the last done review's window ended, or FirstWindow back (ADR 0039 decision 3). It refuses with
-// domain.ErrLearningBudgetExhausted while the review runs of the last BudgetWindow cost
-// policy.WeeklyUSD or more, and with domain.ErrReviewInFlight while one is pending or running.
+// domain.ErrLearningBudgetExhausted while Jonah's runs of the last BudgetWindow cost policy's
+// share of the line's spend or more (ADR 0039 decision 16), and with domain.ErrReviewInFlight while one is pending or running.
 func (dc *Decider) QueueReview(ctx context.Context, f domain.FactoryID, version domain.DefinitionVersionID, policy domain.JonahPolicy) (domain.JonahReview, error) {
 	by, err := actor(ctx)
 	if err != nil {
@@ -381,13 +382,13 @@ func (dc *Decider) QueueReview(ctx context.Context, f domain.FactoryID, version 
 
 	now := dc.d.Clock.Now().UTC()
 
-	spent, err := dc.d.Proposals.JonahSpendSince(ctx, f, now.Add(-BudgetWindow))
+	spend, err := dc.d.Proposals.JonahSpendSince(ctx, f, now.Add(-BudgetWindow))
 	if err != nil {
 		return domain.JonahReview{}, fmt.Errorf("queue review: read spend: %w", err)
 	}
 
-	if spent >= policy.WeeklyUSD {
-		return domain.JonahReview{}, fmt.Errorf("queue review: $%.2f of $%.2f spent: %w", spent, policy.WeeklyUSD, domain.ErrLearningBudgetExhausted)
+	if b := policy.Budget(spend); b.Exhausted() {
+		return domain.JonahReview{}, fmt.Errorf("queue review: $%.2f of $%.2f spent: %w", b.SpentUSD, b.BudgetUSD, domain.ErrLearningBudgetExhausted)
 	}
 
 	start, err := windowStart(ctx, dc.d.Proposals, f, now)

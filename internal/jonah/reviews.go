@@ -82,7 +82,8 @@ func NewReviews(d ReviewDeps, c ReviewConfig) *Reviews {
 // Sweep queues the daily review of each factory of every live organization whose learning.jonah
 // is enabled (ADR 0039 decision 3): once UTC now is past the factory's hour of the day
 // (ReviewHour), when its latest review was queued before that hour today, it has an item finished
-// since its window starts, and its review runs of the last BudgetWindow cost less than weeklyUsd.
+// since its window starts, and Jonah's runs of the last BudgetWindow cost less than its share of
+// the line's spend (ADR 0039 decision 16).
 // A factory with a review in flight keeps it. A factory or organization that fails does not hold
 // up the others; the error names each one.
 func (r *Reviews) Sweep(ctx context.Context) error {
@@ -150,12 +151,12 @@ func (r *Reviews) sweepFactory(ctx context.Context, l domain.Line) error {
 		return nil
 	}
 
-	spent, err := r.d.Jonah.JonahSpendSince(ctx, l.FactoryID, now.Add(-BudgetWindow))
+	spend, err := r.d.Jonah.JonahSpendSince(ctx, l.FactoryID, now.Add(-BudgetWindow))
 	if err != nil {
 		return fmt.Errorf("read spend: %w", err)
 	}
 
-	if spent >= l.Jonah.WeeklyUSD {
+	if l.Jonah.Budget(spend).Exhausted() {
 		return nil
 	}
 
@@ -345,12 +346,12 @@ func (r *Reviews) review(ctx context.Context, org domain.OrgID, rv domain.JonahR
 		return domain.JonahReviewResult{}, fmt.Errorf("read version %s: %w", rv.VersionID, err)
 	}
 
-	spent, err := r.d.Jonah.JonahSpendSince(ctx, rv.FactoryID, r.d.Clock.Now().UTC().Add(-BudgetWindow))
+	spend, err := r.d.Jonah.JonahSpendSince(ctx, rv.FactoryID, r.d.Clock.Now().UTC().Add(-BudgetWindow))
 	if err != nil {
 		return domain.JonahReviewResult{}, fmt.Errorf("read spend: %w", err)
 	}
 
-	if spent >= l.Jonah.WeeklyUSD {
+	if l.Jonah.Budget(spend).Exhausted() {
 		return failed("%s", domain.ErrLearningBudgetExhausted.Error()), nil
 	}
 

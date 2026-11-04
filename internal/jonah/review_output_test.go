@@ -65,21 +65,21 @@ func TestReviews_Validate(t *testing.T) {
 		}},
 		{
 			name: "threshold review at proposeAfter", trigger: domain.JonahThreshold, kept: true,
-			obs: []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 5, Proposal: new(0)}},
+			obs: []observation{{Summary: testsMissing, Items: []string{"#2"}, Count: 5, Proposal: new(0)}},
 		},
 		{
 			name: "threshold review below proposeAfter", trigger: domain.JonahThreshold, drop: "threshold", watching: 1,
-			obs: []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 4, Proposal: new(0)}},
+			obs: []observation{{Summary: testsMissing, Items: []string{"#2"}, Count: 2, Proposal: new(0)}},
 		},
 		{name: "threshold review with no observation", trigger: domain.JonahThreshold, drop: "threshold"},
 		{
 			name: "manual review below proposeAfter", trigger: domain.JonahManual, kept: true,
-			obs: []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 1, Proposal: new(0)}},
+			obs: []observation{{Summary: testsMissing, Items: []string{"#2"}, Count: 1, Proposal: new(0)}},
 		},
 		{
 			name: "observation of a dropped proposal", trigger: domain.JonahManual, drop: "path", watching: 1,
 			edit: func(p *proposal, _ domain.SentBack) { p.Files[0].Path = "evals/cases/one.yaml" },
-			obs:  []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 5, Proposal: new(0)}},
+			obs:  []observation{{Summary: testsMissing, Items: []string{"#2"}, Count: 5, Proposal: new(0)}},
 		},
 	}
 

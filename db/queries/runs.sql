@@ -30,11 +30,12 @@ UPDATE agent_runs SET status = 'failed', error = sqlc.arg(error), ended_at = sql
 WHERE item_id = ANY (sqlc.arg(item_ids)::uuid[]) AND status = 'running';
 
 -- name: FactorySpendSince :one
--- The cost of the runs a factory started at or after since, for its weekly budget. Row-level
--- security scopes it to the organization; agent_runs_factory_started_idx serves the range.
+-- The cost of the runs a factory started at or after since, for its weekly budget: Jonah's runs
+-- never trigger onExhausted (ADR 0039 decision 16), so they are left out. Row-level security
+-- scopes it to the organization; agent_runs_factory_started_idx serves the range.
 SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
 FROM agent_runs
-WHERE factory_id = sqlc.arg(factory_id) AND started_at >= sqlc.arg(since);
+WHERE factory_id = sqlc.arg(factory_id) AND started_at >= sqlc.arg(since) AND kind <> 'jonah';
 
 -- name: ItemRuns :many
 -- An item's runs, oldest first, on agent_runs_item_id_idx; row-level security scopes it to the

@@ -2396,7 +2396,7 @@ export interface paths {
         put?: never;
         /**
          * Queue a manual review of the factory at once ("Look for improvements now")
-         * @description The review reads what finished since the last done review's window ended (30 days back before the first) on the current version; goald's review loop runs it, retrying a failed run twice. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+         * @description The review reads what finished since the last done review's window ended (30 days back before the first) on the current version; goald's review loop runs it, retrying a failed run twice. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while Jonah's runs over the last 7 days cost its budget or more: learning.jonah.share (default 5%) of what the line's other runs cost over those 7 days, so a line that spent nothing has none. 404 version-not-found before the first publish.
          */
         post: operations["queueJonahReview"];
         delete?: never;
@@ -5988,13 +5988,18 @@ export interface components {
         /** @description The current version's learning.jonah, with its defaults where it sets none */
         JonahPolicy: {
             enabled: boolean;
-            /** @description Sent-back touches that queue a review, and how often an observation is seen before it is proposed */
+            /** @description Items with the same cause an observation needs before it becomes a proposal */
             propose_after: number;
             /**
              * Format: double
-             * @description What review runs may cost over 7 days
+             * @description learning.jonah.share as a fraction (5% is 0.05) of what the line spent over the last 7 days
              */
-            weekly_usd: number;
+            share: number;
+            /**
+             * Format: double
+             * @description Jonah's budget now: share times what the line's runs other than Jonah's cost over the last 7 days. Each review may spend a fifth of it, and Jonah's spend never triggers runtime.budget.onExhausted
+             */
+            budget_usd: number;
             /** @description The review run's model: learning.jonah.model, else runtime.model; absent when neither is set */
             model?: string;
             /** @description The roles holding definition:publish: organization roles first, then factory roles */
@@ -7734,6 +7739,10 @@ export interface components {
                 flow?: {
                     [key: string]: unknown;
                 };
+                /**
+                 * @deprecated
+                 * @description Ignored: learning.librarian is retired (ADR 0039, warning field-ignored). goald always answers null and ignores a value written here
+                 */
                 librarian?: string | null;
             };
             agents: {
