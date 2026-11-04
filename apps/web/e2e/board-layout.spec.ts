@@ -337,3 +337,85 @@ for (const width of [1280, 1440]) {
     expect(result.scrollWidth).toBeLessThanOrEqual(result.clientWidth);
   });
 }
+
+// Marks drawn one per unit (an assembly's parts, a station's WIP, a lane's slots) fit their card, header and
+// column for any count: the software board seeds assemblies of 24 and 60 parts (apps/web/mock/fixtures.ts).
+for (const width of [1440, 1280, 1024, 768, 390]) {
+  test(`at ${width} px no card is wider than its content and no part count lands on another card`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto(width < 768 ? '/o/acme/f/software/board?station=build' : '/o/acme/f/software/board');
+    await expect(page.getByRole('region', { name: 'Stations' })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+
+    const result = await page.evaluate(() => {
+      const cards = Array.from(document.querySelectorAll<HTMLElement>('article'));
+      const boxes = cards.map((card) => card.getBoundingClientRect());
+      const wide: string[] = [];
+      const overlaps: string[] = [];
+      const counts = Array.from(document.querySelectorAll<HTMLElement>('article a span')).filter((el) =>
+        /^\d+ of \d+$/.test((el.textContent ?? '').trim()),
+      );
+      cards.forEach((card, i) => {
+        const box = boxes[i] as DOMRect;
+        if (card.scrollWidth > card.clientWidth) wide.push(`${card.getAttribute('aria-label') ?? i}: card`);
+        for (const el of Array.from(card.querySelectorAll<HTMLElement>('*'))) {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && r.right > box.right + 1)
+            wide.push(`${card.getAttribute('aria-label') ?? i}: ${el.tagName}`);
+        }
+      });
+      for (const el of counts) {
+        const r = el.getBoundingClientRect();
+        const own = el.closest('article');
+        cards.forEach((card, i) => {
+          const b = boxes[i] as DOMRect;
+          if (card === own) return;
+          if (r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top) {
+            overlaps.push(`${el.textContent} overlaps another card`);
+          }
+        });
+      }
+      return { count: counts.length, wide, overlaps };
+    });
+    expect(result.wide).toEqual([]);
+    expect(result.overlaps).toEqual([]);
+    if (width >= 768) expect(result.count).toBeGreaterThan(0);
+  });
+}
+
+test('a station with a WIP limit of 50 and a lane with 50 slots fit their column', async ({ page }) => {
+  test.skip(isPhone(page), 'the stations are side by side from 768 px');
+  await page.route('**/v1/orgs/acme/factories/software/board', async (route) => {
+    const response = await route.fetch();
+    const board = await response.json();
+    for (const station of board.stations) {
+      if (station.kind !== 'agent') continue;
+      station.wip_limit = 50;
+      for (const lane of station.lanes ?? []) {
+        if (lane.slots !== null) lane.slots = 50;
+      }
+    }
+    await route.fulfill({ response, json: board });
+  });
+  await page.goto('/o/acme/f/software/board');
+  await expect(page.getByRole('region', { name: 'Stations' })).toBeVisible();
+  await page.waitForLoadState('networkidle');
+
+  const overflowing = await page.evaluate(() => {
+    const out: string[] = [];
+    for (const column of Array.from(
+      document.querySelectorAll<HTMLElement>('section[aria-label="Stations"] > div > section'),
+    )) {
+      const box = column.getBoundingClientRect();
+      for (const el of Array.from(column.querySelectorAll<HTMLElement>('header, header *, [role="img"]'))) {
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && (r.right > box.right + 1 || r.left < box.left - 1)) {
+          out.push(`${column.getAttribute('aria-label')}: ${el.tagName} ${Math.round(r.right - box.right)}px`);
+        }
+      }
+    }
+    return out;
+  });
+  expect(overflowing).toEqual([]);
+  await expect(page.getByRole('img', { name: /of 50 in progress/ }).first()).toBeVisible();
+});

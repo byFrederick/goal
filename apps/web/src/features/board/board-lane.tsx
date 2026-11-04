@@ -12,6 +12,7 @@ import { MoveButton } from '../../shared/move-menu';
 import { holds } from '../../shared/permissions';
 import { WaitLine } from '../../shared/waiting-for';
 import { cn } from '../../ui/cn';
+import { SegmentMeter } from '../../ui/segment-meter';
 import { StatusIcon } from '../../ui/status-icon';
 import {
   AssemblyHeader,
@@ -233,18 +234,21 @@ function LaneHeader({ lane }: { lane: BoardLane }) {
 function Slots({ slots, busy }: { slots: number; busy: number }) {
   const filled = Math.min(busy, slots);
   return (
-    <span className="flex shrink-0 items-center gap-1">
+    <span className="flex min-w-0 max-w-[50%] shrink items-center">
       <span className="sr-only">
         {filled} of {slots} slots busy
       </span>
-      {Array.from({ length: slots }, (_, i) => (
-        <span
-          // biome-ignore lint/suspicious/noArrayIndexKey: the boxes are fixed by the slot count and never reorder
-          key={i}
-          aria-hidden="true"
-          className={cn('size-2.5 rounded-chip border', i < filled ? 'border-run bg-run' : 'border-rule')}
-        />
-      ))}
+      <SegmentMeter
+        total={slots}
+        filled={filled}
+        segmentWidth={10}
+        height={10}
+        gap={4}
+        segmentClassName="border"
+        tones={{ filled: 'border-run bg-run', empty: 'border-rule' }}
+        track="bg-rule"
+        className="shrink"
+      />
     </span>
   );
 }

@@ -77,3 +77,20 @@ for (const size of narrow) {
     await expectNoHorizontalScroll(page);
   });
 }
+
+// An assembly of 24 parts (software#500): its meters fit a phone, on its page and as a row of the Items list.
+test('the 24-part assembly fits a phone, on its page and in the Items list', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/f/software/items/500');
+  await expect(page.getByRole('heading', { name: 'Progress' })).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  await expectNoHorizontalScroll(page);
+
+  await page.goto('/o/acme/f/software/items');
+  const meter = page.getByTestId('assembly-meter').first();
+  await expect(meter).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  await expectNoHorizontalScroll(page);
+  const fits = await meter.evaluate((el) => el.getBoundingClientRect().right <= document.documentElement.clientWidth);
+  expect(fits).toBe(true);
+});

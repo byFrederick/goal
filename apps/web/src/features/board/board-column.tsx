@@ -9,6 +9,7 @@ import type { Board, BoardStation, ItemCard, PartsSummary } from '../../api/type
 import { formatDuration, humanize, plural } from '../../shared/format';
 import { waitingOnYou } from '../../shared/item-state';
 import { cn } from '../../ui/cn';
+import { SegmentMeter } from '../../ui/segment-meter';
 import { BoardCard, type CardDrag } from './board-card';
 import { DraggableCard, DropColumn } from './board-dnd';
 import { columnCount, columnGroups, columnLimit, isExpedite, stationNote, visibleCards } from './stats';
@@ -48,19 +49,16 @@ function WipMeter({ station }: { station: BoardStation }) {
   const waiting = Math.min(waitingOnYou(station), limit - busy);
   const label = `${station.in_progress} of ${limit} in progress`;
   return (
-    <span role="img" aria-label={label} className="flex gap-1">
-      {Array.from({ length: limit }, (_, i) => (
-        <i
-          // biome-ignore lint/suspicious/noArrayIndexKey: the segments are fixed slots by position, never reordered
-          key={i}
-          aria-hidden="true"
-          className={cn(
-            'block h-1 flex-1 rounded-chip',
-            i < busy ? 'bg-ink' : i < busy + waiting ? 'bg-you' : 'bg-line',
-          )}
-        />
-      ))}
-    </span>
+    <SegmentMeter
+      total={limit}
+      filled={busy}
+      waiting={waiting}
+      height={4}
+      gap={4}
+      tones={{ filled: 'bg-ink', waiting: 'bg-you', empty: 'bg-line' }}
+      label={label}
+      className="flex-none"
+    />
   );
 }
 

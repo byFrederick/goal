@@ -1577,6 +1577,53 @@ const sreSeeds: Seed[] = [
 // The Software factory's line on the Floor: four intake requests, two specs in flight (one waiting
 // on a person), the build with two ready in the buffer, five engineers working and one waiting, the
 // review with one reviewer working and one waiting, and the day's merged work.
+/**
+ * Two open assemblies with many parts, for the screens that draw one mark per part: 24 parts (500) and 60 (600).
+ * A few parts are merged and the rest are spread over the stations.
+ */
+function bigAssembly(number: number, title: string, parts: number, merged: number): Seed[] {
+  const open = ['spec', 'build', 'review', 'intake'] as const;
+  return [
+    {
+      number,
+      title,
+      type: 'feature',
+      body: 'A large change, split into parts that merge one at a time.',
+      station: 'intake',
+      state: 'assembly',
+      createdMin: 3000,
+      updatedMin: 200,
+      steps: [],
+    },
+    ...Array.from({ length: parts }, (_, i): Seed => {
+      const done = i < merged;
+      const station = done ? 'done' : (open[i % open.length] ?? 'spec');
+      return {
+        number: number + i + 1,
+        title: `${title}, part ${i + 1}`,
+        type: 'feature',
+        body: `Part ${i + 1} of ${parts}.`,
+        station,
+        state: done ? 'done' : 'queued',
+        ...(done ? { pr: 700 + number + i } : {}),
+        assembly: number,
+        part: i + 1,
+        // Merged parts finished before the Floor's week, so its figures stay as the design picture has them.
+        createdMin: done ? 21_000 - i : 2900 - i,
+        updatedMin: done ? 20_000 - i : 300 - i,
+        steps: done
+          ? [{ move: 'spec' }, { move: 'build' }, { move: 'review' }, { move: 'merge' }, { move: 'done' }]
+          : [],
+      };
+    }),
+  ];
+}
+
+const manyPartsSeeds: Seed[] = [
+  ...bigAssembly(500, 'Move the billing module to the new ledger', 24, 5),
+  ...bigAssembly(600, 'Replace the notification pipeline', 60, 9),
+];
+
 const softwareSeeds: Seed[] = [
   ...[1, 2, 3, 4].map((number) => ({
     number,
@@ -2280,7 +2327,7 @@ export function seed(now = Date.now()): MockState {
   build(goalFactory, 0, [...goalSeeds, ...runsPage.software], now, state);
   build(sreFactory, 1, [...sreSeeds, ...runsPage.sre], now, state);
   build(supportFactory, 2, runsPage.support, now, state);
-  build(softwareFactory, 4, softwareSeeds, now, state);
+  build(softwareFactory, 4, [...softwareSeeds, ...manyPartsSeeds], now, state);
 
   for (const f of state.factories) state.history[f.name] = seedHistory(f, now, state.constraint[f.name] ?? null);
   fitWeeklySpend(state, ['goal', 'sre', 'support'], now, 512);
