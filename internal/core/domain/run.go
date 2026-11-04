@@ -155,7 +155,10 @@ type FailedCheck struct {
 // station under the item's lease; a Jonah review's (Kind jonah, ADR 0034 decision 1) works no
 // item, holds no lease, clones no repository and gets only the model connection (Check). A try of
 // a past item (Kind try, ADR 0039 decision 9) reruns a station on no item and under no lease, from
-// a recorded commit, with only the model's access.
+// a recorded commit, with only the model's access. A grade (Kind try on a TaskKindGrade bundle,
+// ADR 0039 decision 10) grades a try's result, or its item's original or final one, in one model
+// call: no item, lease, repository, commit, check, environment or connection but the model's, so
+// its cost is Jonah's as a try's is.
 type RunRequest struct {
 	OrgID     OrgID
 	FactoryID FactoryID
@@ -214,6 +217,9 @@ type RunRequest struct {
 	// (the original run's branch head); both empty for every other kind.
 	TryOf  PastTryID
 	Commit string
+	// GradeOf is which result a grade run grades, which its task token names so the gateway
+	// serves that result; empty for every other run.
+	GradeOf GradeOf
 	// Checks are the station's command checks a try runs in its box, in order, once its agent
 	// succeeded (ADR 0039 decision 10); a line's run gets its station's checks from its claim, so
 	// only a try names them.
@@ -240,10 +246,12 @@ func (r RunRequest) Check() error {
 	switch {
 	case r.Kind == RunKindJonah:
 		return r.checkJonah()
+	case r.Kind == RunKindTry && r.Bundle == TaskKindGrade:
+		return r.checkGrade()
 	case r.Kind == RunKindTry:
 		return r.checkTry()
-	case r.TryOf != "" || r.Commit != "" || r.Bundle == TaskKindTry || len(r.Checks) > 0:
-		return fmt.Errorf("%w: only a try names a try, a commit and checks", ErrBadRunRequest)
+	case r.TryOf != "" || r.Commit != "" || r.GradeOf != "" || r.Bundle == TaskKindTry || r.Bundle == TaskKindGrade || len(r.Checks) > 0:
+		return fmt.Errorf("%w: only a try names a try, a commit, a result to grade and checks", ErrBadRunRequest)
 	case r.Kind != "" && r.Kind != RunKindStation:
 		return fmt.Errorf("%w: unknown run kind %q", ErrBadRunRequest, r.Kind)
 	case r.Item == "" || r.Station == "":
@@ -288,8 +296,8 @@ func (r RunRequest) checkWindow() error {
 // checkJonah refuses a Jonah run with what ADR 0034 decision 1 leaves out of it.
 func (r RunRequest) checkJonah() error {
 	if r.Item != "" || r.Station != "" || r.Lease != nil || r.Repository != (Repository{}) || len(r.Connections) > 0 ||
-		r.Environment.Name != "" || len(r.Environment.Env) > 0 {
-		return fmt.Errorf("%w: a Jonah run has no item, station, lease, repository, environment or connection but the model's", ErrBadRunRequest)
+		r.Environment.Name != "" || len(r.Environment.Env) > 0 || r.TryOf != "" || r.GradeOf != "" {
+		return fmt.Errorf("%w: a Jonah run has no item, station, lease, repository, environment, try or connection but the model's", ErrBadRunRequest)
 	}
 
 	return nil
@@ -301,10 +309,25 @@ func (r RunRequest) checkTry() error {
 	switch {
 	case r.Item != "" || r.Lease != nil || len(r.Connections) > 0:
 		return fmt.Errorf("%w: a try has no item, lease or connection but the model's", ErrBadRunRequest)
-	case r.Station == "" || r.TryOf == "" || r.Bundle != TaskKindTry:
-		return fmt.Errorf("%w: a try needs its station, its try and a try bundle", ErrBadRunRequest)
+	case r.Station == "" || r.TryOf == "" || r.Bundle != TaskKindTry || r.GradeOf != "":
+		return fmt.Errorf("%w: a try needs its station, its try and a try bundle, and grades no result", ErrBadRunRequest)
 	case r.Commit == "" || r.Repository.URL == "":
 		return fmt.Errorf("%w: a try needs a recorded commit and the repository it is in", ErrBadRunRequest)
+	}
+
+	return nil
+}
+
+// checkGrade refuses a grade run with an item, a lease, a repository, a commit, checks, an
+// environment or a connection besides the model's, or without its station, its try, the result it
+// grades or its model.
+func (r RunRequest) checkGrade() error {
+	switch {
+	case r.Item != "" || r.Lease != nil || len(r.Connections) > 0 || r.Repository != (Repository{}) || r.Commit != "" ||
+		len(r.Checks) > 0 || r.Environment.Name != "" || len(r.Environment.Env) > 0:
+		return fmt.Errorf("%w: a grade has no item, lease, repository, commit, check, environment or connection but the model's", ErrBadRunRequest)
+	case r.Station == "" || r.TryOf == "" || !r.GradeOf.Valid() || r.Model == "":
+		return fmt.Errorf("%w: a grade needs its station, its try, the result it grades and its model", ErrBadRunRequest)
 	}
 
 	return nil

@@ -388,3 +388,68 @@ func TestTaskToken_CarriesTheKnowledgePins(t *testing.T) {
 		t.Errorf("VerifyTaskToken = %+v, %v; want pins %v", got.Knowledge, err, pins)
 	}
 }
+
+// A grade token (ADR 0039 decision 10) names the try and which result it grades, and no item or
+// connection; no other kind names a result to grade.
+func TestTaskToken_Grade(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+	key := []byte("gateway-key")
+	claims := TaskClaims{
+		Kind: TaskKindGrade, OrgID: "o1", FactoryID: "f1", VersionID: "v1", Station: stationBuild, Agent: testAgent, RunID: "r1",
+		Model: "claude-haiku-5-5", TryOf: "try-1", GradeOf: GradeOriginal, ExpiresAt: now.Add(time.Hour).Unix(),
+	}
+
+	token, err := SignTaskToken(key, claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := VerifyTaskToken(key, token, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	claims.Audience = TaskAudience
+	if !reflect.DeepEqual(got, claims) {
+		t.Errorf("claims = %+v, want %+v", got, claims)
+	}
+
+	sign := func(c TaskClaims) string {
+		c.Audience = TaskAudience
+
+		payload, err := json.Marshal(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		enc := base64.RawURLEncoding
+
+		return enc.EncodeToString(payload) + "." + enc.EncodeToString(mac(key, payload))
+	}
+
+	bad := map[string]func(c *TaskClaims){
+		"no try":                func(c *TaskClaims) { c.TryOf = "" },
+		"no result":             func(c *TaskClaims) { c.GradeOf = "" },
+		"an unknown result":     func(c *TaskClaims) { c.GradeOf = "other" },
+		"an item":               func(c *TaskClaims) { c.ItemID = "i1" },
+		"connections":           func(c *TaskClaims) { c.Connections = []string{"acme-host"} },
+		"a result on a try":     func(c *TaskClaims) { c.Kind = TaskKindTry },
+		"a result on a station": func(c *TaskClaims) { c.Kind, c.TryOf, c.ItemID = "", "", "i1" },
+		"a result on a draft":   func(c *TaskClaims) { c.Kind, c.TryOf, c.Station, c.DraftRequest = TaskKindDraftRequest, "", "", "d1" },
+	}
+
+	for name, change := range bad {
+		c := claims
+		change(&c)
+
+		if _, err := SignTaskToken(key, c); !errors.Is(err, ErrBadTaskToken) {
+			t.Errorf("signing a token with %s: err = %v, want ErrBadTaskToken", name, err)
+		}
+
+		if _, err := VerifyTaskToken(key, sign(c), now); !errors.Is(err, ErrBadTaskToken) {
+			t.Errorf("verifying a token with %s: err = %v, want ErrBadTaskToken", name, err)
+		}
+	}
+}
