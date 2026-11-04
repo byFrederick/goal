@@ -2574,6 +2574,32 @@ importSecrets        pat-demoted      403 forbidden            404 org-not-found
 importSecrets        pat-removed      401 unauthenticated      401 unauthenticated
 importSecrets        pat-platform     403 forbidden            404 org-not-found
 importSecrets        pat-deleted-org  401 unauthenticated      401 unauthenticated
+keepTest             anonymous        401 unauthenticated      401 unauthenticated
+keepTest             owner            200                      404 org-not-found
+keepTest             admin            200                      404 org-not-found
+keepTest             viewer           403 forbidden            404 org-not-found
+keepTest             approver         403 forbidden            404 org-not-found
+keepTest             editor           200                      404 org-not-found
+keepTest             member-no-roles  404 factory-not-found    404 org-not-found
+keepTest             other-org-owner  404 org-not-found        200
+keepTest             platform-admin   404 org-not-found        404 org-not-found
+keepTest             stale-owner      200                      404 org-not-found
+keepTest             key-scoped       403 forbidden            404 org-not-found
+keepTest             key-restricted   404 factory-not-found    404 org-not-found
+keepTest             key-other-org    404 org-not-found        200
+keepTest             key-expired      401 unauthenticated      401 unauthenticated
+keepTest             key-revoked      401 unauthenticated      401 unauthenticated
+keepTest             bearer-owner     200                      404 org-not-found
+keepTest             pat-approver     403 forbidden            404 org-not-found
+keepTest             pat-owner        200                      404 org-not-found
+keepTest             pat-viewer       403 forbidden            404 org-not-found
+keepTest             pat-other-org    404 org-not-found        200
+keepTest             pat-expired      401 unauthenticated      401 unauthenticated
+keepTest             pat-revoked      401 unauthenticated      401 unauthenticated
+keepTest             pat-demoted      404 factory-not-found    404 org-not-found
+keepTest             pat-removed      401 unauthenticated      401 unauthenticated
+keepTest             pat-platform     200                      404 org-not-found
+keepTest             pat-deleted-org  401 unauthenticated      401 unauthenticated
 linkItem             anonymous        401 unauthenticated      401 unauthenticated
 linkItem             owner            200                      404 org-not-found
 linkItem             admin            200                      404 org-not-found
@@ -3094,6 +3120,32 @@ listJudges           pat-demoted      404 factory-not-found    404 org-not-found
 listJudges           pat-removed      401 unauthenticated      401 unauthenticated
 listJudges           pat-platform     200                      404 org-not-found
 listJudges           pat-deleted-org  401 unauthenticated      401 unauthenticated
+listKeptTests        anonymous        401 unauthenticated      401 unauthenticated
+listKeptTests        owner            200                      404 org-not-found
+listKeptTests        admin            200                      404 org-not-found
+listKeptTests        viewer           200                      404 org-not-found
+listKeptTests        approver         200                      404 org-not-found
+listKeptTests        editor           200                      404 org-not-found
+listKeptTests        member-no-roles  404 factory-not-found    404 org-not-found
+listKeptTests        other-org-owner  404 org-not-found        200
+listKeptTests        platform-admin   404 org-not-found        404 org-not-found
+listKeptTests        stale-owner      200                      404 org-not-found
+listKeptTests        key-scoped       200                      404 org-not-found
+listKeptTests        key-restricted   404 factory-not-found    404 org-not-found
+listKeptTests        key-other-org    404 org-not-found        200
+listKeptTests        key-expired      401 unauthenticated      401 unauthenticated
+listKeptTests        key-revoked      401 unauthenticated      401 unauthenticated
+listKeptTests        bearer-owner     200                      404 org-not-found
+listKeptTests        pat-approver     200                      404 org-not-found
+listKeptTests        pat-owner        200                      404 org-not-found
+listKeptTests        pat-viewer       200                      404 org-not-found
+listKeptTests        pat-other-org    404 org-not-found        200
+listKeptTests        pat-expired      401 unauthenticated      401 unauthenticated
+listKeptTests        pat-revoked      401 unauthenticated      401 unauthenticated
+listKeptTests        pat-demoted      404 factory-not-found    404 org-not-found
+listKeptTests        pat-removed      401 unauthenticated      401 unauthenticated
+listKeptTests        pat-platform     200                      404 org-not-found
+listKeptTests        pat-deleted-org  401 unauthenticated      401 unauthenticated
 listKnowledgeFiles   anonymous        401 unauthenticated      401 unauthenticated
 listKnowledgeFiles   owner            200                      404 org-not-found
 listKnowledgeFiles   admin            200                      404 org-not-found
@@ -4056,6 +4108,32 @@ removeFactoryRole    pat-demoted      403 forbidden            404 org-not-found
 removeFactoryRole    pat-removed      401 unauthenticated      401 unauthenticated
 removeFactoryRole    pat-platform     403 forbidden            404 org-not-found
 removeFactoryRole    pat-deleted-org  401 unauthenticated      401 unauthenticated
+removeKeptTest       anonymous        401 unauthenticated      401 unauthenticated
+removeKeptTest       owner            200                      404 org-not-found
+removeKeptTest       admin            200                      404 org-not-found
+removeKeptTest       viewer           403 forbidden            404 org-not-found
+removeKeptTest       approver         403 forbidden            404 org-not-found
+removeKeptTest       editor           200                      404 org-not-found
+removeKeptTest       member-no-roles  404 factory-not-found    404 org-not-found
+removeKeptTest       other-org-owner  404 org-not-found        200
+removeKeptTest       platform-admin   404 org-not-found        404 org-not-found
+removeKeptTest       stale-owner      200                      404 org-not-found
+removeKeptTest       key-scoped       403 forbidden            404 org-not-found
+removeKeptTest       key-restricted   404 factory-not-found    404 org-not-found
+removeKeptTest       key-other-org    404 org-not-found        200
+removeKeptTest       key-expired      401 unauthenticated      401 unauthenticated
+removeKeptTest       key-revoked      401 unauthenticated      401 unauthenticated
+removeKeptTest       bearer-owner     200                      404 org-not-found
+removeKeptTest       pat-approver     403 forbidden            404 org-not-found
+removeKeptTest       pat-owner        200                      404 org-not-found
+removeKeptTest       pat-viewer       403 forbidden            404 org-not-found
+removeKeptTest       pat-other-org    404 org-not-found        200
+removeKeptTest       pat-expired      401 unauthenticated      401 unauthenticated
+removeKeptTest       pat-revoked      401 unauthenticated      401 unauthenticated
+removeKeptTest       pat-demoted      404 factory-not-found    404 org-not-found
+removeKeptTest       pat-removed      401 unauthenticated      401 unauthenticated
+removeKeptTest       pat-platform     200                      404 org-not-found
+removeKeptTest       pat-deleted-org  401 unauthenticated      401 unauthenticated
 removePlatformAdmin  anonymous        install: 401 unauthenticated
 removePlatformAdmin  owner            install: 403 forbidden
 removePlatformAdmin  admin            install: 403 forbidden

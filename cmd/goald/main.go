@@ -74,7 +74,7 @@ import (
 func jonahDeps(store *postgres.Store, authors *authoring.Service, defs *definitions.Cache, policies ports.OrgPolicies, clock ports.Clock,
 	log *slog.Logger,
 ) *api.JonahDeps {
-	return &api.JonahDeps{Store: store, Watches: store, Decisions: jonah.NewDecider(jonah.DecideDeps{
+	return &api.JonahDeps{Store: store, Watches: store, Tests: store, Decisions: jonah.NewDecider(jonah.DecideDeps{
 		Proposals: store, Authoring: api.NewJonahAuthoring(authors), Audit: store, Clock: clock, Log: log,
 	}), Models: jonah.NewModelProposals(jonah.ModelDeps{
 		Store: store, Definitions: defs, Check: config.ProposalCheck{}, Policies: policies, Audit: store, Clock: clock, Log: log,

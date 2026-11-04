@@ -98,6 +98,18 @@ Try another model proposes a different model for one agent, as an ordinary propo
 
 The decision behind reviews is ADR 0034 (`docs/adr/0034-jonah-proposals.md` in the repository). The evals and judges are described by ADR 0002 and ADR 0025 there.
 
+## Kept tests
+
+A kept test is a past item that a person keeps, at a station it passed the first time, as a test. The item must keep passing there. A failing kept test will warn when you publish a change that reaches its station, and it never blocks a publish.
+
+An item passed a station the first time when it was claimed there once, no gate rejected it there, and it then moved on. Its first run there must also have finished with its commit recorded, because a test reruns that run. An item sent back to the station counts as failing only once it is claimed there again.
+
+- `GET …/jonah/tests` lists the factory's kept tests by station in line order, then newest first. Each shows the item's number and title, the station, who kept it and when. It needs `factory:read`.
+- `POST …/jonah/tests` with `{"item": <number>, "station": "<id>"}` keeps one. It needs `definition:edit`. It is refused with 404 `item-not-found` for an unknown item, 400 for a station that is not an agent station of the current line, 409 `not-passed-first-time` when the item did not pass the station the first time, and 409 `kept-test-exists` when the item is kept at that station already.
+- `DELETE …/jonah/tests/{test}` removes one, and the item stays. It needs `definition:edit` and answers 404 `kept-test-not-found` for an unknown test.
+
+Deleting the factory or the organization removes its kept tests. Today kept tests exist only in the API: there is no `goal test` command or Tests tab yet, and publishing does not run them yet.
+
 ## Where the review loop stands
 
 goald runs the review loop every minute by default (`GOAL_JONAH_REVIEW_EVERY`). Each round queues the daily reviews that are due and runs the queued ones.

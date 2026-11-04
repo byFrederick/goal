@@ -20,6 +20,8 @@ import (
 // (a ports.JonahStore satisfies it), Decisions decides proposals and queues reviews
 // (*jonah.Decider satisfies it, over NewJonahAuthoring), and Watches reads the watch on every
 // published change (ADR 0039 decision 14) for versions, proposals and the inbox; nil shows none.
+// Tests keeps the kept tests (kepttests.go); while it is nil those routes answer 503
+// jonah-unavailable.
 type JonahDeps struct {
 	Store     JonahReads
 	Decisions JonahDecisions
@@ -27,6 +29,8 @@ type JonahDeps struct {
 	// Models makes Try another model's proposals (ADR 0039 decision 13); *jonah.ModelProposals
 	// satisfies it. nil answers the route with 503 jonah-unavailable.
 	Models JonahModels
+	// Tests keeps the kept tests (kepttests.go); while it is nil those routes answer 503.
+	Tests KeptTestStore
 }
 
 // JonahModels estimates and makes a model proposal as the person in ctx; its refusals are

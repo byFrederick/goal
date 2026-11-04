@@ -28,6 +28,7 @@ func TestStore_Conformance(t *testing.T) {
 			Spend: s,
 			Jonah: s,
 			Tries: s,
+			Kept:  s,
 			Audit: tn,
 			LeaseSpans: func(_ *testing.T, org domain.OrgID, id domain.ItemID) []domain.LeaseSpan {
 				return s.LeaseSpans(org, id)

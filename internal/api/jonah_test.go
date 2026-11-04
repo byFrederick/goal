@@ -395,13 +395,21 @@ func TestJonah_Permissions(t *testing.T) {
 	h.as(acmeMember(domain.FactoryViewer))
 
 	for _, c := range []struct{ path, body string }{
-		{path + "/approve", ""}, {path + "/edit", ""}, {path + "/reject", rejectBody}, {path + "/undo", ""}, {acmeJonah + "/reviews", ""},
+		{path + "/approve", ""},
+		{path + "/edit", ""},
+		{path + "/reject", rejectBody},
+		{path + "/undo", ""},
+		{acmeJonah + "/reviews", ""},
+		{acmeJonah + "/tests", keepBody(1, "inbox")},
 	} {
 		code, p := problemOfCall(t, h, http.MethodPost, c.path, c.body)
 		wantProblem(t, "a viewer's POST "+c.path, code, p, http.StatusForbidden, "forbidden")
 	}
 
-	for _, read := range []string{acmeJonah, acmeProposals, path} {
+	code, p = problemOfCall(t, h, http.MethodDelete, acmeJonah+"/tests/019a0000-0000-7000-8000-00000000dead", "")
+	wantProblem(t, "a viewer's DELETE of a kept test", code, p, http.StatusForbidden, "forbidden")
+
+	for _, read := range []string{acmeJonah, acmeProposals, path, acmeJonah + "/tests"} {
 		if code := h.call(t, http.MethodGet, read, "", nil); code != http.StatusOK {
 			t.Errorf("a viewer's GET %s = %d, want 200", read, code)
 		}
