@@ -21,6 +21,14 @@ export function placePill(el: HTMLElement, over: HTMLElement) {
   el.style.transform = `translateX(${over.offsetLeft}px) scaleX(${over.offsetWidth / PILL_BASE})`;
 }
 
+/** Scrolls a box sideways, and only that box, so the element sits inside it; never animated, never moves the page. */
+export function revealInline(box: HTMLElement, el: HTMLElement) {
+  const left = el.offsetLeft;
+  const right = left + el.offsetWidth;
+  if (left < box.scrollLeft) box.scrollLeft = left;
+  else if (right > box.scrollLeft + box.clientWidth) box.scrollLeft = right - box.clientWidth;
+}
+
 /** The class of each link or button inside a TabNav. */
 export const tabNavItem =
   'press relative inline-flex h-11 shrink-0 items-center gap-1 rounded-chip px-3 text-secondary whitespace-nowrap text-muted hover:text-ink aria-[current=page]:font-control aria-[current=page]:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run md:h-7.5';
@@ -45,6 +53,7 @@ export function TabNav({
   const nav = useRef<HTMLElement>(null);
   const pill = useRef<HTMLSpanElement>(null);
   const placed = useRef(false);
+  const revealed = useRef<HTMLElement | null>(null);
 
   // Runs after every render: the current link, the counts or the width may have changed.
   useLayoutEffect(() => {
@@ -59,8 +68,11 @@ export function TabNav({
       if (!animate) el.style.transition = 'none';
       el.style.opacity = '1';
       placePill(el, current);
-      // The row scrolls sideways on a phone; keep the current link in view, never animated.
-      current.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+      // The row scrolls sideways on a phone; bring a new current link into view, never animated.
+      if (nav.current && revealed.current !== current) {
+        revealed.current = current;
+        revealInline(nav.current, current);
+      }
       if (!animate) {
         void el.offsetWidth;
         el.style.transition = '';

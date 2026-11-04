@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SegmentedControl } from './segmented-control';
 import { TooltipProvider } from './tooltip';
 
@@ -100,22 +100,45 @@ describe('SegmentedControl', () => {
   });
 });
 
+/** Gives every element a 100 px box laid end to end by DOM order, in a 150 px viewport. */
+function stubBoxes() {
+  const left = vi.spyOn(HTMLElement.prototype, 'offsetLeft', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.parentElement
+      ? [...this.parentElement.children].filter((c) => !c.hasAttribute('aria-hidden')).indexOf(this) * 100
+      : 0;
+  });
+  const width = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(100);
+  const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(150);
+  return () => {
+    left.mockRestore();
+    width.mockRestore();
+    client.mockRestore();
+  };
+}
+
 describe('SegmentedControl scrolling', () => {
-  beforeEach(() => {
-    Element.prototype.scrollIntoView ??= () => {};
+  const many = ['a', 'b', 'c', 'd'].map((v) => ({ value: v, label: v }));
+
+  it('scrolls its own box so the chosen option is in view, never the page', () => {
+    const restore = stubBoxes();
+    const page = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    render(<SegmentedControl label="View" options={many} value="d" onChange={() => {}} />);
+    const box = screen.getByRole('group', { name: 'View' });
+    expect(box.className).toContain('overflow-x-auto');
+    expect(box.scrollLeft).toBeGreaterThan(0);
+    expect(page).not.toHaveBeenCalled();
+    page.mockRestore();
+    restore();
   });
 
-  it('scrolls the chosen option into view without smooth behavior', () => {
-    const scroll = vi
-      .spyOn(Element.prototype as { scrollIntoView(o?: unknown): void }, 'scrollIntoView')
-      .mockImplementation(() => {});
-    render(<SegmentedControl label="View" options={options} value="all" onChange={() => {}} />);
-    expect(scroll).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
-    scroll.mockRestore();
-  });
-
-  it('scrolls sideways inside its own box', () => {
-    render(<SegmentedControl label="View" options={options} value="all" onChange={() => {}} />);
-    expect(screen.getByRole('group', { name: 'View' }).className).toContain('overflow-x-auto');
+  it('leaves the scroll alone when re-rendered with new option arrays and on resize', () => {
+    const restore = stubBoxes();
+    const { rerender } = render(<SegmentedControl label="View" options={many} value="d" onChange={() => {}} />);
+    const box = screen.getByRole('group', { name: 'View' });
+    box.scrollLeft = 7;
+    rerender(<SegmentedControl label="View" options={[...many]} value="d" onChange={() => {}} />);
+    window.dispatchEvent(new Event('resize'));
+    expect(box.scrollLeft).toBe(7);
+    restore();
   });
 });
