@@ -45,12 +45,12 @@ func TestRoutes_TheGatewayListenerServesOnlyTheGateway(t *testing.T) {
 
 	paths := []string{"/mcp", "/run", "/run/tool-approval", "/run/knowledge/handbook", "/v1/health", "/v1/orgs", "/", "/board"}
 
-	one, none := routes(false, named(toAPI), named(toGateway), named(toSPA), nil)
+	one, none := routes(false, named(toAPI), named("hooks"), named(toGateway), named(toSPA), nil)
 	if none != nil {
 		t.Fatal("no GOAL_GATEWAY_LISTEN, yet a gateway listener")
 	}
 
-	primary, gatewayOnly := routes(true, named(toAPI), named(toGateway), named(toSPA), nil)
+	primary, gatewayOnly := routes(true, named(toAPI), named("hooks"), named(toGateway), named(toSPA), nil)
 
 	tests := []struct {
 		name string
@@ -96,9 +96,9 @@ func TestRoutes_DocsOnlyFromGOAL_DOCS_DIR(t *testing.T) {
 
 	paths := []string{"/docs", "/docs/", "/docs/guides/", "/docs/pagefind/pagefind.js", "/docsx", "/", "/board", "/v1/health", "/mcp"}
 
-	withDocs, _ := routes(false, named(toAPI), named(toGateway), named(toSPA), named(toDocs))
-	without, _ := routes(false, named(toAPI), named(toGateway), named(toSPA), nil)
-	_, gatewayOnly := routes(true, named(toAPI), named(toGateway), named(toSPA), named(toDocs))
+	withDocs, _ := routes(false, named(toAPI), named("hooks"), named(toGateway), named(toSPA), named(toDocs))
+	without, _ := routes(false, named(toAPI), named("hooks"), named(toGateway), named(toSPA), nil)
+	_, gatewayOnly := routes(true, named(toAPI), named("hooks"), named(toGateway), named(toSPA), named(toDocs))
 
 	tests := []struct {
 		name string
@@ -115,6 +115,51 @@ func TestRoutes_DocsOnlyFromGOAL_DOCS_DIR(t *testing.T) {
 			if got := served(tt.h, path); got != tt.want[i] {
 				t.Errorf("%s: %s served by %s, want %s", tt.name, path, got, tt.want[i])
 			}
+		}
+	}
+}
+
+// The main listener hands /hooks/{webhook id} to the receiver, whatever the method, never to the
+// SPA; other paths keep their handlers, and the gateway listener serves none of
+// them.
+func TestRoutes_HooksBypassTheSPA(t *testing.T) {
+	t.Parallel()
+
+	const toAPI, toHooks, toGateway, toSPA, notFound = "api", "hooks", "gateway", "spa", "404"
+
+	named := func(name string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(name)) })
+	}
+
+	served := func(h http.Handler, method, path string) string {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), method, path, nil))
+
+		if rec.Code == http.StatusNotFound {
+			return notFound
+		}
+
+		return rec.Body.String()
+	}
+
+	one, _ := routes(false, named(toAPI), named(toHooks), named(toGateway), named(toSPA), nil)
+	_, gatewayOnly := routes(true, named(toAPI), named(toHooks), named(toGateway), named(toSPA), nil)
+
+	for _, tc := range []struct {
+		h            http.Handler
+		method, path string
+		want         string
+	}{
+		{one, http.MethodPost, "/hooks/019a0000-0000-7000-8000-000000000000", toHooks},
+		{one, http.MethodGet, "/hooks/019a0000-0000-7000-8000-000000000000", toHooks},
+		{one, http.MethodPost, "/hooks/", toHooks},
+		{one, http.MethodGet, "/hooksx", toSPA},
+		{one, http.MethodGet, "/webhooks", toSPA},
+		{one, http.MethodGet, "/v1/health", toAPI},
+		{gatewayOnly, http.MethodPost, "/hooks/019a0000-0000-7000-8000-000000000000", notFound},
+	} {
+		if got := served(tc.h, tc.method, tc.path); got != tc.want {
+			t.Errorf("%s %s served by %s, want %s", tc.method, tc.path, got, tc.want)
 		}
 	}
 }
@@ -168,7 +213,7 @@ func TestHTTPServers_ProxyAuthOnlyUnderSession(t *testing.T) {
 		hits.Store(0)
 
 		s := settings{Listen: defaultListen, Auth: tt.mode, AuthUpstream: u}
-		main := httpServers(s, "proxy-secret-for-tests-only-0123456789", stub, stub, ui, nil, nil)[0]
+		main := httpServers(s, "proxy-secret-for-tests-only-0123456789", stub, stub, stub, ui, nil, nil)[0]
 
 		r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/auth/get-session", nil)
 		r.Host = defaultListen

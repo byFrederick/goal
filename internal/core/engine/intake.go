@@ -327,3 +327,24 @@ func itemSource(s domain.TriggerSource) domain.ItemSource {
 
 	return ""
 }
+
+// NamesDelivery reports whether a delivery of event to the organization's webhook w is named by an
+// enabled trigger of a loaded line of the organization in ctx that w is open to
+// (domain.Trigger.NamesDelivery), from the lines already in memory: a factory not loaded yet names
+// nothing, so the receiver keeps only the delivery's ledger id and count (ADR 0040 decision 12).
+func (e *Engine) NamesDelivery(ctx context.Context, w domain.WebhookEndpoint, event string) bool {
+	for _, f := range w.Factories() {
+		l, err := e.lineIn(ctx, f)
+		if err != nil {
+			continue
+		}
+
+		for _, t := range l.Triggers {
+			if t.NamesDelivery(w.Name, w.Sender, event) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
