@@ -61,83 +61,98 @@ func TestTryAgain_EstimateQueuesNothing(t *testing.T) {
 		t.Fatalf("Try estimate: %v", err)
 	}
 
-	if est.Number != p.Number || est.Tries != 2 || est.EstimateUSD != 200 || est.BudgetLeftUSD != 2000 || len(est.Items) != 2 {
-		t.Fatalf("estimate = %+v; want 2 tries at $200 with $2000 left", est)
-	}
-
-	for i, it := range []domain.Item{b, a} { // the sweep tries the newest first
-		if g := est.Items[i]; g.ItemID != it.ID || g.Station != stBuild || g.Tries != 1 || g.RunCostUSD != 100 {
-			t.Errorf("estimate item %d = %+v; want one try of %s at %s priced $100", i, g, it.ID, stBuild)
-		}
-	}
+	// The sweep tries the newest first.
+	expectAgainEstimate(t, est, p, b, a)
 
 	if got := w.tries(org, p); len(got) != 2 || len(a2.actions()) != 0 {
 		t.Errorf("an estimate left %d tries and audited %v; want 2 and nothing", len(got), a2.actions())
 	}
 }
 
+// expectAgainEstimate fails t unless est adds one try of each of items to p, at build, priced at
+// $100 each, with $2000 left.
+func expectAgainEstimate(t *testing.T, est jonah.TryAgainEstimate, p domain.Proposal, items ...domain.Item) {
+	t.Helper()
+
+	if est.Number != p.Number || est.Tries != len(items) || est.EstimateUSD != 100*float64(len(items)) || est.BudgetLeftUSD != 2000 ||
+		len(est.Items) != len(items) {
+		t.Fatalf("estimate = %+v; want %d tries at $100 each with $2000 left", est, len(items))
+	}
+
+	for i, it := range items {
+		if g := est.Items[i]; g.ItemID != it.ID || g.Station != stBuild || g.Tries != 1 || g.RunCostUSD != 100 {
+			t.Errorf("estimate item %d = %+v; want one try of %s at %s priced $100", i, g, it.ID, stBuild)
+		}
+	}
+}
+
 func TestTryAgain_ConfirmAddsAttempts(t *testing.T) {
 	t.Parallel()
 
-	t.Run("review proposal", func(t *testing.T) {
-		t.Parallel()
+	t.Run("review proposal", tryAgainReview)
+	t.Run("model proposal", tryAgainModel)
+}
 
-		w := newTryWorld(t, 1)
-		org, p, a, b := w.triedTwice()
-		au := &audits{}
-		again := w.tryAgain(au)
+// tryAgainReview tries a review's proposal again twice: each item gets attempts 2 and 3.
+func tryAgainReview(t *testing.T) {
+	t.Parallel()
 
-		for range 2 {
-			if _, err := again.Try(w.actor(org), w.factories[org], p.Number, againPolicy(10), true); err != nil {
-				t.Fatalf("Try: %v", err)
-			}
-		}
+	w := newTryWorld(t, 1)
+	org, p, a, b := w.triedTwice()
+	au := &audits{}
+	again := w.tryAgain(au)
 
-		expectAttempts(t, w.tries(org, p), map[domain.ItemID][]int{a.ID: {1, 2, 3}, b.ID: {1, 2, 3}})
-
-		if got := au.actions(); len(got) != 2 || got[0] != domain.AuditProposalTried {
-			t.Errorf("audit = %v, want two %s", got, domain.AuditProposalTried)
-		}
-	})
-
-	t.Run("model proposal", func(t *testing.T) {
-		t.Parallel()
-
-		w := newModelWorld(t)
-		a := w.doneItem(rt0.Add(-2*time.Hour), 1, 0)
-		b := w.doneItem(rt0.Add(-time.Hour), 2, 0)
-
-		_, p, err := w.propose(true)
-		if err != nil {
-			t.Fatalf("Propose: %v", err)
-		}
-
-		again := jonah.NewTryAgain(jonah.TryAgainDeps{
-			Store: w.store, Definitions: &tryDefs{lines: map[domain.OrgID]domain.Line{decideOrg: w.defs.line}}, Audit: w.audit, Clock: w.clock,
-		})
-
-		est, err := again.Try(w.ctx(), factory, p.Number, againPolicy(10), true)
-		if err != nil {
+	for range 2 {
+		if _, err := again.Try(w.actor(org), w.factories[org], p.Number, againPolicy(10), true); err != nil {
 			t.Fatalf("Try: %v", err)
 		}
+	}
 
-		if est.Tries != 2*domain.ModelTriesPerItem || est.EstimateUSD != 9 || est.Items[0].Tries != domain.ModelTriesPerItem {
-			t.Errorf("estimate = %+v; want three tries per item at $9", est)
-		}
+	expectAttempts(t, w.tries(org, p), map[domain.ItemID][]int{a.ID: {1, 2, 3}, b.ID: {1, 2, 3}})
 
-		tries, err := w.store.ProposalPastTries(w.ctx(), p.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
+	if got := au.actions(); len(got) != 2 || got[0] != domain.AuditProposalTried {
+		t.Errorf("audit = %v, want two %s", got, domain.AuditProposalTried)
+	}
+}
 
-		expectAttempts(t, tries, map[domain.ItemID][]int{a.ID: {1, 2, 3, 4, 5, 6}, b.ID: {1, 2, 3, 4, 5, 6}})
+// tryAgainModel tries a model proposal again: each item gets attempts 4 to 6, on the new model.
+func tryAgainModel(t *testing.T) {
+	t.Parallel()
 
-		for _, tr := range tries {
-			if tr.Model != modelNew || tr.Station != stBuild {
-				t.Errorf("try %+v, want %s at %s", tr, modelNew, stBuild)
-			}
-		}
+	w := newModelWorld(t)
+	a := w.doneItem(rt0.Add(-2*time.Hour), 1, 0)
+	b := w.doneItem(rt0.Add(-time.Hour), 2, 0)
+
+	_, p, err := w.propose(true)
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+
+	again := jonah.NewTryAgain(jonah.TryAgainDeps{
+		Store: w.store, Definitions: &tryDefs{lines: map[domain.OrgID]domain.Line{decideOrg: w.defs.line}}, Audit: w.audit, Clock: w.clock,
 	})
+
+	est, err := again.Try(w.ctx(), factory, p.Number, againPolicy(10), true)
+	if err != nil {
+		t.Fatalf("Try: %v", err)
+	}
+
+	if est.Tries != 2*domain.ModelTriesPerItem || est.EstimateUSD != 9 || est.Items[0].Tries != domain.ModelTriesPerItem {
+		t.Errorf("estimate = %+v; want three tries per item at $9", est)
+	}
+
+	tries, err := w.store.ProposalPastTries(w.ctx(), p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectAttempts(t, tries, map[domain.ItemID][]int{a.ID: {1, 2, 3, 4, 5, 6}, b.ID: {1, 2, 3, 4, 5, 6}})
+
+	for _, tr := range tries {
+		if tr.Model != modelNew || tr.Station != stBuild {
+			t.Errorf("try %+v, want %s at %s", tr, modelNew, stBuild)
+		}
+	}
 }
 
 // expectAttempts fails t unless tried, as TriedOf groups tries, has each item's attempts in want,

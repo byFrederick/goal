@@ -239,6 +239,11 @@ func (h *harness) models(defs *definitions.Cache, policies ports.OrgPolicies, au
 	})
 }
 
+// tryAgain is Try again over the harness's store and the definitions cache defs.
+func (h *harness) tryAgain(defs *definitions.Cache, audit ports.Audit) *jonah.TryAgain {
+	return jonah.NewTryAgain(jonah.TryAgainDeps{Store: h.store, Definitions: modelLines{Cache: defs, h: h}, Audit: audit, Clock: h.clock})
+}
+
 // acme's one prompt and its path.
 const (
 	writerPrompt = "# writer\n"
@@ -561,9 +566,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	deps.Judges = h.judgeDeps(tenancy)
 	deps.Jonah = &api.JonahDeps{Store: h.store, Watches: h.store, Tests: h.store, Tries: h.store, Decisions: jonah.NewDecider(jonah.DecideDeps{
 		Proposals: h.store, Authoring: api.NewJonahAuthoring(authors), Audit: tenancy, Clock: h.clock,
-	}), Models: h.models(defs, deps.OrgPolicies, tenancy), TryAgain: jonah.NewTryAgain(jonah.TryAgainDeps{
-		Store: h.store, Definitions: modelLines{Cache: defs, h: h}, Audit: tenancy, Clock: h.clock,
-	})}
+	}), Models: h.models(defs, deps.OrgPolicies, tenancy), TryAgain: h.tryAgain(defs, tenancy)}
 
 	handler, err := api.New(h.withEvals(deps, tenancy, opts))
 	if err != nil {

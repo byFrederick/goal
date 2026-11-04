@@ -409,25 +409,7 @@ func testTriesTryAgain(f *fixture) {
 		t.Fatalf("AddPastTries: %v", err)
 	}
 
-	want := []struct {
-		item    domain.ItemID
-		attempt int
-	}{{a.ID, 2}, {a.ID, 3}, {a.ID, 4}, {b.ID, 2}}
-	if len(added) != len(want) {
-		t.Fatalf("AddPastTries = %+v; want %d tries", added, len(want))
-	}
-
-	for i, w := range want {
-		g, from := added[i], first[0]
-		if w.item == b.ID {
-			from = first[1]
-		}
-
-		if g.ItemID != w.item || g.Attempt != w.attempt || g.State != domain.PastTryQueued || g.Station != from.Station ||
-			g.OriginalRunID != from.OriginalRunID || g.Model != from.Model || g.ProposalNumber != p.Number || !g.CreatedAt.Equal(t2) {
-			t.Errorf("added[%d] = %+v; want a queued copy of %+v at attempt %d", i, g, from, w.attempt)
-		}
-	}
+	expectCopies(t, added, []domain.PastTry{first[0], first[0], first[0], first[1]}, []int{2, 3, 4, 2}, t2)
 
 	again, err := f.Tries.AddPastTries(f.ctx(t), f.factory, p.ID, []domain.PastTryAdd{{ItemID: a.ID, Tries: 1}}, t2)
 	if err != nil || len(again) != 1 || again[0].Attempt != 5 {
@@ -454,6 +436,23 @@ func testTriesTryAgain(f *fixture) {
 
 	if got, err := f.Tries.ProposalPastTries(f.ctx(t), p.ID); err != nil || len(got) != len(first)+len(added)+len(again) {
 		t.Errorf("ProposalPastTries = %d tries, %v; want %d, the refused adds none", len(got), err, len(first)+len(added)+len(again))
+	}
+}
+
+// expectCopies fails t unless added are queued copies of from, one each, at attempts, made at at.
+func expectCopies(t *testing.T, added, from []domain.PastTry, attempts []int, at time.Time) {
+	t.Helper()
+
+	if len(added) != len(from) {
+		t.Fatalf("AddPastTries = %+v; want %d tries", added, len(from))
+	}
+
+	for i, g := range added {
+		w := from[i]
+		if g.ItemID != w.ItemID || g.Attempt != attempts[i] || g.State != domain.PastTryQueued || g.Station != w.Station ||
+			g.OriginalRunID != w.OriginalRunID || g.Model != w.Model || g.ProposalNumber != w.ProposalNumber || !g.CreatedAt.Equal(at) {
+			t.Errorf("added[%d] = %+v; want a queued copy of %+v at attempt %d", i, g, w, attempts[i])
+		}
 	}
 }
 

@@ -83,8 +83,8 @@ func (s *Store) QueuePastTries(ctx context.Context, factory domain.FactoryID, pr
 	return out, nil
 }
 
-// AddPastTries implements ports.PastTries: the proposal is locked, so two Try agains number their
-// attempts in turn, and every try is inserted in the same transaction.
+// AddPastTries implements ports.PastTries: the proposal is locked, so two concurrent calls number
+// their attempts in turn, and every try is inserted in the same transaction.
 func (s *Store) AddPastTries(ctx context.Context, factory domain.FactoryID, proposal domain.ProposalID, adds []domain.PastTryAdd,
 	at time.Time,
 ) ([]domain.PastTry, error) {

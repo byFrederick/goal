@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -370,18 +369,7 @@ func tryGoald(t *testing.T, refusal *gen.Problem) (*httptest.Server, func() []st
 func goalJonahTry(t *testing.T, api, stdin string, args ...string) string {
 	t.Helper()
 
-	var stdout, stderr bytes.Buffer
-
-	out := &printer{w: &stdout, e: &stderr, in: strings.NewReader(stdin)}
-	getenv := testEnv(t, api, map[string]string{envOrg: orgAcme})
-	code := 0
-
-	if err := errors.Join(jonahCommand(t.Context(), out, getenv, append([]string{jonahTryCmd}, args...)), out.err); err != nil {
-		code = 1
-		_, _ = fmt.Fprintln(&stderr, "goal:", err)
-	}
-
-	return fmt.Sprintf("exit %d\n--- stdout\n%s--- stderr\n%s", code, stdout.String(), stderr.String())
+	return goalAsked(t, api, stdin, jonahCommand, append([]string{jonahTryCmd}, args...))
 }
 
 func TestJonah_TryAgainPrintsTheEstimate(t *testing.T) {
@@ -434,7 +422,7 @@ func TestJonah_TryAgainConflicts(t *testing.T) {
 	}{
 		{"proposal-not-tried", http.StatusConflict, "goal: " + jonahConflicts["proposal-not-tried"] + "\n"},
 		{"proposal-decided", http.StatusConflict, "goal: the proposal was already decided: goal jonah show 7 says how\n"},
-		{"learning-budget-exhausted", http.StatusConflict, "goal: " + jonahConflicts["learning-budget-exhausted"] + "\n"},
+		{codeBudgetExhausted, http.StatusConflict, "goal: " + jonahConflicts[codeBudgetExhausted] + "\n"},
 		{"proposal-not-triable", http.StatusUnprocessableEntity, "goald's own words"},
 	} {
 		p := jonahRefusal(c.status, c.code)

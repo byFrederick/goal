@@ -86,14 +86,7 @@ func (s *Store) AddPastTries(ctx context.Context, factory domain.FactoryID, prop
 	var out []domain.PastTry
 
 	for _, a := range adds {
-		var latest domain.PastTry
-
-		for _, r := range s.jonah.tries {
-			if r.org == org && r.row.ProposalID == proposal && r.row.ItemID == a.ItemID && r.row.Attempt > latest.Attempt {
-				latest = r.row
-			}
-		}
-
+		latest := s.latestTry(org, proposal, a.ItemID)
 		if latest.ID == "" {
 			return nil, fmt.Errorf("add past tries: proposal %s has no try of item %s: %w", proposal, a.ItemID, ports.ErrNotFound)
 		}
@@ -112,6 +105,20 @@ func (s *Store) AddPastTries(ctx context.Context, factory domain.FactoryID, prop
 	}
 
 	return out, nil
+}
+
+// latestTry is org's proposal's try of item with the highest attempt, zero when it has none.
+// Callers hold s.mu.
+func (s *Store) latestTry(org domain.OrgID, proposal domain.ProposalID, item domain.ItemID) domain.PastTry {
+	var latest domain.PastTry
+
+	for _, r := range s.jonah.tries {
+		if r.org == org && r.row.ProposalID == proposal && r.row.ItemID == item && r.row.Attempt > latest.Attempt {
+			latest = r.row
+		}
+	}
+
+	return latest
 }
 
 // proposalNumber is the number of org's factory's proposal, 0 when there is none. Callers hold s.mu.
