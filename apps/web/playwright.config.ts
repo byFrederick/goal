@@ -16,7 +16,8 @@ export default defineConfig({
   workers: 1,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
-  reporter: process.env.CI ? 'github' : 'list',
+  // Under CI, annotations on the pull request plus an HTML report the e2e job uploads when it fails.
+  reporter: process.env.CI ? [['github'], ['html', { open: 'never', outputFolder: 'playwright-report' }]] : 'list',
   use: {
     baseURL: `http://127.0.0.1:${port}`,
     browserName: 'chromium',

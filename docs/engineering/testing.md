@@ -21,7 +21,7 @@ Tests exist to stop real regressions. A test that would still pass if the behavi
 | HTTP API (`internal/api`) | Handler tests with `httptest` against the real engine, the definitions cache and port fakes | status codes and problem details, work-type validation, event paging, human decisions |
 | CLIs (`cmd/`) | Unit tests on argument parsing, settings and the follow loop against a stub API | flags after positionals; unsafe settings refused; each event printed once until a human must act |
 | Worker (TypeScript) | Vitest on the policy hook and envelope parsing; one smoke test with a recorded SDK stream | deny rules block; contract violations fail |
-| UI | Playwright on critical flows at 375, 768, 1440 px; accessibility checks | approve an item; move a card without dragging |
+| UI | Playwright on critical flows at 375, 768, 1440 px; accessibility checks (CI's e2e job runs `task web:e2e`) | approve an item; move a card without dragging |
 | Agents and factories | Jonah eval suites, not unit tests | see `docs/history/jonah/` (the design phase 5 replaced) |
 
 ## Rules
@@ -36,6 +36,7 @@ Tests and helpers that run git must not inherit the GIT_* repository variables (
 task test               # unit tests with -race
 task test-integration   # starts PostgreSQL 18 and RustFS via compose, runs integration-tagged tests
 task check              # everything the pre-push hook and CI (pull requests into main) run
+task web:e2e            # the web Playwright suite; CI runs it in the e2e job, on pull requests into main that change apps/web/, packages/api-client/ or contracts/, and on every push to main
 task check:changed      # only the checks of the parts this branch changed since origin/main (README, Development)
 task e2e:secrets        # a run on secrets against a private repository, the check before deploying main (below)
 ```
