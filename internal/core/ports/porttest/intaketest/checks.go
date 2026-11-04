@@ -261,7 +261,7 @@ func sameJSON[A, B ~string | ~[]byte](a A, b B) bool {
 // watcher is the check's agent.
 const watcher = "watcher"
 
-// runCheck fires, claims and finishes a check of nightly at at with answer, its items made for
+// runCheck fires, claims and finishes a check of nightly queued at the instant given, with answer, its items made for
 // each file entry, and returns the firing as it reads back. try queues it as a try check.
 func (f *fixture) runCheck(at time.Time, answer string, limits domain.CheckLimits, try bool) domain.TriggerFiring {
 	f.t.Helper()
@@ -344,15 +344,7 @@ func testApplyCheck(f *fixture) {
 
 	first := f.runCheck(t0, `{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}, {"key": "INC-2", "title": "Disk full", "brief": "db-1"}],
 		"state": {"since": "a"}}`, domain.CheckLimits{}, false)
-	if a := first.Applied; len(a.Filed) != 2 || a.Filed[0].Ref == "" || len(a.Noted) != 0 || len(a.Skipped) != 0 {
-		t.Fatalf("first check applied %+v; want two items filed", a)
-	}
-
-	inc1, inc2 := f.itemByRef(first.Applied.Filed[0].Ref), f.itemByRef(first.Applied.Filed[1].Ref)
-	if inc1.Origin != domain.OriginTrigger || inc1.Trigger != nightly || !inc1.Untrusted || inc1.CreatedBy != "agent:"+watcher || inc1.Title != "API down" {
-		t.Errorf("filed item = %+v; want origin trigger of %s by agent:%s, untrusted", inc1, nightly, watcher)
-	}
-
+	inc1, inc2 := f.expectFiled(first)
 	f.close(inc2, domain.StateCancelled)
 
 	second := f.runCheck(t0.Add(2*time.Hour), `{"file": [{"key": "INC-1", "title": "API down", "brief": "still 5xx"}, {"key": "INC-2", "title": "Disk full", "brief": "again"}],
@@ -372,6 +364,22 @@ func testApplyCheck(f *fixture) {
 	}
 
 	f.expectReopened(f.itemByRef(third.Applied.Filed[0].Ref), inc2)
+}
+
+// expectFiled checks that first filed two items through the door and returns them.
+func (f *fixture) expectFiled(first domain.TriggerFiring) (domain.Item, domain.Item) {
+	f.t.Helper()
+
+	if a := first.Applied; len(a.Filed) != 2 || a.Filed[0].Ref == "" || len(a.Noted) != 0 || len(a.Skipped) != 0 {
+		f.t.Fatalf("first check applied %+v; want two items filed", a)
+	}
+
+	inc1, inc2 := f.itemByRef(first.Applied.Filed[0].Ref), f.itemByRef(first.Applied.Filed[1].Ref)
+	if inc1.Origin != domain.OriginTrigger || inc1.Trigger != nightly || !inc1.Untrusted || inc1.CreatedBy != "agent:"+watcher || inc1.Title != "API down" {
+		f.t.Errorf("filed item = %+v; want origin trigger of %s by agent:%s, untrusted", inc1, nightly, watcher)
+	}
+
+	return inc1, inc2
 }
 
 // expectCheckNote checks that it has one item_note, by the engine, with text, the trigger and key.
@@ -464,27 +472,70 @@ func testTryCheck(f *fixture) {
 		t.Errorf("try applied %+v; want it would file INC-2 and note INC-1", a)
 	}
 
+	f.expectTryLeftNothing()
+	f.expectTryRefusedWhileQueued()
+
+	if checks, err := f.in.TriggerChecks(f.ctx(), f.factory, nightly, 10); err != nil || len(checks) != 3 || !checks[1].Try || checks[0].CheckState != domain.CheckQueued {
+		t.Errorf("TriggerChecks = %+v, %v; want the queued check, the try and the first, newest first", checks, err)
+	}
+}
+
+// expectTryLeftNothing checks that only the first check's item exists, and that the next check
+// gets the first check's state and decisions and no note.
+func (f *fixture) expectTryLeftNothing() {
+	f.t.Helper()
+
 	if items, err := f.Store.ListItems(f.ctx(), ports.ItemQuery{FactoryID: f.factory, Limit: 100}); err != nil || len(items) != 1 {
-		t.Errorf("items after the try = %d, %v; want only the first check's", len(items), err)
+		f.t.Errorf("items after the try = %d, %v; want only the first check's", len(items), err)
 	}
 
 	in, err := f.in.CheckInput(f.ctx(), f.factory, nightly, t0.Add(3*time.Hour))
 	if err != nil || !sameJSON(in.State, `{"since": "a"}`) || strings.Contains(string(in.LastDecisions), "INC-2") || in.Open[0].LastNote != "" {
-		t.Errorf("input after the try = %+v, %v; want the first check's state and decisions and no note", in, err)
+		f.t.Errorf("input after the try = %+v, %v; want the first check's state and decisions and no note", in, err)
 	}
+}
 
+// expectTryRefusedWhileQueued queues a check and checks that a try meanwhile is ErrConflict.
+func (f *fixture) expectTryRefusedWhileQueued() {
+	f.t.Helper()
 	f.checkFiring(t0.Add(4 * time.Hour))
 
 	if _, _, err := f.in.Fire(f.ctx(), domain.TriggerFiring{
 		FactoryID: f.factory, Trigger: nightly, Source: domain.TriggerSchedule, EventKey: domain.OnSchedule,
 		IdempotencyKey: "try-busy", Outcome: domain.FiringChecked, CheckState: domain.CheckQueued, At: t0.Add(4 * time.Hour), Try: true,
 	}, nil, domain.FireLimits{}); !errors.Is(err, ports.ErrConflict) {
-		t.Errorf("try while a check is queued = %v; want ErrConflict", err)
+		f.t.Errorf("try while a check is queued = %v; want ErrConflict", err)
+	}
+}
+
+// failCheck fires, claims and fails a check of nightly queued at the instant given, a try when
+// try is set.
+func (f *fixture) failCheck(at time.Time, try bool) {
+	f.t.Helper()
+
+	if _, _, err := f.in.Fire(f.ctx(), domain.TriggerFiring{
+		FactoryID: f.factory, Trigger: nightly, Source: domain.TriggerSchedule, EventKey: domain.OnSchedule,
+		IdempotencyKey: at.UTC().Format(time.RFC3339), Outcome: domain.FiringChecked, CheckState: domain.CheckQueued, At: at, Try: try,
+	}, nil, domain.FireLimits{}); err != nil {
+		f.t.Fatalf("Fire: %v", err)
 	}
 
-	if checks, err := f.in.TriggerChecks(f.ctx(), f.factory, nightly, 10); err != nil || len(checks) != 3 || !checks[1].Try || checks[0].CheckState != domain.CheckQueued {
-		t.Errorf("TriggerChecks = %+v, %v; want the queued check, the try and the first, newest first", checks, err)
+	_, l := f.claimCheck(at)
+	if err := f.in.FinishCheck(f.ctx(), l, domain.CheckResult{State: domain.CheckFailed, Reason: "timed out", At: at.Add(time.Minute)}); err != nil {
+		f.t.Fatalf("FinishCheck: %v", err)
 	}
+}
+
+// alerts are the fixture's factory's check alerts since t0's UTC day began.
+func (f *fixture) alerts() []domain.CheckAlert {
+	f.t.Helper()
+
+	got, err := f.in.CheckAlerts(f.ctx(), []domain.FactoryID{f.factory}, t0.Truncate(24*time.Hour))
+	if err != nil {
+		f.t.Fatalf("CheckAlerts: %v", err)
+	}
+
+	return got
 }
 
 // Three failed checks in a row are an alert, tries left out, until one is done; a check that
@@ -492,50 +543,23 @@ func testTryCheck(f *fixture) {
 func testCheckAlerts(f *fixture) {
 	t := f.t
 
-	fail := func(at time.Time, try bool) {
-		f.t.Helper()
-
-		if _, _, err := f.in.Fire(f.ctx(), domain.TriggerFiring{
-			FactoryID: f.factory, Trigger: nightly, Source: domain.TriggerSchedule, EventKey: domain.OnSchedule,
-			IdempotencyKey: at.UTC().Format(time.RFC3339), Outcome: domain.FiringChecked, CheckState: domain.CheckQueued, At: at, Try: try,
-		}, nil, domain.FireLimits{}); err != nil {
-			t.Fatalf("Fire: %v", err)
-		}
-
-		_, l := f.claimCheck(at)
-		if err := f.in.FinishCheck(f.ctx(), l, domain.CheckResult{State: domain.CheckFailed, Reason: "timed out", At: at.Add(time.Minute)}); err != nil {
-			t.Fatalf("FinishCheck: %v", err)
-		}
-	}
-
-	alerts := func() []domain.CheckAlert {
-		f.t.Helper()
-
-		got, err := f.in.CheckAlerts(f.ctx(), []domain.FactoryID{f.factory}, t0.Truncate(24*time.Hour))
-		if err != nil {
-			t.Fatalf("CheckAlerts: %v", err)
-		}
-
-		return got
-	}
-
 	f.runCheck(t0, `{"file": [{"key": "a", "title": "a", "brief": "b"}, {"key": "b", "title": "b", "brief": "b"}]}`, domain.CheckLimits{PerCheck: 1}, false)
 
-	if got := alerts(); len(got) != 1 || got[0].Kind != domain.CheckLimited || got[0].Trigger != nightly || !got[0].At.Equal(t0.Add(time.Minute)) {
+	if got := f.alerts(); len(got) != 1 || got[0].Kind != domain.CheckLimited || got[0].Trigger != nightly || !got[0].At.Equal(t0.Add(time.Minute)) {
 		t.Errorf("alerts after a check over the limit = %+v; want one limit alert", got)
 	}
 
-	fail(t0.Add(time.Hour), false)
-	fail(t0.Add(2*time.Hour), false)
-	fail(t0.Add(3*time.Hour), true)
+	f.failCheck(t0.Add(time.Hour), false)
+	f.failCheck(t0.Add(2*time.Hour), false)
+	f.failCheck(t0.Add(3*time.Hour), true)
 
-	if got := alerts(); len(got) != 1 {
+	if got := f.alerts(); len(got) != 1 {
 		t.Errorf("alerts after two failures and a failed try = %+v; want only the limit", got)
 	}
 
-	fail(t0.Add(4*time.Hour), false)
+	f.failCheck(t0.Add(4*time.Hour), false)
 
-	if got := alerts(); len(got) != 2 || got[0].Kind != domain.CheckFailing || got[0].Reason != "timed out" || !got[0].At.Equal(t0.Add(4*time.Hour+time.Minute)) {
+	if got := f.alerts(); len(got) != 2 || got[0].Kind != domain.CheckFailing || got[0].Reason != "timed out" || !got[0].At.Equal(t0.Add(4*time.Hour+time.Minute)) {
 		t.Errorf("alerts after three failures = %+v; want failing at the newest, then the limit", got)
 	}
 

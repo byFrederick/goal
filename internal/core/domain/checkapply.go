@@ -3,6 +3,7 @@ package domain
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 )
@@ -147,7 +148,7 @@ const (
 func CheckNoteData(trigger, key, agent string, run RunID, text string) map[string]any {
 	return map[string]any{
 		"text": text, KeyNoteTrigger: trigger, KeyNoteKey: key, KeyNoteAgent: agent, KeyNoteRun: string(run),
-		"actor": EngineActor.Ref(),
+		evKeyActor: EngineActor.Ref(),
 	}
 }
 
@@ -259,9 +260,7 @@ func closedReason(k CheckKey) string {
 
 func cloneKeys(keys map[string]CheckKey) map[string]CheckKey {
 	out := make(map[string]CheckKey, len(keys))
-	for k, v := range keys {
-		out[k] = v
-	}
+	maps.Copy(out, keys)
 
 	return out
 }

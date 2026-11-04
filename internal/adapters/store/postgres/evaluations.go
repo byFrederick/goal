@@ -209,16 +209,8 @@ func fireInTx(ctx context.Context, q *db.Queries, factory, id uuid.UUID, f domai
 	}
 
 	if f.Outcome == domain.FiringChecked {
-		live, err := q.LiveTriggerCheck(ctx, db.LiveTriggerCheckParams{FactoryID: factory, Trigger: f.Trigger})
-		if err != nil {
-			return domain.TriggerFiring{}, false, fmt.Errorf("live check: %w", err)
-		}
-
-		switch {
-		case live && f.Try:
-			return domain.TriggerFiring{}, false, fmt.Errorf("try %s: %s: %w", f.Trigger, domain.StillChecking, ports.ErrConflict)
-		case live:
-			f.Outcome, f.CheckState, f.Reason = domain.FiringSkipped, "", domain.StillChecking
+		if err := skipWhileChecking(ctx, q, factory, &f); err != nil {
+			return domain.TriggerFiring{}, false, err
 		}
 	}
 
@@ -238,6 +230,23 @@ func fireInTx(ctx context.Context, q *db.Queries, factory, id uuid.UUID, f domai
 	f.ID, f.At = id.String(), f.At.UTC().Truncate(time.Microsecond)
 
 	return f, true, nil
+}
+
+// skipWhileChecking makes checked firing f skipped "still checking" while the trigger has a check
+// queued or running, or refuses it with ErrConflict when it is a try.
+func skipWhileChecking(ctx context.Context, q *db.Queries, factory uuid.UUID, f *domain.TriggerFiring) error {
+	live, err := q.LiveTriggerCheck(ctx, db.LiveTriggerCheckParams{FactoryID: factory, Trigger: f.Trigger})
+
+	switch {
+	case err != nil:
+		return fmt.Errorf("live check: %w", err)
+	case live && f.Try:
+		return fmt.Errorf("try %s: %s: %w", f.Trigger, domain.StillChecking, ports.ErrConflict)
+	case live:
+		f.Outcome, f.CheckState, f.Reason = domain.FiringSkipped, "", domain.StillChecking
+	}
+
+	return nil
 }
 
 // fileFiring reads the trigger's counts under its lock and, when limits let f create its item,

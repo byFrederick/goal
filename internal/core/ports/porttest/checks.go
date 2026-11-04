@@ -14,6 +14,31 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
+// checkAlertsOf are the alerts of k's finished checks fs, newest first: failing when the newest
+// domain.CheckFailuresShown failed, and limited from the first one at or after since over the limit.
+func checkAlertsOf(k stateKey, fs []domain.TriggerFiring, since time.Time) []domain.CheckAlert {
+	var out []domain.CheckAlert
+
+	failed := func(f domain.TriggerFiring) bool { return f.CheckState == domain.CheckFailed }
+	if len(fs) >= domain.CheckFailuresShown && !slices.ContainsFunc(fs[:domain.CheckFailuresShown], func(f domain.TriggerFiring) bool { return !failed(f) }) {
+		out = append(out, domain.CheckAlert{FactoryID: k.factory, Trigger: k.trigger, Kind: domain.CheckFailing, At: fs[0].CheckedAt, Reason: fs[0].Reason})
+	}
+
+	var first *domain.TriggerFiring
+
+	for i := range fs {
+		if f := &fs[i]; f.Applied != nil && f.Applied.OverLimit() && !f.CheckedAt.Before(since) {
+			first = f
+		}
+	}
+
+	if first != nil {
+		out = append(out, domain.CheckAlert{FactoryID: k.factory, Trigger: k.trigger, Kind: domain.CheckLimited, At: first.CheckedAt})
+	}
+
+	return out
+}
+
 // liveCheck reports whether the factory's trigger has a check queued or running.
 func (in *Intake) liveCheck(ctx context.Context, factory domain.FactoryID, trigger string) (bool, error) {
 	org, err := orgOf(ctx)
@@ -323,23 +348,11 @@ func (in *Intake) CheckAlerts(ctx context.Context, factories []domain.FactoryID,
 	out := []domain.CheckAlert{}
 
 	for k, fs := range finished {
-		slices.SortFunc(fs, func(a, b domain.TriggerFiring) int { return cmp.Or(b.CheckedAt.Compare(a.CheckedAt), cmp.Compare(b.ID, a.ID)) })
+		slices.SortFunc(fs, func(a, b domain.TriggerFiring) int {
+			return cmp.Or(b.CheckedAt.Compare(a.CheckedAt), cmp.Compare(b.ID, a.ID))
+		})
 
-		if len(fs) >= domain.CheckFailuresShown && !slices.ContainsFunc(fs[:domain.CheckFailuresShown], func(f domain.TriggerFiring) bool { return f.CheckState != domain.CheckFailed }) {
-			out = append(out, domain.CheckAlert{FactoryID: k.factory, Trigger: k.trigger, Kind: domain.CheckFailing, At: fs[0].CheckedAt, Reason: fs[0].Reason})
-		}
-
-		var first *domain.TriggerFiring
-
-		for i := range fs {
-			if f := &fs[i]; f.Applied != nil && f.Applied.OverLimit() && !f.CheckedAt.Before(since) {
-				first = f
-			}
-		}
-
-		if first != nil {
-			out = append(out, domain.CheckAlert{FactoryID: k.factory, Trigger: k.trigger, Kind: domain.CheckLimited, At: first.CheckedAt})
-		}
+		out = append(out, checkAlertsOf(k, fs, since)...)
 	}
 
 	slices.SortFunc(out, func(a, b domain.CheckAlert) int {
@@ -446,14 +459,19 @@ func (in *Intake) checkFiringsInput(org domain.OrgID, factory domain.FactoryID, 
 		out.State = slices.Clone(s)
 	}
 
-	// A key the trigger keeps for an item wins over its firing's dedupe value.
+	in.keyedItemsLocked(stateKey{org: org, factory: factory, trigger: trigger}, keys)
+
+	return keys
+}
+
+// keyedItemsLocked sets keys' key of each item sk keeps a key for, which wins over its firing's
+// dedupe value. Callers hold in.d.mu.
+func (in *Intake) keyedItemsLocked(sk stateKey, keys map[domain.ItemID]string) {
 	for k, r := range in.d.keys {
-		if k.org == org && k.factory == factory && k.trigger == trigger && r.item != "" {
+		if k.stateKey == sk && r.item != "" {
 			keys[r.item] = k.key
 		}
 	}
-
-	return keys
 }
 
 // addItemLocked adds it to out: to the closed keys when it closed within the window, to the open

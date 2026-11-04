@@ -303,8 +303,6 @@ func (f TriggerFiring) Check() error {
 		return fmt.Errorf("firing outcome %q must be created, skipped, missed or checked: %w", f.Outcome, ErrInvalid)
 	case (f.Outcome == FiringChecked) != (f.CheckState != ""):
 		return fmt.Errorf("only a checked firing has a check state, and it always does: %w", ErrInvalid)
-	case f.Try && f.Outcome != FiringChecked:
-		return fmt.Errorf("only a checked firing is a try: %w", ErrInvalid)
 	case f.ItemID != "" && f.Outcome != FiringCreated:
 		return fmt.Errorf("only a created firing names an item: %w", ErrInvalid)
 	case f.At.IsZero():
@@ -314,9 +312,12 @@ func (f TriggerFiring) Check() error {
 	return f.checkMissed()
 }
 
-// checkMissed checks that only a schedule's missed firing counts missed instants, at least one.
+// checkMissed checks that only a schedule's missed firing counts missed instants, at least one,
+// and that only a checked firing is a try.
 func (f TriggerFiring) checkMissed() error {
 	switch {
+	case f.Try && f.Outcome != FiringChecked:
+		return fmt.Errorf("only a checked firing is a try: %w", ErrInvalid)
 	case (f.Outcome == FiringMissed) != (f.Missed > 0) || f.Missed < 0:
 		return fmt.Errorf("only a missed firing counts missed instants, at least one: %w", ErrInvalid)
 	case f.Outcome == FiringMissed && f.Source != TriggerSchedule:

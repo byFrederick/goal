@@ -376,7 +376,7 @@ var (
 // TryCheck queues a try check of the trigger of the factory's current line now (ADR 0040
 // decision 19, Try on the trigger's page): it runs as any check does, leased by the next tick,
 // but its finish keeps only what it would file, note and skip (ports.Intake.FinishCheck). It
-// writes a trigger.tried audit entry by by and returns the queued firing. ErrTriggerNotFound for
+// writes a trigger.tried audit entry by the actor by and returns the queued firing. ErrTriggerNotFound for
 // a name the line does not have, ErrNoCheck for a trigger without a check, and ErrStillChecking
 // while its check is queued or running.
 func (e *Engine) TryCheck(ctx context.Context, factory domain.FactoryID, trigger string, by domain.Actor) (domain.TriggerFiring, error) {

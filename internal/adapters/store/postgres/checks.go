@@ -149,31 +149,37 @@ func (in *Intake) FinishCheck(ctx context.Context, l domain.CheckLease, r domain
 			return err
 		}
 
-		if r.State == domain.CheckDone {
-			a, err := applyCheck(ctx, q, row, r)
-			if err != nil {
-				return err
-			}
-
-			p.Decisions = r.Decisions
-			p.Applied, _ = json.Marshal(a) // plain fields: never fails
-		}
-
-		if _, err := q.FinishTriggerCheck(ctx, p); err != nil {
-			return err
-		}
-
-		if r.State != domain.CheckDone || row.Try || len(r.Saved) == 0 || string(r.Saved) == "null" {
-			return nil
-		}
-
-		return q.SaveTriggerState(ctx, db.SaveTriggerStateParams{FactoryID: row.FactoryID, Trigger: row.Trigger, State: r.Saved, UpdatedAt: r.At})
+		return finishCheckInTx(ctx, q, row, r, p)
 	})
 	if err != nil {
 		return fmt.Errorf("finish check %s: %w", l.FiringID, ruleError(err, ""))
 	}
 
 	return nil
+}
+
+// finishCheckInTx ends running check c as r says with p, in q's transaction under the trigger's
+// lock: a done r's answer applied (applyCheck) and kept, and its state saved unless c is a try.
+func finishCheckInTx(ctx context.Context, q *db.Queries, c db.RunningTriggerCheckRow, r domain.CheckResult, p db.FinishTriggerCheckParams) error {
+	if r.State == domain.CheckDone {
+		a, err := applyCheck(ctx, q, c, r)
+		if err != nil {
+			return err
+		}
+
+		p.Decisions = r.Decisions
+		p.Applied, _ = json.Marshal(a) // plain fields: never fails
+	}
+
+	if _, err := q.FinishTriggerCheck(ctx, p); err != nil {
+		return err
+	}
+
+	if r.State != domain.CheckDone || c.Try || len(r.Saved) == 0 || string(r.Saved) == "null" {
+		return nil
+	}
+
+	return q.SaveTriggerState(ctx, db.SaveTriggerStateParams{FactoryID: c.FactoryID, Trigger: c.Trigger, State: r.Saved, UpdatedAt: r.At})
 }
 
 // applyCheck applies done check c's answer in q's transaction, under the trigger's lock, as

@@ -624,11 +624,13 @@ func TestIntakeTrigger_MissedEvent(t *testing.T) {
 }
 
 const (
-	incidentsName = "new-incidents"
-	incidentsPath = intakePath + "/triggers/" + incidentsName + "/checks"
+	incidentsName       = "new-incidents"
+	incidentsPath       = intakePath + "/triggers/" + incidentsName + "/checks"
+	unknownTrigger      = intakePath + "/triggers/no-such-trigger"
+	codeTriggerNotFound = "trigger-not-found"
 )
 
-// check runs a check of new-incidents queued at at through the intake: done with answer (filing
+// check runs a check of new-incidents queued at the instant given through the intake: done with answer (filing
 // an item for each file entry, at most perCheck 2), or failed with reason when answer is "".
 func (h *harness) check(t *testing.T, at time.Time, answer, reason string) {
 	t.Helper()
@@ -686,27 +688,38 @@ func TestTriggerChecks_List(t *testing.T) {
 		t.Fatalf("checks = %d %+v; want two", code, got)
 	}
 
-	failed, done := got.Checks[0], got.Checks[1]
-	if failed.State != gen.TriggerCheckStateFailed || deref(failed.Reason) != "timed out after 5m0s" || len(failed.Filed) != 0 || failed.CheckedAt == nil {
+	if failed := got.Checks[0]; failed.State != gen.TriggerCheckStateFailed || deref(failed.Reason) != "timed out after 5m0s" || len(failed.Filed) != 0 ||
+		failed.CheckedAt == nil {
 		t.Errorf("newest check = %+v; want failed with its reason", failed)
 	}
 
-	if done.State != gen.TriggerCheckStateDone || done.CostUsd != 0.03 || done.Try || done.Reason != nil || len(done.Filed) != 2 ||
-		done.Filed[0].Key != "INC-1" || deref(done.Filed[0].Ref) != "#1" || len(done.Noted) != 0 {
-		t.Errorf("done check = %+v; want INC-1 and INC-2 filed as #1 and #2", done)
-	}
-
-	wantSkips := []gen.TriggerCheckSkip{{Key: "INC-3", Reason: domain.CheckOverLimit}, {Key: "INC-4", Reason: "a test page"}}
-	if !reflect.DeepEqual(done.Skipped, wantSkips) {
-		t.Errorf("skipped = %+v; want %+v", done.Skipped, wantSkips)
-	}
+	expectDoneCheck(t, got.Checks[1])
 
 	if code := h.call(t, http.MethodGet, incidentsPath+"?limit=1", "", &got); code != http.StatusOK || len(got.Checks) != 1 {
 		t.Errorf("limit=1 = %d, %d checks; want one", code, len(got.Checks))
 	}
 
-	if code, p := problemOfCall(t, h, http.MethodGet, intakePath+"/triggers/no-such-trigger/checks", ""); code != http.StatusNotFound || deref(p.Code) != "trigger-not-found" {
-		t.Errorf("an unknown trigger's checks = %d %s; want 404 trigger-not-found", code, deref(p.Code))
+	if code, p := problemOfCall(t, h, http.MethodGet, unknownTrigger+"/checks", ""); code != http.StatusNotFound || deref(p.Code) != codeTriggerNotFound {
+		t.Errorf("an unknown trigger's checks = %d %s; want 404 %s", code, deref(p.Code), codeTriggerNotFound)
+	}
+}
+
+// expectDoneCheck checks the done check with what it filed and skipped.
+func expectDoneCheck(t *testing.T, done gen.TriggerCheck) {
+	t.Helper()
+
+	filed := done.Filed
+	if len(filed) != 2 || filed[0].Key != "INC-1" || deref(filed[0].Ref) != "#1" {
+		t.Errorf("filed = %+v; want INC-1 and INC-2 filed as #1 and #2", filed)
+	}
+
+	if done.State != gen.TriggerCheckStateDone || done.CostUsd != 0.03 || done.Try || done.Reason != nil || len(done.Noted) != 0 {
+		t.Errorf("done check = %+v; want done, its cost and no notes", done)
+	}
+
+	wantSkips := []gen.TriggerCheckSkip{{Key: "INC-3", Reason: domain.CheckOverLimit}, {Key: "INC-4", Reason: "a test page"}}
+	if !reflect.DeepEqual(done.Skipped, wantSkips) {
+		t.Errorf("skipped = %+v; want %+v", done.Skipped, wantSkips)
 	}
 }
 
@@ -737,7 +750,7 @@ func TestTriggerChecks_Try(t *testing.T) {
 	}{
 		{"a try while one is queued", incidentsPath, http.StatusConflict, "still-checking"},
 		{"a trigger without a check", intakePath + "/triggers/" + nightlyName + "/checks", http.StatusUnprocessableEntity, "no-check"},
-		{"an unknown trigger", intakePath + "/triggers/no-such-trigger/checks", http.StatusNotFound, "trigger-not-found"},
+		{"an unknown trigger", unknownTrigger + "/checks", http.StatusNotFound, codeTriggerNotFound},
 	} {
 		if code, p := problemOfCall(t, h, http.MethodPost, c.path, ""); code != c.status || deref(p.Code) != c.code {
 			t.Errorf("%s: %d %s, want %d %s", c.what, code, deref(p.Code), c.status, c.code)

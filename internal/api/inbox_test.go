@@ -184,7 +184,8 @@ func checkLineEntries(t *testing.T, got gen.Inbox) {
 				t.Errorf("rework warning = %+v; want %+v", e.Rework, want)
 			}
 		case gen.InboxEntryKindDecision, gen.InboxEntryKindQuestion, gen.InboxEntryKindToolApproval, gen.InboxEntryKindBlocked,
-			gen.InboxEntryKindExpedite, gen.InboxEntryKindConversion, gen.InboxEntryKindKnowledgeSource:
+			gen.InboxEntryKindExpedite, gen.InboxEntryKindConversion, gen.InboxEntryKindKnowledgeSource,
+			gen.InboxEntryKindCheckFailing, gen.InboxEntryKindCheckLimit: // TestInbox_CheckEntries checks these
 		}
 	}
 }
@@ -247,23 +248,8 @@ func TestInbox_CheckEntries(t *testing.T) {
 	h.check(t, day.Add(2*time.Hour), `{"file": [{"key": "d", "title": "d", "brief": "b"}, {"key": "e", "title": "e", "brief": "b"},
 		{"key": "f", "title": "f", "brief": "b"}]}`, "")
 
-	entries := func() map[gen.InboxEntryKind][]gen.InboxEntry {
-		got := map[gen.InboxEntryKind][]gen.InboxEntry{}
-
-		for _, e := range h.inbox(t, "").Entries {
-			if e.Kind == gen.InboxEntryKindCheckFailing || e.Kind == gen.InboxEntryKindCheckLimit {
-				got[e.Kind] = append(got[e.Kind], e)
-			}
-		}
-
-		return got
-	}
-
-	got := entries()
-	if l := got[gen.InboxEntryKindCheckLimit]; len(l) != 1 || l[0].Id != "check_limit:"+acmeID+":"+incidentsName+":"+day.Format(time.DateOnly) ||
-		l[0].TriggerCheck == nil || l[0].TriggerCheck.Trigger != incidentsName || !l[0].Since.Equal(day.Add(time.Hour+time.Minute)) {
-		t.Errorf("limit entries = %+v; want one for today, since the first check over the limit", l)
-	}
+	got := h.checkEntries(t)
+	expectLimitEntry(t, got[gen.InboxEntryKindCheckLimit], day)
 
 	if len(got[gen.InboxEntryKindCheckFailing]) != 0 {
 		t.Errorf("failing entries = %+v; want none yet", got[gen.InboxEntryKindCheckFailing])
@@ -273,8 +259,34 @@ func TestInbox_CheckEntries(t *testing.T) {
 		h.check(t, day.Add(time.Duration(3+i)*time.Hour), "", "the check run ended failed: boom")
 	}
 
-	if f := entries()[gen.InboxEntryKindCheckFailing]; len(f) != 1 || f[0].Id != "check_failing:"+acmeID+":"+incidentsName ||
+	if f := h.checkEntries(t)[gen.InboxEntryKindCheckFailing]; len(f) != 1 || f[0].Id != "check_failing:"+acmeID+":"+incidentsName ||
 		f[0].TriggerCheck.Reason != "the check run ended failed: boom" {
 		t.Errorf("failing entries = %+v; want one with the newest reason", f)
+	}
+}
+
+// checkEntries are the inbox's check entries by kind.
+func (h *harness) checkEntries(t *testing.T) map[gen.InboxEntryKind][]gen.InboxEntry {
+	t.Helper()
+
+	got := map[gen.InboxEntryKind][]gen.InboxEntry{}
+
+	for _, e := range h.inbox(t, "").Entries {
+		if e.Kind == gen.InboxEntryKindCheckFailing || e.Kind == gen.InboxEntryKindCheckLimit {
+			got[e.Kind] = append(got[e.Kind], e)
+		}
+	}
+
+	return got
+}
+
+// expectLimitEntry checks that l is one check_limit entry for new-incidents on day, since its
+// first check over the limit.
+func expectLimitEntry(t *testing.T, l []gen.InboxEntry, day time.Time) {
+	t.Helper()
+
+	if len(l) != 1 || l[0].Id != "check_limit:"+acmeID+":"+incidentsName+":"+day.Format(time.DateOnly) ||
+		l[0].TriggerCheck == nil || l[0].TriggerCheck.Trigger != incidentsName || !l[0].Since.Equal(day.Add(time.Hour+time.Minute)) {
+		t.Errorf("limit entries = %+v; want one for today, since the first check over the limit", l)
 	}
 }

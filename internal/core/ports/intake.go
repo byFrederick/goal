@@ -196,8 +196,8 @@ type Intake interface {
 	// CheckAlerts are what of the factories' checks Needs you shows (ADR 0040 decision 19), tries
 	// left out: a trigger whose last domain.CheckFailuresShown finished checks all failed
 	// (domain.CheckFailing, at the newest one, with its reason), and a trigger with a done check
-	// since since that skipped something domain.CheckOverLimit (domain.CheckLimited, at the first
-	// such check). Ordered by factory, trigger and kind.
+	// at or after since that skipped something domain.CheckOverLimit (domain.CheckLimited, at the
+	// first such check). Ordered by factory, trigger and kind.
 	CheckAlerts(ctx context.Context, factories []domain.FactoryID, since time.Time) ([]domain.CheckAlert, error)
 }
 
