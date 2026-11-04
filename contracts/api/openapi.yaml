@@ -2035,6 +2035,13 @@ paths:
       operationId: submitItem
       x-goal-scope: item:create
       summary: Submit a work item to a factory's first station
+      description: >-
+        With start, the item waits at the first station until it may start (ADR 0040): its at has
+        passed and its after items are done. in becomes at when the item is filed, and each open
+        after item becomes a linked dependency by the caller; a done one is met and left out.
+        Problems: 400 for what the line does not take, a start with both at and in, a bad time or
+        wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of
+        another factory.
       requestBody:
         required: true
         content:
@@ -3784,6 +3791,54 @@ paths:
       responses:
         "200":
           description: The item with its new lane
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/start:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+    put:
+      operationId: setItemStart
+      x-goal-scope: item:create
+      tags: [work]
+      summary: Change when an item that has not started may start
+      description: >-
+        at or in replaces the item's start; after alone keeps it and adds the items as linked
+        dependencies by the caller (one the item already needs is kept, a done one is left out).
+        A start_changed event records the change. Problems: 400 for a start with both at and in, a
+        bad time or wait, a start more than 365 days ahead, or an after item that is cancelled,
+        unknown or of another factory; 409 item-closed (done or cancelled), item-started (it left
+        the first station, or an agent took it there), edge-cycle (an after item already needs it)
+        or item-changed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Start" }
+      responses:
+        "200":
+          description: The item with its new start
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: clearItemStart
+      x-goal-scope: item:create
+      tags: [work]
+      summary: Start an item now
+      description: >-
+        Clears the item's start time, so the first station releases it on its next tick (within
+        seconds); its after items still hold it until they are done, and the needs endpoints
+        remove them. A start_changed event without start_at records it. Problems: 409
+        item-closed, item-started or item-changed, as for setItemStart.
+      responses:
+        "200":
+          description: The item without a start time
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
@@ -5927,6 +5982,37 @@ components:
         type: { type: string, description: "One of the factory's work types; absent or empty, the first it declares, or none when it declares none" }
         lane: { type: string }
         priority: { type: integer, default: 0 }
+        start:
+          description: When the item may start; absent, as soon as it can
+          allOf: [{ $ref: "#/components/schemas/Start" }]
+    Start:
+      type: object
+      description: >-
+        When an item may start (ADR 0040): at a time, after a wait, after other items, or a time
+        and items. at and in cannot both be set. The start is at most 365 days ahead.
+      properties:
+        at:
+          type: string
+          minLength: 1
+          description: >-
+            An RFC 3339 time, or a date and time without a zone (2026-11-05T09:00, 2026-11-05
+            09:00 or 2026-11-05), read in the caller's time zone from their notification settings;
+            UTC for an API key or when they saved none
+        in:
+          type: string
+          pattern: "^[1-9][0-9]{0,4}[hdw]$"
+          description: A wait from now in whole hours, days or weeks, as in 36h, 7d or 2w; it becomes at
+        after:
+          type: array
+          maxItems: 50
+          description: The items it starts after, each an id (a UUID) or <factory>#<number>, as in goal#2, of the same factory
+          items: { type: string, minLength: 1 }
+    ItemStart:
+      type: object
+      description: When an item that has not started may start
+      required: [at]
+      properties:
+        at: { type: string, format: date-time }
     Rejection:
       type: object
       required: [reason]
@@ -5981,6 +6067,11 @@ components:
           type: string
           enum: [person, plan, trigger, follow-up]
           description: "Where the item came from: a person filed it, a plan made it a part, a trigger or follow-ups filed it (ADR 0040)"
+        start:
+          description: >-
+            When the item may start, absent when it may start now; it waits at the first station
+            until then (ADR 0040). Its after items are its needs
+          allOf: [{ $ref: "#/components/schemas/ItemStart" }]
         type: { type: string }
         lane: { type: string }
         title: { type: string }

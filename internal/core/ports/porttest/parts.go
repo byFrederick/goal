@@ -298,6 +298,7 @@ func (s *Store) closeAssembly(part *domain.Item, at time.Time, cancel bool) {
 
 	if parts.Done > 0 && !cancel && parent.IntegrationBranch != "" {
 		parent.State, parent.Station = domain.StateQueued, parent.IntegrationLandAt
+		started(parent, before.Station, at)
 
 		s.trackSpan(parent, &before, at)
 		s.append(domain.Event{
@@ -310,6 +311,7 @@ func (s *Store) closeAssembly(part *domain.Item, at time.Time, cancel bool) {
 
 	if parts.Done > 0 && !cancel {
 		parent.State, parent.DoneAt, parent.Station = domain.StateDone, at, lastDone(parts).Station
+		started(parent, before.Station, at)
 	}
 
 	s.trackSpan(parent, &before, at)

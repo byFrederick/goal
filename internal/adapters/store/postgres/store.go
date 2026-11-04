@@ -18,15 +18,24 @@ import (
 // leaseExpiredError is what a run that lost its lease records as its error.
 const leaseExpiredError = "lease expired"
 
-// CreateItem implements ports.Store: fileItem writes the item, its created event and its
-// item.filed audit entry in one transaction.
+// CreateItem implements ports.Store: fileItem writes the item, its created event, its item.filed
+// audit entry and a linked edge by its filer to each item it starts after, in one transaction.
 func (s *Store) CreateItem(ctx context.Context, n domain.NewItem) (domain.Item, error) {
 	factory, err := parseID("factory", string(n.FactoryID))
 	if err != nil {
 		return domain.Item{}, err
 	}
 
-	f := filing{n: n, factory: factory}
+	f := filing{n: n, factory: factory, afterBy: n.FiledBy()}
+
+	for _, need := range n.After {
+		id, err := parseID("after item", string(need))
+		if err != nil {
+			return domain.Item{}, err
+		}
+
+		f.after = append(f.after, id)
+	}
 
 	if n.ParentID != "" {
 		id, err := parseID("parent item", string(n.ParentID))
@@ -99,6 +108,78 @@ func (s *Store) Waiting(ctx context.Context, factory domain.FactoryID, station s
 	return items, nil
 }
 
+// Releasable implements ports.Store.
+func (s *Store) Releasable(ctx context.Context, factory domain.FactoryID, station string, now time.Time, limit int) ([]domain.Item, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	items, err := fetch(ctx, s.read, func(q *db.Queries) ([]domain.Item, error) {
+		rows, err := q.ReleasableItems(ctx, db.ReleasableItemsParams{FactoryID: fid, Station: station, Now: now, MaxItems: int64(limit)})
+		if err != nil {
+			return nil, err
+		}
+
+		return convertAll(rows, itemFrom)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("station %s: releasable items: %w", station, err)
+	}
+
+	return items, nil
+}
+
+// SetStart implements ports.Store: the guarded change and its start_changed event in one
+// transaction.
+func (s *Store) SetStart(ctx context.Context, id domain.ItemID, from domain.Position, at time.Time, by domain.Actor, now time.Time) (domain.Item, error) {
+	uid, err := parseID("item", string(id))
+	if err != nil {
+		return domain.Item{}, err
+	}
+
+	var it domain.Item
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		row, err := q.SetItemStart(ctx, db.SetItemStartParams{
+			StartAt: optionalTime(at), UpdatedAt: now, ID: uid, Station: from.Station, State: string(from.State),
+		})
+		if notFound(err) {
+			return movedOrMissing(ctx, q, uid, from)
+		}
+
+		if err != nil {
+			return fmt.Errorf("set start: %w", err)
+		}
+
+		if it, err = itemFrom(row); err != nil {
+			return err
+		}
+
+		return appendEvents(ctx, q, []domain.Event{domain.StartChangedEvent(it, by, now)})
+	})
+	if err != nil {
+		return domain.Item{}, fmt.Errorf("item %s: start: %w", id, err)
+	}
+
+	return it, nil
+}
+
+// movedOrMissing is why a guarded change of item id at from wrote no row: ErrNotFound when
+// there is no such item, ErrConflict when it is no longer at from.
+func movedOrMissing(ctx context.Context, q *db.Queries, id uuid.UUID, from domain.Position) error {
+	row, err := q.GetItem(ctx, id)
+	if notFound(err) {
+		return ports.ErrNotFound
+	}
+
+	if err != nil {
+		return fmt.Errorf("read item: %w", err)
+	}
+
+	return fmt.Errorf("item is %s at %s, not %s at %s: %w", row.State, row.Station, from.State, from.Station, ports.ErrConflict)
+}
+
 // Leases implements ports.Store.
 func (s *Store) Leases(ctx context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error) {
 	fid, err := parseID("factory", string(factory))
@@ -152,7 +233,7 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 			return slotTaken
 		}
 
-		next, err := q.LockNextWaitingItem(ctx, db.LockNextWaitingItemParams{FactoryID: factory, Station: c.Station.ID})
+		next, err := q.LockNextWaitingItem(ctx, db.LockNextWaitingItemParams{FactoryID: factory, Station: c.Station.ID, Now: c.Now})
 		if notFound(err) {
 			return fmt.Errorf("station %s: %w", c.Station.ID, ports.ErrNoWork)
 		}

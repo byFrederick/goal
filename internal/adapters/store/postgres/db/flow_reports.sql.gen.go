@@ -15,7 +15,7 @@ import (
 const flowItemTimes = `-- name: FlowItemTimes :many
 
 WITH done AS (
-  SELECT w.id, w.created_at, w.done_at FROM work_items w
+  SELECT w.id, coalesce(w.started_at, w.created_at) AS started_at, w.done_at FROM work_items w
   WHERE w.factory_id = $1 AND w.done_at >= $2::timestamptz
     AND w.done_at < $3::timestamptz
     AND ($4::text = '' OR w.type = $4::text)
@@ -23,12 +23,12 @@ WITH done AS (
   LIMIT $5
 )
 SELECT d.id AS item_id,
-       extract(epoch FROM d.done_at - d.created_at)::float8 AS lead_seconds,
+       extract(epoch FROM d.done_at - d.started_at)::float8 AS lead_seconds,
        s.station, s.state, s.rework_by,
        coalesce(sum(extract(epoch FROM s.left_at - s.entered_at)), 0)::float8 AS seconds
 FROM done d
-LEFT JOIN item_spans s ON s.item_id = d.id AND s.left_at IS NOT NULL
-GROUP BY d.id, d.done_at, d.created_at, s.station, s.state, s.rework_by
+LEFT JOIN item_spans s ON s.item_id = d.id AND s.left_at IS NOT NULL AND s.entered_at >= d.started_at
+GROUP BY d.id, d.done_at, d.started_at, s.station, s.state, s.rework_by
 ORDER BY d.done_at, d.id
 `
 
@@ -53,8 +53,9 @@ type FlowItemTimesRow struct {
 // constraint report's station waits. Every query runs under the transaction's organization
 // (row-level security).
 // The last max_items items of the type done in [since, until), each with its lead time in
-// seconds and its closed spans' seconds summed by station, state and rework_by (one row per
-// item without spans), by when it was done (work_items_done_at_idx, then item_spans_item_idx).
+// seconds (from started_at, or created_at when it never started) and its closed spans since then
+// summed in seconds by station, state and rework_by (one row per item without spans), by when it was done
+// (work_items_done_at_idx, then item_spans_item_idx).
 func (q *Queries) FlowItemTimes(ctx context.Context, arg FlowItemTimesParams) ([]FlowItemTimesRow, error) {
 	rows, err := q.db.Query(ctx, flowItemTimes,
 		arg.FactoryID,

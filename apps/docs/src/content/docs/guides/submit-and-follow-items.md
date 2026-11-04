@@ -20,6 +20,34 @@ goal run acme-line "Add a health check endpoint to the API" --type feature
 
 `goal run` prints the new item's reference, such as `acme-line#3`. Use that reference in the other commands.
 
+## Start an item later
+
+An item can wait to start: until a time, after other items are done, or both. It waits at the line's first station, where no agent works on it, and then moves on within seconds of the time passing and its items being done.
+
+```sh
+goal run acme-line "Rotate the staging certificates" --in 7d
+goal run acme-line "Release the mobile app" --at 2026-11-20T09:00 --after acme-line#12
+```
+
+- `--at` is a time. A time without a zone, such as `2026-11-20T09:00`, is read in the time zone of your notification settings, or UTC when you saved none or submit with an API key.
+- `--in` is a wait from now in whole hours, days or weeks: `36h`, `7d`, `2w`. Use `--at` or `--in`, not both.
+- `--after` names an item of the same factory that must be done first. Repeat it for more items. An item that is already done is left out; a cancelled or unknown one is refused.
+
+A start is at most 365 days ahead. `goal run` with a start prints when the item starts and returns without following it, as `--detach` does.
+
+To change the start of an item that has not started, or to start it now:
+
+```sh
+goal start acme-line#14 --in 2d
+goal start acme-line#14 --now
+```
+
+`--now` clears the time, so the first station releases the item on its next tick. Items it waits for still hold it; remove them with the item's needs. Once the item has left the first station, its start cannot change.
+
+The API takes the same start: `start: {at, in, after}` when you submit an item, `PUT /v1/orgs/{org}/items/{item}/start` to change it and `DELETE` on the same path to start it now.
+
+The wait does not count as lead time. An item's lead time counts from when it left the line's first station, or from when it was filed when it entered at a later station.
+
 ## Follow an item again
 
 ```sh

@@ -451,7 +451,8 @@ func (e *Engine) Run(ctx context.Context) error {
 func (e *Engine) Wait() { e.runs.Wait() }
 
 // Submit files an item on its factory's line through domain.File, which places it at the first
-// station and refuses what the line does not take with domain.ErrInvalid. The factory must
+// station, resolves its start at the clock's now and refuses what the line does not take with
+// domain.ErrInvalid; the store links each open after item. The factory must
 // belong to the organization in ctx; any other is ports.ErrNotFound.
 func (e *Engine) Submit(ctx context.Context, r domain.FileRequest) (domain.Item, error) {
 	l, err := e.lineIn(ctx, r.FactoryID)
@@ -563,11 +564,12 @@ func (e *Engine) SweepLeases(ctx context.Context) (int, error) {
 	return swept, errors.Join(errs...)
 }
 
-// releaseQueue moves items waiting at a queue station to the next station.
+// releaseQueue moves the items a queue station releases now to the next station: those with
+// no open need and no start in the future (ADR 0040 decision 4), which wait there until then.
 func (e *Engine) releaseQueue(ctx context.Context, l domain.Line, st domain.Station) error {
-	items, err := e.store.Waiting(ctx, l.FactoryID, st.ID, e.cfg.SweepLimit)
+	items, err := e.store.Releasable(ctx, l.FactoryID, st.ID, e.clock.Now(), e.cfg.SweepLimit)
 	if err != nil {
-		return fmt.Errorf("station %s: list waiting: %w", st.ID, err)
+		return fmt.Errorf("station %s: list releasable: %w", st.ID, err)
 	}
 
 	next, err := l.Next(st.ID)

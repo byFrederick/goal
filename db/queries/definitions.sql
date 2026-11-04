@@ -145,7 +145,8 @@ FOR NO KEY UPDATE;
 UPDATE work_items SET
   station = sqlc.arg(to_station),
   state = CASE WHEN state = 'blocked' THEN state ELSE sqlc.arg(state)::text END,
-  updated_at = sqlc.arg(at)::timestamptz
+  updated_at = sqlc.arg(at)::timestamptz,
+  started_at = coalesce(started_at, sqlc.arg(at)::timestamptz)
 WHERE factory_id = sqlc.arg(factory_id) AND station = sqlc.arg(from_station)
   AND state NOT IN ('done', 'cancelled', 'in_progress')
 RETURNING id, number, updated_at;
