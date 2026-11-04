@@ -40,6 +40,7 @@ describe('the Check panel', () => {
     const answer: KnowledgeCheck = {
       access: { ok: true },
       files: 212,
+      first_files: ['db/disk.md', 'k8s/pods.md'],
       bytes: 3 * 1024 * 1024,
       limits,
       over_limit: ['files'],
@@ -65,6 +66,7 @@ describe('the Check panel', () => {
     check.mockResolvedValue({
       access: { ok: false, error: 'the token was refused' },
       files: 0,
+      first_files: [],
       limits,
       over_limit: [],
       warnings: [],
