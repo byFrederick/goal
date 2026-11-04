@@ -3,14 +3,17 @@
 # `production` (write credentials; shared with the plan workflow, so it has no deployment-branch
 # rule: what keeps a non-main run from applying is this file's push-to-main trigger and the review
 # of any change to a workflow), one run at a time: a run in flight is never cancelled, and a newer
-# push waits for it. It plans to a saved file, applies that
+# push waits for it. It plans to a saved file, refuses it when it destroys or replaces a Secrets
+# Store secret the deployed goal Worker binds (deploy/terraform/scripts/bound-secrets-guard.sh: the
+# app deploys after the apply, so the running Worker still needs its old names), applies that
 # file (what the merged commit planned, nothing newer), then plans again with -detailed-exitcode
 # and fails if anything is left: drift or an error fails loudly, never silently. A failed apply
 # is fixed by a new pull request, never by a manual apply.
 # Only deploy/terraform/** triggers it: a change to this file alone applies nothing.
 # Hardening (github-actions-hardening skill): no permissions but the job's contents: read and
 # id-token: write (Google through Workload Identity Federation, deploy/terraform/ci.tf; no key), actions
-# pinned to commit SHAs, secrets only through step env: and only to the steps that run Terraform,
+# pinned to commit SHAs, secrets only through step env: and only to the steps that run Terraform
+# (CLOUDFLARE_DEPLOY_API_TOKEN only to the one read of the Worker's bindings),
 # no ${{ }} expressions inside run scripts, the age key in a mode-0600 file under $RUNNER_TEMP,
 # never echoed, and it and the saved plan deleted at the end (the plan is never uploaded). No step
 # prints outputs, decrypts the SOPS file or dumps the environment: GitHub masks the secrets, and
@@ -75,6 +78,34 @@ jobs:
           PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
           GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
         run: task -x tf:plan -- -input=false -out=tfplan
+      # The bindings of the goal Worker that production runs now, which may be older than main's
+      # wrangler.jsonc. A failed read fails the job: without it the guard cannot tell.
+      - name: Read the deployed goal Worker's bindings
+        env:
+          CLOUDFLARE_DEPLOY_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          umask 077
+          curl --fail --silent --show-error --max-time 30 \
+            -H "Authorization: Bearer $CLOUDFLARE_DEPLOY_API_TOKEN" \
+            -o "$RUNNER_TEMP/worker-settings.json" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/goal/settings"
+      # A failure here stops the job before the apply. The plan's JSON holds sensitive values in
+      # the clear: it goes through a pipe, never to disk.
+      - name: Refuse to destroy a store secret the deployed Worker binds
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GOAL_TF_STATE_ACCESS_KEY: ${{ secrets.GOAL_TF_STATE_ACCESS_KEY }}
+          GOAL_TF_STATE_SECRET_KEY: ${{ secrets.GOAL_TF_STATE_SECRET_KEY }}
+          PLANETSCALE_SERVICE_TOKEN_ID: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_ID }}
+          PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
+        run: |
+          set -o pipefail
+          task --silent tf:show -- -json tfplan \
+            | sh deploy/terraform/scripts/bound-secrets-guard.sh /dev/stdin "$RUNNER_TEMP/worker-settings.json"
       # A saved plan never prompts: it applies exactly what the step above planned.
       - name: Apply the saved plan
         env:
@@ -112,6 +143,6 @@ jobs:
               exit "$code"
               ;;
           esac
-      - name: Delete the saved plan and the age key
+      - name: Delete the saved plan, the age key and the Worker's settings
         if: always()
-        run: rm -f deploy/terraform/tfplan "$RUNNER_TEMP/sops-age-key.txt"
+        run: rm -f deploy/terraform/tfplan "$RUNNER_TEMP/sops-age-key.txt" "$RUNNER_TEMP/worker-settings.json"
