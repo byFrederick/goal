@@ -191,6 +191,15 @@ type JonahStore interface {
 	// sent-back rate is SentBack over Passed. LeadTimeP85 is the 85th percentile, interpolated
 	// between ranks as FlowMetrics does, of the durations of those spans.
 	StationFlow(ctx context.Context, factory domain.FactoryID, station string, since, until time.Time) (domain.StationFlow, error)
+	// EvidenceItems is the factory's items finished in [since, until), the most recently finished
+	// first, at most limit: what a review's evidence reads (ADR 0039 decision 2). A done item
+	// finished at its done_at, a cancelled one at its latest cancelled event. Each has its runs,
+	// oldest first, and its milestone events in append order: every kind but domain.PerTurnKinds.
+	EvidenceItems(ctx context.Context, factory domain.FactoryID, since, until time.Time, limit int) ([]domain.EvidenceItem, error)
+	// StationRunMedians is the median cost and turns, interpolated as percentile_cont(0.5) does, of
+	// the factory's finished station runs started in [since, until), one per station that has
+	// any, sorted by station: what makes a run an outlier (ADR 0039 decision 1).
+	StationRunMedians(ctx context.Context, factory domain.FactoryID, since, until time.Time) ([]domain.StationMedian, error)
 }
 
 // ProposalQuery selects a factory's proposals: in State when set, numbered below Before when

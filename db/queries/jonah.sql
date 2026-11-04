@@ -147,3 +147,47 @@ INSERT INTO jonah_proposals (id, factory_id, number, undoes, version_id, title, 
 VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(number), sqlc.arg(undoes), sqlc.arg(version_id), sqlc.arg(title),
         sqlc.arg(summary), sqlc.arg(files), sqlc.arg(paths)::text[], sqlc.arg(created_at))
 RETURNING *;
+
+-- name: EvidenceItems :many
+-- The factory's items finished in [since, until), the most recently finished first, at most
+-- max_items: a done item by its done_at (work_items_done_at_idx), a cancelled one by its latest
+-- cancelled event (item_events_factory_at_idx; a later one past until keeps it out).
+SELECT sqlc.embed(w), f.finished_at::timestamptz AS finished_at
+FROM (
+  SELECT d.id, d.done_at AS finished_at FROM work_items d
+  WHERE d.factory_id = sqlc.arg(factory_id) AND d.state = 'done'
+    AND d.done_at >= sqlc.arg(since)::timestamptz AND d.done_at < sqlc.arg(until)::timestamptz
+  UNION ALL
+  SELECT c.item_id, max(c.at) FROM item_events c
+  JOIN work_items cw ON cw.id = c.item_id AND cw.state = 'cancelled'
+  WHERE c.factory_id = sqlc.arg(factory_id) AND c.kind = 'cancelled' AND c.at >= sqlc.arg(since)::timestamptz
+  GROUP BY c.item_id
+  HAVING max(c.at) < sqlc.arg(until)::timestamptz
+) f
+JOIN work_items w ON w.id = f.id
+ORDER BY f.finished_at DESC, w.id
+LIMIT sqlc.arg(max_items);
+
+-- name: EvidenceRuns :many
+-- The runs of the items, by item, oldest first (agent_runs_item_id_idx).
+SELECT * FROM agent_runs WHERE item_id = ANY(sqlc.arg(item_ids)::uuid[]) ORDER BY item_id, started_at, id;
+
+-- name: EvidenceEvents :many
+-- The events of the items but those of the per-turn kinds, by item in append order
+-- (item_events_item_idx).
+SELECT * FROM item_events
+WHERE item_id = ANY(sqlc.arg(item_ids)::uuid[]) AND NOT (kind = ANY(sqlc.arg(per_turn)::text[]))
+ORDER BY item_id, id;
+
+-- name: StationRunMedians :many
+-- The median cost and turns of the factory's finished station runs started in [since, until), by
+-- station (agent_runs_factory_started_idx).
+SELECT station,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY cost_usd)::float8 AS cost_usd,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY turns)::float8 AS turns,
+       count(*)::bigint AS runs
+FROM agent_runs
+WHERE factory_id = sqlc.arg(factory_id) AND kind = 'station' AND status <> 'running'
+  AND started_at >= sqlc.arg(since)::timestamptz AND started_at < sqlc.arg(until)::timestamptz
+GROUP BY station
+ORDER BY station;

@@ -1014,6 +1014,108 @@ func TestServeRun_JonahBundle(t *testing.T) {
 	}
 }
 
+// A Jonah review's bundle holds its evidence under evidence/: README.md, versions.md and a file for
+// each item finished in the window that needed help, built with the stations' medians over the 30
+// days before the window's end and the versions published in it.
+func TestServeRun_JonahBundleHoldsEvidence(t *testing.T) {
+	t.Parallel()
+
+	h := newJonahHarness(t, harnessDeps{})
+	now := h.clock.Now()
+
+	// An earlier item's three runs set the build station's median at $1.
+	earlier := h.submit(t, factoryID, "Earlier work", "")
+	for i := range 3 {
+		h.finishedRun(t, earlier, now.Add(-20*24*time.Hour+time.Duration(i)*time.Minute), 1)
+	}
+
+	h.finishItem(t, earlier, now.Add(-20*24*time.Hour))
+
+	it := h.submit(t, factoryID, "Add a health endpoint", "Answer 200 on /healthz.")
+	h.finishedRun(t, it, now.Add(-2*24*time.Hour), 5)
+	h.sendBack(t, it, domain.EventNote, "carol", "", now.Add(-2*24*time.Hour+time.Hour))
+	h.finishItem(t, it, now.Add(-24*time.Hour))
+
+	h.publishVersion(t, "Ask for tests")
+	h.clock.Advance(time.Hour)
+
+	b := h.fetchBundle(t, h.runServer(t), h.jonahClaims())
+
+	item := string(b.Files["evidence/items/"+strconv.FormatInt(it.Number, 10)+".md"])
+	for _, want := range []string{"# #" + strconv.FormatInt(it.Number, 10) + " Add a health endpoint", "> Answer 200 on /healthz.", "| note | build | carol |", "## Outliers", "$5.00"} {
+		if !strings.Contains(item, want) {
+			t.Errorf("the item's evidence lacks %q:\n%s", want, item)
+		}
+	}
+
+	if _, ok := b.Files["evidence/items/"+strconv.FormatInt(earlier.Number, 10)+".md"]; ok {
+		t.Error("evidence for an item finished before the window, want none")
+	}
+
+	if readme := string(b.Files["evidence/README.md"]); !strings.Contains(readme, "1 of the 1 items that finished") {
+		t.Errorf("evidence/README.md =\n%s\nwant 1 of the 1 items", readme)
+	}
+
+	if versions := string(b.Files["evidence/versions.md"]); !strings.Contains(versions, "## v1") || !strings.Contains(versions, "> Ask for tests") {
+		t.Errorf("evidence/versions.md =\n%s\nwant v1 with its message", versions)
+	}
+}
+
+// finishedRun records a finished run of the build station's engineer on it, started at at, that cost usd.
+func (h *harness) finishedRun(t *testing.T, it domain.Item, at time.Time, usd float64) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	id, err := h.store.StartRun(ctx, ports.NewRun{FactoryID: it.FactoryID, ItemID: it.ID, Station: h.claims().Station, Agent: agentEngineer, Model: "model-a", StartedAt: at})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.store.FinishRun(ctx, id, domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd, Turns: 4}, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// finishItem moves it to the done station, done at at.
+func (h *harness) finishItem(t *testing.T, it domain.Item, at time.Time) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	cur, err := h.store.Item(ctx, it.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.store.Transition(ctx, ports.Transition{
+		ItemID: it.ID, From: cur.Position(), To: domain.Position{Station: "done", State: domain.StateDone}, At: at, DoneAt: at,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// publishVersion publishes the test factory's first version in h.drafts, now, with message.
+func (h *harness) publishVersion(t *testing.T, message string) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	m, err := h.drafts.PutBlobs(ctx, draftFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, d, err := h.drafts.CreateFactory(ctx, ports.NewFactory{ID: factoryID, Name: "acme-gateway", Manifest: m, By: domain.LocalUser})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.drafts.Publish(ctx, ports.Publish{Factory: factoryID, DraftRevision: d.Revision, Name: "acme-gateway", Message: message, By: domain.LocalUser}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // expectJonahSpec checks that b is a Jonah review's bundle for c: the policy's threshold and
 // model, the token's manual, agent and run, and nothing of an item's run.
 func expectJonahSpec(t *testing.T, b runBundle, c domain.TaskClaims, it domain.Item) {
@@ -1029,7 +1131,7 @@ func expectJonahSpec(t *testing.T, b runBundle, c domain.TaskClaims, it domain.I
 	}
 
 	// Everything else is an empty item-less spec: no item, station, brief, connection, rule,
-	// granted call, skill, file, git login, tool or repository.
+	// granted call, skill, git login, tool or repository, and no file but the evidence.
 	want := runBundle{
 		Spec: bundleSpec{
 			FactoryID: c.FactoryID, RunID: c.RunID, Agent: c.Agent, Model: "claude-haiku-5-5", Skills: []string{}, ToolsAllow: []string{},
@@ -1040,6 +1142,13 @@ func expectJonahSpec(t *testing.T, b runBundle, c domain.TaskClaims, it domain.I
 
 	got := b
 	got.Spec.Jonah = nil
+	got.Files = map[string][]byte{}
+
+	for p, body := range b.Files {
+		if !strings.HasPrefix(p, "evidence/") {
+			got.Files[p] = body
+		}
+	}
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("bundle =\n %+v\nwant (not item %s)\n %+v", got, it.ID, want)

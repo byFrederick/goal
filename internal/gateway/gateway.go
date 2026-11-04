@@ -109,7 +109,7 @@ import (
 )
 
 // EventToolCall is the kind of the audit event every gateway tool call appends.
-const EventToolCall domain.EventKind = "gateway_tool_call"
+const EventToolCall = domain.EventGatewayToolCall
 
 // Definitions returns a published definition version. The gateway reads the version a task's
 // run started on (its token's v claim), so the run sees that version's agents and connections
@@ -187,11 +187,13 @@ type DraftRequests interface {
 	Get(ctx context.Context, id domain.DraftRequestID) (domain.DraftRequest, error)
 }
 
-// Drafts reads a factory's open draft and the blobs of its files, for the organization in ctx;
-// ports.DefinitionStore satisfies it. The gateway only reads them: writing a draft is authoring's.
+// Drafts reads a factory's open draft and the blobs of its files, and its published versions
+// (a Jonah review's versions.md), for the organization in ctx; ports.DefinitionStore satisfies it.
+// The gateway only reads them: writing a draft is authoring's.
 type Drafts interface {
 	Draft(ctx context.Context, f domain.FactoryID) (domain.DefinitionVersion, error)
 	Blob(ctx context.Context, h domain.BlobHash) ([]byte, error)
+	Versions(ctx context.Context, f domain.FactoryID, before, limit int) ([]domain.DefinitionVersion, error)
 }
 
 // Config bounds the gateway. Zero values take the defaults below.

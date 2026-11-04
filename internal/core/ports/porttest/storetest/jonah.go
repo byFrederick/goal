@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -32,6 +33,8 @@ var jonahTests = []struct {
 	{"Jonah_SentBackSinceCountsRejections", testJonahSentBack},
 	{"Jonah_SentBackBetweenListsWindow", testJonahSentBackBetween},
 	{"Jonah_StationFlowMeasuresStation", testJonahStationFlow},
+	{"Jonah_EvidenceItemsFinishedInWindow", testJonahEvidenceItems},
+	{"Jonah_EvidenceStationMedians", testJonahEvidenceMedians},
 }
 
 // sha is a well-formed base_sha256.
@@ -739,5 +742,180 @@ func testJonahStationFlow(f *fixture) {
 
 	if got, err := f.Jonah.StationFlow(f.ctx(t), f.factory, stReview, since, until); err != nil || got != (domain.StationFlow{}) {
 		t.Errorf("StationFlow at an idle station = %+v, %v; want nothing measured", got, err)
+	}
+}
+
+// cancel closes it as cancelled where it is at at, with a person's cancelled event.
+func (f *fixture) cancel(t *testing.T, it domain.Item, at time.Time) {
+	t.Helper()
+
+	if _, err := f.Store.Transition(f.ctx(t), ports.Transition{
+		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: it.Station, State: domain.StateCancelled}, At: at,
+		Events: []domain.Event{by(it, ada, domain.EventCancelled, at, nil)},
+	}); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+}
+
+// EvidenceItems lists the factory's items done or cancelled in [since, until), the most recently
+// finished first, at most limit, each with its runs and its milestone events: not a per-turn
+// event, an item finished outside the window or still open, or another factory's or
+// organization's.
+func testJonahEvidenceItems(f *fixture) {
+	t := f.t
+	since, until := t1, t1.Add(time.Hour)
+
+	a := f.create(t, domain.NewItem{Title: "Fix the login", Body: "It times out."})
+	f.kindRun(t, a, domain.RunKindStation, t0.Add(time.Minute), 0.5)
+	f.appendEvents(t,
+		agentEvent(a, agWorker, domain.EventToolCall, since),
+		agentEvent(a, agWorker, domain.EventUsage, since),
+		by(a, ada, domain.EventNote, since.Add(time.Minute), map[string]any{keyText: "mind the tests"}),
+		agentEvent(a, agWorker, domain.EventGateRejected, since.Add(2*time.Minute)),
+	)
+	f.finish(t, a, since.Add(30*time.Minute), false)
+
+	b := f.create(t, domain.NewItem{Title: "Drop the export"})
+	f.cancel(t, b, since.Add(10*time.Minute))
+
+	f.finish(t, f.create(t, domain.NewItem{Title: "early"}), since.Add(-time.Second), false)
+	f.finish(t, f.create(t, domain.NewItem{Title: "late"}), until, false)
+	f.cancel(t, f.create(t, domain.NewItem{Title: "cancelled late"}), until)
+	f.create(t, domain.NewItem{Title: "open"})
+	f.finish(t, f.create(t, domain.NewItem{FactoryID: f.newFactory(t), Title: "another factory's"}), since, false)
+
+	got, err := f.Jonah.EvidenceItems(f.ctx(t), f.factory, since, until, 10)
+	if err != nil {
+		t.Fatalf("EvidenceItems: %v", err)
+	}
+
+	if len(got) != 2 || got[0].Item.ID != a.ID || got[1].Item.ID != b.ID {
+		t.Fatalf("EvidenceItems = %+v, want %s then %s", got, a.ID, b.ID)
+	}
+
+	expectEvidenceItems(t, got, a, since)
+
+	if got, err := f.Jonah.EvidenceItems(f.ctx(t), f.factory, since, until, 1); err != nil || len(got) != 1 || got[0].Item.ID != a.ID {
+		t.Errorf("EvidenceItems limit 1 = %+v, %v; want only the latest finished", got, err)
+	}
+
+	other := domain.WithOrg(t.Context(), f.NewOrg(t))
+	if got, err := f.Jonah.EvidenceItems(other, f.factory, since, until, 10); err != nil || len(got) != 0 {
+		t.Errorf("other org's EvidenceItems = %+v, %v; want none", got, err)
+	}
+
+	if _, err := f.Jonah.EvidenceItems(t.Context(), f.factory, since, until, 10); !errors.Is(err, domain.ErrNoOrg) {
+		t.Errorf("EvidenceItems without an org: %v, want ErrNoOrg", err)
+	}
+}
+
+// expectEvidenceItems checks got, testJonahEvidenceItems's items a and then the cancelled one:
+// when each finished, a's fields and run, and each one's milestone events.
+func expectEvidenceItems(t *testing.T, got []domain.EvidenceItem, a domain.Item, since time.Time) {
+	t.Helper()
+
+	if !got[0].FinishedAt.Equal(since.Add(30*time.Minute)) || !got[1].FinishedAt.Equal(since.Add(10*time.Minute)) {
+		t.Errorf("finished at %s and %s, want 30 and 10 minutes into the window", got[0].FinishedAt, got[1].FinishedAt)
+	}
+
+	if it := got[0].Item; it.Title != a.Title || it.Body != a.Body || it.Type != typeTask || it.State != domain.StateDone {
+		t.Errorf("item = %+v, want %s done with its title, body and type", it, a.ID)
+	}
+
+	if runs := got[0].Runs; len(runs) != 1 || roundTo(runs[0].Result.CostUSD, 4) != 0.5 || runs[0].Station != stWork {
+		t.Errorf("runs = %+v, want the one at %s that cost 0.5", runs, stWork)
+	}
+
+	expectMilestones(t, got[0].Events, []domain.EventKind{domain.EventNote, domain.EventGateRejected}, domain.PerTurnKinds)
+	expectMilestones(t, got[1].Events, []domain.EventKind{domain.EventCancelled}, nil)
+}
+
+// expectMilestones checks that events, in append order, hold every kind of want in that order
+// and none of unwanted.
+func expectMilestones(t *testing.T, events []domain.Event, want, unwanted []domain.EventKind) {
+	t.Helper()
+
+	var kinds []domain.EventKind
+
+	for _, e := range events {
+		if slices.Contains(unwanted, e.Kind) {
+			t.Errorf("events hold a %s event, want none", e.Kind)
+		}
+
+		if slices.Contains(want, e.Kind) {
+			kinds = append(kinds, e.Kind)
+		}
+	}
+
+	if !slices.Equal(kinds, want) {
+		t.Errorf("event kinds %v, want %v among %d events", kinds, want, len(events))
+	}
+}
+
+// stationRun records a run of kind on it at station, started at at, with turns and cost; finished
+// unless running.
+func (f *fixture) stationRun(t *testing.T, it domain.Item, station string, kind domain.RunKind, at time.Time, usd float64, turns int, running bool) {
+	t.Helper()
+
+	id, err := f.Store.StartRun(f.ctx(t), ports.NewRun{
+		FactoryID: it.FactoryID, ItemID: it.ID, Station: station, Agent: agWorker, Model: model, StartedAt: at, Kind: kind,
+	})
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	if running {
+		return
+	}
+
+	res := domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd, Turns: turns}
+	if err := f.Store.FinishRun(f.ctx(t), id, res, at.Add(time.Minute)); err != nil {
+		t.Fatalf("FinishRun: %v", err)
+	}
+}
+
+// StationRunMedians is the median cost and turns of the factory's finished station runs started in
+// [since, until), by station: not a running run, one started before the window, a jonah run or
+// another factory's.
+func testJonahEvidenceMedians(f *fixture) {
+	t := f.t
+	since, until := t1, t1.Add(time.Hour)
+	at := func(m int) time.Time { return since.Add(time.Duration(m) * time.Minute) }
+
+	it := f.create(t, domain.NewItem{})
+	elsewhere := f.create(t, domain.NewItem{FactoryID: f.newFactory(t)})
+
+	f.stationRun(t, it, stWork, domain.RunKindStation, at(1), 1, 10, false)
+	f.stationRun(t, it, stWork, "", at(2), 2, 20, false)
+	f.stationRun(t, it, stWork, domain.RunKindStation, at(3), 10, 30, false)
+	f.stationRun(t, it, stNext, domain.RunKindStation, at(4), 1, 4, false)
+	f.stationRun(t, it, stNext, domain.RunKindStation, at(5), 3, 6, false)
+	f.stationRun(t, it, stWork, domain.RunKindStation, at(6), 100, 100, true)
+	f.stationRun(t, it, stWork, domain.RunKindStation, since.Add(-time.Second), 50, 50, false)
+	f.stationRun(t, it, stWork, domain.RunKindJonah, at(7), 70, 70, false)
+	f.stationRun(t, it, stWork, domain.RunKindStation, until, 60, 60, false)
+	f.stationRun(t, elsewhere, stWork, domain.RunKindStation, at(8), 80, 80, false)
+
+	got, err := f.Jonah.StationRunMedians(f.ctx(t), f.factory, since, until)
+	if err != nil {
+		t.Fatalf("StationRunMedians: %v", err)
+	}
+
+	for i := range got {
+		got[i].CostUSD = roundTo(got[i].CostUSD, 4)
+	}
+
+	want := []domain.StationMedian{{Station: stNext, CostUSD: 2, Turns: 5, Runs: 2}, {Station: stWork, CostUSD: 2, Turns: 20, Runs: 3}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("StationRunMedians = %+v, want %+v", got, want)
+	}
+
+	other := domain.WithOrg(t.Context(), f.NewOrg(t))
+	if got, err := f.Jonah.StationRunMedians(other, f.factory, since, until); err != nil || len(got) != 0 {
+		t.Errorf("other org's StationRunMedians = %+v, %v; want none", got, err)
+	}
+
+	if _, err := f.Jonah.StationRunMedians(t.Context(), f.factory, since, until); !errors.Is(err, domain.ErrNoOrg) {
+		t.Errorf("StationRunMedians without an org: %v, want ErrNoOrg", err)
 	}
 }

@@ -16,11 +16,14 @@ import (
 )
 
 // Jonah reads what a Jonah review's bundle holds besides its definition files (ADR 0034
-// decision 1): the factory's sent-back events in the review's window and its rejected proposals.
+// decision 1): the factory's sent-back events in the review's window and its rejected proposals,
+// and the items and station medians its evidence is built from (ADR 0039 decision 2).
 // ports.JonahStore satisfies it.
 type Jonah interface {
 	SentBackBetween(ctx context.Context, factory domain.FactoryID, since, until time.Time, limit int) ([]domain.SentBack, error)
 	Proposals(ctx context.Context, q ports.ProposalQuery) ([]domain.Proposal, error)
+	EvidenceItems(ctx context.Context, factory domain.FactoryID, since, until time.Time, limit int) ([]domain.EvidenceItem, error)
+	StationRunMedians(ctx context.Context, factory domain.FactoryID, since, until time.Time) ([]domain.StationMedian, error)
 }
 
 // errNoJonah answers a jonah token's bundle when the gateway has no Deps.Jonah: 503.
@@ -36,6 +39,12 @@ const (
 	rejectedPage  = 50
 	rejectedScan  = 500
 	rejectedLimit = 50
+	// evidenceItemLimit caps the finished items the evidence reads, the latest finished first, and
+	// evidenceVersionLimit the factory's latest versions read for versions.md and the runs' numbers.
+	evidenceItemLimit    = 200
+	evidenceVersionLimit = 100
+	// evidenceDir is where the evidence files are in the bundle's files.
+	evidenceDir = "evidence/"
 )
 
 // bundleJonah is spec.jonah, what goal-agent's jonah mode reads (apps/worker/src/spec.ts Jonah).
@@ -76,8 +85,8 @@ type jonahRejected struct {
 
 // jonahBundle is the bundle of a Jonah review's run: the files of c's version that a proposal may
 // edit, the factory's sent-back events in c's window and its proposals rejected within
-// rejectedWithin of now. It names no item, repository, connection, knowledge source or rule, and
-// records nothing. The version must be c's factory's in c's organization (ctx).
+// rejectedWithin of now, and the evidence files under evidenceDir. It names no item, repository,
+// connection, knowledge source or rule, and records nothing. The version must be c's factory's in c's organization (ctx).
 func (g *Gateway) jonahBundle(ctx context.Context, c domain.TaskClaims) (runBundle, error) {
 	if g.jonah == nil {
 		return runBundle{}, errNoJonah
@@ -107,13 +116,18 @@ func (g *Gateway) jonahBundle(ctx context.Context, c domain.TaskClaims) (runBund
 		return runBundle{}, err
 	}
 
+	files, err := g.jonahEvidence(ctx, c, line)
+	if err != nil {
+		return runBundle{}, err
+	}
+
 	return runBundle{
 		Spec: bundleSpec{
 			FactoryID: c.FactoryID, RunID: c.RunID, Agent: c.Agent, Model: cmp.Or(c.Model, line.Jonah.Model), Purpose: line.Purpose,
 			Skills: []string{}, ToolsAllow: []string{}, ToolsDeny: []string{}, Connections: []bundleConnection{}, Rules: []bundleRule{},
 			GrantedCalls: []grantedCall{}, Jonah: j,
 		},
-		Files: map[string][]byte{},
+		Files: files,
 		Git:   []gitCredential{},
 		Tools: []string{},
 	}, nil
@@ -187,4 +201,45 @@ func (g *Gateway) jonahRejected(ctx context.Context, factory domain.FactoryID) (
 	}
 
 	return out, nil
+}
+
+// jonahEvidence is the evidence folder of c's window (domain.BuildEvidence) as bundle files under
+// evidenceDir: the items finished in the window, the stations' medians over the
+// domain.EvidenceMedianWindow before its end and the factory's latest versions, read through
+// Deps.Drafts (none without it).
+func (g *Gateway) jonahEvidence(ctx context.Context, c domain.TaskClaims, line domain.Line) (map[string][]byte, error) {
+	since, until := time.Unix(c.WindowStart, 0).UTC(), time.Unix(c.WindowEnd, 0).UTC()
+
+	items, err := g.jonah.EvidenceItems(ctx, c.FactoryID, since, until, evidenceItemLimit)
+	if err != nil {
+		return nil, fmt.Errorf("evidence items of factory %s: %w", c.FactoryID, err)
+	}
+
+	medians, err := g.jonah.StationRunMedians(ctx, c.FactoryID, until.Add(-domain.EvidenceMedianWindow), until)
+	if err != nil {
+		return nil, fmt.Errorf("station run medians of factory %s: %w", c.FactoryID, err)
+	}
+
+	var versions []domain.DefinitionVersion
+	if g.drafts != nil {
+		if versions, err = g.drafts.Versions(ctx, c.FactoryID, 0, evidenceVersionLimit); err != nil {
+			return nil, fmt.Errorf("versions of factory %s: %w", c.FactoryID, err)
+		}
+	}
+
+	stations := make([]string, len(line.Stations))
+	for i, st := range line.Stations {
+		stations[i] = st.ID
+	}
+
+	evidence := domain.BuildEvidence(domain.EvidenceInput{
+		Since: since, Until: until, Stations: stations, Items: items, Medians: medians, Versions: versions,
+	})
+
+	files := make(map[string][]byte, len(evidence))
+	for p, body := range evidence {
+		files[evidenceDir+p] = body
+	}
+
+	return files, nil
 }
