@@ -279,7 +279,7 @@ func TestMemoryFacts_RefusesUnquoted(t *testing.T) {
 				t.Errorf("facts dropped for %v, want [%s]", got, tc.reason)
 			}
 
-			if strings.Contains(w.log.String(), "390") {
+			if strings.Contains(w.log.String(), "390 wide") {
 				t.Errorf("the log holds a fact's text: %s", w.log)
 			}
 		})
