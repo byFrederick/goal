@@ -26,7 +26,8 @@ type ProposedDefinitions interface {
 var errNoTries = errors.New("the gateway has no tries store")
 
 // tryBundle is a try of a past item's bundle (ADR 0039 decision 9): the station's bundle for the
-// try's agent on the token's version with the proposal's edits applied to it, whose brief is
+// try's agent on the token's version with the proposal's edits applied to it (a publish's try's
+// own edits, on its own version), whose brief is
 // the one the original run recorded and whose inputs are the item's outputs from the runs that
 // ended before it started. Its repository is the original run's commit, fetched by SHA, with the
 // login that clones it, which prepare drops before the agent starts. Its environment has no files
@@ -53,14 +54,25 @@ func (g *Gateway) tryBundle(ctx context.Context, c domain.TaskClaims) (runBundle
 		return runBundle{}, err
 	}
 
-	p, err := g.jonah.Proposal(ctx, c.FactoryID, try.ProposalNumber)
-	if err != nil {
-		return runBundle{}, fmt.Errorf("try %s: proposal %d: %w", try.ID, try.ProposalNumber, err)
+	// A proposal's try runs on its edits; a publish's on its own, the draft's (ADR 0039 decision 12).
+	edits := try.Edits
+
+	if try.ProposalID == "" && try.VersionID != c.VersionID {
+		return runBundle{}, fmt.Errorf("%w: try %s runs on version %s, not %s", errForbidden, try.ID, try.VersionID, c.VersionID)
 	}
 
-	defs, err := g.proposed.Proposed(ctx, c.VersionID, p.Edits)
+	if try.ProposalID != "" {
+		p, err := g.jonah.Proposal(ctx, c.FactoryID, try.ProposalNumber)
+		if err != nil {
+			return runBundle{}, fmt.Errorf("try %s: proposal %d: %w", try.ID, try.ProposalNumber, err)
+		}
+
+		edits = p.Edits
+	}
+
+	defs, err := g.proposed.Proposed(ctx, c.VersionID, edits)
 	if err != nil {
-		return runBundle{}, fmt.Errorf("try %s: version %s with proposal %d: %w", try.ID, c.VersionID, p.Number, err)
+		return runBundle{}, fmt.Errorf("try %s: version %s with its edits: %w", try.ID, c.VersionID, err)
 	}
 
 	pg := *g

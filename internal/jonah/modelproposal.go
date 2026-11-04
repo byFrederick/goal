@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"regexp"
 	"slices"
 	"strconv"
@@ -24,6 +25,8 @@ type ModelStore interface {
 	AgentDoneItems(ctx context.Context, factory domain.FactoryID, agent string, limit int) ([]domain.AgentItem, error)
 	ProposeModel(ctx context.Context, factory domain.FactoryID, version domain.DefinitionVersionID, agent string, n domain.NewProposal,
 		tries []domain.NewPastTry, at time.Time) (domain.Proposal, []domain.PastTry, error)
+	KeptReads
+	RunTargets
 }
 
 // ModelDefinitions reads the version a model proposal is made against; *definitions.Cache
@@ -74,9 +77,10 @@ type ModelRequest struct {
 	Confirm bool
 }
 
-// ModelEstimate is what a model proposal will try and cost: the agent's newest finished items,
-// domain.ModelTriesPerItem tries of each, priced at each item's original run's cost per try, and
-// what is left of Jonah's budget (ADR 0039 decision 16).
+// ModelEstimate is what a model proposal will try and cost: the agent's newest finished items and
+// the kept tests at its stations (ADR 0039 decision 12), domain.ModelTriesPerItem tries of each,
+// priced at each one's original run's cost per try, and what is left of Jonah's budget (ADR 0039
+// decision 16).
 type ModelEstimate struct {
 	Agent         string
 	CurrentModel  string
@@ -85,6 +89,8 @@ type ModelEstimate struct {
 	Tries         int
 	EstimateUSD   float64
 	BudgetLeftUSD float64
+	// kept are the kept tests the proposal tries, with the runs their tries rerun.
+	kept []keptTarget
 }
 
 // modelItemsRead is how many of the agent's done items are read to find domain.MaxPastTryItems
@@ -156,10 +162,19 @@ func (m *ModelProposals) estimate(ctx context.Context, f domain.FactoryID, line 
 	}
 
 	est.Items = items[:min(len(items), domain.MaxPastTryItems)]
-	est.Tries = domain.ModelTriesPerItem * len(est.Items)
+
+	if est.kept, _, err = keptTargets(ctx, m.d.Store, m.d.Store, f, line, agentStations(line, a.Name)); err != nil {
+		return ModelEstimate{}, fmt.Errorf("model proposal: %w", err)
+	}
+
+	est.Tries = domain.ModelTriesPerItem * (len(est.Items) + len(est.kept))
 
 	for _, it := range est.Items {
 		est.EstimateUSD += domain.ModelTriesPerItem * it.Run.Result.CostUSD
+	}
+
+	for _, k := range est.kept {
+		est.EstimateUSD += domain.ModelTriesPerItem * k.run.Result.CostUSD
 	}
 
 	spend, err := m.d.Store.JonahSpendSince(ctx, f, m.d.Clock.Now().UTC().Add(-BudgetWindow))
@@ -219,6 +234,26 @@ func (m *ModelProposals) propose(ctx context.Context, f domain.FactoryID, line d
 		}
 	}
 
+	if len(est.kept) > 0 {
+		edited, err := domain.ApplyEdits(files, edits)
+		if err != nil {
+			return domain.Proposal{}, fmt.Errorf("model proposal: apply the edit: %w", err)
+		}
+
+		key := domain.ContentKey(edited)
+
+		for _, k := range est.kept {
+			model := ""
+			if k.run.Agent == est.Agent {
+				model = est.Model
+			}
+
+			for attempt := 1; attempt <= domain.ModelTriesPerItem; attempt++ {
+				tries = append(tries, k.try(line, key, attempt, model))
+			}
+		}
+	}
+
 	if n.Supersedes, err = m.overlapping(ctx, f, edits, files); err != nil {
 		return domain.Proposal{}, err
 	}
@@ -241,6 +276,24 @@ func (m *ModelProposals) propose(ctx context.Context, f domain.FactoryID, line d
 		slog.String("agent", est.Agent), slog.String("model", est.Model), slog.Int("tries", len(queued)))
 
 	return p, nil
+}
+
+// agentStations are the agent stations of l that agent works, as its own or in a route: what a
+// change of its model reaches.
+func agentStations(l domain.Line, agent string) []string {
+	var out []string
+
+	for _, st := range l.Stations {
+		if st.Kind != domain.KindAgent {
+			continue
+		}
+
+		if st.Agent == agent || slices.Contains(slices.Collect(maps.Values(st.Route)), agent) {
+			out = append(out, st.ID)
+		}
+	}
+
+	return out
 }
 
 // maxEvidenceQuote is the longest evidence quote a proposal stores (domain.NewProposal.Check).
