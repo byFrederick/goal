@@ -127,6 +127,54 @@ func (r *reader) Fetch(ctx context.Context, _ domain.SyncSpec, id string) (domai
 	return domain.SourceDoc{SourceItem: domain.SourceItem{ID: id, MIME: domain.MediaMarkdown}, Body: []byte(body)}, nil
 }
 
+// archiving is a reader that also reads an archive (ports.ArchiveReader). An archive yields
+// every asked item whose content is still the version listed, except those in skip. With
+// breakAfter above 0 it fails as a whole after yielding that many.
+type archiving struct {
+	*reader
+
+	archives   int
+	skip       map[string]bool
+	breakAfter int
+}
+
+func (a *archiving) Archive(_ context.Context, _ domain.SyncSpec, items []domain.SourceItem) iter.Seq2[domain.SourceDoc, error] {
+	a.mu.Lock()
+	a.archives++
+	docs := maps.Clone(a.docs)
+	a.mu.Unlock()
+
+	return func(yield func(domain.SourceDoc, error) bool) {
+		n := 0
+
+		for _, item := range items {
+			body, ok := docs[item.ID]
+			if !ok || a.skip[item.ID] || string(domain.HashBlob([]byte(body))) != item.Version {
+				continue
+			}
+
+			if a.breakAfter > 0 && n == a.breakAfter {
+				yield(domain.SourceDoc{}, errors.New("the archive is cut short"))
+
+				return
+			}
+
+			n++
+
+			if !yield(domain.SourceDoc{SourceItem: domain.SourceItem{ID: item.ID, MIME: domain.MediaMarkdown}, Body: []byte(body)}, nil) {
+				return
+			}
+		}
+	}
+}
+
+func (a *archiving) count() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	return a.archives
+}
+
 // world is one organization's knowledge base on the port fakes, with a repository source
 // "runbooks" read by docs and an upload source "handbook".
 type world struct {
@@ -189,8 +237,13 @@ func (w *world) ingestor(kb ports.Knowledge) *knowledge.Ingestor {
 		kb = w.kb
 	}
 
+	return w.ingestorReading(kb, w.docs)
+}
+
+// ingestorReading syncs kb's repository and Confluence sources with r.
+func (w *world) ingestorReading(kb ports.Knowledge, r ports.SourceReader) *knowledge.Ingestor {
 	return knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: kb, Secrets: w.secrets, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: w.docs, "confluence": w.docs},
+		Knowledge: kb, Secrets: w.secrets, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: r, "confluence": r},
 		Objects: w.objects, Clock: w.clock, TempDir: w.t.TempDir(),
 	})
 }
