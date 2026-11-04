@@ -183,6 +183,25 @@ for (const theme of ['light', 'dark'] as const) {
   }
 }
 
+for (const scheme of ['light', 'dark'] as const) {
+  for (const width of [1440, 1280, 1024, 768, 390] as const) {
+    test.describe(`First files, ${scheme} at ${width} px`, () => {
+      test.use({ viewport: { width, height: 900 }, colorScheme: scheme });
+
+      test('the Check lists the first files with "and N more", and the page fits', async ({ page }) => {
+        await page.goto('/o/acme/knowledge/new?kind=repository');
+        await page.getByLabel('Name', { exact: true }).fill('runbooks');
+        await page.getByLabel('When should agents read it?').fill('How to fix what pages us. Read before acting.');
+        await page.getByRole('button', { name: 'Check' }).click();
+        const card = page.getByRole('region', { name: 'First files' });
+        await expect(card).toContainText('db/disk.md');
+        await expect(card).toContainText('and 9 more');
+        await fits(page);
+      });
+    });
+  }
+}
+
 // ADR 0038 decisions 1 and 2: sync only on demand, a Confluence root page, and Replace value on the alert.
 const widths = [1440, 1280, 1024, 768, 390] as const;
 

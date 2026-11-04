@@ -181,3 +181,38 @@ describe('the standing rules of an MCP server', () => {
     expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
   });
 });
+
+describe('a server card after a test', () => {
+  function card(results: Record<string, ServerTest>) {
+    return (
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <TooltipProvider>
+          <McpCard
+            environment="default"
+            spec={readEnv(file)}
+            change={() => undefined}
+            readOnly={false}
+            results={results}
+            testing={undefined}
+            testServer={() => undefined}
+          />
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+  }
+
+  it('opens to offer Test again when its result arrives, and swaps the status in without animating at first', () => {
+    api.list.mockResolvedValue([]);
+    const { rerender } = render(card({}));
+    const before = screen.getAllByText('Not tested')[0];
+    expect(before?.className).not.toContain('animate-text-states-swap');
+    expect(screen.queryByRole('button', { name: 'Test linear' })).toBeNull();
+
+    rerender(card({ linear }));
+
+    const status = screen.getByText('3 found');
+    expect(status.className).toContain('motion-safe:animate-text-states-swap');
+    expect(status.className).toContain('motion-reduce:animate-fade-in');
+    expect(screen.getByRole('button', { name: 'Test linear' }).textContent).toBe('Test again');
+  });
+});
