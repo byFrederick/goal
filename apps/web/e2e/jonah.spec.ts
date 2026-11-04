@@ -30,10 +30,15 @@ test('what Jonah noticed sits right under After publish, not below its placehold
   const noticed = page.getByRole('region', { name: /What Jonah noticed this week/ });
   await expect(after).toBeVisible();
   await expect(noticed).toBeVisible();
-  const afterBox = await after.boundingBox();
-  const noticedBox = await noticed.boundingBox();
-  if (!afterBox || !noticedBox) throw new Error('both regions need a box');
-  expect(noticedBox.y - (afterBox.y + afterBox.height)).toBeLessThan(24);
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+  await expect
+    .poll(async () => {
+      const afterBox = await after.boundingBox();
+      const noticedBox = await noticed.boundingBox();
+      if (!afterBox || !noticedBox) return Number.POSITIVE_INFINITY;
+      return noticedBox.y - (afterBox.y + afterBox.height);
+    })
+    .toBeLessThan(24);
 });
 
 test('the tabs are Overview, Proposals and Tests, each at its own address', async ({ page }) => {
