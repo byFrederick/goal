@@ -242,30 +242,16 @@ describe('Runtime', () => {
     expect(screen.queryByText(/connection/i)).toBeNull();
   });
 
-  it('writes the box size to basics.size', async () => {
+  it('points at environments instead of editing the box size and tools', async () => {
     await renderSettings();
-    fireEvent.click(screen.getByRole('radio', { name: 'Large' }));
+    const runtime = screen.getByRole('region', { name: 'Runtime' });
 
-    const basics = await savedSection('basics', (v) => v.size === 'large');
-    expect(basics.size).toBe('large');
-  });
-
-  it('appends a mise tool spec to basics.tools', async () => {
-    await renderSettings();
-    fireEvent.change(screen.getByPlaceholderText('name@version…'), { target: { value: 'go@1.26.10' } });
-    fireEvent.keyDown(screen.getByLabelText('Add a tool'), { key: 'Enter' });
-
-    const basics = await savedSection('basics', (v) => (v.tools ?? []).includes('go@1.26.10'));
-    expect(basics.tools).toEqual(['node@22', 'go@1.26.10']);
-  });
-
-  it('refuses a tool that is not a mise tool spec', async () => {
-    await renderSettings();
-    fireEvent.change(screen.getByPlaceholderText('name@version…'), { target: { value: 'not a tool!' } });
-    fireEvent.keyDown(screen.getByLabelText('Add a tool'), { key: 'Enter' });
-
-    expect(await screen.findByText(/A mise tool spec, such as go/)).toBeTruthy();
-    expect(api.saves.some((s) => s.section === 'basics' && JSON.stringify(s.value).includes('not a tool'))).toBe(false);
+    expect(within(runtime).getByText(/Box size, CLIs and what agents reach live in/)).toBeTruthy();
+    const link = within(runtime).getByRole('link', { name: 'environments' });
+    expect(link.getAttribute('href')).toBe('/o/acme/f/sre/definition/environments');
+    expect(within(runtime).queryByRole('radio')).toBeNull();
+    expect(within(runtime).queryByText('Tools')).toBeNull();
+    expect(within(runtime).queryByPlaceholderText('name@version…')).toBeNull();
   });
 });
 
