@@ -396,6 +396,15 @@ var probes = map[string]probe{
 	"getWebhookDelivery": {
 		method: http.MethodGet, path: probeHooks + "/" + noDocument + "/deliveries/" + noDocument, org: testOrg, factory: acmeID,
 	},
+	"listWebhooks":             {method: http.MethodGet, path: "/v1/orgs/acme/webhooks", org: testOrg},
+	"createWebhook":            {method: http.MethodPost, path: "/v1/orgs/acme/webhooks", body: `{"name":"ci-hooks","sender":"github"}`, org: testOrg},
+	"getWebhook":               {method: http.MethodGet, path: "/v1/orgs/acme/webhooks/ci-hooks", org: testOrg},
+	"patchWebhook":             {method: http.MethodPatch, path: "/v1/orgs/acme/webhooks/ci-hooks", body: `{"enabled":false}`, org: testOrg},
+	"deleteWebhook":            {method: http.MethodDelete, path: "/v1/orgs/acme/webhooks/ci-hooks", org: testOrg},
+	"listOrgWebhookDeliveries": {method: http.MethodGet, path: "/v1/orgs/acme/webhooks/ci-hooks/deliveries", org: testOrg},
+	"getOrgWebhookDelivery": {
+		method: http.MethodGet, path: "/v1/orgs/acme/webhooks/ci-hooks/deliveries/" + noDocument, org: testOrg,
+	},
 	"listSavedViews": {method: http.MethodGet, path: probeViews, org: testOrg, factory: acmeID},
 	"createSavedView": {
 		method: http.MethodPost, path: probeViews, body: `{"name":"mine","shared":false,"filters":{"status":["open"]}}`, org: testOrg, factory: acmeID,

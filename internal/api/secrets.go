@@ -381,8 +381,8 @@ func (s *server) importSecret(ctx context.Context, e domain.CredentialImportEntr
 
 // secretUses is what uses secret name, by kind then name: the connections that refer to it as
 // {{name}}, the factories whose current published version does (archived ones left out, as for a
-// connection's users), the knowledge sources that read with it and the Slack notification
-// setting, when it names the secret. It opens no secret.
+// connection's users), the knowledge sources that read with it, the Slack notification setting,
+// when it names the secret, and the organization webhooks it signs. It opens no secret.
 func (s *server) secretUses(ctx context.Context, name string) ([]gen.SecretUse, error) {
 	conns, err := s.credentials.UsedBy(ctx, name)
 	if err != nil {
@@ -400,6 +400,11 @@ func (s *server) secretUses(ctx context.Context, name string) ([]gen.SecretUse, 
 	}
 
 	notify, err := s.notifySettings.NotificationSettings(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("the uses of secret %q: %w", name, err)
+	}
+
+	hooks, err := s.intake.WebhookSecretUses(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("the uses of secret %q: %w", name, err)
 	}
@@ -430,6 +435,13 @@ func (s *server) secretUses(ctx context.Context, name string) ([]gen.SecretUse, 
 
 	if notify.SlackSecret == name {
 		uses = append(uses, gen.SecretUse{Kind: gen.SecretUseSlack, Name: slackUseName})
+	}
+
+	// Webhooks come by secret, then name.
+	for _, h := range hooks {
+		if h.Secret == name {
+			uses = append(uses, gen.SecretUse{Kind: gen.SecretUseWebhook, Name: h.Webhook})
+		}
 	}
 
 	return uses, nil

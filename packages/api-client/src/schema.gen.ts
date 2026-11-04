@@ -2307,14 +2307,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The factory's webhook endpoints
-         * @description By name, each with its address, kind, the label of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret.
+         * The webhook endpoints open to the factory
+         * @description By name, the factory's own endpoints and the organization's webhooks open to it, each with its address, kind, sender, the name of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret. Kept for one release beside listWebhooks.
          */
         get: operations["listWebhookEndpoints"];
         put?: never;
         /**
          * Create a webhook endpoint
-         * @description An endpoint with a new signing secret, answered here once and never again: copy it to the sender. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+         * @description A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
          */
         post: operations["createWebhookEndpoint"];
         delete?: never;
@@ -2342,7 +2342,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a webhook endpoint and its deliveries
-         * @description Its address stops accepting requests. 404 webhook-not-found for an endpoint the factory does not have. Needs a sign-in from the last 10 minutes.
+         * @description Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
          */
         delete: operations["deleteWebhookEndpoint"];
         options?: never;
@@ -2368,7 +2368,7 @@ export interface paths {
         put?: never;
         /**
          * Replace an endpoint's signing secret
-         * @description A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+         * @description A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 400 webhook-invalid for an organization webhook, whose secret is replaced on the Secrets page; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
          */
         post: operations["rotateWebhookSecret"];
         delete?: never;
@@ -2422,9 +2422,121 @@ export interface paths {
         };
         /**
          * One delivery with its request
-         * @description The request as received: its headers (names lower-cased, never a signature header) and its body. 404 webhook-delivery-not-found for a delivery the endpoint does not have.
+         * @description The request as received: its headers (names lower-cased, never a signature header) and its body. Only webhook:manage reads it (ADR 0040 decision 12). 404 webhook-delivery-not-found for a delivery the endpoint does not have. Needs a sign-in from the last 10 minutes.
          */
         get: operations["getWebhookDelivery"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's webhooks
+         * @description By name, each with its sender, the name of the secret that signs it, its openings, the triggers of the published definitions that use it and its deliveries of the last 7 UTC days. Never a secret's value.
+         */
+        get: operations["listWebhooks"];
+        put?: never;
+        /**
+         * Create a webhook
+         * @description An enabled webhook, open to no factory. Without secret, it creates the secret webhook-<name> (cut to 40 characters, without a trailing hyphen), open to no factory, with a generated value answered here once as secret_value; with secret, it is signed by that existing secret, for a sender that issues its own, such as PagerDuty or Sentry. 400 webhook-invalid for a name that is not a slug or is reserved (the sender names, schedule and webhook), an unknown sender, or token settings on a sender other than token; 404 secret-not-found for a secret the organization does not have; 409 webhook-name-taken for a name an endpoint of the organization has, secret-name-taken when the generated secret's name is taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+         */
+        post: operations["createWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/webhooks/{webhook}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The organization webhook's name or id */
+                webhook: components["parameters"]["WebhookRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One webhook
+         * @description 404 webhook-not-found for a webhook the organization does not have.
+         */
+        get: operations["getWebhook"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a webhook, its openings and its deliveries
+         * @description Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
+         */
+        delete: operations["deleteWebhook"];
+        options?: never;
+        head?: never;
+        /**
+         * Open, close, limit, rename, enable or disable a webhook
+         * @description open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+         */
+        patch: operations["patchWebhook"];
+        trace?: never;
+    };
+    "/v1/orgs/{org}/webhooks/{webhook}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The organization webhook's name or id */
+                webhook: components["parameters"]["WebhookRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One page of a webhook's deliveries, newest first
+         * @description What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+         */
+        get: operations["listOrgWebhookDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/webhooks/{webhook}/deliveries/{delivery}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The organization webhook's name or id */
+                webhook: components["parameters"]["WebhookRef"];
+                /** @description The delivery's id */
+                delivery: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One delivery with its request
+         * @description The request as received: its headers (names lower-cased, never a signature header) and its body. 404 webhook-delivery-not-found. Needs a sign-in from the last 10 minutes.
+         */
+        get: operations["getOrgWebhookDelivery"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3803,7 +3915,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate). */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404), webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with triggers naming each trigger that uses it), webhooks-unavailable (503). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate). */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -3825,6 +3937,8 @@ export interface components {
             try_estimate?: components["schemas"]["TryProposalEstimate"];
             /** @description secret-in-use only, what uses the secret */
             uses?: components["schemas"]["SecretUse"][];
+            /** @description webhook-in-use only, the published triggers that use the webhook */
+            triggers?: components["schemas"]["WebhookTrigger"][];
         };
         /**
          * @description session: people sign in and every request carries a session or an API key. none: sign-in is off (GOAL_AUTH=none, a loopback install), every request acts as the local user.
@@ -7620,14 +7734,17 @@ export interface components {
         WebhookEndpointList: {
             endpoints: components["schemas"]["WebhookEndpoint"][];
         };
-        /** @description A factory's webhook endpoint, never its signing secret */
+        /** @description A webhook endpoint open to the factory, never its signing secret */
         WebhookEndpoint: {
             id: string;
             name: string;
+            /** @description A factory endpoint's kind; an organization webhook reads as github for sender github, generic otherwise */
             kind: components["schemas"]["WebhookKind"];
+            /** @description Its sender; a factory endpoint of kind generic reads as standard */
+            sender: components["schemas"]["WebhookSender"];
             /** @description The path senders post to, /hooks/{id}, on goald's public origin */
             address: string;
-            /** @description The label the screens show for its signing secret, <name>-hook-secret. The secret is sealed on the endpoint, not a credential, so no credential has this name. */
+            /** @description A factory endpoint's label for its signing secret, <name>-hook-secret, sealed on the endpoint, so no secret has this name; an organization webhook's is the name of the organization secret that signs it. */
             secret_name: string;
             /** Format: date-time */
             created_at: string;
@@ -7640,6 +7757,81 @@ export interface components {
             triggers: string[];
             /** @description The last 7 UTC days, oldest first, today last, each zero-filled */
             days: components["schemas"]["WebhookDeliveryDay"][];
+        };
+        /**
+         * @description How a webhook is signed and names its events (ADR 0040 decision 12). github: X-Hub-Signature-256; gitlab: X-Gitlab-Token; standard: Standard Webhooks' webhook-signature; pagerduty: X-PagerDuty-Signature; sentry: Sentry-Hook-Signature; token: a shared value in one header, for a sender that can do nothing else.
+         * @enum {string}
+         */
+        WebhookSender: "github" | "gitlab" | "standard" | "pagerduty" | "sentry" | "token";
+        /** @description The token sender's settings */
+        WebhookTokenSettings: {
+            /** @description The header that carries the value; Authorization (as Bearer <value>) when empty */
+            header?: string;
+            /** @description The body's dot path of the event name, such as event.type; empty for none */
+            event_path?: string;
+            /** @description The body's dot path of a delivery id; empty for none */
+            id_path?: string;
+        };
+        /** @description The webhook is open to a factory */
+        WebhookOpening: {
+            /** @description The factory's metadata.id */
+            factory: string;
+            /** @description The repositories (owner/name) whose deliveries reach the factory; null or absent: every one */
+            repositories?: string[] | null;
+        };
+        /** @description A trigger of a factory's published definition that uses the webhook */
+        WebhookTrigger: {
+            /** @description The factory's metadata.id */
+            factory: string;
+            factory_name: string;
+            trigger: string;
+        };
+        NewWebhook: {
+            /** @description A slug of 3 to 40 characters, unique in the organization, and none of github, gitlab, standard, pagerduty, sentry, token, schedule and webhook */
+            name: string;
+            sender: components["schemas"]["WebhookSender"];
+            /** @description The name of an existing secret that signs it; absent: goald creates webhook-<name> with a generated value */
+            secret?: string;
+            token?: components["schemas"]["WebhookTokenSettings"];
+        };
+        WebhookPatch: {
+            /** @description A new name */
+            name?: string;
+            /** @description false: its address answers 404 until enabled again */
+            enabled?: boolean;
+            /** @description Factories to open it to, or whose opening's repositories to replace */
+            open?: components["schemas"]["WebhookOpening"][];
+            /** @description The metadata.id of factories to close it to */
+            close?: string[];
+        };
+        WebhookList: {
+            webhooks: components["schemas"]["Webhook"][];
+        };
+        /** @description One of the organization's webhooks, never a secret's value */
+        Webhook: {
+            id: string;
+            name: string;
+            sender: components["schemas"]["WebhookSender"];
+            /** @description The path senders post to, /hooks/{id}, on goald's public origin */
+            address: string;
+            /** @description The name of the organization secret that signs it */
+            secret: string;
+            enabled: boolean;
+            /** @description The token sender's settings; null for another sender */
+            token: components["schemas"]["WebhookTokenSettings"] | null;
+            /** @description The factories it is open to, by factory id */
+            openings: components["schemas"]["WebhookOpening"][];
+            /** @description The triggers of the published definitions of the factories it is open to that use it (on webhook.<name>, <name> or either followed by .<event>), by factory then trigger */
+            triggers: components["schemas"]["WebhookTrigger"][];
+            /** Format: date-time */
+            created_at: string;
+            /** @description The last 7 UTC days, oldest first, today last, each zero-filled */
+            days: components["schemas"]["WebhookDeliveryDay"][];
+        };
+        /** @description A new webhook, with the value of the secret goald generated for it, never readable again */
+        CreatedWebhook: components["schemas"]["Webhook"] & {
+            /** @description The generated secret's value, to paste into the sender: 64 lower-case hex characters, or for sender standard whsec_ and the base64 of 32 bytes. null when the webhook uses an existing secret. */
+            secret_value: string | null;
         };
         WebhookDeliveryDay: {
             /**
@@ -8439,6 +8631,8 @@ export interface components {
     parameters: {
         /** @description The saved view's id */
         SavedViewRef: string;
+        /** @description The organization webhook's name or id */
+        WebhookRef: string;
         /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
         WebhookEndpointRef: string;
         /** @description A person's user id */
@@ -11853,6 +12047,196 @@ export interface operations {
                 factory: components["parameters"]["FactoryRef"];
                 /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
                 endpoint: components["parameters"]["WebhookEndpointRef"];
+                /** @description The delivery's id */
+                delivery: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The delivery */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDeliveryRequest"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listWebhooks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The webhooks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewWebhook"];
+            };
+        };
+        responses: {
+            /** @description The webhook, with the generated secret's value when it made one */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedWebhook"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The organization webhook's name or id */
+                webhook: components["parameters"]["WebhookRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The webhook */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Webhook"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The organization webhook's name or id */
+                webhook: components["parameters"]["WebhookRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    patchWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The organization webhook's name or id */
+                webhook: components["parameters"]["WebhookRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookPatch"];
+            };
+        };
+        responses: {
+            /** @description The webhook as changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Webhook"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listOrgWebhookDeliveries: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description The next_after of the previous page; deliveries received before it */
+                after?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The organization webhook's name or id */
+                webhook: components["parameters"]["WebhookRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deliveries, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDeliveryPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getOrgWebhookDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The organization webhook's name or id */
+                webhook: components["parameters"]["WebhookRef"];
                 /** @description The delivery's id */
                 delivery: string;
             };
