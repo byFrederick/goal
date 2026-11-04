@@ -13,7 +13,7 @@ type OrgWebhooks interface {
 	Webhooks(ctx context.Context) ([]domain.WebhookEndpoint, error)
 }
 
-// CodeWebhookNotOpen: a trigger names a webhook the organization doesn't have, or one that isn't
+// CodeWebhookNotOpen is the problem of a trigger that names a webhook the organization doesn't have, or one that isn't
 // open to the factory (ADR 0040 decision 14).
 const CodeWebhookNotOpen = "webhook-not-open"
 

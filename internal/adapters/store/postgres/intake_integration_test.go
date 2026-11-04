@@ -520,18 +520,21 @@ func TestIntake_DeliveryEvaluationsRLSAndGrants(t *testing.T) {
 	admin := openPool(t, db.admin)
 
 	var rls bool
-	if err := admin.QueryRow(t.Context(), `SELECT relrowsecurity FROM pg_class WHERE oid = (current_schema() || '.delivery_evaluations')::regclass`).Scan(&rls); err != nil || !rls {
+	if err := admin.QueryRow(t.Context(), `SELECT relrowsecurity FROM pg_class WHERE oid = (current_schema() || '.' || $1)::regclass`, tableEvaluations).Scan(&rls); err != nil || !rls {
 		t.Errorf("delivery_evaluations row-level security = %v, %v; want on", rls, err)
 	}
 
-	checkPolicy(t, admin, "delivery_evaluations")
+	checkPolicy(t, admin, tableEvaluations)
 
 	for _, g := range []struct {
 		table, priv string
 		want        bool
 	}{
-		{"delivery_evaluations", "SELECT", true}, {"delivery_evaluations", "INSERT", true}, {"delivery_evaluations", "UPDATE", true},
-		{"delivery_evaluations", "DELETE", false}, {"trigger_firings", "DELETE", true},
+		{tableEvaluations, "select", true},
+		{tableEvaluations, "insert", true},
+		{tableEvaluations, "update", true},
+		{tableEvaluations, "delete", false},
+		{"trigger_firings", "delete", true},
 	} {
 		var has bool
 		if err := admin.QueryRow(t.Context(), "SELECT has_table_privilege('goal_app', current_schema() || '.' || $1, $2)", g.table, g.priv).
@@ -540,3 +543,6 @@ func TestIntake_DeliveryEvaluationsRLSAndGrants(t *testing.T) {
 		}
 	}
 }
+
+// tableEvaluations is the table of ADR 0040 decision 13.
+const tableEvaluations = "delivery_evaluations"

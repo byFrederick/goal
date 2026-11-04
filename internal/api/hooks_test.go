@@ -227,7 +227,7 @@ func TestReceiver_AddsEvaluations(t *testing.T) {
 		}
 
 		want := domain.EvaluationPending
-		if d.DeliveryID == "d-1" {
+		if strings.HasSuffix(d.DeliveryID, "1") {
 			want = domain.EvaluationDone
 		}
 

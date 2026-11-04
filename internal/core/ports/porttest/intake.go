@@ -744,14 +744,19 @@ func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Rece
 		return out, err
 	}
 
+	return out, in.addEvaluationsLocked(org, row, n)
+}
+
+// addEvaluationsLocked adds n's evaluations of the delivery row.
+func (in *Intake) addEvaluationsLocked(org domain.OrgID, row domain.WebhookDeliveryID, n domain.NewReceipt) error {
 	for _, e := range n.Evaluations {
 		if !in.ownsFactory(org, e.FactoryID) {
-			return out, fmt.Errorf("factory %s: %w", e.FactoryID, ports.ErrNotFound)
+			return fmt.Errorf("factory %s: %w", e.FactoryID, ports.ErrNotFound)
 		}
 
 		id, err := uuid.NewV7()
 		if err != nil {
-			return out, err
+			return err
 		}
 
 		ev := domain.DeliveryEvaluation{
@@ -765,7 +770,7 @@ func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Rece
 		in.d.evaluations = append(in.d.evaluations, evaluationRow{org: org, e: ev})
 	}
 
-	return out, nil
+	return nil
 }
 
 // DeliveryEvaluations implements ports.Intake.
@@ -894,36 +899,47 @@ func (in *Intake) Fire(ctx context.Context, f domain.TriggerFiring, item *domain
 	}
 
 	if item != nil && f.Outcome == domain.FiringCreated {
+		if err := in.fileFiring(ctx, &f, *item, limits); err != nil {
+			return domain.TriggerFiring{}, false, err
+		}
+	}
+
+	return in.RecordFiring(ctx, f)
+}
+
+// fileFiring reads the trigger's counts and files item for f, or makes f skipped by limits.
+func (in *Intake) fileFiring(ctx context.Context, f *domain.TriggerFiring, item domain.NewItem, limits domain.FireLimits) error {
+	{
 		var c domain.FireCounts
 
 		open, _, err := in.OpenItemByDedupe(ctx, f.FactoryID, f.Trigger, f.Dedupe)
 		if err != nil {
-			return domain.TriggerFiring{}, false, err
+			return err
 		}
 
 		c.OpenDedupe = open
 
 		if c.Today, err = in.CreatedSince(ctx, f.FactoryID, f.Trigger, f.At.UTC().Truncate(24*time.Hour)); err != nil {
-			return domain.TriggerFiring{}, false, err
+			return err
 		}
 
 		if c.LastHour, err = in.CreatedSince(ctx, f.FactoryID, f.Trigger, f.At.Add(-time.Hour)); err != nil {
-			return domain.TriggerFiring{}, false, err
+			return err
 		}
 
 		if why := limits.Skip(c); why != "" {
 			f.Outcome, f.Reason = domain.FiringSkipped, why
 		} else {
-			it, err := in.store.CreateItem(ctx, *item)
+			it, err := in.store.CreateItem(ctx, item)
 			if err != nil {
-				return domain.TriggerFiring{}, false, err
+				return err
 			}
 
 			f.ItemID = it.ID
 		}
 	}
 
-	return in.RecordFiring(ctx, f)
+	return nil
 }
 
 // keepReceivedLocked keeps the row of a delivery the receiver accepted or refused.

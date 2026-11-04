@@ -5,9 +5,16 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
+)
+
+// Values the cases share.
+const (
+	firstDelivery = "d-1"
+	typeFix       = "fix"
 )
 
 // evaluationTests are the suite's cases for delivery evaluations and the locked firing (ADR 0040
@@ -44,32 +51,44 @@ func testReceiverAddsEvaluations(f *fixture) {
 	other := f.NewFactory(t, f.org)
 	skip := "acme/legacy is not one of shop's repositories"
 
-	r := f.receiveEvaluated(w.ID, "d-1",
+	r := f.receiveEvaluated(w.ID, firstDelivery,
 		domain.NewDeliveryEvaluation{FactoryID: f.factory, Triggers: []string{flaky}},
 		domain.NewDeliveryEvaluation{FactoryID: other, Triggers: []string{flaky, nightly}, Skip: skip})
-	f.receiveEvaluated(w.ID, "d-1", domain.NewDeliveryEvaluation{FactoryID: f.factory, Triggers: []string{flaky}})
+	f.receiveEvaluated(w.ID, firstDelivery, domain.NewDeliveryEvaluation{FactoryID: f.factory, Triggers: []string{flaky}})
 
 	es, err := f.in.DeliveryEvaluations(f.ctx(), r.Row)
 	if err != nil || len(es) != 2 {
 		t.Fatalf("DeliveryEvaluations = %+v, %v; want two", es, err)
 	}
 
+	checkReceived(t, f, w.ID, other, skip, es)
+
+	checkEvaluationsIsolated(t, f, r.Row)
+}
+
+// checkReceived checks the pending and the skipped evaluation.
+func checkReceived(t *testing.T, f *fixture, w domain.WebhookEndpointID, other domain.FactoryID, skip string, es []domain.DeliveryEvaluation) {
+	t.Helper()
+
 	for _, e := range es {
 		switch e.FactoryID {
 		case f.factory:
-			if e.State != domain.EvaluationPending || e.Outcome != "" || e.Attempts != 0 || e.Event != pushEvent || e.DeliveryID != "d-1" ||
-				e.WebhookID != w.ID || !e.NextAt.Equal(t0) {
+			if e.State != domain.EvaluationPending || e.Outcome != "" || e.Attempts != 0 || e.Event != pushEvent || e.DeliveryID != firstDelivery ||
+				e.WebhookID != w || !e.NextAt.Equal(t0) {
 				t.Errorf("pending evaluation = %+v", e)
 			}
 		case other:
-			if e.State != domain.EvaluationDone || e.Outcome != domain.EvaluationSkipped || e.Reason != skip || !slices.Equal(e.Triggers, []string{flaky, nightly}) {
-				t.Errorf("skipped evaluation = %+v", e)
-			}
+			checkSkippedAtOnce(t, e, skip)
 		}
 	}
+}
+
+// checkEvaluationsIsolated checks another organization sees and claims none of row's evaluations.
+func checkEvaluationsIsolated(t *testing.T, f *fixture, row domain.WebhookDeliveryID) {
+	t.Helper()
 
 	theirs := &fixture{Harness: f.Harness, t: t, in: f.in, org: f.NewOrg(t)}
-	if got, err := f.in.DeliveryEvaluations(theirs.ctx(), r.Row); err != nil || len(got) != 0 {
+	if got, err := f.in.DeliveryEvaluations(theirs.ctx(), row); err != nil || len(got) != 0 {
 		t.Errorf("another organization's DeliveryEvaluations = %+v, %v; want none", got, err)
 	}
 
@@ -126,6 +145,13 @@ func testClaimEvaluationsSkipLocked(f *fixture) {
 		t.Fatalf("%d rows claimed; want all 6", len(seen))
 	}
 
+	checkLeases(t, f, seen)
+}
+
+// checkLeases checks live leases keep rows, lapsed ones free them, and only the holder finishes.
+func checkLeases(t *testing.T, f *fixture, seen map[string]string) {
+	t.Helper()
+
 	if got, _ := f.in.ClaimEvaluations(f.ctx(), "goald-x", t0.Add(30*time.Second), time.Minute, 10); len(got) != 0 {
 		t.Errorf("a claim under live leases = %+v; want none", got)
 	}
@@ -135,29 +161,7 @@ func testClaimEvaluationsSkipLocked(f *fixture) {
 		t.Fatalf("a claim after the leases = %+v, %v; want one row on its second attempt", again, err)
 	}
 
-	c := again[0]
-	stale := domain.EvaluationFinish{ID: c.ID, Holder: seen[c.ID], Attempts: 1, State: domain.EvaluationDone, Outcome: domain.EvaluationSkipped, At: t0}
-
-	if ok, err := f.in.FinishEvaluation(f.ctx(), stale); err != nil || ok {
-		t.Errorf("the first holder's finish = %v, %v; want refused", ok, err)
-	}
-
-	done := stale
-	done.Holder, done.Attempts, done.Reason = "goald-x", 2, domain.ReasonNoTriggerMatches
-
-	if ok, err := f.in.FinishEvaluation(f.ctx(), done); err != nil || !ok {
-		t.Fatalf("the holder's finish = %v, %v; want it done", ok, err)
-	}
-
-	es, _ := f.in.DeliveryEvaluations(f.ctx(), c.Delivery)
-	if len(es) != 1 || es[0].State != domain.EvaluationDone || es[0].LeaseHolder != "" || es[0].LeaseUntil != nil || es[0].Reason != done.Reason {
-		t.Errorf("finished = %+v; want done without a lease", es)
-	}
-
-	retry := domain.EvaluationFinish{ID: c.ID, Holder: "goald-x", Attempts: 2, State: domain.EvaluationPending, At: t0}
-	if ok, _ := f.in.FinishEvaluation(f.ctx(), retry); ok {
-		t.Error("a done row finished again; want refused")
-	}
+	checkFinish(t, f, seen, again[0])
 }
 
 // Firings of one trigger at once hold perDay and perHour, as the trigger's lock serializes them:
@@ -169,7 +173,7 @@ func testFireHoldsLimits(f *fixture) {
 
 	fire := func(key string) (domain.TriggerFiring, bool) {
 		item := domain.NewItem{
-			FactoryID: f.factory, Type: "fix", Title: "Fix " + key, Station: station, State: domain.StateQueued, Class: domain.ClassStandard,
+			FactoryID: f.factory, Type: typeFix, Title: "Fix " + key, Station: station, State: domain.StateQueued, Class: domain.ClassStandard,
 			CreatedAt: t0, Source: domain.ItemFromGitHub, Trigger: flaky, Origin: domain.OriginTrigger, Untrusted: true,
 		}
 
@@ -215,6 +219,13 @@ func testFireHoldsLimits(f *fixture) {
 		t.Fatalf("%d created and %d skipped; want 3 and 9", created, skipped)
 	}
 
+	checkReplay(t, f, fire)
+}
+
+// checkReplay checks a replay of e0 returns its first firing, whose item is untrusted.
+func checkReplay(t *testing.T, f *fixture, fire func(string) (domain.TriggerFiring, bool)) {
+	t.Helper()
+
 	first, ok, err := f.in.Firing(f.ctx(), f.factory, flaky, "e0")
 	if err != nil || !ok {
 		t.Fatalf("Firing e0 = %v, %v", ok, err)
@@ -228,5 +239,42 @@ func testFireHoldsLimits(f *fixture) {
 		if it, err := f.Store.Item(f.ctx(), first.ItemID); err != nil || !it.Untrusted || it.Origin != domain.OriginTrigger {
 			t.Errorf("the firing's item = %+v, %v; want it filed untrusted by the trigger", it, err)
 		}
+	}
+}
+
+// checkFinish checks only the claim that holds c may finish it, once.
+func checkFinish(t *testing.T, f *fixture, seen map[string]string, c domain.ClaimedEvaluation) {
+	t.Helper()
+
+	stale := domain.EvaluationFinish{ID: c.ID, Holder: seen[c.ID], Attempts: 1, State: domain.EvaluationDone, Outcome: domain.EvaluationSkipped, At: t0}
+
+	if ok, err := f.in.FinishEvaluation(f.ctx(), stale); err != nil || ok {
+		t.Errorf("the first holder's finish = %v, %v; want refused", ok, err)
+	}
+
+	done := stale
+	done.Holder, done.Attempts, done.Reason = "goald-x", 2, domain.ReasonNoTriggerMatches
+
+	if ok, err := f.in.FinishEvaluation(f.ctx(), done); err != nil || !ok {
+		t.Fatalf("the holder's finish = %v, %v; want it done", ok, err)
+	}
+
+	es, _ := f.in.DeliveryEvaluations(f.ctx(), c.Delivery)
+	if len(es) != 1 || es[0].State != domain.EvaluationDone || es[0].LeaseHolder != "" || es[0].LeaseUntil != nil || es[0].Reason != done.Reason {
+		t.Errorf("finished = %+v; want done without a lease", es)
+	}
+
+	retry := domain.EvaluationFinish{ID: c.ID, Holder: "goald-x", Attempts: 2, State: domain.EvaluationPending, At: t0}
+	if ok, _ := f.in.FinishEvaluation(f.ctx(), retry); ok {
+		t.Error("a done row finished again; want refused")
+	}
+}
+
+// checkSkippedAtOnce checks e is done and skipped with skip, naming both triggers.
+func checkSkippedAtOnce(t *testing.T, e domain.DeliveryEvaluation, skip string) {
+	t.Helper()
+
+	if e.State != domain.EvaluationDone || e.Outcome != domain.EvaluationSkipped || e.Reason != skip || !slices.Equal(e.Triggers, []string{flaky, nightly}) {
+		t.Errorf("skipped evaluation = %+v", e)
 	}
 }

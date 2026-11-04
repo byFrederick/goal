@@ -84,7 +84,7 @@ func (in *Intake) ClaimEvaluations(ctx context.Context, holder string, now time.
 		var err error
 
 		rows, err = q.ClaimDeliveryEvaluations(ctx, db.ClaimDeliveryEvaluationsParams{
-			Now: now, Max: int32(min(max(limit, 0), maxClaim)), Holder: holder, Until: now.Add(lease), //nolint:gosec // bounded by maxClaim
+			Now: now, Max: int32(min(max(limit, 0), maxClaim)), Holder: holder, Until: now.Add(lease),
 		})
 
 		return err
@@ -123,7 +123,7 @@ func (in *Intake) FinishEvaluation(ctx context.Context, f domain.EvaluationFinis
 	}
 
 	p := db.FinishDeliveryEvaluationParams{
-		ID: id, Holder: f.Holder, Attempts: int32(min(max(f.Attempts, 0), maxInt32)), State: string(f.State), //nolint:gosec // bounded
+		ID: id, Holder: f.Holder, Attempts: int32(min(max(f.Attempts, 0), maxInt32)), State: string(f.State),
 		Reason: f.Reason, ItemID: item, At: f.At,
 	}
 	if f.Outcome != "" {
@@ -166,44 +166,11 @@ func (in *Intake) Fire(ctx context.Context, f domain.TriggerFiring, item *domain
 	)
 
 	err = in.s.inTx(ctx, func(q *db.Queries) error {
-		if err := q.LockTriggerFiring(ctx, db.LockTriggerFiringParams{FactoryID: factory, Trigger: f.Trigger}); err != nil {
-			return fmt.Errorf("lock the trigger: %w", err)
-		}
+		var err error
 
-		r, err := q.TriggerFiringByKey(ctx, db.TriggerFiringByKeyParams{FactoryID: factory, Trigger: f.Trigger, IdempotencyKey: f.IdempotencyKey})
-		if err == nil {
-			out = firingFrom(r)
+		out, fresh, err = fireInTx(ctx, q, factory, id, f, item, limits)
 
-			return nil
-		}
-
-		if !notFound(err) {
-			return err
-		}
-
-		g := f
-		if item != nil && g.Outcome == domain.FiringCreated {
-			if err := fileFiring(ctx, q, factory, &g, *item, limits); err != nil {
-				return err
-			}
-		}
-
-		itemID, err := optionalID("item", string(g.ItemID))
-		if err != nil {
-			return err
-		}
-
-		if _, err := q.InsertTriggerFiring(ctx, db.InsertTriggerFiringParams{
-			ID: id, FactoryID: factory, Trigger: g.Trigger, Source: string(g.Source), EventKey: g.EventKey,
-			IdempotencyKey: g.IdempotencyKey, Dedupe: g.Dedupe, Outcome: string(g.Outcome), Reason: g.Reason, ItemID: itemID, At: g.At,
-		}); err != nil {
-			return err
-		}
-
-		out, fresh = g, true
-		out.ID, out.At = id.String(), g.At.UTC().Truncate(time.Microsecond)
-
-		return nil
+		return err
 	})
 	if isForeignKeyViolation(err) {
 		return domain.TriggerFiring{}, false, fmt.Errorf("fire %s: factory %s: %w", f.Trigger, f.FactoryID, ports.ErrNotFound)
@@ -214,6 +181,47 @@ func (in *Intake) Fire(ctx context.Context, f domain.TriggerFiring, item *domain
 	}
 
 	return out, fresh, nil
+}
+
+// fireInTx is Fire's transaction in q: the trigger's lock, the firing a replay finds, or the new
+// firing with its item.
+func fireInTx(ctx context.Context, q *db.Queries, factory, id uuid.UUID, f domain.TriggerFiring, item *domain.NewItem,
+	limits domain.FireLimits,
+) (domain.TriggerFiring, bool, error) {
+	if err := q.LockTriggerFiring(ctx, db.LockTriggerFiringParams{FactoryID: factory, Trigger: f.Trigger}); err != nil {
+		return domain.TriggerFiring{}, false, fmt.Errorf("lock the trigger: %w", err)
+	}
+
+	r, err := q.TriggerFiringByKey(ctx, db.TriggerFiringByKeyParams{FactoryID: factory, Trigger: f.Trigger, IdempotencyKey: f.IdempotencyKey})
+	if err == nil {
+		return firingFrom(r), false, nil
+	}
+
+	if !notFound(err) {
+		return domain.TriggerFiring{}, false, err
+	}
+
+	if item != nil && f.Outcome == domain.FiringCreated {
+		if err := fileFiring(ctx, q, factory, &f, *item, limits); err != nil {
+			return domain.TriggerFiring{}, false, err
+		}
+	}
+
+	itemID, err := optionalID("item", string(f.ItemID))
+	if err != nil {
+		return domain.TriggerFiring{}, false, err
+	}
+
+	if _, err := q.InsertTriggerFiring(ctx, db.InsertTriggerFiringParams{
+		ID: id, FactoryID: factory, Trigger: f.Trigger, Source: string(f.Source), EventKey: f.EventKey,
+		IdempotencyKey: f.IdempotencyKey, Dedupe: f.Dedupe, Outcome: string(f.Outcome), Reason: f.Reason, ItemID: itemID, At: f.At,
+	}); err != nil {
+		return domain.TriggerFiring{}, false, err
+	}
+
+	f.ID, f.At = id.String(), f.At.UTC().Truncate(time.Microsecond)
+
+	return f, true, nil
 }
 
 // fileFiring reads the trigger's counts under its lock and, when limits let f create its item,

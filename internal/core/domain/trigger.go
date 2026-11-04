@@ -71,8 +71,12 @@ func (f TriggerFilter) Needs() []string {
 		set   bool
 		field string
 	}{
-		{f.Branch != "", FieldBranch}, {len(f.Repo) > 0, FieldRepo}, {f.Label != "", FieldLabel},
-		{len(f.Action) > 0, FieldAction}, {len(f.Conclusion) > 0, FieldConclusion}, {len(f.Paths) > 0, FieldPaths},
+		{f.Branch != "", FieldBranch},
+		{len(f.Repo) > 0, FieldRepo},
+		{f.Label != "", FieldLabel},
+		{len(f.Action) > 0, FieldAction},
+		{len(f.Conclusion) > 0, FieldConclusion},
+		{len(f.Paths) > 0, FieldPaths},
 		{len(f.Authors) > 0 || f.SkipBots, FieldAuthor},
 	} {
 		if n.set {

@@ -46,6 +46,9 @@ func withTriggers(pairs ...string) string {
 		workAgentLine, "        route: { backend: worker }\n")
 }
 
+// redMain names the second trigger of triggerBlock in a message.
+const redMain = "trigger red-main"
+
 // sweep names the first trigger of triggerBlock in a message.
 const sweep = "trigger nightly-sweep"
 
@@ -127,18 +130,18 @@ var triggerRows = []struct {
 	},
 	{
 		name: "placeholder with an empty segment", doc: withTriggers(`"Fix {{check.name}}" }`, `"Fix {{check..name}}" } #here`),
-		code: codePlaceholderInvalid, message: []string{"trigger red-main", "create.title", "{{check..name}}"},
+		code: codePlaceholderInvalid, message: []string{redMain, "create.title", "{{check..name}}"},
 	},
 	{
 		name: "model check", doc: withTriggers("dedupe: check.name }", `dedupe: check.name, modelAgrees: { question: "Is this a real regression?", key: "{{haiku-key}}", model: claude-haiku-5-5 } }`),
 	},
 	{
 		name: "model check with a blank question", doc: withTriggers("dedupe: check.name }", `dedupe: check.name, modelAgrees: { question: "   " } } #here`),
-		code: codeModelQuestionInvalid, message: []string{"trigger red-main", "only.modelAgrees.question", "empty"},
+		code: codeModelQuestionInvalid, message: []string{redMain, "only.modelAgrees.question", "empty"},
 	},
 	{
 		name: "model check with a question too long", doc: withTriggers("dedupe: check.name }", `dedupe: check.name, modelAgrees: { question: "`+strings.Repeat("why ", 126)+`" } } #here`),
-		code: codeModelQuestionInvalid, message: []string{"trigger red-main", "only.modelAgrees.question", "500"},
+		code: codeModelQuestionInvalid, message: []string{redMain, "only.modelAgrees.question", "500"},
 	},
 	{
 		name: "model check without a question", doc: withTriggers("dedupe: check.name }", "dedupe: check.name, modelAgrees: { model: claude-haiku-5-5 } } #here"),
@@ -150,12 +153,12 @@ var triggerRows = []struct {
 	},
 	{
 		name: "a sender without an event", doc: withTriggers("        on: github.check_run.failed\n", "        on: github #here\n"),
-		code: codeOnNeedsEvent, message: []string{"trigger red-main", "github.<event>"},
+		code: codeOnNeedsEvent, message: []string{redMain, "github.<event>"},
 	},
 	{
 		name: "a filter the sender's event never supplies",
 		doc:  withTriggers("repo: acme/app, authors:", `repo: acme/app, paths: ["**/*.go"], authors:`, "skipBots: true }\n", "skipBots: true } #here\n"),
-		code: CodeFilterUnsupplied, message: []string{"trigger red-main", "github.check_run carries no paths", "filter.paths"},
+		code: CodeFilterUnsupplied, message: []string{redMain, "github.check_run carries no paths", "filter.paths"},
 	},
 	{
 		name: "a label on a push", doc: withTriggers("filter: { repo: [acme/app", "filter: { label: bug, repo: [acme/app", `forced: "false" } }`+"\n", `forced: "false" } } #here`+"\n"),

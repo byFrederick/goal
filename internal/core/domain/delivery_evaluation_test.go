@@ -21,7 +21,7 @@ func TestEvaluationFor(t *testing.T) {
 			{Name: "off", Enabled: false, On: "github.check_run"},
 		},
 	}
-	open := domain.WebhookEndpoint{ID: "w1", Name: "gh-acme", Sender: domain.SenderGitHub, Openings: []domain.WebhookOpening{{FactoryID: "f1"}}}
+	open := domain.WebhookEndpoint{ID: "w1", Name: ghAcme, Sender: domain.SenderGitHub, Openings: []domain.WebhookOpening{{FactoryID: "f1"}}}
 	limited := open
 	limited.Openings = []domain.WebhookOpening{{FactoryID: "f1", Repositories: []string{"acme/shop", "acme/legacy"}}}
 
@@ -40,12 +40,18 @@ func TestEvaluationFor(t *testing.T) {
 		{"the factory's repository", open, ev("check_run", "acme/shop"), true, []string{"ci"}, ""},
 		{"in any case", open, ev("check_run", "Acme/Shop"), true, []string{"ci"}, ""},
 		{"an event no enabled trigger names", open, ev("push", "acme/shop"), false, nil, ""},
-		{"a repository the factory doesn't have", open, ev("check_run", "acme/legacy"), true, []string{"ci"},
-			"acme/legacy is not one of shop's repositories"},
+		{
+			"a repository the factory doesn't have", open, ev("check_run", "acme/legacy"), true,
+			[]string{"ci"},
+			"acme/legacy is not one of shop's repositories",
+		},
 		{"a repository outside the opening", limited, ev("check_run", "acme/other"), false, nil, ""},
 		{"no repository and a limited opening", limited, ev("check_run", ""), false, nil, ""},
-		{"a webhook not open to the factory", domain.WebhookEndpoint{ID: "w2", Name: "gh-acme", Sender: domain.SenderGitHub},
-			ev("check_run", "acme/shop"), false, nil, ""},
+		{
+			"a webhook not open to the factory",
+			domain.WebhookEndpoint{ID: "w2", Name: ghAcme, Sender: domain.SenderGitHub},
+			ev("check_run", "acme/shop"), false, nil, "",
+		},
 	}
 
 	for _, tc := range tests {
@@ -87,6 +93,13 @@ func TestFinishEvaluation_BacksOffThenFails(t *testing.T) {
 	if last.State != domain.EvaluationFailed || last.Outcome != domain.EvaluationFailedOutcome || last.Reason != "boom" {
 		t.Errorf("the last attempt = %+v; want failed with the error", last)
 	}
+
+	checkFinishedDone(t, at)
+}
+
+// checkFinishedDone checks a done evaluation is created with the first item, else skipped.
+func checkFinishedDone(t *testing.T, at time.Time) {
+	t.Helper()
 
 	done := domain.FinishEvaluation(domain.ClaimedEvaluation{}, []domain.TriggerFiring{
 		{Trigger: "a", Outcome: domain.FiringSkipped, Reason: "limits.perHour: full"},

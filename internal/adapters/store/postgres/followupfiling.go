@@ -223,22 +223,9 @@ func (l *lander) untrustedTriage(ctx context.Context, factory domain.FactoryID, 
 		return nil, fmt.Errorf("untrusted triage of factory %s: no line: %w", factory, ports.ErrNotFound)
 	}
 
-	es := make([]domain.TriageEntry, 0, len(rows))
-
-	for _, r := range rows {
-		f, err := followUpFrom(r)
-		if err != nil {
-			return nil, err
-		}
-
-		src, err := l.item(ctx, r.ItemID)
-		if err != nil {
-			return nil, err
-		}
-
-		es = append(es, domain.TriageEntry{
-			FollowUp: f, Source: l.ref(src), Title: src.Title, Type: src.Type, Priority: src.Priority, Generation: src.Generation,
-		})
+	es, err := l.entries(ctx, rows)
+	if err != nil {
+		return nil, err
 	}
 
 	n, err := domain.File(ln, domain.UntrustedTriageFileRequest(factory, es, l.at))
@@ -268,12 +255,40 @@ func (l *lander) untrustedTriage(ctx context.Context, factory domain.FactoryID, 
 		return nil, err
 	}
 
+	return l.fileOnto(ctx, rows, row.ID)
+}
+
+// entries are rows' triage entries, with their source items.
+func (l *lander) entries(ctx context.Context, rows []db.FollowUp) ([]domain.TriageEntry, error) {
+	es := make([]domain.TriageEntry, 0, len(rows))
+
+	for _, r := range rows {
+		f, err := followUpFrom(r)
+		if err != nil {
+			return nil, err
+		}
+
+		src, err := l.item(ctx, r.ItemID)
+		if err != nil {
+			return nil, err
+		}
+
+		es = append(es, domain.TriageEntry{
+			FollowUp: f, Source: l.ref(src), Title: src.Title, Type: src.Type, Priority: src.Priority, Generation: src.Generation,
+		})
+	}
+
+	return es, nil
+}
+
+// fileOnto files rows onto the item it.
+func (l *lander) fileOnto(ctx context.Context, rows []db.FollowUp, it uuid.UUID) ([]domain.FollowUp, error) {
 	out := make([]domain.FollowUp, 0, len(rows))
 
 	for _, r := range rows {
-		filed, err := l.q.FileFollowUpOnto(ctx, db.FileFollowUpOntoParams{ID: r.ID, FiledItemID: &row.ID, At: l.at})
+		filed, err := l.q.FileFollowUpOnto(ctx, db.FileFollowUpOntoParams{ID: r.ID, FiledItemID: &it, At: l.at})
 		if err != nil {
-			return nil, fmt.Errorf("follow-up %s to its own triage item: %w", r.ID, err)
+			return nil, fmt.Errorf("follow-up %s to its triage item: %w", r.ID, err)
 		}
 
 		f, err := followUpFrom(filed)

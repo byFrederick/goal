@@ -361,7 +361,8 @@ func TestSenders_EventTables(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, event := range []string{"check_run", "issues", "pull_request", "push"} {
+	ghEvents := strings.Fields("check_run issues pull_request push")
+	for _, event := range ghEvents {
 		tb, ok := c.EventTable(domain.SenderGitHub, event)
 		if !ok || !tb.Supplies(domain.FieldRepo) || !tb.Supplies(domain.FieldAuthor) {
 			t.Errorf("github %s: table %v, %v; want one with repo and author", event, tb, ok)
@@ -380,7 +381,14 @@ func TestSenders_EventTables(t *testing.T) {
 		t.Errorf("standard's table for an event = %v, %v; want none", tb, ok)
 	}
 
-	tb, _ := c.EventTable(domain.SenderGitHub, "push")
+	checkPushTable(t, c, ghEvents)
+}
+
+// checkPushTable reads a push by its table, and Parse refuses a malformed dot path.
+func checkPushTable(t *testing.T, c *senders.Catalog, ghEvents []string) {
+	t.Helper()
+
+	tb, _ := c.EventTable(domain.SenderGitHub, ghEvents[3])
 	n := domain.Normalize(tb, domain.ParsePayload([]byte(`{"ref": "refs/heads/main", "repository": {"full_name": "acme/app"},
 		"sender": {"login": "jo", "type": "User"}, "commits": [{"added": ["a.go"], "modified": [], "removed": ["b.go"]}]}`)))
 
@@ -389,7 +397,7 @@ func TestSenders_EventTables(t *testing.T) {
 		t.Errorf("push normalized = %+v; want main, acme/app, jo and a.go, b.go", n)
 	}
 
-	_, err = senders.Parse([]byte(`apiVersion: goal/v1
+	_, err := senders.Parse([]byte(`apiVersion: goal/v1
 kind: Sender
 metadata: {name: token}
 spec:

@@ -25,7 +25,9 @@ const (
 type EvaluationOutcome string
 
 const (
+	// EvaluationCreated filed an item.
 	EvaluationCreated EvaluationOutcome = "created"
+	// EvaluationSkipped filed none, with the reason.
 	EvaluationSkipped EvaluationOutcome = "skipped"
 	// EvaluationFailedOutcome goes with EvaluationFailed.
 	EvaluationFailedOutcome EvaluationOutcome = "failed"

@@ -125,16 +125,19 @@ object, required.
   - `triggers`: array of object. Rules that turn an event, a schedule or a webhook delivery into a work item (ADR 0026). Each name is unique within the factory.
     - `name`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, required. Names the trigger in the API, the UI and the firing log; unique within the factory.
     - `enabled`: boolean, default `true`. A disabled trigger matches nothing.
-    - `on`: string matching `^(github\.check_run\.failed|github\.issues\.labeled|schedule|webhook\.[a-z][a-z0-9-]{1,38}[a-z0-9](\.[A-Za-z0-9_][A-Za-z0-9_.-]*)?)$`, required. The event key: github.check\_run.failed, github.issues.labeled, schedule, or webhook.&lt;endpoint name&gt; with an optional .&lt;event&gt; matched against the delivery's event field.
+    - `on`: string matching `^(schedule|(webhook\.)?[a-z][a-z0-9-]{1,38}[a-z0-9](\.[A-Za-z0-9_][A-Za-z0-9_.-]*)?)$`, required. What the trigger fires on: schedule; &lt;sender&gt;.&lt;event&gt; (github.check\_run), that event from every webhook of the sender open to the factory; &lt;webhook&gt;.&lt;event&gt;, that event to one organization webhook; or &lt;webhook&gt;, every event to it. github.check\_run.failed and github.issues.labeled, as written before, read as github.check\_run with conclusion failure and github.issues with action labeled, and webhook.&lt;name&gt;\[.&lt;event&gt;\] as &lt;name&gt;\[.&lt;event&gt;\].
     - `cron`: string. When on is schedule, and only then: five cron fields (minute, hour, day of month, month, day of week).
     - `timeZone`: string. When on is schedule, and only then: the IANA time zone the cron is read in. Defaults to UTC.
-    - `filter`: object. Filters on the event's fields; every one given must match.
+    - `filter`: object. Filters on the event's normalized fields, which the sender's event table gives, and on its payload; every one given must match. Publish refuses a filter on a field the event never supplies.
       - `branch`: string. The event's branch equals this.
-      - `repo`: string. The event's repository, owner/name, equals this.
+      - `repo`: string or array of string. The event's repository, owner/name in any case, is this one or one of this list; leaving it out watches every repository.
       - `label`: string. The event's label equals this.
+      - `action`: string or array of string. The event's action (opened, labeled, completed…) is this one or one of this list.
+      - `conclusion`: string or array of string. The event's conclusion (failure, success…) is this one or one of this list.
       - `paths`: array of string. Globs; the event matches when any changed path matches one.
       - `authors`: array of string. The event's sender is one of these.
       - `skipBots`: boolean. Drop events whose sender is a bot.
+      - `match`: map of string or array of string. Payload fields by dot path (check\_run.app.slug), each matched against a value or a list of values; all must match.
     - `only`: object. Checks made before an item is created, in this order.
       - `failuresInARow`: integer. Passes when the same check failed on the last n events for it.
       - `dedupe`: string matching `^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`. An event field, dotted (check.name); passes when no open item this trigger created holds the same value of it.
@@ -148,10 +151,12 @@ object, required.
       - `station`: string, required. The station id the item starts at.
       - `lane`: string. The item's lane: a key of that station's route.
       - `expedite`: boolean. Put the item in the expedite flow.
-      - `title`: string. The item's title; {{field}} placeholders take the event's fields.
-      - `brief`: string. The item's brief; {{field}} placeholders take the event's fields, which reach agents only as untrusted data.
+      - `title`: string. The item's title; {{field}} placeholders take the event's normalized fields, and {{payload.&lt;path&gt;}} any field of its body.
+      - `brief`: string. The item's brief; {{field}} and {{payload.&lt;path&gt;}} placeholders take the event's values, which reach agents only as untrusted data.
+      - `trusted`: boolean. File the item a delivery makes as trusted, so a person need not merge its work. Refused for the gitlab and token senders, and on a GitHub webhook unless filter.authors is set.
     - `limits`: object. Caps on what the trigger creates.
       - `perDay`: integer. At most this many items created by the trigger since the start of the UTC day.
+      - `perHour`: integer. At most this many items created by the trigger in the hour before an event. Defaults to 10 for an event trigger; a schedule has none.
       - `pauseOnBudget`: boolean. Skip events while the factory's budget is spent (today the weekly budget).
   - `intake`: array of object. Deprecated and ignored: nothing reads it, and board.triggers replaces it (ADR 0026). Still accepted so existing definitions load.
     - `source`: one of `"manual"`, `"github-issues"`, `"schedule"`, `"webhook"`, `"email"`, required.

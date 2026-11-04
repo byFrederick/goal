@@ -737,14 +737,9 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, run do
 
 		return
 	case v != nil && (c.noMerge || c.item.Untrusted) && c.station.Action == domain.ActionMerge:
-		reason := "approved; the organization policy lets no agent merge a pull request, so a person merges it"
-		if c.item.Untrusted {
-			reason = "approved; the item was made from outside text (a webhook delivery), so a person merges it"
-		}
-
 		t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
 		t.To, t.Outcome = domain.Position{Station: c.station.ID, State: domain.StateWaitingHuman}, domain.LeaseEscalated
-		t.Events = append(t.Events, event(c.item, domain.EventWaitingHuman, t.At, domain.ActorEngine, map[string]any{keyReason: reason}))
+		t.Events = append(t.Events, event(c.item, domain.EventWaitingHuman, t.At, domain.ActorEngine, map[string]any{keyReason: noMergeReason(c.item)}))
 	case v != nil:
 		t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
 		if err = e.mergeOnApproval(ctx, c, next, &t); err == nil {
@@ -960,4 +955,14 @@ func agentSpec(l domain.Line, name string) (domain.AgentSpec, error) {
 	}
 
 	return a, nil
+}
+
+// noMergeReason is why an approved merge waits for a person: the item came from outside text
+// (ADR 0040 decision 21), or the organization policy lets no agent merge.
+func noMergeReason(it domain.Item) string {
+	if it.Untrusted {
+		return "approved; the item was made from outside text (a webhook delivery), so a person merges it"
+	}
+
+	return "approved; the organization policy lets no agent merge a pull request, so a person merges it"
 }

@@ -19,7 +19,7 @@ var errNoIntake = errors.New("engine: no intake state (Deps.Intake)")
 // one firing for each trigger it reached, in declaration order: every enabled trigger whose on:
 // and filter match it (domain.Trigger.Matches). A trigger it does not reach records nothing. For
 // each one reached, the checks run in order (only.failuresInARow, only.dedupe, only.modelAgrees,
-// limits.perDay, limits.pauseOnBudget); the first that fails records a skipped firing whose reason starts with
+// limits.perDay, limits.perHour, limits.pauseOnBudget); the first that fails records a skipped firing whose reason starts with
 // its step, and when all pass the trigger creates its item and records a created firing with it.
 // Replaying an event with the same idempotency key returns the firing recorded first and creates
 // nothing. The factory must belong to the organization in ctx; any other is ports.ErrNotFound.

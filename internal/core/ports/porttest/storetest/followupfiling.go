@@ -364,6 +364,13 @@ func testFileUntrustedToOwnTriage(f *fixture) {
 		t.Errorf("reasons %q, %q; want the start's title and the note's ref kept", got[0].Reason, got[2].Reason)
 	}
 
+	checkOwnTriage(t, f, lines, own)
+}
+
+// checkOwnTriage checks the untrusted item's own triage item, and that a trusted item's follow-up goes elsewhere.
+func checkOwnTriage(t *testing.T, f *fixture, lines []domain.Line, own domain.ItemID) {
+	t.Helper()
+
 	it := f.item(t, own)
 	if !it.Triage || !it.Untrusted || it.State != domain.StateBlocked || it.Origin != domain.OriginFollowUp {
 		t.Errorf("own triage item = %+v; want an untrusted triage item, blocked", it)

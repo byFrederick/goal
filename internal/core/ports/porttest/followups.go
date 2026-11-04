@@ -301,6 +301,7 @@ func (l *fakeLander) land(root *domain.Item) []domain.FollowUp {
 			f.State, f.Reason = domain.FollowUpDropped, land.Reason
 		case land.Untrusted:
 			f.Reason, f.Target, f.For, f.Start = domain.UntrustedTriageReason(*f), domain.FollowUpTriage, nil, nil
+
 			untrusted = append(untrusted, i)
 
 			continue

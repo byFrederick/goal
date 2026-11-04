@@ -430,7 +430,18 @@ func (n NewReceipt) Check() error {
 		return fmt.Errorf("an accepted delivery needs its id: %w", ErrInvalid)
 	case n.Receipt == ReceiptRefused && (n.DeliveryID != "" || n.Event != "" || len(n.Body) > 0):
 		return fmt.Errorf("a refused delivery keeps metadata only: %w", ErrInvalid)
-	case len(n.Evaluations) > 0 && (n.Receipt != ReceiptAccepted || !n.Named):
+	}
+
+	if err := n.checkEvaluations(); err != nil {
+		return err
+	}
+
+	return n.checkSizes()
+}
+
+// checkEvaluations refuses an evaluation without its factory or triggers, or with a long reason.
+func (n NewReceipt) checkEvaluations() error {
+	if len(n.Evaluations) > 0 && (n.Receipt != ReceiptAccepted || !n.Named) {
 		return fmt.Errorf("only an accepted delivery a trigger names is evaluated: %w", ErrInvalid)
 	}
 
@@ -441,7 +452,7 @@ func (n NewReceipt) Check() error {
 		}
 	}
 
-	return n.checkSizes()
+	return nil
 }
 
 // checkSizes refuses an id, event, body or reason over its limit.

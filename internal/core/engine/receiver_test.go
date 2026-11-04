@@ -25,10 +25,10 @@ func TestEvaluations_LoadedFactoriesItIsOpenTo(t *testing.T) {
 		event string
 		want  bool
 	}{
-		{"named", open, "check_run", true},
+		{"named", open, evCheckRun, true},
 		{"disabled trigger", open, "push", false},
 		{"other event", open, "issues", false},
-		{"closed", closed, "check_run", false},
+		{"closed", closed, evCheckRun, false},
 		{"ping", open, "ping", false},
 	} {
 		got := h.e.Evaluations(inOrg(t), tc.w, tc.event, []byte(`{}`))
@@ -37,7 +37,7 @@ func TestEvaluations_LoadedFactoriesItIsOpenTo(t *testing.T) {
 		}
 	}
 
-	if got := h.e.Evaluations(domain.WithOrg(t.Context(), "019a0000-0000-7000-8000-0000000000ff"), open, "check_run", nil); len(got) != 0 {
+	if got := h.e.Evaluations(domain.WithOrg(t.Context(), "019a0000-0000-7000-8000-0000000000ff"), open, evCheckRun, nil); len(got) != 0 {
 		t.Errorf("another organization's Evaluations = %+v; want none", got)
 	}
 }

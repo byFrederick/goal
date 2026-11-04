@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/engine"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
@@ -28,8 +29,11 @@ var checkRunTable = eventTables{"github.check_run": {
 	domain.FieldAuthor: {Paths: []string{"sender.login"}},
 }}
 
-// The webhook the delivery tests receive on.
-const testWebhook = "github-acme"
+// The webhook the delivery tests receive on, and the event they deliver.
+const (
+	testWebhook = "github-acme"
+	evCheckRun  = "check_run"
+)
 
 // onFailedRun fires on failed check runs from every GitHub webhook open to the factory.
 func onFailedRun() domain.Trigger {
@@ -77,13 +81,14 @@ func checkRun(name, conclusion string) string {
 // evaluations the engine names, and returns its row.
 func (h *harness) deliver(t *testing.T, e interface {
 	Evaluations(ctx context.Context, w domain.WebhookEndpoint, event string, body []byte) []domain.NewDeliveryEvaluation
-}, w domain.WebhookEndpoint, id, body string) domain.WebhookDeliveryID {
+}, w domain.WebhookEndpoint, id, body string,
+) domain.WebhookDeliveryID {
 	t.Helper()
 
-	evals := e.Evaluations(inOrg(t), w, "check_run", []byte(body))
+	evals := e.Evaluations(inOrg(t), w, evCheckRun, []byte(body))
 
 	got, err := h.intake.Receive(inOrg(t), domain.NewReceipt{
-		WebhookID: w.ID, ReceivedAt: h.clock.Now(), Receipt: domain.ReceiptAccepted, DeliveryID: id, Event: "check_run",
+		WebhookID: w.ID, ReceivedAt: h.clock.Now(), Receipt: domain.ReceiptAccepted, DeliveryID: id, Event: evCheckRun,
 		Body: []byte(body), Named: len(evals) > 0, Evaluations: evals,
 	})
 	if err != nil {
@@ -132,6 +137,13 @@ func TestIntake_DeliveryItemIsUntrusted(t *testing.T) {
 		t.Errorf("item = %+v; want untrusted from GitHub, titled from the event", it)
 	}
 
+	checkTrustedAndSkipped(t, h, w, green)
+}
+
+// checkTrustedAndSkipped checks the trusted trigger's item is trusted and the passing check skipped.
+func checkTrustedAndSkipped(t *testing.T, h *harness, w domain.WebhookEndpoint, green domain.WebhookDeliveryID) {
+	t.Helper()
+
 	f, ok, err := h.intake.Firing(inOrg(t), factoryID, "trusted-check", string(w.ID)+"/d-1")
 	if err != nil || !ok || f.ItemID == "" || h.item(t, f.ItemID).Untrusted {
 		t.Errorf("trusted trigger's firing = %+v, %v, %v; want a trusted item", f, ok, err)
@@ -156,7 +168,7 @@ func TestEngine_EvaluateDeliveriesBacksOffThenFails(t *testing.T) {
 	body := checkRun("unit", "failure")
 
 	got, err := h.intake.Receive(inOrg(t), domain.NewReceipt{
-		WebhookID: w.ID, ReceivedAt: h.clock.Now(), Receipt: domain.ReceiptAccepted, DeliveryID: "d-1", Event: "check_run",
+		WebhookID: w.ID, ReceivedAt: h.clock.Now(), Receipt: domain.ReceiptAccepted, DeliveryID: "d-1", Event: evCheckRun,
 		Body: []byte(body), Named: true, Evaluations: []domain.NewDeliveryEvaluation{{FactoryID: unloaded, Triggers: []string{"red-check"}}},
 	})
 	if err != nil {
@@ -194,6 +206,13 @@ func TestEngine_EvaluateDeliveriesBacksOffThenFails(t *testing.T) {
 			t.Errorf("after %d attempts: evaluation = %+v; want failed with the error", attempt, e)
 		}
 	}
+
+	checkGrowing(t, waits)
+}
+
+// checkGrowing checks each wait is longer than the one before.
+func checkGrowing(t *testing.T, waits []time.Duration) {
+	t.Helper()
 
 	for i := 1; i < len(waits); i++ {
 		if waits[i] <= waits[i-1] {
@@ -240,6 +259,13 @@ func TestEngine_EvaluateDeliveriesSharedAcrossInstances(t *testing.T) {
 	if total != 8 || h.items(t) != 8 {
 		t.Fatalf("%d evaluations done and %d items; want 8 of each", total, h.items(t))
 	}
+
+	checkLapsedLease(t, h, w, other)
+}
+
+// checkLapsedLease checks a row whose instance died with its lease is evaluated by another.
+func checkLapsedLease(t *testing.T, h *harness, w domain.WebhookEndpoint, other *engine.Engine) {
+	t.Helper()
 
 	// An instance claims a row and dies: once its lease runs out, the other evaluates it.
 	row := h.deliver(t, h.e, w, "d-dead", checkRun("late", "failure"))
@@ -324,7 +350,7 @@ func TestEngine_UntrustedApprovalWaitsForAPerson(t *testing.T) {
 
 	h := newHarness(t, gateMergeLine(), byAgent(map[string]string{
 		agWorker:   `{"pull_request":"` + prURL + `"}`,
-		agReviewer: `{"decision":"approve"}`,
+		agReviewer: approve,
 	}))
 	h.codehost.Add(openPR(prURL))
 

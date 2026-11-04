@@ -10,10 +10,18 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
+// Names the trigger tests use.
+const (
+	ghAcme      = "gh-acme"
+	acmeApp     = "acme/app"
+	fieldBranch = "branch"
+	mainBranch  = "main"
+)
+
 func flakyTrigger() domain.Trigger {
 	return domain.Trigger{
 		Name: "flaky-test-on-main", Enabled: true, On: "github.check_run.failed",
-		Filter: domain.TriggerFilter{Branch: "main", Repo: []string{"acme/app"}},
+		Filter: domain.TriggerFilter{Branch: mainBranch, Repo: []string{acmeApp}},
 	}
 }
 
@@ -22,7 +30,7 @@ func TestTrigger_Matches(t *testing.T) {
 
 	ev := domain.IntakeEvent{
 		Key: "github.check_run.failed", Fields: map[string]string{
-			"branch": "main", "repo": "acme/app", "label": "bug", "action": "labeled", "conclusion": "failure",
+			fieldBranch: mainBranch, "repo": acmeApp, "label": "bug", "action": "labeled", "conclusion": "failure",
 		},
 		Paths: []string{"web/src/app.ts"}, Author: "jo",
 		Payload: domain.ParsePayload([]byte(`{"check_run": {"app": {"slug": "ci"}, "pull_requests": [{"number": 7}, {"number": 8}]}}`)),
@@ -36,7 +44,7 @@ func TestTrigger_Matches(t *testing.T) {
 		{"on and filter match", func(*domain.Trigger, *domain.IntakeEvent) {}, true},
 		{"another key", func(_ *domain.Trigger, e *domain.IntakeEvent) { e.Key = "github.issues.labeled" }, false},
 		{"another branch", func(_ *domain.Trigger, e *domain.IntakeEvent) {
-			e.Fields = map[string]string{"branch": "dev", "repo": "acme/app"}
+			e.Fields = map[string]string{fieldBranch: "dev", "repo": acmeApp}
 		}, false},
 		{"disabled", func(tr *domain.Trigger, _ *domain.IntakeEvent) { tr.Enabled = false }, false},
 		{"a schedule never matches an event", func(tr *domain.Trigger, e *domain.IntakeEvent) { tr.On, e.Key = domain.OnSchedule, domain.OnSchedule }, false},
@@ -95,16 +103,26 @@ func TestTrigger_OnForms(t *testing.T) {
 		names          []string // deliveries "<webhook>/<sender>/<event>" it names
 		doesNotName    []string
 	}{
-		{on: "github.check_run", sender: domain.SenderGitHub, event: "check_run",
-			names: []string{"gh-acme/github/check_run", "gh-other/github/check_run"}, doesNotName: []string{"gh-acme/github/issues", "lab/gitlab/check_run"}},
-		{on: "pagerduty.incident.triggered", sender: domain.SenderPagerDuty, event: "incident.triggered",
-			names: []string{"pd/pagerduty/incident.triggered"}, doesNotName: []string{"pd/pagerduty/incident.resolved"}},
-		{on: "gh-acme.check_run", webhook: "gh-acme", event: "check_run",
-			names: []string{"gh-acme/github/check_run"}, doesNotName: []string{"gh-other/github/check_run", "gh-acme/github/issues"}},
-		{on: "gh-acme", webhook: "gh-acme",
-			names: []string{"gh-acme/github/check_run", "gh-acme/github/push"}, doesNotName: []string{"gh-acmex/github/push"}},
-		{on: "webhook.deploys.failed", webhook: "deploys", event: "failed",
-			names: []string{"deploys/standard/failed"}, doesNotName: []string{"deploys/standard/ok"}},
+		{
+			on: "github.check_run", sender: domain.SenderGitHub, event: "check_run",
+			names: []string{"gh-acme/github/check_run", "gh-other/github/check_run"}, doesNotName: []string{"gh-acme/github/issues", "lab/gitlab/check_run"},
+		},
+		{
+			on: "pagerduty.incident.triggered", sender: domain.SenderPagerDuty, event: "incident.triggered",
+			names: []string{"pd/pagerduty/incident.triggered"}, doesNotName: []string{"pd/pagerduty/incident.resolved"},
+		},
+		{
+			on: "gh-acme.check_run", webhook: ghAcme, event: "check_run",
+			names: []string{"gh-acme/github/check_run"}, doesNotName: []string{"gh-other/github/check_run", "gh-acme/github/issues"},
+		},
+		{
+			on: ghAcme, webhook: ghAcme,
+			names: []string{"gh-acme/github/check_run", "gh-acme/github/push"}, doesNotName: []string{"gh-acmex/github/push"},
+		},
+		{
+			on: "webhook.deploys.failed", webhook: "deploys", event: "failed",
+			names: []string{"deploys/standard/failed"}, doesNotName: []string{"deploys/standard/ok"},
+		},
 		{on: domain.OnSchedule, doesNotName: []string{"schedule/github/check_run"}},
 	}
 
@@ -139,12 +157,12 @@ func TestTrigger_OnForms(t *testing.T) {
 func TestTrigger_FilterNeeds(t *testing.T) {
 	t.Parallel()
 
-	f := domain.TriggerFilter{Branch: "main", Paths: []string{"web/**"}, SkipBots: true, Match: map[string][]string{"a": {"b"}}}
+	f := domain.TriggerFilter{Branch: mainBranch, Paths: []string{"web/**"}, SkipBots: true, Match: map[string][]string{"a": {"b"}}}
 	if got, want := f.Needs(), []string{"branch", "paths", "author"}; !slices.Equal(got, want) {
 		t.Errorf("Needs = %v; want %v", got, want)
 	}
 
-	tb := domain.EventTable{"branch": {Paths: []string{"x"}}}
+	tb := domain.EventTable{fieldBranch: {Paths: []string{"x"}}}
 	if got, want := tb.Unsupplied(f.Needs()), []string{"paths", "author"}; !slices.Equal(got, want) {
 		t.Errorf("Unsupplied = %v; want %v", got, want)
 	}
@@ -154,7 +172,7 @@ func TestNewDeliveryEvent_NormalizesByTheTable(t *testing.T) {
 	t.Parallel()
 
 	tb := domain.EventTable{
-		"branch":      {Paths: []string{"ref"}, TrimPrefix: "refs/heads/"},
+		fieldBranch:   {Paths: []string{"ref"}, TrimPrefix: "refs/heads/"},
 		"repo":        {Paths: []string{"repository.full_name"}},
 		"author":      {Paths: []string{"sender.login"}},
 		"author.type": {Paths: []string{"sender.type"}},
@@ -163,21 +181,30 @@ func TestNewDeliveryEvent_NormalizesByTheTable(t *testing.T) {
 	}
 	body := `{"ref": "refs/heads/main", "repository": {"full_name": "acme/app"}, "sender": {"login": "ci", "type": "Bot"},
 	  "commits": [{"added": ["a.go"], "modified": ["b.go"]}, {"added": [], "modified": ["b.go", "c.go"]}]}`
-	w := domain.WebhookEndpoint{ID: "w1", Name: "gh-acme", Sender: domain.SenderGitHub}
+	w := domain.WebhookEndpoint{ID: "w1", Name: ghAcme, Sender: domain.SenderGitHub}
 
 	ev := domain.NewDeliveryEvent("f1", w, "d1", "push", []byte(body), tb)
 
 	switch {
-	case ev.Key != "github.push" || ev.Webhook != "gh-acme" || ev.Sender != domain.SenderGitHub || ev.Event != "push":
+	case ev.Key != "github.push" || ev.Webhook != ghAcme || ev.Sender != domain.SenderGitHub || ev.Event != "push":
 		t.Errorf("event = %q from %s (%s), %s; want github.push from gh-acme", ev.Key, ev.Webhook, ev.Sender, ev.Event)
 	case ev.Source != domain.TriggerGitHub || ev.IdempotencyKey != "w1/d1":
 		t.Errorf("source, key = %s, %s; want github, w1/d1", ev.Source, ev.IdempotencyKey)
-	case ev.Fields["branch"] != "main" || ev.Fields["repo"] != "acme/app" || ev.Author != "ci" || !ev.Bot:
+	case ev.Fields["branch"] != mainBranch || ev.Fields["repo"] != acmeApp || ev.Author != "ci" || !ev.Bot:
 		t.Errorf("fields = %v, author %q, bot %v; want main, acme/app and the bot ci", ev.Fields, ev.Author, ev.Bot)
-	case !slices.Equal(ev.Paths, []string{"a.go", "c.go", "b.go"}) && !slices.Equal(ev.Paths, []string{"a.go", "b.go", "c.go"}):
-		t.Errorf("paths = %v; want a.go, b.go and c.go once each", ev.Paths)
 	case ev.Fields["missing"] != "":
 		t.Errorf("a field the payload lacks = %q; want none", ev.Fields["missing"])
+	}
+
+	checkPayloadValues(t, ev)
+}
+
+// checkPayloadValues checks placeholders read the payload.
+func checkPayloadValues(t *testing.T, ev domain.IntakeEvent) {
+	t.Helper()
+
+	if !slices.Equal(ev.Paths, []string{"a.go", "b.go", "c.go"}) {
+		t.Errorf("paths = %v; want a.go, b.go and c.go once each", ev.Paths)
 	}
 
 	if got := ev.Value("payload.commits.modified"); got != "b.go" {
@@ -282,13 +309,20 @@ func TestUntrustedEventBlock(t *testing.T) {
 		t.Errorf("Work() = %q; want it to carry the block", it.Work())
 	}
 
+	checkLargeBlock(t)
+}
+
+// checkLargeBlock checks a large event's block stays closed and under MaxUntrustedBlock.
+func checkLargeBlock(t *testing.T) {
+	t.Helper()
+
 	big := domain.IntakeEvent{Key: "github.push", Fields: map[string]string{}, Author: "jo"}
 	for i := range 40 {
 		big.Fields[fmt.Sprintf("field%d", i)] = strings.Repeat("<", 3000)
 		big.Paths = append(big.Paths, strings.Repeat("p", 300))
 	}
 
-	block = domain.UntrustedEventBlock(big)
+	block := domain.UntrustedEventBlock(big)
 	if len(block) >= domain.MaxUntrustedBlock || !strings.HasSuffix(block, "\n</untrusted-event-data>") {
 		t.Errorf("a large event's block has %d bytes; want it closed and under %d", len(block), domain.MaxUntrustedBlock)
 	}

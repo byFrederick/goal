@@ -643,6 +643,9 @@ func TestLoad_RefusesUnknownDependencyKeys(t *testing.T) {
 	}
 }
 
+// branchMain is the branch the trigger mapping cases filter on.
+const branchMain = "main"
+
 // workIncident is the support factory's expedited work type.
 const workIncident = "incident"
 
@@ -687,14 +690,14 @@ func TestLine_Triggers(t *testing.T) {
 		on, want string
 		filter   domain.TriggerFilter
 	}{
-		{domain.OnCheckRunFailed, "github.check_run", domain.TriggerFilter{Branch: "main", Conclusion: []string{"failure"}}},
-		{domain.OnIssuesLabeled, "github.issues", domain.TriggerFilter{Branch: "main", Action: []string{"labeled"}}},
-		{"webhook.deploys", "deploys", domain.TriggerFilter{Branch: "main"}},
-		{"github.push", "github.push", domain.TriggerFilter{Branch: "main"}},
+		{domain.OnCheckRunFailed, "github.check_run", domain.TriggerFilter{Branch: branchMain, Conclusion: []string{"failure"}}},
+		{domain.OnIssuesLabeled, "github.issues", domain.TriggerFilter{Branch: branchMain, Action: []string{"labeled"}}},
+		{"webhook.deploys", "deploys", domain.TriggerFilter{Branch: branchMain}},
+		{"github.push", "github.push", domain.TriggerFilter{Branch: branchMain}},
 	}
 
 	for _, o := range old {
-		got := trigger(Trigger{Name: "t", On: o.on, Filter: &TriggerFilter{Branch: "main"}, Limits: &TriggerLimits{PerHour: 4}})
+		got := trigger(Trigger{Name: "t", On: o.on, Filter: &TriggerFilter{Branch: branchMain}, Limits: &TriggerLimits{PerHour: 4}})
 		if got.On != o.want || !reflect.DeepEqual(got.Filter, o.filter) || got.Limits.PerHour != 4 {
 			t.Errorf("on %s maps to on %s, filter %+v, perHour %d; want %s, %+v, 4", o.on, got.On, got.Filter, got.Limits.PerHour, o.want, o.filter)
 		}
