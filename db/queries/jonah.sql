@@ -1,4 +1,4 @@
--- Jonah reviews, proposals and observations (00075), under row-level security: every statement
+-- Jonah reviews, proposals and observations (00078, 00101), under row-level security: every statement
 -- sees the transaction's organization only.
 
 -- name: InsertJonahReview :one
@@ -51,18 +51,48 @@ LIMIT sqlc.arg(max_reviews);
 SELECT coalesce(max(number), 0)::bigint FROM jonah_proposals WHERE factory_id = sqlc.arg(factory_id);
 
 -- name: InsertProposal :one
-INSERT INTO jonah_proposals (id, factory_id, number, review_id, version_id, title, summary, files, evidence, estimate,
+INSERT INTO jonah_proposals (id, factory_id, number, review_id, version_id, title, summary, edits, evidence, estimate,
                              paths, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(number), sqlc.arg(review_id), sqlc.arg(version_id), sqlc.arg(title),
-        sqlc.arg(summary), sqlc.arg(files), sqlc.arg(evidence), sqlc.arg(estimate), sqlc.arg(paths)::text[],
+        sqlc.arg(summary), sqlc.arg(edits), sqlc.arg(evidence), sqlc.arg(estimate), sqlc.arg(paths)::text[],
         sqlc.arg(created_at))
 RETURNING *;
 
+-- name: SupersedeProposal :exec
+-- Sets a proposal that is still proposed superseded by a newer one whose edits overlap its own
+-- (ADR 0039 decision 6); one decided since is left as it is.
+UPDATE jonah_proposals SET state = 'superseded', decided_by = sqlc.arg(decided_by), decided_at = sqlc.arg(decided_at)::timestamptz
+WHERE factory_id = sqlc.arg(factory_id) AND id = sqlc.arg(id) AND state = 'proposed';
+
 -- name: InsertObservation :one
-INSERT INTO jonah_observations (id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at)
+INSERT INTO jonah_observations (id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at,
+                                updated_at)
 VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(review_id), sqlc.arg(summary), sqlc.arg(detail),
-        sqlc.arg(item_ids)::uuid[], sqlc.arg(count), sqlc.arg(state), sqlc.narg(proposal_id), sqlc.arg(created_at))
+        sqlc.arg(item_ids)::uuid[], sqlc.arg(count), sqlc.arg(state), sqlc.narg(proposal_id), sqlc.arg(created_at),
+        sqlc.arg(created_at))
 RETURNING *;
+
+-- name: UpdateObservation :one
+-- A later review's update of an open observation (ADR 0039 decision 5): its items join the
+-- observation's (at most 1000, the first kept), its count adds to the count, and a state and
+-- proposal, when given, replace the observation's. No row when it is not open.
+UPDATE jonah_observations o
+SET summary = sqlc.arg(summary), detail = sqlc.arg(detail),
+    item_ids = (SELECT coalesce((array_agg(i ORDER BY n))[1:1000], '{}')
+                FROM (SELECT i, min(n) AS n FROM unnest(o.item_ids || sqlc.arg(item_ids)::uuid[]) WITH ORDINALITY AS u (i, n)
+                      GROUP BY i) AS d),
+    count = least(o.count::bigint + sqlc.arg(count)::bigint, 2147483647)::integer,
+    state = coalesce(sqlc.narg(state)::text, o.state),
+    proposal_id = coalesce(sqlc.narg(proposal_id)::uuid, o.proposal_id),
+    updated_at = sqlc.arg(updated_at)
+WHERE o.factory_id = sqlc.arg(factory_id) AND o.id = sqlc.arg(id) AND o.state IN ('watching', 'proposed')
+RETURNING *;
+
+-- name: OpenObservations :many
+-- A factory's watching and proposed observations, the latest updated first (jonah_observations_open_idx).
+SELECT * FROM jonah_observations WHERE factory_id = sqlc.arg(factory_id) AND state IN ('watching', 'proposed')
+ORDER BY updated_at DESC, id DESC
+LIMIT sqlc.arg(max_observations);
 
 -- name: Proposals :many
 -- A factory's proposals, newest first, in state when one is given, below number before when one
@@ -86,8 +116,9 @@ WHERE factory_id = sqlc.arg(factory_id) AND number = sqlc.arg(number) AND state 
 RETURNING *;
 
 -- name: LatestObservations :many
+-- A factory's observations, the latest updated first.
 SELECT * FROM jonah_observations WHERE factory_id = sqlc.arg(factory_id)
-ORDER BY created_at DESC, id DESC
+ORDER BY updated_at DESC, id DESC
 LIMIT sqlc.arg(max_observations);
 
 -- name: JonahSpendSince :one
@@ -145,9 +176,9 @@ WHERE t.item_id IN (
 -- name: InsertUndoProposal :one
 -- An undo proposal: no review, undoes the proposal it reverses. The undo key's conflict means
 -- one is already proposed, published or applied.
-INSERT INTO jonah_proposals (id, factory_id, number, undoes, version_id, title, summary, files, paths, created_at)
+INSERT INTO jonah_proposals (id, factory_id, number, undoes, version_id, title, summary, edits, paths, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(number), sqlc.arg(undoes), sqlc.arg(version_id), sqlc.arg(title),
-        sqlc.arg(summary), sqlc.arg(files), sqlc.arg(paths)::text[], sqlc.arg(created_at))
+        sqlc.arg(summary), sqlc.arg(edits), sqlc.arg(paths)::text[], sqlc.arg(created_at))
 RETURNING *;
 
 -- name: EvidenceItems :many

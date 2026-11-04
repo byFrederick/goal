@@ -241,7 +241,12 @@ func (s *Store) UndoProposal(ctx context.Context, factory domain.FactoryID, undo
 
 		p.Number = last + 1
 
-		return q.InsertUndoProposal(ctx, p)
+		row, err := q.InsertUndoProposal(ctx, p)
+		if err != nil {
+			return db.JonahProposal{}, err
+		}
+
+		return row, supersede(ctx, q, p.FactoryID, n.Supersedes, at)
 	})
 
 	switch {
@@ -281,8 +286,8 @@ func undoProposalParams(factory domain.FactoryID, undoes domain.ProposalID, vers
 		return p, fmt.Errorf("no proposal %q to undo: %w", undoes, ports.ErrNotFound)
 	}
 
-	if p.Files, err = json.Marshal(n.Files); err != nil {
-		return p, fmt.Errorf("files: %w", err)
+	if p.Edits, err = json.Marshal(n.Edits); err != nil {
+		return p, fmt.Errorf("edits: %w", err)
 	}
 
 	return p, nil
