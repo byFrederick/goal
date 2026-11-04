@@ -107,6 +107,21 @@ type Item struct {
 	CreatedBy  string
 	Generation int
 	Untrusted  bool
+	// StartAt is when the item may start (ADR 0040 decision 3), zero when it may start now.
+	// StartedAt is when it left its line's first station, or when it was filed at a later one;
+	// zero until then. Lead time counts from it.
+	StartAt   time.Time
+	StartedAt time.Time
+}
+
+// LeadFrom is when the item's lead time starts: StartedAt, or CreatedAt when it has not started
+// (ADR 0040 decision 4).
+func (it Item) LeadFrom() time.Time {
+	if it.StartedAt.IsZero() {
+		return it.CreatedAt
+	}
+
+	return it.StartedAt
 }
 
 // Position returns the item's station and state.
@@ -224,6 +239,12 @@ type NewItem struct {
 	CreatedBy  Actor
 	Generation int
 	Untrusted  bool
+	// StartAt is when the item may start, zero for now; StartedAt is CreatedAt for an item filed
+	// past its line's first station, zero otherwise; After are the items it waits for, each a
+	// linked edge by CreatedBy (domain.File).
+	StartAt   time.Time
+	StartedAt time.Time
+	After     []ItemID
 }
 
 // Assembly is an item with parts: a request split into several items (each part's ParentID is

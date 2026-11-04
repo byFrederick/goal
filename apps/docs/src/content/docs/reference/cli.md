@@ -13,7 +13,7 @@ Every command of the `goal` CLI, in the order its usage text lists them: each se
 
 Factory definitions live in goald (drafts and published versions), not in files: goal factory push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, jonah, test, agent, spend, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
+Every command that talks to goald (run, follow, start, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, jonah, test, agent, spend, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
 
 With sign-in on (GOAL\_AUTH=session), commands send GOAL\_API\_KEY (an API key goal\_sk\_… or a personal token goal\_pat\_…) when it is set, else what goal login stored for goald's origin, and only over https or to this machine; a refused credential or permission exits 77
 
@@ -30,12 +30,12 @@ Flags: `--compose`.
 ## goal run
 
 ```text
-goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach]
+goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach] [--at <time> | --in <wait>] [--after <item>]...
 ```
 
-submit a work item and follow it until a human or done (--type: one of the factory's work types; default its first, none when it declares none)
+submit a work item and follow it until a human or done (--type: one of the factory's work types; default its first, none when it declares none); with a start it waits at the first station and is not followed: --at a time (RFC 3339, or 2026-11-05T09:00 in your time zone), --in a wait (36h, 7d, 2w), --after an item that must be done first (repeatable); at most 365 days ahead
 
-Flags: `--type T`, `--body B`, `--priority N`, `--detach`.
+Flags: `--type T`, `--body B`, `--priority N`, `--detach`, `--at <time>`, `--in <wait>`, `--after <item>`.
 
 ## goal follow
 
@@ -44,6 +44,16 @@ goal follow <item>
 ```
 
 follow an item's events again
+
+## goal start
+
+```text
+goal start <item> --at <time> | --in <wait> | --now
+```
+
+change when an item that has not started may start, or start it now (its --after items still hold it)
+
+Flags: `--at <time>`, `--in <wait>`, `--now`.
 
 ## goal item
 

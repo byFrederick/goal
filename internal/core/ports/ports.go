@@ -88,6 +88,16 @@ type Store interface {
 	// first, then priority (highest first), then age (oldest first).
 	Waiting(ctx context.Context, factory domain.FactoryID, station string, limit int) ([]domain.Item, error)
 
+	// Releasable returns up to limit of the Waiting items at a station that a queue station
+	// releases at now, in pull order: those with no open need (AddEdge) and no StartAt after now
+	// (ADR 0040 decision 4), filtered before the limit.
+	Releasable(ctx context.Context, factory domain.FactoryID, station string, now time.Time, limit int) ([]domain.Item, error)
+
+	// SetStart changes when an item may start to at, or clears it when at is zero (Start now),
+	// and appends a start_changed event by the actor at now. It returns the item after it: ErrNotFound
+	// when it is missing and ErrConflict when it is no longer at from.
+	SetStart(ctx context.Context, id domain.ItemID, from domain.Position, at time.Time, by domain.Actor, now time.Time) (domain.Item, error)
+
 	// Leases returns the live leases held at a station; their slots are the station's WIP.
 	Leases(ctx context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error)
 
@@ -99,8 +109,8 @@ type Store interface {
 	// ErrSlotTaken when the slot already holds a lease; in each case nothing changes. The unique
 	// (factory, station, slot) lease is what keeps WIP at or under capacity across instances.
 	//
-	// An item is skipped while any item it needs (AddEdge) is neither done nor cancelled. Waiting
-	// lists it all the same: only queue stations read it, and they hold nothing.
+	// An item is skipped while any item it needs (AddEdge) is neither done nor cancelled, and
+	// while its StartAt is after c.Now. Waiting lists it all the same.
 	ClaimNext(ctx context.Context, c Claim) (domain.Item, domain.Lease, error)
 
 	// AddEdge records that e.Item needs e.Needs and appends an edge_added event on e.Item. It
@@ -399,7 +409,7 @@ type FlowStats interface {
 
 	// ItemTimes returns the items of q.Type done in [q.Since, q.Until), by when they were done:
 	// each one's lead time and its time in each component of the lead-time bridge, from its
-	// spans (domain.ComponentOf). It returns at most limit items, those done last, so the read
+	// spans since it started (domain.ComponentOf); lead time counts from Item.LeadFrom. It returns at most limit items, those done last, so the read
 	// stays bounded however busy the window.
 	ItemTimes(ctx context.Context, q FlowQuery, limit int) ([]domain.ItemTime, error)
 

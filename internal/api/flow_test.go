@@ -31,13 +31,19 @@ var build = domain.Station{
 	ID: stBuild, Kind: domain.KindAgent, Route: map[string]string{laneAPI: agBackend, "web": "frontend"}, Agents: 2, WIP: 2,
 }
 
-// seed creates an item of the line factory straight in the store, at station in state.
+// seed creates an item of the line factory straight in the store, at station in state. Past the
+// inbox, the line's first station, it has started when it is created, as domain.File files it.
 func (h *harness) seed(t *testing.T, station string, state domain.ItemState, created time.Time) domain.Item {
 	t.Helper()
 
+	var started time.Time
+	if station != stInbox {
+		started = created
+	}
+
 	it, err := h.store.CreateItem(inOrg(t), domain.NewItem{
 		FactoryID: lineID, Type: typeFeature, Lane: laneAPI, Title: "item at " + station, Station: station,
-		State: state, Class: domain.ClassStandard, CreatedAt: created,
+		State: state, Class: domain.ClassStandard, CreatedAt: created, StartedAt: started,
 	})
 	if err != nil {
 		t.Fatal(err)

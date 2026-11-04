@@ -58,6 +58,9 @@ const (
 	// needs (the item it needs), kind and actor (ref).
 	EventEdgeAdded   EventKind = "edge_added"
 	EventEdgeRemoved EventKind = "edge_removed"
+	// EventStartChanged is a person's change of when the item may start (ADR 0040 decision 3):
+	// data start_at (RFC 3339, absent when cleared: Start now) and actor (ref).
+	EventStartChanged EventKind = "start_changed"
 	// EventAssembled is an item whose plan became parts (data parts: how many); EventPartCreated
 	// a part created from it (data parent and key), its first event; EventAssemblyDone the
 	// assembly closed by its last part (data state, parts_done and parts); EventPartAdded a part

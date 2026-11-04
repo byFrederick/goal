@@ -233,8 +233,9 @@ func TestEngine_ClaimWaitsForNeeds(t *testing.T) {
 		t.Fatalf("need = %s at %s; want done", got.State, got.Station)
 	}
 
-	if got := h.item(t, part.ID); got.Station != stWork || got.State != domain.StateQueued {
-		t.Fatalf("part = %s at %s; want queued at %s while its need is open", got.State, got.Station, stWork)
+	// The inbox holds it too, so it has not started (ADR 0040 decision 4).
+	if got := h.item(t, part.ID); got.Station != stInbox || got.State != domain.StateQueued {
+		t.Fatalf("part = %s at %s; want queued at %s while its need is open", got.State, got.Station, stInbox)
 	}
 
 	if runs := h.runs(t, testOrg, part.ID); len(runs) != 0 {

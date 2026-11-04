@@ -67,6 +67,8 @@ type Engine interface {
 	Retry(ctx context.Context, id domain.ItemID, by domain.Actor) (domain.Item, error)
 	Move(ctx context.Context, id domain.ItemID, to string, by domain.Actor, reason string) (domain.Item, error)
 	SetLane(ctx context.Context, id domain.ItemID, lane string, by domain.Actor) (domain.Item, error)
+	SetStart(ctx context.Context, id domain.ItemID, r domain.StartRequest, by domain.Actor) (domain.Item, error)
+	StartNow(ctx context.Context, id domain.ItemID, by domain.Actor) (domain.Item, error)
 	Pause(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Cancel(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)
@@ -493,9 +495,21 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 	source, via := submittedFrom(ctx)
 	p, _ := domain.PrincipalFrom(ctx)
 
+	var start *domain.StartRequest
+
+	if b.Start != nil {
+		r, err := s.startOf(ctx, *b.Start)
+		if err != nil {
+			return nil, err
+		}
+
+		start = &r
+	}
+
 	it, err := s.engine.Submit(ctx, domain.FileRequest{
 		FactoryID: domain.FactoryID(f.Metadata.ID), Origin: domain.OriginPerson, Via: via, By: p.Actor(),
 		Type: deref(b.Type), Title: b.Title, Body: deref(b.Body), Lane: deref(b.Lane), Priority: deref(b.Priority), Source: source,
+		Start: start,
 	})
 	if errors.Is(err, domain.ErrInvalid) { // what the line does not take is a bad request here, not a conflict
 		return nil, fmt.Errorf("%w: %s", errInvalid, err.Error())
@@ -854,6 +868,8 @@ func (s *server) itemOf(ctx context.Context, it domain.Item) gen.Item {
 	if it.Origin != "" {
 		out.Origin = new(gen.ItemOrigin(it.Origin))
 	}
+
+	out.Start = itemStartOf(it)
 
 	return out
 }
