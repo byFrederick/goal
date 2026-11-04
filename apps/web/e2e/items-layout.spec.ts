@@ -147,7 +147,10 @@ for (const { width, height } of [
   test(`keeps an Items row as tall as with a plain span around the checkbox at ${width} px`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await page.goto(items);
-    const box = page.getByRole('table', { name: 'Items' }).getByRole('checkbox', { name: /^Select / }).first();
+    const box = page
+      .getByRole('table', { name: 'Items' })
+      .getByRole('checkbox', { name: /^Select / })
+      .first();
     await expect(box).toBeVisible();
     const row = box.locator('xpath=ancestor::tr[1]');
     const before = (await row.boundingBox())?.height ?? 0;
