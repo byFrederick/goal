@@ -102,7 +102,8 @@ func insertTry(ctx context.Context, q *db.Queries, f, p uuid.UUID, n domain.NewP
 	}
 
 	t, err := q.InsertTry(ctx, db.InsertTryParams{
-		ID: id, FactoryID: f, ProposalID: p, ItemID: item, Station: n.Station, OriginalRunID: run, Model: n.Model, CreatedAt: at,
+		ID: id, FactoryID: f, ProposalID: p, ItemID: item, Attempt: int32(n.TryAttempt()), Station: n.Station, OriginalRunID: run, Model: n.Model,
+		CreatedAt: at,
 	})
 
 	var pg *pgconn.PgError
@@ -111,7 +112,7 @@ func insertTry(ctx context.Context, q *db.Queries, f, p uuid.UUID, n domain.NewP
 	case isForeignKeyViolation(err):
 		return db.Try{}, fmt.Errorf("item %s or run %s: %w", n.ItemID, n.OriginalRunID, ports.ErrNotFound)
 	case errors.As(err, &pg) && pg.Code == uniqueViolation:
-		return db.Try{}, fmt.Errorf("item %s twice: %w", n.ItemID, ports.ErrConflict)
+		return db.Try{}, fmt.Errorf("item %s attempt %d twice: %w", n.ItemID, n.TryAttempt(), ports.ErrConflict)
 	case err != nil:
 		return db.Try{}, fmt.Errorf("insert try: %w", err)
 	}
@@ -297,6 +298,40 @@ func (s *Store) PastTryTarget(ctx context.Context, item domain.ItemID, station s
 	return runFrom(row), nil
 }
 
+// AgentDoneItems implements ports.PastTries.
+func (s *Store) AgentDoneItems(ctx context.Context, factory domain.FactoryID, agent string, limit int) ([]domain.AgentItem, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return nil, domain.ErrNoOrg
+	}
+
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.AgentDoneItemsRow, error) {
+		return q.AgentDoneItems(ctx, db.AgentDoneItemsParams{FactoryID: f, Agent: agent, MaxItems: clampLimit(limit)})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("done items of agent %s: %w", agent, err)
+	}
+
+	out := make([]domain.AgentItem, len(rows))
+	for i, r := range rows {
+		run := runFrom(r.AgentRun)
+		out[i] = domain.AgentItem{
+			ItemID: run.ItemID, ItemNumber: r.ItemNumber, ItemTitle: r.ItemTitle, Run: run, SentBackAt: r.SentBackAt,
+			CostUSD: r.ItemCostUsd, DoneAt: r.DoneAt.UTC(),
+		}
+
+		if len(out[i].SentBackAt) == 0 {
+			out[i].SentBackAt = nil
+		}
+	}
+
+	return out, nil
+}
+
 // PastTryInput implements ports.PastTries.
 func (s *Store) PastTryInput(ctx context.Context, run domain.RunID) (domain.PastTryInput, error) {
 	if _, ok := domain.OrgFrom(ctx); !ok {
@@ -342,7 +377,7 @@ func (s *Store) PastTryInput(ctx context.Context, run domain.RunID) (domain.Past
 func pastTryFrom(t db.Try, number int64) domain.PastTry {
 	out := domain.PastTry{
 		ID: domain.PastTryID(t.ID.String()), FactoryID: domain.FactoryID(t.FactoryID.String()), ProposalID: domain.ProposalID(t.ProposalID.String()),
-		ProposalNumber: number, ItemID: domain.ItemID(t.ItemID.String()), Station: t.Station, OriginalRunID: domain.RunID(t.OriginalRunID.String()),
+		ProposalNumber: number, ItemID: domain.ItemID(t.ItemID.String()), Attempt: int(t.Attempt), Station: t.Station, OriginalRunID: domain.RunID(t.OriginalRunID.String()),
 		Model: t.Model, State: domain.PastTryState(t.State), Verdict: domain.PastTryVerdict(deref(t.Verdict)), Error: t.Error, Reason: t.Reason, Diff: t.Diff,
 		CostUSD: t.CostUsd, Attempts: int(t.Attempts), CreatedAt: t.CreatedAt.UTC(),
 	}

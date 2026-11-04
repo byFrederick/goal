@@ -44,3 +44,48 @@ func TestPastTryResult_Check(t *testing.T) {
 		}
 	}
 }
+
+func TestNewPastTry_CheckAttempt(t *testing.T) {
+	t.Parallel()
+
+	n := NewPastTry{ProposalID: "p", ItemID: "i", Station: "build", OriginalRunID: "r", Model: "m"}
+
+	for _, attempt := range []int{0, 1, ModelTriesPerItem} {
+		n.Attempt = attempt
+		if err := n.Check(); err != nil {
+			t.Errorf("Check with attempt %d = %v, want nil", attempt, err)
+		}
+	}
+
+	if n.Attempt = 0; n.TryAttempt() != 1 {
+		t.Errorf("TryAttempt of attempt 0 = %d, want 1", n.TryAttempt())
+	}
+
+	for _, attempt := range []int{-1, ModelTriesPerItem + 1} {
+		n.Attempt = attempt
+		if err := n.Check(); !errors.Is(err, ErrInvalid) {
+			t.Errorf("Check with attempt %d = %v, want ErrInvalid", attempt, err)
+		}
+	}
+}
+
+func TestAgentItem_LineResult(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		sent []string
+		cost float64
+		want string
+	}{
+		{nil, 0.42, "passed first time, $0.42"},
+		{[]string{"review"}, 0.9, "sent back once at review, $0.90"},
+		{[]string{"review", "review"}, 1.1, "sent back 2 times at review, $1.10"},
+		{[]string{"review", "test", "review"}, 2, "sent back 3 times at review and test, $2.00"},
+	}
+
+	for _, c := range cases {
+		if got := (AgentItem{SentBackAt: c.sent, CostUSD: c.cost}).LineResult(); got != c.want {
+			t.Errorf("LineResult of %v, $%v = %q, want %q", c.sent, c.cost, got, c.want)
+		}
+	}
+}

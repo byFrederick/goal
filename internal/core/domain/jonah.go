@@ -33,6 +33,21 @@ var (
 	ErrLearningBudgetExhausted = errors.New("this factory's review runs used their weekly budget")
 )
 
+// Refusals of Try another model (ADR 0039 decision 13).
+var (
+	// ErrModelNotAllowed refuses a model the organization's policy does not allow, or the
+	// agent's model already.
+	ErrModelNotAllowed = errors.New("the model is not one the organization allows, or is the agent's model already")
+	// ErrAgentNotFound refuses an agent the current version does not have.
+	ErrAgentNotFound = errors.New("the current version has no such agent")
+	// ErrAgentNotTriable refuses an agent that needs MCP servers or secrets to do its work, so
+	// it cannot be tried on past items.
+	ErrAgentNotTriable = errors.New("the agent needs MCP servers or secrets, so it can't be tried on past items")
+	// ErrNoFinishedItems refuses an agent with no finished item whose first run of a claim can
+	// be rerun.
+	ErrNoFinishedItems = errors.New("the agent has no finished item to try the model on")
+)
+
 // Audit actions of Jonah's decisions.
 const (
 	AuditProposalPublished = "learning_proposal.published"
@@ -40,6 +55,7 @@ const (
 	AuditProposalRejected  = "learning_proposal.rejected"
 	AuditReviewQueued      = "jonah_review.queued"
 	AuditProposalUndo      = "learning_proposal.undo_proposed"
+	AuditProposalModel     = "learning_proposal.model_proposed"
 )
 
 // Audit target kinds of Jonah's entries.
@@ -394,6 +410,9 @@ type Proposal struct {
 	// Undoes is the proposal this one reverses (Undo this change, ADR 0039 decision 15); it has
 	// no review then.
 	Undoes ProposalID
+	// Agent is the agent whose model a person's Try another model changes (ADR 0039 decision
+	// 13); it has no review then.
+	Agent string
 	// PublishedVersionID is the version Approve published.
 	PublishedVersionID DefinitionVersionID
 	RejectReason       string

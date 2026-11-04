@@ -34,6 +34,7 @@ var jonahTests = []struct {
 	{"Jonah_ObservationsPersistAcrossReviews", testJonahObservationsPersist},
 	{"Jonah_DecideProposalOnlyOnce", testJonahDecide},
 	{"Jonah_UndoProposalOncePerProposal", testJonahUndo},
+	{"Jonah_ModelProposalStored", testJonahModelProposal},
 	{"Jonah_OtherOrgInvisible", testJonahTenancy},
 	{"Jonah_SpendSinceSumsJonahRuns", testJonahSpend},
 	{"Jonah_SentBackBetweenListsWindow", testJonahSentBackBetween},
@@ -1161,4 +1162,58 @@ func (f *fixture) expectPersisted(t *testing.T, first domain.JonahReviewID, scre
 	if n := got[sandbox]; n.State != domain.ObservationNotJonahs || n.Count != 2 {
 		t.Errorf("not Jonah's observation %+v, want not_jonahs, count 2", n)
 	}
+}
+
+// ProposeModel stores a person's model proposal with the factory's next number, the agent it
+// changes, no review and its evidence, queues its tries with it, three per item, and supersedes
+// what it names; a try given twice stores nothing.
+func testJonahModelProposal(f *fixture) {
+	t := f.t
+	_, made := f.finishReview(t, f.factory, t0, domain.JonahReviewResult{Proposals: []domain.NewProposal{proposal("a", "factory.yaml")}})
+	version := f.NewVersion(t, f.org, f.factory)
+	it := f.create(t, domain.NewItem{Title: "Fix the login"})
+	run := f.pastRun(t, it, stWork, t0, true, "")
+
+	n := proposal("Try model-b for worker", "factory.yaml")
+	n.Evidence = []domain.ProposalEvidence{{ItemID: it.ID, Station: stWork, Quote: "passed first time, $1.00"}}
+	n.Supersedes = []domain.ProposalID{made[0].ID}
+
+	tries := make([]domain.NewPastTry, domain.ModelTriesPerItem)
+	for i := range tries {
+		tries[i] = domain.NewPastTry{ItemID: it.ID, Attempt: i + 1, Station: stWork, OriginalRunID: run, Model: "model-b"}
+	}
+
+	p, queued, err := f.Jonah.ProposeModel(f.ctx(t), f.factory, version, agWorker, n, tries, t1)
+	if err != nil {
+		t.Fatalf("ProposeModel: %v", err)
+	}
+
+	if p.Number != 2 || p.Agent != agWorker || p.ReviewID != "" || p.Undoes != "" || p.VersionID != version || p.State != domain.ProposalProposed {
+		t.Errorf("ProposeModel = %+v, want proposal 2 of agent %s on %s without a review", p, agWorker, version)
+	}
+
+	got, err := f.Jonah.Proposal(f.ctx(t), f.factory, 2)
+	if err != nil || got.Agent != agWorker || !reflect.DeepEqual(got.Evidence, n.Evidence) || got.Paths()[0] != "factory.yaml" {
+		t.Errorf("read back %+v, %v; want agent %s with its evidence", got, err, agWorker)
+	}
+
+	if len(queued) != domain.ModelTriesPerItem || queued[0].ProposalID != p.ID || queued[0].ProposalNumber != 2 || queued[2].Attempt != 3 {
+		t.Errorf("queued tries = %+v, want three of proposal 2, attempts 1 to 3", queued)
+	}
+
+	if stored, _ := f.Tries.ProposalPastTries(f.ctx(t), p.ID); len(stored) != domain.ModelTriesPerItem {
+		t.Errorf("ProposalPastTries = %d tries, want %d", len(stored), domain.ModelTriesPerItem)
+	}
+
+	if old, _ := f.Jonah.Proposal(f.ctx(t), f.factory, made[0].Number); old.State != domain.ProposalSuperseded {
+		t.Errorf("overlapping proposal is %s, want superseded", old.State)
+	}
+
+	_, _, err = f.Jonah.ProposeModel(f.ctx(t), f.factory, version, agWorker, proposal("twice", "factory.yaml"), []domain.NewPastTry{tries[0], tries[0]}, t1)
+	expect(t, "ProposeModel with a try twice", err, ports.ErrConflict)
+	f.expectNoProposal(t, 3)
+
+	_, _, err = f.Jonah.ProposeModel(f.ctx(t), f.factory, version, "", proposal("no agent", "factory.yaml"), tries, t1)
+	expect(t, "ProposeModel without an agent", err, domain.ErrInvalid)
+	f.expectNoProposal(t, 3)
 }

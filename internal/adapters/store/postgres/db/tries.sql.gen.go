@@ -12,6 +12,93 @@ import (
 	"github.com/google/uuid"
 )
 
+const agentDoneItems = `-- name: AgentDoneItems :many
+SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, r.kind, r.brief, r.output, r.branch_head, r.base_head, r.pushed_head, w.number AS item_number, w.title AS item_title, w.cost_usd AS item_cost_usd,
+       w.done_at::timestamptz AS done_at,
+       coalesce((SELECT array_agg(coalesce(e.station, '') ORDER BY e.at, e.id) FROM item_events e
+                 WHERE e.item_id = w.id AND e.kind IN ('rejected', 'gate_rejected')), '{}')::text[] AS sent_back_at
+FROM work_items w
+JOIN LATERAL (
+  SELECT a.id FROM agent_runs a
+  WHERE a.item_id = w.id AND a.agent = $1 AND a.kind = 'station' AND a.branch_head IS NOT NULL
+    AND a.status <> 'running'
+  ORDER BY a.started_at DESC, a.id DESC
+  LIMIT 1
+) pick ON true
+JOIN agent_runs r ON r.id = pick.id
+WHERE w.factory_id = $2 AND w.state = 'done' AND w.done_at IS NOT NULL
+ORDER BY w.done_at DESC, w.id
+LIMIT $3
+`
+
+type AgentDoneItemsParams struct {
+	Agent     string
+	FactoryID uuid.UUID
+	MaxItems  int32
+}
+
+type AgentDoneItemsRow struct {
+	AgentRun    AgentRun
+	ItemNumber  int64
+	ItemTitle   string
+	ItemCostUsd float64
+	DoneAt      time.Time
+	SentBackAt  []string
+}
+
+// The factory's done items, the most recently done first (work_items_done_at_idx), that the agent
+// has a finished station run of that was a claim's first, with the newest such run, the stations
+// of the item's rejected and gate_rejected events, oldest first, and the item's cost: what Try
+// another model tries (ADR 0039 decision 13).
+func (q *Queries) AgentDoneItems(ctx context.Context, arg AgentDoneItemsParams) ([]AgentDoneItemsRow, error) {
+	rows, err := q.db.Query(ctx, agentDoneItems, arg.Agent, arg.FactoryID, arg.MaxItems)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AgentDoneItemsRow
+	for rows.Next() {
+		var i AgentDoneItemsRow
+		if err := rows.Scan(
+			&i.AgentRun.ID,
+			&i.AgentRun.FactoryID,
+			&i.AgentRun.ItemID,
+			&i.AgentRun.Station,
+			&i.AgentRun.Agent,
+			&i.AgentRun.Model,
+			&i.AgentRun.SessionID,
+			&i.AgentRun.Status,
+			&i.AgentRun.Turns,
+			&i.AgentRun.InputTokens,
+			&i.AgentRun.OutputTokens,
+			&i.AgentRun.CostUsd,
+			&i.AgentRun.Error,
+			&i.AgentRun.StartedAt,
+			&i.AgentRun.EndedAt,
+			&i.AgentRun.OrgID,
+			&i.AgentRun.DefinitionVersionID,
+			&i.AgentRun.Kind,
+			&i.AgentRun.Brief,
+			&i.AgentRun.Output,
+			&i.AgentRun.BranchHead,
+			&i.AgentRun.BaseHead,
+			&i.AgentRun.PushedHead,
+			&i.ItemNumber,
+			&i.ItemTitle,
+			&i.ItemCostUsd,
+			&i.DoneAt,
+			&i.SentBackAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const claimTry = `-- name: ClaimTry :one
 UPDATE tries t SET state = 'running', lease_until = $1::timestamptz, attempts = t.attempts + 1
 WHERE t.id = (
@@ -88,10 +175,10 @@ func (q *Queries) FinishTry(ctx context.Context, arg FinishTryParams) (uuid.UUID
 }
 
 const insertTry = `-- name: InsertTry :one
-INSERT INTO tries (id, factory_id, proposal_id, item_id, station, original_run_id, model, created_at)
-VALUES ($1, $2, $3, $4, $5,
-        $6, $7, $8)
-RETURNING id, org_id, factory_id, proposal_id, item_id, station, original_run_id, try_run_id, model, state, verdict, error, diff, cost_usd, lease_until, attempts, created_at, finished_at, reason
+INSERT INTO tries (id, factory_id, proposal_id, item_id, attempt, station, original_run_id, model, created_at)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7, $8, $9)
+RETURNING id, org_id, factory_id, proposal_id, item_id, station, original_run_id, try_run_id, model, state, verdict, error, diff, cost_usd, lease_until, attempts, created_at, finished_at, reason, attempt
 `
 
 type InsertTryParams struct {
@@ -99,6 +186,7 @@ type InsertTryParams struct {
 	FactoryID     uuid.UUID
 	ProposalID    uuid.UUID
 	ItemID        uuid.UUID
+	Attempt       int32
 	Station       string
 	OriginalRunID uuid.UUID
 	Model         string
@@ -111,6 +199,7 @@ func (q *Queries) InsertTry(ctx context.Context, arg InsertTryParams) (Try, erro
 		arg.FactoryID,
 		arg.ProposalID,
 		arg.ItemID,
+		arg.Attempt,
 		arg.Station,
 		arg.OriginalRunID,
 		arg.Model,
@@ -137,6 +226,7 @@ func (q *Queries) InsertTry(ctx context.Context, arg InsertTryParams) (Try, erro
 		&i.CreatedAt,
 		&i.FinishedAt,
 		&i.Reason,
+		&i.Attempt,
 	)
 	return i, err
 }
@@ -225,7 +315,7 @@ func (q *Queries) ProposalHasTries(ctx context.Context, proposalID uuid.UUID) (b
 }
 
 const proposalTries = `-- name: ProposalTries :many
-SELECT t.id, t.org_id, t.factory_id, t.proposal_id, t.item_id, t.station, t.original_run_id, t.try_run_id, t.model, t.state, t.verdict, t.error, t.diff, t.cost_usd, t.lease_until, t.attempts, t.created_at, t.finished_at, t.reason, p.number AS proposal_number FROM tries t
+SELECT t.id, t.org_id, t.factory_id, t.proposal_id, t.item_id, t.station, t.original_run_id, t.try_run_id, t.model, t.state, t.verdict, t.error, t.diff, t.cost_usd, t.lease_until, t.attempts, t.created_at, t.finished_at, t.reason, t.attempt, p.number AS proposal_number FROM tries t
 JOIN jonah_proposals p ON p.id = t.proposal_id
 WHERE t.proposal_id = $1
 ORDER BY t.created_at, t.id
@@ -265,6 +355,7 @@ func (q *Queries) ProposalTries(ctx context.Context, proposalID uuid.UUID) ([]Pr
 			&i.Try.CreatedAt,
 			&i.Try.FinishedAt,
 			&i.Try.Reason,
+			&i.Try.Attempt,
 			&i.ProposalNumber,
 		); err != nil {
 			return nil, err
@@ -313,7 +404,7 @@ func (q *Queries) RunByID(ctx context.Context, id uuid.UUID) (AgentRun, error) {
 }
 
 const tryByID = `-- name: TryByID :one
-SELECT t.id, t.org_id, t.factory_id, t.proposal_id, t.item_id, t.station, t.original_run_id, t.try_run_id, t.model, t.state, t.verdict, t.error, t.diff, t.cost_usd, t.lease_until, t.attempts, t.created_at, t.finished_at, t.reason, p.number AS proposal_number FROM tries t
+SELECT t.id, t.org_id, t.factory_id, t.proposal_id, t.item_id, t.station, t.original_run_id, t.try_run_id, t.model, t.state, t.verdict, t.error, t.diff, t.cost_usd, t.lease_until, t.attempts, t.created_at, t.finished_at, t.reason, t.attempt, p.number AS proposal_number FROM tries t
 JOIN jonah_proposals p ON p.id = t.proposal_id
 WHERE t.id = $1
 `
@@ -346,6 +437,7 @@ func (q *Queries) TryByID(ctx context.Context, id uuid.UUID) (TryByIDRow, error)
 		&i.Try.CreatedAt,
 		&i.Try.FinishedAt,
 		&i.Try.Reason,
+		&i.Try.Attempt,
 		&i.ProposalNumber,
 	)
 	return i, err

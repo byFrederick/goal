@@ -1,6 +1,7 @@
 package porttest
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -78,12 +79,12 @@ func (s *Store) newPastTries(org domain.OrgID, factory domain.FactoryID, proposa
 			return nil, fmt.Errorf("queue past tries: item %s or run %s: %w", n.ItemID, n.OriginalRunID, ports.ErrNotFound)
 		}
 
-		if slices.ContainsFunc(out, func(t domain.PastTry) bool { return t.ItemID == n.ItemID }) {
-			return nil, fmt.Errorf("queue past tries: item %s twice: %w", n.ItemID, ports.ErrConflict)
+		if slices.ContainsFunc(out, func(t domain.PastTry) bool { return t.ItemID == n.ItemID && t.Attempt == n.TryAttempt() }) {
+			return nil, fmt.Errorf("queue past tries: item %s attempt %d twice: %w", n.ItemID, n.TryAttempt(), ports.ErrConflict)
 		}
 
 		out = append(out, domain.PastTry{
-			ID: domain.PastTryID(s.newID()), FactoryID: factory, ProposalID: proposal, ProposalNumber: number, ItemID: n.ItemID,
+			ID: domain.PastTryID(s.newID()), FactoryID: factory, ProposalID: proposal, ProposalNumber: number, ItemID: n.ItemID, Attempt: n.TryAttempt(),
 			Station: n.Station, OriginalRunID: n.OriginalRunID, Model: n.Model, State: domain.PastTryQueued, CreatedAt: at,
 		})
 	}
@@ -237,6 +238,55 @@ func (s *Store) PastTryTarget(ctx context.Context, item domain.ItemID, station s
 func (s *Store) firstRunAt(org domain.OrgID, id domain.RunID, r *domain.Run, item domain.ItemID, station string) bool {
 	return r.ItemID == item && r.Station == station && s.runVisible(r, org) && s.jonah.runKinds[id] == domain.RunKindStation &&
 		r.Result.Status != domain.RunRunning && r.Input.BranchHead != ""
+}
+
+// AgentDoneItems implements ports.PastTries.
+func (s *Store) AgentDoneItems(ctx context.Context, factory domain.FactoryID, agent string, limit int) ([]domain.AgentItem, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := []domain.AgentItem{}
+
+	for id, it := range s.items {
+		if it.OrgID != org || it.FactoryID != factory || it.State != domain.StateDone {
+			continue
+		}
+
+		var best *domain.Run
+
+		for rid, r := range s.runs {
+			if r.Agent != agent || !s.firstRunAt(org, rid, r, id, r.Station) {
+				continue
+			}
+
+			if best == nil || r.StartedAt.After(best.StartedAt) || (r.StartedAt.Equal(best.StartedAt) && r.ID > best.ID) {
+				best = r
+			}
+		}
+
+		if best == nil {
+			continue
+		}
+
+		a := domain.AgentItem{ItemID: id, ItemNumber: it.Number, ItemTitle: it.Title, Run: *best, CostUSD: it.CostUSD, DoneAt: it.DoneAt}
+
+		for _, e := range s.events {
+			if e.ItemID == id && (e.Kind == domain.EventRejected || e.Kind == domain.EventGateRejected) {
+				a.SentBackAt = append(a.SentBackAt, e.Station)
+			}
+		}
+
+		out = append(out, a)
+	}
+
+	slices.SortFunc(out, func(a, b domain.AgentItem) int { return cmp.Or(b.DoneAt.Compare(a.DoneAt), cmp.Compare(a.ItemID, b.ItemID)) })
+
+	return out[:min(len(out), max(limit, 0))], nil
 }
 
 // PastTryInput implements ports.PastTries.

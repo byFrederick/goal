@@ -277,6 +277,7 @@ type JonahProposal struct {
 	CreatedAt          time.Time
 	Undoes             *uuid.UUID
 	Edits              []byte
+	Agent              *string
 }
 
 type JonahReview struct {
@@ -374,6 +375,7 @@ type Try struct {
 	CreatedAt     time.Time
 	FinishedAt    *time.Time
 	Reason        string
+	Attempt       int32
 }
 
 type Watch struct {

@@ -17,6 +17,8 @@ var triesTests = []struct {
 	test func(f *fixture)
 }{
 	{"Tries_QueuedOncePerProposal", testTriesQueuedOnce},
+	{"Tries_ThreePerItem", testTriesThreePerItem},
+	{"Tries_AgentDoneItemsNewestFirst", testTriesAgentDoneItems},
 	{"Tries_ClaimCappedPerFactoryAndLeased", testTriesClaim},
 	{"Tries_FinishStoresVerdictAndReason", testTriesGraded},
 	{"Tries_TargetIsNewestFirstRunOfAClaim", testTriesTarget},
@@ -351,5 +353,87 @@ func testTriesTenancy(f *fixture) {
 	_, err = f.Tries.ClaimPastTry(t.Context(), f.factory, t1, ttl, 2)
 	if !errors.Is(err, domain.ErrNoOrg) {
 		t.Errorf("ClaimPastTry without an org = %v, want ErrNoOrg", err)
+	}
+}
+
+// A proposal may have up to three tries of one item, one per attempt: a try without an attempt is
+// the first, and an item and attempt given twice is a conflict that queues none.
+func testTriesThreePerItem(f *fixture) {
+	t := f.t
+	p := f.triedProposal(t, t1)
+	it := f.create(t, domain.NewItem{})
+	run := f.pastRun(t, it, stWork, t0, true, "")
+	try := func(attempt int) domain.NewPastTry {
+		return domain.NewPastTry{ProposalID: p.ID, ItemID: it.ID, Attempt: attempt, Station: stWork, OriginalRunID: run, Model: model}
+	}
+
+	_, err := f.Tries.QueuePastTries(f.ctx(t), f.factory, p.ID, []domain.NewPastTry{try(1), try(1)}, t1)
+	expect(t, "QueuePastTries of one attempt twice", err, ports.ErrConflict)
+
+	_, err = f.Tries.QueuePastTries(f.ctx(t), f.factory, p.ID, []domain.NewPastTry{try(1), try(domain.ModelTriesPerItem + 1)}, t1)
+	expect(t, "QueuePastTries of a fourth attempt", err, domain.ErrInvalid)
+
+	if _, err := f.Tries.QueuePastTries(f.ctx(t), f.factory, p.ID, []domain.NewPastTry{try(0), try(2), try(3)}, t1); err != nil {
+		t.Fatalf("QueuePastTries of three attempts: %v", err)
+	}
+
+	got, err := f.Tries.ProposalPastTries(f.ctx(t), p.ID)
+	if err != nil || len(got) != 3 {
+		t.Fatalf("ProposalPastTries = %+v, %v; want three tries", got, err)
+	}
+
+	attempts := map[int]bool{}
+	for _, tr := range got {
+		attempts[tr.Attempt] = tr.ItemID == it.ID
+	}
+
+	if !attempts[1] || !attempts[2] || !attempts[3] {
+		t.Errorf("attempts = %v, want 1, 2 and 3 of the item", attempts)
+	}
+}
+
+// AgentDoneItems lists the done items the agent has a claim's first run of, the most recently done
+// first, at most limit, each with that newest run, its send-backs' stations and the item's cost:
+// not an open item, one whose run recorded no branch head, or another factory's.
+func testTriesAgentDoneItems(f *fixture) {
+	t := f.t
+
+	a := f.create(t, domain.NewItem{Title: "older"})
+	f.pastRun(t, a, stWork, t0, true, "")
+	newest := f.pastRun(t, a, stWork, t0.Add(time.Minute), true, "")
+	f.event(t, domain.Event{FactoryID: f.factory, ItemID: a.ID, At: t0.Add(2 * time.Minute), Kind: domain.EventGateRejected, Station: stNext, Actor: agWorker})
+	f.finish(t, a, t1, false)
+
+	b := f.create(t, domain.NewItem{Title: "newer"})
+	f.pastRun(t, b, stWork, t0, true, "")
+	f.finish(t, b, t1.Add(time.Minute), false)
+
+	noHead := f.create(t, domain.NewItem{Title: "retry only"})
+	f.pastRun(t, noHead, stWork, t0, false, "")
+	f.finish(t, noHead, t1, false)
+
+	open := f.create(t, domain.NewItem{Title: "open"})
+	f.pastRun(t, open, stWork, t0, true, "")
+
+	other := f.create(t, domain.NewItem{FactoryID: f.newFactory(t), Title: "another factory's"})
+	f.pastRun(t, other, stWork, t0, true, "")
+	f.finish(t, other, t1, false)
+
+	got, err := f.Tries.AgentDoneItems(f.ctx(t), f.factory, agWorker, 5)
+	if err != nil || len(got) != 2 || got[0].ItemID != b.ID || got[1].ItemID != a.ID {
+		t.Fatalf("AgentDoneItems = %+v, %v; want b then a", got, err)
+	}
+
+	if g := got[1]; g.Run.ID != newest || g.ItemNumber != a.Number || g.ItemTitle != "older" || len(g.SentBackAt) != 1 ||
+		g.SentBackAt[0] != stNext || g.CostUSD != 2 || !g.DoneAt.Equal(t1) {
+		t.Errorf("AgentDoneItems[1] = %+v, want a's newest run, one send-back at %s, $2 and done at t1", g, stNext)
+	}
+
+	if got, _ := f.Tries.AgentDoneItems(f.ctx(t), f.factory, agWorker, 1); len(got) != 1 || got[0].ItemID != b.ID {
+		t.Errorf("AgentDoneItems limit 1 = %+v, want b", got)
+	}
+
+	if got, _ := f.Tries.AgentDoneItems(f.ctx(t), f.factory, "nobody", 5); len(got) != 0 {
+		t.Errorf("AgentDoneItems of another agent = %+v, want none", got)
 	}
 }

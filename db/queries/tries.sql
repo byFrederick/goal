@@ -9,8 +9,8 @@ SELECT id, number FROM jonah_proposals WHERE factory_id = sqlc.arg(factory_id) A
 SELECT EXISTS (SELECT 1 FROM tries WHERE proposal_id = sqlc.arg(proposal_id))::bool;
 
 -- name: InsertTry :one
-INSERT INTO tries (id, factory_id, proposal_id, item_id, station, original_run_id, model, created_at)
-VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(proposal_id), sqlc.arg(item_id), sqlc.arg(station),
+INSERT INTO tries (id, factory_id, proposal_id, item_id, attempt, station, original_run_id, model, created_at)
+VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(proposal_id), sqlc.arg(item_id), sqlc.arg(attempt), sqlc.arg(station),
         sqlc.arg(original_run_id), sqlc.arg(model), sqlc.arg(created_at))
 RETURNING *;
 
@@ -71,3 +71,25 @@ SELECT * FROM agent_runs WHERE id = sqlc.arg(id);
 SELECT DISTINCT ON (station) station, output FROM agent_runs
 WHERE item_id = sqlc.arg(item_id) AND ended_at < sqlc.arg(before)::timestamptz AND output IS NOT NULL
 ORDER BY station, ended_at DESC, id DESC;
+
+-- name: AgentDoneItems :many
+-- The factory's done items, the most recently done first (work_items_done_at_idx), that the agent
+-- has a finished station run of that was a claim's first, with the newest such run, the stations
+-- of the item's rejected and gate_rejected events, oldest first, and the item's cost: what Try
+-- another model tries (ADR 0039 decision 13).
+SELECT sqlc.embed(r), w.number AS item_number, w.title AS item_title, w.cost_usd AS item_cost_usd,
+       w.done_at::timestamptz AS done_at,
+       coalesce((SELECT array_agg(coalesce(e.station, '') ORDER BY e.at, e.id) FROM item_events e
+                 WHERE e.item_id = w.id AND e.kind IN ('rejected', 'gate_rejected')), '{}')::text[] AS sent_back_at
+FROM work_items w
+JOIN LATERAL (
+  SELECT a.id FROM agent_runs a
+  WHERE a.item_id = w.id AND a.agent = sqlc.arg(agent) AND a.kind = 'station' AND a.branch_head IS NOT NULL
+    AND a.status <> 'running'
+  ORDER BY a.started_at DESC, a.id DESC
+  LIMIT 1
+) pick ON true
+JOIN agent_runs r ON r.id = pick.id
+WHERE w.factory_id = sqlc.arg(factory_id) AND w.state = 'done' AND w.done_at IS NOT NULL
+ORDER BY w.done_at DESC, w.id
+LIMIT sqlc.arg(max_items);
