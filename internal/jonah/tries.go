@@ -1,0 +1,503 @@
+package jonah
+
+import (
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"slices"
+	"time"
+
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
+)
+
+// TryDefinitions reads the lines a try loop works on and what a proposal changes, for the
+// organization in ctx; cmd/goald adapts definitions.Cache and authoring.Service to it.
+type TryDefinitions interface {
+	// CurrentLines are the current versions' lines of the organization's factories.
+	CurrentLines(ctx context.Context) ([]domain.Line, error)
+	// ProposedLine is version's line with files written over its files, and the agent stations of
+	// it, in line order, that the change reaches (factorymodel.StationsReached). ErrNotFound when
+	// the organization has no such version.
+	ProposedLine(ctx context.Context, version domain.DefinitionVersionID, files []domain.ProposalFile) (domain.Line, []string, error)
+}
+
+// WaitingItems reads the items waiting at a station; ports.Store satisfies it.
+type WaitingItems interface {
+	Waiting(ctx context.Context, factory domain.FactoryID, station string, limit int) ([]domain.Item, error)
+}
+
+// TryDeps are the ports the try loop works through. Log may be nil.
+type TryDeps struct {
+	Orgs        Orgs
+	Jonah       ports.JonahStore
+	Tries       ports.PastTries
+	Definitions TryDefinitions
+	Waiting     WaitingItems
+	Runner      TaskRunner
+	Clock       ports.Clock
+	Log         *slog.Logger
+}
+
+// TryConfig sets the try loop's times and its cap.
+type TryConfig struct {
+	// Timeout bounds one try's run.
+	Timeout time.Duration
+	// Margin is the lease's time beyond the run, for reading and recording.
+	Margin time.Duration
+	// PerFactory is how many of a factory's tries run at once, on every goald together; 0 is
+	// DefaultTriesPerFactory.
+	PerFactory int
+}
+
+// DefaultTriesPerFactory is how many of a factory's tries run at once when TryConfig names none.
+const DefaultTriesPerFactory = 2
+
+// MaxTryAttempts is how many claims a try gets before it ends with verdict error: a try whose
+// goald died twice more is not tried again.
+const MaxTryAttempts = 3
+
+// sweepProposals bounds the proposed proposals a sweep reads per factory.
+const sweepProposals = 100
+
+// Tries tries each proposal on past items before anyone sees it (ADR 0039 decisions 9 and 11):
+// its sweep queues the tries, and its work runs them, each a run of kind try in a box with only
+// the model key, through engine.RunTask. Any goald may run it: tries are claimed under a lease,
+// and one whose goald died is claimed again when its lease ends.
+type Tries struct {
+	d   TryDeps
+	c   TryConfig
+	log *slog.Logger
+}
+
+// NewTries returns a try loop over d with the times and cap of c.
+func NewTries(d TryDeps, c TryConfig) *Tries {
+	log := d.Log
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+
+	if c.PerFactory <= 0 {
+		c.PerFactory = DefaultTriesPerFactory
+	}
+
+	return &Tries{d: d, c: c, log: log}
+}
+
+// Sweep queues the tries of every proposed proposal of each Jonah-enabled factory of every live
+// organization that has none: those that change what a triable station's agent gets
+// (ProposedLine's reached stations whose agent domain.Line.TriableAgent accepts). Each such
+// proposal gets one try per item it cites, at most domain.MaxPastTryItems, newest first, each of
+// the item's newest run there that was a claim's first. A memory-only or flow-only proposal, or
+// one that reaches only stations that can't be tried, gets none. Queuing is all or none per
+// proposal and once, so the sweep is idempotent. A factory or organization that fails does not
+// hold up the others.
+func (s *Tries) Sweep(ctx context.Context) error {
+	orgs, err := s.d.Orgs.ActiveOrgs(ctx)
+	if err != nil {
+		return fmt.Errorf("try sweep: list organizations: %w", err)
+	}
+
+	var errs []error
+
+	for _, org := range orgs {
+		octx := domain.WithOrg(ctx, org)
+
+		lines, err := s.d.Definitions.CurrentLines(octx)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("try sweep of org %s: list lines: %w", org, err))
+
+			continue
+		}
+
+		for _, l := range lines {
+			if !l.Jonah.Enabled {
+				continue
+			}
+
+			if err := s.sweepFactory(octx, l.FactoryID); err != nil {
+				errs = append(errs, fmt.Errorf("try sweep of factory %s: %w", l.FactoryID, err))
+			}
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+func (s *Tries) sweepFactory(ctx context.Context, f domain.FactoryID) error {
+	ps, err := s.d.Jonah.Proposals(ctx, ports.ProposalQuery{Factory: f, State: domain.ProposalProposed, Limit: sweepProposals})
+	if err != nil {
+		return fmt.Errorf("list proposals: %w", err)
+	}
+
+	var errs []error
+
+	for _, p := range ps {
+		if err := s.sweepProposal(ctx, p); err != nil {
+			errs = append(errs, fmt.Errorf("proposal %d: %w", p.Number, err))
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+// target is one past item's try: the run it reruns.
+type target struct {
+	item domain.ItemID
+	run  domain.Run
+}
+
+func (s *Tries) sweepProposal(ctx context.Context, p domain.Proposal) error {
+	have, err := s.d.Tries.ProposalPastTries(ctx, p.ID)
+	if err != nil {
+		return fmt.Errorf("read tries: %w", err)
+	}
+
+	if len(have) > 0 {
+		return nil
+	}
+
+	line, reached, err := s.d.Definitions.ProposedLine(ctx, p.VersionID, p.Files)
+	if errors.Is(err, ports.ErrNotFound) {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("read what it changes: %w", err)
+	}
+
+	targets, err := s.targets(ctx, p, line, reached)
+	if err != nil || len(targets) == 0 {
+		return err
+	}
+
+	tries := make([]domain.NewPastTry, len(targets))
+	for i, t := range targets {
+		a, _ := line.Agent(t.run.Agent)
+		tries[i] = domain.NewPastTry{
+			ProposalID: p.ID, ItemID: t.item, Station: t.run.Station, OriginalRunID: t.run.ID, Model: cmp.Or(a.Model, line.Runtime.Model),
+		}
+	}
+
+	queued, err := s.d.Tries.QueuePastTries(ctx, p.FactoryID, p.ID, tries, s.d.Clock.Now().UTC())
+	if errors.Is(err, ports.ErrConflict) {
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("queue tries: %w", err)
+	}
+
+	s.log.InfoContext(ctx, "jonah tries queued", slog.String("factory", string(p.FactoryID)), slog.Int64("proposal", p.Number),
+		slog.Int("tries", len(queued)))
+
+	return nil
+}
+
+// targets are the runs p's tries rerun: for each item p cites, its newest first run of a claim at
+// a triable reached station (the station its evidence names first, then the others in line
+// order), whose agent can be tried; newest first, at most domain.MaxPastTryItems.
+func (s *Tries) targets(ctx context.Context, p domain.Proposal, line domain.Line, reached []string) ([]target, error) {
+	triable := slices.DeleteFunc(slices.Clone(reached), func(st string) bool { return !stationTriable(line, st) })
+	if len(triable) == 0 {
+		return nil, nil
+	}
+
+	var (
+		items []domain.ItemID
+		cited = map[domain.ItemID]string{}
+	)
+
+	for _, e := range p.Evidence {
+		if _, ok := cited[e.ItemID]; !ok && e.ItemID != "" {
+			items, cited[e.ItemID] = append(items, e.ItemID), e.Station
+		}
+	}
+
+	var out []target
+
+	for _, it := range items {
+		stations := triable
+		if st := cited[it]; slices.Contains(triable, st) {
+			stations = append([]string{st}, slices.DeleteFunc(slices.Clone(triable), func(x string) bool { return x == st })...)
+		}
+
+		for _, st := range stations {
+			run, err := s.d.Tries.PastTryTarget(ctx, it, st)
+			if errors.Is(err, ports.ErrNotFound) {
+				continue
+			}
+
+			if err != nil {
+				return nil, fmt.Errorf("find the run of item %s at %s: %w", it, st, err)
+			}
+
+			if line.TriableAgent(run.Agent) {
+				out = append(out, target{item: it, run: run})
+
+				break
+			}
+		}
+	}
+
+	slices.SortStableFunc(out, func(a, b target) int { return b.run.StartedAt.Compare(a.run.StartedAt) })
+
+	return out[:min(len(out), domain.MaxPastTryItems)], nil
+}
+
+// stationTriable reports whether st is an agent station of l whose agents can all be tried.
+func stationTriable(l domain.Line, st string) bool {
+	s, ok := l.Station(st)
+	if !ok || s.Kind != domain.KindAgent {
+		return false
+	}
+
+	agents := []string{s.Agent}
+	for _, a := range s.Route {
+		agents = append(agents, a)
+	}
+
+	return !slices.ContainsFunc(agents, func(a string) bool { return a != "" && !l.TriableAgent(a) })
+}
+
+// Work runs the claimable tries of every live organization and returns how many it finished. It
+// claims fairly: each pass takes one try of each organization in turn, until a pass claims none.
+// Within an organization it claims none for a factory whose Jonah budget is used (the try stays
+// queued) or that has an item waiting at an agent station (tries give way to production work), and
+// the store claims none past TryConfig.PerFactory running at once. An organization that fails
+// does not hold up the others.
+func (s *Tries) Work(ctx context.Context) (int, error) {
+	orgs, err := s.d.Orgs.ActiveOrgs(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("try work: list organizations: %w", err)
+	}
+
+	var (
+		worked int
+		errs   []error
+		failed = map[domain.OrgID]bool{}
+	)
+
+	for claimed := true; claimed && ctx.Err() == nil; {
+		claimed = false
+
+		for _, org := range orgs {
+			if failed[org] || ctx.Err() != nil {
+				continue
+			}
+
+			got, finished, err := s.workOne(domain.WithOrg(ctx, org))
+			if err != nil {
+				errs, failed[org] = append(errs, fmt.Errorf("try work of org %s: %w", org, err)), true
+			}
+
+			claimed = claimed || got
+
+			if finished {
+				worked++
+			}
+		}
+	}
+
+	return worked, errors.Join(errs...)
+}
+
+// workOne claims one try of the organization in ctx and runs it: whether it claimed one and
+// whether it finished it.
+func (s *Tries) workOne(ctx context.Context) (claimed, finished bool, err error) {
+	lines, err := s.d.Definitions.CurrentLines(ctx)
+	if err != nil {
+		return false, false, fmt.Errorf("list lines: %w", err)
+	}
+
+	for _, l := range lines {
+		if ok, err := s.mayTry(ctx, l); err != nil || !ok {
+			if err != nil {
+				return false, false, fmt.Errorf("factory %s: %w", l.FactoryID, err)
+			}
+
+			continue
+		}
+
+		try, err := s.d.Tries.ClaimPastTry(ctx, l.FactoryID, s.d.Clock.Now().UTC(), s.c.Timeout+s.c.Margin, s.c.PerFactory)
+		if errors.Is(err, ports.ErrNotFound) {
+			continue
+		}
+
+		if err != nil {
+			return false, false, fmt.Errorf("claim a try of factory %s: %w", l.FactoryID, err)
+		}
+
+		finished, err := s.finish(ctx, try)
+
+		return true, finished, err
+	}
+
+	return false, false, nil
+}
+
+// mayTry reports whether l's tries may be claimed now: Jonah is on, its budget is not used and
+// no item waits at one of its agent stations.
+func (s *Tries) mayTry(ctx context.Context, l domain.Line) (bool, error) {
+	if !l.Jonah.Enabled {
+		return false, nil
+	}
+
+	spend, err := s.d.Jonah.JonahSpendSince(ctx, l.FactoryID, s.d.Clock.Now().UTC().Add(-BudgetWindow))
+	if err != nil {
+		return false, fmt.Errorf("read spend: %w", err)
+	}
+
+	if l.Jonah.Budget(spend).Exhausted() {
+		return false, nil
+	}
+
+	for _, st := range l.Stations {
+		if st.Kind != domain.KindAgent {
+			continue
+		}
+
+		waiting, err := s.d.Waiting.Waiting(ctx, l.FactoryID, st.ID, 1)
+		if err != nil {
+			return false, fmt.Errorf("read the items waiting at %s: %w", st.ID, err)
+		}
+
+		if len(waiting) > 0 {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+// finish runs the claimed try and records how it ended: whether it finished it. A try that
+// could not run is done with verdict error; a read that failed or a cancelled ctx leaves it to its
+// lease.
+func (s *Tries) finish(ctx context.Context, try domain.PastTry) (bool, error) {
+	res, err := s.run(ctx, try)
+	if err != nil {
+		return false, fmt.Errorf("try %s: %w", try.ID, err)
+	}
+
+	res.At = s.d.Clock.Now().UTC()
+	res.Error = truncate(res.Error, domain.MaxPastTryError)
+
+	_, err = s.d.Tries.FinishPastTry(ctx, try, res)
+	if errors.Is(err, ports.ErrLeaseLost) {
+		s.log.WarnContext(ctx, "jonah try lease lost", slog.String("try_id", string(try.ID)), slog.String("factory", string(try.FactoryID)))
+
+		return false, nil
+	}
+
+	if err != nil {
+		return false, fmt.Errorf("finish try %s: %w", try.ID, err)
+	}
+
+	s.log.InfoContext(ctx, "jonah try finished", slog.String("try_id", string(try.ID)), slog.String("factory", string(try.FactoryID)),
+		slog.Int64("proposal", try.ProposalNumber), slog.String("verdict", string(res.Verdict)), slog.Float64("cost_usd", res.CostUSD))
+
+	return true, nil
+}
+
+// tryError is a try's error result: why it could not be carried out.
+func tryError(format string, a ...any) domain.PastTryResult {
+	return domain.PastTryResult{Verdict: domain.PastTryError, Error: fmt.Sprintf(format, a...)}
+}
+
+// run runs try and returns its result to record (At unset). Anything that keeps the run from
+// being carried out is verdict error: a proposal, version or original run that is gone, a run
+// with no recorded commit, an agent that can no longer be tried, or a RunTask error (a commit
+// that is gone, a lost box, a prepare or setup that failed). A run that ended, however it did, is
+// done with no verdict, its diff, its cost and its run. Only a failed read or a cancelled ctx is
+// an error.
+func (s *Tries) run(ctx context.Context, try domain.PastTry) (domain.PastTryResult, error) {
+	if try.Attempts > MaxTryAttempts {
+		return tryError("the try did not finish in %d attempts", MaxTryAttempts), nil
+	}
+
+	p, err := s.d.Jonah.Proposal(ctx, try.FactoryID, try.ProposalNumber)
+	if errors.Is(err, ports.ErrNotFound) {
+		return tryError("proposal %d is gone", try.ProposalNumber), nil
+	}
+
+	if err != nil {
+		return domain.PastTryResult{}, fmt.Errorf("read proposal %d: %w", try.ProposalNumber, err)
+	}
+
+	line, _, err := s.d.Definitions.ProposedLine(ctx, p.VersionID, p.Files)
+	if errors.Is(err, ports.ErrNotFound) {
+		return tryError("definition version %s is gone", p.VersionID), nil
+	}
+
+	if err != nil {
+		return domain.PastTryResult{}, fmt.Errorf("read version %s with proposal %d: %w", p.VersionID, p.Number, err)
+	}
+
+	in, err := s.d.Tries.PastTryInput(ctx, try.OriginalRunID)
+	if errors.Is(err, ports.ErrNotFound) {
+		return tryError("run %s is gone", try.OriginalRunID), nil
+	}
+
+	if err != nil {
+		return domain.PastTryResult{}, fmt.Errorf("read run %s: %w", try.OriginalRunID, err)
+	}
+
+	req, why := tryRequest(line, try, in.Run)
+	if why != "" {
+		return tryError("%s", why), nil
+	}
+
+	req.OrgID, _ = domain.OrgFrom(ctx)
+	req.Timeout = s.c.Timeout
+
+	run, err := s.d.Runner.RunTask(ctx, req)
+
+	switch {
+	case err != nil && ctx.Err() != nil:
+		return domain.PastTryResult{}, fmt.Errorf("run: %w", err)
+	case err != nil:
+		res := tryError("the try could not run: %v", err)
+		res.CostUSD, res.TryRunID = run.CostUSD, run.RunID
+
+		return res, nil
+	case run.Status == domain.RunCancelled:
+		res := tryError("the try's run was cancelled: %s", run.Error)
+		res.CostUSD, res.TryRunID = run.CostUSD, run.RunID
+
+		return res, nil
+	}
+
+	return domain.PastTryResult{Diff: run.Diff, CostUSD: run.CostUSD, TryRunID: run.RunID}, nil
+}
+
+// tryRequest is try's run on line, from what orig recorded, or why it cannot run.
+func tryRequest(line domain.Line, try domain.PastTry, orig domain.Run) (domain.RunRequest, string) {
+	rt := line.Runtime
+
+	a, ok := line.Agent(orig.Agent)
+
+	switch {
+	case orig.Input.BranchHead == "":
+		return domain.RunRequest{}, fmt.Sprintf("run %s recorded no commit", orig.ID)
+	case rt.Repository.URL == "":
+		return domain.RunRequest{}, "the factory has no repository to try in"
+	case !ok || !line.TriableAgent(orig.Agent):
+		return domain.RunRequest{}, fmt.Sprintf("agent %s can't be tried: it needs MCP servers or secrets", orig.Agent)
+	}
+
+	req := domain.RunRequest{
+		FactoryID: try.FactoryID, Version: line.VersionID, Kind: domain.RunKindTry, Station: try.Station,
+		Agent: a.Name, Model: try.Model, Bundle: domain.TaskKindTry, TryOf: try.ID, Commit: orig.Input.BranchHead,
+		Repository: rt.Repository, ModelConnection: rt.ModelConnection, Size: rt.Size,
+	}
+
+	if line.OnSecrets() { // the model key alone (ADR 0037 decision 7)
+		env, _ := line.Environment(a.Environment)
+		req.ModelConnection, req.Repository.Connection, req.ModelKey, req.Environment = "", "", rt.ModelKey, env
+		req.Size, req.Image = cmp.Or(env.Size, domain.SandboxMedium), env.Image
+	}
+
+	return req, ""
+}
