@@ -19,7 +19,7 @@ export function AskBar() {
         type="text"
         disabled
         placeholder="Ask the factory to change it, for example: give Review a 4th reviewer"
-        className="min-w-0 flex-1 bg-transparent text-body text-ink outline-none placeholder:text-muted disabled:cursor-not-allowed disabled:opacity-60"
+        className="min-w-0 flex-1 bg-transparent max-md:min-h-11 text-body text-ink outline-none placeholder:text-muted disabled:cursor-not-allowed disabled:opacity-60"
       />
       <span className="hidden shrink-0 text-meta whitespace-nowrap text-muted md:inline">
         Becomes an item, reviewed like any change
