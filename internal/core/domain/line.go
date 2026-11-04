@@ -323,6 +323,16 @@ func (l Line) Station(id string) (Station, bool) {
 	return l.Stations[i], true
 }
 
+// Trigger returns the trigger with the given name.
+func (l Line) Trigger(name string) (Trigger, bool) {
+	i := slices.IndexFunc(l.Triggers, func(t Trigger) bool { return t.Name == name })
+	if i < 0 {
+		return Trigger{}, false
+	}
+
+	return l.Triggers[i], true
+}
+
 // First returns the station new items enter at.
 func (l Line) First() (Station, error) {
 	if len(l.Stations) == 0 {

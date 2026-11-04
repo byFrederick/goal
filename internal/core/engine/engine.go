@@ -265,6 +265,8 @@ type Engine struct {
 	// active holds this instance's runs by item, so the engine can cancel them (BudgetStop).
 	activeMu sync.Mutex
 	active   map[domain.ItemID]*activeRun
+	// checks holds this instance's running checks by firing, so a budget stop cancels them too.
+	checks map[string]*activeRun
 	// exhausted holds the factories whose weekly budget was used up at the last tick, so each
 	// transition is logged once. It is a local hint, not state: an instance that starts reads
 	// the spend afresh and logs what it finds.
@@ -318,7 +320,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 		events: d.Events, holder: holder,
 		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, connections: d.Connections,
 		credentials: d.Credentials, orgSecrets: d.OrgSecrets, codehosts: d.CodeHosts, minters: d.Minters, policies: d.Policies, knowledge: d.Knowledge, intake: d.Intake, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
-		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{}, warned: map[domain.FactoryID]bool{},
+		active: map[domain.ItemID]*activeRun{}, checks: map[string]*activeRun{}, exhausted: map[domain.FactoryID]bool{}, warned: map[domain.FactoryID]bool{},
 	}, nil
 }
 
@@ -489,7 +491,7 @@ func (e *Engine) Submit(ctx context.Context, r domain.FileRequest) (domain.Item,
 // Tick does one round of pulling: items waiting at queue stations move to the next station,
 // line by line, the weekly budgets are enforced (budgets), then agent stations of the lines
 // within budget claim work into their free slots and start runs, fairly across organizations
-// (claim). A paused line, and a line stopped by an open andon pull (read once per tick; an
+// (claim), and lease their queued checks into the slots left (workChecks). A paused line, and a line stopped by an open andon pull (read once per tick; an
 // unreadable one counts as open), neither releases nor claims, whatever its budget, while its
 // runs in progress finish; its budget is still enforced, so the stop policy still cancels its
 // runs. Each line's store calls are bound to its organization, whatever ctx carries. Runs
@@ -534,6 +536,11 @@ func (e *Engine) Tick(ctx context.Context) error {
 	claimable, err := e.budgets(ctx, lines)
 	maps.DeleteFunc(claimable, func(id domain.FactoryID, _ domain.Line) bool { _, ok := running[id]; return !ok })
 	errs = append(errs, err, e.claim(ctx, claimable))
+
+	// Checks are leased on every instance, into the slots the claims left (checks.go).
+	if e.intake != nil {
+		errs = append(errs, e.workChecks(ctx, lines, claimable))
+	}
 
 	return errors.Join(errs...)
 }
