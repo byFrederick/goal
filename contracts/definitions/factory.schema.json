@@ -666,6 +666,11 @@
                   "type": "string",
                   "minLength": 1,
                   "description": "The top-level output field that holds follow-ups: work an agent noticed outside its item. goald keeps the first 10 entries of each accepted output on the item, each text once. An entry is a string (text for triage) or an object with text and optionally for, an open item <factory>#<number> to note, or start, {at, in, after} with a title and optionally type, lane, repositories and factory, an item of its own filed when the work lands; start wins over for. A station contract that declares the field must declare it as a plain array: no $ref, no maxItems and no required on its items."
+                },
+                "close": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The top-level output field whose text closes the item: when an accepted output gives 10 to 500 characters there, goald cancels the item at its station with that text as the reason, the agent the actor. Only an item a trigger or a follow-up filed, and never a part, can be closed. On a person's item, a part, an output that also plans parts, or a text outside the limits, the output fails its check and the agent asks a person instead. Empty or only whitespace closes nothing."
                 }
               }
             },

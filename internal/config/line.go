@@ -180,7 +180,7 @@ func flowPolicy(fl Flow) domain.FlowPolicy {
 	}
 
 	if o := fl.Outputs; o != nil {
-		p.Outputs.FollowUps = o.FollowUps
+		p.Outputs.FollowUps, p.Outputs.Close = o.FollowUps, o.Close
 	}
 
 	for _, id := range fl.FollowUpsFrom {

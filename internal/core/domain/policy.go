@@ -44,6 +44,10 @@ type OutputPolicy struct {
 	// FollowUps is the output field that holds follow-ups (FollowUpsFrom), kept on the item from
 	// every accepted run; "" when no output holds any.
 	FollowUps string
+	// Close is the output field whose text, when non-empty, closes (cancels) a trigger's or a
+	// follow-up's item with that reason (CloseFrom, CheckClose; ADR 0040 decision 11); "" when no
+	// output can close its item.
+	Close string
 }
 
 // DependencyPolicy is board.flow.dependencies: which output fields set an item's dependencies.

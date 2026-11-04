@@ -39,6 +39,8 @@ type checked struct {
 	// after are the open items the output says the work must follow (followed).
 	after []domain.Item
 	next  domain.Line
+	// close is the reason the output closes its item with (domain.CloseFrom); "" when it does not.
+	close string
 }
 
 // claimed is an item this instance holds a lease on at an agent station.
@@ -390,7 +392,8 @@ func agentFor(l domain.Line, st domain.Station, lane string) (domain.AgentSpec, 
 // when not, it has blocked the item.
 func (e *Engine) outputFailed(ctx context.Context, log *slog.Logger, c claimed, attempt int, err error) bool {
 	retryable := errors.Is(err, ports.ErrContractViolation) || errors.Is(err, domain.ErrBadVerdict) ||
-		errors.Is(err, domain.ErrBadPlan) || errors.Is(err, domain.ErrBadAfter) || errors.Is(err, errCheckFailed)
+		errors.Is(err, domain.ErrBadPlan) || errors.Is(err, domain.ErrBadAfter) || errors.Is(err, domain.ErrBadClose) ||
+		errors.Is(err, errCheckFailed)
 	if !retryable {
 		e.block(ctx, log, c, "check output: "+err.Error())
 		return false
@@ -415,9 +418,9 @@ func (e *Engine) outputFailed(ctx context.Context, log *slog.Logger, c claimed, 
 
 // check validates an output against the station's contract (of the version the run started
 // on), at a gate reads its verdict and, when the output is not a rejection, the items it says
-// the work follows (followed) and, when the current line materializes plans, its plan. The
-// current line is read once here and finish moves the item along the same one, so a plan is
-// assembled only by a line that parsed it.
+// the work follows (followed), its close (closeOf) and, when the current line materializes plans,
+// its plan. The current line is read once here and finish moves the item along the same one, so a
+// plan is assembled only by a line that parsed it.
 func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (checked, error) {
 	if c.station.Output != "" {
 		if err := e.contracts.Validate(ctx, c.line.VersionID, c.station.Output, output); err != nil {
@@ -439,6 +442,13 @@ func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (
 	if chk.verdict != nil && chk.verdict.Decision == domain.Reject {
 		return chk, nil
 	}
+
+	reason, err := closeOf(c, output, chk.next)
+	if err != nil {
+		return checked{}, err
+	}
+
+	chk.close = reason
 
 	after, err := e.followed(ctx, c, output, chk.next.Flow.Dependencies.After)
 	if err != nil {
@@ -463,6 +473,33 @@ func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (
 	chk.plan = plan
 
 	return chk, nil
+}
+
+// closeOf is the close the output gives in the field the line maps (flow.outputs.close), checked
+// before any plan is assembled: refused on an item a person filed, on a part, and together with a
+// plan when the current line (next) materializes plans. "" when the output closes nothing.
+func closeOf(c claimed, output json.RawMessage, next domain.Line) (string, error) {
+	reason, err := domain.CloseFrom(output, c.line.Flow.Outputs.Close)
+	if err != nil || reason == "" {
+		return "", err
+	}
+
+	var plan bool
+
+	if next.Flow.Assemblies.Materialize {
+		parts, err := domain.PlanFrom(output)
+		if err != nil {
+			return "", err
+		}
+
+		plan = len(parts) > 0
+	}
+
+	if err := domain.CheckClose(c.item, plan); err != nil {
+		return "", err
+	}
+
+	return reason, nil
 }
 
 // runOnce runs the claim's next run with the shared run lifecycle (runTask) under the claim's
@@ -705,8 +742,8 @@ var refreshWhen = map[domain.IntegrationRefresh]string{
 // finish moves an item whose output passed its checks, with an event for each declared rule the
 // output says was broken (violations) and the paths it lists in the field the line maps
 // (flow.dependencies.paths) and the follow-ups of run it holds (followUps), with the base commit it was planned against (baseCommit): through the gate's verdict when the
-// station has one, into state assembly when its output has a plan (assemble), otherwise to the
-// next station. An approving gate whose action is merge leaves the merge to a person when the
+// station has one, to cancelled at its station when its output closes the item (closeItem), into
+// state assembly when its output has a plan (assemble), otherwise to the next station. An approving gate whose action is merge leaves the merge to a person when the
 // organization policy lets no agent merge (claimed.noMerge), and goes back to its own queue when
 // a pull request is only not mergeable yet (deferMerge). The run was checked against the version it started on; where the item goes
 // next is the current line's say (chk.next), so an item finishing on v1 after v2 was published
@@ -727,6 +764,8 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, run do
 	switch {
 	case v != nil && v.Decision == domain.Reject:
 		err = e.gateReject(c, next, *v, &t)
+	case chk.close != "":
+		closeItem(c, chk.close, &t)
 	case len(chk.plan) > 0:
 		if v != nil { // an approving gate's plan: no merge, the parts make the pull requests
 			t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
@@ -760,6 +799,18 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, run do
 	}
 
 	e.transition(ctx, log, t)
+}
+
+// closeItem points t at the item's cancellation at its station with reason, its agent the actor
+// (ADR 0040 decision 11). The lease ends advanced, as with any accepted output: this is not
+// Cancel, which takes a running run's lease.
+func closeItem(c claimed, reason string, t *ports.Transition) {
+	by := agentActor(c)
+	data := map[string]any{keyReason: reason, "station": c.station.ID, "agent": c.agent.Name, "closed": true}
+
+	t.To = domain.Position{Station: c.station.ID, State: domain.StateCancelled}
+	t.Events = append(t.Events, decision(c.item, domain.EventCancelled, t.At, by, data))
+	t.Audit = itemAudit(c.item, t.At, by, domain.AuditItemCancelled, data)
 }
 
 // followUps are the follow-ups an accepted output of run holds in the field the line maps
