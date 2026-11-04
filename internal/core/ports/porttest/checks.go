@@ -120,7 +120,7 @@ func (in *Intake) HeartbeatCheck(ctx context.Context, l domain.CheckLease, until
 	return nil
 }
 
-// FinishCheck implements ports.Intake.
+// FinishCheck implements ports.Intake: fires is the trigger's lock, as in Fire.
 func (in *Intake) FinishCheck(ctx context.Context, l domain.CheckLease, res domain.CheckResult) error {
 	org, err := orgOf(ctx)
 	if err != nil {
@@ -131,22 +131,48 @@ func (in *Intake) FinishCheck(ctx context.Context, l domain.CheckLease, res doma
 		return fmt.Errorf("finish check %s: %w", l.FiringID, err)
 	}
 
+	in.d.fires.Lock()
+	defer in.d.fires.Unlock()
+
+	in.d.mu.Lock()
+	r, err := in.runningLocked(org, l)
+
+	var f domain.TriggerFiring
+	if r != nil {
+		f = r.f
+	}
+	in.d.mu.Unlock()
+
+	if err != nil {
+		return err
+	}
+
+	var applied *domain.CheckApplied
+
+	if res.State == domain.CheckDone {
+		a, err := in.applyCheck(ctx, org, f, res)
+		if err != nil {
+			return fmt.Errorf("finish check %s: %w", l.FiringID, err)
+		}
+
+		applied = &a
+	}
+
 	in.d.mu.Lock()
 
-	r, err := in.runningLocked(org, l)
-	if err != nil {
+	if r, err = in.runningLocked(org, l); err != nil {
 		in.d.mu.Unlock()
 		return err
 	}
 
-	r.f.CheckState, r.f.RunID, r.f.CostUSD, r.lease = res.State, res.RunID, res.CostUSD, domain.CheckLease{}
+	r.f.CheckState, r.f.RunID, r.f.CostUSD, r.f.CheckedAt, r.lease = res.State, res.RunID, res.CostUSD, res.At.UTC().Truncate(time.Microsecond), domain.CheckLease{}
 	if res.State == domain.CheckDone {
-		r.f.Decisions = string(res.Decisions)
+		r.f.Decisions, r.f.Applied = string(res.Decisions), applied
 	} else {
 		r.f.Reason = truncateRunes(res.Reason, maxReason)
 	}
 
-	if res.State == domain.CheckDone && len(res.Saved) > 0 && string(res.Saved) != "null" {
+	if res.State == domain.CheckDone && !f.Try && len(res.Saved) > 0 && string(res.Saved) != "null" {
 		in.d.states[stateKey{org: org, factory: r.f.FactoryID, trigger: r.f.Trigger}] = slices.Clone(res.Saved)
 	}
 
@@ -154,6 +180,173 @@ func (in *Intake) FinishCheck(ctx context.Context, l domain.CheckLease, res doma
 	in.store.freeCheckSlot(l.FiringID)
 
 	return nil
+}
+
+// applyCheck applies a done check's answer as domain.ApplyCheck decides: it files its items and
+// writes its notes, and keeps each key's last item and note; for a try it only decides.
+func (in *Intake) applyCheck(ctx context.Context, org domain.OrgID, f domain.TriggerFiring, res domain.CheckResult) (domain.CheckApplied, error) {
+	var a domain.CheckAnswer
+	if err := json.Unmarshal(res.Decisions, &a); err != nil {
+		return domain.CheckApplied{}, fmt.Errorf("decisions: %w: %w", domain.ErrInvalid, err)
+	}
+
+	sk := stateKey{org: org, factory: f.FactoryID, trigger: f.Trigger}
+	keys, today := in.checkKeys(sk, res.At)
+	out := domain.ApplyCheck(a, res.Items, keys, res.Limits, today, res.At)
+
+	if f.Try {
+		return out, nil
+	}
+
+	for i := range out.Filed {
+		it, err := in.store.CreateItem(ctx, out.Filed[i].Item)
+		if err != nil {
+			return domain.CheckApplied{}, fmt.Errorf("file %s: %w", out.Filed[i].Key, err)
+		}
+
+		out.Filed[i].Ref = fmt.Sprintf("#%d", it.Number)
+
+		in.d.mu.Lock()
+		in.d.keys[triggerKey{stateKey: sk, key: out.Filed[i].Key}] = keyRow{item: it.ID}
+		in.d.mu.Unlock()
+	}
+
+	for _, n := range out.Noted {
+		it, err := in.store.Item(ctx, n.Item)
+		if err != nil {
+			return domain.CheckApplied{}, fmt.Errorf("note on %s: %w", n.Key, err)
+		}
+
+		if err := in.store.AppendEvents(ctx, domain.Event{
+			FactoryID: f.FactoryID, ItemID: n.Item, At: res.At, Kind: domain.EventItemNote, Station: it.Station, Actor: domain.ActorEngine,
+			Data: domain.CheckNoteData(f.Trigger, n.Key, res.Agent, res.RunID, n.Text),
+		}); err != nil {
+			return domain.CheckApplied{}, fmt.Errorf("note on %s: %w", n.Key, err)
+		}
+
+		in.d.mu.Lock()
+		k := triggerKey{stateKey: sk, key: n.Key}
+		row := in.d.keys[k]
+		row.noteAt, row.noteText = res.At.UTC().Truncate(time.Microsecond), n.Text
+		in.d.keys[k] = row
+		in.d.mu.Unlock()
+	}
+
+	return out, nil
+}
+
+// checkKeys are sk's keys with their items as ApplyCheck reads them, and how many items the
+// trigger filed since the UTC day of at began.
+func (in *Intake) checkKeys(sk stateKey, at time.Time) (map[string]domain.CheckKey, int) {
+	in.d.mu.Lock()
+	rows := map[string]keyRow{}
+
+	for k, r := range in.d.keys {
+		if k.stateKey == sk {
+			rows[k.key] = r
+		}
+	}
+	in.d.mu.Unlock()
+
+	in.store.mu.Lock()
+	defer in.store.mu.Unlock()
+
+	keys := map[string]domain.CheckKey{}
+
+	for key, r := range rows {
+		k := domain.CheckKey{Key: key, NoteAt: r.noteAt, NoteText: r.noteText}
+
+		if it, ok := in.store.items[r.item]; ok && it.OrgID == sk.org {
+			k.Item, k.Number, k.State = it.ID, it.Number, it.State
+			if k.Closed() {
+				k.ClosedAt, k.Why = cmp.Or(it.DoneAt, it.UpdatedAt).UTC(), in.lastTextLocked(it.ID, "reason", domain.EventDone, domain.EventCancelled)
+			}
+		}
+
+		keys[key] = k
+	}
+
+	today, day := 0, at.UTC().Truncate(24*time.Hour)
+
+	for _, it := range in.store.items {
+		if it.OrgID == sk.org && it.FactoryID == sk.factory && it.Trigger == sk.trigger && it.Origin == domain.OriginTrigger && !it.CreatedAt.Before(day) {
+			today++
+		}
+	}
+
+	return keys, today
+}
+
+// TriggerChecks implements ports.Intake.
+func (in *Intake) TriggerChecks(ctx context.Context, factory domain.FactoryID, trigger string, limit int) ([]domain.TriggerFiring, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	out := []domain.TriggerFiring{}
+
+	for _, r := range in.d.firings {
+		if r.org == org && r.f.FactoryID == factory && r.f.Trigger == trigger && r.f.Outcome == domain.FiringChecked {
+			out = append(out, r.f)
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.TriggerFiring) int { return cmp.Or(b.At.Compare(a.At), cmp.Compare(b.ID, a.ID)) })
+
+	return out[:min(len(out), max(limit, 0))], nil
+}
+
+// CheckAlerts implements ports.Intake.
+func (in *Intake) CheckAlerts(ctx context.Context, factories []domain.FactoryID, since time.Time) ([]domain.CheckAlert, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	finished := map[stateKey][]domain.TriggerFiring{}
+
+	for _, r := range in.d.firings {
+		done := r.f.CheckState == domain.CheckDone || r.f.CheckState == domain.CheckFailed
+		if r.org == org && slices.Contains(factories, r.f.FactoryID) && done && !r.f.Try {
+			k := stateKey{org: org, factory: r.f.FactoryID, trigger: r.f.Trigger}
+			finished[k] = append(finished[k], r.f)
+		}
+	}
+
+	out := []domain.CheckAlert{}
+
+	for k, fs := range finished {
+		slices.SortFunc(fs, func(a, b domain.TriggerFiring) int { return cmp.Or(b.CheckedAt.Compare(a.CheckedAt), cmp.Compare(b.ID, a.ID)) })
+
+		if len(fs) >= domain.CheckFailuresShown && !slices.ContainsFunc(fs[:domain.CheckFailuresShown], func(f domain.TriggerFiring) bool { return f.CheckState != domain.CheckFailed }) {
+			out = append(out, domain.CheckAlert{FactoryID: k.factory, Trigger: k.trigger, Kind: domain.CheckFailing, At: fs[0].CheckedAt, Reason: fs[0].Reason})
+		}
+
+		var first *domain.TriggerFiring
+
+		for i := range fs {
+			if f := &fs[i]; f.Applied != nil && f.Applied.OverLimit() && !f.CheckedAt.Before(since) {
+				first = f
+			}
+		}
+
+		if first != nil {
+			out = append(out, domain.CheckAlert{FactoryID: k.factory, Trigger: k.trigger, Kind: domain.CheckLimited, At: first.CheckedAt})
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.CheckAlert) int {
+		return cmp.Or(cmp.Compare(a.FactoryID, b.FactoryID), cmp.Compare(a.Trigger, b.Trigger), cmp.Compare(a.Kind, b.Kind))
+	})
+
+	return out, nil
 }
 
 // maxReason is the most characters a firing's reason keeps, as the column allows.
@@ -176,7 +369,7 @@ func (in *Intake) ExpireChecks(ctx context.Context, factory domain.FactoryID, no
 			continue
 		}
 
-		r.f.CheckState, r.f.Reason, r.lease = domain.CheckFailed, domain.CheckLeaseExpired, domain.CheckLease{}
+		r.f.CheckState, r.f.Reason, r.f.CheckedAt, r.lease = domain.CheckFailed, domain.CheckLeaseExpired, now.UTC().Truncate(time.Microsecond), domain.CheckLease{}
 		freed = append(freed, r.f.ID)
 	}
 
@@ -240,7 +433,7 @@ func (in *Intake) checkFiringsInput(org domain.OrgID, factory domain.FactoryID, 
 			keys[r.f.ItemID] = r.f.Dedupe
 		}
 
-		if r.f.CheckState == domain.CheckDone && (last.ID == "" || r.f.ID > last.ID) {
+		if r.f.CheckState == domain.CheckDone && !r.f.Try && (last.ID == "" || r.f.ID > last.ID) {
 			last = r.f
 		}
 	}
@@ -251,6 +444,13 @@ func (in *Intake) checkFiringsInput(org domain.OrgID, factory domain.FactoryID, 
 
 	if s, ok := in.d.states[stateKey{org: org, factory: factory, trigger: trigger}]; ok {
 		out.State = slices.Clone(s)
+	}
+
+	// A key the trigger keeps for an item wins over its firing's dedupe value.
+	for k, r := range in.d.keys {
+		if k.org == org && k.factory == factory && k.trigger == trigger && r.item != "" {
+			keys[r.item] = k.key
+		}
 	}
 
 	return keys

@@ -88,11 +88,13 @@ type CheckLease struct {
 
 // CheckResult is how a check ended: done with its decisions (the answer, as CheckAnswer.Decisions
 // gives it) and the state it saved, nil to keep the saved one; or failed with Reason. RunID and
-// CostUSD are its run's, when one started. A done check's answer is applied (ApplyCheck) with
-// Items, the items its file entries make on the trigger's line, and the trigger's Limits.
+// CostUSD are its run's, when one started, and Agent the check's agent. A done check's answer is
+// applied (ApplyCheck) with Items, the items its file entries make on the trigger's line, and the
+// trigger's Limits.
 type CheckResult struct {
 	State     CheckState
 	RunID     RunID
+	Agent     string
 	CostUSD   float64
 	Decisions json.RawMessage
 	Saved     json.RawMessage

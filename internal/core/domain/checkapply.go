@@ -110,6 +110,47 @@ func (a CheckApplied) OverLimit() bool {
 	return false
 }
 
+// CheckFailuresShown is how many checks of a trigger fail in a row before Needs you shows it.
+const CheckFailuresShown = 3
+
+// CheckAlertKind is what of a trigger's checks Needs you shows.
+type CheckAlertKind string
+
+// Check alert kinds.
+const (
+	// CheckFailing is a trigger whose last CheckFailuresShown checks failed.
+	CheckFailing CheckAlertKind = "failing"
+	// CheckLimited is a trigger whose check skipped something over the limit that UTC day.
+	CheckLimited CheckAlertKind = "limit"
+)
+
+// CheckAlert is a trigger's checks as Needs you shows them: of Kind, since At, with the newest
+// failure's Reason for CheckFailing.
+type CheckAlert struct {
+	FactoryID FactoryID
+	Trigger   string
+	Kind      CheckAlertKind
+	At        time.Time
+	Reason    string
+}
+
+// The data keys an item_note a check writes adds to NoteData's text and agent: the trigger, the
+// key and the check's run.
+const (
+	KeyNoteTrigger = "trigger"
+	KeyNoteKey     = "key"
+	KeyNoteRun     = "run_id"
+)
+
+// CheckNoteData is the data of the item_note event a check of trigger writes on key's item: the
+// text, the trigger, the key, the check's agent and run, and the engine as actor, as NoteData's.
+func CheckNoteData(trigger, key, agent string, run RunID, text string) map[string]any {
+	return map[string]any{
+		"text": text, KeyNoteTrigger: trigger, KeyNoteKey: key, KeyNoteAgent: agent, KeyNoteRun: string(run),
+		"actor": EngineActor.Ref(),
+	}
+}
+
 // ApplyCheck decides what a check's answer a does at now (ADR 0040 decision 19), given the
 // items its file entries make (by key), the trigger's keys and limits, and how many items the
 // trigger filed since the UTC day began:

@@ -3,6 +3,8 @@ package intaketest
 import (
 	"encoding/json"
 	"errors"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -20,6 +22,11 @@ var checkTests = []struct {
 	{"Check_ClaimLeasesAndFinishIsFenced", testClaimCheck},
 	{"Check_ExpiredLeaseFails", testExpireChecks},
 	{"Check_InputListsOpenAndClosedItems", testCheckInput},
+	{"Check_ApplyFilesNotesAndSkipsByKey", testApplyCheck},
+	{"Check_ApplyLimits", testApplyLimits},
+	{"Check_TryAppliesNothing", testTryCheck},
+	{"Check_AlertsFailuresAndLimits", testCheckAlerts},
+	{"OtherOrg_ReadsNoTriggerKey", testIsolatedKeys},
 }
 
 // checkFiring is a schedule firing of nightly for the instant at, which queues a check.
@@ -249,4 +256,311 @@ func sameJSON[A, B ~string | ~[]byte](a A, b B) bool {
 	yb, _ := json.Marshal(y)
 
 	return string(xb) == string(yb)
+}
+
+// watcher is the check's agent.
+const watcher = "watcher"
+
+// runCheck fires, claims and finishes a check of nightly at at with answer, its items made for
+// each file entry, and returns the firing as it reads back. try queues it as a try check.
+func (f *fixture) runCheck(at time.Time, answer string, limits domain.CheckLimits, try bool) domain.TriggerFiring {
+	f.t.Helper()
+
+	queued, fresh, err := f.in.Fire(f.ctx(), domain.TriggerFiring{
+		FactoryID: f.factory, Trigger: nightly, Source: domain.TriggerSchedule, EventKey: domain.OnSchedule,
+		IdempotencyKey: at.UTC().Format(time.RFC3339), Outcome: domain.FiringChecked, CheckState: domain.CheckQueued, At: at, Try: try,
+	}, nil, domain.FireLimits{})
+	if err != nil || !fresh || queued.Try != try {
+		f.t.Fatalf("Fire a check at %s = %+v, %v, %v", at, queued, fresh, err)
+	}
+
+	_, l := f.claimCheck(at)
+
+	a, err := domain.ParseCheckAnswer(json.RawMessage(answer))
+	if err != nil {
+		f.t.Fatalf("ParseCheckAnswer: %v", err)
+	}
+
+	var items []domain.CheckItem
+	for _, file := range a.File {
+		items = append(items, domain.CheckItem{Key: file.Key, Item: domain.NewItem{
+			FactoryID: f.factory, Type: typeFix, Title: file.Title, Body: file.Brief, Station: station, State: domain.StateQueued,
+			Class: domain.ClassStandard, CreatedAt: at, Source: domain.ItemFromSchedule, Trigger: nightly, Origin: domain.OriginTrigger,
+			CreatedBy: domain.Actor{Kind: domain.ActorAgent, ID: watcher, Name: watcher}, Untrusted: true,
+		}})
+	}
+
+	if err := f.in.FinishCheck(f.ctx(), l, domain.CheckResult{
+		State: domain.CheckDone, RunID: f.checkRun(), Agent: watcher, CostUSD: 0.02, Decisions: a.Decisions(), Saved: a.State,
+		Items: items, Limits: limits, At: at.Add(time.Minute),
+	}); err != nil {
+		f.t.Fatalf("FinishCheck: %v", err)
+	}
+
+	got, ok, err := f.in.Firing(f.ctx(), f.factory, nightly, queued.IdempotencyKey)
+	if err != nil || !ok || got.Applied == nil || got.CheckState != domain.CheckDone {
+		f.t.Fatalf("Firing after the check = %+v, %v, %v; want it done with what it applied", got, ok, err)
+	}
+
+	return got
+}
+
+// itemByRef is the fixture's factory's item with ref (#<number>).
+func (f *fixture) itemByRef(ref string) domain.Item {
+	f.t.Helper()
+
+	items, err := f.Store.ListItems(f.ctx(), ports.ItemQuery{FactoryID: f.factory, Limit: 100})
+	if err != nil {
+		f.t.Fatalf("ListItems: %v", err)
+	}
+
+	for _, it := range items {
+		if refOf(it) == ref {
+			return it
+		}
+	}
+
+	f.t.Fatalf("no item %s", ref)
+
+	return domain.Item{}
+}
+
+// skips are a's skipped entries as key: reason.
+func skips(a *domain.CheckApplied) []string {
+	var out []string
+	for _, s := range a.Skipped {
+		out = append(out, s.Key+": "+s.Reason)
+	}
+
+	return out
+}
+
+// A check files new keys through the door (origin trigger, by its agent, untrusted) and keeps
+// each key's item; a file or a note on an open key's item becomes an item_note, one per key an
+// hour and never the same text twice; a closed key is skipped unless reopened, when its new item
+// links to the old one; the state is saved; CheckInput gives the items with their keys.
+func testApplyCheck(f *fixture) {
+	t := f.t
+
+	first := f.runCheck(t0, `{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}, {"key": "INC-2", "title": "Disk full", "brief": "db-1"}],
+		"state": {"since": "a"}}`, domain.CheckLimits{}, false)
+	if a := first.Applied; len(a.Filed) != 2 || a.Filed[0].Ref == "" || len(a.Noted) != 0 || len(a.Skipped) != 0 {
+		t.Fatalf("first check applied %+v; want two items filed", a)
+	}
+
+	inc1, inc2 := f.itemByRef(first.Applied.Filed[0].Ref), f.itemByRef(first.Applied.Filed[1].Ref)
+	if inc1.Origin != domain.OriginTrigger || inc1.Trigger != nightly || !inc1.Untrusted || inc1.CreatedBy != "agent:"+watcher || inc1.Title != "API down" {
+		t.Errorf("filed item = %+v; want origin trigger of %s by agent:%s, untrusted", inc1, nightly, watcher)
+	}
+
+	f.close(inc2, domain.StateCancelled)
+
+	second := f.runCheck(t0.Add(2*time.Hour), `{"file": [{"key": "INC-1", "title": "API down", "brief": "still 5xx"}, {"key": "INC-2", "title": "Disk full", "brief": "again"}],
+		"note": [{"key": "INC-1", "text": "and slow"}, {"key": "INC-9", "text": "who"}]}`, domain.CheckLimits{}, false)
+
+	wantSkips := []string{"INC-2: closed on Oct 1: cancelled", "INC-1: " + domain.CheckNoteTooSoon, "INC-9: " + domain.CheckNoOpenItem}
+	if a := second.Applied; len(a.Filed) != 0 || len(a.Noted) != 1 || a.Noted[0].Ref != refOf(inc1) || !slices.Equal(skips(a), wantSkips) {
+		t.Errorf("second check applied %+v; want a note on %s and skips %q", a, refOf(inc1), wantSkips)
+	}
+
+	f.expectCheckNote(inc1, "API down\n\nstill 5xx")
+
+	third := f.runCheck(t0.Add(4*time.Hour), `{"file": [{"key": "INC-2", "title": "Disk full", "brief": "back", "reopen": "it came back"}],
+		"note": [{"key": "INC-1", "text": "API down\n\nstill 5xx"}]}`, domain.CheckLimits{}, false)
+	if a := third.Applied; len(a.Filed) != 1 || a.Filed[0].Reopens != refOf(inc2) || !slices.Equal(skips(a), []string{"INC-1: " + domain.CheckNoteRepeated}) {
+		t.Fatalf("third check applied %+v; want INC-2 filed again after %s, and the repeated note dropped", a, refOf(inc2))
+	}
+
+	f.expectReopened(f.itemByRef(third.Applied.Filed[0].Ref), inc2)
+}
+
+// expectCheckNote checks that it has one item_note, by the engine, with text, the trigger and key.
+func (f *fixture) expectCheckNote(it domain.Item, text string) {
+	f.t.Helper()
+
+	events, err := f.Store.ItemEvents(f.ctx(), it.ID, 0, 100)
+	if err != nil {
+		f.t.Fatalf("ItemEvents: %v", err)
+	}
+
+	var notes []domain.Event
+
+	for _, e := range events {
+		if e.Kind == domain.EventItemNote {
+			notes = append(notes, e)
+		}
+	}
+
+	if len(notes) != 1 || notes[0].Data["text"] != text || notes[0].Data[domain.KeyNoteTrigger] != nightly || notes[0].Data[domain.KeyNoteKey] != "INC-1" ||
+		notes[0].Actor != domain.ActorEngine {
+		f.t.Errorf("item notes = %+v; want one by the engine with %q", notes, text)
+	}
+}
+
+// expectReopened checks that again links to old, and that the input gives again with its key.
+func (f *fixture) expectReopened(again, old domain.Item) {
+	f.t.Helper()
+
+	edges, err := f.Store.Edges(f.ctx(), again.ID)
+	if err != nil || len(edges.Needs) != 1 || edges.Needs[0].Needs != old.ID || edges.Needs[0].Kind != domain.EdgeLinked {
+		f.t.Errorf("edges of the item filed again = %+v, %v; want a linked edge to %s", edges, err, old.ID)
+	}
+
+	in, err := f.in.CheckInput(f.ctx(), f.factory, nightly, t0.Add(5*time.Hour))
+	if err != nil {
+		f.t.Fatalf("CheckInput: %v", err)
+	}
+
+	keys := map[string]string{}
+	for _, o := range in.Open {
+		keys[o.Ref] = o.Key
+	}
+
+	if keys[refOf(again)] != "INC-2" || len(in.Open) != 2 || !sameJSON(in.State, `{"since": "a"}`) {
+		f.t.Errorf("input open = %+v, state %s; want both open items with their keys and the first check's state", in.Open, in.State)
+	}
+}
+
+// perCheck caps one check's items and perDay the items the trigger filed since the UTC day
+// began; what is over them is skipped over the limit.
+func testApplyLimits(f *fixture) {
+	t := f.t
+
+	files := func(keys ...string) string {
+		var parts []string
+		for _, k := range keys {
+			parts = append(parts, `{"key": "`+k+`", "title": "t `+k+`", "brief": "b"}`)
+		}
+
+		return `{"file": [` + strings.Join(parts, ", ") + `]}`
+	}
+
+	first := f.runCheck(t0, files("a", "b", "c"), domain.CheckLimits{PerCheck: 2, PerDay: 3}, false)
+	if a := first.Applied; len(a.Filed) != 2 || !slices.Equal(skips(a), []string{"c: " + domain.CheckOverLimit}) {
+		t.Errorf("first check applied %+v; want 2 filed and c over the limit", a)
+	}
+
+	second := f.runCheck(t0.Add(time.Hour), files("c", "d"), domain.CheckLimits{PerCheck: 2, PerDay: 3}, false)
+	if a := second.Applied; len(a.Filed) != 1 || a.Filed[0].Key != "c" || !slices.Equal(skips(a), []string{"d: " + domain.CheckOverLimit}) {
+		t.Errorf("second check applied %+v; want c filed and d over perDay", a)
+	}
+
+	next := f.runCheck(t0.Add(24*time.Hour), files("d"), domain.CheckLimits{PerCheck: 2, PerDay: 3}, false)
+	if a := next.Applied; len(a.Filed) != 1 {
+		t.Errorf("next day's check applied %+v; want d filed", a)
+	}
+}
+
+// A try check says what it would do and files, notes and saves nothing; the next check's input
+// does not see its decisions; a try while a check is in flight is ErrConflict.
+func testTryCheck(f *fixture) {
+	t := f.t
+
+	f.runCheck(t0, `{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}], "state": {"since": "a"}}`, domain.CheckLimits{}, false)
+
+	try := f.runCheck(t0.Add(2*time.Hour), `{"file": [{"key": "INC-2", "title": "New", "brief": "b"}], "note": [{"key": "INC-1", "text": "slow"}],
+		"state": {"since": "b"}}`, domain.CheckLimits{}, true)
+	if a := try.Applied; !try.Try || len(a.Filed) != 1 || a.Filed[0].Ref != "" || len(a.Noted) != 1 {
+		t.Errorf("try applied %+v; want it would file INC-2 and note INC-1", a)
+	}
+
+	if items, err := f.Store.ListItems(f.ctx(), ports.ItemQuery{FactoryID: f.factory, Limit: 100}); err != nil || len(items) != 1 {
+		t.Errorf("items after the try = %d, %v; want only the first check's", len(items), err)
+	}
+
+	in, err := f.in.CheckInput(f.ctx(), f.factory, nightly, t0.Add(3*time.Hour))
+	if err != nil || !sameJSON(in.State, `{"since": "a"}`) || strings.Contains(string(in.LastDecisions), "INC-2") || in.Open[0].LastNote != "" {
+		t.Errorf("input after the try = %+v, %v; want the first check's state and decisions and no note", in, err)
+	}
+
+	f.checkFiring(t0.Add(4 * time.Hour))
+
+	if _, _, err := f.in.Fire(f.ctx(), domain.TriggerFiring{
+		FactoryID: f.factory, Trigger: nightly, Source: domain.TriggerSchedule, EventKey: domain.OnSchedule,
+		IdempotencyKey: "try-busy", Outcome: domain.FiringChecked, CheckState: domain.CheckQueued, At: t0.Add(4 * time.Hour), Try: true,
+	}, nil, domain.FireLimits{}); !errors.Is(err, ports.ErrConflict) {
+		t.Errorf("try while a check is queued = %v; want ErrConflict", err)
+	}
+
+	if checks, err := f.in.TriggerChecks(f.ctx(), f.factory, nightly, 10); err != nil || len(checks) != 3 || !checks[1].Try || checks[0].CheckState != domain.CheckQueued {
+		t.Errorf("TriggerChecks = %+v, %v; want the queued check, the try and the first, newest first", checks, err)
+	}
+}
+
+// Three failed checks in a row are an alert, tries left out, until one is done; a check that
+// skipped over the limit is one from that UTC day on.
+func testCheckAlerts(f *fixture) {
+	t := f.t
+
+	fail := func(at time.Time, try bool) {
+		f.t.Helper()
+
+		if _, _, err := f.in.Fire(f.ctx(), domain.TriggerFiring{
+			FactoryID: f.factory, Trigger: nightly, Source: domain.TriggerSchedule, EventKey: domain.OnSchedule,
+			IdempotencyKey: at.UTC().Format(time.RFC3339), Outcome: domain.FiringChecked, CheckState: domain.CheckQueued, At: at, Try: try,
+		}, nil, domain.FireLimits{}); err != nil {
+			t.Fatalf("Fire: %v", err)
+		}
+
+		_, l := f.claimCheck(at)
+		if err := f.in.FinishCheck(f.ctx(), l, domain.CheckResult{State: domain.CheckFailed, Reason: "timed out", At: at.Add(time.Minute)}); err != nil {
+			t.Fatalf("FinishCheck: %v", err)
+		}
+	}
+
+	alerts := func() []domain.CheckAlert {
+		f.t.Helper()
+
+		got, err := f.in.CheckAlerts(f.ctx(), []domain.FactoryID{f.factory}, t0.Truncate(24*time.Hour))
+		if err != nil {
+			t.Fatalf("CheckAlerts: %v", err)
+		}
+
+		return got
+	}
+
+	f.runCheck(t0, `{"file": [{"key": "a", "title": "a", "brief": "b"}, {"key": "b", "title": "b", "brief": "b"}]}`, domain.CheckLimits{PerCheck: 1}, false)
+
+	if got := alerts(); len(got) != 1 || got[0].Kind != domain.CheckLimited || got[0].Trigger != nightly || !got[0].At.Equal(t0.Add(time.Minute)) {
+		t.Errorf("alerts after a check over the limit = %+v; want one limit alert", got)
+	}
+
+	fail(t0.Add(time.Hour), false)
+	fail(t0.Add(2*time.Hour), false)
+	fail(t0.Add(3*time.Hour), true)
+
+	if got := alerts(); len(got) != 1 {
+		t.Errorf("alerts after two failures and a failed try = %+v; want only the limit", got)
+	}
+
+	fail(t0.Add(4*time.Hour), false)
+
+	if got := alerts(); len(got) != 2 || got[0].Kind != domain.CheckFailing || got[0].Reason != "timed out" || !got[0].At.Equal(t0.Add(4*time.Hour+time.Minute)) {
+		t.Errorf("alerts after three failures = %+v; want failing at the newest, then the limit", got)
+	}
+
+	if got, err := f.in.CheckAlerts(f.ctx(), []domain.FactoryID{f.factory}, t0.Add(24*time.Hour)); err != nil || len(got) != 1 || got[0].Kind != domain.CheckFailing {
+		t.Errorf("alerts the next day = %+v, %v; want only failing", got, err)
+	}
+}
+
+// Another organization reads none of a trigger's keys, checks or alerts.
+func testIsolatedKeys(f *fixture) {
+	t := f.t
+
+	f.runCheck(t0, `{"file": [{"key": "a", "title": "a", "brief": "b"}, {"key": "b", "title": "b", "brief": "b"}]}`, domain.CheckLimits{PerCheck: 1}, false)
+
+	labs := domain.WithOrg(t.Context(), f.NewOrg(t))
+
+	if in, err := f.in.CheckInput(labs, f.factory, nightly, t0.Add(time.Hour)); err != nil || len(in.Open) != 0 || string(in.LastDecisions) != "null" {
+		t.Errorf("labs CheckInput = %+v, %v; want nothing", in, err)
+	}
+
+	if got, err := f.in.TriggerChecks(labs, f.factory, nightly, 10); err != nil || len(got) != 0 {
+		t.Errorf("labs TriggerChecks = %+v, %v; want none", got, err)
+	}
+
+	if got, err := f.in.CheckAlerts(labs, []domain.FactoryID{f.factory}, t0.Truncate(24*time.Hour)); err != nil || len(got) != 0 {
+		t.Errorf("labs CheckAlerts = %+v, %v; want none", got, err)
+	}
 }
