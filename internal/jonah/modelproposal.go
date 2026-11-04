@@ -169,8 +169,10 @@ func (m *ModelProposals) estimate(ctx context.Context, f domain.FactoryID, line 
 
 	est.Tries = domain.ModelTriesPerItem * (len(est.Items) + len(est.kept))
 
-	for _, it := range est.Items {
+	// The estimate sums the run costs as they are, then each answers whole cents.
+	for i, it := range est.Items {
 		est.EstimateUSD += domain.ModelTriesPerItem * it.Run.Result.CostUSD
+		est.Items[i].Run.Result.CostUSD = domain.RoundCents(it.Run.Result.CostUSD)
 	}
 
 	for _, k := range est.kept {
@@ -182,8 +184,8 @@ func (m *ModelProposals) estimate(ctx context.Context, f domain.FactoryID, line 
 		return ModelEstimate{}, fmt.Errorf("model proposal: read spend: %w", err)
 	}
 
-	b := line.Jonah.Budget(spend)
-	est.BudgetLeftUSD = max(b.BudgetUSD-b.SpentUSD, 0)
+	est.EstimateUSD = domain.RoundCents(est.EstimateUSD)
+	est.BudgetLeftUSD = line.Jonah.Budget(spend).LeftUSD()
 
 	if est.EstimateUSD > est.BudgetLeftUSD {
 		return est, fmt.Errorf("model proposal: the estimate $%.2f is more than the $%.2f left of Jonah's budget: %w", est.EstimateUSD,
