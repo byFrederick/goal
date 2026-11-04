@@ -42,14 +42,19 @@ type byteLimits struct {
 
 var defaultLimits = byteLimits{source: domain.MaxSourceBytes, file: domain.MaxFileBytes}
 
+// archiveFrom is how many changed items make a sync read them from its reader's archive, when the
+// reader has one (ports.ArchiveReader), instead of fetching them one by one (ADR 0038 decision 2).
+const archiveFrom = 50
+
 type snapshotStats struct {
-	files, fetched, failed int
-	written                bool
+	// fetched counts the items read, archived those of them read from an archive.
+	files, fetched, archived, failed int
+	written                          bool
 }
 
 // snapshot is the snapshot pass of one sync (ADR 0038 decisions 3 and 4): it lists every item of
 // spec's source, copies the entries whose version is unchanged from the current snapshot's zip
-// without fetching or recompressing them, fetches and converts the others, and when something
+// without fetching or recompressing them, reads and converts the others, and when something
 // was added, changed or removed writes one zip on local disk, stores it and records it. A file
 // that fails keeps its last good entry or stays out, one that looks like it holds a key stays
 // out, and both are listed; only a source past a limit, the bucket, the database or ctx fail the
@@ -83,13 +88,24 @@ func (in *Ingestor) snapshot(ctx context.Context, c domain.SourceClaim, spec dom
 
 	b := &snapshotBuilder{zw: zip.NewWriter(out), limits: in.limits, prev: prev, old: old, paths: map[string]bool{}}
 
+	var changed []changedItem
+
 	for _, item := range items {
-		if err := in.entry(ctx, b, spec, reader, item); err != nil {
+		p, read, err := in.entry(ctx, b, spec, item)
+		if err != nil {
 			return stats, err
+		}
+
+		if read {
+			changed = append(changed, changedItem{item: item, path: p})
 		}
 	}
 
-	stats.files, stats.fetched, stats.failed = len(b.files), b.fetched, b.failed
+	if err := in.read(ctx, b, spec, reader, changed); err != nil {
+		return stats, err
+	}
+
+	stats.files, stats.fetched, stats.archived, stats.failed = len(b.files), b.fetched, b.archived, b.failed
 
 	if !b.changed(src.CurrentSnapshot == "") {
 		return stats, nil
@@ -253,28 +269,36 @@ func (in *Ingestor) previousZip(ctx context.Context, c domain.SourceClaim) (map[
 // snapshotBuilder is a snapshot being written: its zip, its files, what changed and what failed
 // against the current snapshot's files (prev) and zip entries (old).
 type snapshotBuilder struct {
-	zw      *zip.Writer
-	limits  byteLimits
-	prev    map[string]domain.KnowledgeFile
-	old     map[string]*zip.File
-	paths   map[string]bool
-	files   []domain.KnowledgeFile
-	bytes   int64
-	changes domain.SnapshotChanges
-	failed  int
-	fetched int
+	zw       *zip.Writer
+	limits   byteLimits
+	prev     map[string]domain.KnowledgeFile
+	old      map[string]*zip.File
+	paths    map[string]bool
+	files    []domain.KnowledgeFile
+	bytes    int64
+	changes  domain.SnapshotChanges
+	failed   int
+	fetched  int
+	archived int
 }
 
-// entry adds item to the snapshot: copied when its version is unchanged, else fetched and
-// converted; a failure keeps the entry it had, or leaves it out, and is listed.
-func (in *Ingestor) entry(ctx context.Context, b *snapshotBuilder, spec domain.SyncSpec, reader ports.SourceReader, item domain.SourceItem) error {
-	p := b.path(spec.Source.Kind, item)
+// changedItem is an item the snapshot reads, at its file's path.
+type changedItem struct {
+	item domain.SourceItem
+	path string
+}
+
+// entry gives item its file's path p in the snapshot and copies its entry when its version is
+// unchanged; read reports that it changed and is to be read. An item whose path is not a file's
+// is left out and counted as failed.
+func (in *Ingestor) entry(ctx context.Context, b *snapshotBuilder, spec domain.SyncSpec, item domain.SourceItem) (p string, read bool, err error) {
+	p = b.path(spec.Source.Kind, item)
 	if err := domain.CheckFilePath(p); err != nil {
 		in.cfg.Log.WarnContext(ctx, "knowledge file left out: its path is not a file's", slog.String("source", spec.Source.Name), slog.Any("error", err))
 
 		b.failed++
 
-		return nil
+		return "", false, nil
 	}
 
 	b.paths[p] = true
@@ -282,22 +306,107 @@ func (in *Ingestor) entry(ctx context.Context, b *snapshotBuilder, spec domain.S
 	if f, ok := b.prev[p]; ok && f.Version == item.Version {
 		copied, err := b.copy(p)
 		if err != nil || copied {
+			return p, false, err
+		}
+	}
+
+	return p, true, nil
+}
+
+// read adds the changed items to the snapshot: from one archive when reader has one and at least
+// archiveFrom changed, then those the archive did not hand over fetched one by one.
+func (in *Ingestor) read(ctx context.Context, b *snapshotBuilder, spec domain.SyncSpec, reader ports.SourceReader, changed []changedItem) error {
+	if a, ok := reader.(ports.ArchiveReader); ok && len(changed) >= archiveFrom {
+		left, err := in.fromArchive(ctx, b, spec, a, changed)
+		if err != nil {
+			return err
+		}
+
+		changed = left
+	}
+
+	for _, c := range changed {
+		doc, err := reader.Fetch(ctx, spec, c.item.ID)
+		if err != nil {
+			err = fmt.Errorf("%w: %w", errFetch, err)
+		}
+
+		if err := in.put(ctx, b, c, doc, err); err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+// fromArchive adds the changed items a's archive hands over, one at a time, and returns the
+// others. An archive that fails as a whole is logged, and leaves the items it did not hand over
+// to be fetched one by one.
+func (in *Ingestor) fromArchive(ctx context.Context, b *snapshotBuilder, spec domain.SyncSpec, a ports.ArchiveReader, changed []changedItem,
+) ([]changedItem, error) {
+	at := make(map[string]int, len(changed))
+	items := make([]domain.SourceItem, len(changed))
+
+	for i, c := range changed {
+		at[c.item.ID], items[i] = i, c.item
+	}
+
+	done := make([]bool, len(changed))
+
+	for doc, err := range a.Archive(ctx, spec, items) {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		if err != nil {
+			in.cfg.Log.WarnContext(ctx, "knowledge archive failed", slog.String("source", spec.Source.Name), slog.Any("error", err))
+
+			break
+		}
+
+		i, ok := at[doc.ID]
+		if !ok || done[i] {
+			continue
+		}
+
+		done[i] = true
+		b.archived++
+
+		if err := in.put(ctx, b, changed[i], doc, nil); err != nil {
+			return nil, err
+		}
+	}
+
+	var left []changedItem
+
+	for i, c := range changed {
+		if !done[i] {
+			left = append(left, c)
+		}
+	}
+
+	return left, nil
+}
+
+// put converts c's content doc and adds it to the snapshot; when its read failed (readErr) or its
+// conversion fails, it keeps the entry it had, or leaves it out, and is listed.
+func (in *Ingestor) put(ctx context.Context, b *snapshotBuilder, c changedItem, doc domain.SourceDoc, readErr error) error {
 	b.fetched++
 
-	md, title, url, err := in.markdown(ctx, spec, reader, item, p)
+	md, title, url, err := "", "", "", readErr
+	if err == nil {
+		md, title, url, err = in.markdown(ctx, c.item, doc, c.path)
+	}
+
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
 
 	if err != nil {
-		return b.keep(p, err)
+		return b.keep(c.path, err)
 	}
 
-	return b.add(p, item.Version, md, title, url)
+	return b.add(c.path, c.item.Version, md, title, url)
 }
 
 // keep lists p as failed with err and keeps its entry from the current snapshot, or leaves it
@@ -465,16 +574,9 @@ func (b *snapshotBuilder) fail(f domain.FileFailure) {
 	}
 }
 
-// markdown fetches item and converts it to Markdown, returning its title and URL as the fetch
-// tells them. name is its file's path, which names its type when neither the listing nor the
-// fetch does.
-func (in *Ingestor) markdown(ctx context.Context, spec domain.SyncSpec, reader ports.SourceReader, item domain.SourceItem, name string,
-) (md, title, url string, err error) {
-	doc, err := reader.Fetch(ctx, spec, item.ID)
-	if err != nil {
-		return "", "", "", fmt.Errorf("%w: %w", errFetch, err)
-	}
-
+// markdown converts item's content doc to Markdown, returning its title and URL as the read tells
+// them. name is its file's path, which names its type when neither the listing nor the read does.
+func (in *Ingestor) markdown(ctx context.Context, item domain.SourceItem, doc domain.SourceDoc, name string) (md, title, url string, err error) {
 	mediaType := cmp.Or(doc.MIME, item.MIME)
 	if mediaType == "" {
 		if mediaType, err = domain.DocumentType(cmp.Or(item.Title, item.ID), doc.Body); err != nil {
