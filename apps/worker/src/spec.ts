@@ -178,6 +178,21 @@ export const Jonah = z.object({
 });
 export type Jonah = z.infer<typeof Jonah>;
 
+/**
+ * Grade mode (ADR 0039 decision 10): the reason an item went back and the result to grade, a try's
+ * output and diff or the item's original or final result. The run answers fixed, not fixed or unknown.
+ */
+export const Grade = z.object({
+  /** Why the item went back to an earlier station. */
+  reason: z.string().min(1),
+  result: z.object({
+    kind: z.enum(['try', 'original', 'final']),
+    output: z.string(),
+    diff: z.string(),
+  }),
+});
+export type Grade = z.infer<typeof Grade>;
+
 const taskFields = z.object({
   factory_id: z.string().min(1),
   /** Empty only in definition mode, judge mode and Jonah mode, which need no item. */
@@ -224,6 +239,8 @@ const taskFields = z.object({
   judge: Judge.optional(),
   /** Jonah mode (ADR 0039 decision 4): the run reads its box with Read, Grep and Glob and returns observations and proposals. */
   jonah: Jonah.optional(),
+  /** Grade mode (ADR 0039 decision 10): the run grades this result against the reason, in one model call without tools. */
+  grade: Grade.optional(),
 });
 
 type ModeFields = {
@@ -231,20 +248,26 @@ type ModeFields = {
   draft_request?: DraftRequest | undefined;
   judge?: Judge | undefined;
   jonah?: Jonah | undefined;
+  grade?: Grade | undefined;
 };
 
 /** An item's run names its item; only definition, judge and Jonah mode may leave it empty. */
 const itemNamed = (s: ModeFields) =>
-  s.draft_request !== undefined || s.judge !== undefined || s.jonah !== undefined || s.item_id.length > 0;
+  s.draft_request !== undefined ||
+  s.judge !== undefined ||
+  s.jonah !== undefined ||
+  s.grade !== undefined ||
+  s.item_id.length > 0;
 const itemMessage = {
-  message: 'item_id is required outside definition mode, judge mode and Jonah mode',
+  message: 'item_id is required outside definition, judge, Jonah and grade mode',
   path: ['item_id'],
 };
 
 /** A run is in one mode at most: a draft request's, a judge's or a Jonah review's. */
-const oneMode = (s: ModeFields) => [s.draft_request, s.judge, s.jonah].filter((m) => m !== undefined).length <= 1;
+const oneMode = (s: ModeFields) =>
+  [s.draft_request, s.judge, s.jonah, s.grade].filter((m) => m !== undefined).length <= 1;
 const modeMessage = {
-  message: 'a spec has at most one mode: a draft_request, a judge or a jonah (not both)',
+  message: 'a spec has at most one mode: a draft_request, a judge, a jonah or a grade (not both)',
   path: ['judge'],
 };
 
@@ -355,5 +378,9 @@ export const Bundle = z
   .refine((b) => !(b.spec.jonah && (b.repository || b.definition)), {
     message: "a jonah's bundle has no repository and no definition",
     path: ['spec', 'jonah'],
+  })
+  .refine((b) => !(b.spec.grade && (b.repository || b.definition)), {
+    message: "a grade's bundle has no repository and no definition",
+    path: ['spec', 'grade'],
   });
 export type Bundle = z.infer<typeof Bundle>;
