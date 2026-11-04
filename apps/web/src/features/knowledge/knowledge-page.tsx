@@ -65,7 +65,7 @@ export function KnowledgePage() {
 
       {failing.map((s) => (
         <div key={s.id} role="alert" className="flex flex-wrap items-center gap-3 rounded-card bg-rework-tint p-4">
-          <div className="min-w-0 flex-1">
+          <div className={cn('min-w-0 flex-1', s.secret && 'max-md:basis-full')}>
             <Callout tone="rework">
               <span translate="no" className="font-medium">
                 {s.name}
@@ -212,7 +212,7 @@ function SourcesCard({
                 return (
                   <tr
                     key={s.id}
-                    className="animate-row-in align-top [&>td]:border-t [&>td]:border-line [&>td]:px-4 [&>td]:py-3"
+                    className="animate-row-in align-top [&>td]:border-t [&>td]:border-line [&>td]:px-4 [&>td]:py-3 max-md:[&>td]:py-0"
                   >
                     <td className="min-w-0">
                       <SourceName s={s} />
@@ -344,8 +344,7 @@ function FindFile() {
                   params={{ org: org.slug, source: f.source }}
                   search={{ find: f.path }}
                   className={cn(
-                    touchLink,
-                    'flex min-w-0 items-start justify-between gap-3 py-2 text-ink hover:text-link',
+                    'flex min-w-0 items-start justify-between gap-3 py-2 text-ink hover:text-link max-md:min-h-11',
                   )}
                 >
                   <span className="flex min-w-0 flex-col">
@@ -410,7 +409,9 @@ function MostRead({ reads, pending }: { reads: Parameters<typeof mostRead>[0]; p
                       params={{ org: org.slug, source: r.source }}
                       search={{ find: r.path }}
                       translate="no"
-                      className={cn(touchLink, 'font-mono text-ink break-all underline-offset-3 hover:underline')}
+                      className={cn(
+                        'font-mono text-ink break-all underline-offset-3 hover:underline max-md:flex max-md:min-h-11 max-md:items-center',
+                      )}
                     >
                       {r.source}/{r.path}
                     </Link>

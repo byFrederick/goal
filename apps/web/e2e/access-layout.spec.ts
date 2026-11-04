@@ -81,3 +81,19 @@ test('switches the view and opens an environment’s file from a row', async ({ 
     /\/o\/acme\/f\/software\/definition\/basics\?mode=yaml&file=environments%2Fdeploy\.yaml/,
   );
 });
+
+for (const width of [1280, 768]) {
+  for (const path of ['/o/acme/access', '/o/acme/access?by=secret']) {
+    test(`secret chips are at least 24 px tall at ${width} px on ${path}`, async ({ page }, testInfo) => {
+      test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs the whole matrix');
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(path);
+      await expect(page.getByRole('region', { name: 'Expiring' })).toBeVisible();
+      const chips = page.locator('a[href*="/secrets/"][translate="no"]:visible');
+      await expect(chips.first()).toBeVisible();
+      const heights = await chips.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
+      for (const h of heights) expect(h).toBeGreaterThanOrEqual(24);
+      await expectAccessible(page);
+    });
+  }
+}

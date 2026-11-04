@@ -22,7 +22,6 @@ import { NotAvailable } from '../../ui/not-available';
 import { StatStrip } from '../../ui/stat-strip';
 import { TabNav, tabNavUnderlineItem } from '../../ui/tab-nav';
 import { Tooltip } from '../../ui/tooltip';
-import { touchLink } from '../../ui/touch-target';
 import {
   DraftSessionContext,
   DraftSessionProvider,
@@ -95,13 +94,13 @@ function SendBackReasons({ stats }: { stats: AgentStats }) {
           {stats.reasons.map((r) => (
             <li
               key={r.label}
-              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-t border-line py-3 md:grid-cols-[minmax(0,1fr)_150px_auto]"
+              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-t border-line py-3 max-md:py-0 md:grid-cols-[minmax(0,1fr)_150px_auto]"
             >
               <Tooltip label={r.label} side="top">
                 <button
                   type="button"
                   title={r.label}
-                  className={cn(touchLink, 'min-w-0 cursor-default truncate text-left text-body')}
+                  className="min-w-0 cursor-default truncate text-left text-body max-md:min-h-11"
                 >
                   {reasonLabel(r.label)}
                 </button>
