@@ -385,13 +385,135 @@ func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, si
 }
 
 // PruneDeliveries implements ports.Intake.
-func (in *Intake) PruneDeliveries(ctx context.Context, before time.Time) (int, error) {
-	n, err := fetch(ctx, in.s.systemTx, func(q *db.Queries) (int64, error) { return q.PruneWebhookDeliveries(ctx, before) })
+func (in *Intake) PruneDeliveries(ctx context.Context, now time.Time) (int, error) {
+	n, err := fetch(ctx, in.s.systemTx, func(q *db.Queries) (int64, error) {
+		deliveries, err := q.PruneWebhookDeliveries(ctx, now.Add(-domain.DeliveryRetention))
+		if err != nil {
+			return 0, err
+		}
+
+		ledger, err := q.PruneWebhookLedger(ctx, now.Add(-domain.LedgerRetention))
+
+		return deliveries + ledger, err
+	})
 	if err != nil {
 		return 0, fmt.Errorf("prune deliveries: %w", err)
 	}
 
 	return int(n), nil
+}
+
+// Receive implements ports.Intake: the ledger's insert decides a duplicate, so two goalds that
+// receive one delivery at once keep one.
+func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Received, error) {
+	if err := n.Check(); err != nil {
+		return domain.Received{}, fmt.Errorf("receive delivery: %w", err)
+	}
+
+	webhook, err := parseID("webhook", string(n.WebhookID))
+	if err != nil {
+		return domain.Received{}, err
+	}
+
+	headers, err := json.Marshal(domain.StoredHeaders(n.Headers))
+	if err != nil {
+		return domain.Received{}, fmt.Errorf("receive delivery: headers: %w", err)
+	}
+
+	at := n.ReceivedAt.UTC()
+	out := domain.Received{Receipt: n.Receipt, DeliveryID: n.DeliveryID}
+
+	err = in.s.inTx(ctx, func(q *db.Queries) error {
+		if n.Receipt == domain.ReceiptAccepted {
+			_, err := q.InsertLedgerID(ctx, db.InsertLedgerIDParams{WebhookID: webhook, DeliveryID: n.DeliveryID, ReceivedAt: at})
+
+			switch {
+			case notFound(err):
+				out.Receipt = domain.ReceiptDuplicate
+
+				// The first row is gone, or there was none: the id was only counted.
+				row, err := q.CountDuplicate(ctx, db.CountDuplicateParams{EndpointID: webhook, DeliveryID: n.DeliveryID})
+				if notFound(err) {
+					return nil
+				}
+
+				out.Row = domain.WebhookDeliveryID(row.String())
+
+				return err
+			case err != nil:
+				return err
+			case !n.Named:
+				return q.CountUnnamedDelivery(ctx, db.CountUnnamedDeliveryParams{WebhookID: webhook, ReceivedAt: at})
+			}
+		}
+
+		row, err := in.insertReceived(ctx, q, webhook, headers, n)
+		out.Row = row
+
+		return err
+	})
+
+	switch {
+	case isForeignKeyViolation(err):
+		return domain.Received{}, fmt.Errorf("webhook %s: %w", n.WebhookID, ports.ErrNotFound)
+	case err != nil:
+		return domain.Received{}, fmt.Errorf("receive delivery: %w", ruleError(err, ""))
+	default:
+		return out, nil
+	}
+}
+
+// insertReceived keeps the row of a delivery the receiver accepted or refused, with its body for an
+// accepted one.
+func (in *Intake) insertReceived(ctx context.Context, q *db.Queries, webhook uuid.UUID, headers []byte, n domain.NewReceipt,
+) (domain.WebhookDeliveryID, error) {
+	id, err := newID()
+	if err != nil {
+		return "", err
+	}
+
+	p := db.InsertReceivedDeliveryParams{
+		ID: id, EndpointID: webhook, ReceivedAt: n.ReceivedAt.UTC(), Headers: headers, Body: n.Body, Outcome: string(domain.DeliveryAccepted),
+		Reason: n.Reason, Event: n.Event, Receipt: new(string(n.Receipt)),
+	}
+
+	if n.Receipt == domain.ReceiptRefused {
+		p.Outcome = string(domain.DeliveryRefused)
+	} else {
+		p.DeliveryID = &n.DeliveryID
+	}
+
+	if p.Body == nil {
+		p.Body = []byte{}
+	}
+
+	if _, err := q.InsertReceivedDelivery(ctx, p); err != nil {
+		return "", err
+	}
+
+	return domain.WebhookDeliveryID(id.String()), nil
+}
+
+// UnnamedDays implements ports.Intake.
+func (in *Intake) UnnamedDays(ctx context.Context, webhook domain.WebhookEndpointID, since time.Time) ([]domain.DeliveryCount, error) {
+	uid, err := parseID("webhook", string(webhook))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.UnnamedDeliveryDaysRow, error) {
+		return q.UnnamedDeliveryDays(ctx, db.UnnamedDeliveryDaysParams{WebhookID: uid, Since: since})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("unnamed deliveries of webhook %s: %w", webhook, err)
+	}
+
+	out := make([]domain.DeliveryCount, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, domain.DeliveryCount{WebhookID: webhook, Day: r.Day.UTC(), Count: int(r.Count)})
+	}
+
+	return out, nil
 }
 
 // RecordFiring implements ports.Intake.
@@ -757,6 +879,16 @@ func deliveryFrom(r db.WebhookDeliveriesRow) (domain.WebhookDelivery, error) {
 	if r.ItemID != nil {
 		d.ItemID = domain.ItemID(r.ItemID.String())
 	}
+
+	if r.DeliveryID != nil {
+		d.DeliveryID = *r.DeliveryID
+	}
+
+	if r.Receipt != nil {
+		d.Receipt = domain.DeliveryReceipt(*r.Receipt)
+	}
+
+	d.Event, d.Duplicates = r.Event, int(r.Duplicates)
 
 	return d, nil
 }

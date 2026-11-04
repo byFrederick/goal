@@ -37,6 +37,10 @@ type intakeData struct {
 	endpoints  map[domain.WebhookEndpointID]*endpointRow
 	deliveries []deliveryRow
 	firings    []firingRow
+	// ledger holds each webhook's accepted delivery ids with when they came, and counts the
+	// deliveries no trigger named per webhook and UTC day.
+	ledger map[ledgerKey]time.Time
+	counts map[countKey]int
 	// secrets are the organization secrets webhooks are signed by (UseSecrets); nil has none.
 	secrets *OrgSecrets
 }
@@ -53,6 +57,18 @@ type deliveryRow struct {
 	d   domain.WebhookDelivery
 }
 
+type ledgerKey struct {
+	org      domain.OrgID
+	webhook  domain.WebhookEndpointID
+	delivery string
+}
+
+type countKey struct {
+	org     domain.OrgID
+	webhook domain.WebhookEndpointID
+	day     time.Time
+}
+
 type firingRow struct {
 	org domain.OrgID
 	f   domain.TriggerFiring
@@ -60,7 +76,9 @@ type firingRow struct {
 
 // NewIntake returns intake state sealed with key, over store's factories and items.
 func NewIntake(key ports.MasterKey, store *Store) *Intake {
-	return &Intake{key: key, store: store, d: &intakeData{endpoints: map[domain.WebhookEndpointID]*endpointRow{}}}
+	return &Intake{key: key, store: store, d: &intakeData{
+		endpoints: map[domain.WebhookEndpointID]*endpointRow{}, ledger: map[ledgerKey]time.Time{}, counts: map[countKey]int{},
+	}}
 }
 
 // UseSecrets makes s the secrets the organization's webhooks are signed by, as the secrets table
@@ -381,6 +399,8 @@ func (in *Intake) DeleteEndpoint(ctx context.Context, id domain.WebhookEndpointI
 
 	delete(in.d.endpoints, id)
 	in.d.deliveries = slices.DeleteFunc(in.d.deliveries, func(r deliveryRow) bool { return r.d.EndpointID == id })
+	maps.DeleteFunc(in.d.ledger, func(k ledgerKey, _ time.Time) bool { return k.webhook == id })
+	maps.DeleteFunc(in.d.counts, func(k countKey, _ int) bool { return k.webhook == id })
 
 	return nil
 }
@@ -568,14 +588,110 @@ func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, si
 }
 
 // PruneDeliveries implements ports.Intake.
-func (in *Intake) PruneDeliveries(_ context.Context, before time.Time) (int, error) {
+func (in *Intake) PruneDeliveries(_ context.Context, now time.Time) (int, error) {
 	in.d.mu.Lock()
 	defer in.d.mu.Unlock()
 
-	n := len(in.d.deliveries)
-	in.d.deliveries = slices.DeleteFunc(in.d.deliveries, func(r deliveryRow) bool { return r.d.ReceivedAt.Before(before) })
+	before, ledgerBefore := now.Add(-domain.DeliveryRetention), now.Add(-domain.LedgerRetention)
+	n := len(in.d.deliveries) + len(in.d.ledger) + len(in.d.counts)
 
-	return n - len(in.d.deliveries), nil
+	in.d.deliveries = slices.DeleteFunc(in.d.deliveries, func(r deliveryRow) bool { return r.d.ReceivedAt.Before(before) })
+	maps.DeleteFunc(in.d.ledger, func(_ ledgerKey, at time.Time) bool { return at.Before(ledgerBefore) })
+	maps.DeleteFunc(in.d.counts, func(k countKey, _ int) bool { return k.day.Before(utcDay(ledgerBefore)) })
+
+	return n - len(in.d.deliveries) - len(in.d.ledger) - len(in.d.counts), nil
+}
+
+// Receive implements ports.Intake.
+func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Received, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Received{}, err
+	}
+
+	if err := n.Check(); err != nil {
+		return domain.Received{}, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	if _, err := in.endpointLocked(org, n.WebhookID); err != nil {
+		return domain.Received{}, err
+	}
+
+	out := domain.Received{Receipt: n.Receipt, DeliveryID: n.DeliveryID}
+	key := ledgerKey{org: org, webhook: n.WebhookID, delivery: n.DeliveryID}
+	_, taken := in.d.ledger[key]
+
+	switch {
+	case n.Receipt == domain.ReceiptRefused:
+	case taken:
+		out.Receipt = domain.ReceiptDuplicate
+
+		for i, r := range in.d.deliveries {
+			if r.org == org && r.d.EndpointID == n.WebhookID && r.d.DeliveryID == n.DeliveryID {
+				in.d.deliveries[i].d.Duplicates++
+				out.Row = r.d.ID
+			}
+		}
+
+		return out, nil
+	case !n.Named:
+		in.d.ledger[key] = n.ReceivedAt.UTC()
+		in.d.counts[countKey{org: org, webhook: n.WebhookID, day: utcDay(n.ReceivedAt)}]++
+
+		return out, nil
+	default:
+		in.d.ledger[key] = n.ReceivedAt.UTC()
+	}
+
+	id, err := uuid.NewV7()
+	if err != nil {
+		return domain.Received{}, err
+	}
+
+	outcome := domain.DeliveryAccepted
+	if n.Receipt == domain.ReceiptRefused {
+		outcome = domain.DeliveryRefused
+	}
+
+	d := domain.WebhookDelivery{
+		ID: domain.WebhookDeliveryID(id.String()), EndpointID: n.WebhookID, ReceivedAt: n.ReceivedAt.UTC(),
+		Headers: domain.StoredHeaders(n.Headers), Body: slices.Clone(n.Body), Outcome: outcome, Reason: n.Reason,
+		DeliveryID: n.DeliveryID, Event: n.Event, Receipt: n.Receipt,
+	}
+	if d.Body == nil {
+		d.Body = []byte{}
+	}
+
+	in.d.deliveries = append(in.d.deliveries, deliveryRow{org: org, d: d})
+	out.Row = d.ID
+
+	return out, nil
+}
+
+// UnnamedDays implements ports.Intake.
+func (in *Intake) UnnamedDays(ctx context.Context, webhook domain.WebhookEndpointID, since time.Time) ([]domain.DeliveryCount, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	out := []domain.DeliveryCount{}
+
+	for k, n := range in.d.counts {
+		if k.org == org && k.webhook == webhook && !k.day.Before(utcDay(since)) {
+			out = append(out, domain.DeliveryCount{WebhookID: webhook, Day: k.day, Count: n})
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.DeliveryCount) int { return a.Day.Compare(b.Day) })
+
+	return out, nil
 }
 
 // RecordFiring implements ports.Intake.
