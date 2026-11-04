@@ -168,6 +168,16 @@ const softwareObservations = (now: number): JonahObservation[] => [
 /** The Software factory's proposals, newest first. */
 const softwareProposals = (now: number): ProposalEntry[] => [
   {
+    number: 9,
+    title: 'Try a smaller model for the reviewer',
+    state: 'proposed',
+    created_at: new Date(now - 12 * 3_600_000).toISOString(),
+    paths: ['factory.yaml'],
+    agents: ['reviewer'],
+    estimate: { metric: 'sent_back_rate', station: 'review', before: 0.2, after: 0.12, cost_per_item_usd: -0.5 },
+    evidence_count: 0,
+  },
+  {
     number: 8,
     title: 'Split requests over 400 changed lines into an assembly',
     state: 'proposed',
@@ -324,10 +334,45 @@ const proposalEight = (now: number): Proposal => ({
   ],
 });
 
-/** The detail of a seeded proposal; only 7 and 8 have one, the other numbers answer 404. */
+/** Proposal 9, a model proposal: it has no evidence, only what was tried on past items with the line's result. */
+const proposalNine = (now: number): Proposal => ({
+  ...(softwareProposals(now).find((p) => p.number === 9) as ProposalEntry),
+  summary: 'The reviewer passed past items first time on a smaller model, at a lower cost.',
+  made_against_version: 21,
+  publishes_as_version: 22,
+  edits: [],
+  files: [
+    {
+      path: 'factory.yaml',
+      base_sha256: 'd4',
+      base_content: [...filler(), '    model: claude-opus-5-5'].join('\n'),
+      content: [...filler(), '    model: claude-sonnet-5-5'].join('\n'),
+    },
+  ],
+  evidence: [],
+  tried: {
+    state: 'done',
+    items: [
+      ['software#511', 'Board Done cards overflow', 'passed first time, $0.42'],
+      ['software#497', 'Board column header meta', 'passed first time, $0.38'],
+    ].map(([ref, title, result]) => ({
+      item_ref: ref as string,
+      item_title: title as string,
+      station: 'review',
+      line_result: result as string,
+      tries: [doneTry(1)],
+    })),
+    cost_usd: 2.8,
+    seconds: 1200,
+    kept_tests: [],
+  },
+});
+
+/** The detail of a seeded proposal; only 7, 8 and 9 have one, the other numbers answer 404. */
 const softwareDetail = (now: number, number: number): Proposal | undefined => {
   if (number === 7) return proposalSeven(now);
   if (number === 8) return proposalEight(now);
+  if (number === 9) return proposalNine(now);
   return undefined;
 };
 

@@ -8,7 +8,7 @@ test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
 });
 
-test('the overview shows the two proposals waiting, the policy and what Jonah noticed', async ({ page }) => {
+test('the overview shows the proposals waiting, the policy and what Jonah noticed', async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah');
   await expect(page.getByRole('heading', { level: 1, name: 'Jonah' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Waiting for your review' })).toBeVisible();
