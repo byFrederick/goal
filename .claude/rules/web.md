@@ -45,8 +45,13 @@ The UI is one product, so its look comes from one design system: [MASTER.md](../
 ## Tests and checks
 
 - Test what a person sees and does with Vitest and Testing Library. Tests of markup or internals break on every refactor.
-- Write or update the Playwright specs when a flow changes. They cannot run in the box, so the pull request says so.
+- Write or update the Playwright specs in `apps/web/e2e/` when a flow changes. The box has no browser, so the pull request names them as [goal-deliver](../skills/goal-deliver/SKILL.md) step 4 says.
 - Run `pnpm --dir apps/web run typecheck`, `lint` and `test` after the last edit.
+
+## Review
+
+- Before approving a pull request into main that changes `apps/web/`, `packages/api-client/` or `contracts/`, read the result of the ci workflow's e2e job (`task web:e2e`) on it. Reject the change when the job failed or has not reported.
+- A pull request into an assembly's integration branch runs no ci, so its specs run on the assembly's landing pull request into main.
 
 ## Skills
 
