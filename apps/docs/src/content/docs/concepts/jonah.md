@@ -111,7 +111,17 @@ Tries run only while Jonah is on, while no item waits at an agent station, and w
 - **The cost and the time:** what the tries cost together, and the seconds from the first try queued to the last one finished, once all are done.
 - **The state:** `trying` while a try is queued or running, `done` when every try is done, and `budget_used`, shown as "Not tried: budget used", while a try is still queued and Jonah's budget has run out. Queued tries run once the 7-day window has room again.
 
-Today only code grades a try. A try whose output breaks the station's contract, as the proposal changes it, or fails one of the station's checks is `not_fixed`, with what failed as its reason. A try that passes both stays done without a verdict until the grader is built. The grader's hit rates (`tried.grader`) and the station's kept tests (`tried.kept_tests`) are not shown yet: `grader` is absent and `kept_tests` is empty.
+Code grades a try first. A try whose output breaks the station's contract, as the proposal changes it, or fails one of the station's checks is `not_fixed`, with what failed as its reason.
+
+A try at a gate station, where the proposal changes the gate's own agent, rules or contract, is then graded by what people did with the item after its original run, never by a model and never by the gate's own reasons. Goal reads the item's events from the original run's start up to its next claim at the gate or at a station before it:
+
+- **Reject is right** when a person sent the item back: a person's rejection at the gate, a person's rejection back to the gate or before it, or a person's move there.
+- **Approve is right** when the item merged and no person sent it back afterwards.
+- **No answer** when the item is still open, was cancelled, or only the gate agent sent it back.
+
+The try is `fixed` when its decision matches, and `not_fixed` when it differs or its output is not a gate verdict. It is `unknown` when there is no answer. Its reason names the person's verdict or the merge.
+
+A try at any other station that passes the contract and the checks stays done without a verdict until the grader is built. The grader's hit rates (`tried.grader`) and the station's kept tests (`tried.kept_tests`) are not shown yet: `grader` is absent and `kept_tests` is empty.
 
 ## Kept tests
 

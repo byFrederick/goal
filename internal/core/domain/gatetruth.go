@@ -15,7 +15,7 @@ type GateTruth struct {
 	Reason string
 }
 
-// GateTruthOf reads the right decision for the run at gate station station of line that started
+// GateTruthOf reads the right decision for the run at line's gate station named station that started
 // at since, from the item's events in append order. The window is the events at or after since,
 // up to the item's next claim at the station or at one before it, since a claim there works a
 // newer version of the item; a claim stamped at or before since is the run's own.
@@ -65,21 +65,21 @@ func GateTruthOf(events []Event, line Line, station string, since time.Time) Gat
 // personSendBack is why e is a person's send-back of the item to the gate at line place gate or
 // before it, with the person's own reason, and whether it is one.
 func personSendBack(later []Event, e Event, line []string, gate int) (string, bool) {
-	if !byPerson(e) {
-		return "", false
+	sent := false
+
+	switch {
+	case !byPerson(e):
+	case e.Kind == EventGateRejected:
+		sent = true
+	case e.Kind == EventRejected:
+		to := rejectTarget(later, e)
+		sent = to == "" || linePlace(line, to) <= gate
+	case e.Kind == EventMoved:
+		to := dataText(e, evKeyTo)
+		sent = to != "" && linePlace(line, to) <= gate
 	}
 
-	switch e.Kind {
-	case EventGateRejected:
-	case EventRejected:
-		if to := rejectTarget(later, e); to != "" && linePlace(line, to) > gate {
-			return "", false
-		}
-	case EventMoved:
-		if to := dataText(e, evKeyTo); to == "" || linePlace(line, to) > gate {
-			return "", false
-		}
-	default:
+	if !sent {
 		return "", false
 	}
 

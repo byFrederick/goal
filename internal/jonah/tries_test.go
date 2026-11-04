@@ -785,10 +785,14 @@ func TestTries_GateChangeGradedByPeople(t *testing.T) {
 			name: "gate's own rejection ignored",
 			events: func(f domain.FactoryID, it domain.ItemID, at time.Time) []domain.Event {
 				return []domain.Event{
-					{FactoryID: f, ItemID: it, At: at.Add(time.Minute), Kind: domain.EventGateRejected, Station: stBuild, Actor: tryAgent,
-						Data: map[string]any{"reason": gateReason}},
-					{FactoryID: f, ItemID: it, At: at.Add(time.Minute), Kind: domain.EventMoved, Station: stBuild, Actor: domain.ActorEngine,
-						Data: map[string]any{"from": stBuild, "to": stSpec}},
+					{
+						FactoryID: f, ItemID: it, At: at.Add(time.Minute), Kind: domain.EventGateRejected, Station: stBuild, Actor: tryAgent,
+						Data: map[string]any{"reason": gateReason},
+					},
+					{
+						FactoryID: f, ItemID: it, At: at.Add(time.Minute), Kind: domain.EventMoved, Station: stBuild, Actor: domain.ActorEngine,
+						Data: map[string]any{"from": stBuild, "to": stSpec},
+					},
 				}
 			},
 			output: `{"decision":"reject","reason":"no tests"}`, verdict: domain.PastTryUnknown, reason: "no person",

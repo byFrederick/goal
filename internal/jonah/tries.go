@@ -562,23 +562,26 @@ func (s *Tries) gradeByPeople(ctx context.Context, line domain.Line, try domain.
 			return domain.PastTryResult{}, err
 		}
 
-		truth := domain.GateTruthOf(events, line, try.Station, orig.StartedAt)
-
-		switch {
-		case truth.Decision == "":
-			res.Verdict, res.Reason = domain.PastTryUnknown,
-				"no person's verdict or merge decides the item yet: it is still open, was cancelled, or only the gate agent sent it back"
-		case truth.Decision == v.Decision:
-			res.Verdict, res.Reason = domain.PastTryFixed, fmt.Sprintf("the try decided %s, as people did: %s", v.Decision, truth.Reason)
-		default:
-			res.Verdict, res.Reason = domain.PastTryNotFixed, fmt.Sprintf("the try decided %s, but people decided %s: %s", v.Decision,
-				truth.Decision, truth.Reason)
-		}
+		res.Verdict, res.Reason = peopleGrade(v.Decision, domain.GateTruthOf(events, line, try.Station, orig.StartedAt))
 	}
 
 	res.Reason = truncate(res.Reason, domain.MaxPastTryReason)
 
 	return res, nil
+}
+
+// peopleGrade is the grade of a try that decided d, against what people decided.
+func peopleGrade(d domain.Decision, truth domain.GateTruth) (domain.PastTryVerdict, string) {
+	if truth.Decision == "" {
+		return domain.PastTryUnknown,
+			"no person's verdict or merge decides the item yet: it is still open, was cancelled, or only the gate agent sent it back"
+	}
+
+	if truth.Decision == d {
+		return domain.PastTryFixed, fmt.Sprintf("the try decided %s, as people did: %s", d, truth.Reason)
+	}
+
+	return domain.PastTryNotFixed, fmt.Sprintf("the try decided %s, but people decided %s: %s", d, truth.Decision, truth.Reason)
 }
 
 // tryEventPage is how many of an item's events itemEvents reads at a time.
