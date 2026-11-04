@@ -70,3 +70,14 @@ describe.each([
     }
   });
 });
+
+describe('the editor theme with shortened hex values', () => {
+  it.each([
+    ['#fff', '#ffffff', 'ffffff'],
+    ['#ffff', '#ffffffff', 'ffffffff'],
+  ])('expands %s so Monaco accepts every value', (short, colour, rule) => {
+    const theme = editorTheme(() => short, false);
+    for (const value of Object.values(theme.colors)) expect(value).toBe(colour);
+    for (const r of theme.rules) expect(r.foreground).toBe(rule);
+  });
+});
