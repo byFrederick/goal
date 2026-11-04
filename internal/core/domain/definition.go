@@ -79,6 +79,16 @@ type DefinitionVersion struct {
 	// CreatedBy, UpdatedBy and PublishedBy are stored as Actor.Ref().
 	CreatedBy, UpdatedBy, PublishedBy Actor
 	CreatedAt, UpdatedAt, PublishedAt time.Time
+	// Counts are what the published version's tree holds, kept so the version list reads no
+	// files; nil for a draft, and for a version published before they were kept until a list
+	// computes them.
+	Counts *VersionCounts
+}
+
+// VersionCounts are the stations, agents, skills and connections a version's factory.yaml
+// declares. A version's files never change, so neither do they.
+type VersionCounts struct {
+	Stations, Agents, Skills, Connections int
 }
 
 // SourceKind says where a version's content came from.

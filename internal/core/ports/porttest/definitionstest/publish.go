@@ -1,8 +1,10 @@
 package definitionstest
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"sync"
 	"testing"
@@ -403,6 +405,93 @@ func testVersions(f *fixture) {
 	if vs, err := f.Definitions.Versions(ctx, newFactoryID(), 0, 10); err != nil || len(vs) != 0 {
 		t.Errorf("Versions of an unknown factory = %+v, %v; want none", vs, err)
 	}
+}
+
+// A version keeps the counts it was published with; one published without them is given them
+// once by SetVersionCounts, only in its own organization, and a draft never is.
+func testVersionCounts(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+	r, _ := f.create(t, acme)
+
+	publish := func(note string, c *domain.VersionCounts) domain.DefinitionVersion {
+		t.Helper()
+
+		d := f.openDraft(t, r.ID)
+		d = f.save(t, r.ID, d.Revision, map[string]string{notesPath: note})
+		p := publishing(f.record(t, r.ID), d, note)
+		p.Counts = c
+
+		v, err := f.Definitions.Publish(ctx, p)
+		if err != nil {
+			t.Fatalf("Publish %s: %v", note, err)
+		}
+
+		return v
+	}
+
+	stored := func(what string, v domain.DefinitionVersion, want *domain.VersionCounts) {
+		t.Helper()
+
+		got, err := f.Definitions.Version(ctx, v.ID)
+		if err != nil {
+			t.Fatalf("Version %s: %v", what, err)
+		}
+
+		if !reflect.DeepEqual(got.Counts, want) {
+			t.Errorf("%s counts = %v, want %v", what, got.Counts, want)
+		}
+	}
+
+	withCounts := &domain.VersionCounts{Stations: 4, Agents: 2, Skills: 3, Connections: 1}
+	v1 := publish("one", withCounts)
+
+	if !reflect.DeepEqual(v1.Counts, withCounts) {
+		t.Errorf("published counts = %v, want %v", v1.Counts, withCounts)
+	}
+
+	v2 := publish("two", nil)
+	v3 := publish("three", nil)
+	draft := f.openDraft(t, r.ID)
+
+	vs, err := f.Definitions.Versions(ctx, r.ID, 0, 10)
+	if err != nil || len(vs) != 3 {
+		t.Fatalf("Versions = %+v, %v; want three", vs, err)
+	}
+
+	for i, want := range []*domain.VersionCounts{nil, nil, withCounts} {
+		if !reflect.DeepEqual(vs[i].Counts, want) {
+			t.Errorf("listed v%d counts = %v, want %v", vs[i].Number, vs[i].Counts, want)
+		}
+	}
+
+	later := domain.VersionCounts{Stations: 1}
+	backfilled := domain.VersionCounts{Stations: 5, Agents: 1}
+
+	for _, tc := range []struct {
+		what string
+		ctx  context.Context //nolint:containedctx // the call's organization
+		id   domain.DefinitionVersionID
+		c    domain.VersionCounts
+	}{
+		{"v2 backfilled", ctx, v2.ID, backfilled},
+		{"v2 again", ctx, v2.ID, later},
+		{"v1, which has counts", ctx, v1.ID, later},
+		{"the open draft", ctx, draft.ID, later},
+		{"v3 from another org", f.other(t).ctx(t), v3.ID, later},
+	} {
+		if err := f.Definitions.SetVersionCounts(tc.ctx, tc.id, tc.c); err != nil {
+			t.Errorf("SetVersionCounts %s: %v", tc.what, err)
+		}
+	}
+
+	stored("v1", v1, withCounts)
+	stored("v2", v2, &backfilled)
+	stored("v3", v3, nil)
+	stored("the open draft", draft, nil)
+
+	err = f.Definitions.SetVersionCounts(context.Background(), v3.ID, later)
+	expect(t, "SetVersionCounts without an org", err, domain.ErrNoOrg)
 }
 
 func testRestore(f *fixture) {

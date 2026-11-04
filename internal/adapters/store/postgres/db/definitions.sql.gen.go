@@ -15,7 +15,7 @@ import (
 const archiveDraft = `-- name: ArchiveDraft :one
 UPDATE definition_versions SET state = 'archived', updated_by = $1, updated_at = now()
 WHERE id = $2 AND state = 'draft'
-RETURNING id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at
+RETURNING id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at, counts
 `
 
 type ArchiveDraftParams struct {
@@ -44,6 +44,7 @@ func (q *Queries) ArchiveDraft(ctx context.Context, arg ArchiveDraftParams) (Def
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PublishedAt,
+		&i.Counts,
 	)
 	return i, err
 }
@@ -78,7 +79,7 @@ func (q *Queries) BlobSizes(ctx context.Context, hashes []string) ([]BlobSizesRo
 }
 
 const currentVersions = `-- name: CurrentVersions :many
-SELECT v.id, v.org_id, v.factory_id, v.state, v.number, v.base_version_id, v.revision, v.manifest, v.message, v.source, v.resolved, v.created_by, v.updated_by, v.published_by, v.created_at, v.updated_at, v.published_at FROM factories f JOIN definition_versions v ON v.id = f.current_version_id ORDER BY f.id
+SELECT v.id, v.org_id, v.factory_id, v.state, v.number, v.base_version_id, v.revision, v.manifest, v.message, v.source, v.resolved, v.created_by, v.updated_by, v.published_by, v.created_at, v.updated_at, v.published_at, v.counts FROM factories f JOIN definition_versions v ON v.id = f.current_version_id ORDER BY f.id
 `
 
 func (q *Queries) CurrentVersions(ctx context.Context) ([]DefinitionVersion, error) {
@@ -108,6 +109,7 @@ func (q *Queries) CurrentVersions(ctx context.Context) ([]DefinitionVersion, err
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.PublishedAt,
+			&i.Counts,
 		); err != nil {
 			return nil, err
 		}
@@ -140,7 +142,7 @@ func (q *Queries) DeleteFactory(ctx context.Context, id uuid.UUID) error {
 }
 
 const draft = `-- name: Draft :one
-SELECT id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at FROM definition_versions WHERE factory_id = $1 AND state = 'draft'
+SELECT id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at, counts FROM definition_versions WHERE factory_id = $1 AND state = 'draft'
 `
 
 func (q *Queries) Draft(ctx context.Context, factoryID uuid.UUID) (DefinitionVersion, error) {
@@ -164,6 +166,7 @@ func (q *Queries) Draft(ctx context.Context, factoryID uuid.UUID) (DefinitionVer
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PublishedAt,
+		&i.Counts,
 	)
 	return i, err
 }
@@ -260,7 +263,7 @@ func (q *Queries) FactoryRecords(ctx context.Context) ([]FactoryRecord, error) {
 }
 
 const getVersion = `-- name: GetVersion :one
-SELECT id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at FROM definition_versions WHERE id = $1
+SELECT id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at, counts FROM definition_versions WHERE id = $1
 `
 
 func (q *Queries) GetVersion(ctx context.Context, id uuid.UUID) (DefinitionVersion, error) {
@@ -284,6 +287,7 @@ func (q *Queries) GetVersion(ctx context.Context, id uuid.UUID) (DefinitionVersi
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PublishedAt,
+		&i.Counts,
 	)
 	return i, err
 }
@@ -342,7 +346,7 @@ INSERT INTO definition_versions (
   $6, $7, $8, $9, $9,
   $10, CASE WHEN $3 = 'published' THEN now() END
 )
-RETURNING id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at
+RETURNING id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at, counts
 `
 
 type InsertVersionParams struct {
@@ -390,12 +394,13 @@ func (q *Queries) InsertVersion(ctx context.Context, arg InsertVersionParams) (D
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PublishedAt,
+		&i.Counts,
 	)
 	return i, err
 }
 
 const listVersions = `-- name: ListVersions :many
-SELECT id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at FROM definition_versions
+SELECT id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at, counts FROM definition_versions
 WHERE factory_id = $1 AND state = 'published'
   AND ($2::integer <= 0 OR number < $2::integer)
 ORDER BY number DESC
@@ -436,6 +441,7 @@ func (q *Queries) ListVersions(ctx context.Context, arg ListVersionsParams) ([]D
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.PublishedAt,
+			&i.Counts,
 		); err != nil {
 			return nil, err
 		}
@@ -448,7 +454,7 @@ func (q *Queries) ListVersions(ctx context.Context, arg ListVersionsParams) ([]D
 }
 
 const lockDraft = `-- name: LockDraft :one
-SELECT id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at FROM definition_versions WHERE factory_id = $1 AND state = 'draft' FOR UPDATE
+SELECT id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at, counts FROM definition_versions WHERE factory_id = $1 AND state = 'draft' FOR UPDATE
 `
 
 // FOR UPDATE, not NO KEY: publishing sets number, a key column.
@@ -473,6 +479,7 @@ func (q *Queries) LockDraft(ctx context.Context, factoryID uuid.UUID) (Definitio
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PublishedAt,
+		&i.Counts,
 	)
 	return i, err
 }
@@ -662,15 +669,16 @@ const publishDraft = `-- name: PublishDraft :one
 UPDATE definition_versions SET
   state = 'published', number = $1, message = $2,
   published_by = $3::text, published_at = now(),
-  updated_by = $3::text, updated_at = now()
-WHERE id = $4 AND state = 'draft'
-RETURNING id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at
+  updated_by = $3::text, updated_at = now(), counts = $4::jsonb
+WHERE id = $5 AND state = 'draft'
+RETURNING id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at, counts
 `
 
 type PublishDraftParams struct {
 	Number      *int32
 	Message     string
 	PublishedBy string
+	Counts      []byte
 	ID          uuid.UUID
 }
 
@@ -679,6 +687,7 @@ func (q *Queries) PublishDraft(ctx context.Context, arg PublishDraftParams) (Def
 		arg.Number,
 		arg.Message,
 		arg.PublishedBy,
+		arg.Counts,
 		arg.ID,
 	)
 	var i DefinitionVersion
@@ -700,12 +709,13 @@ func (q *Queries) PublishDraft(ctx context.Context, arg PublishDraftParams) (Def
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PublishedAt,
+		&i.Counts,
 	)
 	return i, err
 }
 
 const publishedVersion = `-- name: PublishedVersion :one
-SELECT id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at FROM definition_versions WHERE factory_id = $1 AND id = $2 AND state = 'published'
+SELECT id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at, counts FROM definition_versions WHERE factory_id = $1 AND id = $2 AND state = 'published'
 `
 
 type PublishedVersionParams struct {
@@ -735,6 +745,7 @@ func (q *Queries) PublishedVersion(ctx context.Context, arg PublishedVersionPara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PublishedAt,
+		&i.Counts,
 	)
 	return i, err
 }
@@ -743,7 +754,7 @@ const saveDraft = `-- name: SaveDraft :one
 UPDATE definition_versions SET
   manifest = $1, revision = revision + 1, updated_by = $2, updated_at = now()
 WHERE id = $3 AND state = 'draft'
-RETURNING id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at
+RETURNING id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at, counts
 `
 
 type SaveDraftParams struct {
@@ -773,6 +784,7 @@ func (q *Queries) SaveDraft(ctx context.Context, arg SaveDraftParams) (Definitio
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PublishedAt,
+		&i.Counts,
 	)
 	return i, err
 }
@@ -815,8 +827,24 @@ func (q *Queries) SetFactoryPaused(ctx context.Context, arg SetFactoryPausedPara
 	return err
 }
 
+const setVersionCounts = `-- name: SetVersionCounts :exec
+UPDATE definition_versions SET counts = $1::jsonb
+WHERE id = $2 AND state = 'published' AND counts IS NULL
+`
+
+type SetVersionCountsParams struct {
+	Counts []byte
+	ID     uuid.UUID
+}
+
+// Stores the counts of a published version that has none; a version that has them keeps them.
+func (q *Queries) SetVersionCounts(ctx context.Context, arg SetVersionCountsParams) error {
+	_, err := q.db.Exec(ctx, setVersionCounts, arg.Counts, arg.ID)
+	return err
+}
+
 const versionByNumber = `-- name: VersionByNumber :one
-SELECT id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at FROM definition_versions WHERE factory_id = $1 AND number = $2
+SELECT id, org_id, factory_id, state, number, base_version_id, revision, manifest, message, source, resolved, created_by, updated_by, published_by, created_at, updated_at, published_at, counts FROM definition_versions WHERE factory_id = $1 AND number = $2
 `
 
 type VersionByNumberParams struct {
@@ -845,6 +873,7 @@ func (q *Queries) VersionByNumber(ctx context.Context, arg VersionByNumberParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.PublishedAt,
+		&i.Counts,
 	)
 	return i, err
 }

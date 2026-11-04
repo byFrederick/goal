@@ -117,6 +117,10 @@ type DefinitionStore interface {
 	// Restore points the factory at an older published version (see Restore); numbers are not
 	// reused and an open draft stays open. Audit: definition.restored.
 	Restore(ctx context.Context, r Restore) (FactoryRecord, error)
+	// SetVersionCounts stores the counts of a published version that has none, for a version
+	// published before counts were kept. It changes nothing for a version that has counts, and
+	// for one that is not a published version of the organization.
+	SetVersionCounts(ctx context.Context, id domain.DefinitionVersionID, c domain.VersionCounts) error
 }
 
 // NewFactory is a factory to create with its first draft.
@@ -207,6 +211,8 @@ type Publish struct {
 	// Name and Title come from the validated factory.yaml and are copied to the factory.
 	Name, Title string
 	Message     string
+	// Counts are the version's counts, stored on it; nil stores none.
+	Counts *domain.VersionCounts
 	// RemovedStations are the station ids the new version drops, and StationMoves send the
 	// open items at them to a station it keeps.
 	RemovedStations []string

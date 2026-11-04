@@ -63,7 +63,8 @@ func (s *Service) Publish(ctx context.Context, f domain.FactoryID, r PublishRequ
 	v, err := s.store.Publish(ctx, ports.Publish{
 		Factory: f, DraftRevision: r.Revision, ExpectedCurrent: r.ExpectedCurrent,
 		Name: c.factory.Metadata.Name, Title: c.factory.Metadata.Title, Message: r.Message,
-		RemovedStations: removed, StationMoves: moves, Start: r.Start == nil || *r.Start, By: by, At: s.clock.Now(),
+		Counts: new(versionCounts(c.model)), RemovedStations: removed, StationMoves: moves,
+		Start: r.Start == nil || *r.Start, By: by, At: s.clock.Now(),
 	})
 	if errors.Is(err, ports.ErrConflict) {
 		return domain.DefinitionVersion{}, fmt.Errorf("publish %s: %w", f, ErrDraftConflict)
