@@ -115,7 +115,7 @@ Rules:
   - **Organization-wide:** Home, Needs you (orange count), Runs, Connections, Credentials, Knowledge. 32px rows, 16px icons. The current page is a grey `--color-hover` fill with ink text and an ink icon.
   - **Factories:** each factory is a collapsible group: its 18px letter badge, its name, and an orange count (needs you) or a red dot (andon). The open factory's pages (Floor, Board, Items, Agents, Intake, Jonah, Definition, Settings) sit under a 1px guide line; the current one is a grey fill.
   - **Bottom:** spend this week as a plain row with a 4px bar (no card), then the person.
-- **Top bar** (52px): the breadcrumb (muted ancestors, ink current) on the left; the page's actions on the right, the primary one last.
+- **Top bar** (52px): the breadcrumb (muted ancestors, ink current) on the left; the page's actions on the right, the primary one last. At tablet widths, when the actions do not fit beside the crumbs, they wrap to a right-aligned row under the crumbs (no animation); the crumbs keep at least their last item, ellipsized.
 - **Phones** (below 768px): a top bar with the mark (opens the drawer), the title and actions; a bottom tab bar (Needs you, Floor, Board, Items, More) with a 2px ink indicator on the current tab. Targets are at least 44px.
 
 ## Vocabulary
