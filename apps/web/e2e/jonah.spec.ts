@@ -8,7 +8,7 @@ test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
 });
 
-test('the overview shows the two proposals waiting, the policy and what Jonah noticed', async ({ page }) => {
+test('the overview shows the proposals waiting, the policy and what Jonah noticed', async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah');
   await expect(page.getByRole('heading', { level: 1, name: 'Jonah' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Waiting for your review' })).toBeVisible();
@@ -17,6 +17,8 @@ test('the overview shows the two proposals waiting, the policy and what Jonah no
   await expect(page.getByText('Proposal 8')).toBeVisible();
   await expect(page.getByText('Based on 4 runs sent back')).toBeVisible();
   await expect(page.getByText('Watching, 3 of 5')).toBeVisible();
+  await expect(page.getByText('Review sends back 1 in 4 frontend items for a missing phone check')).toBeVisible();
+  await expect(page.getByText(/Plain-language judge/)).toHaveCount(0);
   await expect(page.getByRole('region', { name: /After publish/ })).toBeVisible();
 
   await expectAccessible(page);
@@ -54,7 +56,7 @@ test('the tabs are Overview, Proposals and Tests, each at its own address', asyn
 
 test('each proposal links to its page', async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah');
-  await expect(page.getByRole('link', { name: /^Review/ }).first()).toHaveAttribute('href', /\/jonah\/proposals\/8$/);
+  await expect(page.getByRole('link', { name: /^Review/ }).first()).toHaveAttribute('href', /\/jonah\/proposals\/10$/);
 });
 
 test('Look for improvements now queues a review, and a second one is refused', async ({ page }) => {

@@ -149,3 +149,15 @@ test('items waiting at a station the draft removes ask where they go', async ({ 
   await publishButton(page).click();
   await expectToast(page, 'goal v9 published');
 });
+
+test('Review lists the draft’s kept tests with their results, and Versions shows the watch chips', async ({ page }) => {
+  await openReview(page);
+  const kept = page.getByRole('region', { name: 'Publish' }).locator('section[aria-labelledby="kept-tests-h"]');
+  await expect(kept.getByRole('heading', { name: 'Kept tests' })).toBeVisible();
+  const build = kept.getByRole('listitem').filter({ hasText: 'Build' });
+  await expect(build.getByText('Passed')).toBeVisible();
+  await expect(build.getByText('Failed')).toBeVisible();
+  for (const chip of ['Helped', 'Worse', 'No change', 'Watching']) {
+    await expect(history(page).getByText(chip, { exact: true }).first()).toBeVisible();
+  }
+});

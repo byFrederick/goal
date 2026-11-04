@@ -1328,7 +1328,14 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           ]
         : [],
     );
-    return [...items, ...syncs, ...conversions, ...warnings];
+    const worse = jonah.worseWatches(f.org_id, f.id).map(
+      (w): InboxEntry => ({
+        ...entry(f, 'watch_worse', w.id, w.since),
+        station: w.watch.station,
+        watch: w.watch,
+      }),
+    );
+    return [...items, ...syncs, ...conversions, ...warnings, ...worse];
   };
 
   const kindOrder: InboxEntry['kind'][] = [
@@ -1341,6 +1348,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     'expedite',
     'knowledge_source',
     'conversion',
+    'watch_worse',
   ];
 
   /**
@@ -1403,14 +1411,17 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
 
   /**
    * One agent's statistics: the fixture's measures (zeros for an agent without any) over the
-   * request's range, with the stations whose agents are its copies (builder-1 → builder). Null
+   * request's range, with the stations whose agents are its copies (builder-1 → builder) or the current version routes to it. Null
    * for an agent the definition does not declare (one on no station is declared, with no stations); a string for a bad range.
    */
   const agentStatsOf = (factory: Factory, agent: string, params: URLSearchParams): AgentStats | string | null => {
     const config = state.stations[factory.name] ?? {};
     const base = (name: string) => name.replace(/-\d+$/, '');
+    const routed = definitions.stationAgents(factory);
     const stations = factory.stations
-      .filter((s) => (config[s.id]?.agents ?? []).some((a) => base(a) === agent))
+      .filter(
+        (s) => (config[s.id]?.agents ?? []).some((a) => base(a) === agent) || (routed[s.id] ?? []).includes(agent),
+      )
       .map((s) => ({
         id: s.id,
         slots: config[s.id]?.copies ?? 1,

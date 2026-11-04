@@ -1,11 +1,13 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { AgentStats } from '@goal/api-client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createMockApi, type MockApi } from './api.ts';
 
-// GET …/factories/{f}/agents/{agent}/stats answers as goald does (internal/api/agents.go): 404 agent-not-found
-// only for an agent the definition does not declare; a declared agent on no station gets 200 with no stations
-// and zero measures. The same server answers the default caller's secrets and access, which orgCan grants.
+// The mock answers GET …/agents/{agent}/stats as goald does (internal/api/agents.go): the stations whose agents
+// include the agent, by copy name or by the line's route, and 404 agent-not-found only for an agent the definition
+// does not declare. A declared agent on no station gets 200 with no stations and zero measures. The same server
+// answers the default caller's secrets and access, which orgCan grants.
 
 let api: MockApi;
 let server: Server;
@@ -32,30 +34,46 @@ beforeEach(async () => {
   await fetch(`${base}/__mock/reset`, { method: 'POST' });
 });
 
-const stats = (agent: string) => fetch(`${base}/v1/orgs/acme/factories/goal/agents/${agent}/stats`);
+const stats = async (agent: string) => {
+  const res = await fetch(`${base}/v1/orgs/acme/factories/goal/agents/${agent}/stats`);
+  return { status: res.status, body: (await res.json()) as AgentStats & { code?: string } };
+};
 
-describe('the mock’s agent statistics', () => {
-  it('answers a station’s agent with its stations', async () => {
-    const res = await stats('reviewer');
-    expect(res.status).toBe(200);
-    expect(((await res.json()) as { stations: unknown[] }).stations.length).toBeGreaterThan(0);
+describe('agent stats', () => {
+  it('finds frontend-engineer at the build station the goal line routes to it', async () => {
+    const { status, body } = await stats('frontend-engineer');
+    expect(status).toBe(200);
+    expect(body.agent).toBe('frontend-engineer');
+    expect(body.model).toBe('claude-haiku-5-5');
+    expect(body.reasons).toHaveLength(4);
+    expect(body.stations.map((s) => ({ id: s.id, constraint: s.constraint }))).toEqual([
+      { id: 'build', constraint: true },
+    ]);
+  });
+
+  it('answers agent-not-found for an agent the definition does not declare', async () => {
+    const { status, body } = await stats('nobody');
+    expect(status).toBe(404);
+    expect(body.code).toBe('agent-not-found');
+  });
+
+  it('still finds agents by copy name and by a station agent', async () => {
+    expect((await stats('builder')).status).toBe(200);
+    const reviewer = await stats('reviewer');
+    expect(reviewer.status).toBe(200);
+    expect(reviewer.body.stations.map((s) => s.id)).toEqual(['review']);
   });
 
   it('answers a declared agent on no station with 200, no stations and zero measures', async () => {
-    const res = await stats('infra-engineer');
+    // sre declares fixer and runs it on no station (its stations are triage and investigate).
+    const res = await fetch(`${base}/v1/orgs/acme/factories/sre/agents/fixer/stats`);
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
-      agent: 'infra-engineer',
+      agent: 'fixer',
       stations: [],
       tasks_finished: 0,
       spend_usd: 0,
     });
-  });
-
-  it('answers an agent the definition does not declare with 404 agent-not-found', async () => {
-    const res = await stats('nobody');
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ code: 'agent-not-found' });
   });
 });
 
