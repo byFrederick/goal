@@ -20,6 +20,7 @@ var keptTestsTests = []struct {
 	{"KeptTests_ItemOfTheFactoryOnly", testKeptTestsItem},
 	{"KeptTests_Remove", testKeptTestsRemove},
 	{"KeptTests_OtherOrgInvisible", testKeptTestsTenancy},
+	{"KeptTests_LastResultIsNewestFinishedTry", testKeptTestsLastResult},
 }
 
 // keep keeps it at station, at minutes after t0, as the local user.
@@ -168,4 +169,55 @@ func keptIDs(ks []domain.KeptTest) []domain.KeptTestID {
 	}
 
 	return out
+}
+
+// A kept test's last result is its newest finished try's, of any source: nil until one finished,
+// and a queued or running try never counts.
+func testKeptTestsLastResult(f *fixture) {
+	t := f.t
+	k := f.keep(t, f.create(t, domain.NewItem{}), stWork, 1)
+
+	last := func() *domain.KeptTestLast {
+		t.Helper()
+
+		all, err := f.Kept.KeptTests(f.ctx(t), f.factory, "")
+		if err != nil || len(all) != 1 {
+			t.Fatalf("KeptTests = %+v, %v; want the one test", all, err)
+		}
+
+		return all[0].LastResult
+	}
+
+	if got := last(); got != nil {
+		t.Errorf("LastResult of a test never run = %+v, want nil", got)
+	}
+
+	tries := []domain.NewPastTry{f.keptTry(t, k, "key-1", 1), f.keptTry(t, k, "key-1", 2), f.keptTry(t, k, "key-1", 3)}
+	if _, err := f.Tries.QueuePublishTries(f.ctx(t), f.factory, f.NewVersion(t, f.org, f.factory), publishEdits, tries, t1); err != nil {
+		t.Fatal(err)
+	}
+
+	finish := func(v domain.PastTryVerdict, at time.Time) domain.RunID {
+		t.Helper()
+
+		c, err := f.Tries.ClaimPastTry(f.ctx(t), f.factory, at, ttl, 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		run := f.pastRun(t, f.create(t, domain.NewItem{}), stNext, t1, false, "")
+		if _, err := f.Tries.FinishPastTry(f.ctx(t), c, domain.PastTryResult{Verdict: v, Reason: "why", TryRunID: run, At: at}); err != nil {
+			t.Fatal(err)
+		}
+
+		return run
+	}
+
+	finish(domain.PastTryFixed, t1.Add(time.Hour))
+	run := finish(domain.PastTryNotFixed, t1.Add(2*time.Hour))
+
+	got := last()
+	if got == nil || got.Result != domain.KeptTestFailed || !got.At.Equal(t1.Add(2*time.Hour)) || got.RunID != run {
+		t.Errorf("LastResult = %+v; want failed at %s by run %s, the newest finished", got, t1.Add(2*time.Hour), run)
+	}
 }

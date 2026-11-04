@@ -92,3 +92,20 @@ func TestTries_TriedGroupsByItem(t *testing.T) {
 		t.Error("TriedOf of no tries: want none")
 	}
 }
+
+// A proposal's kept-test tries are listed apart from its cited items', and count in its cost.
+func TestTries_TriedKeepsKeptTestsApart(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
+	tries := []domain.PastTry{
+		{ItemID: "a", Attempt: 1, Station: stationBuild, State: domain.PastTryQueued, CreatedAt: at, CostUSD: 0.25},
+		{ItemID: "a", KeptTestID: "k", Attempt: 1, Station: stationBuild, State: domain.PastTryQueued, CreatedAt: at, CostUSD: 0.5},
+	}
+
+	got, ok := jonah.TriedOf(tries, domain.JonahBudget{BudgetUSD: 2})
+	if !ok || len(got.Items) != 1 || len(got.Items[0].Tries) != 1 || len(got.KeptTests) != 1 || got.KeptTests[0].KeptTestID != "k" ||
+		got.CostUSD != 0.75 {
+		t.Errorf("TriedOf = %+v, %v; want the cited item's try, the kept test's apart, and both costs", got, ok)
+	}
+}

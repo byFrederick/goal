@@ -383,7 +383,7 @@ type Try struct {
 	ID            uuid.UUID
 	OrgID         uuid.UUID
 	FactoryID     uuid.UUID
-	ProposalID    uuid.UUID
+	ProposalID    *uuid.UUID
 	ItemID        uuid.UUID
 	Station       string
 	OriginalRunID uuid.UUID
@@ -400,6 +400,10 @@ type Try struct {
 	FinishedAt    *time.Time
 	Reason        string
 	Attempt       int32
+	KeptTestID    *uuid.UUID
+	ContentKey    *string
+	VersionID     *uuid.UUID
+	Edits         []byte
 }
 
 type Watch struct {

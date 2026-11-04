@@ -19,13 +19,15 @@ const (
 	TriedBudgetUsed TriedState = "budget_used"
 )
 
-// Tried is how a proposal did on its past items: its tries by item, what they cost and how long
-// they took.
+// Tried is how a proposal did on its past items: its tries by item, its kept tests' tries (ADR
+// 0039 decision 12), what they cost and how long they took.
 type Tried struct {
 	State TriedState
-	// Items are the items tried, in the order their tries were queued.
-	Items   []TriedItem
-	CostUSD float64
+	// Items are the items the proposal cites that were tried, in the order their tries were queued.
+	Items []TriedItem
+	// KeptTests are its tries of kept tests, in the order they were queued.
+	KeptTests []domain.PastTry
+	CostUSD   float64
 	// Duration is from the first try queued to the last one finished; zero until every try is done.
 	Duration time.Duration
 }
@@ -51,13 +53,6 @@ func TriedOf(tries []domain.PastTry, budget domain.JonahBudget) (Tried, bool) {
 	)
 
 	for _, t := range tries {
-		i, ok := at[t.ItemID]
-		if !ok {
-			i, at[t.ItemID] = len(out.Items), len(out.Items)
-			out.Items = append(out.Items, TriedItem{ItemID: t.ItemID, Station: t.Station})
-		}
-
-		out.Items[i].Tries = append(out.Items[i].Tries, t)
 		out.CostUSD += t.CostUSD
 
 		if first.IsZero() || t.CreatedAt.Before(first) {
@@ -67,6 +62,20 @@ func TriedOf(tries []domain.PastTry, budget domain.JonahBudget) (Tried, bool) {
 		if t.FinishedAt.After(last) {
 			last = t.FinishedAt
 		}
+
+		if t.KeptTestID != "" {
+			out.KeptTests = append(out.KeptTests, t)
+
+			continue
+		}
+
+		i, ok := at[t.ItemID]
+		if !ok {
+			i, at[t.ItemID] = len(out.Items), len(out.Items)
+			out.Items = append(out.Items, TriedItem{ItemID: t.ItemID, Station: t.Station})
+		}
+
+		out.Items[i].Tries = append(out.Items[i].Tries, t)
 	}
 
 	for _, it := range out.Items {

@@ -206,6 +206,12 @@ usage:
                                                   print what trying the proposal again costs: one more
                                                   try per item it was tried on, three for a model
                                                   proposal; ask, then queue them (--yes: without asking)
+  goal test keep <item> --station S [--factory F] keep the item as a test at a station it passed the
+                                                  first time: every change that reaches the station is
+                                                  tried on it, and a failing test warns at publish
+  goal test list [--factory F]                    the kept tests by station: item, title, last result
+                                                  (passed, failed or error, and when), who kept it, id
+  goal test rm <id> [--factory F]                 remove a kept test; its item stays
   goal agent try-model <agent> <model> [--factory F] [--yes] [--json]
                                                   print what trying the model costs: three tries on each
                                                   of the agent's five newest finished items, beside how
@@ -300,7 +306,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, eval, bake-off, jonah, agent, spend, judge, triggers, webhooks) acts in one
+Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, eval, bake-off, jonah, test, agent, spend, judge, triggers, webhooks) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or

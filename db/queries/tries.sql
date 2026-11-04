@@ -10,14 +10,34 @@ SELECT id, number, state FROM jonah_proposals WHERE factory_id = sqlc.arg(factor
 SELECT EXISTS (SELECT 1 FROM tries WHERE proposal_id = sqlc.arg(proposal_id))::bool;
 
 -- name: LatestItemTry :one
--- The proposal's try of the item with the highest attempt: what Try again copies.
-SELECT * FROM tries WHERE proposal_id = sqlc.arg(proposal_id) AND item_id = sqlc.arg(item_id) ORDER BY attempt DESC LIMIT 1;
+-- The proposal's try of the cited item with the highest attempt: what Try again copies. A
+-- kept-test try of the same item is not one (00108).
+SELECT * FROM tries
+WHERE proposal_id = sqlc.arg(proposal_id) AND item_id = sqlc.arg(item_id) AND kept_test_id IS NULL
+ORDER BY attempt DESC LIMIT 1;
 
 -- name: InsertTry :one
-INSERT INTO tries (id, factory_id, proposal_id, item_id, attempt, station, original_run_id, model, created_at)
+-- One try of a proposal: of an item it cites, or of a kept test with the content it runs on (00108).
+INSERT INTO tries (id, factory_id, proposal_id, item_id, attempt, station, original_run_id, model, kept_test_id, content_key, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(proposal_id), sqlc.arg(item_id), sqlc.arg(attempt), sqlc.arg(station),
-        sqlc.arg(original_run_id), sqlc.arg(model), sqlc.arg(created_at))
+        sqlc.arg(original_run_id), sqlc.arg(model), sqlc.narg(kept_test_id), sqlc.narg(content_key), sqlc.arg(created_at))
 RETURNING *;
+
+-- name: InsertPublishTry :one
+-- One kept-test try of a publish (00108): no proposal, its version and edits its own. No row when
+-- the test has a publish's try of that content and attempt already (tries_publish_key).
+INSERT INTO tries (id, factory_id, item_id, attempt, station, original_run_id, model, kept_test_id, content_key, version_id, edits, created_at)
+VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(item_id), sqlc.arg(attempt), sqlc.arg(station), sqlc.arg(original_run_id),
+        sqlc.arg(model), sqlc.arg(kept_test_id), sqlc.arg(content_key), sqlc.arg(version_id), sqlc.arg(edits), sqlc.arg(created_at))
+ON CONFLICT (org_id, kept_test_id, content_key, attempt) WHERE proposal_id IS NULL DO NOTHING
+RETURNING *;
+
+-- name: KeptTestTries :many
+-- The factory's kept-test tries of content, from any proposal or publish, oldest first (tries_content_idx).
+SELECT sqlc.embed(t), coalesce(p.number, 0)::bigint AS proposal_number FROM tries t
+LEFT JOIN jonah_proposals p ON p.id = t.proposal_id
+WHERE t.factory_id = sqlc.arg(factory_id) AND t.content_key = sqlc.arg(content_key) AND t.kept_test_id IS NOT NULL
+ORDER BY t.created_at, t.id;
 
 -- name: ProposalTries :many
 SELECT sqlc.embed(t), p.number AS proposal_number FROM tries t
@@ -26,8 +46,9 @@ WHERE t.proposal_id = sqlc.arg(proposal_id)
 ORDER BY t.created_at, t.id;
 
 -- name: TryByID :one
-SELECT sqlc.embed(t), p.number AS proposal_number FROM tries t
-JOIN jonah_proposals p ON p.id = t.proposal_id
+-- A try with its proposal's number, 0 for a publish's try.
+SELECT sqlc.embed(t), coalesce(p.number, 0)::bigint AS proposal_number FROM tries t
+LEFT JOIN jonah_proposals p ON p.id = t.proposal_id
 WHERE t.id = sqlc.arg(id);
 
 -- name: LockFactoryTries :exec
@@ -36,8 +57,8 @@ SELECT pg_advisory_xact_lock(hashtextextended('goal.tries:' || sqlc.arg(factory_
 
 -- name: ClaimTry :one
 -- The factory's oldest queued try, or running one whose lease ended by now, that no other
--- transaction holds, while fewer than max_running of its tries run under a live lease: running
--- until until, one more attempt (tries_due_idx).
+-- transaction holds, a publish's (no proposal) before a proposal's, while fewer than max_running
+-- of its tries run under a live lease: running until until, one more attempt (tries_due_idx).
 UPDATE tries t SET state = 'running', lease_until = sqlc.arg(until)::timestamptz, attempts = t.attempts + 1
 WHERE t.id = (
   SELECT d.id FROM tries d
@@ -46,7 +67,7 @@ WHERE t.id = (
     AND (SELECT count(*) FROM tries l
          WHERE l.factory_id = sqlc.arg(factory_id) AND l.state = 'running' AND l.lease_until > sqlc.arg(now)::timestamptz)
         < sqlc.arg(max_running)::bigint
-  ORDER BY d.created_at, d.id
+  ORDER BY (d.proposal_id IS NOT NULL), d.created_at, d.id
   LIMIT 1
   FOR UPDATE SKIP LOCKED)
 RETURNING t.id;

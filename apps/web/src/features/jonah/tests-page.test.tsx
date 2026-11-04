@@ -48,6 +48,7 @@ const kept = (id: string, number: number, title: string, station: string, by = '
   item: { id: `item-${number}`, number, title },
   station,
   kept_by: by,
+  last_result: null,
   kept_at: '2026-11-01T10:00:00Z',
 });
 const tests = [

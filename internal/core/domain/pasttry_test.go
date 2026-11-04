@@ -93,6 +93,26 @@ func TestAgentItem_LineResult(t *testing.T) {
 	}
 }
 
+// A kept test's try needs its content key, and a try with no proposal needs a kept test.
+func TestNewPastTry_CheckKeptTest(t *testing.T) {
+	t.Parallel()
+
+	n := NewPastTry{KeptTestID: "k", ContentKey: "key", ItemID: "i", Station: stationBuild, OriginalRunID: "r", Model: "m"}
+	if err := n.Check(); err != nil {
+		t.Errorf("Check of a publish's kept-test try = %v, want nil", err)
+	}
+
+	for name, bad := range map[string]NewPastTry{
+		"no content key":         {KeptTestID: "k", ItemID: "i", Station: stationBuild, OriginalRunID: "r", Model: "m"},
+		"no proposal, no test":   {ContentKey: "key", ItemID: "i", Station: stationBuild, OriginalRunID: "r", Model: "m"},
+		"content key past bound": {KeptTestID: "k", ContentKey: strings.Repeat("a", MaxContentKey+1), ItemID: "i", Station: stationBuild, OriginalRunID: "r", Model: "m"},
+	} {
+		if err := bad.Check(); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: Check = %v, want ErrInvalid", name, err)
+		}
+	}
+}
+
 func TestNewGraderCheck_Check(t *testing.T) {
 	t.Parallel()
 
@@ -133,6 +153,65 @@ func TestNewGraderCheck_Check(t *testing.T) {
 		if err != nil && !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: Check = %v; want ErrInvalid", tt.name, err)
 		}
+	}
+}
+
+// A kept test's try is running until done, then passed, failed or error by its verdict; the
+// result of several is running, then failed, then passed, then error.
+func TestPastTry_KeptResult(t *testing.T) {
+	t.Parallel()
+
+	done := func(v PastTryVerdict) PastTry { return PastTry{ID: PastTryID(v), State: PastTryDone, Verdict: v} }
+
+	for want, try := range map[KeptTestResult]PastTry{
+		KeptTestRunning: {State: PastTryQueued}, KeptTestPassed: done(PastTryFixed), KeptTestFailed: done(PastTryNotFixed),
+		KeptTestError: done(PastTryError),
+	} {
+		if got := try.KeptResult(); got != want {
+			t.Errorf("KeptResult of %+v = %s, want %s", try, got, want)
+		}
+	}
+
+	if got, by, _ := KeptResultOf([]PastTry{done(PastTryFixed), done(PastTryNotFixed), done(PastTryError)}); got != KeptTestFailed || by.Verdict != PastTryNotFixed {
+		t.Errorf("KeptResultOf = %s by %+v, want failed by the try that failed", got, by)
+	}
+
+	if got, _, _ := KeptResultOf([]PastTry{done(PastTryError), done(PastTryFixed)}); got != KeptTestPassed {
+		t.Errorf("KeptResultOf of an error and a pass = %s, want passed", got)
+	}
+
+	if _, _, ok := KeptResultOf(nil); ok {
+		t.Error("KeptResultOf of no tries is ok, want false")
+	}
+}
+
+// promptPath is the prompt file the content-key test changes.
+const promptPath = "agents/w.md"
+
+// A content key depends only on the files: a version with whole-file edits that make it another
+// version's files has that version's key.
+func TestPastTry_ContentKeyOfAppliedEdits(t *testing.T) {
+	t.Parallel()
+
+	base := map[string][]byte{"factory.yaml": []byte("a: 1\n"), promptPath: []byte("# w\n")}
+	draft := map[string][]byte{"factory.yaml": []byte("a: 1\n"), promptPath: []byte("# w, test first\n")}
+
+	edited, err := ApplyEdits(base, []ProposalEdit{{Path: promptPath, Replacements: []Replacement{{Old: "# w\n", New: "# w, test first\n"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	whole, err := ApplyEdits(base, []ProposalEdit{{Path: promptPath, Content: "# w, test first\n", BaseSHA256: string(HashBlob(base[promptPath]))}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if ContentKey(edited) != ContentKey(draft) || ContentKey(whole) != ContentKey(draft) {
+		t.Error("the key of base with the edits differs from the draft's with the same files")
+	}
+
+	if ContentKey(base) == ContentKey(draft) || string(base[promptPath]) != "# w\n" {
+		t.Error("the key of other files matches, or ApplyEdits changed its input")
 	}
 }
 

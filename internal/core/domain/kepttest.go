@@ -24,6 +24,16 @@ type KeptTest struct {
 	Station    string
 	KeptBy     Actor
 	KeptAt     time.Time
+	// LastResult is the test's newest finished try of any source; nil for a test never run.
+	LastResult *KeptTestLast
+}
+
+// KeptTestLast is a kept test's newest finished try: passed, failed or error, when it finished and
+// its run (empty when it never ran).
+type KeptTestLast struct {
+	Result KeptTestResult
+	At     time.Time
+	RunID  RunID
 }
 
 // NewKeptTest is a test to keep.

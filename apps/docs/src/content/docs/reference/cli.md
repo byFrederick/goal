@@ -13,7 +13,7 @@ Every command of the `goal` CLI, in the order its usage text lists them: each se
 
 Factory definitions live in goald (drafts and published versions), not in files: goal factory push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, eval, bake-off, jonah, agent, spend, judge, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
+Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, eval, bake-off, jonah, test, agent, spend, judge, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
 
 With sign-in on (GOAL\_AUTH=session), commands send GOAL\_API\_KEY (an API key goal\_sk\_… or a personal token goal\_pat\_…) when it is set, else what goal login stored for goald's origin, and only over https or to this machine; a refused credential or permission exits 77
 
@@ -720,6 +720,36 @@ goal jonah try <number> [--factory F] [--yes] [--json]
 print what trying the proposal again costs: one more try per item it was tried on, three for a model proposal; ask, then queue them (--yes: without asking)
 
 Flags: `--factory F`, `--yes`, `--json`.
+
+## goal test keep
+
+```text
+goal test keep <item> --station S [--factory F]
+```
+
+keep the item as a test at a station it passed the first time: every change that reaches the station is tried on it, and a failing test warns at publish
+
+Flags: `--station S`, `--factory F`.
+
+## goal test list
+
+```text
+goal test list [--factory F]
+```
+
+the kept tests by station: item, title, last result (passed, failed or error, and when), who kept it, id
+
+Flags: `--factory F`.
+
+## goal test rm
+
+```text
+goal test rm <id> [--factory F]
+```
+
+remove a kept test; its item stays
+
+Flags: `--factory F`.
 
 ## goal agent try-model
 
