@@ -22,6 +22,7 @@ type jonahRows struct {
 	proposals    []jonahRow[domain.Proposal]
 	observations []jonahRow[domain.Observation]
 	watches      []jonahRow[domain.Watch]
+	tries        []jonahRow[domain.PastTry]
 	// outcomes are the station outcomes SetStationOutcomes gave, by factory and station.
 	outcomes map[domain.FactoryID]map[string][]domain.StationOutcome
 	runKinds map[domain.RunID]domain.RunKind
@@ -44,6 +45,7 @@ func (s *Store) purgeJonah(org domain.OrgID, factory domain.FactoryID) {
 		return gone(r.org, r.row.FactoryID)
 	})
 	s.jonah.watches = slices.DeleteFunc(s.jonah.watches, func(r jonahRow[domain.Watch]) bool { return gone(r.org, r.row.FactoryID) })
+	s.jonah.tries = slices.DeleteFunc(s.jonah.tries, func(r jonahRow[domain.PastTry]) bool { return gone(r.org, r.row.FactoryID) })
 }
 
 // ownsFactory reports whether factory is org's. Callers hold s.mu.
@@ -365,7 +367,7 @@ func (s *Store) JonahSpendSince(ctx context.Context, factory domain.FactoryID, s
 			continue
 		}
 
-		if s.jonah.runKinds[id] == domain.RunKindJonah {
+		if s.jonah.runKinds[id].Jonahs() {
 			out.JonahUSD += r.Result.CostUSD
 		} else {
 			out.LineUSD += r.Result.CostUSD

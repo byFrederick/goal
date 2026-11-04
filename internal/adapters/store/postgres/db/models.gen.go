@@ -353,6 +353,27 @@ type SavedView struct {
 	UpdatedAt time.Time
 }
 
+type Try struct {
+	ID            uuid.UUID
+	OrgID         uuid.UUID
+	FactoryID     uuid.UUID
+	ProposalID    uuid.UUID
+	ItemID        uuid.UUID
+	Station       string
+	OriginalRunID uuid.UUID
+	TryRunID      *uuid.UUID
+	Model         string
+	State         string
+	Verdict       *string
+	Error         string
+	Diff          string
+	CostUsd       float64
+	LeaseUntil    *time.Time
+	Attempts      int32
+	CreatedAt     time.Time
+	FinishedAt    *time.Time
+}
+
 type Watch struct {
 	ID           uuid.UUID
 	OrgID        uuid.UUID

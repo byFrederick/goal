@@ -118,7 +118,7 @@ func (q *Queries) CountOrgRuns(ctx context.Context, arg CountOrgRunsParams) (int
 const factorySpendSince = `-- name: FactorySpendSince :one
 SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
 FROM agent_runs
-WHERE factory_id = $1 AND started_at >= $2 AND kind <> 'jonah'
+WHERE factory_id = $1 AND started_at >= $2 AND kind NOT IN ('jonah', 'try')
 `
 
 type FactorySpendSinceParams struct {
@@ -126,8 +126,8 @@ type FactorySpendSinceParams struct {
 	Since     time.Time
 }
 
-// The cost of the runs a factory started at or after since, for its weekly budget: Jonah's runs
-// never trigger onExhausted (ADR 0039 decision 16), so they are left out. Row-level security
+// The cost of the runs a factory started at or after since, for its weekly budget: Jonah's runs,
+// its reviews and tries, never trigger onExhausted (ADR 0039 decision 16), so they are left out. Row-level security
 // scopes it to the organization; agent_runs_factory_started_idx serves the range.
 func (q *Queries) FactorySpendSince(ctx context.Context, arg FactorySpendSinceParams) (float64, error) {
 	row := q.db.QueryRow(ctx, factorySpendSince, arg.FactoryID, arg.Since)
@@ -262,7 +262,8 @@ type InsertRunParams struct {
 }
 
 // A run records the definition version it starts on; NULL only for runs from before versions.
-// kind is station for a line's run, jonah for a review's, which alone may have no item (00077).
+// kind is station for a line's run, jonah for a review's and try for a try of a past item; only
+// the last two may have no item (00079, 00101).
 func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) error {
 	_, err := q.db.Exec(ctx, insertRun,
 		arg.ID,

@@ -213,3 +213,33 @@ type ProposalQuery struct {
 	Before  int64
 	Limit   int
 }
+
+// PastTries keeps the tries of past items (ADR 0039 decisions 9 and 11), for the organization in
+// ctx; *postgres.Store and *porttest.Store implement it next to ports.Store. A try is claimed
+// under a lease, so any instance may run it and a dead one's try is claimed again.
+type PastTries interface {
+	// QueuePastTries queues tries of the factory's proposal, all of them or none: ErrConflict when
+	// the proposal has tries already, ErrNotFound when the proposal, an item or a run is not the
+	// organization's, and domain.ErrInvalid when a try fails Check. It returns them in order.
+	QueuePastTries(ctx context.Context, factory domain.FactoryID, proposal domain.ProposalID, tries []domain.NewPastTry, at time.Time) ([]domain.PastTry, error)
+	// ProposalPastTries is the proposal's tries, oldest first.
+	ProposalPastTries(ctx context.Context, proposal domain.ProposalID) ([]domain.PastTry, error)
+	// PastTry is one try with its proposal's number. ErrNotFound when there is none.
+	PastTry(ctx context.Context, id domain.PastTryID) (domain.PastTry, error)
+	// ClaimPastTry takes the factory's oldest queued try, or running one whose lease ended by now,
+	// skipping tries another transaction holds, while fewer than limit of the factory's tries run
+	// under a lease that has not ended: running until now+lease, with one more attempt.
+	// ErrNotFound when nothing is claimable.
+	ClaimPastTry(ctx context.Context, factory domain.FactoryID, now time.Time, lease time.Duration, limit int) (domain.PastTry, error)
+	// FinishPastTry ends the claimed try done as r says. claimed is what ClaimPastTry returned;
+	// ErrLeaseLost unless the try still runs under that lease. r must pass Check.
+	FinishPastTry(ctx context.Context, claimed domain.PastTry, r domain.PastTryResult) (domain.PastTry, error)
+	// PastTryTarget is the run a try of item at station reruns: the item's newest finished run of
+	// kind station there that was a claim's first run (its branch head recorded). ErrNotFound when
+	// it has none.
+	PastTryTarget(ctx context.Context, item domain.ItemID, station string) (domain.Run, error)
+	// PastTryInput is what run recorded, with its input and output, and its item's latest output
+	// of each station among the runs that ended before run started. ErrNotFound when there is no
+	// such run.
+	PastTryInput(ctx context.Context, run domain.RunID) (domain.PastTryInput, error)
+}
