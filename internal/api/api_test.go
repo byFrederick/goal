@@ -207,7 +207,7 @@ type harness struct {
 	ingestor *knowledge.Ingestor
 	kbDocs   *docsReader
 	uploads  *knowledge.Uploads
-	// versions is the definitions cache, which reads the line of a version a bake-off runs.
+	// versions is the definitions cache, which the tests refresh after a change.
 	versions *definitions.Cache
 	// drafts are the factories' draft requests; nothing runs them, so tests finish them.
 	drafts *porttest.DraftRequests

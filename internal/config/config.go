@@ -1,6 +1,6 @@
 // Package config loads and validates a factory definition: factory.yaml at the root of a
-// file tree that holds its prompts, skills, rules, contracts and evals. The tree is an fs.FS, so the
-// same loader reads a local working copy or a version's files from the bucket.
+// file tree that holds its prompts, skills, rules, contracts and environments. The tree is an fs.FS, so
+// the same loader reads a local working copy or a version's files from the bucket.
 //
 // Check validates in passes and reports every finding as a located domain.DefinitionProblem
 // (a stable code, a severity, the Visual section and model pointer, the file, line and

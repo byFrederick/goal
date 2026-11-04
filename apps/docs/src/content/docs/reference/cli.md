@@ -13,7 +13,7 @@ Every command of the `goal` CLI, in the order its usage text lists them: each se
 
 Factory definitions live in goald (drafts and published versions), not in files: goal factory push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, eval, bake-off, jonah, test, agent, spend, judge, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
+Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, jonah, test, agent, spend, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
 
 With sign-in on (GOAL\_AUTH=session), commands send GOAL\_API\_KEY (an API key goal\_sk\_… or a personal token goal\_pat\_…) when it is set, else what goal login stored for goald's origin, and only over https or to this machine; a refused credential or permission exits 77
 
@@ -631,26 +631,6 @@ the organization's agent runs, newest first: factory, item, station, agent, mode
 
 Flags: `--factory F`, `--status S`, `--since T`, `--until T`, `--search Q`, `--limit N`, `--cursor C`, `--json`.
 
-## goal eval run
-
-```text
-goal eval run [--case C] [--draft] [--factory F] [--json]
-```
-
-start an eval run of the factory's eval cases (every one, or --case), on the current version or --draft, and print what it is about to cost
-
-Flags: `--case C`, `--draft`, `--factory F`, `--json`.
-
-## goal eval show
-
-```text
-goal eval show <run> [--factory F] [--json]
-```
-
-an eval run's state and cost, and each case's tries: pass, fail or error
-
-Flags: `--factory F`, `--json`.
-
 ## goal jonah
 
 ```text
@@ -761,35 +741,13 @@ print what trying the model costs: three tries on each of the agent's five newes
 
 Flags: `--factory F`, `--yes`, `--json`.
 
-## goal bake-off run
+## goal
 
 ```text
-goal bake-off run <agent> [--model M]... [--trials N] [--follow] [--factory F] [--json]
+goal judge, goal eval, goal bake-off
 ```
 
-print the estimate and the models, then start a bake-off of the agent's eval cases on 2 to 4 models (default its model and goald's default ones; --trials: tries per case, default 3); --follow waits for the result
-
-Flags: `--model M`, `--trials N`, `--follow`, `--factory F`, `--json`.
-
-## goal bake-off show
-
-```text
-goal bake-off show <id> [--factory F] [--json]
-```
-
-the recommended model against the current one, then per model the pass rate, cost and time per item, turns and judged share (Recommended, Now), and per case the tries passed per model
-
-Flags: `--factory F`, `--json`.
-
-## goal bake-off apply
-
-```text
-goal bake-off apply <id> [--model M] [--factory F] [--json]
-```
-
-write the recommended model (or M) as the agent's model into the factory's draft; nothing is published
-
-Flags: `--model M`, `--factory F`, `--json`.
+removed: each prints where it moved (goal jonah, goal test, goal agent try-model)
 
 ## goal spend
 
@@ -800,26 +758,6 @@ goal spend [--window week|month|90d] [--json]
 what the organization's agent runs cost (default this week), per merged item and on rework, and each factory's budget: running, stopped or over\_budget, its spend today and in the last 7 days
 
 Flags: `--window week|month|90d`, `--json`.
-
-## goal judge list
-
-```text
-goal judge list [--factory F] [--json]
-```
-
-the factory's judges (default: the organization's only factory): enabled, sample, pass mark, and over the last 30 days the pass rate, runs scored and cost; then what its judge runs cost (--json: goald's answer as it came)
-
-Flags: `--factory F`, `--json`.
-
-## goal judge try
-
-```text
-goal judge try <slug> [--factory F] [--json]
-```
-
-queue the judge on the 10 newest finished runs of its agents; the tries never count in its 30-day figures
-
-Flags: `--factory F`, `--json`.
 
 ## goal triggers list
 

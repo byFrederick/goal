@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://goal.local/schema/environment.schema.json",
   "title": "Goal environment",
-  "description": "environments/<name>.yaml in a factory definition (ADR 0037 decision 5): what an agent's box installs and what it can reach. Its name is its file name; every factory has environments/default.yaml, which an agent, judge or eval case without an environment gets. A {{secret}} reference names an organization secret and is valid only in env, files and mcp (headers, and a stdio server's env).",
+  "description": "environments/<name>.yaml in a factory definition (ADR 0037 decision 5): what an agent's box installs and what it can reach. Its name is its file name; every factory has environments/default.yaml, which an agent without an environment gets. A {{secret}} reference names an organization secret and is valid only in env, files and mcp (headers, and a stdio server's env).",
   "type": "object",
   "required": ["apiVersion", "kind", "spec"],
   "additionalProperties": false,

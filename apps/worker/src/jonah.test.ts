@@ -117,15 +117,9 @@ describe('spec.jonah', () => {
     expect(spec.item_id).toBe('');
   });
 
-  it('refuses a jonah block with a judge or a draft request', () => {
-    const judge = {
-      slug: 'evidence',
-      rubric: '# Evidence\n',
-      outcomes: [{ score: 1, label: 'complete', meaning: 'All there.' }],
-      pass_mark: 0.6,
-      material: { kind: 'eval_try', brief: 'b', output: 'o', diff: '' },
-    };
-    expect(() => specWith({ judge })).toThrow();
+  it('refuses a jonah block with a grade or a draft request', () => {
+    const grade = { reason: 'It returned 500.', result: { kind: 'try', output: 'o', diff: '' } };
+    expect(() => specWith({ grade })).toThrow();
     expect(() => specWith({ draft_request: { id: 'd1', text: 'Change the engineer.' } })).toThrow();
   });
 
@@ -142,8 +136,8 @@ describe('the output schema', () => {
 
   it('rejects a path under evals/, outside the four folders, or of a script', () => {
     for (const path of [
-      'evals/judges/evidence.md',
       'evals/cases/c1.md',
+      'evals/cases/c1.yaml',
       'README.md',
       'agents/../evals/x.md',
       'agents//x.md',
@@ -211,7 +205,7 @@ describe('the output schema', () => {
     expect(pattern.test('agents/engineer/prompt.md')).toBe(true);
     expect(pattern.test('contracts/change.json')).toBe(true);
     expect(pattern.test('factory.yaml')).toBe(true);
-    expect(pattern.test('evals/judges/evidence.md')).toBe(false);
+    expect(pattern.test('evals/cases/c1.md')).toBe(false);
     expect(pattern.test('docs/notes.md')).toBe(false);
     expect(pattern.test('skills/deliver/run.sh')).toBe(false);
   });

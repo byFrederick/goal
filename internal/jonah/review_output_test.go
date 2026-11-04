@@ -50,7 +50,7 @@ func validateCases() []validateCase {
 			p.Edits[0].Path = "evals/cases/one.yaml"
 		}},
 		{name: "path escaping its folder", trigger: domain.JonahManual, drop: reasonPath, edit: func(p *proposal, _ domain.SentBack) {
-			p.Edits[0].Path = "agents/../evals/judge.yaml"
+			p.Edits[0].Path = "agents/../evals/cases/x.yaml"
 		}},
 		{name: "a script", trigger: domain.JonahManual, drop: reasonPath, edit: func(p *proposal, _ domain.SentBack) {
 			p.Edits[0] = fileEdit{Path: "skills/x/run.sh", Content: new("rm -rf /\n")}

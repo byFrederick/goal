@@ -31,7 +31,7 @@ func TestProposalPathAllowed(t *testing.T) {
 		"x/memory.yaml":               false,
 		"agents/memory.yaml":          true,
 		"evals/cases/a.yaml":          false,
-		"evals/judges/x.md":           false,
+		"evals/cases/x.md":            false,
 		"agents/../evals/x.md":        false,
 		"rules/./a.md":                false,
 		"factory.yaml.bak":            false,

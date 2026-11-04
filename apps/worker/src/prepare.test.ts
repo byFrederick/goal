@@ -948,34 +948,6 @@ describe('prepare', () => {
       }
     });
 
-    it('refuses a judge with a repository, a definition or a draft request', async () => {
-      const judge = {
-        slug: 'evidence',
-        rubric: '# Evidence\n',
-        outcomes: [{ score: 1, label: 'complete', meaning: 'All there.' }],
-        pass_mark: 0.6,
-        material: { kind: 'eval_try', brief: 'b', output: 'o', diff: '' },
-      };
-      const judgeSpec = { ...spec, item_id: '', station: '', judge };
-      for (const bundle of [
-        { spec: judgeSpec, files: {}, repository: { url: 'https://example.com/a.git', branch: 'goal/1-x' } },
-        { spec: judgeSpec, files: {}, definition: { files: { 'factory.yaml': b64(factory) } } },
-        {
-          spec: { ...judgeSpec, draft_request: draftSpec.draft_request },
-          files: {},
-          definition: { files: { 'factory.yaml': b64(factory) } },
-        },
-      ]) {
-        const { exec, calls } = recorder();
-        await expect(prepare(depsWith(gatewayServing(bundle).fake, exec))).rejects.toThrow();
-        expect(calls).toEqual([]);
-      }
-
-      const { exec } = recorder();
-      await prepare(depsWith(gatewayServing({ spec: judgeSpec, files: {} }).fake, exec));
-      expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).judge).toEqual(judge);
-    });
-
     it('refuses a grade with a repository or a definition, and writes its block to spec.json', async () => {
       const grade = { reason: 'It returned 500.', result: { kind: 'try', output: 'o', diff: '' } };
       const gradeSpec = { ...spec, item_id: '', station: '', grade };
