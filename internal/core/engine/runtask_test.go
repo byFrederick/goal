@@ -231,3 +231,126 @@ func (h *harness) expectJonahRun(t *testing.T, id domain.RunID) {
 		t.Errorf("JonahSpendSince = %+v, %v; want 0.25 of Jonah's: the run is of kind jonah", s, err)
 	}
 }
+
+// tryRequest is a try of a past item at stWork on the test factory: no item, lease or connection
+// but the model's and the repository's (ADR 0039 decision 9), from a recorded commit.
+func tryRequest() domain.RunRequest {
+	return domain.RunRequest{
+		OrgID: testOrg, FactoryID: factoryID, Version: v1, Kind: domain.RunKindTry, Station: stWork, Agent: agWorker,
+		Model: "claude-opus-5-5", ModelConnection: connModel, Bundle: domain.TaskKindTry, TryOf: "try-1",
+		Commit: strings.Repeat("c", 40), Repository: domain.Repository{URL: repoURL, Connection: connGit},
+	}
+}
+
+// A try records a run of kind try without an item, so the past item's cost and events stay as
+// they were; its agent gets only the model connection's env; its token is of kind try, names the
+// try and its station and no connection; and the result carries the box's diff.
+func TestRunTask_TryRecordsNoItemCost(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, connLine(), func(context.Context, porttest.ExecCall, io.Writer) domain.RunResult {
+		return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), CostUSD: 0.5, Turns: 3}
+	})
+	h.store.AddFactory(testOrg, factoryID)
+	past := h.submit(t, domain.NewItem{Title: "a past item"})
+	before := len(h.store.Events(past.ID))
+
+	const diff = "diff --git a/main.go b/main.go\n"
+	h.worker.Diff(diff, 0)
+
+	res, err := h.e.RunTask(t.Context(), tryRequest())
+	if err != nil {
+		t.Fatalf("RunTask: %v", err)
+	}
+
+	if res.Status != domain.RunSucceeded || res.Diff != diff || res.CostUSD != 0.5 || res.RunID == "" {
+		t.Errorf("RunTask = %+v; want the succeeded result with the box's diff, its cost and its run", res)
+	}
+
+	if n := len(h.worker.Diffs()); n != 1 {
+		t.Errorf("%d diffs read; want one, after the agent", n)
+	}
+
+	runs := h.worker.Runs()
+	if len(runs) != 1 {
+		t.Fatalf("%d agent runs; want one", len(runs))
+	}
+
+	expectNoSecretButModel(t, runs[0].Env)
+
+	c := h.claims(t, runs[0].Env["GOAL_GATEWAY_TOKEN"])
+	if c.Kind != domain.TaskKindTry || c.TryOf != "try-1" || c.Station != stWork || c.ItemID != "" || len(c.Connections) != 0 {
+		t.Errorf("token claims = %+v; want a try token of try-1 at %s with no item or connection", c, stWork)
+	}
+
+	run, err := h.store.Run(inOrg(t), res.RunID)
+	if err != nil || run.ItemID != "" || run.Station != stWork || run.Result.CostUSD != 0.5 {
+		t.Errorf("run = %+v, %v; want a finished run at %s without an item, with its cost", run, err, stWork)
+	}
+
+	if s, err := h.store.JonahSpendSince(inOrg(t), factoryID, t0); err != nil || s.JonahUSD != 0.5 || s.LineUSD != 0 {
+		t.Errorf("JonahSpendSince = %+v, %v; want the try's 0.5 as Jonah's and none as the line's", s, err)
+	}
+
+	if got := h.item(t, past.ID); got.CostUSD != 0 || len(h.store.Events(past.ID)) != before {
+		t.Errorf("past item cost %v with %d events; want it unchanged", got.CostUSD, len(h.store.Events(past.ID)))
+	}
+
+	if events := h.store.Events(""); len(events) != 0 {
+		t.Errorf("events without an item = %+v; want none", events)
+	}
+
+	h.expectSandboxes(t, 0)
+}
+
+// A try whose diff cannot be read failed on its infrastructure: RunTask returns an error with the
+// result, which names the run.
+func TestRunTask_TryDiffFailureIsAnError(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, connLine(), porttest.Succeed(`{}`))
+	h.store.AddFactory(testOrg, factoryID)
+	h.worker.Diff("", 128)
+
+	res, err := h.e.RunTask(t.Context(), tryRequest())
+	if err == nil || res.RunID == "" {
+		t.Errorf("RunTask = %+v, %v; want an error naming the run", res, err)
+	}
+}
+
+// RunTask refuses a try with an item, a connection or no recorded commit before it opens a box.
+func TestRunTask_TryRefused(t *testing.T) {
+	t.Parallel()
+
+	for name, change := range map[string]func(*domain.RunRequest){
+		"an item":      func(r *domain.RunRequest) { r.Item = "00000000-0000-7000-8000-000000000001" },
+		"a connection": func(r *domain.RunRequest) { r.Connections = []string{connTracker} },
+		"no commit":    func(r *domain.RunRequest) { r.Commit = "" },
+	} {
+		h := newHarness(t, connLine(), porttest.Succeed(`{}`))
+		req := tryRequest()
+		change(&req)
+
+		if _, err := h.e.RunTask(t.Context(), req); !errors.Is(err, domain.ErrBadRunRequest) || len(h.worker.Prepares()) != 0 {
+			t.Errorf("%s: RunTask = %v with %d prepares; want ErrBadRunRequest and none", name, err, len(h.worker.Prepares()))
+		}
+	}
+}
+
+// expectNoSecretButModel fails the test unless the agent's env has the model connection's key and
+// no secret of another connection or credential.
+func expectNoSecretButModel(t *testing.T, env map[string]string) {
+	t.Helper()
+
+	if env[envModelKey] != modelKey {
+		t.Errorf("the agent's %s = %q; want the model connection's key", envModelKey, env[envModelKey])
+	}
+
+	for name, v := range env {
+		for _, secret := range []string{codeToken, trackerToken, otherToken, cloudKey, deployKeyValue} {
+			if strings.Contains(v, secret) {
+				t.Errorf("the agent's %s holds a secret of a connection or credential other than the model's", name)
+			}
+		}
+	}
+}

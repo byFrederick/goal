@@ -19,7 +19,8 @@ type AgentFunc func(ctx context.Context, run ExecCall, stdout io.Writer) domain.
 
 // Worker plays the goal-agent image in Sandboxes (NewSandboxes(w.Exec)), as apps/worker/README.md's
 // sandbox contract says: `goal-agent prepare` writes its one prepared line, `goal-agent run`
-// plays an AgentFunc and writes its result as the stdout protocol's finished line, and any
+// plays an AgentFunc and writes its result as the stdout protocol's finished line, `goal-agent
+// diff` prints the diff Diff scripted (none by default), and any
 // other command is a station check, which exits as scripted (Exit) and passes otherwise. It
 // records every command it was given.
 type Worker struct {
@@ -32,6 +33,9 @@ type Worker struct {
 	branchHead    string
 	baseHead      string
 	exits         map[string][]int
+	diff          string
+	diffCode      int
+	diffs         []ExecCall
 	prepares      []ExecCall
 	runs          []ExecCall
 	checks        []ExecCall
@@ -66,6 +70,22 @@ func (w *Worker) Heads(branch, base string) {
 	w.branchHead, w.baseHead = branch, base
 }
 
+// Diff makes `goal-agent diff`, a try's change against its commit, print diff and exit code.
+func (w *Worker) Diff(diff string, code int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.diff, w.diffCode = diff, code
+}
+
+// Diffs are the `goal-agent diff` commands the worker was given.
+func (w *Worker) Diffs() []ExecCall {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	return slices.Clone(w.diffs)
+}
+
 // Exit scripts the exit codes of successive runs of a check command, repeating the last.
 func (w *Worker) Exit(command string, codes ...int) {
 	w.mu.Lock()
@@ -81,6 +101,15 @@ func (w *Worker) Exec(ctx context.Context, c ExecCall, stdout, stderr io.Writer)
 		return w.prepare(c, stdout, stderr)
 	case slices.Equal(c.Argv, []string{"goal-agent", "run"}):
 		return w.run(ctx, c, stdout, stderr)
+	case slices.Equal(c.Argv, []string{"goal-agent", "diff"}):
+		w.mu.Lock()
+		w.diffs = append(w.diffs, c)
+		diff, code := w.diff, w.diffCode
+		w.mu.Unlock()
+
+		_, _ = io.WriteString(stdout, diff)
+
+		return code
 	default:
 		return w.check(c, stdout)
 	}

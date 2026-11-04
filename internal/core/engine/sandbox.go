@@ -31,6 +31,8 @@ const (
 var (
 	argvPrepare = []string{"goal-agent", "prepare"}
 	argvAgent   = []string{"goal-agent", "run"}
+	// argvDiff prints a try's change against the commit prepare checked out (ADR 0039 decision 9).
+	argvDiff = []string{"goal-agent", "diff"}
 )
 
 // box is a claim's sandbox: created by the claim's first run and prepared once; a retry of a
