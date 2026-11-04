@@ -114,6 +114,36 @@ describe('the Tests tab', () => {
     expect(build.getByText('jonah, Nov 1')).toBeTruthy();
   });
 
+  it('shows each kept test’s last result, or Not run yet', async () => {
+    const withResults = [
+      {
+        ...kept('t1', 497, 'Board column header meta', 'review'),
+        last_result: { result: 'passed' as const, at: '2026-11-03T09:00:00Z', run_id: 'run-1' },
+      },
+      {
+        ...kept('t2', 418, 'Needs you header in the top bar', 'build'),
+        last_result: { result: 'failed' as const, at: '2026-11-02T09:00:00Z' },
+      },
+      {
+        ...kept('t3', 451, 'A sidebar request gets the frontend lane', 'spec'),
+        last_result: { result: 'error' as const, at: '2026-11-02T09:00:00Z', run_id: 'run-3' },
+      },
+      kept('t4', 493, 'Phone fixes on three screens', 'build'),
+    ];
+    renderTests(editor, withResults);
+
+    const kept_ = await screen.findByRole('region', { name: 'Kept tests' });
+    expect(within(kept_).getByText('Passed')).toBeTruthy();
+    expect(within(kept_).getByText('Nov 3')).toBeTruthy();
+    expect(within(kept_).getByText('Failed')).toBeTruthy();
+    expect(within(kept_).getByText('Error')).toBeTruthy();
+    expect(within(kept_).getByText('Not run yet')).toBeTruthy();
+    const link = within(kept_).getByRole('link', { name: /Passed on Nov 3/ });
+    expect(link.getAttribute('href')).toContain('/items/497');
+    expect(link.getAttribute('href')).toContain('tab=trace');
+    expect(within(kept_).getAllByRole('link')).toHaveLength(2);
+  });
+
   it('is empty when nothing is kept', async () => {
     renderTests(editor, []);
     expect(await screen.findByText('No kept tests yet')).toBeTruthy();

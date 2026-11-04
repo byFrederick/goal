@@ -2,6 +2,7 @@
 // verdict and the reason, the kept tests the station holds with their result, and what the tries cost and took. A model
 // proposal shows its three tries per item beside the item's line result instead (ModelTries).
 import { useQuery } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { keptTestsQuery } from '../../api/queries';
 import type { ProposalTried, TriedItem, TriedTry } from '../../api/types';
 import { useFactory } from '../../shared/factory';
@@ -15,6 +16,7 @@ import {
   itemNumber,
   itemReason,
   itemVerdict,
+  latestTry,
   passedFirstTime,
   verdictLabels,
   verdictTones,
@@ -34,7 +36,8 @@ export function triedAside(tried: ProposalTried): string {
 }
 
 function ItemRow({ item }: { item: TriedItem }) {
-  const chip = tryChip(item.tries[0]);
+  const chip = tryChip(latestTry(item));
+  const attempts = item.tries.length;
   const reason = itemReason(item);
   return (
     <li className="flex flex-col gap-1 border-t border-line py-3 first:border-t-0">
@@ -43,7 +46,12 @@ function ItemRow({ item }: { item: TriedItem }) {
           <span className="mr-2 text-muted tabular-nums">{itemNumber(item.item_ref)}</span>
           <span className="text-ink">{item.item_title}</span>
         </span>
-        <Chip tone={chip.tone}>{chip.label}</Chip>
+        <span className="flex shrink-0 items-center gap-2">
+          {attempts > 1 ? (
+            <span className="text-secondary text-muted tabular-nums">{`Try ${attempts} of ${attempts}`}</span>
+          ) : null}
+          <Chip tone={chip.tone}>{chip.label}</Chip>
+        </span>
       </div>
       {reason && itemVerdict(item) !== 'fixed' ? (
         <span className="text-secondary text-muted break-words">{reason}</span>
@@ -53,7 +61,7 @@ function ItemRow({ item }: { item: TriedItem }) {
 }
 
 /** The Tried on past items card of a definition proposal. */
-export function TriedPanel({ tried }: { tried: ProposalTried }) {
+export function TriedPanel({ tried, action }: { tried: ProposalTried; action?: ReactNode }) {
   const org = useOrg();
   const factory = useFactory();
   const kept = useQuery(keptTestsQuery(org.id, factory.id));
@@ -69,7 +77,12 @@ export function TriedPanel({ tried }: { tried: ProposalTried }) {
           </InfoTip>
         </span>
       }
-      aside={<span className="text-secondary text-muted">{triedAside(tried)}</span>}
+      aside={
+        <span className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+          <span className="text-secondary text-muted">{triedAside(tried)}</span>
+          {action}
+        </span>
+      }
     >
       {notTried ? (
         <p className="m-0 text-secondary text-muted">Not tried: budget used</p>
@@ -126,7 +139,15 @@ function cellTone(passed: number, total: number): string {
 }
 
 /** A model proposal's tries: each item with how it went on the line and how many of its three tries passed. */
-export function ModelTries({ tried, model }: { tried: ProposalTried; model: string | undefined }) {
+export function ModelTries({
+  tried,
+  model,
+  action,
+}: {
+  tried: ProposalTried;
+  model: string | undefined;
+  action?: ReactNode;
+}) {
   return (
     <SectionCard
       title={
@@ -137,7 +158,12 @@ export function ModelTries({ tried, model }: { tried: ProposalTried; model: stri
           </InfoTip>
         </span>
       }
-      aside={<span className="text-secondary text-muted">{triedAside(tried)}</span>}
+      aside={
+        <span className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+          <span className="text-secondary text-muted">{triedAside(tried)}</span>
+          {action}
+        </span>
+      }
     >
       <table aria-label="Tries per item" className="w-full table-fixed border-collapse text-left">
         <thead>

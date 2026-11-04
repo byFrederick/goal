@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -12,6 +12,7 @@ import {
   getJonahOverview,
   getProposal,
   rejectProposal,
+  tryProposal,
 } from '../../api/client';
 import type { Factory, JonahOverview, OrgSummary, Proposal } from '../../api/types';
 import { TopBar, TopBarSetContext, type TopBarState } from '../../app/top-bar';
@@ -28,6 +29,7 @@ vi.mock('../../api/client', async (original) => ({
   approveProposal: vi.fn(),
   editProposal: vi.fn(),
   rejectProposal: vi.fn(),
+  tryProposal: vi.fn(),
 }));
 
 afterEach(cleanup);
@@ -473,5 +475,106 @@ describe('the decisions', () => {
       ),
     );
     await vi.waitFor(() => expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Proposal rejected')));
+  });
+});
+
+describe('Try again', () => {
+  const estimate = {
+    number: 7,
+    items: [],
+    tries: 2,
+    estimate_usd: 8.4,
+    budget_left_usd: 31.2,
+  };
+  const triedPanel = () => screen.findByRole('region', { name: /Tried on past items/ });
+
+  it('shows the estimate, and Confirm queues the tries', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    vi.mocked(getProposal).mockResolvedValue({ ...proposal7, tried: tried('done') });
+    vi.mocked(tryProposal).mockResolvedValueOnce({ estimate });
+    renderProposal();
+
+    fireEvent.click(within(await triedPanel()).getByRole('button', { name: 'Try again' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      await within(dialog).findByText("Adds 2 tries for about $8.40. $31.20 left of Jonah's budget this week."),
+    ).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'How the estimate is priced' })).toBeTruthy();
+    expect(tryProposal).toHaveBeenCalledWith('org-1', 'factory-1', 7, false);
+
+    vi.mocked(tryProposal).mockResolvedValueOnce({ estimate, proposal: { ...proposal7, tried: tried('done') } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Queue the tries' }));
+    await waitFor(() => expect(tryProposal).toHaveBeenCalledWith('org-1', 'factory-1', 7, true));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('queues nothing when cancelled', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    vi.mocked(getProposal).mockResolvedValue({ ...proposal7, tried: tried('done') });
+    vi.mocked(tryProposal).mockResolvedValue({ estimate });
+    renderProposal();
+
+    fireEvent.click(within(await triedPanel()).getByRole('button', { name: 'Try again' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(tryProposal).toHaveBeenCalledTimes(1);
+    expect(tryProposal).not.toHaveBeenCalledWith('org-1', 'factory-1', 7, true);
+  });
+
+  it('is hidden without definition:edit or once decided', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    vi.mocked(getProposal).mockResolvedValue({ ...proposal7, tried: tried('done') });
+    renderProposal(viewer);
+    await triedPanel();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    cleanup();
+
+    vi.mocked(getProposal).mockResolvedValue({ ...proposal7, state: 'rejected', tried: tried('done') });
+    renderProposal();
+    await triedPanel();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  });
+
+  it('shows new attempts after the earlier ones', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    const base = tried('done');
+    const first = base.items[0] as NonNullable<Proposal['tried']>['items'][number];
+    const again = {
+      ...base,
+      items: [
+        {
+          ...first,
+          tries: [...first.tries, { attempt: 2, state: 'running' as const, cost_usd: 0 }],
+        },
+        ...base.items.slice(1),
+      ],
+    };
+    vi.mocked(getProposal).mockResolvedValue({ ...proposal7, tried: again });
+    renderProposal();
+
+    const panel = await triedPanel();
+    expect(within(panel).getByText('Try 2 of 2')).toBeTruthy();
+    expect(within(panel).getByText('Trying')).toBeTruthy();
+  });
+
+  it('says Not tried: budget used when it is refused over budget', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    vi.mocked(getProposal).mockResolvedValue({ ...proposal7, tried: tried('done') });
+    vi.mocked(tryProposal).mockRejectedValue(refusal('learning-budget-exhausted'));
+    renderProposal();
+
+    fireEvent.click(within(await triedPanel()).getByRole('button', { name: 'Try again' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByText('Not tried: budget used')).toBeTruthy();
+  });
+
+  it('says goald is not answering for any other error', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    vi.mocked(getProposal).mockResolvedValue({ ...proposal7, tried: tried('done') });
+    vi.mocked(tryProposal).mockRejectedValue(new Error('network'));
+    renderProposal();
+
+    fireEvent.click(within(await triedPanel()).getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('goald is not answering. Try again in a moment.')).toBeTruthy();
   });
 });
