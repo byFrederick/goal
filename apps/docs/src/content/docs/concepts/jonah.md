@@ -41,8 +41,9 @@ Goal's own prompt tells it to group the evidence by cause and propose one change
 
 A proposal is one hypothesis with file edits. Each edit has the whole new content of one file and the SHA-256 of the file it was made from. A review may edit only `factory.yaml`, `agents/`, `skills/`, `rules/` and `contracts/`, never `evals/`.
 
-- goald queues one review a day for each factory with Jonah on that has new evidence, at an hour of the day set by the factory's id. A person can queue one at once. Each factory has at most one review at a time, and the weekly spend is capped by `learning.jonah.weeklyUsd`.
-- On a daily review, an observation becomes a proposal only once its count reaches `learning.jonah.proposeAfter`, 5 by default. Until then it shows as "Watching, n of proposeAfter". A review a person asked for may propose below it.
+- goald queues one review a day for each factory with Jonah on that has new evidence, at an hour of the day set by the factory's id. A person can queue one at once. Each factory has at most one review at a time.
+- Jonah's budget is `learning.jonah.share`, 5% by default, of what the line spent in the last 7 days. Each review may spend a fifth of it. When the budget is used up, reviews wait and publishes go on. Jonah's spend shows in the factory's spend, but it never stops production work through `runtime.budget.onExhausted`.
+- On a daily review, an observation becomes a proposal only once its count reaches `learning.jonah.proposeAfter`, 3 by default. Until then it shows as "Watching, n of proposeAfter". A review a person asked for may propose below it.
 - Each factory numbers its proposals from 1. A proposal is `proposed`, `published`, `applied`, `rejected` or `superseded`.
 - Approve opens a draft from the current version, writes the proposal's files into it and publishes it as the person who approved. It is refused when the factory already has an open draft, or when a file changed since Jonah read it, so a stale proposal cannot overwrite newer work.
 - Edit writes the proposal into the draft, so the person can continue in the builder.
@@ -70,7 +71,7 @@ The decision behind reviews is ADR 0034 (`docs/adr/0034-jonah-proposals.md` in t
 
 goald runs the review loop every minute by default (`GOAL_JONAH_REVIEW_EVERY`). Each round queues the daily reviews that are due and runs the queued ones.
 
-- **Look for improvements now:** `goal jonah look` and `POST …/jonah/reviews` queue a review at once. The answer is `review-in-flight` while one is pending or running, and `learning-budget-exhausted` once the factory's review runs of the last 7 days cost `learning.jonah.weeklyUsd`. The web app's button is not wired to it yet.
+- **Look for improvements now:** `goal jonah look` and `POST …/jonah/reviews` queue a review at once. The answer is `review-in-flight` while one is pending or running, and `learning-budget-exhausted` once Jonah's runs of the last 7 days cost its budget. The web app's button is not wired to it yet.
 - **The window:** a review reads what finished since the last successful review ended, or the last 30 days before the first. A failed review does not move it.
 - **Retries:** a review whose run fails or whose answer does not parse is tried again, at most twice. After the third failure it ends `failed`, and its error shows as the last review in `GET …/jonah`. A spent budget or a deleted version fails it at once.
 

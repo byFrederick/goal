@@ -89,15 +89,16 @@ type Line struct {
 	Environments []Environment
 }
 
-// JonahPolicy is when and how a factory's Jonah reviews run (ADR 0034).
+// JonahPolicy is when and how a factory's Jonah reviews run (ADR 0034, ADR 0039 decision 17).
 type JonahPolicy struct {
 	// Enabled says whether sent-back runs queue reviews at all.
 	Enabled bool
 	// ProposeAfter is both the number of sent-back touches that queue a review and the number of
 	// times an observation is seen before it becomes a proposal.
 	ProposeAfter int
-	// WeeklyUSD caps what the review runs cost over the last 7 days.
-	WeeklyUSD float64
+	// Share is learning.jonah.share as a fraction (5% is 0.05): Jonah's budget is this share of
+	// what the line spent over the last JonahBudgetWindow (ADR 0039 decision 16).
+	Share float64
 	// Model is the review run's model: learning.jonah.model, else runtime.model; empty when both
 	// are, and the run then takes the organization's default model, as an agent without one does.
 	Model string
@@ -105,7 +106,48 @@ type JonahPolicy struct {
 
 // DefaultJonahPolicy is the policy of a factory whose definition sets no learning.jonah key.
 func DefaultJonahPolicy() JonahPolicy {
-	return JonahPolicy{Enabled: true, ProposeAfter: 5, WeeklyUSD: 10}
+	return JonahPolicy{Enabled: true, ProposeAfter: 3, Share: 0.05}
+}
+
+// jonahReviewShare is the part of Jonah's budget one review may spend (ADR 0039 decision 16).
+const jonahReviewShare = 0.2
+
+// minJonahCap is the smallest cost cap a review run gets, so its cap is never absent: a run's
+// max_usd of 0 is no cap.
+const minJonahCap = 0.01
+
+// JonahSpend is what a factory spent over Jonah's budget window: LineUSD on every run but
+// Jonah's, JonahUSD on Jonah's runs.
+type JonahSpend struct {
+	LineUSD  float64
+	JonahUSD float64
+}
+
+// JonahBudget is a factory's Jonah budget at one moment (ADR 0039 decision 16).
+type JonahBudget struct {
+	// BudgetUSD is Share × the line's spend over the window.
+	BudgetUSD float64
+	// SpentUSD is what Jonah's runs cost over the window.
+	SpentUSD float64
+	// PerReviewUSD caps one review: a fifth of BudgetUSD.
+	PerReviewUSD float64
+}
+
+// Budget measures s against p's share of the line's spend.
+func (p JonahPolicy) Budget(s JonahSpend) JonahBudget {
+	budget := p.Share * s.LineUSD
+
+	return JonahBudget{BudgetUSD: budget, SpentUSD: s.JonahUSD, PerReviewUSD: budget * jonahReviewShare}
+}
+
+// Exhausted reports whether Jonah's runs reached the budget: reviews wait until the window
+// moves on. A budget of 0, as for a line that spent nothing, is always exhausted.
+func (b JonahBudget) Exhausted() bool { return b.SpentUSD >= b.BudgetUSD }
+
+// ReviewCap is the cost cap of a review run: what the budget has left, at most PerReviewUSD and
+// at least a cent.
+func (b JonahBudget) ReviewCap() float64 {
+	return max(min(b.BudgetUSD-b.SpentUSD, b.PerReviewUSD), minJonahCap)
 }
 
 // Refusal is why no run of the line can start, "" when runs can: since the cutover to

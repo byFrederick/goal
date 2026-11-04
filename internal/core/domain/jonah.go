@@ -64,8 +64,8 @@ type ProposalID string
 // ObservationID identifies one observation.
 type ObservationID string
 
-// JonahBudgetWindow is how far back a factory's weekly Jonah budget counts its review runs (ADR
-// 0034 decision 2).
+// JonahBudgetWindow is how far back a factory's Jonah budget counts the line's spend and Jonah's
+// (ADR 0039 decision 16).
 const JonahBudgetWindow = 7 * 24 * time.Hour
 
 // JonahTrigger is why a review was queued: a person asked, or the factory's sent-back touches

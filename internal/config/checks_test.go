@@ -230,12 +230,8 @@ var locatedCases = []struct {
 		code: "unknown-contract", section: domain.SectionLine, pointer: "/line/stations/1/output",
 	},
 	{
-		name: "unknown collection", doc: baseFactory + "  learning:\n    librarian: { agent: worker, writes: [ghosts] } #here\n",
-		code: "unknown-collection", section: domain.SectionFiles,
-	},
-	{
-		name: "unknown librarian", doc: baseFactory + "  learning:\n    librarian: { agent: ghost } #here\n",
-		code: codeUnknownAgent, section: domain.SectionLine, pointer: "/line/librarian",
+		name: "ignored field", doc: baseFactory + "  learning:\n    librarian: { agent: ghost } #here\n",
+		code: codeFieldIgnored, severity: domain.SeverityWarning, section: domain.SectionFiles,
 	},
 	{
 		name: "prompt not found", doc: edited(agentPrompt, "      prompt: ./agents/missing.md #here\n"),
@@ -369,6 +365,72 @@ func TestCheck_FixesPatchTheirSection(t *testing.T) {
 	if !reflect.DeepEqual(p.Fixes, want) {
 		t.Errorf("fixes =\n%+v\nwant\n%+v", p.Fixes, want)
 	}
+}
+
+// The keys ADR 0039 retired load with a warning at their line and nothing else: they are not
+// removed forms, so the line's Removed stays empty and its runs start (decision 17).
+func TestCheck_IgnoredFieldsWarnAndDoNotRefuse(t *testing.T) {
+	t.Parallel()
+
+	doc := baseFactory + "  learning:\n" +
+		"    librarian: { agent: ghost, writes: [ghosts] }\n" +
+		"    kaizen: { schedule: weekly }\n" +
+		"    jonah: { weeklyUsd: 25 }\n"
+
+	f, err := Load(checkTree(doc, nil))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	_, problems := Check(checkTree(doc, nil))
+	got := ignoredLines(t, problems)
+
+	var want []int
+
+	for i, l := range strings.Split(doc, "\n") {
+		if strings.HasPrefix(l, "    librarian:") || strings.HasPrefix(l, "    kaizen:") || strings.HasPrefix(l, "    jonah:") {
+			want = append(want, i+1)
+		}
+	}
+
+	if slices.Sort(got); !slices.Equal(got, want) {
+		t.Errorf("field-ignored lines = %v, want %v (%+v)", got, want, problems)
+	}
+
+	l := f.Line()
+	if len(l.Removed) != 0 || l.Refusal() != "" {
+		t.Errorf("removed = %v, refusal %q; want neither", l.Removed, l.Refusal())
+	}
+
+	if l.Jonah.Share != domain.DefaultJonahPolicy().Share {
+		t.Errorf("share = %v; weeklyUsd must not change it", l.Jonah.Share)
+	}
+}
+
+// ignoredLines are the factory.yaml lines of problems' field-ignored warnings; any problem that
+// blocks, or any other code that a retired key used to raise, fails t.
+func ignoredLines(t *testing.T, problems []domain.DefinitionProblem) []int {
+	t.Helper()
+
+	var lines []int
+
+	for _, p := range problems {
+		if p.Blocking() || p.Code == codeUnknownAgent || p.Code == codeFieldRemoved {
+			t.Errorf("problem %+v; want warnings only", p)
+		}
+
+		if p.Code != codeFieldIgnored {
+			continue
+		}
+
+		if p.Severity != domain.SeverityWarning || p.File != FileName {
+			t.Errorf("problem %+v; want a warning in %s", p, FileName)
+		}
+
+		lines = append(lines, p.Line)
+	}
+
+	return lines
 }
 
 // Each removed form's fix takes it out of the definition, or puts an organization connection of

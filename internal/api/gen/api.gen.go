@@ -4761,16 +4761,19 @@ type JonahOverview struct {
 type JonahPolicy struct {
 	// ApproverRoles The roles holding definition:publish: organization roles first, then factory roles
 	ApproverRoles []string `json:"approver_roles"`
-	Enabled       bool     `json:"enabled"`
+
+	// BudgetUsd Jonah's budget now: share times what the line's runs other than Jonah's cost over the last 7 days. Each review may spend a fifth of it, and Jonah's spend never triggers runtime.budget.onExhausted
+	BudgetUsd float64 `json:"budget_usd"`
+	Enabled   bool    `json:"enabled"`
 
 	// Model The review run's model: learning.jonah.model, else runtime.model; absent when neither is set
 	Model *string `json:"model,omitempty"`
 
-	// ProposeAfter Sent-back touches that queue a review, and how often an observation is seen before it is proposed
+	// ProposeAfter Items with the same cause an observation needs before it becomes a proposal
 	ProposeAfter int `json:"propose_after"`
 
-	// WeeklyUsd What review runs may cost over 7 days
-	WeeklyUsd float64 `json:"weekly_usd"`
+	// Share learning.jonah.share as a fraction (5% is 0.05) of what the line spent over the last 7 days
+	Share float64 `json:"share"`
 }
 
 // JonahReview defines model for JonahReview.
@@ -9903,7 +9906,7 @@ type ClientInterface interface {
 
 	// QueueJonahReview Queue a manual review of the factory at once ("Look for improvements now")
 	//
-	// The review reads what finished since the last done review's window ended (30 days back before the first) on the current version; goald's review loop runs it, retrying a failed run twice. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+	// The review reads what finished since the last done review's window ended (30 days back before the first) on the current version; goald's review loop runs it, retrying a failed run twice. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while Jonah's runs over the last 7 days cost its budget or more: learning.jonah.share (default 5%) of what the line's other runs cost over those 7 days, so a line that spent nothing has none. 404 version-not-found before the first publish.
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/reviews (the `QueueJonahReview` operationId).
 	QueueJonahReview(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -13203,7 +13206,7 @@ func (c *Client) UndoProposal(ctx context.Context, org OrgRef, factory FactoryRe
 
 // QueueJonahReview Queue a manual review of the factory at once ("Look for improvements now")
 //
-// The review reads what finished since the last done review's window ended (30 days back before the first) on the current version; goald's review loop runs it, retrying a failed run twice. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+// The review reads what finished since the last done review's window ended (30 days back before the first) on the current version; goald's review loop runs it, retrying a failed run twice. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while Jonah's runs over the last 7 days cost its budget or more: learning.jonah.share (default 5%) of what the line's other runs cost over those 7 days, so a line that spent nothing has none. 404 version-not-found before the first publish.
 //
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/reviews (the `QueueJonahReview` operationId).
 func (c *Client) QueueJonahReview(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -27473,7 +27476,7 @@ type ClientWithResponsesInterface interface {
 
 	// QueueJonahReviewWithResponse Queue a manual review of the factory at once ("Look for improvements now")
 	//
-	// The review reads what finished since the last done review's window ended (30 days back before the first) on the current version; goald's review loop runs it, retrying a failed run twice. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+	// The review reads what finished since the last done review's window ended (30 days back before the first) on the current version; goald's review loop runs it, retrying a failed run twice. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while Jonah's runs over the last 7 days cost its budget or more: learning.jonah.share (default 5%) of what the line's other runs cost over those 7 days, so a line that spent nothing has none. 404 version-not-found before the first publish.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -40127,7 +40130,7 @@ func (c *ClientWithResponses) UndoProposalWithResponse(ctx context.Context, org 
 
 // QueueJonahReviewWithResponse Queue a manual review of the factory at once ("Look for improvements now")
 //
-// The review reads what finished since the last done review's window ended (30 days back before the first) on the current version; goald's review loop runs it, retrying a failed run twice. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+// The review reads what finished since the last done review's window ended (30 days back before the first) on the current version; goald's review loop runs it, retrying a failed run twice. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while Jonah's runs over the last 7 days cost its budget or more: learning.jonah.share (default 5%) of what the line's other runs cost over those 7 days, so a line that spent nothing has none. 404 version-not-found before the first publish.
 //
 // Returns a wrapper object for the known response body format(s).
 //

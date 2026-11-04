@@ -209,7 +209,7 @@ func TestJonah_LookConflicts(t *testing.T) {
 
 	for code, want := range map[string]string{
 		"review-in-flight":          "a review is already pending or running: wait for it to finish",
-		"learning-budget-exhausted": "Jonah's runs reached the factory's weekly budget (learning.jonah.weeklyUsd): try again when the last 7 days cost less",
+		"learning-budget-exhausted": "Jonah's runs used up its budget, learning.jonah.share of what the line spent in the last 7 days: try again when the window moves on",
 	} {
 		srv, _ := evalGoald(t, map[string]evalAnswer{"POST " + webReviews: {http.StatusConflict, jonahRefusal(http.StatusConflict, code)}})
 
@@ -233,7 +233,7 @@ func TestJonah_ConflictsPrintOneLine(t *testing.T) {
 		{"draft-conflict", []string{jonahEditCmd, "7"}, webProposals + "/7/edit", "the draft's copy of a file changed since Jonah made this proposal: nothing was written"},
 		{"proposal-decided", []string{verbReject, "7", flagReason, "no"}, webProposals + "/7/reject", "the proposal was already decided: goal jonah show 7 says how"},
 		{"review-in-flight", []string{verbApprove, "7"}, webProposals + "/7/approve", "a review is already pending or running: wait for it to finish"},
-		{"learning-budget-exhausted", []string{verbApprove, "7"}, webProposals + "/7/approve", "Jonah's runs reached the factory's weekly budget (learning.jonah.weeklyUsd): try again when the last 7 days cost less"},
+		{"learning-budget-exhausted", []string{verbApprove, "7"}, webProposals + "/7/approve", "Jonah's runs used up its budget, learning.jonah.share of what the line spent in the last 7 days: try again when the window moves on"},
 	}
 
 	for _, tc := range cases {

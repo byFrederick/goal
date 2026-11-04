@@ -23,6 +23,7 @@ const (
 	checkReferences = "references" // every name and path points at something that exists
 	checkTools      = "tools"      // runtime.tools are mise tool specs
 	checkRemoved    = "removed"    // no form connections replaced is left
+	checkIgnored    = "ignored"    // no retired key that does nothing is left
 	checkContracts  = "contracts"  // every output contract is a schema the model API takes as a tool's input
 	// checkAvailability: what the definition declares that this install cannot serve yet.
 	checkAvailability = "availability"
@@ -62,7 +63,6 @@ const (
 	codeUnknownConnection = "unknown-connection"
 	codeUnknownContract   = "unknown-contract"
 	codeUnknownStation    = "unknown-station"
-	codeUnknownCollection = "unknown-collection"
 	codePromptNotFound    = "prompt-not-found"
 	codeSkillNotFound     = "skill-not-found"
 	codeContractNotFound  = "contract-not-found"
@@ -87,6 +87,10 @@ const (
 	codeFieldRemoved        = "field-removed"
 	codeEnvReferenceRemoved = "env-reference-removed"
 	codeInlineRemoved       = "connection-inline-removed"
+
+	// codeFieldIgnored: a key a decision retired, which stays in the schema marked deprecated and
+	// does nothing. A warning, never a removed form: a live version that has it keeps running.
+	codeFieldIgnored = "field-ignored"
 
 	codeBuiltinAsk = "builtin-ask-unavailable"
 
@@ -152,6 +156,7 @@ func (c *checker) run() []domain.DefinitionProblem {
 	c.tools()
 	c.outputContracts()
 	c.removedForms()
+	c.ignoredFields(ignoredKeys)
 	c.moved()
 	c.environments()
 	c.evals()
@@ -453,28 +458,6 @@ func (c *checker) capacity(i int, s Station) {
 func (c *checker) flowAndLearning() {
 	c.constraint()
 	c.integration()
-
-	l := c.f.Spec.Learning
-	if l == nil || l.Librarian == nil {
-		return
-	}
-
-	if !slices.Contains(c.agents, l.Librarian.Agent) {
-		c.errorf(checkReferences, codeUnknownAgent, at("spec", "learning", "librarian", "agent"),
-			"learning.librarian: unknown agent %q", l.Librarian.Agent)
-	}
-
-	var collections []string
-	if kb := c.f.Spec.KnowledgeBase; kb != nil {
-		collections = kb.Collections
-	}
-
-	for j, w := range l.Librarian.Writes {
-		if !slices.Contains(collections, w) {
-			c.errorf(checkReferences, codeUnknownCollection, at("spec", "learning", "librarian", "writes", j),
-				"learning.librarian writes %q, which is not a knowledge base collection", w)
-		}
-	}
 }
 
 // constraint checks that flow.constraint names a station and warns about buffers away from it:
@@ -594,6 +577,30 @@ func (c *checker) removedForms() {
 			"connection %s: inline connections are removed; create an organization connection named %s (for example of kind mcp-server) "+
 				"and list it here by name, with its credentials in the connection", conn.Name, conn.Name).
 			Fixes = []domain.ProblemFix{ReplaceFix("Use the organization's connection "+conn.Name, p, map[string]string{keyName: conn.Name})}
+	}
+}
+
+// ignoredKey is a key a decision retired, with what replaces it.
+type ignoredKey struct {
+	path []string
+	why  string
+}
+
+// ignoredKeys are the keys ADR 0039 retired (decision 17).
+var ignoredKeys = []ignoredKey{
+	{at("spec", "learning", "jonah", "weeklyUsd"), "Jonah's budget is learning.jonah.share of what the line spent in the last 7 days"},
+	{at("spec", "learning", "librarian"), "Jonah proposes knowledge from the line"},
+	{at("spec", "learning", "kaizen"), "Jonah reviews the line once a day"},
+}
+
+// ignoredFields warns, code field-ignored, about each key of keys the definition still has. It
+// never goes through removed: a removed form refuses every run of a version that has it
+// (domain.Line.Refusal), and these keys must not stop a live factory.
+func (c *checker) ignoredFields(keys []ignoredKey) {
+	for _, k := range keys {
+		if c.f.hasKey(k.path) {
+			c.warnf(checkIgnored, codeFieldIgnored, k.path, "%s is ignored: %s; remove it", strings.Join(k.path[1:], "."), k.why)
+		}
 	}
 }
 

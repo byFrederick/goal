@@ -58,10 +58,6 @@ func specPath(key string, rest []string) (string, []string) {
 		return domain.SectionConnections, append([]string{domain.SectionConnections}, connectionPath(rest)...)
 	case "knowledge", "secrets", "knowledgeBase":
 		return knowledgePath(key, rest)
-	case "learning":
-		if len(rest) >= 2 && rest[0] == "librarian" && rest[1] == "agent" {
-			return domain.SectionLine, []string{domain.SectionLine, "librarian"}
-		}
 	}
 
 	return domain.SectionFiles, nil

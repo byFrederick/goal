@@ -91,10 +91,13 @@ ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(max_observations);
 
 -- name: JonahSpendSince :one
--- The cost of the factory's review runs started at or after since, on agent_runs_jonah_idx.
-SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
+-- The cost of the factory's runs started at or after since, the line's (every kind but jonah) and
+-- Jonah's: Jonah's budget is a share of the first (ADR 0039 decision 16). Row-level security
+-- scopes it to the organization; agent_runs_factory_started_idx serves the range.
+SELECT coalesce(sum(cost_usd) FILTER (WHERE kind <> 'jonah'), 0)::float8 AS line_usd,
+  coalesce(sum(cost_usd) FILTER (WHERE kind = 'jonah'), 0)::float8 AS jonah_usd
 FROM agent_runs
-WHERE factory_id = sqlc.arg(factory_id) AND kind = 'jonah' AND started_at >= sqlc.arg(since);
+WHERE factory_id = sqlc.arg(factory_id) AND started_at >= sqlc.arg(since);
 
 -- name: SentBackBetween :many
 -- The factory's sent-back touches in [since, until), oldest first, at most max_events: each with

@@ -148,7 +148,36 @@ func newReviewWorldAt(t *testing.T, now time.Time) *reviewWorld {
 		Log: slog.New(slog.NewJSONHandler(w.log, nil)),
 	}, jonah.ReviewConfig{Timeout: reviewTimeout, Margin: reviewMargin})
 
+	w.lineSpend(reviewLineUSD, now.Add(-time.Hour))
+
 	return w
+}
+
+// reviewLineUSD is what the review world's line spent over the last 7 days: with the default
+// share of 5%, Jonah's budget is $10 and a review's cap $2.
+const reviewLineUSD = 200
+
+// lineSpend records a finished station run, on a new item still in progress, that cost usd,
+// started at. The world records one first, so its item is #1.
+func (w *reviewWorld) lineSpend(usd float64, at time.Time) {
+	w.t.Helper()
+
+	it, err := w.store.CreateItem(w.ctx(), domain.NewItem{
+		FactoryID: reviewFactory, Title: "work in progress", Station: stBuild, State: domain.StateInProgress,
+		Class: domain.ClassStandard, CreatedAt: at,
+	})
+	if err != nil {
+		w.t.Fatalf("CreateItem: %v", err)
+	}
+
+	id, err := w.store.StartRun(w.ctx(), ports.NewRun{FactoryID: reviewFactory, ItemID: it.ID, Station: stBuild, Agent: "builder", StartedAt: at})
+	if err != nil {
+		w.t.Fatalf("StartRun: %v", err)
+	}
+
+	if err := w.store.FinishRun(w.ctx(), id, domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd}, at.Add(time.Minute)); err != nil {
+		w.t.Fatalf("FinishRun: %v", err)
+	}
 }
 
 func succeeded(output string) domain.RunResult {
@@ -349,6 +378,14 @@ func TestReviews_Sweep(t *testing.T) {
 			w.finished(rt0.Add(-time.Hour))
 			w.spend(6, rt0.Add(-6*24*time.Hour))
 			w.spend(4, rt0.Add(-time.Hour))
+		}},
+		{name: "budget nearly spent", setup: func(w *reviewWorld) {
+			w.finished(rt0.Add(-time.Hour))
+			w.spend(9.99, rt0.Add(-time.Hour))
+		}, want: domain.JonahThreshold, start: firstWindow},
+		{name: "no share", setup: func(w *reviewWorld) {
+			w.finished(rt0.Add(-time.Hour))
+			w.defs.line.Jonah.Share = 0
 		}},
 		{name: "budget spent before the window", setup: func(w *reviewWorld) {
 			w.finished(rt0.Add(-time.Hour))
@@ -755,8 +792,8 @@ func TestReviews_Finish(t *testing.T) {
 
 	out := output{
 		Observations: []observation{
-			{Summary: testsMissing, Detail: "two items", Items: []string{"#1", "#2", "#99"}, Count: 2, Proposal: new(1)},
-			{Summary: screenshotsMissing, Items: []string{"#2"}, Count: 1},
+			{Summary: testsMissing, Detail: "two items", Items: []string{"#2", "#3", "#99"}, Count: 2, Proposal: new(1)},
+			{Summary: screenshotsMissing, Items: []string{"#3"}, Count: 1},
 		},
 		Proposals: []proposal{
 			newProposal("Ask for tests", writerPath, ev[0], domain.MetricSentBackRate),

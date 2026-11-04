@@ -30,7 +30,7 @@ type JonahReads interface {
 	Proposals(ctx context.Context, q ports.ProposalQuery) ([]domain.Proposal, error)
 	Proposal(ctx context.Context, factory domain.FactoryID, number int64) (domain.Proposal, error)
 	Observations(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.Observation, error)
-	JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
+	JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (domain.JonahSpend, error)
 }
 
 // JonahDecisions decide proposals and queue manual reviews as the person in ctx; their refusals
@@ -111,6 +111,11 @@ func (s *server) GetJonahOverview(ctx context.Context, req gen.GetJonahOverviewR
 		return nil, fmt.Errorf("read this month's jonah spend: %w", err)
 	}
 
+	week, err := s.jonah.Store.JonahSpendSince(ctx, rec.ID, now.Add(-domain.JonahBudgetWindow))
+	if err != nil {
+		return nil, fmt.Errorf("read the week's spend: %w", err)
+	}
+
 	observations, err := s.weekObservations(ctx, rec.ID, policy, weekStart(now))
 	if err != nil {
 		return nil, err
@@ -118,9 +123,10 @@ func (s *server) GetJonahOverview(ctx context.Context, req gen.GetJonahOverviewR
 
 	out := gen.GetJonahOverview200JSONResponse{
 		Policy: gen.JonahPolicy{
-			Enabled: policy.Enabled, ProposeAfter: policy.ProposeAfter, WeeklyUsd: policy.WeeklyUSD, ApproverRoles: rolesHolding("definition:publish"),
+			Enabled: policy.Enabled, ProposeAfter: policy.ProposeAfter, Share: policy.Share, BudgetUsd: policy.Budget(week).BudgetUSD,
+			ApproverRoles: rolesHolding("definition:publish"),
 		},
-		Waiting: len(waiting), MonthCostUsd: month, Observations: observations,
+		Waiting: len(waiting), MonthCostUsd: month.JonahUSD, Observations: observations,
 	}
 	if policy.Model != "" {
 		out.Policy.Model = &policy.Model

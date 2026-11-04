@@ -25,7 +25,7 @@ type Jonah interface {
 	Proposals(ctx context.Context, q ports.ProposalQuery) ([]domain.Proposal, error)
 	EvidenceItems(ctx context.Context, factory domain.FactoryID, since, until time.Time, limit int) ([]domain.EvidenceItem, error)
 	StationRunMedians(ctx context.Context, factory domain.FactoryID, since, until time.Time) ([]domain.StationMedian, error)
-	JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
+	JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (domain.JonahSpend, error)
 }
 
 // errNoJonah answers a jonah token's bundle when the gateway has no Deps.Jonah: 503.
@@ -120,16 +120,17 @@ func (g *Gateway) jonahBundle(ctx context.Context, c domain.TaskClaims) (runBund
 	}, nil
 }
 
-// jonahBudgetLeft is what the policy's weekly budget has left after the factory's review runs of
-// the last domain.JonahBudgetWindow, this one's spend so far included; at least a cent, so the cap
-// is never absent (max_usd 0 is no cap).
+// jonahBudgetLeft is a review's cost cap: what the policy's share of the line's spend over the
+// last domain.JonahBudgetWindow has left after Jonah's runs, this one's spend so far included, at
+// most a fifth of that budget and at least a cent, so the cap is never absent (max_usd 0 is no
+// cap; ADR 0039 decision 16).
 func (g *Gateway) jonahBudgetLeft(ctx context.Context, factory domain.FactoryID, p domain.JonahPolicy) (float64, error) {
-	spent, err := g.jonah.JonahSpendSince(ctx, factory, g.clock.Now().Add(-domain.JonahBudgetWindow))
+	spend, err := g.jonah.JonahSpendSince(ctx, factory, g.clock.Now().Add(-domain.JonahBudgetWindow))
 	if err != nil {
 		return 0, fmt.Errorf("jonah spend of factory %s: %w", factory, err)
 	}
 
-	return max(p.WeeklyUSD-spent, 0.01), nil
+	return p.Budget(spend).ReviewCap(), nil
 }
 
 // jonahDefinition adds every file of c's version that is UTF-8 text under definitionDir, and

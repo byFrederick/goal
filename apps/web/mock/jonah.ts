@@ -61,15 +61,17 @@ const problem = (res: ServerResponse, status: number, title: string, code: strin
 const softwarePolicy: JonahPolicy = {
   enabled: true,
   propose_after: 5,
-  weekly_usd: 20,
+  share: 0.05,
+  budget_usd: 20,
   model: 'claude-opus-5-5',
   approver_roles: ['owner', 'admin'],
 };
 
 const defaultPolicy: JonahPolicy = {
   enabled: true,
-  propose_after: 5,
-  weekly_usd: 10,
+  propose_after: 3,
+  share: 0.05,
+  budget_usd: 10,
   approver_roles: ['owner', 'admin'],
 };
 

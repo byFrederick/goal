@@ -7,6 +7,7 @@ import (
 	"flag"
 	"io"
 	"maps"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -985,7 +986,8 @@ func TestServeRun_JonahBundle(t *testing.T) {
 	h.sendBack(t, it, domain.EventRejected, "alice", "Too old.", now.Add(-10*24*time.Hour)) // before the window
 	h.sendBack(t, it, domain.EventNote, "carol", "", now.Add(-3*time.Hour))                 // not sent back
 	h.decidedProposals(t)
-	h.finishedJonahRun(t, now.Add(-time.Hour), 2.5)
+	h.finishedRun(t, it, now.Add(-2*time.Hour), 200) // the line's spend: Jonah's budget is $10, a review's cap $2
+	h.finishedJonahRun(t, now.Add(-time.Hour), 8.5)
 
 	c := h.jonahClaims()
 	c.Manual = true
@@ -1004,8 +1006,8 @@ func TestServeRun_JonahBundle(t *testing.T) {
 	expectJonahSpec(t, b, c, it)
 	expectNoKeys(t, body)
 
-	if b.Spec.MaxUSD != 7.5 {
-		t.Errorf("max_usd = %v, want 7.5: the weekly $10 less the $2.50 spent", b.Spec.MaxUSD)
+	if math.Abs(b.Spec.MaxUSD-1.5) > 1e-9 {
+		t.Errorf("max_usd = %v, want 1.5: the $10 budget less the $8.50 spent, under the $2 cap", b.Spec.MaxUSD)
 	}
 
 	if n := len(h.store.Events(it.ID)); n != before {
@@ -1183,7 +1185,7 @@ func expectJonahSpec(t *testing.T, b runBundle, c domain.TaskClaims, it domain.I
 	}
 
 	if b.Spec.MaxUSD <= 0 {
-		t.Errorf("max_usd = %v, want the weekly budget left", b.Spec.MaxUSD)
+		t.Errorf("max_usd = %v, want the budget left", b.Spec.MaxUSD)
 	}
 
 	if !reflect.DeepEqual(got, want) {

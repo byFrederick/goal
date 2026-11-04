@@ -291,8 +291,9 @@ type Store interface {
 	// decision. Order is unspecified.
 	StationLoads(ctx context.Context, factory domain.FactoryID) ([]domain.StationLoad, error)
 
-	// SpendSince is the summed cost_usd of the factory's agent runs started at or after since;
-	// 0 when there are none. The engine reads it once per tick for each factory with a weekly
+	// SpendSince is the summed cost_usd of the factory's agent runs started at or after since,
+	// but its Jonah runs, which never trigger onExhausted (ADR 0039 decision 16); 0 when there
+	// are none. The engine reads it once per tick for each factory with a weekly
 	// budget (domain.Runtime.WeeklyBudget).
 	SpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
 

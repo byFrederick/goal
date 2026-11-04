@@ -479,24 +479,30 @@ Each problem is located at its key under `starter.item` in `factory.yaml`. The e
 
 ## Jonah: `learning.jonah`
 
-Jonah reviews a factory's sent-back runs and turns what it sees there into proposals for the definition ([ADR 0034](../adr/0034-jonah-proposals.md)). `learning.jonah` sets when the reviews run and what they may cost. Every key is optional, and a factory without `learning`, or without `jonah` in it, gets the defaults.
+Jonah reviews a factory's line and turns what it sees there into proposals for the definition ([ADR 0039](../adr/0039-jonah-learns-from-the-line.md)). `learning.jonah` sets whether it runs, its model, its budget and when an observation becomes a proposal. Every key is optional, and a factory without `learning`, or without `jonah` in it, gets the defaults.
 
 ```yaml
 spec:
   learning:
     jonah:
       enabled: true
-      proposeAfter: 5
-      weeklyUsd: 10
       model: claude-sonnet-5-5
+      share: 5%
+      proposeAfter: 3
 ```
 
-- `enabled` (boolean, default `true`): whether sent-back runs queue reviews at all.
-- `proposeAfter` (integer, 1 to 50, default `5`): the number of new sent-back touches that queue a threshold review, and the number of times a threshold review must see an observation before it becomes a proposal (ADR 0034, decisions 2 and 5).
-- `weeklyUsd` (number, at least 0, default `10`): the cap, in US dollars, on what the factory's review runs cost over the last 7 days. While the cost is at or above it, no review is queued. `0` queues none.
+- `enabled` (boolean, default `true`): whether Jonah reviews the factory at all.
 - `model` (a `claude-` model id, optional): the review run's model. When absent, it is `runtime.model`; when both are absent, the run takes the organization's default model, as an agent without a model does. The organization policy still checks the model when the run starts.
+- `share` (a percent string from `0%` to `100%`, such as `5%` or `2.5%`, default `5%`): Jonah's budget, as a share of what the line's runs other than Jonah's cost over the last 7 days. Each review may spend at most a fifth of the budget, and its run's cost cap is what the budget has left, under that fifth. While Jonah's runs of the last 7 days cost the budget or more, no review is queued, a manual one is refused with `learning-budget-exhausted`, and publishes go on. A line that spent nothing in the last 7 days gives Jonah no budget, and `0%` turns its spend off.
+- `proposeAfter` (integer, 1 to 50, default `3`): the number of new sent-back touches that queue a threshold review, and the number of items with the same cause an observation needs before it becomes a proposal.
 
-`config.Factory.Line()` carries the keys, with the defaults applied, as `domain.Line.Jonah`, a `domain.JonahPolicy`; `domain.DefaultJonahPolicy()` holds the defaults. Like the rest of `learning`, the section is not part of the Visual editor: YAML mode edits it. A value out of range or an unknown key is a schema problem (`schema-invalid`, `schema-unknown-key`) at its line in `factory.yaml`, in section `files`.
+Jonah's runs show in the factory's spend, but they never count toward `runtime.budget.weeklyUsd`, so they never trigger its `onExhausted`.
+
+`config.Factory.Line()` carries the keys, with the defaults applied, as `domain.Line.Jonah`, a `domain.JonahPolicy`, with `share` as a fraction (`0.05`); `domain.DefaultJonahPolicy()` holds the defaults, and `JonahPolicy.Budget` computes the budget and the per-review cap. Like the rest of `learning`, the section is not part of the Visual editor: YAML mode edits it. A value out of range or an unknown key is a schema problem (`schema-invalid`, `schema-unknown-key`) at its line in `factory.yaml`, in section `files`.
+
+### Ignored keys
+
+`learning.jonah.weeklyUsd`, `learning.librarian` and `learning.kaizen` do nothing. They stay in the schema, marked deprecated, so a definition that has them still loads, publishes and runs. Each one gets the warning `field-ignored` (check `ignored`) at its line in `factory.yaml`, in section `files`, saying to remove it. They are not removed forms: unlike `field-removed`, a `field-ignored` key is not recorded in `domain.Line.Removed`, so the engine never refuses a version for it. `ignoredFields` in `internal/config/checks.go` takes the list of paths to warn about.
 
 ## Organization policy
 
