@@ -256,6 +256,71 @@ func (t *KnowledgeTally) Reads(ids map[string]KnowledgeSourceID, factory Factory
 	return out
 }
 
+// MaxKnowledgeTouchedPaths bounds the paths KnowledgeTally.Touched lists across all sources, so a
+// run that read thousands of files records an event of bounded size.
+const MaxKnowledgeTouchedPaths = 200
+
+// KnowledgeTouched is what one run did in one pinned source: the files it read (Reads) and the
+// folders or files it searched (Searches), each once and sorted, and how many more paths it
+// touched that were left out past MaxKnowledgeTouchedPaths (More).
+type KnowledgeTouched struct {
+	Source   string
+	Reads    []string
+	Searches []string
+	More     int
+}
+
+// Touched is what the run did in each source it touched, by source name; past
+// MaxKnowledgeTouchedPaths paths in all, the rest are left out and counted in each source's More.
+func (t *KnowledgeTally) Touched() []KnowledgeTouched {
+	keys := make([]KnowledgeTouch, 0, len(t.counts))
+	for k := range t.counts {
+		keys = append(keys, k)
+	}
+
+	slices.SortFunc(keys, func(a, b KnowledgeTouch) int {
+		return cmp.Or(strings.Compare(a.Source, b.Source), cmpBool(a.Search, b.Search), strings.Compare(a.Path, b.Path))
+	})
+
+	var out []KnowledgeTouched
+
+	left := MaxKnowledgeTouchedPaths
+
+	for _, k := range keys {
+		if len(out) == 0 || out[len(out)-1].Source != k.Source {
+			out = append(out, KnowledgeTouched{Source: k.Source})
+		}
+
+		s := &out[len(out)-1]
+
+		switch {
+		case left == 0:
+			s.More++
+			continue
+		case k.Search:
+			s.Searches = append(s.Searches, k.Path)
+		default:
+			s.Reads = append(s.Reads, k.Path)
+		}
+
+		left--
+	}
+
+	return out
+}
+
+// cmpBool orders false before true.
+func cmpBool(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case a:
+		return 1
+	default:
+		return -1
+	}
+}
+
 // KnowledgeDay is the day t counts on: its UTC date, at midnight.
 func KnowledgeDay(t time.Time) time.Time {
 	y, m, d := t.UTC().Date()

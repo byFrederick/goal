@@ -38,8 +38,13 @@ VALUES (sqlc.arg(id), sqlc.arg(name), sqlc.arg(title), sqlc.arg(kind), sqlc.narg
         CASE WHEN sqlc.arg(kind)::text = 'live' THEN NULL ELSE now() END, sqlc.arg(created_by));
 
 -- name: UpdateKnowledgeSource :one
+-- A new read-when line makes a source that writes snapshots due at once, so its next snapshot
+-- carries the line; read_when on the right is the row's old line.
 UPDATE knowledge_sources
-SET title = coalesce(sqlc.narg(title)::text, title), config = coalesce(sqlc.narg(config)::jsonb, config),
+SET next_sync_at = CASE WHEN sqlc.narg(read_when)::text IS NOT NULL AND read_when IS DISTINCT FROM sqlc.narg(read_when)::text
+                             AND kind IN ('upload', 'repository', 'confluence') THEN now()
+                        ELSE next_sync_at END,
+    title = coalesce(sqlc.narg(title)::text, title), config = coalesce(sqlc.narg(config)::jsonb, config),
     secret_id = coalesce(sqlc.narg(secret_id)::uuid, secret_id), read_when = coalesce(sqlc.narg(read_when)::text, read_when),
     sync_every = CASE WHEN sqlc.narg(sync_every_seconds)::bigint IS NULL THEN sync_every
                       ELSE make_interval(secs => sqlc.narg(sync_every_seconds)::bigint) END,

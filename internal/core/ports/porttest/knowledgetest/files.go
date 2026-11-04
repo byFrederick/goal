@@ -420,7 +420,8 @@ func testFilesIsolation(f *fixture) {
 }
 
 // testNewKinds: repository and Confluence sources are created, read their secret by name and
-// carry their read-when line, which a patch changes.
+// carry their read-when line, which a patch changes: a new line makes the source due at once, a
+// patch of the title or of the same line does not.
 func testNewKinds(f *fixture) {
 	ctx := f.ctx()
 
@@ -440,11 +441,31 @@ func testNewKinds(f *fixture) {
 	})
 	f.want("a Confluence source", wiki, wiki.Kind == domain.SourceConfluence, wiki.Secret == docsSecret)
 
+	// Sync both once, so neither is due.
+	now := time.Now().Add(time.Second)
+	for c := f.claim(now, time.Minute); c != nil; c = f.claim(now, time.Minute) {
+		f.finish(*c, now, "")
+	}
+
+	due := f.get(f.org, "repo-docs").NextSyncAt
+	f.want("repo-docs after its sync", due, due != nil, due.After(now))
+
+	title, same := "Repository docs", repo.ReadWhen
+
+	got, err := f.Knowledge.UpdateSource(ctx, "repo-docs", domain.KnowledgeSourcePatch{Title: &title}, admin)
+	f.must(err)
+	f.want("UpdateSource of only the title keeps the next sync", got.NextSyncAt, equalTime(got.NextSyncAt, *due))
+
+	got, err = f.Knowledge.UpdateSource(ctx, "repo-docs", domain.KnowledgeSourcePatch{ReadWhen: &same}, admin)
+	f.must(err)
+	f.want("UpdateSource of the same read-when line keeps the next sync", got.NextSyncAt, equalTime(got.NextSyncAt, *due))
+
 	line := "Read for how we deploy."
 
-	got, err := f.Knowledge.UpdateSource(ctx, "repo-docs", domain.KnowledgeSourcePatch{ReadWhen: &line}, admin)
+	got, err = f.Knowledge.UpdateSource(ctx, "repo-docs", domain.KnowledgeSourcePatch{ReadWhen: &line}, admin)
 	f.must(err)
-	f.want("UpdateSource of the read-when line", got, got.ReadWhen == line, f.get(f.org, "repo-docs").ReadWhen == line)
+	f.want("UpdateSource of the read-when line", got, got.ReadWhen == line, f.get(f.org, "repo-docs").ReadWhen == line,
+		got.NextSyncAt != nil, !got.NextSyncAt.After(time.Now()))
 
 	_, err = f.Knowledge.CreateSource(ctx, domain.NewKnowledgeSource{Name: "wiki-two", Title: "Wiki", Kind: domain.SourceConfluence}, admin)
 	f.refused("CreateSource of Confluence without a secret", err, domain.ErrInvalid)

@@ -891,8 +891,11 @@ func (q *Queries) UnheldBlobs(ctx context.Context, blobs []string) ([]string, er
 
 const updateKnowledgeSource = `-- name: UpdateKnowledgeSource :one
 UPDATE knowledge_sources
-SET title = coalesce($1::text, title), config = coalesce($2::jsonb, config),
-    secret_id = coalesce($3::uuid, secret_id), read_when = coalesce($4::text, read_when),
+SET next_sync_at = CASE WHEN $1::text IS NOT NULL AND read_when IS DISTINCT FROM $1::text
+                             AND kind IN ('upload', 'repository', 'confluence') THEN now()
+                        ELSE next_sync_at END,
+    title = coalesce($2::text, title), config = coalesce($3::jsonb, config),
+    secret_id = coalesce($4::uuid, secret_id), read_when = coalesce($1::text, read_when),
     sync_every = CASE WHEN $5::bigint IS NULL THEN sync_every
                       ELSE make_interval(secs => $5::bigint) END,
     updated_at = now()
@@ -901,20 +904,22 @@ RETURNING id
 `
 
 type UpdateKnowledgeSourceParams struct {
+	ReadWhen         *string
 	Title            *string
 	Config           []byte
 	SecretID         *uuid.UUID
-	ReadWhen         *string
 	SyncEverySeconds *int64
 	Name             string
 }
 
+// A new read-when line makes a source that writes snapshots due at once, so its next snapshot
+// carries the line; read_when on the right is the row's old line.
 func (q *Queries) UpdateKnowledgeSource(ctx context.Context, arg UpdateKnowledgeSourceParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, updateKnowledgeSource,
+		arg.ReadWhen,
 		arg.Title,
 		arg.Config,
 		arg.SecretID,
-		arg.ReadWhen,
 		arg.SyncEverySeconds,
 		arg.Name,
 	)

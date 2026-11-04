@@ -144,6 +144,41 @@ func TestKnowledge_SourcesCreateChangeAndSync(t *testing.T) {
 	h.syncedOnASecret(t)
 }
 
+// A PATCH with a new read_when makes a synced-once source due at once, so its next snapshot carries
+// the line; a PATCH of only the title, or of the same read_when, keeps its next sync.
+func TestKnowledge_ReadWhenPatchMakesTheSourceDue(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createHandbook(t)
+
+	if r := h.upload(t, srcHandbook, [2]string{leaveFile, leaveMD}); r.status != http.StatusAccepted {
+		t.Fatalf("upload = %d %s; want 202", r.status, r.body)
+	}
+
+	h.syncAll(t)
+
+	synced := decode[gen.KnowledgeSource](t, h.request(t, http.MethodGet, handbookPath, "", nil), http.StatusOK)
+	if synced.NextSyncAt == nil || !synced.NextSyncAt.After(time.Now()) {
+		t.Fatalf("after a sync next_sync_at = %v; want a time ahead", synced.NextSyncAt)
+	}
+
+	for name, body := range map[string]string{
+		"title":          `{"title":"Acme handbook"}`,
+		"same read_when": `{"read_when":"` + synced.ReadWhen + `"}`,
+	} {
+		got := decode[gen.KnowledgeSource](t, h.request(t, http.MethodPatch, handbookPath, body, nil), http.StatusOK)
+		if got.NextSyncAt == nil || !got.NextSyncAt.Equal(*synced.NextSyncAt) {
+			t.Errorf("PATCH of %s: next_sync_at = %v; want %v, unchanged", name, got.NextSyncAt, synced.NextSyncAt)
+		}
+	}
+
+	got := decode[gen.KnowledgeSource](t, h.request(t, http.MethodPatch, handbookPath, `{"read_when":"Read when you plan leave."}`, nil), http.StatusOK)
+	if got.ReadWhen != "Read when you plan leave." || got.NextSyncAt == nil || got.NextSyncAt.After(time.Now()) {
+		t.Errorf("PATCH of a new read_when = %q due %v; want the new line, due now", got.ReadWhen, got.NextSyncAt)
+	}
+}
+
 // syncedOnASecret creates, reads and patches a synced source that reads with a secret.
 func (h *harness) syncedOnASecret(t *testing.T) {
 	t.Helper()

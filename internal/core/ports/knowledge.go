@@ -26,8 +26,10 @@ type Knowledge interface {
 	// (OrgSecrets.Delete: ErrConflict naming the sources).
 	CreateSource(ctx context.Context, s domain.NewKnowledgeSource, by domain.Actor) (domain.KnowledgeSource, error)
 	// UpdateSource changes a source's title, config, schedule or secret (knowledge_source.updated),
-	// with KnowledgeSourcePatch.Check's and CheckOn's rules (domain.ErrInvalid). ErrNotFound when
-	// there is no such source or secret.
+	// with KnowledgeSourcePatch.Check's and CheckOn's rules (domain.ErrInvalid). A read-when line
+	// that differs from the stored one makes an upload, repository or Confluence source due at
+	// once, so its next snapshot carries the line (ADR 0038 decision 1). ErrNotFound when there is
+	// no such source or secret.
 	UpdateSource(ctx context.Context, name string, p domain.KnowledgeSourcePatch, by domain.Actor) (domain.KnowledgeSource, error)
 	// DeleteSource deletes a source with its documents and chunks (knowledge_source.deleted) and
 	// calls drop, before the deletion commits, with the uploads' content hashes no document of
