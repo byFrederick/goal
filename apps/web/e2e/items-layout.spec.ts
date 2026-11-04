@@ -139,3 +139,26 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await expectAccessible(page);
   });
 }
+
+for (const { width, height } of [
+  { width: 390, height: 844 },
+  { width: 1440, height: 1000 },
+]) {
+  test(`keeps an Items row as tall as with a plain span around the checkbox at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto(items);
+    const box = page.getByRole('table', { name: 'Items' }).getByRole('checkbox', { name: /^Select / }).first();
+    await expect(box).toBeVisible();
+    const row = box.locator('xpath=ancestor::tr[1]');
+    const before = (await row.boundingBox())?.height ?? 0;
+    await box.locator('xpath=..').evaluate((label) => {
+      const span = document.createElement('span');
+      span.className = label.className;
+      span.append(...Array.from(label.childNodes));
+      label.replaceWith(span);
+    });
+    const after = (await row.boundingBox())?.height ?? 0;
+    expect(before).toBeGreaterThan(0);
+    expect(Math.abs(before - after)).toBeLessThanOrEqual(0.5);
+  });
+}

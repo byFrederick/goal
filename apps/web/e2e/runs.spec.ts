@@ -140,3 +140,20 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await expectAccessible(page);
   });
 }
+
+for (const { width, height } of [
+  { width: 390, height: 900 },
+  { width: 1440, height: 1000 },
+]) {
+  test(`keeps a Runs row as tall as without the title link's hit area at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await openRuns(page);
+    const row = page.getByRole('table').locator('tbody tr').first();
+    const link = row.locator('a').first();
+    const before = (await row.boundingBox())?.height ?? 0;
+    await link.evaluate((el) => el.classList.remove('max-md:-my-4', 'max-md:py-4'));
+    const after = (await row.boundingBox())?.height ?? 0;
+    expect(before).toBeGreaterThan(0);
+    expect(Math.abs(before - after)).toBeLessThanOrEqual(0.5);
+  });
+}
