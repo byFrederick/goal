@@ -1,6 +1,6 @@
 # ADR 0039 — Jonah learns from the line: evidence from every item, tries on past items, a watch on every change
 
-Status: accepted · 2026-11-03
+Status: accepted · 2026-11-03 · Amended by [ADR 0040](0040-one-door-for-every-source.md) (item evidence names the origin; notes from other items are not a person's touch; removed keys only warn) and [ADR 0041](0041-code-and-github-without-an-app.md) (a try clones the repositories its run recorded, and a run's heads are kept per repository)
 
 - **Replaces:**
   - [ADR 0025](0025-judges-and-evals-as-the-screens-show-them.md): judges go, and eval cases become past items kept as tests (decisions 8–12).
