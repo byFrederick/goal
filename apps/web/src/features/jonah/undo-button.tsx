@@ -24,10 +24,12 @@ export function UndoThisChange({
   number,
   factoryId,
   factoryName,
+  size = 'sm',
 }: {
   number: number;
   factoryId: string;
   factoryName: string;
+  size?: 'sm' | 'md';
 }) {
   const org = useOrg();
   const navigate = useNavigate();
@@ -47,7 +49,7 @@ export function UndoThisChange({
     onError: (err) => toast.error(undoFailure(err)),
   });
   return (
-    <Button variant="secondary" size="sm" disabled={undo.isPending} onClick={() => undo.mutate()}>
+    <Button variant="secondary" size={size} disabled={undo.isPending} onClick={() => undo.mutate()}>
       Undo this change<span className="sr-only"> of proposal {number}</span>
     </Button>
   );

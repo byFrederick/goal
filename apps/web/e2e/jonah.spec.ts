@@ -3,6 +3,7 @@
 // Not run in the box: Playwright needs a browser, which the box does not have.
 import { expect, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll } from './support';
+import { expectNoOverlap, expectTarget44 } from './support-boxes';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -149,3 +150,23 @@ for (const scheme of ['light', 'dark'] as const) {
     }
   }
 }
+
+test('on the Tests tab each result ⓘ is 44×44 and does not lie over the next row at 390 px', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/f/software/jonah/tests');
+  await expect(page.getByText('Not run yet')).toBeVisible();
+  const tips = page.getByRole('button', { name: 'What the last result is' });
+  const rows = page.getByRole('region', { name: 'Kept tests' }).locator('a, button');
+  for (let i = 0; i < (await tips.count()); i++) {
+    const tip = tips.nth(i);
+    await expectTarget44(tip, 'What the last result is');
+    const tipBox = await tip.boundingBox();
+    for (let j = 0; j < (await rows.count()); j++) {
+      const row = rows.nth(j);
+      if (await tip.evaluate((el, other) => el === other, await row.elementHandle())) continue;
+      const box = await row.boundingBox();
+      if (!tipBox || !box || box.y < tipBox.y) continue;
+      await expectNoOverlap(tip, row, 'What the last result is and the control after it');
+    }
+  }
+});

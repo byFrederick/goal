@@ -2,6 +2,7 @@
 // revision 42 based on v8 (3 changes in 2 sections, 1 warning).
 import { expect, type Page, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll, isPhone, openNavigation, orgNav } from './support';
+import { expectNoOverlap, expectTarget44 } from './support-boxes';
 
 const basics = '/o/acme/f/goal/definition/basics';
 const draft = '/v1/orgs/acme/factories/goal/draft';
@@ -384,3 +385,16 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 }
+
+test('the change-count and problems links are 44×44 at 390 px', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openBasics(page);
+  const bar = status(page);
+  await expectTarget44(bar.getByRole('link', { name: /\d+ changes? in \d+ sections?/ }), 'the change count');
+  await expectTarget44(bar.getByRole('link', { name: /\d+ problems?/ }), 'the problems link');
+  await expectNoOverlap(
+    bar.getByRole('link', { name: /\d+ changes? in \d+ sections?/ }),
+    bar.getByRole('link', { name: /\d+ problems?/ }),
+    'the change count and the problems link',
+  );
+});
