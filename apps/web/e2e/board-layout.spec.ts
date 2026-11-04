@@ -310,7 +310,8 @@ for (const width of [1280, 1440]) {
   test(`every card stays inside its column and the board does not scroll sideways at ${width} px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/o/acme/f/goal/board');
-    await expect(page.getByRole('region', { name: 'Stations' })).toBeVisible();
+    // A phone shows the picked station's own region; the desktop shows all of them under 'Stations'.
+    await expect(page.getByRole('region', { name: width < 768 ? 'Build' : 'Stations' })).toBeVisible();
     await page.waitForLoadState('networkidle');
 
     const result = await page.evaluate(() => {
@@ -344,7 +345,8 @@ for (const width of [1440, 1280, 1024, 768, 390]) {
   test(`at ${width} px no card is wider than its content and no part count lands on another card`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto(width < 768 ? '/o/acme/f/software/board?station=build' : '/o/acme/f/software/board');
-    await expect(page.getByRole('region', { name: 'Stations' })).toBeVisible();
+    // A phone shows the picked station's own region; the desktop shows all of them under 'Stations'.
+    await expect(page.getByRole('region', { name: width < 768 ? 'Build' : 'Stations' })).toBeVisible();
     await page.waitForLoadState('networkidle');
 
     const result = await page.evaluate(() => {
@@ -385,7 +387,7 @@ for (const width of [1440, 1280, 1024, 768, 390]) {
 
 test('a station with a WIP limit of 50 and a lane with 50 slots fit their column', async ({ page }) => {
   test.skip(isPhone(page), 'the stations are side by side from 768 px');
-  await page.route('**/v1/orgs/acme/factories/software/board', async (route) => {
+  await page.route(/\/factories\/[^/]+\/board(\?|$)/, async (route) => {
     const response = await route.fetch();
     const board = await response.json();
     for (const station of board.stations) {
@@ -400,6 +402,8 @@ test('a station with a WIP limit of 50 and a lane with 50 slots fit their column
   await page.goto('/o/acme/f/software/board');
   await expect(page.getByRole('region', { name: 'Stations' })).toBeVisible();
   await page.waitForLoadState('networkidle');
+  // Proves the intercept applied before the overflow check means anything.
+  await expect(page.getByRole('img', { name: /of 50 in progress/ }).first()).toBeVisible();
 
   const overflowing = await page.evaluate(() => {
     const out: string[] = [];
@@ -417,5 +421,4 @@ test('a station with a WIP limit of 50 and a lane with 50 slots fit their column
     return out;
   });
   expect(overflowing).toEqual([]);
-  await expect(page.getByRole('img', { name: /of 50 in progress/ }).first()).toBeVisible();
 });
