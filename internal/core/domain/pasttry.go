@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -20,13 +21,31 @@ const (
 	PastTryDone    PastTryState = "done"
 )
 
-// PastTryVerdict is how a done try came out. Values match tries.verdict. Empty is a try whose run
-// ended and is waiting to be graded (software#597 adds fixed, not fixed and unknown).
+// PastTryVerdict is how a done try came out (ADR 0039 decision 10). Values match tries.verdict.
+// Empty is a try whose run ended and is waiting for the grader.
 type PastTryVerdict string
 
-// PastTryError is a try whose run could not be carried out: a commit that is gone, a lost box, a
-// prepare or setup that failed, or any other infrastructure failure. It is never a failing try.
-const PastTryError PastTryVerdict = "error"
+// Past-item try verdicts. Code grades first: a try whose output fails the proposed contract or
+// one of the station's checks is not fixed, and the grader never sees it. Fixed, not fixed and
+// unknown carry their reason (PastTryResult.Reason).
+const (
+	// PastTryFixed is a try that fixed what sent the item back.
+	PastTryFixed PastTryVerdict = "fixed"
+	// PastTryNotFixed is a try that did not: its output failed the contract or a check, or the
+	// grader said so.
+	PastTryNotFixed PastTryVerdict = "not_fixed"
+	// PastTryUnknown is a try whose grade cannot be trusted, as when the grader misread the item.
+	PastTryUnknown PastTryVerdict = "unknown"
+	// PastTryError is a try whose run could not be carried out: a commit that is gone, a lost
+	// box, a prepare or setup that failed, or any other infrastructure failure. It is never a
+	// failing try.
+	PastTryError PastTryVerdict = "error"
+)
+
+// graded reports whether v is a grade, which needs its reason.
+func (v PastTryVerdict) graded() bool {
+	return v == PastTryFixed || v == PastTryNotFixed || v == PastTryUnknown
+}
 
 // Bounds of past-item tries (ADR 0039 decision 11).
 const (
@@ -36,6 +55,8 @@ const (
 	MaxPastTryDiff = 1 << 20
 	// MaxPastTryError bounds a try's error, in characters (tries.error).
 	MaxPastTryError = 2000
+	// MaxPastTryReason bounds the reason of a try's grade, in characters (tries.reason).
+	MaxPastTryReason = 2000
 )
 
 // PastTryStartRef is the ref prepare points at the commit a try's agent starts from, once the
@@ -63,6 +84,8 @@ type PastTry struct {
 	State    PastTryState
 	Verdict  PastTryVerdict
 	Error    string
+	// Reason is why the try was graded as it was, first; empty without a grade.
+	Reason string
 	// Diff is the try's change against the commit it started from.
 	Diff       string
 	CostUSD    float64
@@ -91,25 +114,34 @@ func (n NewPastTry) Check() error {
 	return nil
 }
 
-// PastTryResult is how a claimed try ended: done, with no verdict and its run's diff and cost, or
-// with verdict error and why.
+// PastTryResult is how a claimed try ended: done, with no verdict and its run's diff and cost,
+// graded with its reason, or with verdict error and why.
 type PastTryResult struct {
-	Verdict  PastTryVerdict
-	Error    string
+	Verdict PastTryVerdict
+	Error   string
+	// Reason is why the try was graded Verdict: what failed first for a try code graded.
+	Reason   string
 	Diff     string
 	CostUSD  float64
 	TryRunID RunID
 	At       time.Time
 }
 
-// Check reports what makes r impossible to store, wrapping ErrInvalid: a verdict other than
-// error, an error verdict without its reason, a negative cost, or a diff or error past its bound.
+// Check reports what makes r impossible to store, wrapping ErrInvalid: an unknown verdict, an
+// error verdict without its error, a grade without its reason or a reason without a grade, a
+// negative cost, or a diff, error or reason past its bound.
 func (r PastTryResult) Check() error {
 	switch {
-	case r.Verdict != "" && r.Verdict != PastTryError:
+	case r.Verdict != "" && r.Verdict != PastTryError && !r.Verdict.graded():
 		return fmt.Errorf("past try result: verdict %q: %w", r.Verdict, ErrInvalid)
 	case r.Verdict == PastTryError && r.Error == "":
 		return fmt.Errorf("past try result: an error needs its reason: %w", ErrInvalid)
+	case r.Verdict.graded() && strings.TrimSpace(r.Reason) == "":
+		return fmt.Errorf("past try result: verdict %s needs its reason: %w", r.Verdict, ErrInvalid)
+	case !r.Verdict.graded() && r.Reason != "":
+		return fmt.Errorf("past try result: a reason needs a grade: %w", ErrInvalid)
+	case len([]rune(r.Reason)) > MaxPastTryReason:
+		return fmt.Errorf("past try result: the reason is over %d characters: %w", MaxPastTryReason, ErrInvalid)
 	case r.CostUSD < 0:
 		return fmt.Errorf("past try result: negative cost: %w", ErrInvalid)
 	case len(r.Diff) > MaxPastTryDiff:

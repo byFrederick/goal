@@ -27,8 +27,10 @@ import (
 // A try of a past item (ADR 0039 decision 9) holds no lease and works no item either. Its agent
 // gets the model's access only: its environment keeps its env, which the worker gives setup alone,
 // and loses its files and MCP servers. Once the agent ended, its change against the commit prepare
-// checked out is read from the box (domain.PastTryDiffScript) into the result's Diff; a diff that cannot
-// be read is an error, as the try's infrastructure failed.
+// checked out is read from the box (domain.PastTryDiffScript) into the result's Diff, and, when it
+// succeeded, the station's checks the request names run there (ADR 0039 decision 10), the first
+// that fails coming back as the result's FailedCheck. A diff that cannot be read or a check that
+// cannot be run is an error, as the try's infrastructure failed.
 //
 // A Jonah run (ADR 0034 decision 1) holds no lease and works no item, so no item event is written
 // for it: its sandbox's prepare gets no repository's git login, as it clones none, and its agent
@@ -189,6 +191,10 @@ func (e *Engine) runInBox(ctx context.Context, t runTask, runID domain.RunID) (d
 
 	if lost == nil && t.Kind == domain.RunKindTry && res.Status != domain.RunCancelled {
 		res.Diff, lost = e.tryDiff(ctx, t, runID, scrub)
+	}
+
+	if lost == nil && t.Kind == domain.RunKindTry && res.Status == domain.RunSucceeded {
+		res.FailedCheck, lost = e.tryChecks(ctx, t, runID, scrub)
 	}
 
 	e.finishRun(ctx, runID, res)

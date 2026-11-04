@@ -524,28 +524,19 @@ func (c claimed) request(brief string) domain.RunRequest {
 // exitTimedOut is the exit code a check reports when it ran out of time, as timeout(1) does.
 const exitTimedOut = 124
 
-// runChecks runs the station's command checks in order in the claim's sandbox, in its workspace,
-// with no credential, and stops at the first that fails, which is returned as an *outputError.
-// The exit code is the runtime's: nothing the agent left in the sandbox can report a pass. What a
-// check prints is scrubbed of the run's secrets, which the agent may have left in a file.
+// runChecks runs the station's command checks in order in the claim's sandbox (runCheck), records
+// each one's event on the item, and stops at the first that fails, which is returned as an
+// *outputError. What a check prints is scrubbed of the run's secrets, which the agent may have
+// left in a file.
 func (e *Engine) runChecks(ctx context.Context, c claimed, runID domain.RunID, b *box, scrub scrubber) error {
 	for _, cmd := range c.station.Checks {
 		started := e.clock.Now()
-		out := &tail{max: maxCheckOutput}
 
-		st, err := execLines(ctx, b.sandbox, ports.Exec{
-			Argv: []string{"sh", "-c", cmd}, Env: map[string]string{"CI": "true"}, Dir: workspaceDir, Timeout: e.cfg.CheckTimeout,
-		}, out.add)
+		code, output, err := e.runCheck(ctx, runID, b, cmd, scrub)
 		if err != nil {
-			return fmt.Errorf("run check %q: %w", cmd, scrub.err(err))
+			return err
 		}
 
-		code, output := st.Code, joinParts(out.String(), st.StderrTail)
-		if st.TimedOut {
-			code, output = exitTimedOut, joinParts(output, fmt.Sprintf("timed out after %s", e.cfg.CheckTimeout))
-		}
-
-		output = scrub.string(cut(strings.TrimSpace(output), maxCheckOutput))
 		kind := domain.EventCheckPassed
 		data := map[string]any{"command": cmd, "exit_code": code, "duration_ms": e.clock.Now().Sub(started).Milliseconds()}
 
@@ -554,8 +545,6 @@ func (e *Engine) runChecks(ctx context.Context, c claimed, runID domain.RunID, b
 		}
 
 		e.record(ctx, c.item, runID, kind, data)
-		e.log.InfoContext(ctx, "sandbox exec", slog.String("run", string(runID)), slog.String("step", "check"),
-			slog.Int("exit", code), slog.Float64("seconds", e.since(started)))
 
 		if code != 0 {
 			return &outputError{err: fmt.Errorf("%w: `%s` exited %d; the end of its output:\n%s", errCheckFailed, cmd, code, output)}
@@ -563,6 +552,50 @@ func (e *Engine) runChecks(ctx context.Context, c claimed, runID domain.RunID, b
 	}
 
 	return nil
+}
+
+// tryChecks runs a try's checks (ADR 0039 decision 10) as runChecks runs a station's, in the
+// try's box, and returns the first that fails; nil when they all pass. A try works no item, so
+// no check event is written. A check that cannot be run is an error.
+func (e *Engine) tryChecks(ctx context.Context, t runTask, runID domain.RunID, scrub scrubber) (*domain.FailedCheck, error) {
+	for _, cmd := range t.Checks {
+		code, output, err := e.runCheck(ctx, runID, t.box, cmd, scrub)
+		if err != nil {
+			return nil, err
+		}
+
+		if code != 0 {
+			return &domain.FailedCheck{Command: cmd, ExitCode: code, Output: output}, nil
+		}
+	}
+
+	return nil, nil
+}
+
+// runCheck runs one command check in b, in its workspace, with CI=true and no credential, under
+// the check timeout: its exit code (exitTimedOut when it ran out of time) and the end of what it
+// printed, scrubbed of the run's secrets. The exit code is the runtime's: nothing the agent left
+// in the sandbox can report a pass. An error when the command could not be run.
+func (e *Engine) runCheck(ctx context.Context, runID domain.RunID, b *box, cmd string, scrub scrubber) (int, string, error) {
+	started := e.clock.Now()
+	out := &tail{max: maxCheckOutput}
+
+	st, err := execLines(ctx, b.sandbox, ports.Exec{
+		Argv: []string{"sh", "-c", cmd}, Env: map[string]string{"CI": "true"}, Dir: workspaceDir, Timeout: e.cfg.CheckTimeout,
+	}, out.add)
+	if err != nil {
+		return 0, "", fmt.Errorf("run check %q: %w", cmd, scrub.err(err))
+	}
+
+	code, output := st.Code, joinParts(out.String(), st.StderrTail)
+	if st.TimedOut {
+		code, output = exitTimedOut, joinParts(output, fmt.Sprintf("timed out after %s", e.cfg.CheckTimeout))
+	}
+
+	e.log.InfoContext(ctx, "sandbox exec", slog.String("run", string(runID)), slog.String("step", "check"),
+		slog.Int("exit", code), slog.Float64("seconds", e.since(started)))
+
+	return code, scrub.string(cut(strings.TrimSpace(output), maxCheckOutput)), nil
 }
 
 // maxCheckOutput bounds the check output kept in an event and quoted to the agent.

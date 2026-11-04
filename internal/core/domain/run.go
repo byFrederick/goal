@@ -137,6 +137,17 @@ type RunResult struct {
 	// Diff is a try's change against the commit it started from, as engine.RunTask read it from
 	// the box once the agent ended; empty for every other run.
 	Diff string
+	// FailedCheck is the first of a try's checks (RunRequest.Checks) that failed in its box once
+	// its agent succeeded; nil when they all passed, and for every other run.
+	FailedCheck *FailedCheck
+}
+
+// FailedCheck is a command check that ran and exited non-zero: its command, its exit code (124
+// when it ran out of time) and the end of its output, scrubbed of the run's secrets.
+type FailedCheck struct {
+	Command  string
+	ExitCode int
+	Output   string
 }
 
 // RunRequest is one agent run for engine.RunTask: what it records, which sandbox it opens, what
@@ -203,6 +214,10 @@ type RunRequest struct {
 	// (the original run's branch head); both empty for every other kind.
 	TryOf  PastTryID
 	Commit string
+	// Checks are the station's command checks a try runs in its box, in order, once its agent
+	// succeeded (ADR 0039 decision 10); a line's run gets its station's checks from its claim, so
+	// only a try names them.
+	Checks []string
 }
 
 // ErrBadRunRequest refuses a RunRequest that Check does not accept.
@@ -227,8 +242,8 @@ func (r RunRequest) Check() error {
 		return r.checkJonah()
 	case r.Kind == RunKindTry:
 		return r.checkTry()
-	case r.TryOf != "" || r.Commit != "" || r.Bundle == TaskKindTry:
-		return fmt.Errorf("%w: only a try names a try and a commit", ErrBadRunRequest)
+	case r.TryOf != "" || r.Commit != "" || r.Bundle == TaskKindTry || len(r.Checks) > 0:
+		return fmt.Errorf("%w: only a try names a try, a commit and checks", ErrBadRunRequest)
 	case r.Kind != "" && r.Kind != RunKindStation:
 		return fmt.Errorf("%w: unknown run kind %q", ErrBadRunRequest, r.Kind)
 	case r.Item == "" || r.Station == "":

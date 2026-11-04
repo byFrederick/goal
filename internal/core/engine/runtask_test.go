@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
@@ -323,6 +324,81 @@ func TestRunTask_TryDiffFailureIsAnError(t *testing.T) {
 	res, err := h.e.RunTask(t.Context(), tryRequest())
 	if err == nil || res.RunID == "" {
 		t.Errorf("RunTask = %+v, %v; want an error naming the run", res, err)
+	}
+}
+
+// A try that succeeded runs its station's checks in its own box, in order, in the workspace, with
+// CI=true, no credential and the check timeout, after its diff was read; it stops at the first
+// that fails, which comes back on the result with its exit code and the end of its output. A try
+// whose agent failed runs none.
+func TestRunTask_TryRunsChecksInItsBox(t *testing.T) {
+	t.Parallel()
+
+	const lint, test, build = "make lint", "make test", "make build"
+
+	h := newHarness(t, connLine(), porttest.Succeed(`{}`))
+	h.store.AddFactory(testOrg, factoryID)
+	h.worker.Exit(test, 2)
+
+	req := tryRequest()
+	req.Checks = []string{lint, test, build}
+
+	res, err := h.e.RunTask(t.Context(), req)
+	if err != nil {
+		t.Fatalf("RunTask: %v", err)
+	}
+
+	want := domain.FailedCheck{Command: test, ExitCode: 2, Output: test + " exited 2"}
+	if res.Status != domain.RunSucceeded || res.FailedCheck == nil || *res.FailedCheck != want {
+		t.Errorf("RunTask = %+v with failed check %+v; want succeeded with %+v", res, res.FailedCheck, want)
+	}
+
+	checks := h.worker.Checks()
+	if len(checks) != 2 || checks[0].Argv[2] != lint || checks[1].Argv[2] != test {
+		t.Fatalf("checks = %+v; want %s then %s, and none after the failure", checks, lint, test)
+	}
+
+	runBox := h.worker.Runs()[0].Sandbox.RunID
+	for _, c := range checks {
+		if c.Dir != "/workspace" || c.Env["CI"] != "true" || c.Timeout <= 0 || c.Sandbox.RunID != runBox {
+			t.Errorf("check %q in %q with env %v and timeout %s; want the try's box's workspace, CI=true and a timeout",
+				c.Argv, c.Dir, keys(c.Env), c.Timeout)
+		}
+
+		for _, name := range []string{envModelKey, "GOAL_GATEWAY_TOKEN", envCodeToken} {
+			if _, ok := c.Env[name]; ok {
+				t.Errorf("check %q got %s", c.Argv, name)
+			}
+		}
+	}
+
+	if n := len(h.worker.Diffs()); n != 1 {
+		t.Errorf("%d diffs read; want one", n)
+	}
+
+	failed := newHarness(t, connLine(), porttest.Sequence(domain.RunResult{Status: domain.RunFailed, Error: "the agent gave up"}))
+	failed.store.AddFactory(testOrg, factoryID)
+
+	if res, err := failed.e.RunTask(t.Context(), req); err != nil || res.FailedCheck != nil || len(failed.worker.Checks()) != 0 {
+		t.Errorf("RunTask of a failed agent = %+v, %v with %d checks; want no check run", res, err, len(failed.worker.Checks()))
+	}
+}
+
+// A try whose check cannot be run failed on its infrastructure, not its check: RunTask returns an
+// error with the result, which names the run.
+func TestRunTask_TryCheckThatCannotRunIsAnError(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, connLine(), porttest.Succeed(`{}`))
+	h.store.AddFactory(testOrg, factoryID)
+	h.sandboxes.Lose("sh -c "+makeTest, 1, lostBox)
+
+	req := tryRequest()
+	req.Checks = []string{makeTest}
+
+	res, err := h.e.RunTask(t.Context(), req)
+	if err == nil || !errors.Is(err, ports.ErrSandboxLost) || res.RunID == "" || res.FailedCheck != nil {
+		t.Errorf("RunTask = %+v, %v; want an error wrapping ports.ErrSandboxLost naming the run, and no failed check", res, err)
 	}
 }
 
