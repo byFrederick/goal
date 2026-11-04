@@ -23,27 +23,9 @@ func (s *Store) RecordGraderCheck(ctx context.Context, n domain.NewGraderCheck) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	i := slices.IndexFunc(s.jonah.proposals, func(r jonahRow[domain.Proposal]) bool { return r.org == org && r.row.ID == n.ProposalID })
-	if i < 0 {
-		return domain.GraderCheck{}, fmt.Errorf("record grader check: proposal %s: %w", n.ProposalID, ports.ErrNotFound)
-	}
-
-	factory := s.jonah.proposals[i].row.FactoryID
-
-	if it, ok := s.visible(n.ItemID, org); !ok || it.FactoryID != factory {
-		return domain.GraderCheck{}, fmt.Errorf("record grader check: item %s: %w", n.ItemID, ports.ErrNotFound)
-	}
-
-	if n.RunID != "" {
-		if run, ok := s.runs[n.RunID]; !ok || !s.runVisible(run, org) {
-			return domain.GraderCheck{}, fmt.Errorf("record grader check: run %s: %w", n.RunID, ports.ErrNotFound)
-		}
-	}
-
-	if slices.ContainsFunc(s.jonah.graderChecks, func(r jonahRow[domain.GraderCheck]) bool {
-		return r.org == org && r.row.ProposalID == n.ProposalID && r.row.ItemID == n.ItemID && r.row.Result == n.Result
-	}) {
-		return domain.GraderCheck{}, fmt.Errorf("record grader check: item %s %s result: %w", n.ItemID, n.Result, ports.ErrConflict)
+	factory, err := s.graderCheckFactory(org, n)
+	if err != nil {
+		return domain.GraderCheck{}, fmt.Errorf("record grader check: %w", err)
 	}
 
 	c := domain.GraderCheck{
@@ -53,6 +35,36 @@ func (s *Store) RecordGraderCheck(ctx context.Context, n domain.NewGraderCheck) 
 	s.jonah.graderChecks = append(s.jonah.graderChecks, jonahRow[domain.GraderCheck]{org: org, row: c})
 
 	return c, nil
+}
+
+// graderCheckFactory is the factory of n's proposal: ErrNotFound when the proposal, item or run is
+// not org's or the item not the proposal's factory's, ErrConflict when n's item and result has a
+// check of the proposal. Callers hold s.mu.
+func (s *Store) graderCheckFactory(org domain.OrgID, n domain.NewGraderCheck) (domain.FactoryID, error) {
+	i := slices.IndexFunc(s.jonah.proposals, func(r jonahRow[domain.Proposal]) bool { return r.org == org && r.row.ID == n.ProposalID })
+	if i < 0 {
+		return "", fmt.Errorf("proposal %s: %w", n.ProposalID, ports.ErrNotFound)
+	}
+
+	factory := s.jonah.proposals[i].row.FactoryID
+
+	if it, ok := s.visible(n.ItemID, org); !ok || it.FactoryID != factory {
+		return "", fmt.Errorf("item %s: %w", n.ItemID, ports.ErrNotFound)
+	}
+
+	if n.RunID != "" {
+		if run, ok := s.runs[n.RunID]; !ok || !s.runVisible(run, org) {
+			return "", fmt.Errorf("run %s: %w", n.RunID, ports.ErrNotFound)
+		}
+	}
+
+	if slices.ContainsFunc(s.jonah.graderChecks, func(r jonahRow[domain.GraderCheck]) bool {
+		return r.org == org && r.row.ProposalID == n.ProposalID && r.row.ItemID == n.ItemID && r.row.Result == n.Result
+	}) {
+		return "", fmt.Errorf("item %s %s result: %w", n.ItemID, n.Result, ports.ErrConflict)
+	}
+
+	return factory, nil
 }
 
 // ProposalGraderChecks implements ports.PastTries.

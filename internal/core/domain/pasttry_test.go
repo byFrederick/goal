@@ -118,7 +118,7 @@ func TestNewGraderCheck_Check(t *testing.T) {
 		{name: "a blank reason", change: func(n *NewGraderCheck) { n.Reason = " \n" }},
 		{name: "a reason past its bound", change: func(n *NewGraderCheck) { n.Reason = strings.Repeat("é", MaxGraderCheckReason+1) }},
 		{name: "a negative cost", change: func(n *NewGraderCheck) { n.CostUSD = -0.01 }},
-		{name: "no time", change: func(n *NewGraderCheck) { n.CheckedAt = time.Time{} }},
+		{name: "no check time", change: func(n *NewGraderCheck) { n.CheckedAt = time.Time{} }},
 	}
 
 	for _, tt := range tests {

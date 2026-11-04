@@ -55,9 +55,13 @@ func testGraderChecksOnce(f *fixture) {
 	n.RunID = run
 
 	c := f.check(t, n)
-	if c.ID == "" || c.FactoryID != f.factory || c.ProposalID != p.ID || c.ItemID != it.ID || c.Result != domain.GraderCheckOriginal ||
-		c.Answer != domain.PastTryNotFixed || c.Reason != n.Reason || c.RunID != run || c.CostUSD != 0.25 || !c.CheckedAt.Equal(n.CheckedAt) {
-		t.Errorf("RecordGraderCheck = %+v; want the check of %+v in factory %s", c, n, f.factory)
+	want := domain.GraderCheck{
+		ID: c.ID, FactoryID: f.factory, ProposalID: p.ID, ItemID: it.ID, Result: n.Result, Answer: n.Answer, Reason: n.Reason, RunID: run,
+		CostUSD: n.CostUSD, CheckedAt: n.CheckedAt,
+	}
+
+	if c.ID == "" || c != want {
+		t.Errorf("RecordGraderCheck = %+v; want %+v with an id", c, want)
 	}
 
 	again := graderCheck(p, it, domain.GraderCheckOriginal, domain.PastTryFixed, 2)
@@ -66,8 +70,20 @@ func testGraderChecksOnce(f *fixture) {
 
 	f.check(t, graderCheck(p, it, domain.GraderCheckFinal, domain.PastTryFixed, 2))
 
-	bad := graderCheck(p, it, "latest", domain.PastTryFixed, 3)
-	_, err = f.Tries.RecordGraderCheck(f.ctx(t), bad)
+	f.expectGraderCheckRefused(t, p, it)
+
+	got, err := f.Tries.ProposalGraderChecks(f.ctx(t), p.ID)
+	if err != nil || len(got) != 2 || got[0].ID != c.ID || got[0].RunID != run {
+		t.Errorf("ProposalGraderChecks = %+v, %v; want the original then the final check", got, err)
+	}
+}
+
+// expectGraderCheckRefused checks that a check on p of an invalid result, an unknown item, another
+// factory's item or an unknown proposal records nothing.
+func (f *fixture) expectGraderCheckRefused(t *testing.T, p domain.Proposal, it domain.Item) {
+	t.Helper()
+
+	_, err := f.Tries.RecordGraderCheck(f.ctx(t), graderCheck(p, it, "latest", domain.PastTryFixed, 3))
 	expect(t, "RecordGraderCheck of an invalid result", err, domain.ErrInvalid)
 
 	missing := graderCheck(p, domain.Item{ID: missingItem}, domain.GraderCheckOriginal, domain.PastTryNotFixed, 3)
@@ -81,11 +97,6 @@ func testGraderChecksOnce(f *fixture) {
 	noProposal := graderCheck(domain.Proposal{ID: domain.ProposalID(missingItem)}, it, domain.GraderCheckOriginal, domain.PastTryNotFixed, 3)
 	_, err = f.Tries.RecordGraderCheck(f.ctx(t), noProposal)
 	expect(t, "RecordGraderCheck of an unknown proposal", err, ports.ErrNotFound)
-
-	got, err := f.Tries.ProposalGraderChecks(f.ctx(t), p.ID)
-	if err != nil || len(got) != 2 || got[0].ID != c.ID || got[0].RunID != run {
-		t.Errorf("ProposalGraderChecks = %+v, %v; want the original then the final check", got, err)
-	}
 }
 
 // A proposal's checks come oldest first, whatever order their items and results were recorded in,

@@ -165,9 +165,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"OpenToolApprovals_ByConnection", testOpenToolApprovals},
 	}
 	tests = append(tests, jonahTests...)
-	tests = append(tests, triesTests...)
-	tests = append(tests, keptTestsTests...)
-	tests = append(tests, graderChecksTests...)
+	tests = append(append(append(tests, triesTests...), keptTestsTests...), graderChecksTests...)
 
 	for _, tc := range tests {
 		runCase(t, newHarness, tc.name, tc.test)
