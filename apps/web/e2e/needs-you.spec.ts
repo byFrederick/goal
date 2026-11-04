@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll, orgNav } from './support';
+import { expectNoClippedElements, expectNoHorizontalScroll, orgNav } from './support';
 
 // Needs you (/o/acme/needs-you): the list, the split detail and the phone's approve view, against the
 // mock API. The mock seeds decisions and alerts in the software, sre and support factories.
@@ -153,3 +153,35 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 }
+
+// Below 1024 px the page shows the list, then the entry, so the detail always has a full column.
+test('at 768 px the filter row and the opened entry stay inside the screen', async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto('/o/acme/needs-you');
+  const list = page.getByRole('list', { name: /Waiting on you/ });
+  await expect(list).toBeVisible();
+  await expect(page.getByRole('button', { name: /All factories/ })).toBeVisible();
+  await expectNoClippedElements(page);
+  await expectNoHorizontalScroll(page);
+
+  await list.getByRole('link').first().click();
+  await expect(page.getByRole('link', { name: 'Back to Needs you' })).toBeVisible();
+  await expectNoClippedElements(page);
+  await expectNoHorizontalScroll(page);
+});
+
+test('at 390 px the tabs scroll sideways and Alerts can be selected', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/needs-you');
+  const alerts = page.getByRole('radio', { name: /Alerts/ });
+  await alerts.evaluate((el) => el.parentElement?.scrollIntoView({ inline: 'center', block: 'nearest' }));
+  await alerts.check({ force: true });
+  await expect(page).toHaveURL(/type=alert/);
+  const inView = await alerts.evaluate((el) => {
+    const box = (el.parentElement as HTMLElement).getBoundingClientRect();
+    return box.left >= 0 && box.right <= document.documentElement.clientWidth;
+  });
+  expect(inView).toBe(true);
+  await expectNoHorizontalScroll(page);
+  await expectNoClippedElements(page);
+});

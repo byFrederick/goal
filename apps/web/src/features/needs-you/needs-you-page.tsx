@@ -7,10 +7,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronDown, Inbox } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { factoriesQuery, inboxQuery } from '../../api/queries';
 import type { InboxEntry } from '../../api/types';
-import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
@@ -37,11 +36,28 @@ function decidable(entry: InboxEntry | undefined): DecidedEntry['entry'] | undef
     : undefined;
 }
 
+// The two panes need about 1024 px: the 288 px list leaves the detail under 320 px beside the rail
+// below that. Narrower screens, tablets included, show the list, then the entry, as a phone does.
+const narrowQuery = '(max-width: 1023px)';
+
+function useNarrow(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      if (typeof window.matchMedia !== 'function') return () => {};
+      const query = window.matchMedia(narrowQuery);
+      query.addEventListener('change', onChange);
+      return () => query.removeEventListener('change', onChange);
+    },
+    () => typeof window.matchMedia === 'function' && window.matchMedia(narrowQuery).matches,
+    () => false,
+  );
+}
+
 export function NeedsYouPage() {
   const org = useOrg();
   const navigate = useNavigate({ from: '/o/$org/needs-you' });
   const search = needsSearch(useSearch({ strict: false }) as Record<string, unknown>);
-  const phone = usePhone();
+  const phone = useNarrow();
   const inbox = useQuery(inboxQuery(org.id));
   // The factories carry each one's grants (`can`); an entry's own factory does not, so the question's answers read them here.
   const factories = useQuery(factoriesQuery(org.id));
@@ -148,8 +164,8 @@ export function NeedsYouPage() {
     // The handler reads the visible list and the selection; both change with the URL and the data.
   });
 
-  // From 768 px the count and the filters are the top bar's actions; a phone's bar is too narrow for
-  // five segments, so they sit in a row under it. One element keeps the bar from re-setting each render.
+  // From 1024 px the count and the filters are the top bar's actions; a narrower bar cannot hold
+  // five segments and the factory menu, so they sit in a row under it. One element keeps the bar from re-setting each render.
   const bar = useMemo(() => <BarActions />, []);
   const topBar = <TopBarSlot actions={phone ? undefined : bar} />;
 
@@ -240,10 +256,10 @@ export function NeedsYouPage() {
     <div className={cn('flex min-h-0 flex-1 flex-col', cameBack && 'animate-pane-back')}>
       {header}
       <Skeleton ready={!inbox.isPending} placeholder={placeholder} className="min-h-0 flex-1">
-        <div className="flex h-full min-h-0 flex-col md:flex-row">
+        <div className="flex h-full min-h-0 flex-col lg:flex-row">
           <section
             aria-label="Waiting on you"
-            className="flex min-h-0 flex-col min-w-0 md:w-72 md:flex-none md:border-r lg:w-90 md:border-line"
+            className="flex min-h-0 flex-col min-w-0 lg:w-90 lg:flex-none lg:border-r lg:border-line"
           >
             {visible.length === 0 ? (
               <p className="m-0 px-4 py-5 text-secondary text-muted">Nothing of this type waits on you.</p>
@@ -256,7 +272,7 @@ export function NeedsYouPage() {
                 siblings={factoriesOf(entries)}
               />
             )}
-            <p className="m-0 hidden flex-wrap items-center gap-1 px-4 py-3 text-meta text-muted md:flex">
+            <p className="m-0 hidden flex-wrap items-center gap-1 px-4 py-3 text-meta text-muted lg:flex">
               <Kbd>J</Kbd> <Kbd>K</Kbd> to move, <Kbd>A</Kbd> approve, <Kbd>D</Kbd> deny
             </p>
           </section>
@@ -288,13 +304,13 @@ function clean(next: NeedsSearch) {
 }
 
 const placeholder = (
-  <div className="flex h-full min-h-0 flex-col md:flex-row">
-    <div className="flex min-w-0 flex-col gap-2 p-4 md:w-72 md:flex-none md:border-r md:border-line lg:w-90">
+  <div className="flex h-full min-h-0 flex-col lg:flex-row">
+    <div className="flex min-w-0 flex-col gap-2 p-4 lg:w-90 lg:flex-none lg:border-r lg:border-line">
       {['a', 'b', 'c', 'd', 'e'].map((row) => (
         <div key={row} className="h-14 rounded-control bg-hover" />
       ))}
     </div>
-    <div className="hidden min-w-0 flex-1 flex-col gap-4 p-7 md:flex">
+    <div className="hidden min-w-0 flex-1 flex-col gap-4 p-7 lg:flex">
       <div className="h-6 w-24 rounded-chip bg-hover" />
       <div className="h-8 w-2/3 rounded-control bg-hover" />
       <div className="h-32 rounded-card bg-hover" />
@@ -342,15 +358,21 @@ function TabGroup({
     () => tabs.map((t) => ({ value: t.value, label: t.label, count: counts[t.value] })),
     [counts],
   );
+  // The control keeps its width; this box scrolls sideways when the screen is narrower, and the
+  // chosen tab is brought into view without an animated scroll.
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = box.current;
+    const chosen = el?.querySelector('input:checked')?.parentElement;
+    if (!el || !chosen) return;
+    const over = chosen.offsetLeft + chosen.offsetWidth - (el.scrollLeft + el.clientWidth);
+    if (over > 0) el.scrollLeft += over;
+    else if (chosen.offsetLeft < el.scrollLeft) el.scrollLeft = chosen.offsetLeft;
+  });
   return (
-    <SegmentedControl
-      label="Show"
-      size="compact"
-      options={options}
-      value={value}
-      onChange={onChange}
-      className="max-w-full"
-    />
+    <div ref={box} className="min-w-0 max-w-full overflow-x-auto">
+      <SegmentedControl label="Show" size="compact" options={options} value={value} onChange={onChange} />
+    </div>
   );
 }
 
