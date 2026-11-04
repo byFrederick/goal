@@ -1,6 +1,6 @@
 ## When you change
 
-A definition schema in `contracts/definitions/` (factory, evals, connection kind)
+A definition schema in `contracts/definitions/` (factory, environment, memory, connection kind)
 
 ## Also change
 

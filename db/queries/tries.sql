@@ -80,6 +80,13 @@ SET state = 'done', verdict = sqlc.narg(verdict), error = sqlc.arg(error), reaso
 WHERE id = sqlc.arg(id) AND state = 'running' AND lease_until = sqlc.arg(lease_until)::timestamptz
 RETURNING id;
 
+-- name: RecordTryRun :one
+-- Stores a running try's run, diff and cost under the lease its claim returned, before it is
+-- graded. No row when the lease is lost.
+UPDATE tries SET try_run_id = sqlc.arg(try_run_id), diff = sqlc.arg(diff), cost_usd = sqlc.arg(cost_usd)
+WHERE id = sqlc.arg(id) AND state = 'running' AND lease_until = sqlc.arg(lease_until)::timestamptz
+RETURNING id;
+
 -- name: TryTarget :one
 -- The item's newest finished station run at station that was a claim's first run: its branch
 -- head is recorded (agent_runs_try_target_idx).

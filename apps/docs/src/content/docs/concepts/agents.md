@@ -48,6 +48,6 @@ The worker source is in `apps/worker/src`. `agent.ts` builds the agent's options
 
 - The factory builder edits the `agents` list. Its draft is published as a new version.
 - `goal runs` lists the organization's agent runs, with the factory, item, station, agent, model and cost of each. The [CLI reference](../../reference/) lists its flags.
-- `goal spend` reads what the agent runs cost. [Jonah](../jonah/) can compare an agent's models in a bake-off.
+- `goal spend` reads what the agent runs cost. Try another model, on the agent's page or with `goal agent try-model`, has [Jonah](../jonah/#try-another-model) try a different model on the agent's past items as a proposal.
 
 For the words used here, see the [glossary](../../reference/).

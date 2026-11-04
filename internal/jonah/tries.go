@@ -57,6 +57,8 @@ type TryDeps struct {
 	Waiting     WaitingItems
 	// Events reads the items' events a try at a gate station is graded by.
 	Events ItemEvents
+	// Runs reads the item's runs the grader is checked on.
+	Runs   ItemRuns
 	Runner TaskRunner
 	Clock  ports.Clock
 	Log    *slog.Logger
@@ -387,7 +389,7 @@ func (s *Tries) workOne(ctx context.Context) (claimed, finished bool, err error)
 			return false, false, fmt.Errorf("claim a try of factory %s: %w", l.FactoryID, err)
 		}
 
-		finished, err := s.finish(ctx, try)
+		finished, err := s.finish(ctx, l, try)
 
 		return true, finished, err
 	}
@@ -402,13 +404,8 @@ func (s *Tries) mayTry(ctx context.Context, l domain.Line) (bool, error) {
 		return false, nil
 	}
 
-	spend, err := s.d.Jonah.JonahSpendSince(ctx, l.FactoryID, s.d.Clock.Now().UTC().Add(-BudgetWindow))
-	if err != nil {
-		return false, fmt.Errorf("read spend: %w", err)
-	}
-
-	if l.Jonah.Budget(spend).Exhausted() {
-		return false, nil
+	if used, err := s.budgetUsed(ctx, l); err != nil || used {
+		return false, err
 	}
 
 	for _, st := range l.Stations {
@@ -429,12 +426,34 @@ func (s *Tries) mayTry(ctx context.Context, l domain.Line) (bool, error) {
 	return true, nil
 }
 
-// finish runs the claimed try and records how it ended: whether it finished it. A try that
-// could not run is done with verdict error; a read that failed or a cancelled ctx leaves it to its
-// lease.
-func (s *Tries) finish(ctx context.Context, try domain.PastTry) (bool, error) {
-	res, err := s.run(ctx, try)
+// budgetUsed reports whether Jonah's share of l's spend over BudgetWindow is used up.
+func (s *Tries) budgetUsed(ctx context.Context, l domain.Line) (bool, error) {
+	spend, err := s.d.Jonah.JonahSpendSince(ctx, l.FactoryID, s.d.Clock.Now().UTC().Add(-BudgetWindow))
 	if err != nil {
+		return false, fmt.Errorf("read spend: %w", err)
+	}
+
+	return l.Jonah.Budget(spend).Exhausted(), nil
+}
+
+// finish runs the claimed try of current, the factory's current line, and records how it ended:
+// whether it finished it. A try that could not run is done with verdict error; a read that failed
+// or a cancelled ctx leaves it to its lease, as does a grade that waits for Jonah's budget or for a
+// lease with the time to run it.
+func (s *Tries) finish(ctx context.Context, current domain.Line, try domain.PastTry) (bool, error) {
+	res, err := s.run(ctx, current, try)
+
+	switch {
+	case errors.Is(err, errGradeWait) || errors.Is(err, errLeaseShort):
+		s.log.InfoContext(ctx, "jonah try waits to be graded", slog.String("try_id", string(try.ID)), slog.String("factory", string(try.FactoryID)),
+			slog.String("why", err.Error()))
+
+		return false, nil
+	case errors.Is(err, ports.ErrLeaseLost):
+		s.log.WarnContext(ctx, "jonah try lease lost", slog.String("try_id", string(try.ID)), slog.String("factory", string(try.FactoryID)))
+
+		return false, nil
+	case err != nil:
 		return false, fmt.Errorf("try %s: %w", try.ID, err)
 	}
 
@@ -468,8 +487,10 @@ func tryError(format string, a ...any) domain.PastTryResult {
 // being carried out is verdict error: a proposal, version or original run that is gone, a run
 // with no recorded commit, an agent that can no longer be tried, or a RunTask error (a commit
 // that is gone, a lost box, a prepare or setup that failed). A run that ended is done with its
-// diff, its cost and its run, graded as grade says. Only a failed read or a cancelled ctx is an error.
-func (s *Tries) run(ctx context.Context, try domain.PastTry) (domain.PastTryResult, error) {
+// diff, its cost and its run, graded as grade says. A try whose run an earlier claim recorded
+// (RecordPastTryRun) is not run again: the grader grades it (gradeByModel). Only a failed read, a
+// cancelled ctx, a lost lease or a grade that waits is an error.
+func (s *Tries) run(ctx context.Context, current domain.Line, try domain.PastTry) (domain.PastTryResult, error) {
 	if try.Attempts > MaxTryAttempts {
 		return tryError("the try did not finish in %d attempts", MaxTryAttempts), nil
 	}
@@ -501,6 +522,10 @@ func (s *Tries) run(ctx context.Context, try domain.PastTry) (domain.PastTryResu
 		return domain.PastTryResult{}, fmt.Errorf("read run %s: %w", try.OriginalRunID, err)
 	}
 
+	if try.TryRunID != "" {
+		return s.gradeByModel(ctx, current, try, in.Run, domain.PastTryResult{Diff: try.Diff, CostUSD: try.CostUSD, TryRunID: try.TryRunID})
+	}
+
 	req, why := tryRequest(line, try, in.Run)
 	if why != "" {
 		return tryError("%s", why), nil
@@ -510,23 +535,33 @@ func (s *Tries) run(ctx context.Context, try domain.PastTry) (domain.PastTryResu
 	req.Timeout = s.c.Timeout
 
 	run, err := s.d.Runner.RunTask(ctx, req)
+	if res, ended, err := notCarriedOut(ctx, run, err); ended {
+		return res, err
+	}
+
+	return s.grade(ctx, current, sub, line, try, in.Run, run)
+}
+
+// notCarriedOut is the result of a try's run that RunTask could not carry out or that was
+// cancelled, verdict error with its cost and run, and whether it was one; a cancelled ctx is an
+// error.
+func notCarriedOut(ctx context.Context, run domain.RunResult, err error) (domain.PastTryResult, bool, error) {
+	var res domain.PastTryResult
 
 	switch {
 	case err != nil && ctx.Err() != nil:
-		return domain.PastTryResult{}, fmt.Errorf("run: %w", err)
+		return domain.PastTryResult{}, true, fmt.Errorf("run: %w", err)
 	case err != nil:
-		res := tryError("the try could not run: %v", err)
-		res.CostUSD, res.TryRunID = run.CostUSD, run.RunID
-
-		return res, nil
+		res = tryError("the try could not run: %v", err)
 	case run.Status == domain.RunCancelled:
-		res := tryError("the try's run was cancelled: %s", run.Error)
-		res.CostUSD, res.TryRunID = run.CostUSD, run.RunID
-
-		return res, nil
+		res = tryError("the try's run was cancelled: %s", run.Error)
+	default:
+		return domain.PastTryResult{}, false, nil
 	}
 
-	return s.grade(ctx, sub, line, try, in.Run, run)
+	res.CostUSD, res.TryRunID = run.CostUSD, run.RunID
+
+	return res, true, nil
 }
 
 // tried is what a try runs on: a proposal's version and edits, or a publish's own (ADR 0039
@@ -561,9 +596,9 @@ func (s *Tries) subject(ctx context.Context, try domain.PastTry) (tried, string,
 // the try's box. The first that fails makes it not fixed with what failed as its reason. A contract
 // that cannot be checked makes it an error, and a cancelled ctx an error. A kept test's try is then
 // graded to the end here (gradeKept). Any other try at a gate station is graded by people
-// (gradeByPeople); any other try that passes both, or whose run failed, stays without a verdict,
-// for the grader.
-func (s *Tries) grade(ctx context.Context, sub tried, line domain.Line, try domain.PastTry, orig domain.Run,
+// (gradeByPeople). Any other try whose run failed passes no code grading, so it is not fixed; one
+// that passes both has its run recorded (RecordPastTryRun) and goes to the grader (gradeByModel).
+func (s *Tries) grade(ctx context.Context, current domain.Line, sub tried, line domain.Line, try domain.PastTry, orig domain.Run,
 	run domain.RunResult,
 ) (domain.PastTryResult, error) {
 	res := domain.PastTryResult{Diff: run.Diff, CostUSD: run.CostUSD, TryRunID: run.RunID}
@@ -580,12 +615,28 @@ func (s *Tries) grade(ctx context.Context, sub tried, line domain.Line, try doma
 		return gradeKept(res, st, run), nil
 	}
 
-	if st.Gate == nil {
-		// The model grader grades the try here (software#620); until then it waits without a verdict.
+	if st.Gate != nil {
+		return s.gradeByPeople(ctx, line, try, orig, run, res)
+	}
+
+	switch {
+	case run.Status != domain.RunSucceeded:
+		res.Verdict, res.Reason = domain.PastTryNotFixed, truncate(fmt.Sprintf("the try's run %s: %s", run.Status, cmp.Or(run.Error, "no error given")),
+			domain.MaxPastTryReason)
+
+		return res, nil
+	case res.TryRunID == "":
+		res.Verdict, res.Error = domain.PastTryError, "the try's run was not recorded, so it cannot be graded"
+
 		return res, nil
 	}
 
-	return s.gradeByPeople(ctx, line, try, orig, run, res)
+	recorded, err := s.d.Tries.RecordPastTryRun(ctx, try, res.TryRunID, res.Diff, res.CostUSD)
+	if err != nil {
+		return domain.PastTryResult{}, fmt.Errorf("record the try's run: %w", err)
+	}
+
+	return s.gradeByModel(ctx, current, recorded, orig, res)
 }
 
 // gradeByCode is res graded by st's contract as sub changes it, then by st's checks: not fixed

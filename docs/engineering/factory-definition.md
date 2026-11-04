@@ -1,6 +1,6 @@
 # Factory definition reference
 
-A factory definition is a file tree with `factory.yaml` at its root ([ADR 0005](../adr/0005-factory-definitions-in-object-storage.md)): `agents/` (prompts), `skills/`, `rules/`, `contracts/`, `environments/`, `evals/` and, optionally, `memory.yaml`. `contracts/definitions/factory.schema.json` is the reference for every key of `factory.yaml`, `contracts/definitions/environment.schema.json` for environment files ([below](#environment-files)), `contracts/definitions/evals.schema.json` for judges and eval cases ([below](#judges-and-eval-cases)) and `contracts/definitions/memory.schema.json` for the factory memory ([below](#factory-memory-memoryyaml)). `internal/config` loads a tree and validates it (`config.Check`): every file parses, `factory.yaml` satisfies the schema, and every name and path it uses points at something that exists. `goal factory validate` (and `goal validate`, its offline form), the builder and publish all run the same checks. This page covers what the schema alone cannot explain.
+A factory definition is a file tree with `factory.yaml` at its root ([ADR 0005](../adr/0005-factory-definitions-in-object-storage.md)): `agents/` (prompts), `skills/`, `rules/`, `contracts/`, `environments/` and, optionally, `memory.yaml`. `contracts/definitions/factory.schema.json` is the reference for every key of `factory.yaml`, `contracts/definitions/environment.schema.json` for environment files ([below](#environment-files)) and `contracts/definitions/memory.schema.json` for the factory memory ([below](#factory-memory-memoryyaml)). `internal/config` loads a tree and validates it (`config.Check`): every file parses, `factory.yaml` satisfies the schema, and every name and path it uses points at something that exists. `goal factory validate` (and `goal validate`, its offline form), the builder and publish all run the same checks. This page covers what the schema alone cannot explain.
 
 ## Rules
 
@@ -151,7 +151,7 @@ Nothing reads the settings yet: the store, the engine and the worker follow in t
 
 ## Environment files
 
-An environment file, `environments/<name>.yaml`, says what an agent's box installs and what it can reach ([ADR 0037](../adr/0037-secrets-and-environment-files.md), decisions 5 to 8). Every factory has `environments/default.yaml`. An agent names its file with `environment: <name>`, and an agent without one gets `default`; a judge's front matter and an eval case's `spec` take `environment` the same way. `config.Check` loads and checks the files (`internal/config/environment.go`), and the published version keeps every key on `domain.Environment`.
+An environment file, `environments/<name>.yaml`, says what an agent's box installs and what it can reach ([ADR 0037](../adr/0037-secrets-and-environment-files.md), decisions 5 to 8). Every factory has `environments/default.yaml`. An agent names its file with `environment: <name>`, and an agent without one gets `default`. `config.Check` loads and checks the files (`internal/config/environment.go`), and the published version keeps every key on `domain.Environment`.
 
 **At run start** the engine resolves the agent's file from the pinned version (`internal/core/engine/environment.go`, decision 10):
 
@@ -213,7 +213,7 @@ spec:
 | Code | Check | When |
 | --- | --- | --- |
 | `environment-default-missing` | environments | `environments/default.yaml` does not exist |
-| `environment-unknown` | environments | an agent, judge or eval case names an environment that has no file |
+| `environment-unknown` | environments | an agent names an environment that has no file |
 | `environment-name-invalid` | environments | a file name is not a slug |
 | `environment-name-mismatch` | environments | `metadata.name` is not the file name |
 | `tool-spec-invalid` | environments | a `tools` entry is not a mise tool spec; the fix removes it |
@@ -310,89 +310,6 @@ For example, a factory whose `runtime.repository.url` is `https://github.com/acm
 | `memory-too-big` | the file is over 8 KB (8,192 bytes) or holds over 50 entries |
 
 The limits are `domain.MaxMemoryText`, `domain.MaxMemoryBytes` and `domain.MaxMemoryEntries`. Runs do not receive the factory memory yet.
-
-## Judges and eval cases
-
-Jonah's two file kinds live under `evals/` ([ADR 0025](../adr/0025-judges-and-evals-as-the-screens-show-them.md)). `contracts/definitions/evals.schema.json` defines both, and `config.Check` validates them with the factory (`internal/config/evals.go`). Judge runs and eval runs are built in `internal/jonah` but goald does not run them yet; the publish eval gate is described under [Publishing with eval cases](#publishing-with-eval-cases).
-
-### Judges: `evals/judges/<slug>.md`
-
-A judge scores a sample of the finished production runs of the agents it names. Its file name is its slug, and cases refer to it by that slug. The YAML front matter holds its settings, and the Markdown body is the rubric the judge run reads.
-
-```markdown
----
-title: Review reason actionable
-criterion: A sent-back reason says what to change and how to prove it
-agents: [reviewer]          # spec.agents names; empty or omitted: every agent
-outcomes:
-  - score: 1
-    label: Actionable
-    meaning: Names what failed, what to change and the proof
-  - score: 0.5
-    label: Vague
-    meaning: Says something is wrong but not what would fix it
-  - score: 0
-    label: Missing
-    meaning: No reason, or only "looks wrong"
-passMark: 0.7               # a score below it fails and goes to Jonah
-sample: 0.25                # share of the agents' finished runs it scores; 0 pauses it
-model: claude-sonnet-5-5    # omitted: runtime.model
-enabled: true               # default true
----
-Only score runs where the reviewer sent the change back. …
-```
-
-### Eval cases: `evals/cases/<name>.yaml`
-
-A case is one task an agent must get right. Its file name is its name. `tries` says how often it runs, and it passes when every try passes. `check` names exactly one way to decide a try: `contract: true` (the output satisfies the agent's station contract), `judge: <slug>` (the judge's score reaches its pass mark) or `referencePatch: ./path` (a known-good patch, relative to the root of the definition, such as `./evals/fixtures/…`).
-
-```yaml
-apiVersion: goal/v1
-kind: EvalCase
-metadata:
-  description: A criterion without evidence is sent back with a clear reason
-spec:
-  agent: reviewer
-  input:
-    title: Retry policy for lost leases
-    body: "…"
-    type: feature           # optional: work type, lane, earlier stations' outputs, starting commit (ref)
-    outputs: {spec: {}}
-  tries: 3
-  check:
-    judge: review-reason-actionable
-```
-
-### Checks
-
-Each problem is a `DefinitionProblem` in section `files`. Its `File` is the judge's or case's path, and its line is in that file.
-
-| Problem | Code |
-| --- | --- |
-| A case or a judge's front matter fails the schema: a missing or unknown key, `passMark`, `sample` or an outcome's `score` outside 0 to 1, empty `outcomes`, `tries` outside 1 to 10, no `check` or more than one, a `kind` other than `EvalCase` | `schema-required`, `schema-unknown-key`, `schema-enum`, `schema-invalid` |
-| A judge file has no front matter, or an empty one | `judge-front-matter-missing` |
-| A judge's front matter or a case does not parse | `yaml-invalid` |
-| Two outcomes of a judge share a score, or a label (case-insensitive) | `judge-outcome-duplicate` |
-| A judge's `agents` or a case's `agent` is not in `spec.agents` | `unknown-agent` |
-| A case's `check.judge` is not a file in `evals/judges/` | `unknown-judge` |
-| A case's `check.referencePatch` is not a file in the definition; a path that leaves the tree never matches | `patch-not-found` |
-| A judge's or case's file name is not a slug (3 to 40 lowercase letters, digits and hyphens) | `eval-name-invalid` |
-
-Only files directly in `evals/judges/` (`.md`) and `evals/cases/` (`.yaml`, `.yml`) are judges and cases. Fixtures such as reference patches go elsewhere, for example `evals/fixtures/`.
-
-### Publishing with eval cases
-
-Every publish of a draft that has eval cases runs them on the draft first ([ADR 0025](../adr/0025-judges-and-evals-as-the-screens-show-them.md), decision 4). The gate is in `authoring.Service.Publish` (`internal/authoring/evalgate.go`), after the checks pass, so every way to publish goes through it: `POST …/draft/publish`, `goal factory publish` and push, and adding a case or a judge from the UI. It compares runs by the draft's exact content, `domain.ManifestSHA256` of its files, so any change to any file needs a new run:
-
-- **No cases.** A draft without files in `evals/cases/` publishes as before.
-- **No run yet.** When no run of the content exists, or its newest run ran one case only (`goal eval run --case`), the publish starts a run of every case (trigger `publish`) and refuses with 409 `evals-pending`, naming the run in `eval_run_id`. The draft stays open.
-- **Pending.** While that run is queued or running, the publish refuses with 409 `evals-pending` and starts no other run.
-- **Failing.** When the run finished with a case that has any try that is not `pass` (a `fail`, an `error`, or a try a cancelled run never ran), the publish refuses with 409 `evals-failing`, with `eval_run_id` and `failing_cases`. Fix the case or the definition, which changes the content, and publish again.
-- **Passing.** When every try of every case passed, the draft publishes.
-
-The gate is off while goald does not wire it (`authoring.Deps.EvalGate` is nil): goald has no `EvalSuites` or `EvalRunner` adapter yet, so today a factory with cases publishes without running them, unlike ADR 0025 decision 4. The evals routes answer 503 `evals-unavailable` for the same reason.
-
-`POST …/evals/cases` (and the evals screen's "Add a case from a past run") writes `evals/cases/<name>.yaml` from a past run's agent and item, with `check: {contract: true}` or `{judge: <slug>}` and the requested tries, into a new draft, and publishes it through the same gate.
 
 ## Triggers: `board.triggers`
 
@@ -494,15 +411,19 @@ spec:
 - `enabled` (boolean, default `true`): whether Jonah reviews the factory at all.
 - `model` (a `claude-` model id, optional): the review run's model. When absent, it is `runtime.model`; when both are absent, the run takes the organization's default model, as an agent without a model does. The organization policy still checks the model when the run starts.
 - `share` (a percent string from `0%` to `100%`, such as `5%` or `2.5%`, default `5%`): Jonah's budget, as a share of what the line's runs other than Jonah's cost over the last 7 days. Each review may spend at most a fifth of the budget, and its run's cost cap is what the budget has left, under that fifth. While Jonah's runs of the last 7 days cost the budget or more, no review is queued, a manual one is refused with `learning-budget-exhausted`, and publishes go on. A line that spent nothing in the last 7 days gives Jonah no budget, and `0%` turns its spend off.
-- `proposeAfter` (integer, 1 to 50, default `3`): the number of new sent-back touches that queue a threshold review, and the number of items with the same cause an observation needs before it becomes a proposal.
+- `proposeAfter` (integer, 1 to 50, default `3`): how many items with the same cause an observation needs, counted across reviews, before a daily review turns it into a proposal. A review a person asked for may propose below it. The daily review itself is queued once a day for a factory with new evidence, whatever this number.
 
 Jonah's runs show in the factory's spend, but they never count toward `runtime.budget.weeklyUsd`, so they never trigger its `onExhausted`.
 
-`config.Factory.Line()` carries the keys, with the defaults applied, as `domain.Line.Jonah`, a `domain.JonahPolicy`, with `share` as a fraction (`0.05`); `domain.DefaultJonahPolicy()` holds the defaults, and `JonahPolicy.Budget` computes the budget and the per-review cap. Like the rest of `learning`, the section is not part of the Visual editor: YAML mode edits it. A value out of range or an unknown key is a schema problem (`schema-invalid`, `schema-unknown-key`) at its line in `factory.yaml`, in section `files`.
+`config.Factory.Line()` carries the keys, with the defaults applied, as `domain.Line.Jonah`, a `domain.JonahPolicy`, with `share` as a fraction (`0.05`); `domain.DefaultJonahPolicy()` holds the defaults, and `JonahPolicy.Budget` computes the budget and the per-review cap. Like the rest of `learning`, the section is not part of the Visual editor: YAML mode and the Jonah section of factory settings edit it. A value out of range or an unknown key is a schema problem (`schema-invalid`, `schema-unknown-key`) at its line in `factory.yaml`, in section `files`.
 
 ### Ignored keys
 
 `learning.jonah.weeklyUsd`, `learning.librarian` and `learning.kaizen` do nothing. They stay in the schema, marked deprecated, so a definition that has them still loads, publishes and runs. Each one gets the warning `field-ignored` (check `ignored`) at its line in `factory.yaml`, in section `files`, saying to remove it. They are not removed forms: unlike `field-removed`, a `field-ignored` key is not recorded in `domain.Line.Removed`, so the engine never refuses a version for it. `ignoredFields` in `internal/config/checks.go` takes the list of paths to warn about.
+
+### `evals/`
+
+A definition's `evals/` folder does nothing: no part of Goal reads it, and kept tests ([ADR 0039](../adr/0039-jonah-learns-from-the-line.md) decision 12) are rows in the database, not files. A definition that still has the folder loads, publishes and runs. It gets one warning, `evals-ignored`, in section `files`, saying to remove the folder. A Jonah proposal can never edit a file under `evals/`.
 
 ## Organization policy
 

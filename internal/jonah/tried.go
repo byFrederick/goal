@@ -11,8 +11,9 @@ import (
 // decision 11).
 type TriedState string
 
-// Tried states: budget used while a try is still queued and Jonah's budget is used up, so none
-// is claimed; otherwise trying while a try is queued or running, and done once every try is done.
+// Tried states: budget used while a try is not done and Jonah's budget is used up, so none is
+// claimed and none is graded; otherwise trying while a try is queued or running, and done once
+// every try is done.
 const (
 	TriedTrying     TriedState = "trying"
 	TriedDone       TriedState = "done"
@@ -95,10 +96,10 @@ func triedState(tries []domain.PastTry, budget domain.JonahBudget) TriedState {
 		return slices.ContainsFunc(tries, func(t domain.PastTry) bool { return t.State == st })
 	}
 
-	switch queued := in(domain.PastTryQueued); {
-	case queued && budget.Exhausted():
+	switch open := in(domain.PastTryQueued) || in(domain.PastTryRunning); {
+	case open && budget.Exhausted():
 		return TriedBudgetUsed
-	case queued || in(domain.PastTryRunning):
+	case open:
 		return TriedTrying
 	default:
 		return TriedDone

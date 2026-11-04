@@ -26,7 +26,7 @@ const (
 )
 
 // PastTryVerdict is how a done try came out (ADR 0039 decision 10). Values match tries.verdict.
-// Empty is a try whose run ended and is waiting for the grader.
+// Empty is a try not done yet, or one finished before the grader graded tries.
 type PastTryVerdict string
 
 // Past-item try verdicts. Code grades first: a try whose output fails the proposed contract or
@@ -329,6 +329,21 @@ func (r PastTryResult) checkVerdict() error {
 		return fmt.Errorf("past try result: a reason needs a grade: %w", ErrInvalid)
 	case len([]rune(r.Reason)) > MaxPastTryReason:
 		return fmt.Errorf("past try result: the reason is over %d characters: %w", MaxPastTryReason, ErrInvalid)
+	}
+
+	return nil
+}
+
+// CheckPastTryRun reports what makes a try's run impossible to record before its grade, wrapping
+// ErrInvalid: no run, a negative cost or a diff past MaxPastTryDiff.
+func CheckPastTryRun(run RunID, diff string, cost float64) error {
+	switch {
+	case run == "":
+		return fmt.Errorf("past try run: no run: %w", ErrInvalid)
+	case cost < 0:
+		return fmt.Errorf("past try run: negative cost: %w", ErrInvalid)
+	case len(diff) > MaxPastTryDiff:
+		return fmt.Errorf("past try run: the diff is over %d bytes: %w", MaxPastTryDiff, ErrInvalid)
 	}
 
 	return nil
