@@ -1,6 +1,7 @@
 -- name: InsertRun :exec
 -- A run records the definition version it starts on; NULL only for runs from before versions.
--- kind is station for a line's run, jonah for a review's, which alone may have no item (00077).
+-- kind is station for a line's run, jonah for a review's and try for a try of a past item; only
+-- the last two may have no item (00079, 00102).
 INSERT INTO agent_runs (id, factory_id, definition_version_id, item_id, station, agent, model, status, started_at, kind)
 VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.narg(definition_version_id), sqlc.narg(item_id), sqlc.arg(station),
         sqlc.arg(agent), sqlc.arg(model), 'running', sqlc.arg(started_at), sqlc.arg(kind));
@@ -30,12 +31,12 @@ UPDATE agent_runs SET status = 'failed', error = sqlc.arg(error), ended_at = sql
 WHERE item_id = ANY (sqlc.arg(item_ids)::uuid[]) AND status = 'running';
 
 -- name: FactorySpendSince :one
--- The cost of the runs a factory started at or after since, for its weekly budget: Jonah's runs
--- never trigger onExhausted (ADR 0039 decision 16), so they are left out. Row-level security
+-- The cost of the runs a factory started at or after since, for its weekly budget: Jonah's runs,
+-- its reviews and tries, never trigger onExhausted (ADR 0039 decision 16), so they are left out. Row-level security
 -- scopes it to the organization; agent_runs_factory_started_idx serves the range.
 SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
 FROM agent_runs
-WHERE factory_id = sqlc.arg(factory_id) AND started_at >= sqlc.arg(since) AND kind <> 'jonah';
+WHERE factory_id = sqlc.arg(factory_id) AND started_at >= sqlc.arg(since) AND kind NOT IN ('jonah', 'try');
 
 -- name: ItemRuns :many
 -- An item's runs, oldest first, on agent_runs_item_id_idx; row-level security scopes it to the

@@ -84,6 +84,11 @@ export const Environment = z.object({
   env: z.array(envName).default([]),
   /** The names of the file's tools, without their versions. */
   clis: z.array(z.string()).default([]),
+  /**
+   * A try of a past item's (ADR 0039 decision 9): env is for setup alone, and goal-agent run
+   * removes its variables before the agent starts.
+   */
+  setup_only: z.boolean().optional(),
 });
 export type Environment = z.infer<typeof Environment>;
 
@@ -311,6 +316,19 @@ export const Bundle = z
          * means the default branch. Prepare creates it from the default branch when the remote has none.
          */
         base: z.string().optional(),
+        /**
+         * A try of a past item (ADR 0039 decision 9): the commit its original run started from, and
+         * its base's commit then. Prepare makes a full clone, fetches them by SHA, checks branch out
+         * at commit, brings it up to date with base_commit and drops every git login.
+         */
+        commit: z
+          .string()
+          .regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/)
+          .optional(),
+        base_commit: z
+          .string()
+          .regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/)
+          .optional(),
       })
       .optional(),
     git_credentials: z.array(GitCredential).default([]),

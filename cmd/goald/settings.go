@@ -100,6 +100,13 @@ type settings struct {
 	// once both have passed.
 	JonahReviewEvery time.Duration
 	JonahReview      jonah.ReviewConfig
+	// JonahTryEvery is how often goald queues the tries of past items of the proposals that have
+	// none and works the queued tries (GOAL_JONAH_TRY_EVERY, default 1m). JonahTry bounds one
+	// try's run (GOAL_JONAH_TRY_TIMEOUT, default 30m), the time its lease adds beyond the run
+	// (GOAL_JONAH_TRY_LEASE_MARGIN, default 5m) and how many of a factory's tries run at once on
+	// every goald together (GOAL_JONAH_TRIES_PER_FACTORY, default 2).
+	JonahTryEvery time.Duration
+	JonahTry      jonah.TryConfig
 	// MaxRuns caps the agent runs this goald has in flight at once (GOAL_MAX_RUNS, default 0:
 	// no cap). With a cap, claims are shared out fairly across organizations.
 	MaxRuns int
@@ -517,7 +524,8 @@ func definitionSettings(s *settings, or func(name, def string) string) []error {
 	return errs
 }
 
-// jonahSettings reads the Jonah review loop's times, each a positive duration.
+// jonahSettings reads the Jonah review and try loops' times, each a positive duration, and the
+// try loop's cap per factory, a positive number.
 func jonahSettings(s *settings, or func(name, def string) string) []error {
 	var errs []error
 
@@ -531,6 +539,16 @@ func jonahSettings(s *settings, or func(name, def string) string) []error {
 	read("GOAL_JONAH_REVIEW_EVERY", or("GOAL_JONAH_REVIEW_EVERY", "1m"), &s.JonahReviewEvery)
 	read("GOAL_JONAH_REVIEW_TIMEOUT", or("GOAL_JONAH_REVIEW_TIMEOUT", "30m"), &s.JonahReview.Timeout)
 	read("GOAL_JONAH_REVIEW_LEASE_MARGIN", or("GOAL_JONAH_REVIEW_LEASE_MARGIN", "5m"), &s.JonahReview.Margin)
+	read("GOAL_JONAH_TRY_EVERY", or("GOAL_JONAH_TRY_EVERY", "1m"), &s.JonahTryEvery)
+	read("GOAL_JONAH_TRY_TIMEOUT", or("GOAL_JONAH_TRY_TIMEOUT", "30m"), &s.JonahTry.Timeout)
+	read("GOAL_JONAH_TRY_LEASE_MARGIN", or("GOAL_JONAH_TRY_LEASE_MARGIN", "5m"), &s.JonahTry.Margin)
+
+	perFactory := or("GOAL_JONAH_TRIES_PER_FACTORY", strconv.Itoa(jonah.DefaultTriesPerFactory))
+	if n, err := strconv.Atoi(perFactory); err != nil || n <= 0 {
+		errs = append(errs, fmt.Errorf("GOAL_JONAH_TRIES_PER_FACTORY %q is not a positive number", perFactory))
+	} else {
+		s.JonahTry.PerFactory = n
+	}
 
 	return errs
 }

@@ -41,6 +41,10 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_JONAH_REVIEW_EVERY` | config | no | How often goald queues the daily Jonah reviews that are due and runs the queued reviews. 1m when unset. |
 | `GOAL_JONAH_REVIEW_LEASE_MARGIN` | config | no | How long a Jonah review's lease lasts beyond its run's time limit; a review whose goald died is taken again once the lease ends. 5m when unset. |
 | `GOAL_JONAH_REVIEW_TIMEOUT` | config | no | The time limit of one Jonah review run. 30m when unset. |
+| `GOAL_JONAH_TRIES_PER_FACTORY` | config | no | How many of a factory's tries of past items run at once, on every goald together. 2 when unset. |
+| `GOAL_JONAH_TRY_EVERY` | config | no | How often goald queues the tries of past items of Jonah's proposals and runs the queued tries. 1m when unset. |
+| `GOAL_JONAH_TRY_LEASE_MARGIN` | config | no | How long a try's lease lasts beyond its run's time limit; a try whose goald died is taken again once the lease ends. 5m when unset. |
+| `GOAL_JONAH_TRY_TIMEOUT` | config | no | The time limit of one try of a past item. 30m when unset. |
 | `GOAL_KB_WORKERS` | config | no | How many knowledge sources one goald syncs at once (0: none). |
 | `GOAL_LEGACY_IMPORT` | config | no | Retired: the legacy import is gone; goald ignores it and warns while it is set. |
 | `GOAL_LISTEN` | config | no | goald's address for the API, the UI and, without GOAL_GATEWAY_LISTEN, the gateway. |

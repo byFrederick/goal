@@ -540,9 +540,9 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 
 	kind := cmp.Or(r.Kind, domain.RunKindStation)
 
-	// Only a Jonah run may work no item; it writes no run_started item event.
+	// Only Jonah's runs (a review or a try) may work no item; they write no run_started item event.
 	switch _, ok := s.visible(r.ItemID, org); {
-	case r.ItemID == "" && kind == domain.RunKindJonah:
+	case r.ItemID == "" && kind.Jonahs():
 		if s.factories[r.FactoryID] != org {
 			return "", fmt.Errorf("factory %s: %w", r.FactoryID, ports.ErrNotFound)
 		}
@@ -591,7 +591,7 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 
 	r.Result, r.EndedAt = res, endedAt
 
-	if r.ItemID == "" { // a Jonah run: no item cost, no run_finished item event
+	if r.ItemID == "" { // a Jonah run or a try: no item cost, no run_finished item event
 		return nil
 	}
 

@@ -152,6 +152,9 @@ type bundleEnvironment struct {
 	Env []string `json:"env"`
 	// CLIs are the names of the file's tools, in file order, without their versions.
 	CLIs []string `json:"clis"`
+	// SetupOnly says the env is for setup alone, a try's (ADR 0039 decision 9): the worker
+	// removes its variables before the agent starts.
+	SetupOnly bool `json:"setup_only,omitempty"`
 }
 
 // bundleMCPServer is one MCP server of an environment: remote (URL and Headers) or stdio (Command
@@ -185,11 +188,18 @@ type bundleFile struct {
 // builds on and opens its pull request into, an assembly's integration branch for its parts in
 // integration mode branch (ADR 0033), and empty for the default branch. FreshBase is how prepare
 // brings an existing branch up to date with the default branch (rebase or merge).
+//
+// A try of a past item (ADR 0039 decision 9) names Commit, the commit its original run started
+// from, and BaseCommit, its base's commit then: prepare makes a full clone, fetches both by SHA,
+// checks Branch out at Commit, brings it up to date with BaseCommit as FreshBase says, and drops
+// every git login before the agent starts.
 type bundleRepository struct {
-	URL       string           `json:"url"`
-	Branch    string           `json:"branch"`
-	Base      string           `json:"base,omitempty"`
-	FreshBase domain.FreshBase `json:"fresh_base,omitempty"`
+	URL        string           `json:"url"`
+	Branch     string           `json:"branch"`
+	Base       string           `json:"base,omitempty"`
+	FreshBase  domain.FreshBase `json:"fresh_base,omitempty"`
+	Commit     string           `json:"commit,omitempty"`
+	BaseCommit string           `json:"base_commit,omitempty"`
 }
 
 // gitCredential is a login git uses for https://<Host>: Username and the value of the variable
@@ -271,6 +281,10 @@ func (g *Gateway) bundleOf(ctx context.Context, c domain.TaskClaims) (runBundle,
 
 	if c.Kind == domain.TaskKindDraftRequest {
 		return g.definitionBundle(ctx, c)
+	}
+
+	if c.Kind == domain.TaskKindTry {
+		return g.tryBundle(ctx, c)
 	}
 
 	return g.bundle(ctx, c)
@@ -419,43 +433,11 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 		return runBundle{}, err
 	}
 
-	line, agent, station, it := run.line, run.agent, run.station, run.item
+	line, agent, it := run.line, run.agent, run.item
 
-	agentFiles, err := g.defs.AgentFiles(ctx, c.VersionID, agent, station.Output)
+	b, err := g.agentBundle(ctx, c, run, it.Work(), it.Outputs)
 	if err != nil {
-		return runBundle{}, fmt.Errorf("agent %s files: %w", agent.Name, err)
-	}
-
-	maxTurns, maxUSD := agent.Limits(line.Runtime)
-	b := runBundle{
-		Spec: bundleSpec{
-			FactoryID: c.FactoryID, ItemID: it.ID, RunID: c.RunID, Station: station.ID, Agent: agent.Name,
-			// The engine chose the model and read the denied commands from the organization policy at
-			// run start (ADR 0024); a token from before the policy names neither.
-			Model: cmp.Or(c.Model, agent.Model, line.Runtime.Model), Skills: make([]string, 0, len(agent.Skills)),
-			// The engine records this brief with the run (runTask.work in internal/core/engine): the
-			// two must match.
-			ToolsAllow: nonNil(agent.ToolsAllow), ToolsDeny: withDenied(agent.ToolsDeny, c.DeniedCommands), Purpose: line.Purpose,
-			Brief: it.Work(), Inputs: it.Outputs, Output: station.Output, MaxTurns: maxTurns, MaxUSD: maxUSD,
-			Connections:  []bundleConnection{},
-			Rules:        []bundleRule{},
-			GrantedCalls: []grantedCall{},
-		},
-		Files: make(map[string][]byte, len(agentFiles)),
-		Git:   []gitCredential{},
-		Tools: append([]string{}, line.Runtime.Tools...),
-	}
-
-	for _, sk := range agent.Skills {
-		b.Spec.Skills = append(b.Spec.Skills, sk.Name)
-	}
-
-	if err := forPart(it, agentFiles); err != nil {
-		return runBundle{}, fmt.Errorf("agent %s output schema: %w", agent.Name, err)
-	}
-
-	for p, body := range agentFiles {
-		b.Files[path.Join("agent", p)] = body
+		return runBundle{}, err
 	}
 
 	if line.OnSecrets() {
@@ -488,6 +470,51 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 
 	if err := g.addKnowledge(ctx, c, line, agent, it, &b); err != nil {
 		return runBundle{}, err
+	}
+
+	return b, nil
+}
+
+// agentBundle is the bundle's spec and agent files for run, with brief and the earlier outputs
+// inputs: what every station run's bundle starts from.
+func (g *Gateway) agentBundle(ctx context.Context, c domain.TaskClaims, run taskRun, brief string, inputs map[string]json.RawMessage) (runBundle, error) {
+	line, agent, station, it := run.line, run.agent, run.station, run.item
+
+	agentFiles, err := g.defs.AgentFiles(ctx, c.VersionID, agent, station.Output)
+	if err != nil {
+		return runBundle{}, fmt.Errorf("agent %s files: %w", agent.Name, err)
+	}
+
+	maxTurns, maxUSD := agent.Limits(line.Runtime)
+	b := runBundle{
+		Spec: bundleSpec{
+			FactoryID: c.FactoryID, ItemID: it.ID, RunID: c.RunID, Station: station.ID, Agent: agent.Name,
+			// The engine chose the model and read the denied commands from the organization policy at
+			// run start (ADR 0024); a token from before the policy names neither.
+			Model: cmp.Or(c.Model, agent.Model, line.Runtime.Model), Skills: make([]string, 0, len(agent.Skills)),
+			// The engine records this brief with the run (runTask.work in internal/core/engine): the
+			// two must match.
+			ToolsAllow: nonNil(agent.ToolsAllow), ToolsDeny: withDenied(agent.ToolsDeny, c.DeniedCommands), Purpose: line.Purpose,
+			Brief: brief, Inputs: inputs, Output: station.Output, MaxTurns: maxTurns, MaxUSD: maxUSD,
+			Connections:  []bundleConnection{},
+			Rules:        []bundleRule{},
+			GrantedCalls: []grantedCall{},
+		},
+		Files: make(map[string][]byte, len(agentFiles)),
+		Git:   []gitCredential{},
+		Tools: append([]string{}, line.Runtime.Tools...),
+	}
+
+	for _, sk := range agent.Skills {
+		b.Spec.Skills = append(b.Spec.Skills, sk.Name)
+	}
+
+	if err := forPart(it, agentFiles); err != nil {
+		return runBundle{}, fmt.Errorf("agent %s output schema: %w", agent.Name, err)
+	}
+
+	for p, body := range agentFiles {
+		b.Files[path.Join("agent", p)] = body
 	}
 
 	return b, nil
@@ -579,6 +606,11 @@ const eventPage = 500
 // recordOnce appends the run's event of kind with data, unless the run has one already: a bundle
 // fetched again records nothing.
 func (g *Gateway) recordOnce(ctx context.Context, c domain.TaskClaims, kind domain.EventKind, data map[string]any) error {
+	// A try of a past item changes nothing of the item it reruns (ADR 0039 decision 9).
+	if c.Kind == domain.TaskKindTry {
+		return nil
+	}
+
 	for after := int64(0); ; {
 		events, err := g.events.ItemEvents(ctx, c.ItemID, after, eventPage)
 		if err != nil {
@@ -738,9 +770,15 @@ func (g *Gateway) addEnvironment(ctx context.Context, c domain.TaskClaims, line 
 		env.Env, env.Files, env.MCP = nil, nil, nil
 	}
 
+	// A try's agent gets no files and no MCP servers, and its env is setup's alone (ADR 0039
+	// decision 9): the worker removes those variables before the agent starts.
+	if c.Kind == domain.TaskKindTry {
+		env.Files, env.MCP = nil, nil
+	}
+
 	e := &bundleEnvironment{
 		Name: env.Name, MCPServers: []bundleMCPServer{}, Setup: append([]string{}, env.Setup...), Files: []bundleFile{},
-		Env: append([]string{}, slices.Sorted(maps.Keys(env.Env))...), CLIs: []string{},
+		Env: append([]string{}, slices.Sorted(maps.Keys(env.Env))...), CLIs: []string{}, SetupOnly: c.Kind == domain.TaskKindTry,
 	}
 
 	var (

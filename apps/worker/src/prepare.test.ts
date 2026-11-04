@@ -1013,3 +1013,70 @@ describe('prepare', () => {
     await expect(prepare(depsWith(fake, recorder().exec))).rejects.toThrow('git clone exited 128');
   });
 });
+
+describe('prepare: a try of a past item', () => {
+  it('fully clones, fetches the recorded commits by SHA, checks the branch out at the commit and brings it up to date with the base commit', async () => {
+    const branch = 'goal/20-try';
+    const url = await origin(branch, { moved: { 'main.txt': 'from main\n' } });
+    const bare = join(root, 'origin.git');
+    const commit = git(bare, 'rev-parse', `refs/heads/${branch}`);
+    const base = git(bare, 'rev-parse', 'refs/heads/main');
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch, commit, base_commit: base } });
+    const { exec, calls } = recorder();
+
+    const prepared = await prepare(depsWith(fake, exec));
+
+    expect(prepared).toMatchObject({ branch, branch_head: commit, base_head: base, fresh_base: 'rebase' });
+    const clone = calls.find((c) => c.args[0] === 'clone');
+    expect(clone?.args).not.toContain('--filter=blob:none');
+    expect(calls).toContainEqual({
+      command: 'git',
+      args: ['fetch', '--quiet', 'origin', commit, base],
+      cwd: dirs.workspace,
+    });
+    const ws = dirs.workspace;
+    expect(git(ws, 'branch', '--show-current')).toBe(branch);
+    expect(git(ws, 'merge-base', '--is-ancestor', base, 'HEAD')).toBe('');
+    expect(git(ws, 'rev-parse', 'refs/goal/try-start')).toBe(git(ws, 'rev-parse', 'HEAD'));
+  });
+
+  it('drops the stored login and every credential helper before the agent runs', async () => {
+    const branch = 'goal/21-try';
+    const url = await origin(branch);
+    const commit = git(join(root, 'origin.git'), 'rev-parse', `refs/heads/${branch}`);
+    const login = {
+      host: 'github.com',
+      username: 'x-access-token',
+      password_env: 'GOAL_REPOSITORY_TOKEN',
+      store: true,
+    };
+    const other = { host: 'gitlab.com', username: 'oauth2', password_env: 'GITLAB_TOKEN' };
+    const { fake } = gatewayServing({
+      spec,
+      files: {},
+      repository: { url, branch, commit },
+      git_credentials: [login, other],
+    });
+
+    await prepare(
+      depsWith(fake, recorder().exec, { GOAL_REPOSITORY_TOKEN: 'acme-s3cr3t', GITLAB_TOKEN: 'acme-other' }),
+    );
+
+    expect(existsSync(join(home, '.git-credentials'))).toBe(false);
+    expect(fill('github.com')).not.toContain('password=');
+    expect(fill('gitlab.com')).not.toContain('password=');
+    const config = execFileSync('git', ['config', '--global', '--list'], { env: gitEnv(), encoding: 'utf8' });
+    expect(config).not.toContain('credential.');
+  });
+
+  it('fails, naming the commit, when the remote no longer has it', async () => {
+    const branch = 'goal/22-try';
+    const url = await origin(branch);
+    const gone = 'f'.repeat(40);
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch, commit: gone } });
+
+    await expect(prepare({ ...depsWith(fake, recorder().exec), sleep: async () => undefined })).rejects.toThrow(
+      `commit ${gone} is gone from the remote`,
+    );
+  });
+});
