@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
@@ -23,9 +24,11 @@ type Knowledge interface {
 	Snapshots(ctx context.Context, source string) ([]domain.KnowledgeSnapshot, error)
 }
 
-// Objects reads a knowledge snapshot's zip from the bucket by range; ports.ObjectStore satisfies it.
+// Objects reads a knowledge snapshot's zip from the bucket by range, and signs a URL a cloud box
+// downloads it from; ports.ObjectStore satisfies it.
 type Objects interface {
 	GetRange(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error)
+	PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error)
 }
 
 // KnowledgePath is where a run downloads one of its pinned snapshots: GET KnowledgePath<source>.
@@ -40,7 +43,8 @@ type bundleKnowledge struct {
 }
 
 // knowledgeSnapshot is one pinned snapshot: its source, which is its folder, and the URL of its
-// zip, a path on the gateway that the worker resolves against its gateway URL.
+// zip: a signed bucket URL for a cloud box, or a path on the gateway that the worker resolves
+// against its gateway URL (snapshotURL).
 type knowledgeSnapshot struct {
 	Source string `json:"source"`
 	URL    string `json:"url"`
@@ -54,11 +58,15 @@ type knowledgeSnapshot struct {
 func (g *Gateway) knowledgeOf(
 	ctx context.Context, c domain.TaskClaims, line domain.Line, agent domain.AgentSpec, run domain.RuleTarget, files bool,
 ) (*bundleKnowledge, error) {
+	keys := map[string]string{}
+
 	idx, err := domain.IndexKnowledge(line, agent, run, files, func(source string) (domain.KnowledgeSnapshot, []string, bool, error) {
 		snap, ok, err := g.pinned(ctx, c, source)
 		if err != nil || !ok {
 			return domain.KnowledgeSnapshot{}, nil, false, err
 		}
+
+		keys[source] = snap.Key
 
 		return snap, g.topFolders(ctx, c, snap), true, nil
 	})
@@ -70,7 +78,7 @@ func (g *Gateway) knowledgeOf(
 
 	if files {
 		for _, s := range idx.Sources {
-			k.Snapshots = append(k.Snapshots, knowledgeSnapshot{Source: s.Name, URL: KnowledgePath + s.Name})
+			k.Snapshots = append(k.Snapshots, knowledgeSnapshot{Source: s.Name, URL: g.snapshotURL(ctx, c, s.Name, keys[s.Name])})
 		}
 	}
 
@@ -79,6 +87,24 @@ func (g *Gateway) knowledgeOf(
 	}
 
 	return k, nil
+}
+
+// snapshotURL is where the box downloads the zip at key of source's pinned snapshot: a URL signed
+// for Config.KnowledgeURLTTL when it is set, else, or when signing fails (logged, never with a
+// URL), KnowledgePath<source> on the gateway.
+func (g *Gateway) snapshotURL(ctx context.Context, c domain.TaskClaims, source, key string) string {
+	local := KnowledgePath + source
+	if g.cfg.KnowledgeURLTTL <= 0 || g.objects == nil || key == "" {
+		return local
+	}
+
+	u, err := g.objects.PresignGet(ctx, key, g.cfg.KnowledgeURLTTL)
+	if err != nil {
+		g.log.WarnContext(ctx, "knowledge snapshot url unsigned", claimAttrs(c, "source", source, "error", err)...)
+		return local
+	}
+
+	return u
 }
 
 // pinned is the snapshot c pinned of source, and whether it pinned one the store still has.
