@@ -200,6 +200,11 @@ type Config struct {
 	Key []byte
 	// MaxRequestBytes caps one request from an agent (default 4 MiB).
 	MaxRequestBytes int64
+	// KnowledgeURLTTL, when above zero, gives each pinned snapshot in a run's bundle a signed
+	// bucket URL valid that long (Objects.PresignGet), for boxes that reach the bucket: cloud ones
+	// (ADR 0038 decision 7). Zero keeps KnowledgePath<source>, served by ServeKnowledge, for local
+	// boxes that cannot reach the bucket.
+	KnowledgeURLTTL time.Duration
 }
 
 const (

@@ -390,3 +390,108 @@ func TestRun_KnowledgeReadsFailureLeavesTheRunAlone(t *testing.T) {
 		t.Errorf("logs lack the failed count:\n%s", logs)
 	}
 }
+
+// A run that read or searched its pinned sources records one knowledge_read event once it ends,
+// by its agent, naming each source's files read and folders searched; touches of an unpinned
+// source, the checkout or another tool are left out. The event is recorded even when the
+// rollup's AddReads fails.
+func TestRun_RecordsAKnowledgeReadEvent(t *testing.T) {
+	t.Parallel()
+
+	line := repoLine()
+	line.Knowledge = []domain.KnowledgeEntry{{Name: kbRunbooks}}
+
+	var once sync.Once
+
+	h := newHarness(t, line, func(ctx context.Context, c porttest.ExecCall, stdout io.Writer) domain.RunResult {
+		once.Do(func() {
+			toolLines(t, stdout,
+				[2]string{toolRead, "/knowledge/runbooks/a.md"},
+				[2]string{"Grep", "/knowledge/runbooks/"},
+				[2]string{toolRead, "/knowledge/design/a.md"},
+				[2]string{toolRead, "/workspace/README.md"},
+				[2]string{"Bash", "/knowledge/runbooks/b.md"},
+			)
+		})
+
+		return porttest.Succeed(`{}`)(ctx, c, stdout)
+	})
+	kb := h.knowledgeBase(t)
+	kb.putSnapshot(t, kbRunbooks, "r1")
+	kb.putSnapshot(t, "design", "d1")
+	h.knowledgeDeps = failingReads{kb.kb}
+	h.e = h.engine(t, h.store)
+	it := h.submit(t, domain.NewItem{})
+
+	h.step(t)
+
+	if got := h.item(t, it.ID); got.State != domain.StateDone {
+		t.Fatalf("item is %s, want done (events %v)", got.State, h.kinds(it.ID))
+	}
+
+	evs := h.eventsOf(it.ID, domain.EventKnowledgeRead)
+	if len(evs) != 1 {
+		t.Fatalf("%d knowledge_read events, want one (events %v)", len(evs), h.kinds(it.ID))
+	}
+
+	ev, runs := evs[0], h.runs(t, testOrg, it.ID)
+	if len(runs) != 1 || ev.RunID != runs[0].ID || ev.Actor != runs[0].Agent {
+		t.Errorf("event of run %q by %q; want the one run's, by its agent (runs %+v)", ev.RunID, ev.Actor, runs)
+	}
+
+	want := map[string]any{"sources": []any{
+		map[string]any{"source": kbRunbooks, "reads": []any{"a.md"}, "searches": []any{domain.KnowledgeSourceRoot}},
+	}}
+	if !reflect.DeepEqual(ev.Data, want) {
+		t.Errorf("data = %#v\nwant %#v", ev.Data, want)
+	}
+
+	if logs := h.logs.String(); !strings.Contains(logs, "knowledge reads not counted") {
+		t.Errorf("logs lack the failed count:\n%s", logs)
+	}
+}
+
+// A run that touched no pinned knowledge records no knowledge_read event, and a run without an
+// item (Jonah) records none even when it read its sources.
+func TestRun_NoKnowledgeTouchesRecordsNoReadEvent(t *testing.T) {
+	t.Parallel()
+
+	line := repoLine()
+	line.Knowledge = []domain.KnowledgeEntry{{Name: kbRunbooks}}
+
+	h := newHarness(t, line, func(ctx context.Context, c porttest.ExecCall, stdout io.Writer) domain.RunResult {
+		toolLines(t, stdout, [2]string{toolRead, "/workspace/README.md"}, [2]string{"Bash", "/knowledge/runbooks/a.md"})
+		return porttest.Succeed(`{}`)(ctx, c, stdout)
+	})
+	kb := h.knowledgeBase(t)
+	kb.putSnapshot(t, kbRunbooks, "r1")
+	h.e = h.engine(t, h.store)
+	it := h.submit(t, domain.NewItem{})
+
+	h.step(t)
+
+	if got := h.item(t, it.ID); got.State != domain.StateDone {
+		t.Fatalf("item is %s, want done (events %v)", got.State, h.kinds(it.ID))
+	}
+
+	if evs := h.eventsOf(it.ID, domain.EventKnowledgeRead); len(evs) != 0 {
+		t.Errorf("knowledge_read events = %+v, want none", evs)
+	}
+
+	jonah := newHarness(t, connLine(), func(_ context.Context, _ porttest.ExecCall, stdout io.Writer) domain.RunResult {
+		toolLines(t, stdout, [2]string{toolRead, "/knowledge/runbooks/a.md"})
+		return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{"observations":[],"proposals":[]}`)}
+	})
+	jonah.store.AddFactory(testOrg, factoryID)
+
+	req := jonahRequest()
+	req.Knowledge = []domain.KnowledgePin{{Source: kbRunbooks, Snapshot: "r1"}}
+
+	if _, err := jonah.e.RunTask(t.Context(), req); err != nil {
+		t.Fatalf("RunTask: %v", err)
+	}
+
+	if events := jonah.store.Events(""); len(events) != 0 {
+		t.Errorf("events of a Jonah run = %+v; want none", events)
+	}
+}

@@ -54,7 +54,8 @@ type snapshotStats struct {
 // snapshot is the snapshot pass of one sync (ADR 0038 decisions 3 and 4): it lists every item of
 // spec's source, copies the entries whose version is unchanged from the current snapshot's zip
 // without fetching or recompressing them, reads and converts the others, and when something
-// was added, changed or removed writes one zip on local disk, stores it and records it. A file
+// was added, changed or removed, or the source's read-when line differs from its current
+// snapshot's (ADR 0038 decision 1), writes one zip on local disk, stores it and records it. A file
 // that fails keeps its last good entry or stays out, one that looks like it holds a key stays
 // out, and both are listed; only a source past a limit, the bucket, the database or ctx fail the
 // pass, and then nothing is stored.
@@ -106,7 +107,12 @@ func (in *Ingestor) snapshot(ctx context.Context, c domain.SourceClaim, spec dom
 
 	stats.files, stats.fetched, stats.archived, stats.failed = len(b.files), b.fetched, b.archived, b.failed
 
-	if !b.changed(src.CurrentSnapshot == "") {
+	write, err := in.shouldWrite(ctx, b, src)
+	if err != nil {
+		return stats, err
+	}
+
+	if !write {
 		return stats, nil
 	}
 
@@ -121,6 +127,38 @@ func (in *Ingestor) snapshot(ctx context.Context, c domain.SourceClaim, spec dom
 	stats.written = true
 
 	return stats, nil
+}
+
+// shouldWrite reports whether the pass writes a snapshot: a file changed, or the read-when line
+// differs from the current snapshot's.
+func (in *Ingestor) shouldWrite(ctx context.Context, b *snapshotBuilder, src domain.KnowledgeSource) (bool, error) {
+	if b.changed(src.CurrentSnapshot == "") {
+		return true, nil
+	}
+
+	if src.CurrentSnapshot == "" {
+		return false, nil
+	}
+
+	return in.newReadWhen(ctx, src)
+}
+
+// newReadWhen reports whether src's read-when line differs from its current snapshot's, so a
+// snapshot with the same files carries the new line; a current snapshot that is not listed
+// counts as differing.
+func (in *Ingestor) newReadWhen(ctx context.Context, src domain.KnowledgeSource) (bool, error) {
+	snaps, err := in.cfg.Knowledge.Snapshots(ctx, src.Name)
+	if err != nil {
+		return false, fmt.Errorf("snapshot: current snapshot: %w", err)
+	}
+
+	for _, s := range snaps {
+		if s.ID == src.CurrentSnapshot {
+			return s.ReadWhen != src.ReadWhen, nil
+		}
+	}
+
+	return true, nil
 }
 
 // tempFile creates a temporary file in TempDir; done closes and removes it.
@@ -454,9 +492,10 @@ func (b *snapshotBuilder) add(p, version, md, title, url string) error {
 	return nil
 }
 
-// changed counts the current files the snapshot no longer has as removed and reports whether it
-// is worth writing: something was added, changed or removed, or first, the source's first, has
-// failed files to list.
+// changed counts the current files the snapshot no longer has as removed and reports whether its
+// files are worth writing: something was added, changed or removed, or first, the source's
+// first, has failed files to list. A new read-when line is the other reason to write
+// (Ingestor.newReadWhen).
 func (b *snapshotBuilder) changed(first bool) bool {
 	for p := range b.prev {
 		if !b.paths[p] {

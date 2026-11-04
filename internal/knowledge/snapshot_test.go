@@ -178,6 +178,48 @@ func TestSnapshot_NothingChangedWritesNoSnapshot(t *testing.T) {
 	w.want("the source after two syncs", src, src.Status == domain.SyncIdle, len(w.snapshots(repoSource)) == 1, w.objectsUnder(repoSource) == 1)
 }
 
+// A sync with no file change but a new read-when line writes a snapshot that carries the new line
+// and copies every entry of the current one without fetching it (ADR 0038 decision 1).
+func TestSnapshot_ANewReadWhenLineWritesASnapshot(t *testing.T) {
+	t.Parallel()
+
+	w := repoWorld(t)
+	w.docs.set(map[string]string{deployMD: shipOnTuesdays, oncallMD: "# On call\n\nPage the primary."})
+
+	in := w.ingestor(nil)
+	w.syncDue(in)
+
+	first := w.snapshots(repoSource)[0]
+	_ = w.docs.fetches()
+
+	line := "Read when you deploy or are on call."
+	if _, err := w.kb.UpdateSource(w.ctx(), repoSource, domain.KnowledgeSourcePatch{ReadWhen: &line}, admin); err != nil {
+		t.Fatal(err)
+	}
+
+	w.clock.Advance(time.Hour + time.Minute)
+	w.syncDue(in)
+
+	fetched := w.docs.fetches()
+	w.want("fetched", fetched, len(fetched) == 0)
+
+	snaps := w.snapshots(repoSource)
+	if len(snaps) != 2 {
+		t.Fatalf("snapshots after the read-when edit = %d, want two", len(snaps))
+	}
+
+	second := snaps[0]
+	w.want("the second snapshot", second, second.ReadWhen == line, first.ReadWhen != line, second.Files == first.Files,
+		second.Changes.Added+second.Changes.Changed+second.Changes.Removed == 0, w.objectsUnder(repoSource) == 2, w.source(repoSource).CurrentSnapshot == second.ID)
+
+	before, after := w.zipOf(first), w.zipOf(second)
+	w.want("the same entries", len(after), len(after) == len(before))
+
+	for p, e := range before {
+		w.want(p+" copied raw", after[p].crc, bytes.Equal(after[p].raw, e.raw), after[p].crc == e.crc)
+	}
+}
+
 // A file that fails to convert keeps its last good version, one that never had one stays out,
 // both are listed, and the sync goes through.
 func TestSnapshot_AFailedFileKeepsItsLastGoodVersion(t *testing.T) {

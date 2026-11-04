@@ -83,6 +83,67 @@ func (k *Knowledge) Snapshots(ctx context.Context, source string) ([]domain.Know
 	return out, err
 }
 
+// Pin makes a running agent run of org pin snapshot snap, as its knowledge_pinned event does:
+// retention keeps it (ExpiredSnapshots).
+func (k *Knowledge) Pin(org domain.OrgID, snap domain.KnowledgeSnapshotID) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+
+	k.org(org).pinned[snap] = true
+}
+
+// ExpiredSnapshots implements ports.Knowledge.
+func (k *Knowledge) ExpiredSnapshots(ctx context.Context, l domain.SourceLease, before time.Time) ([]domain.KnowledgeSnapshot, error) {
+	var out []domain.KnowledgeSnapshot
+
+	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
+		s, err := o.leased(l)
+		if err != nil {
+			return err
+		}
+
+		snaps := slices.Clone(s.snapshots)
+		slices.SortStableFunc(snaps, func(a, b domain.KnowledgeSnapshot) int {
+			return cmp.Or(a.CreatedAt.Compare(b.CreatedAt), strings.Compare(string(a.ID), string(b.ID)))
+		})
+
+		// Each snapshot but the newest was replaced when the next one was made.
+		for i, snap := range snaps[:max(len(snaps)-1, 0)] {
+			if snap.ID != s.src.CurrentSnapshot && !o.pinned[snap.ID] && !snaps[i+1].CreatedAt.After(before) {
+				out = append(out, snap)
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("expired knowledge snapshots: %w", err)
+	}
+
+	return out, nil
+}
+
+// DeleteSnapshots implements ports.Knowledge.
+func (k *Knowledge) DeleteSnapshots(ctx context.Context, l domain.SourceLease, ids []domain.KnowledgeSnapshotID) error {
+	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
+		s, err := o.leased(l)
+		if err != nil {
+			return err
+		}
+
+		s.snapshots = slices.DeleteFunc(s.snapshots, func(snap domain.KnowledgeSnapshot) bool {
+			return snap.ID != s.src.CurrentSnapshot && slices.Contains(ids, snap.ID)
+		})
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("delete knowledge snapshots: %w", err)
+	}
+
+	return nil
+}
+
 // Files implements ports.Knowledge.
 func (k *Knowledge) Files(ctx context.Context, q domain.KnowledgeFileQuery) ([]domain.KnowledgeFile, error) {
 	limit := min(max(q.Limit, 0), domain.MaxFilePage)

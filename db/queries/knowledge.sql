@@ -4,7 +4,7 @@
 -- name: KnowledgeSources :many
 -- The organization's sources, or the one named or with the given id.
 SELECT s.id, s.name, s.title, s.kind, c.name AS connection, sc.name AS secret, s.config, s.read_when, s.current_snapshot_id,
-       extract(epoch FROM s.sync_every)::bigint AS sync_every_seconds, s.next_sync_at, s.lease_until, s.status,
+       coalesce(extract(epoch FROM s.sync_every), 0)::bigint AS sync_every_seconds, s.next_sync_at, s.lease_until, s.status,
        s.last_synced_at, s.last_error, s.sync_failures, s.created_by, s.created_at, s.updated_at
 FROM knowledge_sources s
 LEFT JOIN connections c ON c.org_id = s.org_id AND c.id = s.connection_id
@@ -30,19 +30,31 @@ WHERE sc.name = sqlc.arg(name)
 ORDER BY s.name;
 
 -- name: InsertKnowledgeSource :exec
--- org_id comes from its default, goal_org(). A live source never syncs.
+-- org_id comes from its default, goal_org(). A live source never syncs; sync_every_seconds 0 is
+-- on demand (a NULL sync_every, 00100), due once now for its first snapshot.
 INSERT INTO knowledge_sources (id, name, title, kind, connection_id, secret_id, config, read_when, sync_every, next_sync_at, created_by)
 VALUES (sqlc.arg(id), sqlc.arg(name), sqlc.arg(title), sqlc.arg(kind), sqlc.narg(connection_id), sqlc.narg(secret_id), sqlc.arg(config),
         sqlc.arg(read_when),
-        make_interval(secs => sqlc.arg(sync_every_seconds)::bigint),
+        CASE WHEN sqlc.arg(sync_every_seconds)::bigint = 0 THEN NULL
+             ELSE make_interval(secs => sqlc.arg(sync_every_seconds)::bigint) END,
         CASE WHEN sqlc.arg(kind)::text = 'live' THEN NULL ELSE now() END, sqlc.arg(created_by));
 
 -- name: UpdateKnowledgeSource :one
+-- sync_every_seconds 0 makes the source on demand, not due until Sync (00100); an interval makes
+-- an on-demand source that is not live due at once. A new read-when line makes a source that
+-- writes snapshots due at once, so its next snapshot carries the line. The CASEs read the row as it was.
 UPDATE knowledge_sources
 SET title = coalesce(sqlc.narg(title)::text, title), config = coalesce(sqlc.narg(config)::jsonb, config),
     secret_id = coalesce(sqlc.narg(secret_id)::uuid, secret_id), read_when = coalesce(sqlc.narg(read_when)::text, read_when),
     sync_every = CASE WHEN sqlc.narg(sync_every_seconds)::bigint IS NULL THEN sync_every
+                      WHEN sqlc.narg(sync_every_seconds)::bigint = 0 THEN NULL
                       ELSE make_interval(secs => sqlc.narg(sync_every_seconds)::bigint) END,
+    next_sync_at = CASE WHEN sqlc.narg(read_when)::text IS NOT NULL AND read_when IS DISTINCT FROM sqlc.narg(read_when)::text
+                             AND kind IN ('upload', 'repository', 'confluence') THEN now()
+                        WHEN sqlc.narg(sync_every_seconds)::bigint IS NULL THEN next_sync_at
+                        WHEN sqlc.narg(sync_every_seconds)::bigint = 0 THEN NULL
+                        WHEN kind <> 'live' AND next_sync_at IS NULL THEN now()
+                        ELSE next_sync_at END,
     updated_at = now()
 WHERE name = sqlc.arg(name)
 RETURNING id;
@@ -100,8 +112,8 @@ WHERE id = sqlc.arg(id) AND lease_token = sqlc.arg(lease_token)::uuid AND status
 SELECT true FROM knowledge_sources WHERE id = sqlc.arg(id) AND lease_token = sqlc.arg(lease_token)::uuid FOR SHARE;
 
 -- name: FinishKnowledgeSync :execrows
--- The next sync is at plus the interval unless the source was made due since its claim (due).
--- Nothing when another claim took the source (its token).
+-- The next sync is at plus the interval unless the source was made due since its claim (due);
+-- none for an on-demand source, whose NULL sync_every makes the sum NULL (00100). Nothing when another claim took the source (its token).
 UPDATE knowledge_sources
 SET status = CASE WHEN sqlc.arg(error)::text = '' THEN 'idle' ELSE 'failed' END,
     last_error = nullif(sqlc.arg(error)::text, ''),
@@ -147,6 +159,32 @@ SELECT id, source_id, files, failed, bytes, zip_bytes, changes, read_when, zip_k
 FROM knowledge_snapshots
 WHERE source_id = sqlc.arg(source_id)
 ORDER BY created_at DESC, id DESC;
+
+-- name: ExpiredKnowledgeSnapshots :many
+-- The source's snapshots retention deletes, oldest first: not its current one, pinned by no
+-- running agent run (its knowledge_pinned event names the snapshot), and replaced, its next
+-- snapshot made, at or before before.
+SELECT s.id, s.source_id, s.files, s.failed, s.bytes, s.zip_bytes, s.changes, s.read_when, s.zip_key, s.created_at
+FROM (
+  SELECT ks.*, lead(ks.created_at) OVER (ORDER BY ks.created_at, ks.id) AS replaced_at
+  FROM knowledge_snapshots ks
+  WHERE ks.source_id = sqlc.arg(source_id)
+) s
+JOIN knowledge_sources src ON src.id = s.source_id
+WHERE s.id IS DISTINCT FROM src.current_snapshot_id
+  AND s.replaced_at <= sqlc.arg(before)::timestamptz
+  AND NOT EXISTS (
+    SELECT 1 FROM agent_runs r JOIN item_events e ON e.run_id = r.id
+    WHERE r.status = 'running' AND e.kind = 'knowledge_pinned'
+      AND e.data -> 'snapshots' @> jsonb_build_array(jsonb_build_object('snapshot', s.id::text)))
+ORDER BY s.created_at, s.id;
+
+-- name: DeleteKnowledgeSnapshots :exec
+-- The source's snapshots ids, but never its current one.
+DELETE FROM knowledge_snapshots s
+USING knowledge_sources src
+WHERE s.source_id = sqlc.arg(source_id) AND s.id = ANY (sqlc.arg(ids)::uuid[])
+  AND src.id = s.source_id AND s.id IS DISTINCT FROM src.current_snapshot_id;
 
 -- name: KnowledgeFiles :many
 -- One page of a source's current files in path order (byte order: path is COLLATE "C"), after a

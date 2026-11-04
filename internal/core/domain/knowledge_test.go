@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestDocumentType_ByExtensionElseByContent(t *testing.T) {
@@ -32,6 +33,36 @@ func TestDocumentType_ByExtensionElseByContent(t *testing.T) {
 	for name, body := range map[string]string{"image": "\x89PNG\x00\x01", "slides.key": "PK", "archive.zip": "PK"} {
 		if _, err := DocumentType(name, []byte(body)); !errors.Is(err, ErrUnsupportedDocument) {
 			t.Errorf("DocumentType(%s) = %v, want it unsupported", name, err)
+		}
+	}
+}
+
+func TestNewKnowledgeSource_SyncEveryDefaultOnDemandOrAtLeastTheMinimum(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		every *time.Duration
+		ok    bool
+	}{
+		{nil, true},
+		{new(SyncOnDemand), true},
+		{new(MinSyncEvery), true},
+		{new(24 * time.Hour), true},
+		{new(time.Second), false},
+		{new(MinSyncEvery - time.Second), false},
+		{new(-time.Hour), false},
+	} {
+		n := NewKnowledgeSource{Name: "handbook", Title: "Handbook", Kind: SourceUpload, SyncEvery: tc.every}
+		if err := n.Check(); (err == nil) != tc.ok || (err != nil && !errors.Is(err, ErrInvalid)) {
+			t.Errorf("NewKnowledgeSource{SyncEvery: %v}.Check() = %v, want ok %t", tc.every, err, tc.ok)
+		}
+
+		if tc.every == nil {
+			continue
+		}
+
+		if err := (KnowledgeSourcePatch{SyncEvery: tc.every}).Check(); (err == nil) != tc.ok {
+			t.Errorf("KnowledgeSourcePatch{SyncEvery: %s}.Check() = %v, want ok %t", *tc.every, err, tc.ok)
 		}
 	}
 }

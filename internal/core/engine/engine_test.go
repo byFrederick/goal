@@ -836,3 +836,21 @@ func TestTick_PausedLineTakesNoWork(t *testing.T) {
 		t.Errorf("item after resuming is %s/%s, want done", got.Station, got.State)
 	}
 }
+
+// The longest a claim lasts is both attempts of its run and a lease TTL, the defaults filling in
+// what is unset; knowledge retention keeps a replaced snapshot that long.
+func TestConfig_LongestClaimIsBothAttemptsAndTheLease(t *testing.T) {
+	t.Parallel()
+
+	for what, tc := range map[string]struct {
+		cfg  engine.Config
+		want time.Duration
+	}{
+		"the defaults": {engine.Config{}, 2*2*time.Hour + 2*time.Minute},
+		"set":          {engine.Config{TaskTimeout: 30 * time.Minute, LeaseTTL: time.Minute}, 2*30*time.Minute + time.Minute},
+	} {
+		if got := tc.cfg.LongestClaim(); got != tc.want {
+			t.Errorf("LongestClaim of %s = %s, want %s", what, got, tc.want)
+		}
+	}
+}

@@ -127,6 +127,78 @@ func (k *Knowledge) Snapshots(ctx context.Context, source string) ([]domain.Know
 	return out, nil
 }
 
+// ExpiredSnapshots implements ports.Knowledge: under the lease's hold, the source's snapshots
+// ExpiredKnowledgeSnapshots finds, a running run's pin matched in its knowledge_pinned event.
+func (k *Knowledge) ExpiredSnapshots(ctx context.Context, l domain.SourceLease, before time.Time) ([]domain.KnowledgeSnapshot, error) {
+	sid, token, err := lease(l)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []domain.KnowledgeSnapshot
+
+	err = k.s.inTx(ctx, func(q *db.Queries) error {
+		if err := held(ctx, q, l, sid, token); err != nil {
+			return err
+		}
+
+		rows, err := q.ExpiredKnowledgeSnapshots(ctx, db.ExpiredKnowledgeSnapshotsParams{SourceID: sid, Before: before})
+		if err != nil {
+			return err
+		}
+
+		out = make([]domain.KnowledgeSnapshot, 0, len(rows))
+
+		for _, r := range rows {
+			s, err := snapshotFrom(db.KnowledgeSnapshotsRow(r))
+			if err != nil {
+				return err
+			}
+
+			out = append(out, s)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("expired knowledge snapshots: %w", err)
+	}
+
+	return out, nil
+}
+
+// DeleteSnapshots implements ports.Knowledge: under the lease's hold, in one transaction.
+func (k *Knowledge) DeleteSnapshots(ctx context.Context, l domain.SourceLease, ids []domain.KnowledgeSnapshotID) error {
+	sid, token, err := lease(l)
+	if err != nil {
+		return err
+	}
+
+	uids := make([]uuid.UUID, 0, len(ids))
+
+	for _, id := range ids {
+		u, err := uuid.Parse(string(id))
+		if err != nil {
+			continue // no snapshot has it
+		}
+
+		uids = append(uids, u)
+	}
+
+	err = k.s.inTx(ctx, func(q *db.Queries) error {
+		if err := held(ctx, q, l, sid, token); err != nil {
+			return err
+		}
+
+		return q.DeleteKnowledgeSnapshots(ctx, db.DeleteKnowledgeSnapshotsParams{SourceID: sid, Ids: uids})
+	})
+	if err != nil {
+		return fmt.Errorf("delete knowledge snapshots: %w", err)
+	}
+
+	return nil
+}
+
 // Files implements ports.Knowledge.
 func (k *Knowledge) Files(ctx context.Context, fq domain.KnowledgeFileQuery) ([]domain.KnowledgeFile, error) {
 	limit := min(max(fq.Limit, 0), domain.MaxFilePage)

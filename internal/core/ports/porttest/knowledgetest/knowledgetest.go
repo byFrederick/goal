@@ -30,6 +30,9 @@ type Harness struct {
 	Audit   ports.Audit
 	// NewOrg returns a new organization.
 	NewOrg func(t *testing.T) domain.OrgID
+	// Pin makes a running agent run of org pin snapshot snap, as its knowledge_pinned event does
+	// (domain.EventKnowledgePinned).
+	Pin func(t *testing.T, org domain.OrgID, snap domain.KnowledgeSnapshotID)
 }
 
 // Run runs the suite. Tests run in parallel and call newHarness once each; harnesses must be
@@ -49,12 +52,14 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Claim_TakenOverLeaseChangesNothing", testClaimFenced},
 		{"Claim_EveryOrganizationOldestDueFirst", testClaimAcrossOrgs},
 		{"Claim_ScheduleAndSyncNow", testClaimSchedule},
+		{"Claim_OnDemandOnlyAfterSyncNow", testClaimOnDemand},
 		{"FinishSync_AnErrorThatIsNoUTF8", testFinishInvalidUTF8},
 		{"Finish_CountsFailuresInARow", testFinishFailures},
 		{"Uploads_ReplacedByNameDueAndOrphans", testUploads},
 		{"OtherOrg_SeesNothing", testIsolation},
 		{"Snapshots_NewReplacesCurrentFilesAndKeepsTheOld", testSnapshots},
 		{"Snapshots_RulesAndLostLeaseChangeNothing", testSnapshotRules},
+		{"Snapshots_RetentionKeepsCurrentPinnedAndYoung", testSnapshotRetention},
 		{"Files_PageInPathOrderByPathOrTitlePrefix", testFilesPage},
 		{"Reads_AddToOneRowPerSourcePathFactoryAndDay", testReads},
 		{"Files_OtherOrgSeesNothing", testFilesIsolation},
@@ -232,7 +237,7 @@ func testSources(f *fixture) {
 
 	synced := f.source(f.org, domain.NewKnowledgeSource{
 		Name: runbooks, Title: "Runbooks", Kind: domain.SourceSynced, Connection: docsConn,
-		Config: map[string]string{"branch": "main"}, SyncEvery: 30 * time.Minute,
+		Config: map[string]string{"branch": "main"}, SyncEvery: new(30 * time.Minute),
 	})
 	f.want("synced source", synced, synced.Connection == docsConn, synced.SyncEvery == 30*time.Minute, synced.Config["branch"] == "main")
 
@@ -293,7 +298,7 @@ func testSourceRules(f *fixture) {
 		"cannot sync":        {domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceSynced, Connection: chatConn}, domain.ErrConnectionCannotSync},
 		"unknown connection": {domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceSynced, Connection: "nope"}, ports.ErrNotFound},
 		"too often": {
-			domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceSynced, Connection: docsConn, SyncEvery: time.Minute},
+			domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceSynced, Connection: docsConn, SyncEvery: new(time.Minute)},
 			domain.ErrInvalid,
 		},
 	} {
@@ -555,6 +560,51 @@ func testClaimSchedule(f *fixture) {
 
 	got = f.get(f.org, handbook)
 	f.want("next sync after Sync now during a sync (now)", got.NextSyncAt, got.NextSyncAt != nil && !got.NextSyncAt.After(time.Now()))
+}
+
+// testClaimOnDemand: an on-demand source syncs once when it is created and then only after
+// Sync now, each sync leaving it with no next sync; an interval makes it due again.
+func testClaimOnDemand(f *fixture) {
+	ctx := f.ctx()
+	created := f.source(f.org, domain.NewKnowledgeSource{Name: handbook, Kind: domain.SourceUpload, SyncEvery: new(domain.SyncOnDemand)})
+	f.want("an on-demand source when created", created, created.SyncEvery == domain.SyncOnDemand, created.NextSyncAt != nil)
+
+	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Millisecond)
+	f.finish(f.claimed("the new on-demand source", t0, 10*time.Minute), t0.Add(time.Minute), "")
+
+	got := f.get(f.org, handbook)
+	f.want("after its first sync", got, got.Status == domain.SyncIdle, got.NextSyncAt == nil, got.SyncEvery == domain.SyncOnDemand,
+		equalTime(got.LastSyncedAt, t0.Add(time.Minute)))
+	f.none("on demand, hours later", t0.Add(48*time.Hour))
+
+	f.must(f.Knowledge.SyncNow(ctx, handbook))
+
+	got = f.get(f.org, handbook)
+	f.want("after Sync now", got.NextSyncAt, got.NextSyncAt != nil)
+
+	t1 := t0.Add(time.Hour)
+	c := f.claimed("on demand after Sync now", t1, 10*time.Minute)
+	f.none("claimed once", t1)
+	f.finish(c, t1.Add(time.Minute), "")
+
+	got = f.get(f.org, handbook)
+	f.want("after the sync Sync now asked for", got, got.NextSyncAt == nil, equalTime(got.LastSyncedAt, t1.Add(time.Minute)))
+	f.none("on demand again, a day later", t1.Add(24*time.Hour))
+
+	hourly := time.Hour
+	got, err := f.Knowledge.UpdateSource(ctx, handbook, domain.KnowledgeSourcePatch{SyncEvery: &hourly}, admin)
+	f.must(err)
+	f.want("an interval again", got, got.SyncEvery == hourly, got.NextSyncAt != nil)
+	f.finish(f.claimed("due once it has an interval", t1.Add(time.Hour), 10*time.Minute), t1.Add(61*time.Minute), "")
+
+	got = f.get(f.org, handbook)
+	f.want("after a sync on an interval", got.NextSyncAt, equalTime(got.NextSyncAt, t1.Add(121*time.Minute)))
+
+	onDemand := domain.SyncOnDemand
+	got, err = f.Knowledge.UpdateSource(ctx, handbook, domain.KnowledgeSourcePatch{SyncEvery: &onDemand}, admin)
+	f.must(err)
+	f.want("on demand again", got, got.SyncEvery == domain.SyncOnDemand, got.NextSyncAt == nil)
+	f.none("on demand after the patch", t1.Add(48*time.Hour))
 }
 
 // testFinishInvalidUTF8: a sync's error is stored as text even when it is not valid UTF-8 (a

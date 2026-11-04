@@ -8424,7 +8424,7 @@ export interface components {
             };
             /** @description The line that tells agents when to open it; empty when it has none */
             read_when: string;
-            /** @description How often it syncs */
+            /** @description How often it syncs, in seconds: at least 900, or 0 when it syncs only when someone presses Sync */
             sync_every_seconds: number;
             /**
              * @description syncing while a goald holds it; failed after a sync that stopped (last_error says why)
@@ -8436,7 +8436,7 @@ export interface components {
             last_synced_at: string | null;
             /**
              * Format: date-time
-             * @description When it is due next; null for a live source
+             * @description When it is due next; null for a live source, and for an on-demand source (sync_every_seconds 0) until someone presses Sync
              */
             next_sync_at: string | null;
             /** @description Its newest snapshot; null before the first sync */
@@ -8501,7 +8501,7 @@ export interface components {
                 [key: string]: string;
             };
             read_when?: components["schemas"]["KnowledgeReadWhen"];
-            /** @description How often it syncs (default 3600) */
+            /** @description How often it syncs, in seconds: at least 900 (default 3600), or 0 to sync only when someone presses Sync. A new source syncs once when it is created either way */
             sync_every_seconds?: number;
         };
         /** @description One line that tells agents when to open the source, as "How to fix what pages us. Read before acting on an alert." */
@@ -8515,6 +8515,7 @@ export interface components {
             config?: {
                 [key: string]: string;
             };
+            /** @description How often it syncs, in seconds: at least 900, or 0 to sync only when someone presses Sync. 0 clears the next sync; an interval on an on-demand source makes it due at once */
             sync_every_seconds?: number;
         };
         /** @description One file of a source's current snapshot */
