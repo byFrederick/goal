@@ -379,4 +379,9 @@ type WorkItem struct {
 	Source            *string
 	IntegrationBranch *string
 	IntegrationLandAt *string
+	Origin            string
+	Via               *string
+	CreatedBy         *string
+	Generation        int32
+	Untrusted         bool
 }

@@ -3,7 +3,6 @@ package porttest
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
@@ -218,38 +217,39 @@ func (s *Store) Lease(id domain.ItemID) (domain.Lease, bool) {
 	return l, ok
 }
 
-// CreateItem implements ports.Store.
+// CreateItem implements ports.Store. Its audit entry goes to the linked Tenancy, if any, after
+// the item, as Transition's does.
 func (s *Store) CreateItem(ctx context.Context, n domain.NewItem) (domain.Item, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
 		return domain.Item{}, err
 	}
 
+	it, audit, a, err := s.createItem(org, n)
+	if err != nil {
+		return domain.Item{}, err
+	}
+
+	if err := appendAudits(ctx, a, audit); err != nil {
+		return domain.Item{}, fmt.Errorf("create item: %w", err)
+	}
+
+	return it, nil
+}
+
+func (s *Store) createItem(org domain.OrgID, n domain.NewItem) (domain.Item, domain.AuditEntry, ports.Audit, error) {
 	s.mu.Lock()
 	defer s.changes.signal()
 	defer s.mu.Unlock()
 
 	if owner, ok := s.factories[n.FactoryID]; ok && owner != org {
-		return domain.Item{}, fmt.Errorf("factory %s: %w", n.FactoryID, ports.ErrNotFound)
+		return domain.Item{}, domain.AuditEntry{}, nil, fmt.Errorf("factory %s: %w", n.FactoryID, ports.ErrNotFound)
 	}
 
 	s.factories[n.FactoryID] = org
-	s.numbers[n.FactoryID]++
-	it := &domain.Item{
-		ID: domain.ItemID(s.newID()), OrgID: org, FactoryID: n.FactoryID, Number: s.numbers[n.FactoryID],
-		ParentID: n.ParentID, Type: n.Type, Lane: n.Lane, Title: n.Title, Body: n.Body,
-		Station: n.Station, State: n.State, Class: n.Class, Priority: n.Priority,
-		Outputs: map[string]json.RawMessage{}, CreatedAt: n.CreatedAt, UpdatedAt: n.CreatedAt,
-		Source: n.Source, Trigger: n.Trigger,
-	}
-	s.items[it.ID] = it
-	s.trackSpan(it, nil, n.CreatedAt)
-	s.append(domain.Event{
-		FactoryID: it.FactoryID, ItemID: it.ID, At: n.CreatedAt, Kind: domain.EventCreated,
-		Station: it.Station, Actor: domain.ActorEngine,
-	})
+	it, audit := s.file(org, n, filedPart{})
 
-	return clone(it), nil
+	return clone(it), audit, s.audit, nil
 }
 
 // Item implements ports.Store.

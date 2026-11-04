@@ -61,7 +61,7 @@ import (
 
 // Engine moves items; *engine.Engine satisfies it.
 type Engine interface {
-	Submit(ctx context.Context, n domain.NewItem) (domain.Item, error)
+	Submit(ctx context.Context, r domain.FileRequest) (domain.Item, error)
 	Approve(ctx context.Context, id domain.ItemID, by domain.Actor) (domain.Item, error)
 	Reject(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Retry(ctx context.Context, id domain.ItemID, by domain.Actor) (domain.Item, error)
@@ -490,25 +490,17 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 		return nil, err
 	}
 
-	if strings.TrimSpace(b.Title) == "" {
-		return nil, fmt.Errorf("%w: an item needs a title", errInvalid)
-	}
+	source, via := submittedFrom(ctx)
+	p, _ := domain.PrincipalFrom(ctx)
 
-	typ := deref(b.Type)
-	if types := f.Spec.Board.WorkTypes; len(types) > 0 {
-		if typ == "" {
-			typ = types[0]
-		}
-
-		if !slices.Contains(types, typ) {
-			return nil, fmt.Errorf("%w: type %q is not one of factory %s's work types %v", errInvalid, typ, f.Metadata.Name, types)
-		}
-	}
-
-	it, err := s.engine.Submit(ctx, domain.NewItem{
-		FactoryID: domain.FactoryID(f.Metadata.ID), Type: typ, Title: strings.TrimSpace(b.Title),
-		Body: deref(b.Body), Lane: deref(b.Lane), Priority: deref(b.Priority), Source: submittedFrom(ctx),
+	it, err := s.engine.Submit(ctx, domain.FileRequest{
+		FactoryID: domain.FactoryID(f.Metadata.ID), Origin: domain.OriginPerson, Via: via, By: p.Actor(),
+		Type: deref(b.Type), Title: b.Title, Body: deref(b.Body), Lane: deref(b.Lane), Priority: deref(b.Priority), Source: source,
 	})
+	if errors.Is(err, domain.ErrInvalid) { // what the line does not take is a bad request here, not a conflict
+		return nil, fmt.Errorf("%w: %s", errInvalid, err.Error())
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -516,24 +508,24 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 	return gen.SubmitItem201JSONResponse(s.itemOf(ctx, it)), nil
 }
 
-// submittedFrom is where an item the request submits comes from, for Intake: an API key is the
-// API; a user acting through a personal token or a session that is not a browser one (goal
-// login's) is the CLI; a browser session, and GOAL_AUTH=none's one person, who has neither, are
-// people. "" when the request carries no principal.
-func submittedFrom(ctx context.Context) domain.ItemSource {
+// submittedFrom is where an item the request submits comes from, for Intake, and how its person
+// filed it: an API key is the API; a user acting through a personal token or a session that is
+// not a browser one (goal login's) is the CLI; a browser session, and GOAL_AUTH=none's one
+// person, who has neither, are people on the web. "" when the request carries no principal.
+func submittedFrom(ctx context.Context) (domain.ItemSource, domain.Via) {
 	p, ok := domain.PrincipalFrom(ctx)
 
 	switch {
 	case !ok:
-		return ""
+		return "", ""
 	case p.Kind == domain.PrincipalService:
-		return domain.ItemFromAPI
+		return domain.ItemFromAPI, domain.ViaAPI
 	case p.Kind != domain.PrincipalUser:
-		return ""
+		return "", ""
 	case p.Token != nil, p.Session != nil && !p.Session.Browser:
-		return domain.ItemFromCLI
+		return domain.ItemFromCLI, domain.ViaCLI
 	default:
-		return domain.ItemFromPeople
+		return domain.ItemFromPeople, domain.ViaWeb
 	}
 }
 

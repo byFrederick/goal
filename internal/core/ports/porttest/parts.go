@@ -3,7 +3,6 @@ package porttest
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
 	"time"
@@ -20,20 +19,25 @@ func (s *Store) Assemble(ctx context.Context, a ports.Assembly) (domain.Item, do
 		return domain.Item{}, domain.Parts{}, err
 	}
 
-	parent, parts, audit, created, err := s.assemble(org, a)
-	if err != nil || !created || audit == nil || a.Transition.Audit == nil {
+	parent, parts, audit, filed, created, err := s.assemble(org, a)
+	if err != nil || !created {
 		return parent, parts, err
 	}
 
-	if err := audit.Append(ctx, *a.Transition.Audit); err != nil {
+	if a.Transition.Audit != nil {
+		filed = append([]domain.AuditEntry{*a.Transition.Audit}, filed...)
+	}
+
+	if err := appendAudits(ctx, audit, filed...); err != nil {
 		return domain.Item{}, domain.Parts{}, fmt.Errorf("audit assemble: %w", err)
 	}
 
 	return parent, parts, nil
 }
 
-// assemble reports whether it created the parts (false on a retry).
-func (s *Store) assemble(org domain.OrgID, a ports.Assembly) (domain.Item, domain.Parts, ports.Audit, bool, error) {
+// assemble reports whether it created the parts (false on a retry), with their item.filed audit
+// entries.
+func (s *Store) assemble(org domain.OrgID, a ports.Assembly) (domain.Item, domain.Parts, ports.Audit, []domain.AuditEntry, bool, error) {
 	t := a.Transition
 
 	s.mu.Lock()
@@ -42,53 +46,43 @@ func (s *Store) assemble(org domain.OrgID, a ports.Assembly) (domain.Item, domai
 
 	it, ok := s.visible(t.ItemID, org)
 	if !ok {
-		return domain.Item{}, domain.Parts{}, nil, false, fmt.Errorf("item %s: %w", t.ItemID, ports.ErrNotFound)
+		return domain.Item{}, domain.Parts{}, nil, nil, false, fmt.Errorf("item %s: %w", t.ItemID, ports.ErrNotFound)
 	}
 
 	if it.PartKey != "" {
-		return domain.Item{}, domain.Parts{}, nil, false, fmt.Errorf("item %s is a part: %w", t.ItemID, domain.ErrInvalid)
+		return domain.Item{}, domain.Parts{}, nil, nil, false, fmt.Errorf("item %s is a part: %w", t.ItemID, domain.ErrInvalid)
 	}
 
 	if existing := s.partsOf(it.ID); existing.Total > 0 {
-		return clone(it), existing, nil, false, nil
+		return clone(it), existing, nil, nil, false, nil
 	}
 
 	if t.To.State != domain.StateAssembly {
-		return domain.Item{}, domain.Parts{}, nil, false, fmt.Errorf("item %s: assembling moves to state assembly, not %s: %w", t.ItemID, t.To.State, domain.ErrInvalid)
+		return domain.Item{}, domain.Parts{}, nil, nil, false, fmt.Errorf("item %s: assembling moves to state assembly, not %s: %w", t.ItemID, t.To.State, domain.ErrInvalid)
 	}
 
 	if err := domain.ValidatePlan(a.Parts); err != nil {
-		return domain.Item{}, domain.Parts{}, nil, false, fmt.Errorf("assemble item %s: %w", t.ItemID, err)
+		return domain.Item{}, domain.Parts{}, nil, nil, false, fmt.Errorf("assemble item %s: %w", t.ItemID, err)
 	}
 
 	if err := s.checkTransition(it, t); err != nil {
-		return domain.Item{}, domain.Parts{}, nil, false, err
+		return domain.Item{}, domain.Parts{}, nil, nil, false, err
 	}
 
 	after, err := s.afterItems(it, a.After, org)
 	if err != nil {
-		return domain.Item{}, domain.Parts{}, nil, false, err
+		return domain.Item{}, domain.Parts{}, nil, nil, false, err
 	}
 
 	s.move(it, t)
 
 	ids := make(map[string]domain.ItemID, len(a.Parts))
+	filed := make([]domain.AuditEntry, 0, len(a.Parts))
 
 	for _, p := range a.Parts {
-		s.numbers[it.FactoryID]++
-		part := &domain.Item{
-			ID: domain.ItemID(s.newID()), OrgID: org, FactoryID: it.FactoryID, Number: s.numbers[it.FactoryID],
-			ParentID: it.ID, PartKey: p.Key, PartPaths: slices.Clone(p.Paths), Paths: slices.Clone(p.Paths), BaseCommit: it.BaseCommit, Type: it.Type, Lane: p.Lane,
-			Title: p.Title, Body: p.Brief, Station: t.From.Station, State: domain.StateQueued, Class: it.Class,
-			Priority: it.Priority, Outputs: map[string]json.RawMessage{}, CreatedAt: t.At, UpdatedAt: t.At,
-		}
-		s.items[part.ID] = part
+		part, audit := s.file(org, partOf(it, p, a.By, t.At), filedPart{key: p.Key, paths: p.Paths, baseCommit: it.BaseCommit})
 		ids[p.Key] = part.ID
-		s.trackSpan(part, nil, t.At)
-		s.append(domain.Event{
-			FactoryID: part.FactoryID, ItemID: part.ID, At: t.At, Kind: domain.EventPartCreated, Station: part.Station,
-			Actor: domain.ActorEngine, Data: map[string]any{"parent": string(it.ID), "key": p.Key},
-		})
+		filed = append(filed, audit)
 	}
 
 	for _, p := range a.Parts {
@@ -106,7 +100,7 @@ func (s *Store) assemble(org domain.OrgID, a ports.Assembly) (domain.Item, domai
 		Actor: domain.ActorEngine, Data: map[string]any{"parts": len(a.Parts)},
 	})
 
-	return clone(it), s.partsOf(it.ID), s.audit, true, nil
+	return clone(it), s.partsOf(it.ID), s.audit, filed, true, nil
 }
 
 // linkAfter adds a linked edge by a.AfterBy, with its edge_added event, from each of a's parts
@@ -158,39 +152,42 @@ func (s *Store) AddPart(ctx context.Context, n ports.NewAssemblyPart) (domain.It
 		return domain.Item{}, domain.Parts{}, err
 	}
 
-	part, parts, audit, err := s.addPart(org, n)
+	part, parts, audit, filed, err := s.addPart(org, n)
 	if err != nil {
 		return domain.Item{}, domain.Parts{}, fmt.Errorf("add part to %s: %w", n.Assembly, err)
 	}
 
-	if audit != nil && n.Audit != nil {
-		if err := audit.Append(ctx, *n.Audit); err != nil {
-			return domain.Item{}, domain.Parts{}, fmt.Errorf("audit add part: %w", err)
-		}
+	entries := []domain.AuditEntry{filed}
+	if n.Audit != nil {
+		entries = append(entries, *n.Audit)
+	}
+
+	if err := appendAudits(ctx, audit, entries...); err != nil {
+		return domain.Item{}, domain.Parts{}, fmt.Errorf("audit add part: %w", err)
 	}
 
 	return part, parts, nil
 }
 
-func (s *Store) addPart(org domain.OrgID, n ports.NewAssemblyPart) (domain.Item, domain.Parts, ports.Audit, error) {
+func (s *Store) addPart(org domain.OrgID, n ports.NewAssemblyPart) (domain.Item, domain.Parts, ports.Audit, domain.AuditEntry, error) {
 	s.mu.Lock()
 	defer s.changes.signal()
 	defer s.mu.Unlock()
 
 	it, ok := s.visible(n.Assembly, org)
 	if !ok {
-		return domain.Item{}, domain.Parts{}, nil, fmt.Errorf("item %s: %w", n.Assembly, ports.ErrNotFound)
+		return domain.Item{}, domain.Parts{}, nil, domain.AuditEntry{}, fmt.Errorf("item %s: %w", n.Assembly, ports.ErrNotFound)
 	}
 
 	existing := s.partsOf(it.ID)
 
 	switch {
 	case it.PartKey != "":
-		return domain.Item{}, domain.Parts{}, nil, fmt.Errorf("item %s is a part: %w", n.Assembly, domain.ErrInvalid)
+		return domain.Item{}, domain.Parts{}, nil, domain.AuditEntry{}, fmt.Errorf("item %s is a part: %w", n.Assembly, domain.ErrInvalid)
 	case it.State != domain.StateAssembly && existing.Total == 0:
-		return domain.Item{}, domain.Parts{}, nil, fmt.Errorf("item %s is no assembly: %w", n.Assembly, domain.ErrInvalid)
+		return domain.Item{}, domain.Parts{}, nil, domain.AuditEntry{}, fmt.Errorf("item %s is no assembly: %w", n.Assembly, domain.ErrInvalid)
 	case it.State != domain.StateAssembly:
-		return domain.Item{}, domain.Parts{}, nil, fmt.Errorf("item %s is %s, not an open assembly: %w", n.Assembly, it.State, ports.ErrConflict)
+		return domain.Item{}, domain.Parts{}, nil, domain.AuditEntry{}, fmt.Errorf("item %s is %s, not an open assembly: %w", n.Assembly, it.State, ports.ErrConflict)
 	}
 
 	ids := make(map[string]domain.ItemID, existing.Total)
@@ -202,44 +199,36 @@ func (s *Store) addPart(org domain.OrgID, n ports.NewAssemblyPart) (domain.Item,
 
 	p := n.Part
 	if keys[p.Key] {
-		return domain.Item{}, domain.Parts{}, nil, fmt.Errorf("part key %q is taken: %w", p.Key, ports.ErrConflict)
+		return domain.Item{}, domain.Parts{}, nil, domain.AuditEntry{}, fmt.Errorf("part key %q is taken: %w", p.Key, ports.ErrConflict)
 	}
 
 	if err := domain.ValidatePart(p, keys); err != nil {
-		return domain.Item{}, domain.Parts{}, nil, err
+		return domain.Item{}, domain.Parts{}, nil, domain.AuditEntry{}, err
 	}
 
-	s.numbers[it.FactoryID]++
-	part := &domain.Item{
-		ID: domain.ItemID(s.newID()), OrgID: org, FactoryID: it.FactoryID, Number: s.numbers[it.FactoryID],
-		ParentID: it.ID, PartKey: p.Key, PartPaths: slices.Clone(p.Paths), Paths: slices.Clone(p.Paths), BaseCommit: it.BaseCommit, Type: it.Type, Lane: p.Lane,
-		Title: p.Title, Body: p.Brief, Station: it.Station, State: domain.StateQueued, Class: it.Class,
-		Priority: it.Priority, Outputs: map[string]json.RawMessage{}, CreatedAt: n.At, UpdatedAt: n.At,
-	}
-
-	for _, k := range p.Needs {
-		if s.reaches(ids[k], part.ID) {
-			return domain.Item{}, domain.Parts{}, nil, fmt.Errorf("part %q needs %q: %w", p.Key, k, domain.ErrCycle)
-		}
-	}
-
-	s.items[part.ID] = part
-	s.trackSpan(part, nil, n.At)
+	// A new part has no dependents, so its needs close no cycle.
+	part, filed := s.file(org, partOf(it, p, n.By, n.At), filedPart{key: p.Key, paths: p.Paths, baseCommit: it.BaseCommit})
 
 	for _, k := range p.Needs {
 		s.edges = append(s.edges, domain.Edge{Item: part.ID, Needs: ids[k], Kind: domain.EdgePlanned, By: n.By.Ref(), At: n.At})
 	}
 
 	s.append(domain.Event{
-		FactoryID: part.FactoryID, ItemID: part.ID, At: n.At, Kind: domain.EventPartCreated, Station: part.Station,
-		Actor: n.By.Name, Data: map[string]any{"parent": string(it.ID), "key": p.Key},
-	})
-	s.append(domain.Event{
 		FactoryID: it.FactoryID, ItemID: it.ID, At: n.At, Kind: domain.EventPartAdded, Station: it.Station,
 		Actor: n.By.Name, Data: map[string]any{"part": string(part.ID), "key": p.Key, "actor": n.By.Ref()},
 	})
 
-	return clone(part), s.partsOf(it.ID), s.audit, nil
+	return clone(part), s.partsOf(it.ID), s.audit, filed, nil
+}
+
+// partOf is part p of the assembly it, filed by by at at, as the PostgreSQL store's insertPart
+// makes it.
+func partOf(it *domain.Item, p domain.NewPart, by domain.Actor, at time.Time) domain.NewItem {
+	return domain.NewItem{
+		FactoryID: it.FactoryID, ParentID: it.ID, Type: it.Type, Lane: p.Lane, Title: p.Title, Body: p.Brief,
+		Priority: it.Priority, Station: it.Station, State: domain.StateQueued, Class: it.Class, CreatedAt: at,
+		Origin: domain.OriginPlan, CreatedBy: by, Generation: it.Generation, Untrusted: it.Untrusted,
+	}
 }
 
 // Parts implements ports.Store.

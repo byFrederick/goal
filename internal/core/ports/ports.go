@@ -76,7 +76,9 @@ func (e *MergeConflictError) Is(target error) bool { return target == ErrMergeCo
 // their events in the same transaction. All of them are safe to call from many goald
 // instances at once.
 type Store interface {
-	// CreateItem inserts an item with the next per-factory number and appends a created event.
+	// CreateItem files an item domain.File checked: it inserts it with the next per-factory number
+	// (origin person when n.Origin is ""), and appends a created event and an item.filed audit
+	// entry by n.CreatedBy (the engine when zero), in one transaction.
 	CreateItem(ctx context.Context, n domain.NewItem) (domain.Item, error)
 
 	// Item returns one item, or ErrNotFound.
@@ -125,12 +127,13 @@ type Store interface {
 
 	// Assemble makes a planning item an assembly, in one transaction: a.Transition moves it to
 	// state assembly (fenced as Transition is, its lease recorded as a lease span), each of
-	// a.Parts becomes an item with the parent's type, priority, class of service and base commit
-	// (as a.Transition leaves it), its brief as body, queued at a.Transition.From.Station (the station that planned it), each need a
+	// a.Parts becomes an item filed by a.By with origin plan and the parent's type, priority,
+	// class of service, base commit, generation and untrusted (as a.Transition leaves it), its brief as body, queued at a.Transition.From.Station (the station that planned it), each need a
 	// planned edge, and each part without needs a linked edge by a.AfterBy to each of a.After (with
 	// an edge_added event; new parts have no dependents, so these close no cycle). It appends
-	// assembled on the parent and part_created on each part. An item of a.After that is missing
-	// is ErrNotFound, one of another factory domain.ErrInvalid. A plan that
+	// assembled on the parent, and part_created by a.By and an item.filed audit entry on each
+	// part. An item of a.After that is missing is ErrNotFound, one of another factory
+	// domain.ErrInvalid. A plan that
 	// fails domain.ValidatePlan (domain.ErrInvalid or domain.ErrCycle), a transition not to state
 	// assembly and a parent that is itself a part (assemblies do not nest) are refused with
 	// nothing written. When the parent already has parts, a retry, it returns them and changes
@@ -139,7 +142,8 @@ type Store interface {
 
 	// AddPart adds one part to an open assembly, in one transaction, under the factory's lock and
 	// then the assembly's (AddEdge's order): n.Part becomes an item as each of Assemble's parts
-	// does, with the assembly's type, priority, class of service and base commit, its brief as
+	// does, filed by n.By, with the assembly's type, priority, class of service, base commit,
+	// generation and untrusted, its brief as
 	// body, its paths,
 	// queued at the assembly's own station (the station that planned it), and each need, the key
 	// of one of the assembly's parts, a planned edge by n.By (checked for cycles as AddEdge's
@@ -717,6 +721,8 @@ type Assembly struct {
 	// each part without in-plan needs gets a linked edge to each of them by AfterBy.
 	After   []domain.ItemID
 	AfterBy domain.Actor
+	// By files the parts (domain.File, origin plan): the planning agent; the engine when zero.
+	By domain.Actor
 }
 
 // NewAssemblyPart is one part added to an open assembly by By at At.

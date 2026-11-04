@@ -18,14 +18,15 @@ import (
 // leaseExpiredError is what a run that lost its lease records as its error.
 const leaseExpiredError = "lease expired"
 
-// CreateItem implements ports.Store.
+// CreateItem implements ports.Store: fileItem writes the item, its created event and its
+// item.filed audit entry in one transaction.
 func (s *Store) CreateItem(ctx context.Context, n domain.NewItem) (domain.Item, error) {
 	factory, err := parseID("factory", string(n.FactoryID))
 	if err != nil {
 		return domain.Item{}, err
 	}
 
-	var parent *uuid.UUID
+	f := filing{n: n, factory: factory}
 
 	if n.ParentID != "" {
 		id, err := parseID("parent item", string(n.ParentID))
@@ -33,43 +34,20 @@ func (s *Store) CreateItem(ctx context.Context, n domain.NewItem) (domain.Item, 
 			return domain.Item{}, err
 		}
 
-		parent = &id
-	}
-
-	id, err := newID()
-	if err != nil {
-		return domain.Item{}, err
+		f.parent = &id
 	}
 
 	var it domain.Item
 
 	err = s.inTx(ctx, func(q *db.Queries) error {
-		number, err := q.NextItemNumber(ctx, factory)
-		if notFound(err) {
-			return fmt.Errorf("factory %s: %w", n.FactoryID, ports.ErrNotFound)
-		}
-
+		row, err := fileItem(ctx, q, f)
 		if err != nil {
-			return fmt.Errorf("next item number: %w", err)
-		}
-
-		row, err := q.InsertItem(ctx, db.InsertItemParams{
-			ID: id, FactoryID: factory, Number: number, ParentID: parent, Type: n.Type, Lane: optional(n.Lane),
-			Title: n.Title, Body: n.Body, Station: n.Station, State: string(n.State), ClassOfService: string(n.Class),
-			Priority: int64(n.Priority), CreatedAt: n.CreatedAt, Source: optional(string(n.Source)), Trigger: optional(n.Trigger),
-		})
-		if err != nil {
-			return fmt.Errorf("insert item: %w", err)
-		}
-
-		if it, err = itemFrom(row); err != nil {
 			return err
 		}
 
-		return appendEvents(ctx, q, []domain.Event{{
-			FactoryID: it.FactoryID, ItemID: it.ID, At: n.CreatedAt, Kind: domain.EventCreated,
-			Station: it.Station, Actor: domain.ActorEngine,
-		}})
+		it, err = itemFrom(row)
+
+		return err
 	})
 	if err != nil {
 		return domain.Item{}, fmt.Errorf("create item: %w", err)

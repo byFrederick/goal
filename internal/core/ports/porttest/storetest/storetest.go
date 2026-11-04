@@ -58,6 +58,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		test func(f *fixture)
 	}{
 		{"CreateItem_NumbersEachFactoryFromOne", testCreateItem},
+		{"CreateItem_RecordsOriginAndActor", testCreateItemRecordsOrigin},
 		{"UnknownIDs_NotFound", testNotFound},
 		{"Waiting_PullOrder", testWaiting},
 		{"ClaimNext_TakesFirstInPullOrder", testClaim},
@@ -74,6 +75,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Parts_AssembleRefusesAndWritesNothing", testAssembleRefused},
 		{"Parts_AssembleRefusesAPart", testAssembleRefusesAPart},
 		{"Parts_AssembleLinksRootPartsAfter", testAssembleLinksRootPartsAfter},
+		{"Assemble_PartsInheritGenerationAndUntrusted", testAssemblePartsInherit},
 		{"Parts_AssemblyClosesWithItsLastPart", testAssemblyClosesWithItsLastPart},
 		{"Parts_AssemblyCancelledWithItsParts", testAssemblyCancelledWithItsParts},
 		{"Parts_AssemblyClosesOnceWhenTwoLastPartsFinish", testAssemblyClosesOnce},
@@ -353,7 +355,7 @@ func testCreateItem(f *fixture) {
 	want := domain.Item{
 		ID: a.ID, OrgID: f.org, FactoryID: f.factory, Number: 1, Type: typeTask, Lane: laneBackend, Title: "a", Body: "details",
 		Station: stWork, State: domain.StateQueued, Class: domain.ClassStandard, Priority: 3,
-		Outputs: map[string]json.RawMessage{}, CreatedAt: t0, UpdatedAt: t0,
+		Outputs: map[string]json.RawMessage{}, CreatedAt: t0, UpdatedAt: t0, Origin: domain.OriginPerson,
 	}
 	sameItem(t, a, want)
 	sameItem(t, f.item(t, a.ID), want)
@@ -364,6 +366,7 @@ func testCreateItem(f *fixture) {
 
 	sameEvents(t, f.Events(t, a.ID), []domain.Event{{
 		FactoryID: f.factory, ItemID: a.ID, At: t0, Kind: domain.EventCreated, Station: stWork, Actor: domain.ActorEngine,
+		Data: map[string]any{dataActor: domain.EngineActor.Ref()},
 	}})
 }
 

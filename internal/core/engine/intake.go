@@ -296,12 +296,17 @@ func renderItem(l domain.Line, t domain.Trigger, ev domain.IntakeEvent) (domain.
 	}, nil
 }
 
-// createFromTrigger creates the item it, rendered for ev, from t.
+// createFromTrigger files the item it, rendered for ev, from t: origin trigger, by the engine.
 func (e *Engine) createFromTrigger(ctx context.Context, l domain.Line, t domain.Trigger, ev domain.IntakeEvent, it domain.TriggerItem, now time.Time) (domain.Item, error) {
-	created, err := e.store.CreateItem(ctx, domain.NewItem{
-		FactoryID: l.FactoryID, Type: it.Type, Lane: it.Lane, Title: it.Title, Body: it.Body,
-		Station: it.Station, State: it.State, Class: it.Class, CreatedAt: now, Source: itemSource(ev.Source), Trigger: t.Name,
+	n, err := domain.File(l, domain.FileRequest{
+		Origin: domain.OriginTrigger, By: domain.EngineActor, Type: it.Type, Lane: it.Lane, Title: it.Title, Body: it.Body,
+		Station: it.Station, State: it.State, Class: it.Class, At: now, Source: itemSource(ev.Source), Trigger: t.Name,
 	})
+	if err != nil {
+		return domain.Item{}, fmt.Errorf("file the item: %w", err)
+	}
+
+	created, err := e.store.CreateItem(ctx, n)
 	if err != nil {
 		return domain.Item{}, fmt.Errorf("create the item: %w", err)
 	}
