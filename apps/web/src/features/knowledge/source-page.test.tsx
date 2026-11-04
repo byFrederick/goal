@@ -71,6 +71,13 @@ function renderSource(can?: string[], source = runbooks) {
 }
 
 describe('the knowledge source page', () => {
+  it('scrolls the files table in its own container', async () => {
+    renderSource();
+
+    const table = await screen.findByRole('table', { name: 'Files of runbooks' });
+    expect(table.parentElement?.className).toContain('overflow-x-auto');
+  });
+
   it('shows the files with their reads, the latest sync, the settings, the line agents see and who reads it', async () => {
     renderSource();
 

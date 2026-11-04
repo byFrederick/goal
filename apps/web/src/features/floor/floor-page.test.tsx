@@ -764,15 +764,16 @@ describe('the cards below the figures', () => {
     expect(card.textContent).not.toContain('frontend-engineer-2');
   });
 
-  it('Activity rows are one line each: a time, a dot and a truncating sentence, with no avatar', async () => {
+  it('Activity rows hold a time, a dot and a sentence that wraps instead of truncating, with no avatar', async () => {
     renderFloor();
 
     const card = await screen.findByRole('region', { name: 'Activity' });
     const rows = within(card).getAllByRole('listitem');
     expect(rows).toHaveLength(2);
     const sentence = rows[0]?.querySelector('p');
-    expect(sentence?.classList.contains('truncate')).toBe(true);
-    expect(sentence?.getAttribute('title')).toBe('sre#146 merged by reviewer at Review');
+    expect(sentence?.classList.contains('truncate')).toBe(false);
+    expect(sentence?.getAttribute('title')).toBeNull();
+    expect(sentence?.textContent).toBe('sre#146 merged by reviewer at Review');
     expect(rows[0]?.querySelector('.bg-ok.size-1\\.5')).toBeTruthy();
     expect(rows[1]?.querySelector('.bg-muted.size-1\\.5')).toBeTruthy();
     expect(card.querySelector('.rounded-full.size-7')).toBeNull();

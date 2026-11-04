@@ -44,7 +44,7 @@ function usePartLink() {
 /** The progress card: one segment per part, the counts, the lead time, the spend, the touches, the finish. */
 function ProgressCard({ item, assembly, className }: { item: Item; assembly: AssemblyParts; className?: string }) {
   const { parts } = assembly;
-  const { spent, budget } = spend(item, parts, item.flow?.budget.per_item_usd ?? null);
+  const spent = spend(item, parts);
   const finish = timeToFinish(parts);
   const merged = `${assembly.done} of ${assembly.total} parts merged`;
   return (
@@ -60,7 +60,7 @@ function ProgressCard({ item, assembly, className }: { item: Item; assembly: Ass
         label="Assembly figures"
         stats={[
           { label: 'Lead time', value: formatDuration(assembly.lead_time_seconds * 1000) },
-          { label: 'Spend', value: formatUsd(spent), ...(budget ? { unit: `of ${formatUsd(budget)}` } : {}) },
+          { label: 'Spend', value: formatUsd(spent) },
           { label: 'Human touches', value: item.touches?.count ?? 0 },
           {
             label: 'Time to finish',

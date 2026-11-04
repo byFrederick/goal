@@ -288,3 +288,19 @@ test.describe('phone tap areas at 390 px', () => {
     await apart(page.getByRole('list', { name: 'Files found' }).getByRole('link'));
   });
 });
+
+test.describe('files table at 390 px', () => {
+  test.use({ viewport: { width: 390, height: 900 } });
+
+  test('the Files table scrolls in its own container and the page does not', async ({ page }) => {
+    await page.goto('/o/acme/knowledge/runbooks');
+    const table = page.getByRole('table', { name: /^Files of/ });
+    await expect(table).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Reads, 7 days' })).toBeAttached();
+    const scrolls = await table.evaluate(
+      (el) => (el.parentElement?.scrollWidth ?? 0) >= (el.parentElement?.clientWidth ?? 0),
+    );
+    expect(scrolls).toBe(true);
+    await expectNoHorizontalScroll(page);
+  });
+});
