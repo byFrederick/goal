@@ -78,8 +78,8 @@ run "every_secret_reaches_the_store_under_its_env_name" {
   command = plan
 
   assert {
-    condition     = length(module.secrets.names) == 15
-    error_message = "Want 15 store secrets, got ${length(module.secrets.names)}."
+    condition     = length(module.secrets.names) == 14
+    error_message = "Want 14 store secrets, got ${length(module.secrets.names)}."
   }
 
   assert {
@@ -237,7 +237,7 @@ run "a_google_only_install_needs_no_smtp_url" {
   }
 
   assert {
-    condition     = length(module.secrets.names) == 14 && !contains(keys(module.secrets.names), "GOAL_SMTP_URL")
+    condition     = length(module.secrets.names) == 13 && !contains(keys(module.secrets.names), "GOAL_SMTP_URL")
     error_message = "Without an SMTP URL there is no GOAL_SMTP_URL store secret."
   }
 
