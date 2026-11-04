@@ -1017,6 +1017,12 @@ type ObjectStore interface {
 	// domain.ErrInvalid.
 	GetRange(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error)
 
+	// PresignGet returns a URL that anyone holding it can GET the object at key with, valid for
+	// ttl, so a cloud box downloads a knowledge snapshot's zip from the bucket itself (ADR 0038
+	// decision 7). It makes no network call and does not check that key exists. The URL is a
+	// bearer credential: never log it. A ttl at or below zero is domain.ErrInvalid.
+	PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error)
+
 	// Put stores body at key, replacing what was there, and returns it.
 	Put(ctx context.Context, key string, body []byte) (ObjectInfo, error)
 
