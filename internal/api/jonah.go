@@ -34,6 +34,16 @@ type JonahDeps struct {
 	// Tries reads a proposal's tries of past items (ADR 0039 decision 11) for its tried; nil
 	// shows none.
 	Tries PastTryReads
+	// KeptDrafts starts and reads the open draft's kept tests (ADR 0039 decision 12);
+	// *jonah.KeptDrafts satisfies it. nil answers those routes with 503 jonah-unavailable.
+	KeptDrafts DraftKeptTests
+}
+
+// DraftKeptTests starts and reads the kept tests the open draft reaches; an error wrapping
+// authoring.ErrNoDraft when none is open.
+type DraftKeptTests interface {
+	Start(ctx context.Context, f domain.FactoryID) (jonah.DraftTests, error)
+	Read(ctx context.Context, f domain.FactoryID) (jonah.DraftTests, error)
 }
 
 // PastTryReads are the reads of ports.PastTries a proposal's tried makes.
@@ -483,6 +493,10 @@ func (s *server) proposalTried(ctx context.Context, f domain.FactoryID, p domain
 		out.Seconds = &secs
 	}
 
+	for _, k := range tried.KeptTests {
+		out.KeptTests = append(out.KeptTests, s.triedKeptTestOut(ctx, f, k))
+	}
+
 	for _, it := range tried.Items {
 		ref, title := s.itemRef(ctx, f, it.ItemID)
 		e := gen.TriedItem{ItemRef: ref, ItemTitle: title, Station: it.Station, Tries: make([]gen.TriedTry, 0, len(it.Tries))}
@@ -499,6 +513,20 @@ func (s *server) proposalTried(ctx context.Context, f domain.FactoryID, p domain
 	}
 
 	return out, nil
+}
+
+// triedKeptTestOut is a proposal's try of a kept test as its tried shows it: the test by its
+// item's number.
+func (s *server) triedKeptTestOut(ctx context.Context, f domain.FactoryID, t domain.PastTry) gen.TriedKeptTest {
+	var number int64
+	if it, err := s.items.Item(ctx, t.ItemID); err == nil && it.FactoryID == f {
+		number = it.Number
+	}
+
+	return gen.TriedKeptTest{
+		Test: number, Station: t.Station, Attempt: t.Attempt, Result: gen.KeptTestResult(t.KeptResult()), Reason: optional(t.Reason),
+		Error: optional(t.Error),
+	}
 }
 
 // triedTryOut is t as a proposal's tried shows it.
@@ -905,6 +933,63 @@ func (a *JonahAuthoring) Publish(ctx context.Context, f domain.FactoryID, revisi
 	_, gated := errors.AsType[*authoring.EvalGateError](err)
 
 	return v, gated, err
+}
+
+// DraftChange is f's open draft as a change of its current version (jonah.Drafts): each file it
+// changes or adds, whole, with the current file's hash when it changes one, the paths it deletes,
+// and domain.ContentKey of its files, read from their hashes. An error wrapping
+// authoring.ErrNoDraft when none is open; no version before the first publish.
+func (a *JonahAuthoring) DraftChange(ctx context.Context, f domain.FactoryID) (jonah.DraftChange, error) {
+	draft, err := a.defs.DraftFiles(ctx, f)
+	if err != nil {
+		return jonah.DraftChange{}, err
+	}
+
+	current, _, err := a.Head(ctx, f)
+	if err != nil || current == "" {
+		return jonah.DraftChange{}, err
+	}
+
+	cur, err := a.defs.Version(ctx, f, authoring.VersionSelector{Kind: authoring.SelectCurrent})
+	if err != nil {
+		return jonah.DraftChange{}, fmt.Errorf("read the current version of %s: %w", f, err)
+	}
+
+	was := make(map[string]domain.BlobHash, len(cur.Files))
+	for _, fi := range cur.Files {
+		was[fi.Path] = fi.SHA256
+	}
+
+	out := jonah.DraftChange{Version: current}
+	m := make(domain.Manifest, len(draft))
+
+	for _, fi := range draft {
+		m[fi.Path] = fi.SHA256
+
+		before, ok := was[fi.Path]
+		if ok && before == fi.SHA256 {
+			continue
+		}
+
+		content, _, err := a.DraftFile(ctx, f, fi.Path)
+		if err != nil {
+			return jonah.DraftChange{}, fmt.Errorf("read %s of the draft: %w", fi.Path, err)
+		}
+
+		out.Edits = append(out.Edits, domain.ProposalEdit{Path: fi.Path, Content: string(content), BaseSHA256: string(before)})
+	}
+
+	for _, fi := range cur.Files {
+		if _, ok := m[fi.Path]; !ok {
+			out.Deleted = append(out.Deleted, fi.Path)
+		}
+	}
+
+	slices.SortFunc(out.Edits, func(a, b domain.ProposalEdit) int { return strings.Compare(a.Path, b.Path) })
+	slices.Sort(out.Deleted)
+	out.ContentKey = string(domain.ManifestSHA256(m))
+
+	return out, nil
 }
 
 // DiscardDraft discards f's draft at revision.

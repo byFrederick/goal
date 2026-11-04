@@ -1675,6 +1675,48 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Version" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/draft/kept-tests:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    post:
+      operationId: startDraftKeptTests
+      x-goal-scope: definition:publish
+      tags: [learning]
+      summary: Start the kept tests the open draft reaches (ADR 0039 decision 12)
+      description: >-
+        The publish dialog calls this when it opens. Goal finds the stations the draft reaches
+        (the agent stations whose agent gets something different) and queues one try of each
+        kept test there, on the current version with the draft's files. A test that has a try of
+        exactly the draft's content already, from a tried proposal or an earlier publish, reuses
+        it and queues nothing, so calling this again starts nothing new. Tries of a publish are
+        claimed before a proposal's, and still wait while an item waits at an agent station or
+        Jonah's budget is used up. A failing test warns and never blocks a publish:
+        publishDraft does not read these results. A test that can't be tried (its station's
+        agent needs MCP servers or secrets, the draft deletes a file, or Jonah is off) is
+        answered with result error and why. 404 no-draft when no draft is open.
+      responses:
+        "200":
+          description: The kept tests the draft reaches, with their results so far
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DraftKeptTests" }
+        default: { $ref: "#/components/responses/Problem" }
+    get:
+      operationId: getDraftKeptTests
+      x-goal-scope: factory:read
+      tags: [learning]
+      summary: Read the open draft's kept tests and their results
+      description: >-
+        The same answer as startDraftKeptTests, and it starts nothing: a test not yet started has
+        result null. 404 no-draft when no draft is open.
+      responses:
+        "200":
+          description: The kept tests the draft reaches, with their results so far
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DraftKeptTests" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/draft/requests:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -7846,7 +7888,10 @@ components:
           description: From the first try queued to the last one finished; absent until every try is done
         kept_tests:
           type: array
-          description: The station's kept tests run on the proposal, each passed or failed; empty until kept tests run on proposals
+          description: >-
+            The proposal's tries of the kept tests at the stations it reaches (ADR 0039 decision
+            12), in the order they were queued; empty when it reaches none or was tried before kept
+            tests ran on proposals
           items: { $ref: "#/components/schemas/TriedKeptTest" }
         grader:
           description: How often the grader read the items' original and final results right; absent until the grader is checked
@@ -7888,12 +7933,58 @@ components:
         cost_usd: { type: number, format: double }
     TriedKeptTest:
       type: object
-      required: [test, result]
+      required: [test, station, attempt, result]
       properties:
         test: { type: integer, format: int64, description: The kept test's item number }
+        station: { type: string, description: The station the test is kept at }
+        attempt: { type: integer, description: The try's attempt, 1 to 3; a model proposal tries each test three times }
+        result: { $ref: "#/components/schemas/KeptTestResult" }
+        reason: { type: string, description: Why it passed or failed; absent while it runs }
+        error: { type: string, description: Why the try could not be carried out }
+    KeptTestResult:
+      type: string
+      description: >-
+        running: its try is queued or runs; passed: the try passed the station's contract and
+        checks and, at a gate, approved as the item did there; failed: it did not, or its run
+        failed; error: the try could not be carried out, which is never a failure
+      enum: [running, passed, failed, error]
+    KeptTestLastResult:
+      type: object
+      description: A kept test's newest finished try, from a proposal or a publish
+      required: [result, at]
+      properties:
         result:
           type: string
-          enum: [passed, failed]
+          enum: [passed, failed, error]
+        at: { type: string, format: date-time, description: When the try finished }
+        run_id: { type: string, description: The try's own run; absent when it never ran }
+    DraftKeptTests:
+      type: object
+      required: [state, tests]
+      properties:
+        state:
+          type: string
+          description: >-
+            trying: a test's try is queued or running; done: every started try is done, or none
+            was started; budget_used: a try is still queued and Jonah's budget over the last 7
+            days is used up
+          enum: [trying, done, budget_used]
+        tests:
+          type: array
+          description: The kept tests at the stations the draft reaches, then those that can't be tried
+          items: { $ref: "#/components/schemas/DraftKeptTest" }
+    DraftKeptTest:
+      type: object
+      required: [test, result]
+      properties:
+        test: { $ref: "#/components/schemas/KeptTest" }
+        result:
+          allOf: [{ $ref: "#/components/schemas/KeptTestResult" }]
+          nullable: true
+          description: Null while no try of the draft's content was started
+        reason: { type: string, description: Why it passed or failed }
+        error: { type: string, description: Why it could not be tried or carried out }
+        run_id: { type: string, description: The try's own run, once it ran }
     TriedGrader:
       type: object
       required: [original_hit_rate, final_hit_rate]
@@ -7931,13 +8022,17 @@ components:
     KeptTest:
       type: object
       description: A past item kept, at a station it passed the first time, as a test (ADR 0039 decision 12)
-      required: [id, item, station, kept_by, kept_at]
+      required: [id, item, station, kept_by, kept_at, last_result]
       properties:
         id: { type: string }
         item: { $ref: "#/components/schemas/KeptTestItem" }
         station: { type: string }
         kept_by: { type: string, description: "The actor ref of who kept it" }
         kept_at: { type: string, format: date-time }
+        last_result:
+          allOf: [{ $ref: "#/components/schemas/KeptTestLastResult" }]
+          nullable: true
+          description: Its newest finished try's result; null for a test never run
     KeptTestItem:
       type: object
       required: [id, number, title]

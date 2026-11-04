@@ -1,6 +1,8 @@
 package api_test
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -8,8 +10,11 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
+	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/definitions"
+	"github.com/byFrederick/goal/internal/factorymodel"
 )
 
 // lineTests are the line factory's kept tests; line has one agent station, build.
@@ -120,8 +125,8 @@ func (h *harness) keep(t *testing.T, it domain.Item) gen.KeptTest {
 	}
 
 	if kept.Id == "" || kept.Item.Id != string(it.ID) || kept.Item.Number != it.Number || kept.Item.Title != it.Title ||
-		kept.Station != stBuild || kept.KeptBy == "" || !kept.KeptAt.Equal(h.clock.Now()) {
-		t.Errorf("kept = %+v, want item %d at %s, kept now", kept, it.Number, stBuild)
+		kept.Station != stBuild || kept.KeptBy == "" || !kept.KeptAt.Equal(h.clock.Now()) || kept.LastResult != nil {
+		t.Errorf("kept = %+v, want item %d at %s, kept now, never run", kept, it.Number, stBuild)
 	}
 
 	return kept
@@ -168,4 +173,221 @@ func (h *harness) wantKeepRefusals(t *testing.T) {
 	if got := h.keptTests(t, lineTests); len(got) != 2 {
 		t.Errorf("after refusals %d kept tests, want the 2 kept", len(got))
 	}
+}
+
+// tryLines is jonah.TryDefinitions over the definitions cache, as goald's: a change's line is its
+// version with the edits applied, and the stations it reaches factorymodel.StationsReached's.
+type tryLines struct{ c *definitions.Cache }
+
+func (d tryLines) CurrentLines(ctx context.Context) ([]domain.Line, error) { return d.c.CurrentLines(ctx) }
+
+func (d tryLines) ProposedLine(ctx context.Context, v domain.DefinitionVersionID, edits []domain.ProposalEdit) (domain.Line, []string, error) {
+	before, err := d.c.VersionFiles(ctx, v)
+	if err != nil {
+		return domain.Line{}, nil, err
+	}
+
+	p, err := d.c.Proposed(ctx, v, edits)
+	if err != nil {
+		return domain.Line{}, nil, err
+	}
+
+	after, err := p.VersionFiles(ctx, v)
+	if err != nil {
+		return domain.Line{}, nil, err
+	}
+
+	snap := func(files map[string][]byte) factorymodel.Snapshot {
+		m := make(domain.Manifest, len(files))
+		for path, b := range files {
+			m[path] = domain.HashBlob(b)
+		}
+
+		return factorymodel.Snapshot{Manifest: m, Files: config.Files(files)}
+	}
+
+	return p.Line(), factorymodel.StationsReached(snap(before), snap(after)), nil
+}
+
+func (d tryLines) ValidateProposed(ctx context.Context, v domain.DefinitionVersionID, edits []domain.ProposalEdit, contract string,
+	output json.RawMessage,
+) error {
+	p, err := d.c.Proposed(ctx, v, edits)
+	if err != nil {
+		return err
+	}
+
+	return p.Validate(ctx, v, contract, output)
+}
+
+func (d tryLines) ContentKey(ctx context.Context, v domain.DefinitionVersionID, edits []domain.ProposalEdit) (string, error) {
+	p, err := d.c.Proposed(ctx, v, edits)
+	if err != nil {
+		return "", err
+	}
+
+	files, err := p.VersionFiles(ctx, v)
+	if err != nil {
+		return "", err
+	}
+
+	return domain.ContentKey(files), nil
+}
+
+// lineDraftKeptTests is line's open draft's kept tests.
+const lineDraftKeptTests = "/v1/orgs/acme/factories/line/draft/kept-tests"
+
+// backendDraft is the backend prompt line's draft gives: a change that reaches build.
+const backendDraft = "# backend, test first\n"
+
+// draftBackend opens line's draft and writes backendDraft as the backend prompt; it returns
+// domain.ContentKey of the draft's files.
+func (h *harness) draftBackend(t *testing.T) string {
+	t.Helper()
+
+	if r := h.request(t, http.MethodPost, "/v1/orgs/acme/factories/line/draft", `{}`, nil); r.status != http.StatusCreated {
+		t.Fatalf("open line's draft: %d %s", r.status, r.body)
+	}
+
+	path := "/v1/orgs/acme/factories/line/draft/files/agents%2Fbackend.md"
+
+	file := h.request(t, http.MethodGet, path, "", nil)
+	if file.status != http.StatusOK {
+		t.Fatalf("read the backend prompt: %d %s", file.status, file.body)
+	}
+
+	decode[gen.SaveResult](t, h.request(t, http.MethodPut, path, backendDraft, http.Header{ifMatchHeader: {file.header.Get("ETag")}}), http.StatusOK)
+
+	files := map[string][]byte{}
+	for p, c := range lineFiles {
+		files[p] = []byte(c)
+	}
+
+	files["agents/backend.md"] = []byte(backendDraft)
+
+	return domain.ContentKey(files)
+}
+
+func (h *harness) draftKeptTests(t *testing.T, method string) gen.DraftKeptTests {
+	t.Helper()
+
+	var out gen.DraftKeptTests
+	if code := h.call(t, method, lineDraftKeptTests, "", &out); code != http.StatusOK {
+		t.Fatalf("%s %s = %d, want 200", method, lineDraftKeptTests, code)
+	}
+
+	return out
+}
+
+// The publish dialog's kept tests (ADR 0039 decision 12): GET starts nothing; POST queues a
+// publish's try of each kept test the draft reaches, and again queues nothing; a test a proposal
+// with the draft's content tried reuses that try. A test's last result is its newest finished try.
+func TestJonah_DraftKeptTestsStartAndReuse(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	ctx := inOrg(t)
+
+	code, p := problemOfCall(t, h, http.MethodPost, lineDraftKeptTests, "")
+	wantProblem(t, "kept tests without a draft", code, p, http.StatusNotFound, "no-draft")
+
+	h.doneLineItem(t, 2, 998) // the line spent $1,000: Jonah's budget is $50
+
+	fresh := h.keep(t, h.builtItem(t, true, domain.EventClaimed, domain.EventMoved))
+	h.clock.Advance(time.Minute)
+	tried := h.keep(t, h.builtItem(t, true, domain.EventClaimed, domain.EventMoved))
+	key := h.draftBackend(t)
+
+	// A proposal with exactly the draft's content tried the second test, and it passed.
+	h.triedKeptTest(t, tried, key)
+
+	if got := h.draftKeptTests(t, http.MethodGet); got.State != gen.DraftKeptTestsStateDone || len(got.Tests) != 2 {
+		t.Fatalf("GET = %+v, want both tests, nothing started", got)
+	} else if r := resultOf(got, fresh.Id); r != "" {
+		t.Errorf("GET result of the fresh test = %q, want null", r)
+	}
+
+	got := h.draftKeptTests(t, http.MethodPost)
+	if got.State != gen.DraftKeptTestsStateTrying || resultOf(got, fresh.Id) != gen.KeptTestResultRunning || resultOf(got, tried.Id) != gen.KeptTestResultPassed {
+		t.Fatalf("POST = %+v, want the fresh test running and the tried one passed", got)
+	}
+
+	h.draftKeptTests(t, http.MethodPost)
+
+	tries, err := h.store.KeptTestTries(ctx, lineID, key)
+	if err != nil || len(tries) != 2 {
+		t.Fatalf("tries of the draft's content = %+v, %v; want the proposal's and one publish's", tries, err)
+	}
+
+	if pub := tries[1]; pub.ProposalID != "" || pub.KeptTestID != domain.KeptTestID(fresh.Id) || len(pub.Edits) != 1 || pub.Edits[0].Content != backendDraft {
+		t.Errorf("publish try = %+v, want the fresh test's, with no proposal and the draft's prompt", pub)
+	}
+
+	for _, k := range h.keptTests(t, lineTests) {
+		switch {
+		case k.Id == tried.Id && (k.LastResult == nil || k.LastResult.Result != gen.KeptTestLastResultResultPassed):
+			t.Errorf("last result of the tried test = %+v, want passed", k.LastResult)
+		case k.Id == fresh.Id && k.LastResult != nil:
+			t.Errorf("last result of a test whose try runs = %+v, want null", k.LastResult)
+		}
+	}
+}
+
+// triedKeptTest queues and finishes, passed, a proposal's try of k on content key.
+func (h *harness) triedKeptTest(t *testing.T, k gen.KeptTest, key string) {
+	t.Helper()
+
+	ctx := inOrg(t)
+	now := h.clock.Now()
+
+	if _, err := h.store.QueueJonahReview(ctx, domain.NewJonahReview{
+		FactoryID: lineID, VersionID: h.lineRecord(t).Current.ID, Trigger: domain.JonahManual, WindowStart: now.Add(-time.Hour), WindowEnd: now,
+		By: domain.LocalUser, At: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rv, err := h.store.ClaimJonahReview(ctx, now, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, ps, err := h.store.FinishJonahReview(ctx, rv, domain.JonahReviewResult{State: domain.JonahDone, At: now, Proposals: []domain.NewProposal{{
+		Title: "Test first", Edits: []domain.ProposalEdit{{Path: "agents/backend.md", Replacements: []domain.Replacement{{Old: "# backend\n", New: backendDraft}}}},
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	run, err := h.store.PastTryTarget(ctx, domain.ItemID(k.Item.Id), stBuild)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.store.QueuePastTries(ctx, lineID, ps[0].ID, []domain.NewPastTry{{
+		ProposalID: ps[0].ID, KeptTestID: domain.KeptTestID(k.Id), ContentKey: key, ItemID: domain.ItemID(k.Item.Id), Station: stBuild,
+		OriginalRunID: run.ID, Model: runModel,
+	}}, h.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	c, err := h.store.ClaimPastTry(ctx, lineID, h.clock.Now(), time.Minute, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.store.FinishPastTry(ctx, c, domain.PastTryResult{Verdict: domain.PastTryFixed, Reason: "it passed", At: h.clock.Now()}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// resultOf is test id's result in d, "" for null.
+func resultOf(d gen.DraftKeptTests, id string) gen.KeptTestResult {
+	for _, e := range d.Tests {
+		if e.Test.Id == id && e.Result != nil {
+			return *e.Result
+		}
+	}
+
+	return ""
 }

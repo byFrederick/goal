@@ -388,6 +388,9 @@ func TestJonah_Permissions(t *testing.T) {
 	code, p := problemOfCall(t, h, http.MethodPost, path+"/approve", "")
 	wantProblem(t, "approve without definition:publish", code, p, http.StatusForbidden, "forbidden")
 
+	code, p = problemOfCall(t, h, http.MethodPost, acmeDraft+"/kept-tests", "")
+	wantProblem(t, "start the draft's kept tests without definition:publish", code, p, http.StatusForbidden, "forbidden")
+
 	if got := h.getProposal(t, path); got.State != gen.ProposalStateProposed {
 		t.Fatalf("the key could read the proposal as %s, want proposed", got.State)
 	}
@@ -401,6 +404,7 @@ func TestJonah_Permissions(t *testing.T) {
 		{path + "/undo", ""},
 		{acmeJonah + "/reviews", ""},
 		{acmeJonah + "/tests", keepBody(1, "inbox")},
+		{acmeDraft + "/kept-tests", ""},
 	} {
 		code, p := problemOfCall(t, h, http.MethodPost, c.path, c.body)
 		wantProblem(t, "a viewer's POST "+c.path, code, p, http.StatusForbidden, "forbidden")
@@ -414,6 +418,10 @@ func TestJonah_Permissions(t *testing.T) {
 			t.Errorf("a viewer's GET %s = %d, want 200", read, code)
 		}
 	}
+
+	// A viewer reads the draft's kept tests: acme has no draft open, so 404, not 403.
+	code, p = problemOfCall(t, h, http.MethodGet, acmeDraft+"/kept-tests", "")
+	wantProblem(t, "a viewer's GET of the draft's kept tests", code, p, http.StatusNotFound, "no-draft")
 
 	if got := h.getProposal(t, path); got.State != gen.ProposalStateProposed {
 		t.Errorf("after refusals the proposal is %s, want proposed", got.State)
@@ -796,6 +804,8 @@ func TestJonah_ProposalTried(t *testing.T) {
 
 	h := newHarness(t)
 	it := h.doneLineItem(t, 2, 998) // the line spent $1,000: Jonah's budget is $50
+	kept := h.builtItem(t, true, domain.EventClaimed, domain.EventMoved)
+	h.keep(t, kept)
 
 	var made gen.ModelProposalResult
 	if code := h.call(t, http.MethodPost, lineModels+bakeOffAgent+"/model-proposal", `{"model":"`+modelOpus+`","confirm":true}`, &made); code != http.StatusCreated {
@@ -819,11 +829,21 @@ func TestJonah_ProposalTried(t *testing.T) {
 
 	tried := h.getProposal(t, fmt.Sprintf("/v1/orgs/acme/factories/line/jonah/proposals/%d", made.Proposal.Number)).Tried
 	if tried == nil || tried.State != gen.ProposalTriedStateTrying || tried.CostUsd != 1.25 || tried.Seconds != nil ||
-		len(tried.KeptTests) != 0 || tried.Grader != nil || len(tried.Items) != 1 {
-		t.Fatalf("tried = %+v, want one item trying at $1.25, no time, kept tests or grader yet", tried)
+		tried.Grader != nil || len(tried.Items) != 1 {
+		t.Fatalf("tried = %+v, want one item trying at $1.25, no time or grader yet", tried)
 	}
 
 	wantTriedItem(t, tried.Items[0], it)
+
+	// The kept test at build, which the model change reaches, is tried three times too.
+	wantKept := []gen.TriedKeptTest{
+		{Test: kept.Number, Station: stBuild, Attempt: 1, Result: gen.KeptTestResultRunning},
+		{Test: kept.Number, Station: stBuild, Attempt: 2, Result: gen.KeptTestResultRunning},
+		{Test: kept.Number, Station: stBuild, Attempt: 3, Result: gen.KeptTestResultRunning},
+	}
+	if !reflect.DeepEqual(tried.KeptTests, wantKept) {
+		t.Errorf("kept tests = %+v, want %+v", tried.KeptTests, wantKept)
+	}
 
 	stored := h.review(t, []domain.NewProposal{{Title: "Tighten the rule", Edits: proposalFiles()}})
 	if p := h.getProposal(t, fmt.Sprintf("%s/%d", acmeProposals, stored[0].Number)); p.Tried != nil {

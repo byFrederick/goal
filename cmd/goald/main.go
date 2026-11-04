@@ -78,6 +78,8 @@ func jonahDeps(store *postgres.Store, authors *authoring.Service, defs *definiti
 		Proposals: store, Authoring: api.NewJonahAuthoring(authors), Audit: store, Clock: clock, Log: log,
 	}), Models: jonah.NewModelProposals(jonah.ModelDeps{
 		Store: store, Definitions: defs, Check: config.ProposalCheck{}, Policies: policies, Audit: store, Clock: clock, Log: log,
+	}), KeptDrafts: jonah.NewKeptDrafts(jonah.KeptDraftDeps{
+		Drafts: api.NewJonahAuthoring(authors), Definitions: tryDefinitions{defs: defs}, Kept: store, Tries: store, Spend: store, Clock: clock, Log: log,
 	})}
 }
 
