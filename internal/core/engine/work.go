@@ -806,7 +806,7 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, run do
 // Cancel, which takes a running run's lease.
 func closeItem(c claimed, reason string, t *ports.Transition) {
 	by := agentActor(c)
-	data := map[string]any{keyReason: reason, "station": c.station.ID, "agent": c.agent.Name, "closed": true}
+	data := map[string]any{keyReason: reason, keyStation: c.station.ID, "agent": c.agent.Name, "closed": true}
 
 	t.To = domain.Position{Station: c.station.ID, State: domain.StateCancelled}
 	t.Events = append(t.Events, decision(c.item, domain.EventCancelled, t.At, by, data))
@@ -842,7 +842,7 @@ func (e *Engine) violations(ctx context.Context, log *slog.Logger, c claimed, ou
 		}
 
 		events = append(events, event(c.item, domain.EventRuleViolated, at, c.agent.Name, map[string]any{
-			keyRule: v.Rule, keyReason: v.Reason, "station": c.station.ID, "agent": c.agent.Name,
+			keyRule: v.Rule, keyReason: v.Reason, keyStation: c.station.ID, "agent": c.agent.Name,
 		}))
 	}
 

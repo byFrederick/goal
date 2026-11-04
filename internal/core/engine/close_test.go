@@ -197,8 +197,8 @@ func TestEngine_ClosedTriageKeepsFile(t *testing.T) {
 		t.Fatalf("follow-up %+v of a closed triage item; want File", fs[0])
 	}
 
-	ada := domain.Actor{Kind: domain.ActorUser, ID: "ada", Name: "Ada"}
-	if _, err := h.e.FileFollowUp(inOrg(t), src.ID, fs[0].ID, domain.FileRequest{By: ada, Title: "Read the logs"}); err != nil {
+	grace := domain.Actor{Kind: domain.ActorUser, ID: "grace", Name: "Grace"}
+	if _, err := h.e.FileFollowUp(inOrg(t), src.ID, fs[0].ID, domain.FileRequest{By: grace, Title: "Read the logs"}); err != nil {
 		t.Errorf("FileFollowUp after the close: %v", err)
 	}
 }

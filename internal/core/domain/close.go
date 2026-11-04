@@ -32,9 +32,8 @@ func CloseFrom(output json.RawMessage, field string) (string, error) {
 	}
 
 	var v map[string]json.RawMessage
-	if json.Unmarshal(output, &v) != nil {
-		return "", nil
-	}
+
+	_ = json.Unmarshal(output, &v) // an output that is not an object closes nothing
 
 	raw, ok := v[field]
 	if !ok || string(raw) == "null" {

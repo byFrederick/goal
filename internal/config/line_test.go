@@ -913,13 +913,13 @@ func TestLine_CarriesFollowUps(t *testing.T) {
 func TestLine_CarriesClose(t *testing.T) {
 	t.Parallel()
 
-	f, err := Load(checkTree(baseFactory+"    flow:\n      outputs: { followUps: followups, close: close }\n", nil))
+	f, err := Load(checkTree(baseFactory+"    flow:\n      outputs: { followUps: followups, close: closing }\n", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if o := f.Line().Flow.Outputs; o.FollowUps != "followups" || o.Close != "close" {
-		t.Errorf("outputs = %+v; want followUps followups and close close", o)
+	if o := f.Line().Flow.Outputs; o.FollowUps != "followups" || o.Close != "closing" {
+		t.Errorf("outputs = %+v; want followUps followups and close closing", o)
 	}
 }
 

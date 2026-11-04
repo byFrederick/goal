@@ -40,7 +40,7 @@ func (e *Engine) pauseAssembly(ctx context.Context, a domain.Item, by domain.Act
 		t := ports.Transition{
 			ItemID: p.ID, From: p.Position(), To: domain.Position{Station: p.Station, State: domain.StateBlocked}, At: now,
 			Events: []domain.Event{decision(p, domain.EventPaused, now, by, withReason(map[string]any{keyAssembly: string(a.ID)}, reason))},
-			Audit:  itemAudit(p, now, by, domain.AuditItemPaused, withReason(map[string]any{"station": p.Station, keyAssembly: string(a.ID)}, reason)),
+			Audit:  itemAudit(p, now, by, domain.AuditItemPaused, withReason(map[string]any{keyStation: p.Station, keyAssembly: string(a.ID)}, reason)),
 		}
 		if takeLease("pause", p, by, &t) {
 			taken = append(taken, p)
