@@ -79,6 +79,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	tests = append(tests, webhookTests...)
 	tests = append(tests, receiptTests...)
 	tests = append(tests, convertTests...)
+	tests = append(tests, evaluationTests...)
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

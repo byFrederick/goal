@@ -246,7 +246,7 @@ func TestIntake_RLSAndGrants(t *testing.T) {
 		`UPDATE webhook_deliveries SET outcome = 'created'`,
 		`DELETE FROM webhook_deliveries`,
 		`UPDATE trigger_firings SET outcome = 'created'`,
-		`DELETE FROM trigger_firings`,
+		// DELETE on trigger_firings is goal_app's since 00120, for pruning (ADR 0040 decision 13).
 	} {
 		err := inOrgTx(t, d.store.pool, acme, func(tx pgx.Tx) error { _, err := tx.Exec(t.Context(), stmt); return err })
 		if err == nil {
@@ -506,5 +506,37 @@ func TestIntake_ConvertAuditsTheSecret(t *testing.T) {
 	if err := d.admin.QueryRow(t.Context(), `SELECT count(*) FROM webhook_endpoints WHERE id = $1 AND key_id IS NOT NULL AND factory_id IS NULL`,
 		string(s.Endpoint.ID)).Scan(&sealed); err != nil || sealed != 1 {
 		t.Errorf("converted rows keeping their sealed secret = %d, %v; want 1", sealed, err)
+	}
+}
+
+// delivery_evaluations is scoped to its organization by row-level security, and goal_app may
+// update it but not delete from it; it may delete trigger firings, for pruning (ADR 0040
+// decision 13).
+func TestIntake_DeliveryEvaluationsRLSAndGrants(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDB(t, OwnerRole)
+	migrate(t, db.owner)
+	admin := openPool(t, db.admin)
+
+	var rls bool
+	if err := admin.QueryRow(t.Context(), `SELECT relrowsecurity FROM pg_class WHERE oid = (current_schema() || '.delivery_evaluations')::regclass`).Scan(&rls); err != nil || !rls {
+		t.Errorf("delivery_evaluations row-level security = %v, %v; want on", rls, err)
+	}
+
+	checkPolicy(t, admin, "delivery_evaluations")
+
+	for _, g := range []struct {
+		table, priv string
+		want        bool
+	}{
+		{"delivery_evaluations", "SELECT", true}, {"delivery_evaluations", "INSERT", true}, {"delivery_evaluations", "UPDATE", true},
+		{"delivery_evaluations", "DELETE", false}, {"trigger_firings", "DELETE", true},
+	} {
+		var has bool
+		if err := admin.QueryRow(t.Context(), "SELECT has_table_privilege('goal_app', current_schema() || '.' || $1, $2)", g.table, g.priv).
+			Scan(&has); err != nil || has != g.want {
+			t.Errorf("goal_app %s on %s = %v, %v; want %v", g.priv, g.table, has, err, g.want)
+		}
 	}
 }
