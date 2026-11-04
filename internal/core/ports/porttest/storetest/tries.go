@@ -3,6 +3,7 @@ package storetest
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -424,10 +425,7 @@ func testTriesAgentDoneItems(f *fixture) {
 		t.Fatalf("AgentDoneItems = %+v, %v; want b then a", got, err)
 	}
 
-	if g := got[1]; g.Run.ID != newest || g.ItemNumber != a.Number || g.ItemTitle != "older" || len(g.SentBackAt) != 1 ||
-		g.SentBackAt[0] != stNext || g.CostUSD != 2 || !g.DoneAt.Equal(t1) {
-		t.Errorf("AgentDoneItems[1] = %+v, want a's newest run, one send-back at %s, $2 and done at t1", g, stNext)
-	}
+	expectAgentItem(t, got[1], a, newest)
 
 	if got, _ := f.Tries.AgentDoneItems(f.ctx(t), f.factory, agWorker, 1); len(got) != 1 || got[0].ItemID != b.ID {
 		t.Errorf("AgentDoneItems limit 1 = %+v, want b", got)
@@ -435,5 +433,16 @@ func testTriesAgentDoneItems(f *fixture) {
 
 	if got, _ := f.Tries.AgentDoneItems(f.ctx(t), f.factory, "nobody", 5); len(got) != 0 {
 		t.Errorf("AgentDoneItems of another agent = %+v, want none", got)
+	}
+}
+
+// expectAgentItem fails t unless g is a's: its newest run, one send-back at stNext, the $2 its
+// two runs cost and done at t1.
+func expectAgentItem(t *testing.T, g domain.AgentItem, a domain.Item, newest domain.RunID) {
+	t.Helper()
+
+	if g.Run.ID != newest || g.ItemNumber != a.Number || g.ItemTitle != a.Title || !reflect.DeepEqual(g.SentBackAt, []string{stNext}) ||
+		g.CostUSD != 2 || !g.DoneAt.Equal(t1) {
+		t.Errorf("AgentDoneItems[1] = %+v, want a's newest run, one send-back at %s, $2 and done at t1", g, stNext)
 	}
 }

@@ -836,12 +836,8 @@ func (s *Store) ProposeModel(ctx context.Context, factory domain.FactoryID, vers
 		return domain.Proposal{}, nil, fmt.Errorf("propose model: %w", err)
 	}
 
-	tries = slices.Clone(tries)
-	for i := range tries {
-		tries[i].ProposalID = domain.ProposalID(p.ID.String())
-		if err := tries[i].Check(); err != nil {
-			return domain.Proposal{}, nil, fmt.Errorf("propose model: %w", err)
-		}
+	if tries, err = triesOf(domain.ProposalID(p.ID.String()), tries); err != nil {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: %w", err)
 	}
 
 	var (
@@ -872,21 +868,40 @@ func (s *Store) ProposeModel(ctx context.Context, factory domain.FactoryID, vers
 
 		return supersede(ctx, q, p.FactoryID, n.Supersedes, at)
 	})
-
-	switch {
-	case errors.Is(err, ports.ErrNotFound) || errors.Is(err, ports.ErrConflict):
-		return domain.Proposal{}, nil, fmt.Errorf("propose model of agent %s: %w", agent, err)
-	case isForeignKeyViolation(err):
-		return domain.Proposal{}, nil, fmt.Errorf("propose model of agent %s: %w: %w", agent, ports.ErrNotFound, err)
-	case isCheckViolationErr(err):
-		return domain.Proposal{}, nil, fmt.Errorf("propose model of agent %s: %w: %w", agent, domain.ErrInvalid, err)
-	case err != nil:
-		return domain.Proposal{}, nil, fmt.Errorf("propose model of agent %s: %w", agent, err)
+	if err != nil {
+		return domain.Proposal{}, nil, modelProposalError(agent, err)
 	}
 
 	out, err := proposalFrom(row)
 
 	return out, queued, err
+}
+
+// triesOf are tries of proposal, each checked.
+func triesOf(proposal domain.ProposalID, tries []domain.NewPastTry) ([]domain.NewPastTry, error) {
+	out := slices.Clone(tries)
+	for i := range out {
+		out[i].ProposalID = proposal
+		if err := out[i].Check(); err != nil {
+			return nil, err
+		}
+	}
+
+	return out, nil
+}
+
+// modelProposalError is err, ProposeModel's transaction's, with the port's sentinel.
+func modelProposalError(agent string, err error) error {
+	switch {
+	case errors.Is(err, ports.ErrNotFound) || errors.Is(err, ports.ErrConflict):
+		return fmt.Errorf("propose model of agent %s: %w", agent, err)
+	case isForeignKeyViolation(err):
+		return fmt.Errorf("propose model of agent %s: %w: %w", agent, ports.ErrNotFound, err)
+	case isCheckViolationErr(err):
+		return fmt.Errorf("propose model of agent %s: %w: %w", agent, domain.ErrInvalid, err)
+	default:
+		return fmt.Errorf("propose model of agent %s: %w", agent, err)
+	}
 }
 
 // modelProposalParams are n's row as a model proposal of agent, made against version.

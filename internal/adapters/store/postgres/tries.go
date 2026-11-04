@@ -102,7 +102,7 @@ func insertTry(ctx context.Context, q *db.Queries, f, p uuid.UUID, n domain.NewP
 	}
 
 	t, err := q.InsertTry(ctx, db.InsertTryParams{
-		ID: id, FactoryID: f, ProposalID: p, ItemID: item, Attempt: int32(n.TryAttempt()), Station: n.Station, OriginalRunID: run, Model: n.Model,
+		ID: id, FactoryID: f, ProposalID: p, ItemID: item, Attempt: clampLimit(n.TryAttempt()), Station: n.Station, OriginalRunID: run, Model: n.Model,
 		CreatedAt: at,
 	})
 

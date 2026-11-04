@@ -1188,14 +1188,7 @@ func testJonahModelProposal(f *fixture) {
 		t.Fatalf("ProposeModel: %v", err)
 	}
 
-	if p.Number != 2 || p.Agent != agWorker || p.ReviewID != "" || p.Undoes != "" || p.VersionID != version || p.State != domain.ProposalProposed {
-		t.Errorf("ProposeModel = %+v, want proposal 2 of agent %s on %s without a review", p, agWorker, version)
-	}
-
-	got, err := f.Jonah.Proposal(f.ctx(t), f.factory, 2)
-	if err != nil || got.Agent != agWorker || !reflect.DeepEqual(got.Evidence, n.Evidence) || got.Paths()[0] != "factory.yaml" {
-		t.Errorf("read back %+v, %v; want agent %s with its evidence", got, err, agWorker)
-	}
+	f.expectModelProposal(t, p, version, n)
 
 	if len(queued) != domain.ModelTriesPerItem || queued[0].ProposalID != p.ID || queued[0].ProposalNumber != 2 || queued[2].Attempt != 3 {
 		t.Errorf("queued tries = %+v, want three of proposal 2, attempts 1 to 3", queued)
@@ -1216,4 +1209,19 @@ func testJonahModelProposal(f *fixture) {
 	_, _, err = f.Jonah.ProposeModel(f.ctx(t), f.factory, version, "", proposal("no agent", "factory.yaml"), tries, t1)
 	expect(t, "ProposeModel without an agent", err, domain.ErrInvalid)
 	f.expectNoProposal(t, 3)
+}
+
+// expectModelProposal fails t unless p, as stored and read back, is proposal 2 of agWorker on
+// version with n's evidence and no review.
+func (f *fixture) expectModelProposal(t *testing.T, p domain.Proposal, version domain.DefinitionVersionID, n domain.NewProposal) {
+	t.Helper()
+
+	if p.Number != 2 || p.Agent != agWorker || p.ReviewID != "" || p.Undoes != "" || p.VersionID != version || p.State != domain.ProposalProposed {
+		t.Errorf("ProposeModel = %+v, want proposal 2 of agent %s on %s without a review", p, agWorker, version)
+	}
+
+	got, err := f.Jonah.Proposal(f.ctx(t), f.factory, 2)
+	if err != nil || got.Agent != agWorker || !reflect.DeepEqual(got.Evidence, n.Evidence) || got.Paths()[0] != "factory.yaml" {
+		t.Errorf("read back %+v, %v; want agent %s with its evidence", got, err, agWorker)
+	}
 }

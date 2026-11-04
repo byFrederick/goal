@@ -257,36 +257,53 @@ func (s *Store) AgentDoneItems(ctx context.Context, factory domain.FactoryID, ag
 			continue
 		}
 
-		var best *domain.Run
-
-		for rid, r := range s.runs {
-			if r.Agent != agent || !s.firstRunAt(org, rid, r, id, r.Station) {
-				continue
-			}
-
-			if best == nil || r.StartedAt.After(best.StartedAt) || (r.StartedAt.Equal(best.StartedAt) && r.ID > best.ID) {
-				best = r
-			}
-		}
-
+		best := s.newestFirstRun(org, id, agent)
 		if best == nil {
 			continue
 		}
 
-		a := domain.AgentItem{ItemID: id, ItemNumber: it.Number, ItemTitle: it.Title, Run: *best, CostUSD: it.CostUSD, DoneAt: it.DoneAt}
-
-		for _, e := range s.events {
-			if e.ItemID == id && (e.Kind == domain.EventRejected || e.Kind == domain.EventGateRejected) {
-				a.SentBackAt = append(a.SentBackAt, e.Station)
-			}
-		}
-
-		out = append(out, a)
+		out = append(out, domain.AgentItem{
+			ItemID: id, ItemNumber: it.Number, ItemTitle: it.Title, Run: *best, SentBackAt: s.sentBackAt(id), CostUSD: it.CostUSD, DoneAt: it.DoneAt,
+		})
 	}
 
-	slices.SortFunc(out, func(a, b domain.AgentItem) int { return cmp.Or(b.DoneAt.Compare(a.DoneAt), cmp.Compare(a.ItemID, b.ItemID)) })
+	slices.SortFunc(out, func(a, b domain.AgentItem) int {
+		return cmp.Or(b.DoneAt.Compare(a.DoneAt), cmp.Compare(a.ItemID, b.ItemID))
+	})
 
 	return out[:min(len(out), max(limit, 0))], nil
+}
+
+// newestFirstRun is org's item's newest finished station run of agent that was a claim's first;
+// nil when it has none. Callers hold s.mu.
+func (s *Store) newestFirstRun(org domain.OrgID, item domain.ItemID, agent string) *domain.Run {
+	var best *domain.Run
+
+	for id, r := range s.runs {
+		if r.Agent != agent || !s.firstRunAt(org, id, r, item, r.Station) {
+			continue
+		}
+
+		if best == nil || r.StartedAt.After(best.StartedAt) || (r.StartedAt.Equal(best.StartedAt) && r.ID > best.ID) {
+			best = r
+		}
+	}
+
+	return best
+}
+
+// sentBackAt are the stations of item's rejected and gate_rejected events, in append order.
+// Callers hold s.mu.
+func (s *Store) sentBackAt(item domain.ItemID) []string {
+	var out []string
+
+	for _, e := range s.events {
+		if e.ItemID == item && (e.Kind == domain.EventRejected || e.Kind == domain.EventGateRejected) {
+			out = append(out, e.Station)
+		}
+	}
+
+	return out
 }
 
 // PastTryInput implements ports.PastTries.

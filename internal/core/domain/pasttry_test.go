@@ -45,10 +45,13 @@ func TestPastTryResult_Check(t *testing.T) {
 	}
 }
 
+// lineReview is the station the line results send items back at.
+const lineReview = "review"
+
 func TestNewPastTry_CheckAttempt(t *testing.T) {
 	t.Parallel()
 
-	n := NewPastTry{ProposalID: "p", ItemID: "i", Station: "build", OriginalRunID: "r", Model: "m"}
+	n := NewPastTry{ProposalID: "p", ItemID: "i", Station: stationBuild, OriginalRunID: "r", Model: "m"}
 
 	for _, attempt := range []int{0, 1, ModelTriesPerItem} {
 		n.Attempt = attempt
@@ -78,9 +81,9 @@ func TestAgentItem_LineResult(t *testing.T) {
 		want string
 	}{
 		{nil, 0.42, "passed first time, $0.42"},
-		{[]string{"review"}, 0.9, "sent back once at review, $0.90"},
-		{[]string{"review", "review"}, 1.1, "sent back 2 times at review, $1.10"},
-		{[]string{"review", "test", "review"}, 2, "sent back 3 times at review and test, $2.00"},
+		{[]string{lineReview}, 0.9, "sent back once at review, $0.90"},
+		{[]string{lineReview, lineReview}, 1.1, "sent back 2 times at review, $1.10"},
+		{[]string{lineReview, "test", lineReview}, 2, "sent back 3 times at review and test, $2.00"},
 	}
 
 	for _, c := range cases {
