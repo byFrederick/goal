@@ -366,33 +366,6 @@ func (s *Store) JonahSpendSince(ctx context.Context, factory domain.FactoryID, s
 	return usd, nil
 }
 
-// SentBackSince implements ports.JonahStore.
-func (s *Store) SentBackSince(ctx context.Context, factory domain.FactoryID, since time.Time) (int, error) {
-	org, err := orgOf(ctx)
-	if err != nil {
-		return 0, err
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	n := 0
-
-	for id, it := range s.items {
-		if it.OrgID != org || it.FactoryID != factory {
-			continue
-		}
-
-		for _, t := range s.itemTouches(id) {
-			if (t.Kind == domain.EventRejected || t.Kind == domain.EventGateRejected) && !t.At.Before(since) {
-				n++
-			}
-		}
-	}
-
-	return n, nil
-}
-
 // sentBack reports whether t is a sent-back touch: a person's rejected or gate_rejected.
 func sentBack(t domain.Touch) bool {
 	return t.Kind == domain.EventRejected || t.Kind == domain.EventGateRejected

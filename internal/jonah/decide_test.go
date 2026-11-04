@@ -410,3 +410,39 @@ func TestDecide_QueueReview(t *testing.T) {
 		t.Errorf("review over budget = %v, want ErrLearningBudgetExhausted", err)
 	}
 }
+
+// A failed review never moves the window: the next manual review starts where the last done one
+// ended (ADR 0039 decision 3).
+func TestDecide_QueueReviewAfterAFailedOne(t *testing.T) {
+	t.Parallel()
+
+	f, ctx := newDecideFixture(t) // its review is done, its window ended at t0
+	f.clock.Advance(time.Hour)
+
+	policy := domain.DefaultJonahPolicy()
+
+	failedOne, err := f.dc.QueueReview(ctx, factory, versionID(1), policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	claimed, err := f.store.ClaimJonahReview(ctx, f.clock.Now(), time.Minute)
+	if err != nil || claimed.ID != failedOne.ID {
+		t.Fatalf("ClaimJonahReview = %+v, %v", claimed, err)
+	}
+
+	if _, _, err := f.store.FinishJonahReview(ctx, claimed, domain.JonahReviewResult{State: domain.JonahFailed, Error: "x", At: f.clock.Now()}); err != nil {
+		t.Fatal(err)
+	}
+
+	f.clock.Advance(time.Hour)
+
+	r, err := f.dc.QueueReview(ctx, factory, versionID(1), policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !r.WindowStart.Equal(t0) {
+		t.Errorf("window starts %s, want %s, where the last done review ended", r.WindowStart, t0)
+	}
+}

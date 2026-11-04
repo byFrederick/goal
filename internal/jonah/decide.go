@@ -43,7 +43,7 @@ type Proposals interface {
 	Proposal(ctx context.Context, factory domain.FactoryID, number int64) (domain.Proposal, error)
 	DecideProposal(ctx context.Context, factory domain.FactoryID, number int64, d domain.ProposalDecision) (domain.Proposal, error)
 	QueueJonahReview(ctx context.Context, n domain.NewJonahReview) (domain.JonahReview, error)
-	JonahReviews(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.JonahReview, error)
+	LastDoneJonahReview(ctx context.Context, factory domain.FactoryID) (domain.JonahReview, error)
 	JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
 }
 
@@ -254,8 +254,8 @@ func (dc *Decider) Reject(ctx context.Context, f domain.FactoryID, number int64,
 	return decided, nil
 }
 
-// QueueReview queues a manual review of f on version, under policy (decision 2): it reads the
-// sent-back touches since the last review's window ended, or FirstWindow back. It refuses with
+// QueueReview queues a manual review of f on version, under policy (decision 2): it reads what
+// finished since the last done review's window ended, or FirstWindow back (ADR 0039 decision 3). It refuses with
 // domain.ErrLearningBudgetExhausted while the review runs of the last BudgetWindow cost
 // policy.WeeklyUSD or more, and with domain.ErrReviewInFlight while one is pending or running.
 func (dc *Decider) QueueReview(ctx context.Context, f domain.FactoryID, version domain.DefinitionVersionID, policy domain.JonahPolicy) (domain.JonahReview, error) {

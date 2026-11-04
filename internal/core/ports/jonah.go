@@ -176,9 +176,6 @@ type JonahStore interface {
 	// JonahSpendSince sums the cost of the factory's runs of kind jonah started at or after
 	// since: the weekly budget's spend (decision 2).
 	JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
-	// SentBackSince counts the factory's sent-back touches (a person's rejected or
-	// gate_rejected) at or after since: the threshold's count (decision 2).
-	SentBackSince(ctx context.Context, factory domain.FactoryID, since time.Time) (int, error)
 	// SentBackBetween is the factory's sent-back touches (a person's rejected or gate_rejected)
 	// at or after since and before until, oldest first (by at, then event id), at most limit:
 	// a review's events and the evidence it may cite. Each names its item's number and title,

@@ -488,27 +488,6 @@ func (s *Store) JonahSpendSince(ctx context.Context, factory domain.FactoryID, s
 	return usd, nil
 }
 
-// SentBackSince implements ports.JonahStore over item_touches.
-func (s *Store) SentBackSince(ctx context.Context, factory domain.FactoryID, since time.Time) (int, error) {
-	if _, ok := domain.OrgFrom(ctx); !ok {
-		return 0, domain.ErrNoOrg
-	}
-
-	f, err := parseID("factory", string(factory))
-	if err != nil {
-		return 0, fmt.Errorf("sent back: %w", err)
-	}
-
-	n, err := fetch(ctx, s.read, func(q *db.Queries) (int64, error) {
-		return q.SentBackSince(ctx, db.SentBackSinceParams{FactoryID: f, Since: since})
-	})
-	if err != nil {
-		return 0, fmt.Errorf("sent back in factory %s: %w", factory, err)
-	}
-
-	return int(n), nil
-}
-
 // SentBackBetween implements ports.JonahStore over item_touches and lease_spans.
 func (s *Store) SentBackBetween(ctx context.Context, factory domain.FactoryID, since, until time.Time, limit int) ([]domain.SentBack, error) {
 	if _, ok := domain.OrgFrom(ctx); !ok {

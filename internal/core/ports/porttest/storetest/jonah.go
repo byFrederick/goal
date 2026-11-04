@@ -31,7 +31,6 @@ var jonahTests = []struct {
 	{"Jonah_DecideProposalOnlyOnce", testJonahDecide},
 	{"Jonah_OtherOrgInvisible", testJonahTenancy},
 	{"Jonah_SpendSinceSumsJonahRuns", testJonahSpend},
-	{"Jonah_SentBackSinceCountsRejections", testJonahSentBack},
 	{"Jonah_SentBackBetweenListsWindow", testJonahSentBackBetween},
 	{"Jonah_StationFlowMeasuresStation", testJonahStationFlow},
 	{"Jonah_EvidenceItemsFinishedInWindow", testJonahEvidenceItems},
@@ -621,29 +620,6 @@ func testJonahSpend(f *fixture) {
 
 	if all := f.spendSince(t, f.factory, t1); roundTo(all, 4) != 8.75 {
 		t.Errorf("SpendSince = %v, want 8.75: every kind counts there", all)
-	}
-}
-
-// SentBackSince counts a person's rejected and gate_rejected touches of the factory from since:
-// not an agent's send-back, other touches, earlier ones or another factory's.
-func testJonahSentBack(f *fixture) {
-	t := f.t
-	a := f.create(t, domain.NewItem{})
-	b := f.create(t, domain.NewItem{})
-	elsewhere := f.create(t, domain.NewItem{FactoryID: f.newFactory(t)})
-
-	f.appendEvents(t,
-		by(a, ada, domain.EventRejected, t1.Add(-time.Second), map[string]any{keyReason: "early"}),
-		by(a, ada, domain.EventRejected, t1, map[string]any{keyReason: "wrong file"}),
-		by(b, bob, domain.EventGateRejected, t1.Add(time.Minute), nil),
-		by(b, bob, domain.EventNote, t1.Add(2*time.Minute), map[string]any{keyText: "x"}),
-		agentEvent(b, agWorker, domain.EventGateRejected, t1.Add(3*time.Minute)),
-		by(elsewhere, ada, domain.EventRejected, t1, nil),
-	)
-
-	n, err := f.Jonah.SentBackSince(f.ctx(t), f.factory, t1)
-	if err != nil || n != 2 {
-		t.Errorf("SentBackSince = %d, %v; want 2", n, err)
 	}
 }
 

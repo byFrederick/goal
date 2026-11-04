@@ -861,24 +861,6 @@ func (q *Queries) SentBackBetween(ctx context.Context, arg SentBackBetweenParams
 	return items, nil
 }
 
-const sentBackSince = `-- name: SentBackSince :one
-SELECT count(*)::bigint FROM item_touches
-WHERE factory_id = $1 AND kind IN ('rejected', 'gate_rejected') AND at >= $2
-`
-
-type SentBackSinceParams struct {
-	FactoryID uuid.UUID
-	Since     time.Time
-}
-
-// The factory's sent-back touches (a person's rejected or gate_rejected) at or after since.
-func (q *Queries) SentBackSince(ctx context.Context, arg SentBackSinceParams) (int64, error) {
-	row := q.db.QueryRow(ctx, sentBackSince, arg.FactoryID, arg.Since)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const stationFlowSpans = `-- name: StationFlowSpans :one
 SELECT count(DISTINCT item_id) AS passed,
        coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM left_at - entered_at)::float8), 0)::float8 AS p85_seconds

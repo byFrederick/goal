@@ -96,11 +96,6 @@ SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
 FROM agent_runs
 WHERE factory_id = sqlc.arg(factory_id) AND kind = 'jonah' AND started_at >= sqlc.arg(since);
 
--- name: SentBackSince :one
--- The factory's sent-back touches (a person's rejected or gate_rejected) at or after since.
-SELECT count(*)::bigint FROM item_touches
-WHERE factory_id = sqlc.arg(factory_id) AND kind IN ('rejected', 'gate_rejected') AND at >= sqlc.arg(since);
-
 -- name: SentBackBetween :many
 -- The factory's sent-back touches in [since, until), oldest first, at most max_events: each with
 -- its item's number and title, its event's data.reason and the agent of the item's last lease
