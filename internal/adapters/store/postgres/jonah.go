@@ -219,7 +219,7 @@ func insertReviewOutput(ctx context.Context, q *db.Queries, review db.JonahRevie
 
 func insertProposalParams(review db.JonahReview, number int64, n domain.NewProposal, at time.Time) (db.InsertProposalParams, error) {
 	p := db.InsertProposalParams{
-		FactoryID: review.FactoryID, Number: number, ReviewID: review.ID, VersionID: review.VersionID, Title: n.Title,
+		FactoryID: review.FactoryID, Number: number, ReviewID: &review.ID, VersionID: review.VersionID, Title: n.Title,
 		Summary: n.Summary, Paths: n.Paths(), CreatedAt: at,
 	}
 
@@ -566,7 +566,7 @@ func jonahReviewFrom(r db.JonahReview) domain.JonahReview {
 func proposalFrom(r db.JonahProposal) (domain.Proposal, error) {
 	out := domain.Proposal{
 		ID: domain.ProposalID(r.ID.String()), FactoryID: domain.FactoryID(r.FactoryID.String()), Number: r.Number,
-		ReviewID: domain.JonahReviewID(r.ReviewID.String()), VersionID: domain.DefinitionVersionID(r.VersionID.String()),
+		VersionID: domain.DefinitionVersionID(r.VersionID.String()),
 		State: domain.ProposalState(r.State), Title: r.Title, Summary: r.Summary, RejectReason: r.RejectReason,
 		DecidedBy: deref(r.DecidedBy), CreatedAt: r.CreatedAt.UTC(),
 	}
@@ -585,6 +585,14 @@ func proposalFrom(r db.JonahProposal) (domain.Proposal, error) {
 
 	if err := json.Unmarshal(r.Estimate, &out.Estimate); err != nil {
 		return out, fmt.Errorf("proposal %d estimate: %w", r.Number, err)
+	}
+
+	if r.ReviewID != nil {
+		out.ReviewID = domain.JonahReviewID(r.ReviewID.String())
+	}
+
+	if r.Undoes != nil {
+		out.Undoes = domain.ProposalID(r.Undoes.String())
 	}
 
 	if r.PublishedVersionID != nil {

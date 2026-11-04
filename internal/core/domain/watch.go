@@ -72,9 +72,11 @@ type Watch struct {
 	After      WatchSide
 	Interval   *WatchInterval
 	Verdict    WatchVerdict
-	OpenedAt   time.Time
-	ClosedAt   time.Time
-	UpdatedAt  time.Time
+	// ProposalNumber is the proposal's number, where a read names it.
+	ProposalNumber int64
+	OpenedAt       time.Time
+	ClosedAt       time.Time
+	UpdatedAt      time.Time
 }
 
 // StationOutcome is one item's outcome at a station on one definition version: the runs it had

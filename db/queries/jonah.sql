@@ -139,3 +139,11 @@ WHERE t.item_id IN (
   AND t.factory_id = sqlc.arg(factory_id) AND t.station = sqlc.arg(station)::text
   AND t.kind IN ('rejected', 'gate_rejected')
   AND t.at >= sqlc.arg(since)::timestamptz AND t.at < sqlc.arg(until)::timestamptz;
+
+-- name: InsertUndoProposal :one
+-- An undo proposal: no review, undoes the proposal it reverses. The undo key's conflict means
+-- one is already proposed, published or applied.
+INSERT INTO jonah_proposals (id, factory_id, number, undoes, version_id, title, summary, files, paths, created_at)
+VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(number), sqlc.arg(undoes), sqlc.arg(version_id), sqlc.arg(title),
+        sqlc.arg(summary), sqlc.arg(files), sqlc.arg(paths)::text[], sqlc.arg(created_at))
+RETURNING *;

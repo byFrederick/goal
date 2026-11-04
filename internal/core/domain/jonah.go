@@ -330,6 +330,9 @@ type Proposal struct {
 	Files     []ProposalFile
 	Evidence  []ProposalEvidence
 	Estimate  ProposalEstimate
+	// Undoes is the proposal this one reverses (Undo this change, ADR 0039 decision 15); it has
+	// no review then.
+	Undoes ProposalID
 	// PublishedVersionID is the version Approve published.
 	PublishedVersionID DefinitionVersionID
 	RejectReason       string
