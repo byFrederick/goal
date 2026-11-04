@@ -31,7 +31,7 @@ const stations: ModelStation[] = [
 ];
 
 function renderLine(validation?: Validation) {
-  const line: LineSection = { stations };
+  const line: LineSection = { stations, intake: [{ source: 'webhook' }] };
   const move = vi.fn();
   const insert = vi.fn();
   const editor: LineEditor = {
@@ -165,5 +165,30 @@ describe('Checks on this line', () => {
     expect(within(items[1] as HTMLElement).getByRole('img', { name: 'Problem' })).toBeTruthy();
     expect(within(items[1] as HTMLElement).getByText('Build has no WIP limit')).toBeTruthy();
     expect(screen.queryByText('Agents are fine')).toBeNull();
+  });
+});
+
+describe('phone targets and names on a station row', () => {
+  it('names the intake link with its visible text first and gives it a wide touch target', async () => {
+    renderLine();
+    const link = await screen.findByRole('link', { name: /^Edit in YAML/ });
+    expect(link.textContent).toBe('Edit in YAML: the intake of Inbox');
+    expect(link.className).toContain('max-md:py-4');
+    expect(link.className).toContain('max-md:px-3');
+  });
+
+  it('makes the drag handle 44 px wide on a phone and keeps its menu alternative', async () => {
+    renderLine();
+    const handle = await screen.findByRole('button', { name: /^Drag Build/ });
+    expect(handle.className).toContain('w-11');
+    expect(handle.className).toContain('md:w-10');
+    expect(screen.getAllByRole('button', { name: /Station actions|More/i }).length).toBeGreaterThan(0);
+  });
+
+  it('makes the rules disclosure 44 px tall on a phone', async () => {
+    renderLine();
+    const trigger = (await screen.findAllByText('Rules of Build'))[0]?.closest('button');
+    expect(trigger?.className).toContain('min-h-11');
+    expect(trigger?.className).toContain('md:min-h-8');
   });
 });

@@ -115,6 +115,8 @@ function flattenActions(node: ReactNode): ReactNode[] {
  * The page's actions: the last (the primary one) stays in the bar, the others sit behind More actions, so the
  * title keeps its room. Keycap hints are hidden and every control is 44 px tall.
  */
+const hiddenFocusable = 'a, button, input, select, textarea, summary, [tabindex]';
+
 function TopBarActions({ children }: { children: ReactNode }) {
   const actions = flattenActions(children);
   const primary = actions[actions.length - 1];
@@ -122,8 +124,25 @@ function TopBarActions({ children }: { children: ReactNode }) {
   const moreRef = useRef<HTMLButtonElement>(null);
   const hidden = useRef<HTMLDivElement>(null);
   // The hidden copies stay out of the tab order; only a menu item (or a closing dialog) reaches them.
+  // A control that mounts later (a dialog's trigger, a lazy child) is taken out of the tab order too, so
+  // nothing the keyboard can reach sits under aria-hidden (axe aria-hidden-focus).
   useLayoutEffect(() => {
-    for (const control of hidden.current?.querySelectorAll<HTMLElement>('a, button') ?? []) control.tabIndex = -1;
+    const root = hidden.current;
+    if (!root) return;
+    const untab = () => {
+      for (const control of root.querySelectorAll<HTMLElement>(hiddenFocusable)) {
+        if (control.tabIndex >= 0) control.tabIndex = -1;
+      }
+    };
+    untab();
+    const observer = new MutationObserver(untab);
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['tabindex', 'disabled'],
+    });
+    return () => observer.disconnect();
   });
   if (actions.length === 0) return null;
   return (

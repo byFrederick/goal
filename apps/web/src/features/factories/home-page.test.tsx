@@ -367,6 +367,7 @@ describe('Home: the ready state', () => {
     await renderReady();
 
     const line = screen.getByRole('region', { name: 'software line' });
+    expect(line.tabIndex).toBe(0);
     expect(within(line).getByText('Intake')).toBeTruthy();
     expect(within(line).getByText('Done today')).toBeTruthy();
     expect(within(line).queryByText(/merged today/)).toBeNull();
