@@ -532,11 +532,16 @@ func repositoryKey(raw string) string {
 
 // SourceCheck is what listing a source with settings not saved yet found (ADR 0038 decision 12's
 // Check): Error says why it could not be listed ("" when it could), and Files how many items it
-// lists, counting at most MaxSourceFiles+1, past which a sync fails.
+// lists, counting at most MaxSourceFiles+1, past which a sync fails. FirstFiles are the paths, as
+// the sync would write them, of the first CheckFirstFiles files listed, in listing order.
 type SourceCheck struct {
-	Error string
-	Files int
+	Error      string
+	Files      int
+	FirstFiles []string
 }
+
+// CheckFirstFiles is how many of a Check's files it names.
+const CheckFirstFiles = 8
 
 // KnowledgeEntry is one source of a factory's knowledge.sources (ADR 0038 decision 5): the source's
 // name, the runs it applies to (a zero AppliesTo is every run, matched as rules are) and the line

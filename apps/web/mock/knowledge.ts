@@ -639,6 +639,7 @@ export function createKnowledge({
         send(res, 200, {
           access: { ok: true },
           files: 12,
+          first_files: ['db/disk.md', 'db/backups.md', 'k8s/pods.md'],
           bytes: 2_400_000,
           limits: { files: 20000, bytes: 50 << 20, file_bytes: 5 << 20 },
           over_limit: [],
