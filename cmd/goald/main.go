@@ -53,6 +53,7 @@ import (
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/catalog"
+	"github.com/byFrederick/goal/internal/catalog/senders"
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -282,7 +283,14 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	servers := httpServers(s, proxySecret, apiHandler, gatewayHandler(gw), web.Handler(web.Options{StrictTransport: s.strictTransport()}), site, log)
+	// The receiver of the organization's webhooks (ADR 0040 decision 12): how each sender signs is
+	// the sender catalog's, and whether a trigger names a delivery the engine's loaded lines'.
+	receiver, err := webhookReceiver(s, intake, orgSecrets, eng, clock, log)
+	if err != nil {
+		return err
+	}
+
+	servers := httpServers(s, proxySecret, apiHandler, receiver, gatewayHandler(gw), web.Handler(web.Options{StrictTransport: s.strictTransport()}), site, log)
 
 	j, err := newJobs(s, store, orgSecrets, objects, platform, clock, kb.ingestor, defs, eng, authors, intake, log)
 	if err != nil {
@@ -573,13 +581,26 @@ func docsSite(dir string) (http.Handler, error) {
 	return h, nil
 }
 
+// webhookReceiver serves POST /hooks/{webhook id} (api.Receiver) with the senders goald ships.
+func webhookReceiver(s settings, intake *postgres.Intake, secrets *postgres.Secrets, eng *engine.Engine, clock ports.Clock, log *slog.Logger,
+) (http.Handler, error) {
+	catalog, err := senders.Load()
+	if err != nil {
+		return nil, err
+	}
+
+	return api.Receiver(api.ReceiverDeps{
+		Intake: intake, Secrets: secrets, Senders: catalog, Names: eng, TrustedProxies: s.TrustedProxies, Clock: clock, Logger: log,
+	}), nil
+}
+
 // httpServers are goald's HTTP servers: the main listener and, with GOAL_GATEWAY_LISTEN, the
 // gateway's own. Under GOAL_AUTH=session the main one also serves the identity service's
 // endpoints (/api/auth/*, api.AuthProxy). Every request to the main one but the health check and
 // the agents' gateway must name goald (DNS rebinding); the gateway's serves nothing that a Host
 // could matter to.
-func httpServers(s settings, proxySecret string, apiHandler, gw, spa, site http.Handler, log *slog.Logger) []*http.Server {
-	primary, gatewayOnly := routes(s.GatewayListen != "", apiHandler, gw, spa, site)
+func httpServers(s settings, proxySecret string, apiHandler, hooks, gw, spa, site http.Handler, log *slog.Logger) []*http.Server {
+	primary, gatewayOnly := routes(s.GatewayListen != "", apiHandler, hooks, gw, spa, site)
 	if s.Auth == authSession {
 		primary = api.AuthProxy(api.AuthProxyConfig{Upstream: s.AuthUpstream, TrustedProxies: s.TrustedProxies, Secret: proxySecret, Logger: log}, primary)
 	}
@@ -592,20 +613,22 @@ func httpServers(s settings, proxySecret string, apiHandler, gw, spa, site http.
 	return servers
 }
 
-// routes are the handlers of goald's listeners: the main one serves the API, the SPA, the docs
-// site at /docs and everything under it (site, from GOAL_DOCS_DIR; 404 when site is nil, never
+// routes are the handlers of goald's listeners: the main one serves the API, the webhook receiver
+// at /hooks/ (hooks, ahead of the SPA, without a session), the SPA, the docs site at /docs and
+// everything under it (site, from GOAL_DOCS_DIR; 404 when site is nil, never
 // the SPA's index) and, when the gateway has no listener of its own, the agents' gateway at /mcp,
 // /run and /run/tool-approval (gw serves them all).
 // With one (separate), the gateway listener serves only those (everything else 404) and the main
 // one answers them with 404, so the gateway address agents are given reaches nothing else;
 // gatewayOnly is nil without one.
-func routes(separate bool, apiHandler, gw, spa, site http.Handler) (primary, gatewayOnly http.Handler) {
+func routes(separate bool, apiHandler, hooks, gw, spa, site http.Handler) (primary, gatewayOnly http.Handler) {
 	if site == nil {
 		site = http.NotFoundHandler()
 	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", apiHandler)
+	mux.Handle(api.HooksPath, hooks)
 	mux.Handle("/", spa)
 	mux.Handle(api.DocsPath, site)
 	mux.Handle(api.DocsPath+"/", site)
