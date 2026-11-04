@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { addedFacts, durationText, estimateDelta, observationChip, proposalKind, watchText } from './jonah-format';
+import {
+  addedFacts,
+  durationText,
+  estimateDelta,
+  itemReason,
+  itemVerdict,
+  latestTry,
+  observationChip,
+  proposalKind,
+  watchText,
+} from './jonah-format';
 
 describe('estimateDelta', () => {
   it('says a falling rate in points, and good', () => {
@@ -76,5 +86,23 @@ describe('watchText', () => {
     expect(watchText({ ...base, metric: 'cost_per_item', before: side(2.38), after: side(1.91) })).toBe(
       'Cost per item at architect: $2.38 → $1.91',
     );
+  });
+});
+
+describe('an item with more than one try', () => {
+  const item = {
+    item_ref: 'software#511',
+    item_title: 'Board Done cards overflow',
+    station: 'frontend',
+    tries: [
+      { attempt: 1, state: 'done' as const, verdict: 'not_fixed' as const, reason: 'Still overflows.', cost_usd: 1 },
+      { attempt: 2, state: 'done' as const, verdict: 'fixed' as const, cost_usd: 1 },
+    ],
+  };
+  it('reads its newest attempt, the one with the highest number', () => {
+    expect(latestTry(item)?.attempt).toBe(2);
+    expect(latestTry({ ...item, tries: [...item.tries].reverse() })?.attempt).toBe(2);
+    expect(itemVerdict(item)).toBe('fixed');
+    expect(itemReason(item)).toBeUndefined();
   });
 });

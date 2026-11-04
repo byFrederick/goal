@@ -73,6 +73,7 @@ import type {
   ToolDecision,
   TouchMetrics,
   TouchReason,
+  TryProposalResult,
   WeeklyThroughput,
 } from './types';
 
@@ -467,6 +468,25 @@ export function approveProposal(org: string, factory: string, number: number): P
   return unwrap(
     goal.POST(orgPath('/factories/{factory}/jonah/proposals/{number}/approve'), {
       params: { path: { org, factory, number } },
+    }),
+  );
+}
+
+/**
+ * Try again (tryJonahProposal): with confirm false the estimate and nothing queued, with confirm true the estimate and
+ * the proposal with its new tries. 409 learning-budget-exhausted, proposal-decided, proposal-not-tried and
+ * proposal-stale, 422 proposal-not-triable and 404 proposal-not-found are the dialog's to say.
+ */
+export function tryProposal(
+  org: string,
+  factory: string,
+  number: number,
+  confirm: boolean,
+): Promise<TryProposalResult> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/jonah/proposals/{number}/try'), {
+      params: { path: { org, factory, number } },
+      body: { confirm },
     }),
   );
 }

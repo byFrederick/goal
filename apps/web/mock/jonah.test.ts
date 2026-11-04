@@ -183,4 +183,31 @@ describe('the mock Jonah API', () => {
     const waiting = await call(api, '/factories/software/jonah/proposals?state=proposed', 'GET');
     expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([8]);
   });
+
+  it('answers Try again with an estimate, then with the new tries once confirmed, and refuses over budget', async () => {
+    const api = jonah();
+    const path = '/factories/software/jonah/proposals/7/try';
+    const estimate = await call(api, path, 'POST');
+    expect(estimate.status).toBe(200);
+    expect(estimate.body.estimate.tries).toBe(2);
+    expect(estimate.body.proposal).toBeUndefined();
+
+    const first = await call(api, path, 'POST', 'software', { confirm: true });
+    expect(first.status).toBe(201);
+    expect(first.body.proposal.tried.items[0].tries).toHaveLength(2);
+    const second = await call(api, path, 'POST', 'software', { confirm: true });
+    expect(second.body.proposal.tried.items[0].tries).toHaveLength(3);
+    const third = await call(api, path, 'POST', 'software', { confirm: true });
+    expect(third.status).toBe(409);
+    expect(third.body.code).toBe('learning-budget-exhausted');
+    const shown = await call(api, '/factories/software/jonah/proposals/7', 'GET');
+    expect(shown.body.tried.items[0].tries).toHaveLength(3);
+  });
+
+  it('gives the seeded kept tests passed, failed, error and no last result', async () => {
+    const list = await call(jonah(), '/factories/software/jonah/tests', 'GET');
+    expect(
+      list.body.tests.map((t: { last_result: { result: string } | null }) => t.last_result?.result ?? null),
+    ).toEqual(['passed', 'failed', 'error', null]);
+  });
 });

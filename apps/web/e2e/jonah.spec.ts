@@ -81,6 +81,36 @@ test('the Tests tab lists kept tests by station, and Remove takes one away', asy
   await expectAccessible(page);
 });
 
+test('the Tests tab shows each kept test’s last result and links a run to its item', async ({ page }) => {
+  await page.goto('/o/acme/f/software/jonah/tests');
+  const kept = page.getByRole('region', { name: 'Kept tests' });
+  await expect(kept.getByText('Passed')).toBeVisible();
+  await expect(kept.getByText('Failed')).toBeVisible();
+  await expect(kept.getByText('Error', { exact: true })).toBeVisible();
+  await expect(kept.getByText('Not run yet')).toBeVisible();
+  await kept.getByRole('link', { name: /Passed on/ }).click();
+  await expect(page).toHaveURL(/\/items\/451\?tab=trace/);
+});
+
+test('the Tests tab’s last results fit 390, 768 and 1440 px, and every control is 44 px at 390', async ({ page }) => {
+  for (const [width, height] of [
+    [1440, 900],
+    [768, 1024],
+    [390, 844],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await page.goto('/o/acme/f/software/jonah/tests');
+    await expect(page.getByText('Not run yet')).toBeVisible();
+    await expectNoHorizontalScroll(page);
+    if (width === 390) {
+      const targets = page.getByRole('region', { name: 'Kept tests' }).locator('a, button');
+      for (const box of await targets.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))) {
+        expect(box).toBeGreaterThanOrEqual(44);
+      }
+    }
+  }
+});
+
 test('the overview fits 375 and 768 px and renders in dark mode', async ({ page }) => {
   for (const width of [375, 768]) {
     await page.setViewportSize({ width, height: 900 });

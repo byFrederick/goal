@@ -21,6 +21,8 @@ interface ConfirmDialogProps {
   /** What the person must type, exactly, before the action enables. */
   confirmText?: string;
   pending?: boolean;
+  /** Locks the action without the pending label: the thing it needs is not ready or was refused. */
+  disabled?: boolean;
   onConfirm: () => void;
   /** Between the description and the buttons: what the action affects, an error. */
   children?: ReactNode;
@@ -37,6 +39,7 @@ export function ConfirmDialog({
   tone = 'default',
   confirmText,
   pending = false,
+  disabled = false,
   onConfirm,
   children,
 }: ConfirmDialogProps) {
@@ -49,7 +52,7 @@ export function ConfirmDialog({
     e.preventDefault();
     // React bubbles submit through portals: the form the dialog was opened from must not see it.
     e.stopPropagation();
-    if (confirmed && !pending) onConfirm();
+    if (confirmed && !pending && !disabled) onConfirm();
   };
 
   return (
@@ -87,7 +90,11 @@ export function ConfirmDialog({
                 {cancelLabel}
               </Button>
             </DialogClose>
-            <Button type="submit" variant={tone === 'danger' ? 'rework' : 'primary'} disabled={!confirmed || pending}>
+            <Button
+              type="submit"
+              variant={tone === 'danger' ? 'rework' : 'primary'}
+              disabled={!confirmed || pending || disabled}
+            >
               {pending ? (pendingLabel ?? confirmLabel) : confirmLabel}
             </Button>
           </div>
