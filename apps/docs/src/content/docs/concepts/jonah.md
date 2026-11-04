@@ -1,38 +1,44 @@
 ---
-title: Jonah (evals and judges)
-description: Jonah is Goal's learning part, with judges that score finished runs, eval cases that gate a publish, and reviews that propose definition changes.
+title: Jonah (learning from the line)
+description: Jonah learns from what the line already records. It reviews the items that needed help, proposes small changes to the definition, tries them on past items and watches every change after it is published.
 sidebar:
   order: 24
 ---
 
-Jonah is how a factory learns from its own runs. Judges score finished runs against a rubric. Eval cases run an agent on a fixed task before a version is published. Reviews read the runs that people sent back and propose changes to the definition. Jonah never changes a factory by itself: a proposal changes it only when a person approves it, and judges and eval cases change only when a person edits them.
+Jonah is how a factory learns from its own line. Once a day it reads the items that needed help, groups them by cause and proposes the smallest change to the definition that should fix each cause. Before you see a proposal, Goal tries it on the past items it cites and on the station's kept tests. After a change is published, Goal watches the stations it reaches and says whether it helped. Jonah never changes a factory by itself: a proposal changes it only when a person approves it.
 
-## Judges
+The pieces, in the order they happen:
 
-A judge is a file `evals/judges/<slug>.md`. Its front matter says what it checks, which agents it scores, its outcomes (each with a score from 0 to 1 and a label), its pass mark and its sample share. Its Markdown body is the rubric.
+1. The [evidence](#evidence): what the line recorded about each item that needed help.
+2. A daily [review](#reviews-and-proposals) that reads the evidence and writes observations, proposals and [memory facts](#memory-facts).
+3. [Tries on past items](#tried-on-past-items) and [kept tests](#kept-tests), which show how a proposal does before anyone decides it.
+4. [The watch](#the-watch-on-every-change) on every published change, with [Undo this change](#undo-this-change).
 
-A judge scores a share of the finished production runs of its agents. The share is its `sample`, from 0 to 1, and 0 pauses it. A judge run is one model call with no tools. It answers with a reason and one of the judge's outcome labels. The score comes from the outcome, never from the model, and a judge scores a run at most once. A judge never gates a run.
+All of it runs on [Jonah's budget](#jonahs-budget), a share of what the line spends.
 
-`goal judge list` shows the factory's judges. `goal judge try <slug>` queues the judge on the 10 newest finished runs of its agents, and those tries are kept out of the 30-day figures.
+## Evidence
 
-## Eval cases
+The evidence is a folder of small Markdown files that goald writes for each review from the line's own records, with no model call. An item is evidence when it finished in the review's window and something needed help at any station:
 
-An eval case is a file `evals/cases/<name>.yaml`. It holds one task that an agent must get right, how many tries it gets, and one check: the agent's output contract, a judge, or a reference patch.
+- **A send-back:** a gate's rejection, by an agent or a person, with its category; a person's reject; a failed check or contract; or a person moving the item to an earlier station.
+- **A person's touch:** a note, an answer to an agent's question, a retry, a move, a dependency added or removed, or an approval after a hold.
+- **A failed run:** blocked, out of turns, out of its item budget, or retried after a lost sandbox.
+- **An outlier:** a run whose cost or turn count is at least three times its station's median over the last 30 days.
 
-Before a version is published, the cases run on the draft. The publish gate publishes only when the newest eval run of every case, on the draft's exact content, has passed every try. A draft without cases publishes as before.
+These are the engine's own event kinds, so no configuration names them and the same list fits every factory. The folder holds:
 
-`goal eval run` starts an eval run by hand, and `goal eval show <run>` shows its state, cost and the tries of each case.
+- **`items/<number>.md`**, one file per item: its title, body, type and lane; each run's station, agent, model, version, turns, cost, outcome and the knowledge pinned for it; each send-back with its station, who sent it (an agent, a check or a person), its category and its reason; each question with its answer, and each note and touch. Reasons, notes and answers are kept whole up to 4 KB each. The files are built from milestone events only, never from tool calls.
+- **`README.md`**, with the counts across the items: send-backs by station, sender and category, touches by kind, and the disagreements between a gate and a person. A disagreement is an item a person moved to or past a gate that sent it back, or one a person sent back after a gate passed it.
+- **`versions.md`**, the versions published in the window, with who published each and its message, so the review sees what people already fixed.
 
-## Bake-offs
-
-A bake-off runs one agent's eval cases on two to four models, and by default one of them is the agent's current model. It compares the models by pass rate, then by cost per item. Applying the result writes the winning model into the draft. `goal bake-off run <agent>` starts one. The Bake-offs tab lists the factory's bake-offs, newest first; each opens its own page.
+The evidence is untrusted text: a review can only read it and propose, and every proposal waits for a person.
 
 ## Reviews and proposals
 
-A review is one agent run of kind `jonah` per factory, in a box it can only read. Its agent has the Read, Grep and Glob tools and nothing else: no repository, no secrets, no MCP servers, and at most 40 turns under what the weekly budget has left. The box holds:
+A review is one agent run of kind `jonah` per factory, in a box it can only read. Its agent has the Read, Grep and Glob tools and nothing else: no repository, no secrets, no MCP servers, and at most 40 turns under the review's cap from [Jonah's budget](#jonahs-budget). The box holds:
 
 - the current version's files;
-- the evidence: one file per item that finished since the last successful review and needed help, with counts across them and the versions published in that time;
+- the [evidence](#evidence) of the items that finished since the last successful review;
 - the `rejected` and `gate_rejected` touches in that window, with their reasons;
 - the open proposals, and those published or rejected in the last 90 days, the rejected ones with their reasons;
 - the open observations of earlier reviews, each with its id and its count so far;
@@ -52,8 +58,9 @@ goald drops a proposal, and logs `jonah proposal dropped` with the reason, when:
 - the definition with its edits applied has a blocking problem that the version did not have;
 - its title, summary or edits hold an invisible or bidirectional Unicode character, which can hide instructions from the person reading it.
 
+How a proposal moves on:
+
 - goald queues one review a day for each factory with Jonah on that has new evidence, at an hour of the day set by the factory's id. A person can queue one at once. Each factory has at most one review at a time.
-- Jonah's budget is `learning.jonah.share`, 5% by default, of what the line spent in the last 7 days. Each review may spend a fifth of it. When the budget is used up, reviews wait and publishes go on. Jonah's spend shows in the factory's spend, but it never stops production work through `runtime.budget.onExhausted`.
 - On a daily review, an observation becomes a proposal only once its count across reviews reaches `learning.jonah.proposeAfter`, 3 by default. Until then it shows as "Watching, n of proposeAfter". A review a person asked for may propose below it.
 - Each factory numbers its proposals from 1. A proposal is `proposed`, `published`, `applied`, `rejected` or `superseded`. A new proposal supersedes an open one only when their edits overlap: both edit the same file and their old texts cover some of the same text there, or either gives that file whole. Proposals that touch other parts of a file both stay open.
 - Approve applies the proposal's replacements to the current version's files, opens a draft from the current version, writes the results and publishes it as the person who approved. A change to the same file since the review does not stop it. Approve is refused when the factory already has an open draft. It is also refused as stale when an old text no longer occurs exactly once, so a proposal cannot overwrite newer work.
@@ -95,8 +102,6 @@ Try another model proposes a different model for one agent, as an ordinary propo
 - **The estimate comes first.** Goal picks the agent's five newest finished items: done items whose first run of a claim by the agent is at a station of the current version that can be tried. It shows how each went on the line, such as "passed first time, $0.42" or "sent back 2 times at review, $1.10". It plans three tries per item and prices them at each item's original run cost × 3. It also shows what is left of Jonah's budget. Nothing is stored yet. `goal agent try-model` asks before it goes on; `--yes` skips the question.
 - **Then the proposal.** Once you confirm, goald writes a proposal against the current version. Its one edit is a replacement in `factory.yaml` that changes the agent's `model`, checked like a review's edits. Its evidence is the items with their line results. Three tries per item are queued with it, each rerunning the item's original run on the new model, in a box with only the model key; they run while Jonah is on for the factory. From there you approve, edit or reject it like any other proposal, and the watch follows it once it is published.
 - **Refusals.** The model must be one the organization's policy allows, and not the agent's model already (`model-not-allowed`). An agent that needs MCP servers or secrets cannot be tried (`agent-not-triable`). An agent with no finished item gets `no-finished-items`. Tries that would cost more than what is left of Jonah's budget get `learning-budget-exhausted`, with the estimate.
-
-The decision behind reviews is ADR 0034 (`docs/adr/0034-jonah-proposals.md` in the repository). The evals and judges are described by ADR 0002 and ADR 0025 there.
 
 ## Tried on past items
 
@@ -149,7 +154,7 @@ From the CLI:
 - `goal test list [--factory F]` lists the kept tests: station, item number and title, last result and when, who kept it, and the test's id.
 - `goal test rm <id> [--factory F]` removes one.
 
-Removing a kept test removes its tries. Deleting the factory or the organization removes its kept tests. The Tests tab in the web app is not built yet.
+Removing a kept test removes its tries. Deleting the factory or the organization removes its kept tests. In the web app, an item's Teardown tab keeps it as a test (Keep as a test), and the Tests tab lists and removes them.
 
 ### When a kept test passes
 
@@ -167,17 +172,24 @@ When the publish dialog opens, it calls `POST …/draft/kept-tests` (`definition
 
 Publishing never reads these results: a failing kept test is a warning. Approving a proposal publishes it without the dialog and starts no kept tests of its own.
 
-## Where the review loop stands
+## Jonah's budget
 
-goald runs the review loop every minute by default (`GOAL_JONAH_REVIEW_EVERY`). Each round queues the daily reviews that are due and runs the queued ones.
+Jonah spends a share of what the line spends. Its budget is `learning.jonah.share`, 5% by default, of what the factory's runs other than Jonah's cost in the last 7 days. It covers reviews, tries, kept tests and Try another model.
 
-- **Look for improvements now:** `goal jonah look` and `POST …/jonah/reviews` queue a review at once. The answer is `review-in-flight` while one is pending or running, and `learning-budget-exhausted` once Jonah's runs of the last 7 days cost its budget. The web app's button is not wired to it yet.
+- **Per review:** a review may spend at most a fifth of the budget, and its run's cost cap is what the budget has left, under that fifth.
+- **When it runs out:** no daily review is queued, a review you ask for is refused with `learning-budget-exhausted`, and tries stay queued, shown as "Not tried: budget used". They run once the 7-day window has room again. Publishes go on.
+- **The factory's budget:** Jonah's runs show in the factory's spend, but they never count toward `runtime.budget.weeklyUsd`, so they never trigger its `onExhausted` and never stop production work.
+- A line that spent nothing in the last 7 days gives Jonah no budget, and `0%` turns its spend off.
+
+The keys of `learning.jonah` are in the [definition reference](/docs/reference/definition/), and factory settings edit them in their Jonah section.
+
+## How often it runs
+
+goald runs the review loop every minute by default (`GOAL_JONAH_REVIEW_EVERY`). Each round queues the daily reviews that are due and runs the queued ones. The try loop runs every minute too (`GOAL_JONAH_TRY_EVERY`): it queues the tries of new proposals and runs the queued ones. The watches are recomputed every 15 minutes.
+
+- **Look for improvements now:** `goal jonah look` and `POST …/jonah/reviews` queue a review at once. The answer is `review-in-flight` while one is pending or running, and `learning-budget-exhausted` once Jonah's runs of the last 7 days cost its budget.
 - **The window:** a review reads what finished since the last successful review ended, or the last 30 days before the first. A failed review does not move it.
 - **Retries:** a review whose run fails or whose answer does not parse is tried again, at most twice. After the third failure it ends `failed`, and its error shows as the last review in `GET …/jonah`. A spent budget or a deleted version fails it at once.
-
-Eval cases proposed by a review, and judges proposed by a review, are not part of reviews yet.
-
-A goald without judges or evals shows the Judges, Evals and Bake-offs pages empty, with creating a judge, an eval case or a bake-off not available yet.
 
 ## Where you meet it
 
@@ -187,7 +199,8 @@ A goald without judges or evals shows the Judges, Evals and Bake-offs pages empt
 - `goal jonah` lists proposals. `show` displays the evidence and a unified diff, and `approve`, `edit` and `reject` decide one.
 - `goal jonah try` tries a proposal again on its past items.
 - `goal agent try-model` proposes another model for an agent.
-- `goal judge` and `goal eval` manage judges and eval runs. `goal bake-off` runs the comparisons.
-- `goal spend` shows what runs cost, judges and reviews included.
+- `goal test keep`, `list` and `rm` manage kept tests.
+- `goal spend` shows what runs cost, Jonah's included.
+- An item's Teardown keeps the item as a test, an agent's page has Try another model, the publish dialog shows the kept tests the draft reaches, Versions shows each change's watch, and Needs you shows a proposal whose number got worse.
 
-The flags are in the [CLI reference](../../reference/).
+The flags are in the [CLI reference](../../reference/). The decisions behind Jonah are ADR 0034 and ADR 0039 (`docs/adr/0034-jonah-proposals.md` and `docs/adr/0039-jonah-learns-from-the-line.md` in the repository).
