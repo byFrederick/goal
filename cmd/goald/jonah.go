@@ -131,7 +131,7 @@ func jonahTryLoop(s settings, store *postgres.Store, defs *definitions.Cache, en
 	log *slog.Logger,
 ) *jonah.Tries {
 	return jonah.NewTries(jonah.TryDeps{
-		Orgs: store, Jonah: store, Tries: store, Definitions: tryDefinitions{defs: defs}, Waiting: store, Runner: eng, Clock: clock, Log: log,
+		Orgs: store, Jonah: store, Tries: store, Definitions: tryDefinitions{defs: defs}, Waiting: store, Events: store, Runner: eng, Clock: clock, Log: log,
 	}, s.JonahTry)
 }
 
