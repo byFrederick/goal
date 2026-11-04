@@ -23,6 +23,7 @@ import (
 type Jonah interface {
 	SentBackBetween(ctx context.Context, factory domain.FactoryID, since, until time.Time, limit int) ([]domain.SentBack, error)
 	Proposals(ctx context.Context, q ports.ProposalQuery) ([]domain.Proposal, error)
+	Proposal(ctx context.Context, factory domain.FactoryID, number int64) (domain.Proposal, error)
 	EvidenceItems(ctx context.Context, factory domain.FactoryID, since, until time.Time, limit int) ([]domain.EvidenceItem, error)
 	StationRunMedians(ctx context.Context, factory domain.FactoryID, since, until time.Time) ([]domain.StationMedian, error)
 	JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (domain.JonahSpend, error)

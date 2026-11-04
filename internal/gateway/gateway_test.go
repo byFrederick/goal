@@ -300,6 +300,8 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		DraftRequests: h.requests,
 		Drafts:        h.drafts,
 		Jonah:         jonah,
+		Tries:         h.store,
+		Proposed:      proposing{base: defs},
 		Knowledge:     kb,
 		Objects:       objects,
 		Logger:        slog.New(slog.NewTextHandler(h.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
@@ -313,6 +315,28 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 	h.url = ts.URL
 
 	return h
+}
+
+// proposing gives a try's version with the proposal's files written over its own: here only the
+// agent prompts, which the tests propose.
+type proposing struct{ base Definitions }
+
+func (p proposing) Proposed(_ context.Context, _ domain.DefinitionVersionID, files map[string][]byte) (Definitions, error) {
+	return proposed{Definitions: p.base, files: files}, nil
+}
+
+type proposed struct {
+	Definitions
+	files map[string][]byte
+}
+
+func (p proposed) AgentFiles(ctx context.Context, id domain.DefinitionVersionID, agent domain.AgentSpec, output string) (map[string][]byte, error) {
+	out, err := p.Definitions.AgentFiles(ctx, id, agent, output)
+	if b, ok := p.files[strings.TrimPrefix(agent.PromptPath, "./")]; ok && err == nil {
+		out["prompt.md"] = b
+	}
+
+	return out, err
 }
 
 func (h *harness) claims() domain.TaskClaims {

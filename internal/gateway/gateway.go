@@ -79,6 +79,14 @@
 // Deps.Jonah (503 when nil); it names no item, repository, connection, rule or knowledge source.
 // Its MCP session needs no agent of the version, lists no tool and refuses every call.
 //
+// # Tries of past items
+//
+// A token of kind domain.TaskKindTry is a try of a past item (ADR 0039 decision 9, try.go). Its
+// bundle is the station's on the version with the proposal's files written over it, from what
+// the original run recorded: its brief, the item's earlier outputs and its commit. Its agent gets
+// no connection, environment file or MCP server, and its environment's env is for setup alone.
+// Its MCP session lists no tool, and it records no event on the past item.
+//
 // # State
 //
 // None: every HTTP request is verified and served on its own (the SDK's stateless mode), so any
@@ -179,6 +187,11 @@ type Deps struct {
 	// Jonah reads a Jonah review's sent-back events and rejected proposals for its bundle; nil
 	// answers a jonah token's bundle with 503 and changes nothing for other tokens.
 	Jonah Jonah
+	// Tries and Proposed give a try of a past item its bundle (try.go): the try's record and its
+	// version with the proposal's files written over it. Without both, or without Jonah, a try
+	// token's bundle is 503.
+	Tries    Tries
+	Proposed ProposedDefinitions
 }
 
 // DraftRequests reads a draft request of the organization in ctx; ports.DraftRequests satisfies
@@ -229,7 +242,10 @@ type Gateway struct {
 	draftRequests DraftRequests
 	drafts        Drafts
 	jonah         Jonah // nil without Deps.Jonah
-	cfg           Config
+	// tries and proposed are nil without Deps.Tries and Deps.Proposed.
+	tries    Tries
+	proposed ProposedDefinitions
+	cfg      Config
 	mcp           http.Handler
 }
 
@@ -248,7 +264,8 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 
 	g := &Gateway{
 		defs: d.Definitions, items: d.Items, connections: d.Connections, policies: d.Policies, events: d.Events, clock: d.Clock, log: d.Logger,
-		knowledge: d.Knowledge, objects: d.Objects, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah, cfg: cfg,
+		knowledge: d.Knowledge, objects: d.Objects, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah,
+		tries: d.Tries, proposed: d.Proposed, cfg: cfg,
 	}
 	if g.log == nil {
 		g.log = slog.New(slog.DiscardHandler)
@@ -339,8 +356,9 @@ func (g *Gateway) session(ctx context.Context, c domain.TaskClaims) (*session, e
 		return nil, fmt.Errorf("%w: version %s is not a version of factory %s", errForbidden, c.VersionID, c.FactoryID)
 	}
 
-	// A Jonah review's agent is not one of the factory's, and it is served no tool.
-	if c.Kind == domain.TaskKindJonah {
+	// A Jonah review's agent is not one of the factory's, and it is served no tool; nor is a try
+	// of a past item, which has no person to ask and no connection.
+	if c.Kind == domain.TaskKindJonah || c.Kind == domain.TaskKindTry {
 		return &session{g: g, claims: c, noTools: true}, nil
 	}
 
