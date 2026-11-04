@@ -591,7 +591,7 @@ Flags: `--source S`, `--days N`.
 goal memory list <factory>
 ```
 
-the factory memory in its draft (memory.yaml), numbered
+the factory memory (memory.yaml), numbered: the open draft's, or the current version's when no draft is open; it opens no draft
 
 ## goal memory add
 

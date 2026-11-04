@@ -130,6 +130,10 @@ var locatedCases = []struct {
 		code: codeKnowledgeTooMany, section: domain.SectionBasics, pointer: "/basics/knowledge_sources",
 	},
 	{
+		name: "knowledge source listed twice", doc: knowledgeDoc("      - handbook\n      - { name: handbook, readWhen: Again. } #here\n"),
+		code: codeKnowledgeSourceDuplicate, section: domain.SectionBasics, pointer: "/basics/knowledge_sources/1",
+	},
+	{
 		name: "missing required key", doc: edited("      - id: work\n        kind: agent\n", "      - id: work #here\n"),
 		code: "schema-required", section: domain.SectionLine, pointer: "/line/stations/1/kind",
 	},
@@ -752,6 +756,8 @@ func TestCheck_KnowledgeEntries(t *testing.T) {
 	t.Run("an entry the schema refuses", knowledgeSchemaRefuses)
 
 	t.Run("ten sources at most", knowledgeTenAtMost)
+
+	t.Run("each source once", knowledgeEachOnce)
 }
 
 func knowledgeNamesAndObjects(t *testing.T) {
@@ -839,5 +845,32 @@ func knowledgeTenAtMost(t *testing.T) {
 	_, problems := Check(checkTree(knowledgeDoc(ten.String()+"      - { name: s11, readWhen: One too many. }\n"), nil))
 	if i := indexOf(problems, codeKnowledgeTooMany); i < 0 || problems[i].Severity != domain.SeverityError {
 		t.Errorf("eleven sources: problems = %+v, want a knowledge-too-many error", problems)
+	}
+}
+
+func knowledgeEachOnce(t *testing.T) {
+	t.Parallel()
+
+	if _, problems := Check(checkTree(knowledgeDoc("      - handbook\n      - { name: runbooks }\n"), nil)); len(problems) > 0 {
+		t.Errorf("distinct sources: problems = %+v, want none", problems)
+	}
+
+	for _, tt := range []struct{ name, entries, pointer string }{
+		{"two names", "      - handbook\n      - runbooks\n      - handbook\n", "/basics/knowledge_sources/2"},
+		{"two objects", "      - { name: handbook }\n      - { name: handbook, readWhen: Again. }\n", "/basics/knowledge_sources/1"},
+		{"an object then a name", "      - { name: handbook }\n      - handbook\n", "/basics/knowledge_sources/1"},
+	} {
+		_, problems := Check(checkTree(knowledgeDoc(tt.entries), nil))
+
+		i := indexOf(problems, codeKnowledgeSourceDuplicate)
+		if i < 0 || len(problems) != 1 {
+			t.Errorf("%s: problems = %+v, want one %s", tt.name, problems, codeKnowledgeSourceDuplicate)
+
+			continue
+		}
+
+		if p := problems[i]; p.Pointer != tt.pointer || p.Severity != domain.SeverityError || !strings.Contains(p.Message, srcHandbook) {
+			t.Errorf("%s: problem = %+v, want an error at %s naming the source", tt.name, p, tt.pointer)
+		}
 	}
 }
