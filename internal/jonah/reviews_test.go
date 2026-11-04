@@ -1074,3 +1074,13 @@ func (w *reviewWorld) oldWindow() []domain.SentBack {
 
 	return ev
 }
+
+// dropTime leaves the wall-clock time out of the review log, so a test that asserts what the log
+// never holds cannot match a digit run in a timestamp.
+func dropTime(groups []string, a slog.Attr) slog.Attr {
+	if len(groups) == 0 && a.Key == slog.TimeKey {
+		return slog.Attr{}
+	}
+
+	return a
+}
