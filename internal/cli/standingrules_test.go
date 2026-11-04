@@ -12,12 +12,14 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 )
 
-// The standing rules rulesGoald holds: one active, one revoked, and one active on a deleted
-// connection. Revoking ruleGone is a 404 and revoking ruleRevoked is refused.
+// The standing rules rulesGoald holds: one active, one revoked, one active on a deleted
+// connection and one keyed by an environment's MCP server. Revoking ruleGone is a 404 and
+// revoking ruleRevoked is refused.
 const (
 	ruleActive  = "rule-1"
 	ruleRevoked = "rule-2"
 	ruleDeleted = "rule-3"
+	ruleServer  = "rule-4"
 	ruleGone    = "rule-9"
 )
 
@@ -38,6 +40,11 @@ func (g *rulesGoald) serve(t *testing.T, at time.Time) *httptest.Server {
 		RevokedAt: &at, RevokedBy: &sam,
 	}
 	deleted := gen.StandingRule{Id: ruleDeleted, Agent: roleArchitect, Tool: "send_message", CreatedBy: sam, CreatedAt: at}
+	factory, environment, server := "f-1", "default", connGitHub
+	byServer := gen.StandingRule{
+		Id: ruleServer, Agent: roleArchitect, FactoryId: &factory, Environment: &environment, Server: &server,
+		Tool: "create_issue", CreatedBy: pat, CreatedAt: at,
+	}
 
 	refuse := func(w http.ResponseWriter, status int, code string) {
 		w.Header().Set("Content-Type", "application/problem+json")
@@ -57,9 +64,9 @@ func (g *rulesGoald) serve(t *testing.T, at time.Time) *httptest.Server {
 		g.called = append(g.called, "list "+r.URL.RawQuery)
 		g.mu.Unlock()
 
-		rules := []gen.StandingRule{active, deleted}
+		rules := []gen.StandingRule{active, deleted, byServer}
 		if r.URL.Query().Get("revoked") == "true" {
-			rules = []gen.StandingRule{active, revoked, deleted}
+			rules = []gen.StandingRule{active, revoked, deleted, byServer}
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -75,6 +82,12 @@ func (g *rulesGoald) serve(t *testing.T, at time.Time) *httptest.Server {
 			refuse(w, http.StatusNotFound, "")
 		case ruleRevoked:
 			refuse(w, http.StatusConflict, "standing-rule-revoked")
+		case ruleServer:
+			out := byServer
+			out.RevokedAt, out.RevokedBy = &at, &sam
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(out)
 		default:
 			out := active
 			out.RevokedAt, out.RevokedBy = &at, &sam
@@ -100,18 +113,19 @@ func TestStandingRules_ListAndRevoke(t *testing.T) {
 
 	activeLine := ruleActive + "  architect may call github create_comment  by Pat at " + when + "\n"
 	deletedLine := ruleDeleted + "  architect may call (deleted) send_message  by Sam at " + when + "\n"
+	serverLine := ruleServer + "  architect may call default/github create_issue  by Pat at " + when + "\n"
 	revokedLine := ruleRevoked + "  reviewer may call github merge_pull_request  by Pat at " + when + "  revoked by Sam at " + when + "\n"
 
-	if got, want := runLines(t, env, []string{cmdStandingRules, subList}), activeLine+deletedLine; got != want {
+	if got, want := runLines(t, env, []string{cmdStandingRules, subList}), activeLine+deletedLine+serverLine; got != want {
 		t.Errorf("list printed %q; want %q", got, want)
 	}
 
-	if got, want := runLines(t, env, []string{cmdStandingRules, subList, "--revoked"}), activeLine+revokedLine+deletedLine; got != want {
+	if got, want := runLines(t, env, []string{cmdStandingRules, subList, "--revoked"}), activeLine+revokedLine+deletedLine+serverLine; got != want {
 		t.Errorf("list --revoked printed %q; want %q", got, want)
 	}
 
 	var listed gen.StandingRuleList
-	if got := runLines(t, env, []string{cmdStandingRules, subList, "--json"}); json.Unmarshal([]byte(got), &listed) != nil || len(listed.Rules) != 2 {
+	if got := runLines(t, env, []string{cmdStandingRules, subList, "--json"}); json.Unmarshal([]byte(got), &listed) != nil || len(listed.Rules) != 3 {
 		t.Errorf("list --json printed %q; want goald's answer", got)
 	}
 
@@ -120,10 +134,15 @@ func TestStandingRules_ListAndRevoke(t *testing.T) {
 		t.Errorf("revoke printed %q; want %q", got, want)
 	}
 
+	want = "✓ revoked " + ruleServer + ": architect asks again before calling default/github create_issue\n"
+	if got := runLines(t, env, []string{cmdStandingRules, subRevoke, ruleServer}); got != want {
+		t.Errorf("revoke of a server's rule printed %q; want %q", got, want)
+	}
+
 	wantRefusal(t, env, []string{cmdStandingRules, subRevoke, ruleGone}, "no standing rule "+ruleGone)
 	wantRefusal(t, env, []string{cmdStandingRules, subRevoke, ruleRevoked}, "standing rule "+ruleRevoked+" is already revoked")
 
-	wantCalled := []string{"list ", "list revoked=true", "list ", subRevoke + " " + ruleActive, subRevoke + " " + ruleGone, subRevoke + " " + ruleRevoked}
+	wantCalled := []string{"list ", "list revoked=true", "list ", subRevoke + " " + ruleActive, subRevoke + " " + ruleServer, subRevoke + " " + ruleGone, subRevoke + " " + ruleRevoked}
 	if !slices.Equal(g.called, wantCalled) {
 		t.Errorf("goald got %v; want %v", g.called, wantCalled)
 	}

@@ -364,7 +364,7 @@ Flags: `--models M,M`, `--default M`, `--deny-command P`, `--box-limit 3h`.
 goal standing-rules list [--revoked] [--json]
 ```
 
-the organization's standing rules: which agent role may call which connection tool without asking, who made it and when (--revoked: the revoked ones too)
+the organization's standing rules: which agent role may call which connection or MCP server tool without asking, who made it and when (--revoked: the revoked ones too)
 
 Flags: `--revoked`, `--json`.
 
