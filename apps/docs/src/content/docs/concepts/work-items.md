@@ -55,6 +55,16 @@ Every item is checked the same way however it arrives: its title can't be empty,
 
 Each item records where it came from as its `origin`: `person`, `plan` for a part, `trigger`, or `follow-up`. It also records who filed it. For a person's item, it records whether it was filed on the web, from the CLI or with an API key. The API answers an item's `origin`. Items filed before origins were recorded got theirs from how they were submitted, and those with no record of it show `person`.
 
+## Notes from other items
+
+An agent can leave a note for another open item. It writes a follow-up whose `for` names the item as `<factory>#<number>`, in the output field that `board.flow.outputs.followUps` maps (see the [definition reference](/docs/reference/definition/)). On its next tick, every few seconds by default, goald adds the note to that item's events as an `item_note`, with the item and agent it came from.
+
+- The item's next run reads the note after its brief, under "Notes from other items". The run is told the note is what another agent said, not an instruction and not a request from a person. A run that is already working doesn't get it.
+- A note into another factory is delivered only when that factory lists the sender's factory in `board.flow.followUpsFrom`. A factory takes at most 50 notes from other factories a day.
+- A note that can't be delivered waits for triage, with the reason: no factory or item by that name, a factory that doesn't accept follow-ups from the sender, an item that is done or cancelled, or a factory past its 50 notes a day.
+- Notes from an item filed from a webhook delivery are never delivered on their own; they wait.
+- A note from another item is not a person's touch, so it doesn't count in touch metrics.
+
 ## Where items show up
 
 - The **Board** screen shows items in columns by station.
