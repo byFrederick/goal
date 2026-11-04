@@ -59,6 +59,7 @@ import {
   useProposalDecisions,
 } from './proposal-actions';
 import { ModelTries, TriedPanel } from './tried-panel';
+import { TryAgain } from './try-again';
 
 /** The chip tone of a decided proposal's state: published is done, rejected is sent back. */
 const stateTones: Record<ProposalState, ChipTone> = {
@@ -364,6 +365,10 @@ export function ProposalPage({ number }: { number: number }) {
   const reviewers = overview.data ? reviewersText(overview.data.policy.approver_roles) : undefined;
   const actions = waiting || decisions.approve.isSuccess ? proposalActions(p, factory.can, decisions) : [];
   const tried = p.tried;
+  const tryAgain =
+    waiting && factory.can.includes('definition:edit') && tried && tried.items.length > 0 ? (
+      <TryAgain number={p.number} />
+    ) : undefined;
 
   return (
     <div className="@container flex min-w-0 flex-col gap-5 max-md:motion-safe:animate-pane-forward">
@@ -405,7 +410,9 @@ export function ProposalPage({ number }: { number: number }) {
           </section>
 
           {kind === 'memory' ? <MemoryFacts p={p} /> : null}
-          {kind === 'model' && tried ? <ModelTries tried={tried} model={modelOfProposal(p.files)} /> : null}
+          {kind === 'model' && tried ? (
+            <ModelTries tried={tried} model={modelOfProposal(p.files)} action={tryAgain} />
+          ) : null}
 
           <SectionCard
             title={
@@ -443,7 +450,7 @@ export function ProposalPage({ number }: { number: number }) {
         </div>
 
         <div className="flex min-w-0 flex-col gap-5">
-          {kind === 'definition' && tried ? <TriedPanel tried={tried} /> : null}
+          {kind === 'definition' && tried ? <TriedPanel tried={tried} action={tryAgain} /> : null}
           <DetailsCard p={p} reviewers={reviewers} />
         </div>
       </div>

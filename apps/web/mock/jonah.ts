@@ -17,6 +17,8 @@ import type {
   ProposalEntry,
   ProposalFile,
   ProposalState,
+  ProposalTried,
+  TriedTry,
 } from '../src/api/types.ts';
 
 export interface JonahDeps {
@@ -44,6 +46,8 @@ interface FactoryJonah {
   decisions: Map<number, Decision>;
   /** The kept tests a person removed, by id. */
   removed: Set<string>;
+  /** How many times Try again was confirmed on a proposal, by number. */
+  tried: Map<number, number>;
   /** The queued review, once a person asked for one. */
   review: JonahReview | undefined;
 }
@@ -67,18 +71,30 @@ const problem = (res: ServerResponse, status: number, title: string, code: strin
 /** The policy the Software factory's learning.jonah sets, with the defaults the rest of the factories read. */
 /** The Software factory's four kept tests (tests.jpg), kept by the local user over the last weeks. */
 function softwareKeptTests(now: number): KeptTest[] {
-  const kept = (id: string, number: number, title: string, station: string, daysAgo: number): KeptTest => ({
+  const result = (r: 'passed' | 'failed' | 'error', daysAgo: number, run: string): KeptTest['last_result'] => ({
+    result: r,
+    at: new Date(now - daysAgo * 86_400_000).toISOString(),
+    run_id: run,
+  });
+  const kept = (
+    id: string,
+    number: number,
+    title: string,
+    station: string,
+    daysAgo: number,
+    last: KeptTest['last_result'] = null,
+  ): KeptTest => ({
     id,
     item: { id: `item-${number}`, number, title },
     station,
     kept_by: 'user:local',
     kept_at: new Date(now - daysAgo * 86_400_000).toISOString(),
-    last_result: null,
+    last_result: last,
   });
   return [
-    kept('kept-1', 451, 'A sidebar request gets the frontend lane', 'spec', 7),
-    kept('kept-2', 418, 'Needs you header in the top bar', 'build', 4),
-    kept('kept-3', 493, 'Phone fixes on three screens', 'build', 3),
+    kept('kept-1', 451, 'A sidebar request gets the frontend lane', 'spec', 7, result('passed', 2, 'run-451')),
+    kept('kept-2', 418, 'Needs you header in the top bar', 'build', 4, result('failed', 1, 'run-418')),
+    kept('kept-3', 493, 'Phone fixes on three screens', 'build', 3, result('error', 1, 'run-493')),
     kept('kept-4', 497, 'Board column header meta', 'review', 4),
   ];
 }
@@ -258,6 +274,29 @@ const proposalSeven = (now: number): Proposal => ({
   ],
 });
 
+/** One try, done and graded fixed. */
+const doneTry = (attempt: number): TriedTry => ({ attempt, state: 'done', verdict: 'fixed', cost_usd: 1.4 });
+
+/** What proposal 7 was tried on: two past items, each with its first try and one more per confirmed Try again. */
+const triedSeven = (rounds: number): ProposalTried => ({
+  state: 'done',
+  items: [
+    ['software#511', 'Board Done cards overflow'],
+    ['software#497', 'Board column header meta'],
+  ].map(([ref, title]) => ({
+    item_ref: ref as string,
+    item_title: title as string,
+    station: 'frontend',
+    tries: Array.from({ length: rounds + 1 }, (_, i) => doneTry(i + 1)),
+  })),
+  cost_usd: 2.8 * (rounds + 1),
+  seconds: 2460,
+  kept_tests: [],
+});
+
+/** Try again is refused with learning-budget-exhausted from the third round on. */
+const maxRounds = 2;
+
 /** Proposal 8, the flagged case: one file, two runs as evidence. Approving it answers 409 draft-open. */
 const proposalEight = (now: number): Proposal => ({
   ...(softwareProposals(now).find((p) => p.number === 8) as ProposalEntry),
@@ -292,6 +331,33 @@ const softwareDetail = (now: number, number: number): Proposal | undefined => {
   return undefined;
 };
 
+/** Proposal 7 with the tries Try again added, so far. */
+const withTries = (p: Proposal, rounds: number): Proposal => (p.number === 7 ? { ...p, tried: triedSeven(rounds) } : p);
+
+/** What the next Try again costs: one more try on each of proposal 7's two items. */
+const tryEstimate = (rounds: number) => ({
+  number: 7,
+  items: [
+    {
+      item_ref: 'software#511',
+      item_title: 'Board Done cards overflow',
+      station: 'frontend',
+      tries: 1,
+      run_cost_usd: 1.4,
+    },
+    {
+      item_ref: 'software#497',
+      item_title: 'Board column header meta',
+      station: 'frontend',
+      tries: 1,
+      run_cost_usd: 1.4,
+    },
+  ],
+  tries: 2,
+  estimate_usd: 2.8,
+  budget_left_usd: 20 - 2.8 * (rounds + 1),
+});
+
 export function createJonah({ factory, clock }: JonahDeps): MockJonah {
   let byFactory = new Map<string, FactoryJonah>();
 
@@ -302,7 +368,7 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
   const jonahOf = (id: string): FactoryJonah => {
     let j = byFactory.get(id);
     if (!j) {
-      j = { decisions: new Map(), removed: new Set(), review: undefined };
+      j = { decisions: new Map(), removed: new Set(), tried: new Map(), review: undefined };
       byFactory.set(id, j);
     }
     return j;
@@ -327,7 +393,7 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
     reset,
     async handle(org, rest, method, url, res, readBody) {
       const m = rest.match(
-        /^\/factories\/([^/]+)\/jonah(?:\/(proposals|reviews|tests)(?:\/([^/]+)(?:\/(approve|edit|reject|undo))?)?)?$/,
+        /^\/factories\/([^/]+)\/jonah(?:\/(proposals|reviews|tests)(?:\/([^/]+)(?:\/(approve|edit|reject|undo|try))?)?)?$/,
       );
       if (!m) return false;
       const f = factory(org.id, decodeURIComponent(m[1] ?? ''));
@@ -368,12 +434,31 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
         }
         const decided = j.decisions.get(number);
         if (action === undefined && method === 'GET') {
-          json(res, 200, withDecision(j, detail));
+          json(res, 200, withTries(withDecision(j, detail), j.tried.get(number) ?? 0));
           return true;
         }
         if (method !== 'POST' || action === undefined) return false;
         if (action === 'undo') {
           problem(res, 409, 'Proposal not published', 'proposal-not-published', m[3]);
+          return true;
+        }
+        if (action === 'try') {
+          const rounds = j.tried.get(number) ?? 0;
+          const confirm = (await readBody()).confirm === true;
+          if (decided) {
+            problem(res, 409, 'Proposal already decided', 'proposal-decided', m[3]);
+          } else if (number !== 7) {
+            problem(res, 409, 'Proposal not tried', 'proposal-not-tried', m[3]);
+          } else if (rounds >= maxRounds) {
+            problem(res, 409, 'Jonah’s budget is used up', 'learning-budget-exhausted', m[3]);
+          } else {
+            const estimate = tryEstimate(rounds);
+            if (confirm) j.tried.set(number, rounds + 1);
+            json(res, confirm ? 201 : 200, {
+              estimate,
+              ...(confirm ? { proposal: withTries(withDecision(j, detail), rounds + 1) } : {}),
+            });
+          }
           return true;
         }
         if (decided) {
