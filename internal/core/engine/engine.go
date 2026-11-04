@@ -490,6 +490,9 @@ func (e *Engine) Tick(ctx context.Context) error {
 	lines := maps.Clone(e.lines)
 	e.mu.RUnlock()
 
+	// Notes go first, so a target claimed in this tick reads them; every line takes notes.
+	errs = append(errs, e.deliverNotes(ctx, lines))
+
 	running := maps.Clone(lines)
 	maps.DeleteFunc(running, func(_ domain.FactoryID, l domain.Line) bool { return l.Paused })
 
