@@ -216,9 +216,9 @@ func (q *Queries) InsertReceivedDelivery(ctx context.Context, arg InsertReceived
 }
 
 const insertTriggerFiring = `-- name: InsertTriggerFiring :one
-INSERT INTO trigger_firings (id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, missed, at, check_state)
+INSERT INTO trigger_firings (id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, missed, at, check_state, try)
 VALUES ($1, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11, $12, $13)
+        $7, $8, $9, $10, $11, $12, $13, $14)
 ON CONFLICT (org_id, factory_id, trigger, idempotency_key) DO NOTHING
 RETURNING id
 `
@@ -237,6 +237,7 @@ type InsertTriggerFiringParams struct {
 	Missed         int32
 	At             time.Time
 	CheckState     *string
+	Try            bool
 }
 
 // Returns nothing (no rows) when the trigger already has a firing with this key.
@@ -255,6 +256,7 @@ func (q *Queries) InsertTriggerFiring(ctx context.Context, arg InsertTriggerFiri
 		arg.Missed,
 		arg.At,
 		arg.CheckState,
+		arg.Try,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -849,7 +851,7 @@ func (q *Queries) TriggerFailureStreak(ctx context.Context, arg TriggerFailureSt
 
 const triggerFiringByKey = `-- name: TriggerFiringByKey :one
 SELECT id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, missed, at,
-       check_state, run_id, cost_usd::float8 AS cost_usd, decisions FROM trigger_firings
+       check_state, run_id, cost_usd::float8 AS cost_usd, decisions, try, applied, checked_at FROM trigger_firings
 WHERE factory_id = $1 AND trigger = $2 AND idempotency_key = $3
 `
 
@@ -876,6 +878,9 @@ type TriggerFiringByKeyRow struct {
 	RunID          *uuid.UUID
 	CostUsd        float64
 	Decisions      []byte
+	Try            bool
+	Applied        []byte
+	CheckedAt      *time.Time
 }
 
 func (q *Queries) TriggerFiringByKey(ctx context.Context, arg TriggerFiringByKeyParams) (TriggerFiringByKeyRow, error) {
@@ -898,6 +903,9 @@ func (q *Queries) TriggerFiringByKey(ctx context.Context, arg TriggerFiringByKey
 		&i.RunID,
 		&i.CostUsd,
 		&i.Decisions,
+		&i.Try,
+		&i.Applied,
+		&i.CheckedAt,
 	)
 	return i, err
 }

@@ -1,9 +1,11 @@
 package postgres
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -106,7 +108,9 @@ func (in *Intake) HeartbeatCheck(ctx context.Context, l domain.CheckLease, until
 	return nil
 }
 
-// FinishCheck implements ports.Intake.
+// FinishCheck implements ports.Intake: the trigger's advisory lock (LockTriggerFiring, as Fire
+// takes it) first, then the firing's row, then the answer's items in id order (applyCheck), so it
+// never deadlocks with Fire or DeliverNotes.
 func (in *Intake) FinishCheck(ctx context.Context, l domain.CheckLease, r domain.CheckResult) error {
 	if err := r.Check(); err != nil {
 		return fmt.Errorf("finish check %s: %w", l.FiringID, err)
@@ -122,15 +126,21 @@ func (in *Intake) FinishCheck(ctx context.Context, l domain.CheckLease, r domain
 		return err
 	}
 
+	fid, err := parseID("factory", string(l.FactoryID))
+	if err != nil {
+		return err
+	}
+
 	p := db.FinishTriggerCheckParams{
 		State: checkStateArg(r.State), RunID: run, CostUsd: r.CostUSD, Reason: cutText(r.Reason, maxFiringReason), At: &r.At, ID: id, Token: &token,
 	}
-	if r.State == domain.CheckDone {
-		p.Decisions = r.Decisions
-	}
 
 	err = in.s.inTx(ctx, func(q *db.Queries) error {
-		row, err := q.FinishTriggerCheck(ctx, p)
+		if err := q.LockTriggerFiring(ctx, db.LockTriggerFiringParams{FactoryID: fid, Trigger: l.Trigger}); err != nil {
+			return fmt.Errorf("lock the trigger: %w", err)
+		}
+
+		row, err := q.RunningTriggerCheck(ctx, db.RunningTriggerCheckParams{ID: id, Token: &token})
 		if notFound(err) {
 			return fmt.Errorf("check %s: %w", l.FiringID, ports.ErrLeaseLost)
 		}
@@ -139,7 +149,21 @@ func (in *Intake) FinishCheck(ctx context.Context, l domain.CheckLease, r domain
 			return err
 		}
 
-		if r.State != domain.CheckDone || len(r.Saved) == 0 || string(r.Saved) == "null" {
+		if r.State == domain.CheckDone {
+			a, err := applyCheck(ctx, q, row, r)
+			if err != nil {
+				return err
+			}
+
+			p.Decisions = r.Decisions
+			p.Applied, _ = json.Marshal(a) // plain fields: never fails
+		}
+
+		if _, err := q.FinishTriggerCheck(ctx, p); err != nil {
+			return err
+		}
+
+		if r.State != domain.CheckDone || row.Try || len(r.Saved) == 0 || string(r.Saved) == "null" {
 			return nil
 		}
 
@@ -150,6 +174,187 @@ func (in *Intake) FinishCheck(ctx context.Context, l domain.CheckLease, r domain
 	}
 
 	return nil
+}
+
+// applyCheck applies done check c's answer in q's transaction, under the trigger's lock, as
+// domain.ApplyCheck decides from the keys it names (their items locked in id order) and the items
+// the trigger filed today: it files each item through fileItem and keeps it as its key's, and
+// writes each note as an item_note and its key's last note. A try only decides.
+func applyCheck(ctx context.Context, q *db.Queries, c db.RunningTriggerCheckRow, r domain.CheckResult) (domain.CheckApplied, error) {
+	var a domain.CheckAnswer
+	if err := json.Unmarshal(r.Decisions, &a); err != nil {
+		return domain.CheckApplied{}, fmt.Errorf("decisions: %w: %w", domain.ErrInvalid, err)
+	}
+
+	keys, stations, err := checkKeys(ctx, q, c, a)
+	if err != nil {
+		return domain.CheckApplied{}, err
+	}
+
+	today, err := q.CheckFiledSince(ctx, db.CheckFiledSinceParams{FactoryID: c.FactoryID, Trigger: &c.Trigger, Since: r.At.UTC().Truncate(24 * time.Hour)})
+	if err != nil {
+		return domain.CheckApplied{}, fmt.Errorf("items filed today: %w", err)
+	}
+
+	out := domain.ApplyCheck(a, r.Items, keys, r.Limits, int(today), r.At)
+	if c.Try {
+		return out, nil
+	}
+
+	for i, f := range out.Filed {
+		row, err := fileItem(ctx, q, filingOf(f.Item, c.FactoryID))
+		if err != nil {
+			return domain.CheckApplied{}, fmt.Errorf("file %s: %w", f.Key, err)
+		}
+
+		out.Filed[i].Ref = fmt.Sprintf("#%d", row.Number)
+
+		if err := q.KeepTriggerKey(ctx, db.KeepTriggerKeyParams{FactoryID: c.FactoryID, Trigger: c.Trigger, Key: f.Key, ItemID: &row.ID}); err != nil {
+			return domain.CheckApplied{}, fmt.Errorf("keep key %s: %w", f.Key, err)
+		}
+	}
+
+	for _, n := range out.Noted {
+		if err := appendEvents(ctx, q, []domain.Event{{
+			FactoryID: domain.FactoryID(c.FactoryID.String()), ItemID: n.Item, At: r.At, Kind: domain.EventItemNote, Station: stations[n.Item],
+			Actor: domain.ActorEngine, Data: domain.CheckNoteData(c.Trigger, n.Key, r.Agent, r.RunID, n.Text),
+		}}); err != nil {
+			return domain.CheckApplied{}, fmt.Errorf("note on %s: %w", n.Key, err)
+		}
+
+		if err := q.NoteTriggerKey(ctx, db.NoteTriggerKeyParams{At: &r.At, Text: n.Text, FactoryID: c.FactoryID, Trigger: c.Trigger, Key: n.Key}); err != nil {
+			return domain.CheckApplied{}, fmt.Errorf("note on key %s: %w", n.Key, err)
+		}
+	}
+
+	return out, nil
+}
+
+// checkKeys are the trigger's keys a names, each with its item as it stands, locked in id order,
+// and the station of each item.
+func checkKeys(ctx context.Context, q *db.Queries, c db.RunningTriggerCheckRow, a domain.CheckAnswer) (map[string]domain.CheckKey, map[domain.ItemID]string, error) {
+	var names []string
+	for _, f := range a.File {
+		names = append(names, f.Key)
+	}
+
+	for _, n := range a.Note {
+		names = append(names, n.Key)
+	}
+
+	rows, err := q.TriggerKeysOf(ctx, db.TriggerKeysOfParams{FactoryID: c.FactoryID, Trigger: c.Trigger, Keys: names})
+	if err != nil {
+		return nil, nil, fmt.Errorf("keys: %w", err)
+	}
+
+	keys := make(map[string]domain.CheckKey, len(rows))
+	byItem := map[uuid.UUID]string{}
+
+	var ids []uuid.UUID
+
+	for _, r := range rows {
+		k := domain.CheckKey{Key: r.Key, NoteText: r.LastNoteText}
+		if r.LastNoteAt != nil {
+			k.NoteAt = r.LastNoteAt.UTC()
+		}
+
+		if r.ItemID != nil {
+			ids = append(ids, *r.ItemID)
+			byItem[*r.ItemID] = r.Key
+		}
+
+		keys[r.Key] = k
+	}
+
+	items, err := q.LockCheckItems(ctx, ids)
+	if err != nil {
+		return nil, nil, fmt.Errorf("the keys' items: %w", err)
+	}
+
+	stations := make(map[domain.ItemID]string, len(items))
+
+	for _, it := range items {
+		k := keys[byItem[it.ID]]
+		k.Item, k.Number, k.State = domain.ItemID(it.ID.String()), it.Number, domain.ItemState(it.State)
+
+		if k.Closed() {
+			k.ClosedAt, k.Why = it.ClosedAt.UTC(), it.Why
+		}
+
+		keys[k.Key] = k
+		stations[k.Item] = it.Station
+	}
+
+	return keys, stations, nil
+}
+
+// TriggerChecks implements ports.Intake.
+func (in *Intake) TriggerChecks(ctx context.Context, factory domain.FactoryID, trigger string, limit int) ([]domain.TriggerFiring, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.TriggerChecksRow, error) {
+		return q.TriggerChecks(ctx, db.TriggerChecksParams{FactoryID: fid, Trigger: trigger, MaxRows: int32(min(max(limit, 0), maxInt32))})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("checks of trigger %s: %w", trigger, err)
+	}
+
+	out := make([]domain.TriggerFiring, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, firingFrom(db.TriggerFiringByKeyRow(r)))
+	}
+
+	return out, nil
+}
+
+// CheckAlerts implements ports.Intake, in one read transaction.
+func (in *Intake) CheckAlerts(ctx context.Context, factories []domain.FactoryID, since time.Time) ([]domain.CheckAlert, error) {
+	ids := make([]uuid.UUID, 0, len(factories))
+
+	for _, f := range factories {
+		id, err := parseID("factory", string(f))
+		if err != nil {
+			return nil, err
+		}
+
+		ids = append(ids, id)
+	}
+
+	out := []domain.CheckAlert{}
+
+	err := in.s.read(ctx, func(q *db.Queries) error {
+		failing, err := q.FailingTriggerChecks(ctx, ids)
+		if err != nil {
+			return fmt.Errorf("failing checks: %w", err)
+		}
+
+		for _, r := range failing {
+			out = append(out, domain.CheckAlert{FactoryID: domain.FactoryID(r.FactoryID.String()), Trigger: r.Trigger, Kind: domain.CheckFailing, At: r.At.UTC(), Reason: r.Reason})
+		}
+
+		limited, err := q.LimitedTriggerChecks(ctx, db.LimitedTriggerChecksParams{Factories: ids, Since: &since})
+		if err != nil {
+			return fmt.Errorf("checks over the limit: %w", err)
+		}
+
+		for _, r := range limited {
+			out = append(out, domain.CheckAlert{FactoryID: domain.FactoryID(r.FactoryID.String()), Trigger: r.Trigger, Kind: domain.CheckLimited, At: r.At.UTC()})
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("check alerts: %w", err)
+	}
+
+	slices.SortFunc(out, func(a, b domain.CheckAlert) int {
+		return cmp.Or(cmp.Compare(a.FactoryID, b.FactoryID), cmp.Compare(a.Trigger, b.Trigger), cmp.Compare(a.Kind, b.Kind))
+	})
+
+	return out, nil
 }
 
 // maxFiringReason is the most characters a firing's reason column keeps.

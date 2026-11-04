@@ -14,7 +14,8 @@ import (
 
 const checkClosedItems = `-- name: CheckClosedItems :many
 SELECT w.number, w.state, coalesce(w.done_at, w.updated_at)::timestamptz AS closed_at,
-       coalesce((SELECT f.dedupe FROM trigger_firings f WHERE f.item_id = w.id ORDER BY f.at LIMIT 1), '')::text AS key,
+       coalesce((SELECT k.key FROM trigger_keys k WHERE k.item_id = w.id LIMIT 1),
+                (SELECT f.dedupe FROM trigger_firings f WHERE f.item_id = w.id ORDER BY f.at LIMIT 1), '')::text AS key,
        coalesce((SELECT e.data->>'reason' FROM item_events e WHERE e.item_id = w.id AND e.kind IN ('done', 'cancelled')
                  ORDER BY e.id DESC LIMIT 1), '')::text AS why
 FROM work_items w
@@ -39,8 +40,8 @@ type CheckClosedItemsRow struct {
 	Why      string
 }
 
-// The trigger's items that closed at or after since, newest first, each with its key and the
-// reason of its closing event.
+// The trigger's items that closed at or after since, newest first, each with its key (as
+// CheckOpenItems reads it) and the reason of its closing event.
 func (q *Queries) CheckClosedItems(ctx context.Context, arg CheckClosedItemsParams) ([]CheckClosedItemsRow, error) {
 	rows, err := q.db.Query(ctx, checkClosedItems,
 		arg.FactoryID,
@@ -72,9 +73,29 @@ func (q *Queries) CheckClosedItems(ctx context.Context, arg CheckClosedItemsPara
 	return items, nil
 }
 
+const checkFiledSince = `-- name: CheckFiledSince :one
+SELECT count(*) FROM work_items
+WHERE factory_id = $1 AND trigger = $2 AND origin = 'trigger' AND created_at >= $3
+`
+
+type CheckFiledSinceParams struct {
+	FactoryID uuid.UUID
+	Trigger   *string
+	Since     time.Time
+}
+
+// How many items the trigger filed at or after since: a check's perDay.
+func (q *Queries) CheckFiledSince(ctx context.Context, arg CheckFiledSinceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, checkFiledSince, arg.FactoryID, arg.Trigger, arg.Since)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const checkOpenItems = `-- name: CheckOpenItems :many
 SELECT w.number, w.title, w.state,
-       coalesce((SELECT f.dedupe FROM trigger_firings f WHERE f.item_id = w.id ORDER BY f.at LIMIT 1), '')::text AS key,
+       coalesce((SELECT k.key FROM trigger_keys k WHERE k.item_id = w.id LIMIT 1),
+                (SELECT f.dedupe FROM trigger_firings f WHERE f.item_id = w.id ORDER BY f.at LIMIT 1), '')::text AS key,
        coalesce((SELECT e.data->>'text' FROM item_events e WHERE e.item_id = w.id AND e.kind IN ('note', 'item_note')
                  ORDER BY e.id DESC LIMIT 1), '')::text AS last_note
 FROM work_items w
@@ -97,8 +118,8 @@ type CheckOpenItemsRow struct {
 	LastNote string
 }
 
-// The trigger's open items, newest first, each with the dedupe value of the firing that filed it
-// and the text of its newest note.
+// The trigger's open items, newest first, each with its key (its trigger_keys row's, else the
+// dedupe value of the firing that filed it) and the text of its newest note.
 func (q *Queries) CheckOpenItems(ctx context.Context, arg CheckOpenItemsParams) ([]CheckOpenItemsRow, error) {
 	rows, err := q.db.Query(ctx, checkOpenItems, arg.FactoryID, arg.Trigger, arg.MaxItems)
 	if err != nil {
@@ -135,7 +156,7 @@ WHERE f.id = (
   LIMIT 1
   FOR UPDATE SKIP LOCKED)
 RETURNING f.id, f.factory_id, f.trigger, f.source, f.event_key, f.idempotency_key, f.dedupe, f.outcome, f.reason, f.item_id,
-          f.missed, f.at, f.check_state, f.run_id, f.cost_usd::float8 AS cost_usd, f.decisions, f.lease_until
+          f.missed, f.at, f.check_state, f.run_id, f.cost_usd::float8 AS cost_usd, f.decisions, f.try, f.lease_until
 `
 
 type ClaimTriggerCheckParams struct {
@@ -162,6 +183,7 @@ type ClaimTriggerCheckRow struct {
 	RunID          *uuid.UUID
 	CostUsd        float64
 	Decisions      []byte
+	Try            bool
 	LeaseUntil     *time.Time
 }
 
@@ -191,6 +213,7 @@ func (q *Queries) ClaimTriggerCheck(ctx context.Context, arg ClaimTriggerCheckPa
 		&i.RunID,
 		&i.CostUsd,
 		&i.Decisions,
+		&i.Try,
 		&i.LeaseUntil,
 	)
 	return i, err
@@ -217,11 +240,60 @@ func (q *Queries) ExpireTriggerChecks(ctx context.Context, arg ExpireTriggerChec
 	return result.RowsAffected(), nil
 }
 
+const failingTriggerChecks = `-- name: FailingTriggerChecks :many
+SELECT factory_id, trigger, max(checked_at)::timestamptz AS at,
+       (array_agg(reason ORDER BY checked_at DESC, id DESC))[1]::text AS reason
+FROM (
+  SELECT factory_id, trigger, check_state, checked_at, reason, id,
+         row_number() OVER (PARTITION BY factory_id, trigger ORDER BY checked_at DESC, id DESC) AS n
+  FROM trigger_firings
+  WHERE factory_id = ANY($1::uuid[]) AND check_state IN ('done', 'failed') AND NOT try
+) last
+WHERE n <= 3
+GROUP BY factory_id, trigger
+HAVING count(*) = 3 AND bool_and(check_state = 'failed')
+ORDER BY factory_id, trigger
+`
+
+type FailingTriggerChecksRow struct {
+	FactoryID uuid.UUID
+	Trigger   string
+	At        time.Time
+	Reason    string
+}
+
+// The factories' triggers whose last three finished checks, tries left out, all failed, with the
+// newest one's time and reason (trigger_firings_check_finished_idx).
+func (q *Queries) FailingTriggerChecks(ctx context.Context, factories []uuid.UUID) ([]FailingTriggerChecksRow, error) {
+	rows, err := q.db.Query(ctx, failingTriggerChecks, factories)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FailingTriggerChecksRow
+	for rows.Next() {
+		var i FailingTriggerChecksRow
+		if err := rows.Scan(
+			&i.FactoryID,
+			&i.Trigger,
+			&i.At,
+			&i.Reason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const finishTriggerCheck = `-- name: FinishTriggerCheck :one
 UPDATE trigger_firings
 SET check_state = $1, run_id = $2, cost_usd = $3::float8, decisions = $4,
-    reason = $5, checked_at = $6, lease_holder = '', lease_token = NULL, lease_until = NULL
-WHERE id = $7 AND check_state = 'running' AND lease_token = $8
+    applied = $5, reason = $6, checked_at = $7, lease_holder = '', lease_token = NULL, lease_until = NULL
+WHERE id = $8 AND check_state = 'running' AND lease_token = $9
 RETURNING factory_id, trigger
 `
 
@@ -230,6 +302,7 @@ type FinishTriggerCheckParams struct {
 	RunID     *uuid.UUID
 	CostUsd   float64
 	Decisions []byte
+	Applied   []byte
 	Reason    string
 	At        *time.Time
 	ID        uuid.UUID
@@ -249,6 +322,7 @@ func (q *Queries) FinishTriggerCheck(ctx context.Context, arg FinishTriggerCheck
 		arg.RunID,
 		arg.CostUsd,
 		arg.Decisions,
+		arg.Applied,
 		arg.Reason,
 		arg.At,
 		arg.ID,
@@ -279,9 +353,33 @@ func (q *Queries) HeartbeatTriggerCheck(ctx context.Context, arg HeartbeatTrigge
 	return result.RowsAffected(), nil
 }
 
+const keepTriggerKey = `-- name: KeepTriggerKey :exec
+INSERT INTO trigger_keys (factory_id, trigger, key, item_id)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (org_id, factory_id, trigger, key) DO UPDATE SET item_id = excluded.item_id, last_note_at = NULL, last_note_text = ''
+`
+
+type KeepTriggerKeyParams struct {
+	FactoryID uuid.UUID
+	Trigger   string
+	Key       string
+	ItemID    *uuid.UUID
+}
+
+// The key's last item is the one just filed, with no note yet.
+func (q *Queries) KeepTriggerKey(ctx context.Context, arg KeepTriggerKeyParams) error {
+	_, err := q.db.Exec(ctx, keepTriggerKey,
+		arg.FactoryID,
+		arg.Trigger,
+		arg.Key,
+		arg.ItemID,
+	)
+	return err
+}
+
 const lastCheckDecisions = `-- name: LastCheckDecisions :one
 SELECT decisions FROM trigger_firings
-WHERE factory_id = $1 AND trigger = $2 AND check_state = 'done'
+WHERE factory_id = $1 AND trigger = $2 AND check_state = 'done' AND NOT try
 ORDER BY checked_at DESC, id DESC
 LIMIT 1
 `
@@ -291,12 +389,54 @@ type LastCheckDecisionsParams struct {
 	Trigger   string
 }
 
-// The trigger's newest done check's decisions (trigger_firings_check_done_idx).
+// The trigger's newest done check's decisions, tries left out (trigger_firings_check_done_idx).
 func (q *Queries) LastCheckDecisions(ctx context.Context, arg LastCheckDecisionsParams) ([]byte, error) {
 	row := q.db.QueryRow(ctx, lastCheckDecisions, arg.FactoryID, arg.Trigger)
 	var decisions []byte
 	err := row.Scan(&decisions)
 	return decisions, err
+}
+
+const limitedTriggerChecks = `-- name: LimitedTriggerChecks :many
+SELECT factory_id, trigger, min(checked_at)::timestamptz AS at
+FROM trigger_firings
+WHERE factory_id = ANY($1::uuid[]) AND check_state = 'done' AND NOT try AND checked_at >= $2
+  AND applied->'skipped' @> '[{"reason": "over the limit"}]'::jsonb
+GROUP BY factory_id, trigger
+ORDER BY factory_id, trigger
+`
+
+type LimitedTriggerChecksParams struct {
+	Factories []uuid.UUID
+	Since     *time.Time
+}
+
+type LimitedTriggerChecksRow struct {
+	FactoryID uuid.UUID
+	Trigger   string
+	At        time.Time
+}
+
+// The factories' triggers with a done check at or after since, tries left out, that skipped
+// something over the limit, with the first such check's time.
+func (q *Queries) LimitedTriggerChecks(ctx context.Context, arg LimitedTriggerChecksParams) ([]LimitedTriggerChecksRow, error) {
+	rows, err := q.db.Query(ctx, limitedTriggerChecks, arg.Factories, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LimitedTriggerChecksRow
+	for rows.Next() {
+		var i LimitedTriggerChecksRow
+		if err := rows.Scan(&i.FactoryID, &i.Trigger, &i.At); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const liveTriggerCheck = `-- name: LiveTriggerCheck :one
@@ -323,6 +463,104 @@ func (q *Queries) LiveTriggerCheck(ctx context.Context, arg LiveTriggerCheckPara
 	return live, err
 }
 
+const lockCheckItems = `-- name: LockCheckItems :many
+SELECT w.id, w.number, w.station, w.state, coalesce(w.done_at, w.updated_at)::timestamptz AS closed_at,
+       coalesce((SELECT e.data->>'reason' FROM item_events e WHERE e.item_id = w.id AND e.kind IN ('done', 'cancelled')
+                 ORDER BY e.id DESC LIMIT 1), '')::text AS why
+FROM work_items w
+WHERE w.id = ANY($1::uuid[])
+ORDER BY w.id
+FOR UPDATE OF w
+`
+
+type LockCheckItemsRow struct {
+	ID       uuid.UUID
+	Number   int64
+	Station  string
+	State    string
+	ClosedAt time.Time
+	Why      string
+}
+
+// The keys' items, locked in id order, each with how it stands: its number, station and state,
+// when it closed and the reason of its closing event.
+func (q *Queries) LockCheckItems(ctx context.Context, ids []uuid.UUID) ([]LockCheckItemsRow, error) {
+	rows, err := q.db.Query(ctx, lockCheckItems, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LockCheckItemsRow
+	for rows.Next() {
+		var i LockCheckItemsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Number,
+			&i.Station,
+			&i.State,
+			&i.ClosedAt,
+			&i.Why,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const noteTriggerKey = `-- name: NoteTriggerKey :exec
+UPDATE trigger_keys SET last_note_at = $1, last_note_text = $2
+WHERE factory_id = $3 AND trigger = $4 AND key = $5
+`
+
+type NoteTriggerKeyParams struct {
+	At        *time.Time
+	Text      string
+	FactoryID uuid.UUID
+	Trigger   string
+	Key       string
+}
+
+// The key's last note.
+func (q *Queries) NoteTriggerKey(ctx context.Context, arg NoteTriggerKeyParams) error {
+	_, err := q.db.Exec(ctx, noteTriggerKey,
+		arg.At,
+		arg.Text,
+		arg.FactoryID,
+		arg.Trigger,
+		arg.Key,
+	)
+	return err
+}
+
+const runningTriggerCheck = `-- name: RunningTriggerCheck :one
+SELECT factory_id, trigger, try FROM trigger_firings
+WHERE id = $1 AND check_state = 'running' AND lease_token = $2
+FOR UPDATE
+`
+
+type RunningTriggerCheckParams struct {
+	ID    uuid.UUID
+	Token *uuid.UUID
+}
+
+type RunningTriggerCheckRow struct {
+	FactoryID uuid.UUID
+	Trigger   string
+	Try       bool
+}
+
+// A running check under its token, its row locked: its factory, trigger and whether it is a try.
+func (q *Queries) RunningTriggerCheck(ctx context.Context, arg RunningTriggerCheckParams) (RunningTriggerCheckRow, error) {
+	row := q.db.QueryRow(ctx, runningTriggerCheck, arg.ID, arg.Token)
+	var i RunningTriggerCheckRow
+	err := row.Scan(&i.FactoryID, &i.Trigger, &i.Try)
+	return i, err
+}
+
 const saveTriggerState = `-- name: SaveTriggerState :exec
 INSERT INTO trigger_state (factory_id, trigger, state, updated_at)
 VALUES ($1, $2, $3, $4)
@@ -345,6 +583,128 @@ func (q *Queries) SaveTriggerState(ctx context.Context, arg SaveTriggerStatePara
 		arg.UpdatedAt,
 	)
 	return err
+}
+
+const triggerChecks = `-- name: TriggerChecks :many
+SELECT id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, missed, at,
+       check_state, run_id, cost_usd::float8 AS cost_usd, decisions, try, applied, checked_at
+FROM trigger_firings
+WHERE factory_id = $1 AND trigger = $2 AND outcome = 'checked'
+ORDER BY at DESC, id DESC
+LIMIT $3
+`
+
+type TriggerChecksParams struct {
+	FactoryID uuid.UUID
+	Trigger   string
+	MaxRows   int32
+}
+
+type TriggerChecksRow struct {
+	ID             uuid.UUID
+	FactoryID      uuid.UUID
+	Trigger        string
+	Source         string
+	EventKey       string
+	IdempotencyKey string
+	Dedupe         string
+	Outcome        string
+	Reason         string
+	ItemID         *uuid.UUID
+	Missed         int32
+	At             time.Time
+	CheckState     *string
+	RunID          *uuid.UUID
+	CostUsd        float64
+	Decisions      []byte
+	Try            bool
+	Applied        []byte
+	CheckedAt      *time.Time
+}
+
+// The trigger's checked firings, tries among them, newest first.
+func (q *Queries) TriggerChecks(ctx context.Context, arg TriggerChecksParams) ([]TriggerChecksRow, error) {
+	rows, err := q.db.Query(ctx, triggerChecks, arg.FactoryID, arg.Trigger, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TriggerChecksRow
+	for rows.Next() {
+		var i TriggerChecksRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FactoryID,
+			&i.Trigger,
+			&i.Source,
+			&i.EventKey,
+			&i.IdempotencyKey,
+			&i.Dedupe,
+			&i.Outcome,
+			&i.Reason,
+			&i.ItemID,
+			&i.Missed,
+			&i.At,
+			&i.CheckState,
+			&i.RunID,
+			&i.CostUsd,
+			&i.Decisions,
+			&i.Try,
+			&i.Applied,
+			&i.CheckedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const triggerKeysOf = `-- name: TriggerKeysOf :many
+SELECT key, item_id, last_note_at, last_note_text FROM trigger_keys
+WHERE factory_id = $1 AND trigger = $2 AND key = ANY($3::text[])
+`
+
+type TriggerKeysOfParams struct {
+	FactoryID uuid.UUID
+	Trigger   string
+	Keys      []string
+}
+
+type TriggerKeysOfRow struct {
+	Key          string
+	ItemID       *uuid.UUID
+	LastNoteAt   *time.Time
+	LastNoteText string
+}
+
+// The trigger's keys among keys, each with its last item and last note.
+func (q *Queries) TriggerKeysOf(ctx context.Context, arg TriggerKeysOfParams) ([]TriggerKeysOfRow, error) {
+	rows, err := q.db.Query(ctx, triggerKeysOf, arg.FactoryID, arg.Trigger, arg.Keys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TriggerKeysOfRow
+	for rows.Next() {
+		var i TriggerKeysOfRow
+		if err := rows.Scan(
+			&i.Key,
+			&i.ItemID,
+			&i.LastNoteAt,
+			&i.LastNoteText,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const triggerState = `-- name: TriggerState :one

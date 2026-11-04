@@ -214,7 +214,10 @@ func fireInTx(ctx context.Context, q *db.Queries, factory, id uuid.UUID, f domai
 			return domain.TriggerFiring{}, false, fmt.Errorf("live check: %w", err)
 		}
 
-		if live {
+		switch {
+		case live && f.Try:
+			return domain.TriggerFiring{}, false, fmt.Errorf("try %s: %s: %w", f.Trigger, domain.StillChecking, ports.ErrConflict)
+		case live:
 			f.Outcome, f.CheckState, f.Reason = domain.FiringSkipped, "", domain.StillChecking
 		}
 	}
@@ -227,7 +230,7 @@ func fireInTx(ctx context.Context, q *db.Queries, factory, id uuid.UUID, f domai
 	if _, err := q.InsertTriggerFiring(ctx, db.InsertTriggerFiringParams{
 		ID: id, FactoryID: factory, Trigger: f.Trigger, Source: string(f.Source), EventKey: f.EventKey,
 		IdempotencyKey: f.IdempotencyKey, Dedupe: f.Dedupe, Outcome: string(f.Outcome), Reason: f.Reason, ItemID: itemID,
-		Missed: int32(min(max(f.Missed, 0), math.MaxInt32)), At: f.At, CheckState: checkStateArg(f.CheckState),
+		Missed: int32(min(max(f.Missed, 0), math.MaxInt32)), At: f.At, CheckState: checkStateArg(f.CheckState), Try: f.Try,
 	}); err != nil {
 		return domain.TriggerFiring{}, false, err
 	}
