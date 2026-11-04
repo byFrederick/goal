@@ -2380,6 +2380,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/jonah/tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the factory's kept tests (ADR 0039 decision 12)
+         * @description A kept test is a past item a person kept, at a station it passed the first time, as a test the item must keep passing there. A failing kept test warns at publish and never blocks one. Ordered by station in the current line's order (a station no longer in the line last), then newest first.
+         */
+        get: operations["listKeptTests"];
+        put?: never;
+        /**
+         * Keep a past item as a test at a station it passed the first time
+         * @description The item passed the station the first time when it was claimed there once, no gate rejected it there, and it then moved on, and its first run there finished with its commit recorded. Problems: 404 item-not-found for an unknown item number; 400 invalid-request for a station that is not an agent station of the current line; 409 not-passed-first-time when the item did not pass the station the first time; 409 kept-test-exists when the item is kept at that station already.
+         */
+        post: operations["keepTest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/jonah/tests/{test}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The kept test's id */
+                test: components["parameters"]["KeptTestRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a kept test
+         * @description The item stays; only the test goes. 404 kept-test-not-found for an unknown test or one of another factory.
+         */
+        delete: operations["removeKeptTest"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/jonah/reviews": {
         parameters: {
             query?: never;
@@ -6186,6 +6242,33 @@ export interface components {
             /** Format: double */
             high: number;
         };
+        /** @description A past item kept, at a station it passed the first time, as a test (ADR 0039 decision 12) */
+        KeptTest: {
+            id: string;
+            item: components["schemas"]["KeptTestItem"];
+            station: string;
+            /** @description The actor ref of who kept it */
+            kept_by: string;
+            /** Format: date-time */
+            kept_at: string;
+        };
+        KeptTestItem: {
+            id: string;
+            /** Format: int64 */
+            number: number;
+            title: string;
+        };
+        KeptTestList: {
+            tests: components["schemas"]["KeptTest"][];
+        };
+        KeepTestRequest: {
+            /**
+             * Format: int64
+             * @description The item's number in the factory
+             */
+            item: number;
+            station: string;
+        };
         /** @description One published change watched at one station on one metric (ADR 0039 decision 14). Each item's outcome at the station counts for the definition version of its run there: before covers the versions since the last change that reached the station, after the change's version and those after it until the next change that reaches the station. */
         Watch: {
             station: string;
@@ -8835,6 +8918,8 @@ export interface components {
         JudgeRef: string;
         /** @description The proposal's number in its factory, from 1 */
         ProposalNumber: number;
+        /** @description The kept test's id */
+        KeptTestRef: string;
         /** @description The eval run's id */
         EvalRunRef: string;
         /** @description The bake-off's id, the id of its eval run */
@@ -12135,6 +12220,88 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Proposal"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listKeptTests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The factory's kept tests */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KeptTestList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    keepTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KeepTestRequest"];
+            };
+        };
+        responses: {
+            /** @description The kept test */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KeptTest"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    removeKeptTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The kept test's id */
+                test: components["parameters"]["KeptTestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

@@ -2880,6 +2880,65 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Proposal" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/jonah/tests:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listKeptTests
+      x-goal-scope: factory:read
+      tags: [learning]
+      summary: List the factory's kept tests (ADR 0039 decision 12)
+      description: >-
+        A kept test is a past item a person kept, at a station it passed the first time, as a
+        test the item must keep passing there. A failing kept test warns at publish and never
+        blocks one. Ordered by station in the current line's order (a station no longer in the
+        line last), then newest first.
+      responses:
+        "200":
+          description: The factory's kept tests
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KeptTestList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: keepTest
+      x-goal-scope: definition:edit
+      tags: [learning]
+      summary: Keep a past item as a test at a station it passed the first time
+      description: >-
+        The item passed the station the first time when it was claimed there once, no gate
+        rejected it there, and it then moved on, and its first run there finished with its
+        commit recorded. Problems: 404 item-not-found for an unknown item number; 400
+        invalid-request for a station that is not an agent station of the current line; 409
+        not-passed-first-time when the item did not pass the station the first time; 409
+        kept-test-exists when the item is kept at that station already.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/KeepTestRequest" }
+      responses:
+        "201":
+          description: The kept test
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KeptTest" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/jonah/tests/{test}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/KeptTestRef"
+    delete:
+      operationId: removeKeptTest
+      x-goal-scope: definition:edit
+      tags: [learning]
+      summary: Remove a kept test
+      description: The item stays; only the test goes. 404 kept-test-not-found for an unknown test or one of another factory.
+      responses:
+        "204": { description: Removed }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/jonah/reviews:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -5005,6 +5064,12 @@ components:
       required: true
       description: The proposal's number in its factory, from 1
       schema: { type: integer, format: int64, minimum: 1 }
+    KeptTestRef:
+      name: test
+      in: path
+      required: true
+      description: The kept test's id
+      schema: { type: string }
     EvalRunRef:
       name: eval_run
       in: path
@@ -7682,6 +7747,37 @@ components:
       properties:
         low: { type: number, format: double }
         high: { type: number, format: double }
+    KeptTest:
+      type: object
+      description: A past item kept, at a station it passed the first time, as a test (ADR 0039 decision 12)
+      required: [id, item, station, kept_by, kept_at]
+      properties:
+        id: { type: string }
+        item: { $ref: "#/components/schemas/KeptTestItem" }
+        station: { type: string }
+        kept_by: { type: string, description: "The actor ref of who kept it" }
+        kept_at: { type: string, format: date-time }
+    KeptTestItem:
+      type: object
+      required: [id, number, title]
+      properties:
+        id: { type: string }
+        number: { type: integer, format: int64 }
+        title: { type: string }
+    KeptTestList:
+      type: object
+      required: [tests]
+      properties:
+        tests:
+          type: array
+          items: { $ref: "#/components/schemas/KeptTest" }
+    KeepTestRequest:
+      type: object
+      required: [item, station]
+      additionalProperties: false
+      properties:
+        item: { type: integer, format: int64, minimum: 1, description: "The item's number in the factory" }
+        station: { type: string, minLength: 1, maxLength: 100 }
     Watch:
       type: object
       description: >-

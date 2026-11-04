@@ -249,3 +249,17 @@ type PastTries interface {
 	// such run.
 	PastTryInput(ctx context.Context, run domain.RunID) (domain.PastTryInput, error)
 }
+
+// KeptTests keeps the past items people kept as tests (ADR 0039 decision 12), for the organization
+// in ctx; *postgres.Store and *porttest.Store implement it next to ports.Store. A test goes with
+// its item and its factory: both purges remove it.
+type KeptTests interface {
+	// KeepTest stores n with its item's number and title. n must pass Check (domain.ErrInvalid);
+	// ErrNotFound when the item is not the organization's or not the factory's, ErrConflict when
+	// the item is kept at that station already.
+	KeepTest(ctx context.Context, n domain.NewKeptTest) (domain.KeptTest, error)
+	// KeptTests is the factory's kept tests, only station's when station is set, newest first.
+	KeptTests(ctx context.Context, factory domain.FactoryID, station string) ([]domain.KeptTest, error)
+	// RemoveKeptTest removes the factory's kept test id. ErrNotFound when the factory has none.
+	RemoveKeptTest(ctx context.Context, factory domain.FactoryID, id domain.KeptTestID) error
+}

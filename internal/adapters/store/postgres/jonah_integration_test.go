@@ -50,6 +50,17 @@ func seedJonah(ctx context.Context, t *testing.T, s *Store) (domain.FactoryID, d
 		t.Fatal(err)
 	}
 
+	it, err := s.CreateItem(ctx, domain.NewItem{
+		FactoryID: factory, Type: typeTask, Title: "kept", Station: stWork, State: domain.StateQueued, Class: domain.ClassStandard, CreatedAt: jonahAt,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.KeepTest(ctx, domain.NewKeptTest{FactoryID: factory, ItemID: it.ID, Station: stWork, KeptBy: domain.LocalUser, KeptAt: jonahAt}); err != nil {
+		t.Fatal(err)
+	}
+
 	var row db.JonahReview
 
 	err = s.read(ctx, func(q *db.Queries) error {
@@ -189,13 +200,13 @@ func TestJonah_PurgesRemoveRows(t *testing.T) {
 	checkJonahCounts(t, s.pool, "after acme's purge", map[domain.OrgID]int{acme: 0, labs: 1})
 }
 
-// checkJonahCounts checks that each org sees want reviews, proposals and observations each in
+// checkJonahCounts checks that each org sees want reviews, proposals, observations and kept tests each in
 // raw SQL, and none of another org's.
 func checkJonahCounts(t *testing.T, pool *pgxpool.Pool, when string, want map[domain.OrgID]int) {
 	t.Helper()
 
 	for org, n := range want {
-		for _, table := range []string{"jonah_reviews", "jonah_proposals", "jonah_observations"} {
+		for _, table := range []string{"jonah_reviews", "jonah_proposals", "jonah_observations", "kept_tests"} {
 			var all, foreign int
 			if err := asOrg(t, pool, org, "SELECT count(*), count(*) FILTER (WHERE org_id <> '"+string(org)+"') FROM "+table, &all, &foreign); err != nil {
 				t.Fatal(err)

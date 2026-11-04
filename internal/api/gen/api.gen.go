@@ -4976,6 +4976,36 @@ type JudgeWrite struct {
 	Title  string  `json:"title"`
 }
 
+// KeepTestRequest defines model for KeepTestRequest.
+type KeepTestRequest struct {
+	// Item The item's number in the factory
+	Item    int64  `json:"item"`
+	Station string `json:"station"`
+}
+
+// KeptTest A past item kept, at a station it passed the first time, as a test (ADR 0039 decision 12)
+type KeptTest struct {
+	Id     string       `json:"id"`
+	Item   KeptTestItem `json:"item"`
+	KeptAt time.Time    `json:"kept_at"`
+
+	// KeptBy The actor ref of who kept it
+	KeptBy  string `json:"kept_by"`
+	Station string `json:"station"`
+}
+
+// KeptTestItem defines model for KeptTestItem.
+type KeptTestItem struct {
+	Id     string `json:"id"`
+	Number int64  `json:"number"`
+	Title  string `json:"title"`
+}
+
+// KeptTestList defines model for KeptTestList.
+type KeptTestList struct {
+	Tests []KeptTest `json:"tests"`
+}
+
 // KnowledgeCheck defines model for KnowledgeCheck.
 type KnowledgeCheck struct {
 	Access KnowledgeCheckAccess `json:"access"`
@@ -7988,6 +8018,9 @@ type ItemRef = string
 // JudgeRef defines model for JudgeRef.
 type JudgeRef = string
 
+// KeptTestRef defines model for KeptTestRef.
+type KeptTestRef = string
+
 // KindRef defines model for KindRef.
 type KindRef = string
 
@@ -8545,6 +8578,9 @@ type SubmitItemJSONRequestBody = NewItem
 
 // RejectProposalJSONRequestBody defines body for RejectProposal for application/json ContentType.
 type RejectProposalJSONRequestBody = ProposalReject
+
+// KeepTestJSONRequestBody defines body for KeepTest for application/json ContentType.
+type KeepTestJSONRequestBody = KeepTestRequest
 
 // CreateJudgeJSONRequestBody defines body for CreateJudge for application/json ContentType.
 type CreateJudgeJSONRequestBody = CreateJudgeRequest
@@ -9941,6 +9977,38 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/reviews (the `QueueJonahReview` operationId).
 	QueueJonahReview(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListKeptTests List the factory's kept tests (ADR 0039 decision 12)
+	//
+	// A kept test is a past item a person kept, at a station it passed the first time, as a test the item must keep passing there. A failing kept test warns at publish and never blocks one. Ordered by station in the current line's order (a station no longer in the line last), then newest first.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/jonah/tests (the `ListKeptTests` operationId).
+	ListKeptTests(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// KeepTestWithBody Keep a past item as a test at a station it passed the first time
+	//
+	// The item passed the station the first time when it was claimed there once, no gate rejected it there, and it then moved on, and its first run there finished with its commit recorded. Problems: 404 item-not-found for an unknown item number; 400 invalid-request for a station that is not an agent station of the current line; 409 not-passed-first-time when the item did not pass the station the first time; 409 kept-test-exists when the item is kept at that station already.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/tests (the `KeepTest` operationId).
+	KeepTestWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// KeepTest Keep a past item as a test at a station it passed the first time
+	//
+	// The item passed the station the first time when it was claimed there once, no gate rejected it there, and it then moved on, and its first run there finished with its commit recorded. Problems: 404 item-not-found for an unknown item number; 400 invalid-request for a station that is not an agent station of the current line; 409 not-passed-first-time when the item did not pass the station the first time; 409 kept-test-exists when the item is kept at that station already.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/tests (the `KeepTest` operationId).
+	KeepTest(ctx context.Context, org OrgRef, factory FactoryRef, body KeepTestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemoveKeptTest Remove a kept test
+	//
+	// The item stays; only the test goes. 404 kept-test-not-found for an unknown test or one of another factory.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/jonah/tests/{test} (the `RemoveKeptTest` operationId).
+	RemoveKeptTest(ctx context.Context, org OrgRef, factory FactoryRef, test KeptTestRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListJudges The judges of the factory's current version, each with its last 30 days
 	//
@@ -13242,6 +13310,78 @@ func (c *Client) UndoProposal(ctx context.Context, org OrgRef, factory FactoryRe
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/reviews (the `QueueJonahReview` operationId).
 func (c *Client) QueueJonahReview(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewQueueJonahReviewRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListKeptTests List the factory's kept tests (ADR 0039 decision 12)
+//
+// A kept test is a past item a person kept, at a station it passed the first time, as a test the item must keep passing there. A failing kept test warns at publish and never blocks one. Ordered by station in the current line's order (a station no longer in the line last), then newest first.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/jonah/tests (the `ListKeptTests` operationId).
+func (c *Client) ListKeptTests(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListKeptTestsRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// KeepTestWithBody Keep a past item as a test at a station it passed the first time
+//
+// The item passed the station the first time when it was claimed there once, no gate rejected it there, and it then moved on, and its first run there finished with its commit recorded. Problems: 404 item-not-found for an unknown item number; 400 invalid-request for a station that is not an agent station of the current line; 409 not-passed-first-time when the item did not pass the station the first time; 409 kept-test-exists when the item is kept at that station already.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/tests (the `KeepTest` operationId).
+func (c *Client) KeepTestWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewKeepTestRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// KeepTest Keep a past item as a test at a station it passed the first time
+//
+// The item passed the station the first time when it was claimed there once, no gate rejected it there, and it then moved on, and its first run there finished with its commit recorded. Problems: 404 item-not-found for an unknown item number; 400 invalid-request for a station that is not an agent station of the current line; 409 not-passed-first-time when the item did not pass the station the first time; 409 kept-test-exists when the item is kept at that station already.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/tests (the `KeepTest` operationId).
+func (c *Client) KeepTest(ctx context.Context, org OrgRef, factory FactoryRef, body KeepTestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewKeepTestRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemoveKeptTest Remove a kept test
+//
+// The item stays; only the test goes. 404 kept-test-not-found for an unknown test or one of another factory.
+//
+// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/jonah/tests/{test} (the `RemoveKeptTest` operationId).
+func (c *Client) RemoveKeptTest(ctx context.Context, org OrgRef, factory FactoryRef, test KeptTestRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoveKeptTestRequest(c.Server, org, factory, test)
 	if err != nil {
 		return nil, err
 	}
@@ -20661,6 +20801,149 @@ func NewQueueJonahReviewRequest(server string, org OrgRef, factory FactoryRef) (
 	return req, nil
 }
 
+// NewListKeptTestsRequest constructs an http.Request for the ListKeptTests method
+func NewListKeptTestsRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/jonah/tests", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewKeepTestRequest calls the generic KeepTest builder with application/json body
+func NewKeepTestRequest(server string, org OrgRef, factory FactoryRef, body KeepTestJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewKeepTestRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewKeepTestRequestWithBody constructs an http.Request for the KeepTest method, with any body, and a specified content type
+func NewKeepTestRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/jonah/tests", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRemoveKeptTestRequest constructs an http.Request for the RemoveKeptTest method
+func NewRemoveKeptTestRequest(server string, org OrgRef, factory FactoryRef, test KeptTestRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "test", test, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/jonah/tests/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListJudgesRequest constructs an http.Request for the ListJudges method
 func NewListJudgesRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
 	var err error
@@ -27514,6 +27797,42 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/reviews (the `QueueJonahReview` operationId).
 	QueueJonahReviewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*QueueJonahReviewResponse, error)
 
+	// ListKeptTestsWithResponse List the factory's kept tests (ADR 0039 decision 12)
+	//
+	// A kept test is a past item a person kept, at a station it passed the first time, as a test the item must keep passing there. A failing kept test warns at publish and never blocks one. Ordered by station in the current line's order (a station no longer in the line last), then newest first.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/jonah/tests (the `ListKeptTests` operationId).
+	ListKeptTestsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListKeptTestsResponse, error)
+
+	// KeepTestWithBodyWithResponse Keep a past item as a test at a station it passed the first time
+	//
+	// The item passed the station the first time when it was claimed there once, no gate rejected it there, and it then moved on, and its first run there finished with its commit recorded. Problems: 404 item-not-found for an unknown item number; 400 invalid-request for a station that is not an agent station of the current line; 409 not-passed-first-time when the item did not pass the station the first time; 409 kept-test-exists when the item is kept at that station already.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/tests (the `KeepTest` operationId).
+	KeepTestWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*KeepTestResponse, error)
+
+	// KeepTestWithResponse Keep a past item as a test at a station it passed the first time
+	//
+	// The item passed the station the first time when it was claimed there once, no gate rejected it there, and it then moved on, and its first run there finished with its commit recorded. Problems: 404 item-not-found for an unknown item number; 400 invalid-request for a station that is not an agent station of the current line; 409 not-passed-first-time when the item did not pass the station the first time; 409 kept-test-exists when the item is kept at that station already.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/tests (the `KeepTest` operationId).
+	KeepTestWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body KeepTestJSONRequestBody, reqEditors ...RequestEditorFn) (*KeepTestResponse, error)
+
+	// RemoveKeptTestWithResponse Remove a kept test
+	//
+	// The item stays; only the test goes. 404 kept-test-not-found for an unknown test or one of another factory.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/jonah/tests/{test} (the `RemoveKeptTest` operationId).
+	RemoveKeptTestWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, test KeptTestRef, reqEditors ...RequestEditorFn) (*RemoveKeptTestResponse, error)
+
 	// ListJudgesWithResponse The judges of the factory's current version, each with its last 30 days
 	//
 	// One entry per evals/judges/<slug>.md of the current version, by slug, each with its production scores of the last 30 days (runs scored, pass rate, cost and a daily pass-rate series by UTC day; tries never count). judge_cost_usd is what every judge run of the factory cost in those 30 days. Empty, with version null, before the first publish. 503 judges-unavailable when this goald does not serve judges.
@@ -33215,6 +33534,143 @@ func (r QueueJonahReviewResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r QueueJonahReviewResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListKeptTestsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *KeptTestList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListKeptTestsResponse) GetJSON200() *KeptTestList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListKeptTestsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListKeptTestsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListKeptTestsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListKeptTestsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListKeptTestsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type KeepTestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *KeptTest
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r KeepTestResponse) GetJSON201() *KeptTest {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r KeepTestResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r KeepTestResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r KeepTestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r KeepTestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r KeepTestResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RemoveKeptTestResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RemoveKeptTestResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RemoveKeptTestResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RemoveKeptTestResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemoveKeptTestResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RemoveKeptTestResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -40174,6 +40630,66 @@ func (c *ClientWithResponses) QueueJonahReviewWithResponse(ctx context.Context, 
 	return ParseQueueJonahReviewResponse(rsp)
 }
 
+// ListKeptTestsWithResponse List the factory's kept tests (ADR 0039 decision 12)
+//
+// A kept test is a past item a person kept, at a station it passed the first time, as a test the item must keep passing there. A failing kept test warns at publish and never blocks one. Ordered by station in the current line's order (a station no longer in the line last), then newest first.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/jonah/tests (the `ListKeptTests` operationId).
+func (c *ClientWithResponses) ListKeptTestsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListKeptTestsResponse, error) {
+	rsp, err := c.ListKeptTests(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListKeptTestsResponse(rsp)
+}
+
+// KeepTestWithBodyWithResponse Keep a past item as a test at a station it passed the first time
+//
+// The item passed the station the first time when it was claimed there once, no gate rejected it there, and it then moved on, and its first run there finished with its commit recorded. Problems: 404 item-not-found for an unknown item number; 400 invalid-request for a station that is not an agent station of the current line; 409 not-passed-first-time when the item did not pass the station the first time; 409 kept-test-exists when the item is kept at that station already.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/tests (the `KeepTest` operationId).
+func (c *ClientWithResponses) KeepTestWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*KeepTestResponse, error) {
+	rsp, err := c.KeepTestWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseKeepTestResponse(rsp)
+}
+
+// KeepTestWithResponse Keep a past item as a test at a station it passed the first time
+//
+// The item passed the station the first time when it was claimed there once, no gate rejected it there, and it then moved on, and its first run there finished with its commit recorded. Problems: 404 item-not-found for an unknown item number; 400 invalid-request for a station that is not an agent station of the current line; 409 not-passed-first-time when the item did not pass the station the first time; 409 kept-test-exists when the item is kept at that station already.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/tests (the `KeepTest` operationId).
+func (c *ClientWithResponses) KeepTestWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body KeepTestJSONRequestBody, reqEditors ...RequestEditorFn) (*KeepTestResponse, error) {
+	rsp, err := c.KeepTest(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseKeepTestResponse(rsp)
+}
+
+// RemoveKeptTestWithResponse Remove a kept test
+//
+// The item stays; only the test goes. 404 kept-test-not-found for an unknown test or one of another factory.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/jonah/tests/{test} (the `RemoveKeptTest` operationId).
+func (c *ClientWithResponses) RemoveKeptTestWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, test KeptTestRef, reqEditors ...RequestEditorFn) (*RemoveKeptTestResponse, error) {
+	rsp, err := c.RemoveKeptTest(ctx, org, factory, test, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoveKeptTestResponse(rsp)
+}
+
 // ListJudgesWithResponse The judges of the factory's current version, each with its last 30 days
 //
 // One entry per evals/judges/<slug>.md of the current version, by slug, each with its production scores of the last 30 days (runs scored, pass rate, cost and a daily pass-rate series by UTC day; tries never count). judge_cost_usd is what every judge run of the factory cost in those 30 days. Empty, with version null, before the first publish. 503 judges-unavailable when this goald does not serve judges.
@@ -45373,6 +45889,101 @@ func ParseQueueJonahReviewResponse(rsp *http.Response) (*QueueJonahReviewRespons
 	return response, nil
 }
 
+// ParseListKeptTestsResponse parses an HTTP response from a ListKeptTestsWithResponse call
+func ParseListKeptTestsResponse(rsp *http.Response) (*ListKeptTestsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListKeptTestsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest KeptTestList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseKeepTestResponse parses an HTTP response from a KeepTestWithResponse call
+func ParseKeepTestResponse(rsp *http.Response) (*KeepTestResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &KeepTestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest KeptTest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRemoveKeptTestResponse parses an HTTP response from a RemoveKeptTestWithResponse call
+func ParseRemoveKeptTestResponse(rsp *http.Response) (*RemoveKeptTestResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemoveKeptTestResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListJudgesResponse parses an HTTP response from a ListJudgesWithResponse call
 func ParseListJudgesResponse(rsp *http.Response) (*ListJudgesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -49277,6 +49888,15 @@ type ServerInterface interface {
 	// QueueJonahReview Queue a manual review of the factory at once ("Look for improvements now")
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/reviews)
 	QueueJonahReview(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ListKeptTests List the factory's kept tests (ADR 0039 decision 12)
+	// (GET /v1/orgs/{org}/factories/{factory}/jonah/tests)
+	ListKeptTests(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// KeepTest Keep a past item as a test at a station it passed the first time
+	// (POST /v1/orgs/{org}/factories/{factory}/jonah/tests)
+	KeepTest(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// RemoveKeptTest Remove a kept test
+	// (DELETE /v1/orgs/{org}/factories/{factory}/jonah/tests/{test})
+	RemoveKeptTest(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, test KeptTestRef)
 	// ListJudges The judges of the factory's current version, each with its last 30 days
 	// (GET /v1/orgs/{org}/factories/{factory}/judges)
 	ListJudges(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -53373,6 +53993,120 @@ func (siw *ServerInterfaceWrapper) QueueJonahReview(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.QueueJonahReview(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListKeptTests operation middleware
+func (siw *ServerInterfaceWrapper) ListKeptTests(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListKeptTests(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// KeepTest operation middleware
+func (siw *ServerInterfaceWrapper) KeepTest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.KeepTest(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveKeptTest operation middleware
+func (siw *ServerInterfaceWrapper) RemoveKeptTest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "test" -------------
+	var test KeptTestRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "test", r.PathValue("test"), &test, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "test", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveKeptTest(w, r, org, factory, test)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -57975,6 +58709,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/edit", wrapper.EditProposal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject", wrapper.RejectProposal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo", wrapper.UndoProposal)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/tests", wrapper.ListKeptTests)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/tests", wrapper.KeepTest)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/tests/{test}", wrapper.RemoveKeptTest)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/reviews", wrapper.QueueJonahReview)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.GetAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.PullAndon)
@@ -61848,6 +62585,122 @@ type QueueJonahReviewdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response QueueJonahReviewdefaultApplicationProblemPlusJSONResponse) VisitQueueJonahReviewResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListKeptTestsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type ListKeptTestsResponseObject interface {
+	VisitListKeptTestsResponse(w http.ResponseWriter) error
+}
+
+type ListKeptTests200JSONResponse KeptTestList
+
+func (response ListKeptTests200JSONResponse) VisitListKeptTestsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListKeptTestsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListKeptTestsdefaultApplicationProblemPlusJSONResponse) VisitListKeptTestsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type KeepTestRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *KeepTestJSONRequestBody
+}
+
+type KeepTestResponseObject interface {
+	VisitKeepTestResponse(w http.ResponseWriter) error
+}
+
+type KeepTest201JSONResponse KeptTest
+
+func (response KeepTest201JSONResponse) VisitKeepTestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type KeepTestdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response KeepTestdefaultApplicationProblemPlusJSONResponse) VisitKeepTestResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveKeptTestRequestObject struct {
+	Org     OrgRef      `json:"org"`
+	Factory FactoryRef  `json:"factory"`
+	Test    KeptTestRef `json:"test"`
+}
+
+type RemoveKeptTestResponseObject interface {
+	VisitRemoveKeptTestResponse(w http.ResponseWriter) error
+}
+
+type RemoveKeptTest204Response struct {
+}
+
+func (response RemoveKeptTest204Response) VisitRemoveKeptTestResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemoveKeptTestdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RemoveKeptTestdefaultApplicationProblemPlusJSONResponse) VisitRemoveKeptTestResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -66715,6 +67568,15 @@ type StrictServerInterface interface {
 	// QueueJonahReview Queue a manual review of the factory at once ("Look for improvements now")
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/reviews)
 	QueueJonahReview(ctx context.Context, request QueueJonahReviewRequestObject) (QueueJonahReviewResponseObject, error)
+	// ListKeptTests List the factory's kept tests (ADR 0039 decision 12)
+	// (GET /v1/orgs/{org}/factories/{factory}/jonah/tests)
+	ListKeptTests(ctx context.Context, request ListKeptTestsRequestObject) (ListKeptTestsResponseObject, error)
+	// KeepTest Keep a past item as a test at a station it passed the first time
+	// (POST /v1/orgs/{org}/factories/{factory}/jonah/tests)
+	KeepTest(ctx context.Context, request KeepTestRequestObject) (KeepTestResponseObject, error)
+	// RemoveKeptTest Remove a kept test
+	// (DELETE /v1/orgs/{org}/factories/{factory}/jonah/tests/{test})
+	RemoveKeptTest(ctx context.Context, request RemoveKeptTestRequestObject) (RemoveKeptTestResponseObject, error)
 	// ListJudges The judges of the factory's current version, each with its last 30 days
 	// (GET /v1/orgs/{org}/factories/{factory}/judges)
 	ListJudges(ctx context.Context, request ListJudgesRequestObject) (ListJudgesResponseObject, error)
@@ -69804,6 +70666,95 @@ func (sh *strictHandler) QueueJonahReview(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(QueueJonahReviewResponseObject); ok {
 		if err := validResponse.VisitQueueJonahReviewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListKeptTests operation middleware
+func (sh *strictHandler) ListKeptTests(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request ListKeptTestsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListKeptTests(ctx, request.(ListKeptTestsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListKeptTests")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListKeptTestsResponseObject); ok {
+		if err := validResponse.VisitListKeptTestsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// KeepTest operation middleware
+func (sh *strictHandler) KeepTest(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request KeepTestRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body KeepTestJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.KeepTest(ctx, request.(KeepTestRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "KeepTest")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(KeepTestResponseObject); ok {
+		if err := validResponse.VisitKeepTestResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveKeptTest operation middleware
+func (sh *strictHandler) RemoveKeptTest(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, test KeptTestRef) {
+	var request RemoveKeptTestRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Test = test
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveKeptTest(ctx, request.(RemoveKeptTestRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveKeptTest")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveKeptTestResponseObject); ok {
+		if err := validResponse.VisitRemoveKeptTestResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
