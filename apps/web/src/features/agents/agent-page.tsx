@@ -32,6 +32,7 @@ import {
 import { PromptFull, PromptPreview } from './agent-prompt';
 import { AgentSettings } from './agent-settings';
 import { AskJonahButton } from './ask-jonah-button';
+import { TryModelButton } from './try-model-dialog';
 import { blockedSentence, reasonLabel, reasonShare } from './sentences';
 import { type AgentView, agentViews } from './views';
 
@@ -181,12 +182,22 @@ function AgentPageBody({ agent, view }: { agent: string; view: AgentView }) {
   const agentParams = { ...params, agent };
   const byKeyboard = useRef(false);
   const session = useDraftSession();
+  const canEdit = holds(factory, 'definition:edit');
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <TopBarSlot
         crumb={agent}
         actions={[
+          canEdit ? (
+            <TryModelButton
+              key="model"
+              orgId={org.id}
+              factoryId={factory.id}
+              agent={agent}
+              currentModel={stats.model}
+            />
+          ) : null,
           <Button key="prompt" asChild variant="secondary" size="sm">
             <Link
               to="/o/$org/f/$factory/definition/$section"
