@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"context"
 	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -306,6 +308,88 @@ func (in *Intake) WebhookSecretUses(ctx context.Context) ([]domain.WebhookSecret
 	return out, nil
 }
 
+// ConvertEndpoints implements ports.Intake.
+func (in *Intake) ConvertEndpoints(ctx context.Context, by domain.Actor) ([]domain.ConvertedEndpoint, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	var rows []*endpointRow
+
+	for _, r := range in.d.endpoints {
+		if r.org == org && !r.e.OrgLevel() {
+			rows = append(rows, r)
+		}
+	}
+
+	slices.SortFunc(rows, func(a, b *endpointRow) int { return cmp.Compare(a.e.ID, b.e.ID) })
+
+	out := []domain.ConvertedEndpoint{}
+
+	for _, r := range rows {
+		c, err := in.convertLocked(ctx, r, by)
+		if err != nil {
+			return out, fmt.Errorf("convert endpoint %s: %w", r.e.ID, err)
+		}
+
+		out = append(out, c)
+	}
+
+	return out, nil
+}
+
+// convertLocked moves the factory endpoint r to the organization, signed by a new secret holding
+// its sealed value. Callers hold in.d.mu.
+func (in *Intake) convertLocked(ctx context.Context, r *endpointRow, by domain.Actor) (domain.ConvertedEndpoint, error) {
+	if in.key.Active() == "" {
+		return domain.ConvertedEndpoint{}, ports.ErrNoMasterKey
+	}
+
+	if in.d.secrets == nil {
+		return domain.ConvertedEndpoint{}, errors.New("the fake intake has no secrets (UseSecrets)")
+	}
+
+	value, err := in.key.Open(r.keyID, r.nonce, r.ciphertext, domain.WebhookSecretAAD(r.org, r.e.ID, r.keyID))
+	if err != nil {
+		return domain.ConvertedEndpoint{}, err
+	}
+
+	// The secrets seal with this view's key, as one goald's adapters share its master key.
+	secrets := in.d.secrets.WithKey(in.key)
+
+	name := domain.ConvertedWebhookName(r.e.Name, func(n string) bool {
+		for _, o := range in.d.endpoints {
+			if o.org == r.org && o.e.ID != r.e.ID && o.e.Name == n && (o.e.OrgLevel() || o.e.ID < r.e.ID) {
+				return true
+			}
+		}
+
+		return false
+	})
+
+	secret := domain.ConvertedSecretName(name, func(n string) bool {
+		_, err := secrets.Get(ctx, n)
+
+		return err == nil
+	})
+
+	sec, err := secrets.Create(ctx, domain.NewSecret{Name: secret, Description: "Signs the webhook " + name, Value: hex.EncodeToString(value)}, by)
+	if err != nil {
+		return domain.ConvertedEndpoint{}, err
+	}
+
+	c := domain.ConvertedEndpoint{ID: r.e.ID, FactoryID: r.e.FactoryID, From: r.e.Name, Name: name, Secret: secret}
+	r.e.Name, r.e.Sender, r.e.SecretID, r.e.FactoryID = name, r.e.Kind.Sender(), sec.ID, ""
+	r.e.Openings = []domain.WebhookOpening{{FactoryID: c.FactoryID}}
+	in.d.secrets.sign(r.org, sec.ID, name, true)
+
+	return c, nil
+}
+
 // nameTakenLocked reports whether an endpoint of org other than except has name.
 func (in *Intake) nameTakenLocked(org domain.OrgID, name string, except domain.WebhookEndpointID) bool {
 	for _, r := range in.d.endpoints {
@@ -413,7 +497,7 @@ func (in *Intake) OpenSecret(ctx context.Context, id domain.WebhookEndpointID) (
 		return nil, err
 	}
 
-	if r.e.OrgLevel() {
+	if r.keyID == "" {
 		return nil, fmt.Errorf("webhook %s has no sealed secret: %w", id, ports.ErrNotFound)
 	}
 

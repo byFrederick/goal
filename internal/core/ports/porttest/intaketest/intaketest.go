@@ -77,6 +77,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	}
 
 	tests = append(tests, webhookTests...)
+	tests = append(tests, convertTests...)
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1110,6 +1111,7 @@ func testNoOrg(f *fixture) {
 		"WebhookByName":     func() error { _, err := f.in.WebhookByName(ctx, orgHook); return err },
 		"PatchWebhook":      func() error { _, err := f.in.PatchWebhook(ctx, id, domain.WebhookPatch{}); return err },
 		"WebhookSecretUses": func() error { _, err := f.in.WebhookSecretUses(ctx); return err },
+		"ConvertEndpoints":  func() error { _, err := f.in.ConvertEndpoints(ctx, domain.LocalUser); return err },
 	}
 
 	for name, call := range calls {
