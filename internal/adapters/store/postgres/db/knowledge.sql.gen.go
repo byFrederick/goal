@@ -811,7 +811,9 @@ SET title = coalesce($1::text, title), config = coalesce($2::jsonb, config),
     sync_every = CASE WHEN $5::bigint IS NULL THEN sync_every
                       WHEN $5::bigint = 0 THEN NULL
                       ELSE make_interval(secs => $5::bigint) END,
-    next_sync_at = CASE WHEN $5::bigint IS NULL THEN next_sync_at
+    next_sync_at = CASE WHEN $4::text IS NOT NULL AND read_when IS DISTINCT FROM $4::text
+                             AND kind IN ('upload', 'repository', 'confluence') THEN now()
+                        WHEN $5::bigint IS NULL THEN next_sync_at
                         WHEN $5::bigint = 0 THEN NULL
                         WHEN kind <> 'live' AND next_sync_at IS NULL THEN now()
                         ELSE next_sync_at END,
@@ -830,7 +832,8 @@ type UpdateKnowledgeSourceParams struct {
 }
 
 // sync_every_seconds 0 makes the source on demand, not due until Sync (00100); an interval makes
-// an on-demand source that is not live due at once. The CASEs read the row as it was.
+// an on-demand source that is not live due at once. A new read-when line makes a source that
+// writes snapshots due at once, so its next snapshot carries the line. The CASEs read the row as it was.
 func (q *Queries) UpdateKnowledgeSource(ctx context.Context, arg UpdateKnowledgeSourceParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, updateKnowledgeSource,
 		arg.Title,

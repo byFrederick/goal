@@ -41,14 +41,17 @@ VALUES (sqlc.arg(id), sqlc.arg(name), sqlc.arg(title), sqlc.arg(kind), sqlc.narg
 
 -- name: UpdateKnowledgeSource :one
 -- sync_every_seconds 0 makes the source on demand, not due until Sync (00100); an interval makes
--- an on-demand source that is not live due at once. The CASEs read the row as it was.
+-- an on-demand source that is not live due at once. A new read-when line makes a source that
+-- writes snapshots due at once, so its next snapshot carries the line. The CASEs read the row as it was.
 UPDATE knowledge_sources
 SET title = coalesce(sqlc.narg(title)::text, title), config = coalesce(sqlc.narg(config)::jsonb, config),
     secret_id = coalesce(sqlc.narg(secret_id)::uuid, secret_id), read_when = coalesce(sqlc.narg(read_when)::text, read_when),
     sync_every = CASE WHEN sqlc.narg(sync_every_seconds)::bigint IS NULL THEN sync_every
                       WHEN sqlc.narg(sync_every_seconds)::bigint = 0 THEN NULL
                       ELSE make_interval(secs => sqlc.narg(sync_every_seconds)::bigint) END,
-    next_sync_at = CASE WHEN sqlc.narg(sync_every_seconds)::bigint IS NULL THEN next_sync_at
+    next_sync_at = CASE WHEN sqlc.narg(read_when)::text IS NOT NULL AND read_when IS DISTINCT FROM sqlc.narg(read_when)::text
+                             AND kind IN ('upload', 'repository', 'confluence') THEN now()
+                        WHEN sqlc.narg(sync_every_seconds)::bigint IS NULL THEN next_sync_at
                         WHEN sqlc.narg(sync_every_seconds)::bigint = 0 THEN NULL
                         WHEN kind <> 'live' AND next_sync_at IS NULL THEN now()
                         ELSE next_sync_at END,
