@@ -6,9 +6,13 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/adapters/store/postgres"
+	"github.com/byFrederick/goal/internal/config"
+	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/engine"
 	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/definitions"
+	"github.com/byFrederick/goal/internal/factorymodel"
+	"github.com/byFrederick/goal/internal/gateway"
 	"github.com/byFrederick/goal/internal/jonah"
 )
 
@@ -99,4 +103,100 @@ func runWatches(ctx context.Context, log *slog.Logger, lock scheduleLock, watche
 		case <-t.C():
 		}
 	}
+}
+
+// jonahTryLoop is the loop of tries of past items (ADR 0039 decisions 9 and 11): proposals'
+// tries queued from store, each run by eng as a try-kind run on the proposal's version in defs,
+// within s.JonahTry's times and cap.
+func jonahTryLoop(s settings, store *postgres.Store, defs *definitions.Cache, eng *engine.Engine, clock ports.Clock,
+	log *slog.Logger,
+) *jonah.Tries {
+	return jonah.NewTries(jonah.TryDeps{
+		Orgs: store, Jonah: store, Tries: store, Definitions: tryDefinitions{defs: defs}, Waiting: store, Runner: eng, Clock: clock, Log: log,
+	}, s.JonahTry)
+}
+
+// runJonahTries runs a round of the try loop at once and then on each tick of every until ctx
+// ends: the goald holding the schedule lock queues the tries, and every goald works them, each
+// claim leased (ClaimPastTry). Failures are logged and retried next round.
+func runJonahTries(ctx context.Context, log *slog.Logger, lock scheduleLock, tries jonahReviews, clock ports.Clock, every time.Duration) {
+	t := clock.NewTicker(every)
+	defer t.Stop()
+
+	for {
+		jonahTryRound(ctx, log, lock, tries)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C():
+		}
+	}
+}
+
+// jonahTryRound is one round of the try loop.
+func jonahTryRound(ctx context.Context, log *slog.Logger, lock scheduleLock, tries jonahReviews) {
+	ran, err := lock.WithScheduleLock(ctx, tries.Sweep)
+
+	switch {
+	case err != nil:
+		if ctx.Err() == nil {
+			log.WarnContext(ctx, "jonah try sweep", slog.Any("error", err))
+		}
+	case !ran:
+		log.DebugContext(ctx, "jonah try sweep skipped: another goald holds the schedule lock")
+	}
+
+	n, err := tries.Work(ctx)
+	if err != nil && ctx.Err() == nil {
+		log.WarnContext(ctx, "jonah try work", slog.Int("finished", n), slog.Any("error", err))
+	}
+}
+
+// tryDefinitions is jonah.TryDefinitions over the definitions cache: a proposal's line is its
+// version with the proposal's files written over it, and the stations it reaches are
+// factorymodel.StationsReached's between the two.
+type tryDefinitions struct{ defs *definitions.Cache }
+
+func (d tryDefinitions) CurrentLines(ctx context.Context) ([]domain.Line, error) { return d.defs.CurrentLines(ctx) }
+
+func (d tryDefinitions) ProposedLine(ctx context.Context, v domain.DefinitionVersionID, files []domain.ProposalFile) (domain.Line, []string, error) {
+	set := make(map[string][]byte, len(files))
+	for _, f := range files {
+		set[f.Path] = []byte(f.Content)
+	}
+
+	before, err := d.defs.VersionFiles(ctx, v)
+	if err != nil {
+		return domain.Line{}, nil, err
+	}
+
+	p, err := d.defs.Proposed(ctx, v, set)
+	if err != nil {
+		return domain.Line{}, nil, err
+	}
+
+	after, err := p.VersionFiles(ctx, v)
+	if err != nil {
+		return domain.Line{}, nil, err
+	}
+
+	return p.Line(), factorymodel.StationsReached(snapshot(before), snapshot(after)), nil
+}
+
+// snapshot is files as a factorymodel.Snapshot.
+func snapshot(files map[string][]byte) factorymodel.Snapshot {
+	m := make(domain.Manifest, len(files))
+	for p, b := range files {
+		m[p] = domain.HashBlob(b)
+	}
+
+	return factorymodel.Snapshot{Manifest: m, Files: config.Files(files)}
+}
+
+// gatewayProposed is gateway.ProposedDefinitions over the definitions cache.
+type gatewayProposed struct{ defs *definitions.Cache }
+
+func (g gatewayProposed) Proposed(ctx context.Context, id domain.DefinitionVersionID, files map[string][]byte) (gateway.Definitions, error) {
+	return g.defs.Proposed(ctx, id, files)
 }

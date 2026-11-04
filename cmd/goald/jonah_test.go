@@ -58,3 +58,30 @@ func TestJonahReviews_SweepsOnlyUnderTheLock(t *testing.T) {
 		})
 	}
 }
+
+// A try round queues tries only on the goald that takes the schedule lock, and works the queued
+// tries on every goald: claims are leased, so each try runs once wherever it is claimed.
+func TestJonahTries_SweepsOnlyUnderTheLock(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		lock  heldLock
+		swept int
+	}{
+		{"lock taken", heldLock{}, 1},
+		{"lock held by another goald", heldLock{held: true}, 0},
+		{"lock fails", heldLock{err: errors.New("connection refused")}, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := &countedReviews{}
+			jonahTryRound(t.Context(), slog.New(slog.DiscardHandler), tc.lock, r)
+
+			if r.swept != tc.swept || r.worked != 1 {
+				t.Errorf("swept %d and worked %d times; want %d and 1", r.swept, r.worked, tc.swept)
+			}
+		})
+	}
+}

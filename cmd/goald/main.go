@@ -217,6 +217,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Policies: policies, Events: store, Clock: clock, Logger: log,
 		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore,
+		Tries: store, Proposed: gatewayProposed{defs: defs},
 	}, gateway.Config{Key: []byte(key)})
 	if err != nil {
 		return err
@@ -318,6 +319,8 @@ func newJobs(s settings, store *postgres.Store, orgSecrets *postgres.Secrets, ob
 		purger:   retention.New(store, objects, clock, s.OrgRetention, log),
 		platform: platform, clock: clock, identity: newIdentityWatch(s, store), ingestor: ingestor, notify: sender, digest: digest,
 		reviews: jonahReviewLoop(s, store, defs, eng, clock, log), scheduleLock: intake,
+		// Each proposal is tried on past items before anyone sees it (ADR 0039 decisions 9 and 11).
+		tries: jonahTryLoop(s, store, defs, eng, clock, log),
 		// Every published change is watched station by station (ADR 0039 decision 14).
 		watcher: jonah.NewWatcher(jonah.WatchDeps{Orgs: store, Definitions: authors, Proposals: store, Watches: store, Clock: clock, Log: log}),
 	}, nil
@@ -667,6 +670,7 @@ type jobs struct {
 	notify       *notify.Sender
 	digest       *notify.DigestJob
 	reviews      *jonah.Reviews
+	tries        *jonah.Tries
 	watcher      *jonah.Watcher
 	scheduleLock scheduleLock
 }
@@ -719,6 +723,7 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 	wg.Go(func() { cleanUpAuth(ctx, log, j.platform, j.clock, authCleanUpEvery) })
 	wg.Go(func() { fireSchedules(ctx, log, eng, j.clock, scheduleEvery) })
 	wg.Go(func() { runJonahReviews(ctx, log, j.scheduleLock, j.reviews, j.clock, s.JonahReviewEvery) })
+	wg.Go(func() { runJonahTries(ctx, log, j.scheduleLock, j.tries, j.clock, s.JonahTryEvery) })
 	wg.Go(func() { runWatches(ctx, log, j.scheduleLock, j.watcher, j.clock, watchEvery) })
 
 	if s.KBWorkers > 0 {
