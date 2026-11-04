@@ -8,7 +8,15 @@ test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
 });
 
-const routes = ['/o/acme/f/goal', '/o/acme/knowledge', '/o/acme/f/software/jonah/tests'];
+const routes = [
+  '/o/acme/f/goal',
+  '/o/acme/knowledge',
+  '/o/acme/f/software/jonah/tests',
+  '/o/acme/f/goal/definition/line',
+  '/o/acme/f/software/jonah',
+  '/o/acme',
+  '/o/acme/spend',
+];
 
 for (const width of [1280, 390]) {
   for (const path of routes) {

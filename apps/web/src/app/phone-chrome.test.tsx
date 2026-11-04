@@ -238,6 +238,25 @@ describe('the phone top bar with actions', () => {
   });
 });
 
+describe('the hidden copy of actions', () => {
+  it('has nothing the keyboard can reach under aria-hidden', async () => {
+    const { container } = topBar(
+      <>
+        <button type="button">New factory</button>
+        <a href="/import">Import</a>
+        <button type="button">New item</button>
+      </>,
+    );
+    const copy = container.querySelector('[aria-hidden="true"].sr-only') as HTMLElement;
+    const controls = copy.querySelectorAll<HTMLElement>('a, button, input, [tabindex]');
+    expect(controls.length).toBeGreaterThan(0);
+    for (const c of controls) expect(c.tabIndex).toBeLessThan(0);
+    const late = document.createElement('button');
+    copy.append(late);
+    await waitFor(() => expect(late.tabIndex).toBe(-1));
+  });
+});
+
 describe('a hidden action that owns a dialog', () => {
   it('keeps its dialog open after the menu closes, and returns focus to More actions', async () => {
     topBar(
