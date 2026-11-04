@@ -120,7 +120,7 @@ Rules:
 
 ## Vocabulary
 
-Unchanged from version 2: New item, Needs you (Approval, Decision, Question, Alert), Intake, Trigger, Agents, Jonah (Proposals, Judges, Evals, Bake-offs), Credentials, Connections, Hands-off, Sent back; agents named by role. Keep Floor, Board, Items, line, station, lane, WIP, buffer, expedite lane, constraint, andon, assembly, part, touch and definition as the [glossary](../reference/glossary.md) defines them.
+Unchanged from version 2: New item, Needs you (Approval, Decision, Question, Alert), Intake, Trigger, Agents, Jonah (Overview, Proposals, Tests), Credentials, Connections, Hands-off, Sent back; agents named by role. Keep Floor, Board, Items, line, station, lane, WIP, buffer, expedite lane, constraint, andon, assembly, part, touch and definition as the [glossary](../reference/glossary.md) defines them.
 
 ## Components
 
@@ -149,7 +149,7 @@ Unchanged from version 2: New item, Needs you (Approval, Decision, Question, Ale
 
 ## Screens
 
-The screens on the canvas, one page per flow (unchanged list from version 2): Get started (sign up, the code, eight onboarding steps, ready), Daily work (Home, Floor, Board, Work item, Needs you, Items, Runs), Intake (Intake, New trigger, Trigger, Webhooks), Build a factory (Agents, Agent, Definition, Review and publish, Factory settings), Jonah (Overview, Proposal, Judges, Judge, Evals, Bake-off), Connections and knowledge, Organization, Sidebar and account, Mobile. Controls for features not built yet render disabled with "Not available yet" (ADR 0016, decision 4).
+The screens on the canvas, one page per flow (unchanged list from version 2): Get started (sign up, the code, eight onboarding steps, ready), Daily work (Home, Floor, Board, Work item, Needs you, Items, Runs), Intake (Intake, New trigger, Trigger, Webhooks), Build a factory (Agents, Agent, Definition, Review and publish, Factory settings), Jonah (Overview, Proposals, Proposal, Tests), Connections and knowledge, Organization, Sidebar and account, Mobile. Controls for features not built yet render disabled with "Not available yet" (ADR 0016, decision 4).
 
 ## Accessibility and checks
 
