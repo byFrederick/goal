@@ -8,7 +8,7 @@ test.beforeEach(async ({ request }) => {
 });
 
 /**
- * The top edge of each column's first body element (a card, or the Empty text), and its header's height.
+ * The top edge of each column's first body element (a card, the Empty text, or the drum's zone label), and its header's height.
  * All boxes are read in one page.evaluate, so they come from one layout pass: reading them one await at a
  * time lets the board move between reads (the mock's latency shifts it once the columns have loaded).
  */
@@ -23,7 +23,8 @@ async function columnEdges(page: import('@playwright/test').Page) {
       const name = column.getAttribute('aria-label') ?? 'column';
       const header = column.querySelector<HTMLElement>(':scope > header');
       const zone = column.querySelector<HTMLElement>(':scope > div:last-of-type');
-      const first = zone?.querySelector<HTMLElement>(':scope > article, :scope > p');
+      // The drum's zone label ("In progress", docs/design/screens/daily-work/board.html) opens its column.
+      const first = zone?.querySelector<HTMLElement>(':scope > :is(article, p, div:not([data-group]))');
       if (!header || !first) throw new Error(`${name}: no header or first body element is laid out`);
       tops.push({ name, top: first.getBoundingClientRect().top });
       heights.push({ name, height: header.getBoundingClientRect().height });
@@ -120,7 +121,13 @@ for (const theme of ['light', 'dark'] as const) {
       await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
       await page.setViewportSize({ width: size.width, height: size.height });
       await page.goto(size.path);
-      await expect(page.getByText(/^Ready, buffer/).first()).toBeVisible();
+      // The desktop's columns are in the DOM too, hidden below 768 px: wait for the one on screen.
+      await expect(
+        page
+          .getByText(/^Ready, buffer/)
+          .filter({ visible: true })
+          .first(),
+      ).toBeVisible();
       await page.waitForLoadState('networkidle');
       await testInfo.attach(`board-${size.name}-${theme}`, {
         body: await page.screenshot({ fullPage: true }),
@@ -133,7 +140,7 @@ for (const theme of ['light', 'dark'] as const) {
 test('fits the top bar at 768 with New item inside the viewport', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'tablet-768', 'the 768 project');
   await page.goto('/o/acme/f/goal/board');
-  const button = page.getByRole('button', { name: 'New item' });
+  const button = page.getByRole('button', { name: 'New item', exact: true });
   await expect(button).toBeVisible();
   const box = await button.boundingBox();
   const width = page.viewportSize()?.width ?? 0;
@@ -201,7 +208,7 @@ test('on a phone the expedite lane shows only its chip and nothing reaches past 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
-// A crowded station: three expedite items in Build (one with a long title), one in Review. The cards stack in
+// A crowded station: three expedite items in Build (one with a long title), one in Review (and the seed's #16 in Spec). The cards stack in
 // their station's own box, never overlap and are exactly as wide as their column; titles take at most two lines.
 for (const width of [1440, 1280, 1024, 768]) {
   test(`expedite cards stack inside their box and fill the column at ${width} px`, async ({ page, request }) => {
@@ -240,7 +247,8 @@ for (const width of [1440, 1280, 1024, 768]) {
     });
 
     const withCards = g.filter((c) => c.cards.length > 0);
-    expect(withCards.map((c) => c.cards.length).sort()).toEqual([1, 3].sort());
+    // Build's three and Review's one, and the seeded expedite item #16 in Spec.
+    expect(withCards.map((c) => c.cards.length).sort()).toEqual([1, 1, 3]);
     const tops = g.map((c) => c.box?.top ?? 0);
     const tallest = Math.max(...g.map((c) => c.box?.height ?? 0));
     for (const c of g) {
@@ -326,7 +334,7 @@ for (const width of [1280, 1440]) {
             .filter((el) => el.getBoundingClientRect().right > column.getBoundingClientRect().right + 0.5)
             .map((el) => `${el.tagName.toLowerCase()} "${el.textContent?.slice(0, 40) ?? ''}"`),
         ),
-        ages: Array.from(document.querySelectorAll('article')).some((a) => /\b23 min\b/.test(a.textContent ?? '')),
+        ages: Array.from(document.querySelectorAll('article')).some((a) => /(?<!\d)23 min/.test(a.textContent ?? '')),
         longTitle: Array.from(document.querySelectorAll('article span.truncate')).some(
           (span) => (span.textContent?.length ?? 0) > 80,
         ),
