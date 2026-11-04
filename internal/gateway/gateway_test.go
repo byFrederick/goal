@@ -166,6 +166,8 @@ type harness struct {
 	// kb and objects hold the organization's knowledge snapshots and their zips (knowledge_test.go).
 	kb      *porttest.Knowledge
 	objects *porttest.ObjectStore
+	// grades hold the grades' material (grade_test.go); nil with harnessDeps.noGrades.
+	grades *fakeGrades
 }
 
 func newHarness(t *testing.T, cfg Config) *harness {
@@ -180,8 +182,9 @@ type harnessDeps struct {
 	files map[string]string
 	// schema, when set, is the output.schema.json of every agent with a contract.
 	schema string
-	// noJonah leaves Deps.Jonah nil.
-	noJonah bool
+	// noJonah leaves Deps.Jonah nil, and noGrades Deps.Grades.
+	noJonah  bool
+	noGrades bool
 	// knowledge gives the gateway a knowledge base and a bucket, h.kb and h.objects (knowledge_test.go).
 	knowledge bool
 	// mcpCap is the organization policy's MCP tool mode cap (none when nil).
@@ -278,6 +281,12 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		jonah = h.store
 	}
 
+	var grades Grades
+	if !d.noGrades {
+		h.grades = &fakeGrades{}
+		grades = h.grades
+	}
+
 	var (
 		kb      Knowledge
 		objects Objects
@@ -300,6 +309,10 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		DraftRequests: h.requests,
 		Drafts:        h.drafts,
 		Jonah:         jonah,
+		Watches:       h.store,
+		Tries:         h.store,
+		Proposed:      proposing{base: defs},
+		Grades:        grades,
 		Knowledge:     kb,
 		Objects:       objects,
 		Logger:        slog.New(slog.NewTextHandler(h.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
@@ -313,6 +326,41 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 	h.url = ts.URL
 
 	return h
+}
+
+// proposing gives a try's version with the proposal's edits applied to it: here only to the agent
+// prompts, which the tests propose.
+type proposing struct{ base Definitions }
+
+func (p proposing) Proposed(_ context.Context, _ domain.DefinitionVersionID, edits []domain.ProposalEdit) (Definitions, error) {
+	return proposed{Definitions: p.base, edits: edits}, nil
+}
+
+type proposed struct {
+	Definitions
+	edits []domain.ProposalEdit
+}
+
+func (p proposed) AgentFiles(ctx context.Context, id domain.DefinitionVersionID, agent domain.AgentSpec, output string) (map[string][]byte, error) {
+	out, err := p.Definitions.AgentFiles(ctx, id, agent, output)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, e := range p.edits {
+		if e.Path != strings.TrimPrefix(agent.PromptPath, "./") {
+			continue
+		}
+
+		edited, err := e.Apply(out["prompt.md"], true)
+		if err != nil {
+			return nil, err
+		}
+
+		out["prompt.md"] = []byte(edited)
+	}
+
+	return out, nil
 }
 
 func (h *harness) claims() domain.TaskClaims {

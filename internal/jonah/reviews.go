@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"time"
 
@@ -33,9 +34,18 @@ type ReviewDeps struct {
 	Jonah       ports.JonahStore
 	Definitions ReviewDefinitions
 	Runner      TaskRunner
-	Clock       ports.Clock
+	// Check checks the files a proposal's edits give (ADR 0039 decision 6).
+	Check DefinitionCheck
+	// Policies are the organization's policy, whose allowed models an agent's model may change to.
+	Policies Policies
+	Clock    ports.Clock
 	// Log may be nil.
 	Log *slog.Logger
+}
+
+// Policies reads the organization's policy; ports.OrgPolicies satisfies it.
+type Policies interface {
+	Get(ctx context.Context) (domain.OrgPolicy, error)
 }
 
 // ReviewConfig sets the review loop's times.
@@ -50,15 +60,23 @@ type ReviewConfig struct {
 // definition.
 const ReviewAgent = "jonah"
 
-// reviewEventLimit is how many sent-back events a review reads, as the gateway serves them.
-const reviewEventLimit = 200
+// Limits of what a review's output is checked against: the sent-back events, as the gateway
+// serves them, and the open observations and proposals.
+const (
+	reviewEventLimit       = 200
+	reviewObservationLimit = 200
+	reviewProposalLimit    = 500
+	// reviewEvidenceLimit is the evidence items a review's facts may name, as the gateway serves them.
+	reviewEvidenceLimit = 200
+)
 
-// reviewActor queues threshold reviews.
-var reviewActor = domain.Actor{Kind: domain.ActorSystem, ID: ReviewAgent, Name: "Jonah"}
+// reviewActor queues the daily reviews.
+var reviewActor = domain.JonahActor
 
-// Reviews queues threshold reviews and works the queued reviews of every factory (ADR 0034
-// decisions 1 to 5): one jonah-kind run per review, within the factory's weekly budget, whose
-// proposals goald checks and whose before values goald computes. Any goald instance may run it:
+// Reviews queues each factory's daily review and works the queued reviews of every factory (ADR
+// 0034 decisions 1 to 5, ADR 0039 decisions 3 and 4): one jonah-kind run per attempt, within the
+// factory's weekly budget, retried twice, whose proposals goald checks and whose before values
+// goald computes. Any goald instance may run it:
 // at most one review per factory is in flight, and a review whose worker died is claimed again
 // when its lease ends.
 type Reviews struct {
@@ -77,11 +95,13 @@ func NewReviews(d ReviewDeps, c ReviewConfig) *Reviews {
 	return &Reviews{d: d, c: c, log: log}
 }
 
-// Sweep queues a threshold review of each factory of every live organization whose
-// learning.jonah is enabled, once its sent-back touches since the last review's window reach
-// proposeAfter, unless its review runs of the last BudgetWindow cost weeklyUsd or more. A factory
-// with a review in flight keeps it. A factory or organization that fails does not hold up the
-// others; the error names each one.
+// Sweep queues the daily review of each factory of every live organization whose learning.jonah
+// is enabled (ADR 0039 decision 3): once UTC now is past the factory's hour of the day
+// (ReviewHour), when its latest review was queued before that hour today, it has an item finished
+// since its window starts, and Jonah's runs of the last BudgetWindow cost less than its share of
+// the line's spend (ADR 0039 decision 16).
+// A factory with a review in flight keeps it. A factory or organization that fails does not hold
+// up the others; the error names each one.
 func (r *Reviews) Sweep(ctx context.Context) error {
 	orgs, err := r.d.Orgs.ActiveOrgs(ctx)
 	if err != nil {
@@ -114,15 +134,45 @@ func (r *Reviews) Sweep(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
+// ReviewHour is the UTC hour of the day factory f's daily review is queued from: a stable hash of
+// its id, so the organizations' reviews spread over the day (ADR 0039 decision 3).
+func ReviewHour(f domain.FactoryID) int {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(f))
+
+	return int(h.Sum32() % 24)
+}
+
+// slot is the time today, in UTC, that f's daily review is queued from.
+func slot(f domain.FactoryID, now time.Time) time.Time {
+	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
+	return day.Add(time.Duration(ReviewHour(f)) * time.Hour)
+}
+
 func (r *Reviews) sweepFactory(ctx context.Context, l domain.Line) error {
 	now := r.d.Clock.Now().UTC()
 
-	spent, err := r.d.Jonah.JonahSpendSince(ctx, l.FactoryID, now.Add(-BudgetWindow))
+	due := slot(l.FactoryID, now)
+	if now.Before(due) {
+		return nil
+	}
+
+	last, err := r.d.Jonah.JonahReviews(ctx, l.FactoryID, 1)
+	if err != nil {
+		return fmt.Errorf("read the last review: %w", err)
+	}
+
+	if len(last) > 0 && !last[0].CreatedAt.Before(due) {
+		return nil
+	}
+
+	spend, err := r.d.Jonah.JonahSpendSince(ctx, l.FactoryID, now.Add(-BudgetWindow))
 	if err != nil {
 		return fmt.Errorf("read spend: %w", err)
 	}
 
-	if spent >= l.Jonah.WeeklyUSD {
+	if l.Jonah.Budget(spend).Exhausted() {
 		return nil
 	}
 
@@ -131,12 +181,12 @@ func (r *Reviews) sweepFactory(ctx context.Context, l domain.Line) error {
 		return err
 	}
 
-	n, err := r.d.Jonah.SentBackSince(ctx, l.FactoryID, start)
+	items, err := r.d.Jonah.EvidenceItems(ctx, l.FactoryID, start, now, 1)
 	if err != nil {
-		return fmt.Errorf("count sent-back touches: %w", err)
+		return fmt.Errorf("look for evidence: %w", err)
 	}
 
-	if n < proposeAfter(l.Jonah) {
+	if len(items) == 0 {
 		return nil
 	}
 
@@ -153,34 +203,37 @@ func (r *Reviews) sweepFactory(ctx context.Context, l domain.Line) error {
 	}
 
 	r.log.InfoContext(ctx, "jonah review queued", slog.String("factory", string(l.FactoryID)), slog.String("review_id", string(rv.ID)),
-		slog.String("trigger", string(rv.Trigger)), slog.Int("sent_back", n))
+		slog.String("trigger", string(rv.Trigger)))
 
 	return nil
 }
 
-// windowStart is where a review queued now starts reading: the end of the factory's last
-// review's window, or FirstWindow back.
+// windowStart is where a review queued now starts reading (ADR 0039 decision 3): the end of the
+// factory's last review that ended done, or FirstWindow back. A failed review never moves it.
 func windowStart(ctx context.Context, reviews interface {
-	JonahReviews(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.JonahReview, error)
+	LastDoneJonahReview(ctx context.Context, factory domain.FactoryID) (domain.JonahReview, error)
 }, f domain.FactoryID, now time.Time,
 ) (time.Time, error) {
-	last, err := reviews.JonahReviews(ctx, f, 1)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("read the last review: %w", err)
-	}
+	last, err := reviews.LastDoneJonahReview(ctx, f)
 
-	if len(last) > 0 && !last[0].WindowEnd.IsZero() && last[0].WindowEnd.Before(now) {
-		return last[0].WindowEnd, nil
+	switch {
+	case errors.Is(err, ports.ErrNotFound):
+		return now.Add(-FirstWindow), nil
+	case err != nil:
+		return time.Time{}, fmt.Errorf("read the last done review: %w", err)
+	case !last.WindowEnd.IsZero() && last.WindowEnd.Before(now):
+		return last.WindowEnd, nil
+	default:
+		return now.Add(-FirstWindow), nil
 	}
-
-	return now.Add(-FirstWindow), nil
 }
 
 // proposeAfter is p's proposeAfter, at least 1.
 func proposeAfter(p domain.JonahPolicy) int { return max(p.ProposeAfter, 1) }
 
 // Work claims and runs every claimable review of every live organization, one at a time, and
-// returns how many it finished. An organization that fails does not hold up the others.
+// returns how many it finished. A review put back for a retry is claimed again in the same round,
+// up to MaxReviewAttempts. An organization that fails does not hold up the others.
 func (r *Reviews) Work(ctx context.Context) (int, error) {
 	orgs, err := r.d.Orgs.ActiveOrgs(ctx)
 	if err != nil {
@@ -228,6 +281,11 @@ func (r *Reviews) workOne(ctx context.Context, org domain.OrgID) (claimed, finis
 	}
 
 	res, err := r.review(ctx, org, rv)
+	if errors.Is(err, errRetry) {
+		res = retry(rv, res)
+		err = nil
+	}
+
 	if err != nil {
 		// Left running: the lease ends and another claim takes the review again.
 		return true, false, fmt.Errorf("review %s: %w", rv.ID, err)
@@ -246,10 +304,35 @@ func (r *Reviews) workOne(ctx context.Context, org domain.OrgID) (claimed, finis
 		return true, false, fmt.Errorf("finish review %s: %w", rv.ID, err)
 	}
 
+	if res.State == domain.JonahPending {
+		r.log.WarnContext(ctx, "jonah review retried", slog.String("review_id", string(rv.ID)), slog.String("factory", string(rv.FactoryID)),
+			slog.Int("attempt", rv.Attempts), slog.String("error", res.Error))
+
+		return true, false, nil
+	}
+
 	r.log.InfoContext(ctx, "jonah review finished", slog.String("review_id", string(rv.ID)), slog.String("factory", string(rv.FactoryID)),
 		slog.String("state", string(res.State)), slog.Int("proposals", len(stored)), slog.Int("observations", len(res.Observations)))
 
 	return true, true, nil
+}
+
+// MaxReviewAttempts is how many times a review runs before its error ends it: the first try and
+// two retries (ADR 0039 decision 3).
+const MaxReviewAttempts = 3
+
+// errRetry marks a failed result that another attempt may fix: a run that failed or was not
+// carried out, or an output that does not parse.
+var errRetry = errors.New("retry the review")
+
+// retry is res, a failed result of rv's attempt, as rv's next state: pending again with the error
+// kept while rv has attempts left, failed after its last.
+func retry(rv domain.JonahReview, res domain.JonahReviewResult) domain.JonahReviewResult {
+	if rv.Attempts < MaxReviewAttempts {
+		res.State = domain.JonahPending
+	}
+
+	return res
 }
 
 // failed is a failed result with reason.
@@ -260,10 +343,16 @@ func failed(format string, a ...any) domain.JonahReviewResult {
 // maxReviewError keeps a failed review's error within what the store takes (2000 characters).
 const maxReviewError = 2000
 
-// review runs rv and returns the result to record (At unset). A spent budget, a version that is
-// gone, a failed run and an output that does not parse are failed results; a read that failed
-// is an error, and the review is left to its lease.
+// review runs rv and returns the result to record (At unset). A spent budget and a version that
+// is gone are failed results; a failed run and an output that does not parse are failed results
+// with errRetry, which the caller turns into a retry while rv has attempts left; a read that
+// failed is an error, and the review is left to its lease. A review claimed past its last attempt
+// (its runs died with their goald) fails at once.
 func (r *Reviews) review(ctx context.Context, org domain.OrgID, rv domain.JonahReview) (domain.JonahReviewResult, error) {
+	if rv.Attempts > MaxReviewAttempts {
+		return failed("the review did not finish in %d attempts: %s", MaxReviewAttempts, rv.Error), nil
+	}
+
 	l, err := r.d.Definitions.Line(ctx, rv.VersionID)
 	if errors.Is(err, ports.ErrNotFound) {
 		return failed("definition version %s is gone", rv.VersionID), nil
@@ -273,12 +362,12 @@ func (r *Reviews) review(ctx context.Context, org domain.OrgID, rv domain.JonahR
 		return domain.JonahReviewResult{}, fmt.Errorf("read version %s: %w", rv.VersionID, err)
 	}
 
-	spent, err := r.d.Jonah.JonahSpendSince(ctx, rv.FactoryID, r.d.Clock.Now().UTC().Add(-BudgetWindow))
+	spend, err := r.d.Jonah.JonahSpendSince(ctx, rv.FactoryID, r.d.Clock.Now().UTC().Add(-BudgetWindow))
 	if err != nil {
 		return domain.JonahReviewResult{}, fmt.Errorf("read spend: %w", err)
 	}
 
-	if spent >= l.Jonah.WeeklyUSD {
+	if l.Jonah.Budget(spend).Exhausted() {
 		return failed("%s", domain.ErrLearningBudgetExhausted.Error()), nil
 	}
 
@@ -297,24 +386,35 @@ func (r *Reviews) review(ctx context.Context, org domain.OrgID, rv domain.JonahR
 			return domain.JonahReviewResult{}, fmt.Errorf("run: %w", err)
 		}
 
-		return failed("the review run failed: %v", err), nil
+		return ran(failed("the review run failed: %v", err), run), errRetry
 	}
 
 	if run.Status != domain.RunSucceeded {
-		return failed("the review run ended %s: %s", run.Status, run.Error), nil
+		return ran(failed("the review run ended %s: %s", run.Status, run.Error), run), errRetry
 	}
 
 	out, err := parseReviewOutput(run.Output)
 	if err != nil {
-		return failed("%v", err), nil
+		return ran(failed("%v", err), run), errRetry
 	}
 
-	return r.result(ctx, rv, l.Jonah, out)
+	res, err := r.result(ctx, rv, l, out)
+
+	return ran(res, run), err
 }
 
-// result checks out against rv's version and window and computes each kept proposal's before
-// value: a done result.
-func (r *Reviews) result(ctx context.Context, rv domain.JonahReview, p domain.JonahPolicy, out reviewOutput) (domain.JonahReviewResult, error) {
+// ran is res with run's id: the review's agent run, when RunTask recorded one.
+func ran(res domain.JonahReviewResult, run domain.RunResult) domain.JonahReviewResult {
+	res.RunID = run.RunID
+
+	return res
+}
+
+// result checks out against rv's version and window, the factory's open observations and
+// proposals and the organization's allowed models, makes its facts one memory proposal checked
+// against the window's evidence items, and computes each kept proposal's before value: a done
+// result.
+func (r *Reviews) result(ctx context.Context, rv domain.JonahReview, l domain.Line, out reviewOutput) (domain.JonahReviewResult, error) {
 	files, err := r.d.Definitions.VersionFiles(ctx, rv.VersionID)
 	if err != nil {
 		return domain.JonahReviewResult{}, fmt.Errorf("read files of version %s: %w", rv.VersionID, err)
@@ -325,21 +425,71 @@ func (r *Reviews) result(ctx context.Context, rv domain.JonahReview, p domain.Jo
 		return domain.JonahReviewResult{}, fmt.Errorf("read sent-back events: %w", err)
 	}
 
-	proposals, observations := checkOutput(reviewInput{review: rv, proposeAfter: proposeAfter(p), files: files, events: events}, out,
-		func(i int, reason string) {
-			r.log.WarnContext(ctx, "jonah proposal dropped", slog.String("review_id", string(rv.ID)), slog.Int("proposal", i),
-				slog.String("reason", reason))
-		})
+	in := reviewInput{
+		review: rv, proposeAfter: proposeAfter(l.Jonah), files: files, events: events, check: r.d.Check,
+		factoryName: l.Name, today: r.d.Clock.Now().UTC(),
+	}
 
+	if len(out.Facts) > 0 {
+		if in.evidence, err = r.d.Jonah.EvidenceItems(ctx, rv.FactoryID, rv.WindowStart, rv.WindowEnd, reviewEvidenceLimit); err != nil {
+			return domain.JonahReviewResult{}, fmt.Errorf("read evidence items: %w", err)
+		}
+	}
+
+	if in.observations, err = r.d.Jonah.OpenObservations(ctx, rv.FactoryID, reviewObservationLimit); err != nil {
+		return domain.JonahReviewResult{}, fmt.Errorf("read open observations: %w", err)
+	}
+
+	in.proposals, err = r.d.Jonah.Proposals(ctx, ports.ProposalQuery{Factory: rv.FactoryID, State: domain.ProposalProposed, Limit: reviewProposalLimit})
+	if err != nil {
+		return domain.JonahReviewResult{}, fmt.Errorf("read open proposals: %w", err)
+	}
+
+	if r.d.Policies != nil {
+		policy, err := r.d.Policies.Get(ctx)
+		if err != nil {
+			return domain.JonahReviewResult{}, fmt.Errorf("read the organization's policy: %w", err)
+		}
+
+		in.models = policy.AllowedModels
+	}
+
+	proposals, observations := checkOutput(in, out, func(i int, reason, detail string) {
+		r.log.WarnContext(ctx, "jonah proposal dropped", slog.String("review_id", string(rv.ID)), slog.Int("proposal", i),
+			slog.String("reason", reason), slog.String("detail", truncate(detail, maxReviewError)))
+	})
+
+	checker := definitionChecker{in: in}
+	if memory, ok := memoryProposal(&checker, out.Facts, func(i int, reason, detail string) {
+		r.log.WarnContext(ctx, "jonah fact dropped", slog.String("review_id", string(rv.ID)), slog.Int("fact", i),
+			slog.String("reason", reason), slog.String("detail", truncate(detail, maxReviewError)))
+	}); ok {
+		proposals = append(proposals, memory)
+	}
+
+	if err := r.estimate(ctx, rv, proposals); err != nil {
+		return domain.JonahReviewResult{}, err
+	}
+
+	return domain.JonahReviewResult{State: domain.JonahDone, Proposals: proposals, Observations: observations}, nil
+}
+
+// estimate computes each of proposals' before value over rv's window; a memory proposal has no
+// metric and none.
+func (r *Reviews) estimate(ctx context.Context, rv domain.JonahReview, proposals []domain.NewProposal) error {
 	flows := map[string]domain.StationFlow{}
 
 	for i := range proposals {
 		e := &proposals[i].Estimate
+		if e.Metric == "" {
+			continue
+		}
 
 		f, ok := flows[e.Station]
 		if !ok {
+			var err error
 			if f, err = r.d.Jonah.StationFlow(ctx, rv.FactoryID, e.Station, rv.WindowStart, rv.WindowEnd); err != nil {
-				return domain.JonahReviewResult{}, fmt.Errorf("measure station %s: %w", e.Station, err)
+				return fmt.Errorf("measure station %s: %w", e.Station, err)
 			}
 
 			flows[e.Station] = f
@@ -348,7 +498,7 @@ func (r *Reviews) result(ctx context.Context, rv domain.JonahReview, p domain.Jo
 		e.Before = before(e.Metric, f)
 	}
 
-	return domain.JonahReviewResult{State: domain.JonahDone, Proposals: proposals, Observations: observations}, nil
+	return nil
 }
 
 // before is metric's value in f: the sent-back rate (0 when no item passed), or the lead time
@@ -361,6 +511,8 @@ func before(metric domain.ProposalMetric, f domain.StationFlow) float64 {
 		return rate
 	case domain.MetricLeadTimeP85:
 		return f.LeadTimeP85.Hours()
+	case domain.MetricCostPerItem: // a watch's metric, never a proposal's estimate
+		return 0
 	default:
 		return 0
 	}

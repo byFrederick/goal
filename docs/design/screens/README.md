@@ -48,10 +48,10 @@ How to use them:
 | `board`: columns with WIP meters, expedite lane, Ready and In progress, assembly lines | `…/board` | restyle | |
 | `item`: stepper, the agent's question with quick answers, run timeline, note composer, details, cost, overlaps, rules | `…/items/$ref` | restyle | |
 | `trace`: the item's Trace tab, every run's steps on a time axis with the selected step's detail (ADR 0019 decision 2; Watch live opens it on the running run) | `…/items/$ref?tab=trace` | new view of data the item page loads | |
-| `teardown` (+ `teardown-768`, `teardown-dark`, `teardown-loading`, `teardown-empty`, `teardown-error`): the item's Teardown tab, lead time, cost, rework and human touches against the target and budget; time by station; runs; why it went back; human touches (ADR 0019 decision 3) | `…/items/$ref?tab=teardown` | built (`teardown-tab.tsx`, from `getItemTeardown`) | |
+| `teardown` (+ `teardown-768`, `teardown-dark`, `teardown-loading`, `teardown-empty`, `teardown-error`): the item's Teardown tab, lead time, cost, rework and human touches against the target and budget; time by station; runs; why it went back; human touches (ADR 0019 decision 3); Keep as a test, for a station it passed the first time ([ADR 0039](../../adr/0039-jonah-learns-from-the-line.md), decision 12) | `…/items/$ref?tab=teardown` | built (`teardown-tab.tsx`, from `getItemTeardown`) | Keep as a test |
 | `items`: saved views, filters, grouped by assembly, bulk actions | `…/items` | restyle |  |
 | `needs-you`: list across factories by type, detail with Approve, Deny, "Edit, then approve" | `/o/$org/needs-you` (new page; replaces the inbox drawer) | new | Always allow |
-| `runs`: every run across factories | `/o/$org/runs` | new (runs exist in the API) | Send to Jonah |
+| `runs`: every run across factories | `/o/$org/runs` | new (runs exist in the API) | |
 
 ## Intake (`intake/`)
 
@@ -67,10 +67,10 @@ How to use them:
 | Screen | Route | Status | Not built yet |
 |---|---|---|---|
 | `agents`: the line with each station's agents, factory defaults | `…/agents` | new (agents exist) | New agent |
-| `agent`: overview, prompt, tools and access, runs | `…/agents/$agent` | restyle | Bake off this agent |
+| `agent`: overview, prompt, tools and access, runs | `…/agents/$agent` | restyle | Try another model ([ADR 0039](../../adr/0039-jonah-learns-from-the-line.md), decision 13) |
 | `definition`: files, tabs, YAML editor, problems, outline, draft banner | `…/definition` | restyle (Monaco and the sections exist) | quick fixes |
-| `definition-publish`: changes by section, checks, versions | `…/definition/publish` | restyle | evals before publish |
-| `factory-settings`: repository and its token, model key, environments, notifications | `…/settings` | restyle | per-factory roles |
+| `definition-publish`: changes by section, checks, kept tests of the stations it reaches, versions with their watch | `…/definition/publish` | restyle | kept tests and the watch ([ADR 0039](../../adr/0039-jonah-learns-from-the-line.md), decisions 12 and 14) |
+| `factory-settings`: repository and its token, model key, environments, notifications, Jonah (`learning.jonah`) | `…/settings` | restyle | per-factory roles; the Jonah section ([ADR 0039](../../adr/0039-jonah-learns-from-the-line.md), decision 17) |
 | `definition-environments` (+ `definition-environments-768`, the deploy environment): Form view, Environments section. A tab per environment and who uses it; the box (size, image, setup), command-line tools, variables (plain or a secret), files, AWS, MCP servers with tool modes, standing rules and tests; checks, including a key pasted in plain text | `…/definition/environments` | new feature ([ADR 0037](../../adr/0037-secrets-and-environment-files.md)) | Sign in and 1Password sources |
 | `definition-environment-yaml`: the same environment as `environments/default.yaml` in the YAML view, with the plain-key problem | `…/definition` | new feature (ADR 0037 decision 5) | |
 | `add-tool` (+ `add-tool-768`): the catalog of MCP servers, CLIs and APIs; pick or create the secret in place, the server's answer, what agents may do, and the lines added to the draft | `…/definition/add-tool` | new feature (ADR 0037 decision 15) | |
@@ -79,7 +79,15 @@ How to use them:
 
 ## Jonah (`jonah/`)
 
-Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jonah-evals.md)): `jonah` (overview), `proposal`, `judges`, `judge`, `evals`, `bake-off`, under `…/jonah/…`.
+[ADR 0039](../../adr/0039-jonah-learns-from-the-line.md) redesigned Jonah: it learns from the line, tries each proposal on past items, and watches every change. Judges, eval cases, bake-offs and Send to Jonah went with it.
+
+| Screen | Route | Status | Not built yet |
+|---|---|---|---|
+| `jonah` (+ `jonah-768`): the Overview tab: proposals waiting for review; After publish, each change's number before and after, with Undo this change on Worse; what Jonah noticed; how Jonah works here | `…/jonah` | new feature ([ADR 0039](../../adr/0039-jonah-learns-from-the-line.md), decisions 5, 14, 15, 18) | |
+| `proposal` (+ `proposal-768`): a definition proposal: its number now and its estimate, the diffs, why (the items and their reasons), Tried on past items, details; Approve and publish, Edit, Reject with a reason | `…/jonah/proposals/$number` | new feature (ADR 0034, [ADR 0039](../../adr/0039-jonah-learns-from-the-line.md) decisions 6, 10 and 11) | |
+| `proposal-memory`: a factory memory proposal: facts quoted from people, with their items; no try | `…/jonah/proposals/$number` | new feature ([ADR 0039](../../adr/0039-jonah-learns-from-the-line.md), decision 7) | |
+| `proposal-model`: a model proposal from Try another model: three tries per item beside each item's line result | `…/jonah/proposals/$number` | new feature ([ADR 0039](../../adr/0039-jonah-learns-from-the-line.md), decision 13) | |
+| `tests`: kept tests by station, with the last result and who kept each; a failing test warns and never blocks | `…/jonah/tests` | new feature ([ADR 0039](../../adr/0039-jonah-learns-from-the-line.md), decision 12) | |
 
 ## Access, secrets and knowledge (`connections/`)
 
@@ -109,7 +117,7 @@ Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jona
 
 ## Mobile (`mobile/`)
 
-`sign-in`, `drawer`, `needs-you`, `approve`, `floor`, `board`, `item`, `intake`, `teardown` (+ its loading, empty and error states; the item tabs scroll sideways and Runs becomes a list), for ADR 0037 `access`, `secrets`, `secret-new`, `environments` and `add-tool`, and for ADR 0038 `knowledge`, `knowledge-source`, `knowledge-new` (an upload) and `memory` (the definition's Knowledge section): the phone layouts at 390px. Every other screen follows MASTER.md's phone rules: a top bar with the Goal mark, a drawer, a bottom tab bar, one column, and tables that scroll in their own box.
+`sign-in`, `drawer`, `needs-you`, `approve`, `floor`, `board`, `item`, `intake`, `teardown` (+ its loading, empty and error states; the item tabs scroll sideways and Runs becomes a list), for ADR 0037 `access`, `secrets`, `secret-new`, `environments` and `add-tool`, and for ADR 0038 `knowledge`, `knowledge-source`, `knowledge-new` (an upload) and `memory` (the definition's Knowledge section), and for ADR 0039 `jonah` and `proposal` (with Approve): the phone layouts at 390px. Every other screen follows MASTER.md's phone rules: a top bar with the Goal mark, a drawer, a bottom tab bar, one column, and tables that scroll in their own box.
 
 ## Added in v3: live pages that had no design
 
@@ -119,7 +127,6 @@ Every Jonah screen is a **new feature** (phase 5, [ADR 0002](../../adr/0002-jona
 | `daily-work/trace` | an item's Trace tab | built (`trace-tab.tsx`) | |
 | `build/new-factory` | `/o/$org/new/start`: template, clone, import | restyle | |
 | `build/definition-form` | `…/definition/$section` in Form view, with the unsaved-changes dialog | restyle | |
-| `jonah/bake-offs` | `…/jonah/bake-offs` empty state | restyle | |
 | `account/shortcuts` | the `?` keyboard-shortcuts dialog | new | |
 | `account/states` | Pending (skeleton), Error, Not found; archived and view-only banners (`app/states.tsx`) | restyle | |
 | `account/no-org` | `/` with no organization, and Create organization | restyle | |

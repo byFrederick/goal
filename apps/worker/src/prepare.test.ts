@@ -948,23 +948,12 @@ describe('prepare', () => {
       }
     });
 
-    it('refuses a judge with a repository, a definition or a draft request', async () => {
-      const judge = {
-        slug: 'evidence',
-        rubric: '# Evidence\n',
-        outcomes: [{ score: 1, label: 'complete', meaning: 'All there.' }],
-        pass_mark: 0.6,
-        material: { kind: 'eval_try', brief: 'b', output: 'o', diff: '' },
-      };
-      const judgeSpec = { ...spec, item_id: '', station: '', judge };
+    it('refuses a grade with a repository or a definition, and writes its block to spec.json', async () => {
+      const grade = { reason: 'It returned 500.', result: { kind: 'try', output: 'o', diff: '' } };
+      const gradeSpec = { ...spec, item_id: '', station: '', grade };
       for (const bundle of [
-        { spec: judgeSpec, files: {}, repository: { url: 'https://example.com/a.git', branch: 'goal/1-x' } },
-        { spec: judgeSpec, files: {}, definition: { files: { 'factory.yaml': b64(factory) } } },
-        {
-          spec: { ...judgeSpec, draft_request: draftSpec.draft_request },
-          files: {},
-          definition: { files: { 'factory.yaml': b64(factory) } },
-        },
+        { spec: gradeSpec, files: {}, repository: { url: 'https://example.com/a.git', branch: 'goal/1-x' } },
+        { spec: gradeSpec, files: {}, definition: { files: { 'factory.yaml': b64(factory) } } },
       ]) {
         const { exec, calls } = recorder();
         await expect(prepare(depsWith(gatewayServing(bundle).fake, exec))).rejects.toThrow();
@@ -972,18 +961,12 @@ describe('prepare', () => {
       }
 
       const { exec } = recorder();
-      await prepare(depsWith(gatewayServing({ spec: judgeSpec, files: {} }).fake, exec));
-      expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).judge).toEqual(judge);
+      await prepare(depsWith(gatewayServing({ spec: gradeSpec, files: {} }).fake, exec));
+      expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).grade).toEqual(grade);
     });
 
-    it('refuses a jonah review with a repository or a definition, and passes its spec on', async () => {
-      const jonah = {
-        files: [],
-        events: [],
-        rejected: [],
-        propose_after: 5,
-        manual: false,
-      };
+    it('refuses a jonah review with a repository or a definition, and writes its box and spec', async () => {
+      const jonah = { propose_after: 5, manual: false };
       const jonahSpec = { ...spec, item_id: '', station: '', jonah };
       for (const bundle of [
         { spec: jonahSpec, files: {}, repository: { url: 'https://example.com/a.git', branch: 'goal/1-x' } },
@@ -995,8 +978,15 @@ describe('prepare', () => {
       }
 
       const { exec } = recorder();
-      await prepare(depsWith(gatewayServing({ spec: jonahSpec, files: {} }).fake, exec));
+      const box = {
+        'definition/factory.yaml': b64(factory),
+        'evidence/README.md': b64('# Evidence\n'),
+        'events.md': b64('# Sent-back events\n'),
+      };
+      await prepare(depsWith(gatewayServing({ spec: jonahSpec, files: box }).fake, exec));
       expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).jonah).toEqual(jonah);
+      expect(await readFile(join(dirs.goal, 'definition', 'factory.yaml'), 'utf8')).toBe(factory);
+      expect(await readFile(join(dirs.goal, 'evidence', 'README.md'), 'utf8')).toBe('# Evidence\n');
     });
 
     it('still needs an item outside definition mode', async () => {
@@ -1010,5 +1000,72 @@ describe('prepare', () => {
     const missing = `file://${join(root, 'no-such.git')}`;
     const { fake } = gatewayServing({ spec, files: {}, repository: { url: missing, branch: 'goal/1-x' } });
     await expect(prepare(depsWith(fake, recorder().exec))).rejects.toThrow('git clone exited 128');
+  });
+});
+
+describe('prepare: a try of a past item', () => {
+  it('fully clones, fetches the recorded commits by SHA, checks the branch out at the commit and brings it up to date with the base commit', async () => {
+    const branch = 'goal/20-try';
+    const url = await origin(branch, { moved: { 'main.txt': 'from main\n' } });
+    const bare = join(root, 'origin.git');
+    const commit = git(bare, 'rev-parse', `refs/heads/${branch}`);
+    const base = git(bare, 'rev-parse', 'refs/heads/main');
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch, commit, base_commit: base } });
+    const { exec, calls } = recorder();
+
+    const prepared = await prepare(depsWith(fake, exec));
+
+    expect(prepared).toMatchObject({ branch, branch_head: commit, base_head: base, fresh_base: 'rebase' });
+    const clone = calls.find((c) => c.args[0] === 'clone');
+    expect(clone?.args).not.toContain('--filter=blob:none');
+    expect(calls).toContainEqual({
+      command: 'git',
+      args: ['fetch', '--quiet', 'origin', commit, base],
+      cwd: dirs.workspace,
+    });
+    const ws = dirs.workspace;
+    expect(git(ws, 'branch', '--show-current')).toBe(branch);
+    expect(git(ws, 'merge-base', '--is-ancestor', base, 'HEAD')).toBe('');
+    expect(git(ws, 'rev-parse', 'refs/goal/try-start')).toBe(git(ws, 'rev-parse', 'HEAD'));
+  });
+
+  it('drops the stored login and every credential helper before the agent runs', async () => {
+    const branch = 'goal/21-try';
+    const url = await origin(branch);
+    const commit = git(join(root, 'origin.git'), 'rev-parse', `refs/heads/${branch}`);
+    const login = {
+      host: 'github.com',
+      username: 'x-access-token',
+      password_env: 'GOAL_REPOSITORY_TOKEN',
+      store: true,
+    };
+    const other = { host: 'gitlab.com', username: 'oauth2', password_env: 'GITLAB_TOKEN' };
+    const { fake } = gatewayServing({
+      spec,
+      files: {},
+      repository: { url, branch, commit },
+      git_credentials: [login, other],
+    });
+
+    await prepare(
+      depsWith(fake, recorder().exec, { GOAL_REPOSITORY_TOKEN: 'acme-s3cr3t', GITLAB_TOKEN: 'acme-other' }),
+    );
+
+    expect(existsSync(join(home, '.git-credentials'))).toBe(false);
+    expect(fill('github.com')).not.toContain('password=');
+    expect(fill('gitlab.com')).not.toContain('password=');
+    const config = execFileSync('git', ['config', '--global', '--list'], { env: gitEnv(), encoding: 'utf8' });
+    expect(config).not.toContain('credential.');
+  });
+
+  it('fails, naming the commit, when the remote no longer has it', async () => {
+    const branch = 'goal/22-try';
+    const url = await origin(branch);
+    const gone = 'f'.repeat(40);
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch, commit: gone } });
+
+    await expect(prepare({ ...depsWith(fake, recorder().exec), sleep: async () => undefined })).rejects.toThrow(
+      `commit ${gone} is gone from the remote`,
+    );
   });
 });

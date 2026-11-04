@@ -4,7 +4,10 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
+	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -19,7 +22,13 @@ type jonahRows struct {
 	reviews      []jonahRow[domain.JonahReview]
 	proposals    []jonahRow[domain.Proposal]
 	observations []jonahRow[domain.Observation]
-	runKinds     map[domain.RunID]domain.RunKind
+	watches      []jonahRow[domain.Watch]
+	tries        []jonahRow[domain.PastTry]
+	keptTests    []jonahRow[domain.KeptTest]
+	graderChecks []jonahRow[domain.GraderCheck]
+	// outcomes are the station outcomes SetStationOutcomes gave, by factory and station.
+	outcomes map[domain.FactoryID]map[string][]domain.StationOutcome
+	runKinds map[domain.RunID]domain.RunKind
 }
 
 // jonahRow is one Jonah row of an organization.
@@ -38,6 +47,10 @@ func (s *Store) purgeJonah(org domain.OrgID, factory domain.FactoryID) {
 	s.jonah.observations = slices.DeleteFunc(s.jonah.observations, func(r jonahRow[domain.Observation]) bool {
 		return gone(r.org, r.row.FactoryID)
 	})
+	s.jonah.watches = slices.DeleteFunc(s.jonah.watches, func(r jonahRow[domain.Watch]) bool { return gone(r.org, r.row.FactoryID) })
+	s.jonah.tries = slices.DeleteFunc(s.jonah.tries, func(r jonahRow[domain.PastTry]) bool { return gone(r.org, r.row.FactoryID) })
+	s.jonah.keptTests = slices.DeleteFunc(s.jonah.keptTests, func(r jonahRow[domain.KeptTest]) bool { return gone(r.org, r.row.FactoryID) })
+	s.jonah.graderChecks = slices.DeleteFunc(s.jonah.graderChecks, func(r jonahRow[domain.GraderCheck]) bool { return gone(r.org, r.row.FactoryID) })
 }
 
 // ownsFactory reports whether factory is org's. Callers hold s.mu.
@@ -144,6 +157,10 @@ func (s *Store) FinishJonahReview(ctx context.Context, claimed domain.JonahRevie
 	r := &s.jonah.reviews[i].row
 	r.State, r.Error, r.RunID, r.FinishedAt, r.LeaseUntil = res.State, res.Error, res.RunID, res.At, time.Time{}
 
+	if res.State == domain.JonahPending {
+		r.FinishedAt = time.Time{}
+	}
+
 	return *r, s.storeReviewOutput(org, *r, res), nil
 }
 
@@ -163,30 +180,104 @@ func (s *Store) storeReviewOutput(org domain.OrgID, r domain.JonahReview, res do
 	for k, n := range res.Proposals {
 		p := domain.Proposal{
 			ID: domain.ProposalID(s.newID()), FactoryID: r.FactoryID, Number: last + int64(k) + 1, ReviewID: r.ID, VersionID: r.VersionID,
-			State: domain.ProposalProposed, Title: n.Title, Summary: n.Summary, Files: slices.Clone(n.Files),
+			State: domain.ProposalProposed, Title: n.Title, Summary: n.Summary, Edits: cloneEdits(n.Edits),
 			Evidence: slices.Clone(n.Evidence), Estimate: n.Estimate, CreatedAt: res.At,
 		}
+		s.supersede(org, r.FactoryID, n.Supersedes, res.At)
+
 		stored = append(stored, p)
 		s.jonah.proposals = append(s.jonah.proposals, jonahRow[domain.Proposal]{org, p})
 	}
 
 	for _, n := range res.Observations {
-		o := domain.Observation{
-			ID: domain.ObservationID(s.newID()), FactoryID: r.FactoryID, ReviewID: r.ID, Summary: n.Summary, Detail: n.Detail,
-			ItemIDs: slices.Clone(n.ItemIDs), Count: n.Count, State: domain.ObservationWatching, CreatedAt: res.At,
-		}
-		if o.ItemIDs == nil {
-			o.ItemIDs = []domain.ItemID{}
+		var proposal domain.ProposalID
+		if n.Proposal > 0 {
+			proposal = stored[n.Proposal-1].ID
 		}
 
-		if n.Proposal > 0 {
-			o.State, o.ProposalID = domain.ObservationProposed, stored[n.Proposal-1].ID
+		if s.updateObservation(org, r.FactoryID, n, proposal, res.At) {
+			continue
+		}
+
+		o := domain.Observation{
+			ID: domain.ObservationID(s.newID()), FactoryID: r.FactoryID, ReviewID: r.ID, Summary: n.Summary, Detail: n.Detail,
+			ItemIDs: unionItems(nil, n.ItemIDs), Count: n.Count, State: n.State(), ProposalID: proposal, CreatedAt: res.At, UpdatedAt: res.At,
 		}
 
 		s.jonah.observations = append(s.jonah.observations, jonahRow[domain.Observation]{org, o})
 	}
 
 	return cloneProposals(stored)
+}
+
+// supersede sets the factory's proposals of ids that are still proposed superseded by Jonah at
+// at. Callers hold s.mu.
+func (s *Store) supersede(org domain.OrgID, factory domain.FactoryID, ids []domain.ProposalID, at time.Time) {
+	for i := range s.jonah.proposals {
+		p := &s.jonah.proposals[i]
+		if p.org == org && p.row.FactoryID == factory && p.row.State == domain.ProposalProposed && slices.Contains(ids, p.row.ID) {
+			p.row.State, p.row.DecidedBy, p.row.DecidedAt = domain.ProposalSuperseded, domain.JonahActor.Ref(), at
+		}
+	}
+}
+
+// updateObservation updates the open observation n names, as UpdateObservation does, and
+// reports whether there was one. Callers hold s.mu.
+func (s *Store) updateObservation(org domain.OrgID, factory domain.FactoryID, n domain.NewObservation, proposal domain.ProposalID, at time.Time) bool {
+	if n.ID == "" {
+		return false
+	}
+
+	for i := range s.jonah.observations {
+		o := &s.jonah.observations[i].row
+		if s.jonah.observations[i].org != org || o.FactoryID != factory || o.ID != n.ID || !o.State.Open() {
+			continue
+		}
+
+		o.Summary, o.Detail, o.ItemIDs, o.UpdatedAt = n.Summary, n.Detail, unionItems(o.ItemIDs, n.ItemIDs), at
+		o.Count = int(min(int64(o.Count)+int64(n.Count), math.MaxInt32))
+
+		if st := n.State(); st != domain.ObservationWatching {
+			o.State = st
+		}
+
+		if proposal != "" {
+			o.ProposalID = proposal
+		}
+
+		return true
+	}
+
+	return false
+}
+
+// unionItems are a's items and then b's not in a, at most 1000.
+func unionItems(a, b []domain.ItemID) []domain.ItemID {
+	out := []domain.ItemID{}
+
+	for _, it := range slices.Concat(a, b) {
+		if !slices.Contains(out, it) {
+			out = append(out, it)
+		}
+	}
+
+	return out[:min(len(out), 1000)]
+}
+
+// LastDoneJonahReview implements ports.JonahStore.
+func (s *Store) LastDoneJonahReview(ctx context.Context, factory domain.FactoryID) (domain.JonahReview, error) {
+	all, err := s.JonahReviews(ctx, factory, math.MaxInt)
+	if err != nil {
+		return domain.JonahReview{}, err
+	}
+
+	for _, r := range all {
+		if r.State == domain.JonahDone {
+			return r, nil
+		}
+	}
+
+	return domain.JonahReview{}, fmt.Errorf("last done jonah review of factory %s: %w", factory, ports.ErrNotFound)
 }
 
 // JonahReviews implements ports.JonahStore.
@@ -316,59 +407,49 @@ func (s *Store) Observations(ctx context.Context, factory domain.FactoryID, limi
 	}
 
 	slices.SortFunc(out, func(a, b domain.Observation) int {
-		return cmp.Or(b.CreatedAt.Compare(a.CreatedAt), cmp.Compare(b.ID, a.ID))
+		return cmp.Or(b.UpdatedAt.Compare(a.UpdatedAt), cmp.Compare(b.ID, a.ID))
 	})
 
 	return out[:min(len(out), max(limit, 0))], nil
 }
 
-// JonahSpendSince implements ports.JonahStore.
-func (s *Store) JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error) {
-	org, err := orgOf(ctx)
+// OpenObservations implements ports.JonahStore.
+func (s *Store) OpenObservations(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.Observation, error) {
+	all, err := s.Observations(ctx, factory, math.MaxInt)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	out := slices.DeleteFunc(all, func(o domain.Observation) bool { return !o.State.Open() })
 
-	var usd float64
-
-	for id, r := range s.runs {
-		if s.runVisible(r, org) && r.FactoryID == factory && s.jonah.runKinds[id] == domain.RunKindJonah &&
-			!r.StartedAt.Before(since) {
-			usd += r.Result.CostUSD
-		}
-	}
-
-	return usd, nil
+	return out[:min(len(out), max(limit, 0))], nil
 }
 
-// SentBackSince implements ports.JonahStore.
-func (s *Store) SentBackSince(ctx context.Context, factory domain.FactoryID, since time.Time) (int, error) {
+// JonahSpendSince implements ports.JonahStore.
+func (s *Store) JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (domain.JonahSpend, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
-		return 0, err
+		return domain.JonahSpend{}, err
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	n := 0
+	var out domain.JonahSpend
 
-	for id, it := range s.items {
-		if it.OrgID != org || it.FactoryID != factory {
+	for id, r := range s.runs {
+		if !s.runVisible(r, org) || r.FactoryID != factory || r.StartedAt.Before(since) {
 			continue
 		}
 
-		for _, t := range s.itemTouches(id) {
-			if (t.Kind == domain.EventRejected || t.Kind == domain.EventGateRejected) && !t.At.Before(since) {
-				n++
-			}
+		if s.jonah.runKinds[id].Jonahs() {
+			out.JonahUSD += r.Result.CostUSD
+		} else {
+			out.LineUSD += r.Result.CostUSD
 		}
 	}
 
-	return n, nil
+	return out, nil
 }
 
 // sentBack reports whether t is a sent-back touch: a person's rejected or gate_rejected.
@@ -486,8 +567,247 @@ func (s *Store) StationFlow(ctx context.Context, factory domain.FactoryID, stati
 func cloneProposals(ps []domain.Proposal) []domain.Proposal {
 	out := slices.Clone(ps)
 	for i := range out {
-		out[i].Files, out[i].Evidence = slices.Clone(out[i].Files), slices.Clone(out[i].Evidence)
+		out[i].Edits, out[i].Evidence = cloneEdits(out[i].Edits), slices.Clone(out[i].Evidence)
 	}
 
 	return out
+}
+
+func cloneEdits(es []domain.ProposalEdit) []domain.ProposalEdit {
+	out := slices.Clone(es)
+	for i := range out {
+		out[i].Replacements = slices.Clone(out[i].Replacements)
+	}
+
+	return out
+}
+
+// UndoProposal implements ports.JonahStore.
+func (s *Store) UndoProposal(ctx context.Context, factory domain.FactoryID, undoes domain.ProposalID, version domain.DefinitionVersionID,
+	n domain.NewProposal, at time.Time,
+) (domain.Proposal, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Proposal{}, err
+	}
+
+	if err := n.Check(); err != nil {
+		return domain.Proposal{}, fmt.Errorf("undo proposal: %w", err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.ownsFactory(org, factory) {
+		return domain.Proposal{}, fmt.Errorf("undo proposal: factory %s: %w", factory, ports.ErrNotFound)
+	}
+
+	var (
+		last  int64
+		found bool
+	)
+
+	for _, p := range s.jonah.proposals {
+		if p.org != org || p.row.FactoryID != factory {
+			continue
+		}
+
+		last = max(last, p.row.Number)
+		found = found || p.row.ID == undoes
+
+		live := p.row.State == domain.ProposalProposed || p.row.State == domain.ProposalPublished || p.row.State == domain.ProposalApplied
+		if p.row.Undoes == undoes && live {
+			return domain.Proposal{}, fmt.Errorf("undo proposal of %s: one is open: %w", undoes, ports.ErrConflict)
+		}
+	}
+
+	if !found {
+		return domain.Proposal{}, fmt.Errorf("undo proposal: no proposal %s: %w", undoes, ports.ErrNotFound)
+	}
+
+	p := domain.Proposal{
+		ID: domain.ProposalID(s.newID()), FactoryID: factory, Number: last + 1, Undoes: undoes, VersionID: version,
+		State: domain.ProposalProposed, Title: n.Title, Summary: n.Summary, Edits: cloneEdits(n.Edits), CreatedAt: at,
+	}
+	s.supersede(org, factory, n.Supersedes, at)
+	s.jonah.proposals = append(s.jonah.proposals, jonahRow[domain.Proposal]{org, p})
+
+	return cloneProposals([]domain.Proposal{p})[0], nil
+}
+
+// ProposeModel implements ports.JonahStore.
+func (s *Store) ProposeModel(ctx context.Context, factory domain.FactoryID, version domain.DefinitionVersionID, agent string,
+	n domain.NewProposal, tries []domain.NewPastTry, at time.Time,
+) (domain.Proposal, []domain.PastTry, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Proposal{}, nil, err
+	}
+
+	if err := n.Check(); err != nil {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: %w", err)
+	}
+
+	if strings.TrimSpace(agent) == "" || version == "" {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: it needs an agent and a version: %w", domain.ErrInvalid)
+	}
+
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	if !s.ownsFactory(org, factory) {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: factory %s: %w", factory, ports.ErrNotFound)
+	}
+
+	var last int64
+
+	for _, p := range s.jonah.proposals {
+		if p.org == org && p.row.FactoryID == factory {
+			last = max(last, p.row.Number)
+		}
+	}
+
+	p := domain.Proposal{
+		ID: domain.ProposalID(s.newID()), FactoryID: factory, Number: last + 1, Agent: agent, VersionID: version,
+		State: domain.ProposalProposed, Title: n.Title, Summary: n.Summary, Edits: cloneEdits(n.Edits),
+		Evidence: slices.Clone(n.Evidence), Estimate: n.Estimate, CreatedAt: at,
+	}
+
+	tries = slices.Clone(tries)
+	for i := range tries {
+		tries[i].ProposalID = p.ID
+		if err := tries[i].Check(); err != nil {
+			return domain.Proposal{}, nil, fmt.Errorf("propose model: %w", err)
+		}
+	}
+
+	queued, err := s.newPastTries(org, factory, p.ID, p.Number, tries, at)
+	if err != nil {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: %w", err)
+	}
+
+	s.supersede(org, factory, n.Supersedes, at)
+	s.jonah.proposals = append(s.jonah.proposals, jonahRow[domain.Proposal]{org, p})
+
+	for _, t := range queued {
+		s.jonah.tries = append(s.jonah.tries, jonahRow[domain.PastTry]{org: org, row: t})
+	}
+
+	return cloneProposals([]domain.Proposal{p})[0], queued, nil
+}
+
+// EvidenceItems implements ports.JonahStore.
+func (s *Store) EvidenceItems(ctx context.Context, factory domain.FactoryID, since, until time.Time, limit int) ([]domain.EvidenceItem, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := []domain.EvidenceItem{}
+
+	for id, it := range s.items {
+		if it.OrgID != org || it.FactoryID != factory {
+			continue
+		}
+
+		if at, ok := s.finishedAt(it); ok && inWindow(at, since, until) {
+			out = append(out, domain.EvidenceItem{Item: *it, FinishedAt: at, Runs: s.itemRuns(id), Events: s.milestones(id)})
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.EvidenceItem) int {
+		return cmp.Or(b.FinishedAt.Compare(a.FinishedAt), cmp.Compare(a.Item.ID, b.Item.ID))
+	})
+
+	return out[:min(len(out), max(limit, 0))], nil
+}
+
+// finishedAt is when it finished: a done item's DoneAt, a cancelled one's latest cancelled event.
+// Callers hold s.mu.
+func (s *Store) finishedAt(it *domain.Item) (time.Time, bool) {
+	if it.State == domain.StateDone {
+		return it.DoneAt, !it.DoneAt.IsZero()
+	}
+
+	if it.State != domain.StateCancelled {
+		return time.Time{}, false
+	}
+
+	var at time.Time
+
+	for _, e := range s.events {
+		if e.ItemID == it.ID && e.Kind == domain.EventCancelled && e.At.After(at) {
+			at = e.At
+		}
+	}
+
+	return at, !at.IsZero()
+}
+
+// itemRuns are item's runs, oldest first. Callers hold s.mu.
+func (s *Store) itemRuns(item domain.ItemID) []domain.Run {
+	out := []domain.Run{}
+
+	for _, r := range s.runs {
+		if r.ItemID == item {
+			out = append(out, *r)
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.Run) int { return cmp.Or(a.StartedAt.Compare(b.StartedAt), cmp.Compare(a.ID, b.ID)) })
+
+	return out
+}
+
+// milestones are item's events but those of domain.PerTurnKinds, in append order. Callers hold
+// s.mu.
+func (s *Store) milestones(item domain.ItemID) []domain.Event {
+	out := []domain.Event{}
+
+	for _, e := range s.events {
+		if e.ItemID == item && !slices.Contains(domain.PerTurnKinds, e.Kind) {
+			out = append(out, e)
+		}
+	}
+
+	return out
+}
+
+// StationRunMedians implements ports.JonahStore.
+func (s *Store) StationRunMedians(ctx context.Context, factory domain.FactoryID, since, until time.Time) ([]domain.StationMedian, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	costs, turns := map[string][]float64{}, map[string][]float64{}
+
+	for id, r := range s.runs {
+		if !s.runVisible(r, org) || r.FactoryID != factory || cmp.Or(s.jonah.runKinds[id], domain.RunKindStation) != domain.RunKindStation ||
+			r.Result.Status == domain.RunRunning || !inWindow(r.StartedAt, since, until) {
+			continue
+		}
+
+		costs[r.Station] = append(costs[r.Station], r.Result.CostUSD)
+		turns[r.Station] = append(turns[r.Station], float64(r.Result.Turns))
+	}
+
+	out := []domain.StationMedian{}
+
+	for _, st := range slices.Sorted(maps.Keys(costs)) {
+		slices.Sort(costs[st])
+		slices.Sort(turns[st])
+		out = append(out, domain.StationMedian{
+			Station: st, CostUSD: percentileOf(costs[st], 0.5), Turns: percentileOf(turns[st], 0.5), Runs: len(costs[st]),
+		})
+	}
+
+	return out, nil
 }

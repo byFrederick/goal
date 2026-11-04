@@ -159,8 +159,8 @@ type envRow struct {
 	fixes     []string
 }
 
-// The checks of environment files and what names them: every factory has default.yaml, agents,
-// judges and cases name environments that exist, files are named and written well, and a
+// The checks of environment files and what names them: every factory has default.yaml, agents
+// name environments that exist, files are named and written well, and a
 // repository on another host names its forge.
 func TestCheck_EnvironmentFiles(t *testing.T) {
 	t.Parallel()
@@ -176,10 +176,6 @@ func TestCheck_EnvironmentFiles(t *testing.T) {
 	rows := []envRow{
 		{name: "a default environment", doc: baseFactory},
 		{name: "an agent in a named environment", doc: withAgentEnv("browser"), files: map[string]string{browser: baseEnvironment}},
-		{name: "a judge and a case in a named environment", doc: baseFactory, files: map[string]string{
-			browser: baseEnvironment, judgeFile: replaced(validJudge, "enabled: true\n", "enabled: true\nenvironment: browser\n"),
-			caseFile: replaced(validCase, "  agent: worker\n", "  agent: worker\n  environment: browser\n"),
-		}},
 		{
 			name: "no default environment", doc: baseFactory, files: map[string]string{defaultEnvFile: absent, browser: baseEnvironment},
 			code: codeEnvironmentDefaultMissing, file: defaultEnvFile,
@@ -187,17 +183,6 @@ func TestCheck_EnvironmentFiles(t *testing.T) {
 		{
 			name: "an agent names an unknown environment", doc: withAgentEnv("browser"),
 			code: codeEnvironmentUnknown, file: FileName, pointer: "/agents/agents/0/environment",
-		},
-		{
-			name: "a judge names an unknown environment", doc: baseFactory,
-			files: map[string]string{judgeFile: replaced(validJudge, "enabled: true\n", "enabled: true\nenvironment: browser #here\n")},
-			code:  codeEnvironmentUnknown, file: judgeFile,
-		},
-		{
-			name: "a case names an unknown environment", doc: baseFactory, files: map[string]string{
-				judgeFile: validJudge, caseFile: replaced(validCase, "  agent: worker\n", "  agent: worker\n  environment: browser #here\n"),
-			},
-			code: codeEnvironmentUnknown, file: caseFile,
 		},
 		{
 			name: "a file name that is not a slug", doc: baseFactory, files: map[string]string{"environments/Big_Box.yaml": baseEnvironment},

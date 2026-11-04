@@ -79,6 +79,24 @@
 // Deps.Jonah (503 when nil); it names no item, repository, connection, rule or knowledge source.
 // Its MCP session needs no agent of the version, lists no tool and refuses every call.
 //
+// # Tries of past items
+//
+// A token of kind domain.TaskKindTry is a try of a past item (ADR 0039 decision 9, try.go). Its
+// bundle is the station's on the version with the proposal's edits applied to it, from what
+// the original run recorded: its brief, the item's earlier outputs and its commit. Its agent gets
+// no connection, environment file or MCP server, and its environment's env is for setup alone.
+// Its MCP session lists no tool, and it records no event on the past item.
+//
+// # Grades
+//
+// A token of kind domain.TaskKindGrade is a grade (ADR 0039 decision 10, grade.go): one model call
+// that decides whether a result fixed the reason an item went back. It names the try and which
+// result it grades, a try's or the item's original or final one. Its bundle's spec.grade holds the
+// reason and that result's output and diff, read through Deps.Grades (503 when it or Deps.Jonah is
+// nil), with the token's model and Jonah's budget left as max_usd; it has no item, repository,
+// definition, file, connection, knowledge, rule or tool. Its MCP session lists no tool, refuses
+// every call, and its notes are none.
+//
 // # State
 //
 // None: every HTTP request is verified and served on its own (the SDK's stateless mode), so any
@@ -109,7 +127,7 @@ import (
 )
 
 // EventToolCall is the kind of the audit event every gateway tool call appends.
-const EventToolCall domain.EventKind = "gateway_tool_call"
+const EventToolCall = domain.EventGatewayToolCall
 
 // Definitions returns a published definition version. The gateway reads the version a task's
 // run started on (its token's v claim), so the run sees that version's agents and connections
@@ -179,6 +197,17 @@ type Deps struct {
 	// Jonah reads a Jonah review's sent-back events and rejected proposals for its bundle; nil
 	// answers a jonah token's bundle with 503 and changes nothing for other tokens.
 	Jonah Jonah
+	// Watches reads the watches of the published proposals a review's bundle holds (ADR 0039
+	// decisions 4 and 14); nil leaves the watch out of their files.
+	Watches ProposalWatches
+	// Tries and Proposed give a try of a past item its bundle (try.go): the try's record and its
+	// version with the proposal's edits applied to it. Without both, or without Jonah, a try
+	// token's bundle is 503.
+	Tries    Tries
+	Proposed ProposedDefinitions
+	// Grades give a grade its reason and the result it grades (grade.go). Without it, or without
+	// Jonah, a grade token's bundle is 503.
+	Grades Grades
 }
 
 // DraftRequests reads a draft request of the organization in ctx; ports.DraftRequests satisfies
@@ -187,11 +216,13 @@ type DraftRequests interface {
 	Get(ctx context.Context, id domain.DraftRequestID) (domain.DraftRequest, error)
 }
 
-// Drafts reads a factory's open draft and the blobs of its files, for the organization in ctx;
-// ports.DefinitionStore satisfies it. The gateway only reads them: writing a draft is authoring's.
+// Drafts reads a factory's open draft and the blobs of its files, and its published versions
+// (a Jonah review's versions.md), for the organization in ctx; ports.DefinitionStore satisfies it.
+// The gateway only reads them: writing a draft is authoring's.
 type Drafts interface {
 	Draft(ctx context.Context, f domain.FactoryID) (domain.DefinitionVersion, error)
 	Blob(ctx context.Context, h domain.BlobHash) ([]byte, error)
+	Versions(ctx context.Context, f domain.FactoryID, before, limit int) ([]domain.DefinitionVersion, error)
 }
 
 // Config bounds the gateway. Zero values take the defaults below.
@@ -232,8 +263,13 @@ type Gateway struct {
 	draftRequests DraftRequests
 	drafts        Drafts
 	jonah         Jonah // nil without Deps.Jonah
-	cfg           Config
-	mcp           http.Handler
+	watches       ProposalWatches
+	// tries and proposed are nil without Deps.Tries and Deps.Proposed.
+	tries    Tries
+	proposed ProposedDefinitions
+	grades   Grades // nil without Deps.Grades
+	cfg      Config
+	mcp      http.Handler
 }
 
 // New returns a gateway; goald mounts it at its MCP path.
@@ -251,7 +287,8 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 
 	g := &Gateway{
 		defs: d.Definitions, items: d.Items, connections: d.Connections, policies: d.Policies, events: d.Events, clock: d.Clock, log: d.Logger,
-		knowledge: d.Knowledge, objects: d.Objects, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah, cfg: cfg,
+		knowledge: d.Knowledge, objects: d.Objects, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah,
+		watches: d.Watches, tries: d.Tries, proposed: d.Proposed, grades: d.Grades, cfg: cfg,
 	}
 	if g.log == nil {
 		g.log = slog.New(slog.DiscardHandler)
@@ -342,8 +379,9 @@ func (g *Gateway) session(ctx context.Context, c domain.TaskClaims) (*session, e
 		return nil, fmt.Errorf("%w: version %s is not a version of factory %s", errForbidden, c.VersionID, c.FactoryID)
 	}
 
-	// A Jonah review's agent is not one of the factory's, and it is served no tool.
-	if c.Kind == domain.TaskKindJonah {
+	// A Jonah review's agent is not one of the factory's, and it is served no tool; nor is a try
+	// of a past item, which has no person to ask and no connection, or a grade, which calls none.
+	if c.Kind == domain.TaskKindJonah || c.Kind == domain.TaskKindTry || c.Kind == domain.TaskKindGrade {
 		return &session{g: g, claims: c, noTools: true}, nil
 	}
 

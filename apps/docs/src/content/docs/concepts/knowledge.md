@@ -75,6 +75,9 @@ An entry in the definition may replace the line with its own `readWhen`. A sourc
 
 ## Factory memory
 
+The factory memory is `memory.yaml`, beside `factory.yaml`: short facts that every run's prompt carries. Each entry has its `text`, the items it came from (`from`, as `<factory>#<number>`) and the date it was added (`added`). Memory holds at most 50 entries and 8 KB, and an entry at most 300 characters.
+
+People add facts with `goal memory add` or in the definition editor. Jonah may propose facts too, but only a person's own words from a note, an answer or a send-back reason, which goald checks against that person's event. A person approves the proposal before memory changes ([memory facts](../jonah/#memory-facts)).
 A factory's memory is `memory.yaml`, a file next to `factory.yaml` in the definition. It holds short facts that every run of the factory should know. Its entries appear in each run's Knowledge section, after the source lines. The file's fields are in the [definition reference](../../reference/definition/).
 
 | Limit | Value |
@@ -83,7 +86,7 @@ A factory's memory is `memory.yaml`, a file next to `factory.yaml` in the defini
 | Size of the file | 8 KiB |
 | Entries | 50 |
 
-A draft that goes past a limit fails its checks at publish: `memory-too-long` for an entry over 300 characters, `memory-too-big` for a file over 8 KiB or 50 entries. A version whose only change is `memory.yaml` publishes without the eval gate.
+A draft that goes past a limit fails its checks at publish: `memory-too-long` for an entry over 300 characters, `memory-too-big` for a file over 8 KiB or 50 entries.
 
 `goal memory add` and `rm` edit the memory in the factory's draft, opening one when none is open. `goal memory add --publish` publishes the draft too. `goal memory list` opens no draft: it shows the open draft's memory, or the current version's when no draft is open.
 

@@ -142,7 +142,9 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   }
   const repo = bundle.repository;
   let baseBranch: string | undefined;
-  if (repo) {
+  if (repo?.commit) {
+    await checkoutCommit(deps, repo, out);
+  } else if (repo) {
     const ws = deps.dirs.workspace;
     // An empty base is the default branch, as an absent one.
     const base = repo.base || undefined;
@@ -173,6 +175,8 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
     out.branch = repo.branch;
     out.branch_existed = existed;
   }
+  // A try's agent gets no git login (ADR 0039 decision 9): the clone was the logins' only use.
+  if (repo?.commit) await dropLogins(deps, credentials);
   const unpacked = await knowledge;
   if (unpacked > 0) out.knowledge = unpacked;
 
@@ -320,6 +324,11 @@ async function freshen(deps: PrepareDeps, ws: string, mode: FreshBase, onto?: st
     ? `origin/${onto}`
     : (await deps.output('git', ['rev-parse', '--abbrev-ref', 'origin/HEAD'], { cwd: ws })).trim();
   if (!base.startsWith('origin/')) throw new Error(`origin/HEAD is ${base || 'not set'}`);
+  return bringUpToDate(deps, ws, mode, base);
+}
+
+/** Rebases the checked-out branch on base or merges base into it, as freshen does. */
+async function bringUpToDate(deps: PrepareDeps, ws: string, mode: FreshBase, base: string): Promise<string[]> {
   const args = mode === 'merge' ? ['merge', '--quiet', '--no-edit', base] : ['rebase', '--quiet', base];
   const code = await deps.exec('git', args, { cwd: ws });
   if (code === 0) return [];
@@ -331,6 +340,59 @@ async function freshen(deps: PrepareDeps, ws: string, mode: FreshBase, onto?: st
   if (conflicts.length === 0) throw new Error(`git ${mode} exited ${code}`);
   await must(deps, 'git', [mode, '--abort'], ws);
   return conflicts;
+}
+
+/** The ref a try's change is read against once its agent ended (domain.PastTryStartRef in goald). */
+export const tryStartRef = 'refs/goal/try-start';
+
+/**
+ * A try of a past item's workspace (ADR 0039 decision 9): a full clone, the recorded commit and
+ * its base's fetched by SHA, the branch checked out at the commit and brought up to date with the
+ * base commit as the original run's prepare did (a conflict is aborted and reported), then
+ * tryStartRef at the result and the repository's own tools. A commit the remote no longer has
+ * fails prepare, which goald records as the try's error.
+ */
+async function checkoutCommit(
+  deps: PrepareDeps,
+  repo: NonNullable<Bundle['repository']>,
+  out: Prepared,
+): Promise<void> {
+  const ws = deps.dirs.workspace;
+  const commit = repo.commit as string;
+  await must(deps, 'git', ['check-ref-format', '--branch', repo.branch]);
+  const clone = await network(deps, ['clone', '--quiet', '--no-checkout', '--', repo.url, ws], { clean: ws });
+  if (clone !== 0) throw new Error(`git clone exited ${clone}`);
+  const wanted = repo.base_commit && repo.base_commit !== commit ? [commit, repo.base_commit] : [commit];
+  const fetched = await network(deps, ['fetch', '--quiet', 'origin', ...wanted], { cwd: ws });
+  if (fetched !== 0)
+    throw new Error(`commit ${wanted.join(' or ')} is gone from the remote: git fetch exited ${fetched}`);
+  await must(deps, 'git', ['checkout', '--quiet', '-B', repo.branch, commit], ws);
+  out.branch_head = commit;
+  if (repo.base_commit) {
+    out.base_head = repo.base_commit;
+    const behind =
+      (await deps.exec('git', ['merge-base', '--is-ancestor', repo.base_commit, 'HEAD'], { cwd: ws })) !== 0;
+    if (behind) {
+      out.fresh_base = repo.fresh_base ?? 'rebase';
+      const conflicts = await bringUpToDate(deps, ws, out.fresh_base, repo.base_commit);
+      if (conflicts.length > 0) out.conflicts = conflicts;
+    }
+  }
+  await must(deps, 'git', ['update-ref', tryStartRef, 'HEAD'], ws);
+  await must(deps, 'mise', ['install', '--yes'], ws);
+  out.branch = repo.branch;
+  out.branch_existed = true;
+}
+
+/**
+ * Drops every git login prepare configured: the credential store under the box's home and each
+ * host's credential helpers, so nothing the agent runs signs git in.
+ */
+async function dropLogins(deps: PrepareDeps, credentials: GitCredential[]): Promise<void> {
+  await rm(join(deps.dirs.home, '.git-credentials'), { force: true });
+  for (const host of new Set(credentials.map((c) => c.host))) {
+    await must(deps, 'git', ['config', '--global', '--unset-all', `credential.https://${host}.helper`]);
+  }
 }
 
 /**

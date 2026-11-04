@@ -18,7 +18,7 @@ The `wip` cap applies at agent stations, where agents claim work. Two WIP settin
 
 ## The weekly budget
 
-A factory's weekly budget is `runtime.budget.weeklyUsd`. It caps what the factory's agent runs may cost over the last 7 days, counted as a rolling window of 7 times 24 hours. The cost counted is the cost of the runs the factory started in that window.
+A factory's weekly budget is `runtime.budget.weeklyUsd`. It caps what the factory's agent runs may cost over the last 7 days, counted as a rolling window of 7 times 24 hours. The cost counted is the cost of the runs the factory started in that window, except Jonah's: they show in the factory's spend but never use up its weekly budget ([Jonah](/docs/concepts/jonah/)).
 
 Spend is checked once per engine tick. A factory is exhausted when its spend reaches the cap. Then the engine claims no new agent work for it. Queue releases and decisions by people carry on as before.
 

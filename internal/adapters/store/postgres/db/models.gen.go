@@ -117,61 +117,6 @@ type EnvironmentTest struct {
 	Tools       []string
 }
 
-type EvalResult struct {
-	EvalRunID  uuid.UUID
-	OrgID      uuid.UUID
-	CaseName   string
-	CaseSha256 string
-	Try        int32
-	State      string
-	LeaseUntil *time.Time
-	RunID      *uuid.UUID
-	CheckedBy  string
-	Detail     []byte
-	CostUsd    float64
-	Turns      int32
-	Arm        int16
-	DurationMs int64
-}
-
-type EvalRun struct {
-	ID            uuid.UUID
-	OrgID         uuid.UUID
-	FactoryID     uuid.UUID
-	VersionID     *uuid.UUID
-	ContentSha256 string
-	Trigger       string
-	Cases         *string
-	State         string
-	EstimateUsd   float64
-	CostUsd       float64
-	CreatedBy     string
-	CreatedAt     time.Time
-	FinishedAt    *time.Time
-	Kind          string
-	Station       *string
-	Agent         *string
-	TriesPerCase  *int16
-}
-
-type EvalRunArm struct {
-	EvalRunID      uuid.UUID
-	OrgID          uuid.UUID
-	Arm            int16
-	Model          string
-	IsCurrent      bool
-	SummarizedAt   *time.Time
-	Tries          *int32
-	Passed         *int32
-	Errors         *int32
-	CostPerItemUsd *float64
-	MsPerItem      *int64
-	MeanTurns      *float64
-	Judge          *string
-	JudgedShare    *float64
-	PerCase        []byte
-}
-
 type FactoryConversion struct {
 	OrgID       uuid.UUID
 	FactoryID   uuid.UUID
@@ -203,6 +148,20 @@ type FactoryRecord struct {
 	DraftBy           *string
 	ArchivedAt        *time.Time
 	ArchivedBy        *string
+}
+
+type GraderCheck struct {
+	ID         uuid.UUID
+	OrgID      uuid.UUID
+	FactoryID  uuid.UUID
+	ProposalID uuid.UUID
+	ItemID     uuid.UUID
+	Result     string
+	Answer     string
+	Reason     string
+	RunID      *uuid.UUID
+	CostUsd    float64
+	CheckedAt  time.Time
 }
 
 type ItemEdge struct {
@@ -254,6 +213,7 @@ type JonahObservation struct {
 	State      string
 	ProposalID *uuid.UUID
 	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 type JonahProposal struct {
@@ -261,12 +221,11 @@ type JonahProposal struct {
 	OrgID              uuid.UUID
 	FactoryID          uuid.UUID
 	Number             int64
-	ReviewID           uuid.UUID
+	ReviewID           *uuid.UUID
 	VersionID          uuid.UUID
 	State              string
 	Title              string
 	Summary            string
-	Files              []byte
 	Evidence           []byte
 	Estimate           []byte
 	Paths              []string
@@ -275,6 +234,9 @@ type JonahProposal struct {
 	DecidedBy          *string
 	DecidedAt          *time.Time
 	CreatedAt          time.Time
+	Edits              []byte
+	Agent              *string
+	Undoes             *uuid.UUID
 }
 
 type JonahReview struct {
@@ -295,25 +257,14 @@ type JonahReview struct {
 	FinishedAt  *time.Time
 }
 
-type JudgeScore struct {
-	ID         uuid.UUID
-	OrgID      uuid.UUID
-	FactoryID  uuid.UUID
-	VersionID  uuid.UUID
-	Judge      string
-	RunID      *uuid.UUID
-	ItemID     *uuid.UUID
-	State      string
-	Outcome    *string
-	Score      *float64
-	Passed     *bool
-	Reason     string
-	CostUsd    float64
-	JudgeRunID *uuid.UUID
-	LeaseUntil *time.Time
-	LeaseToken *uuid.UUID
-	CreatedAt  time.Time
-	ScoredAt   *time.Time
+type KeptTest struct {
+	ID        uuid.UUID
+	OrgID     uuid.UUID
+	FactoryID uuid.UUID
+	ItemID    uuid.UUID
+	Station   string
+	KeptBy    string
+	KeptAt    time.Time
 }
 
 type Lease struct {
@@ -350,6 +301,53 @@ type SavedView struct {
 	Filters   []byte
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type Try struct {
+	ID            uuid.UUID
+	OrgID         uuid.UUID
+	FactoryID     uuid.UUID
+	ProposalID    *uuid.UUID
+	ItemID        uuid.UUID
+	Station       string
+	OriginalRunID uuid.UUID
+	TryRunID      *uuid.UUID
+	Model         string
+	State         string
+	Verdict       *string
+	Error         string
+	Diff          string
+	CostUsd       float64
+	LeaseUntil    *time.Time
+	Attempts      int32
+	CreatedAt     time.Time
+	FinishedAt    *time.Time
+	Reason        string
+	Attempt       int32
+	KeptTestID    *uuid.UUID
+	ContentKey    *string
+	VersionID     *uuid.UUID
+	Edits         []byte
+}
+
+type Watch struct {
+	ID           uuid.UUID
+	OrgID        uuid.UUID
+	FactoryID    uuid.UUID
+	VersionID    uuid.UUID
+	ProposalID   *uuid.UUID
+	Station      string
+	Metric       string
+	BeforeN      int32
+	BeforeValue  float64
+	AfterN       int32
+	AfterValue   float64
+	IntervalLow  *float64
+	IntervalHigh *float64
+	Verdict      string
+	OpenedAt     time.Time
+	ClosedAt     *time.Time
+	UpdatedAt    time.Time
 }
 
 type WorkItem struct {

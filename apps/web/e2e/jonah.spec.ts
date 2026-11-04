@@ -1,5 +1,5 @@
-// Jonah's overview and its Proposals tab (build the Jonah overview, jonah/jonah.jpg): the proposals waiting, the
-// policy, what Jonah noticed, the disabled Look for improvements now button, and the Proposals tab's state filter.
+// Jonah's three tabs (jonah/jonah.jpg, jonah/tests.jpg, mobile/jonah.jpg): the Overview with the proposals waiting,
+// the policy and what Jonah noticed; the Proposals tab's state filter; the Tests tab's kept tests by station.
 // Not run in the box: Playwright needs a browser, which the box does not have.
 import { expect, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll } from './support';
@@ -16,50 +16,36 @@ test('the overview shows the two proposals waiting, the policy and what Jonah no
   await expect(page.getByText('Proposal 7')).toBeVisible();
   await expect(page.getByText('Proposal 8')).toBeVisible();
   await expect(page.getByText('Based on 4 runs sent back')).toBeVisible();
-  await expect(page.getByText('$6.40 this month')).toBeVisible();
   await expect(page.getByText('Watching, 3 of 5')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'All proposals' })).toHaveAttribute(
-    'href',
-    '/o/acme/f/software/jonah?tab=proposals',
-  );
+  await expect(page.getByRole('region', { name: /After publish/ })).toBeVisible();
 
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
 
-test('each proposal links to its page, and the overview shows each judge against its pass mark', async ({ page }) => {
+test('the tabs are Overview, Proposals and Tests, each at its own address', async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah');
-  await expect(page.getByRole('link', { name: 'Review' }).first()).toHaveAttribute('href', /\/jonah\/proposals\/8$/);
-  await expect(page.getByRole('navigation', { name: 'Jonah' }).getByRole('link', { name: 'Evals' })).toBeVisible();
-  const section = page.getByRole('region', { name: 'Pass rate by judge, last 30 days' });
-  await expect(section.getByRole('article')).toHaveCount(4);
-  await expect(section.getByRole('link', { name: 'Review reason actionable' })).toHaveAttribute(
-    'href',
-    /\/jonah\/judges\/review-reason-actionable$/,
-  );
+  const tabs = page.getByRole('navigation', { name: 'Jonah' });
+  await expect(tabs.getByRole('link')).toHaveText([/Overview/, /Proposals/, /Tests/]);
+  await tabs.getByRole('link', { name: /Proposals/ }).click();
+  await expect(page).toHaveURL(/\/jonah\/proposals$/);
+  await tabs.getByRole('link', { name: /Tests/ }).click();
+  await expect(page).toHaveURL(/\/jonah\/tests$/);
+  await expect(tabs.getByRole('link', { name: /Tests/ })).toHaveAttribute('aria-current', 'page');
 });
 
-// Screenshots of the overview at 1440 and 375 px in light and dark, for the pull request.
-for (const scheme of ['light', 'dark'] as const) {
-  for (const width of [1440, 375]) {
-    test(`screenshot: the overview at ${width} px, ${scheme}`, async ({ page }) => {
-      await page.emulateMedia({ colorScheme: scheme });
-      await page.setViewportSize({ width, height: 900 });
-      await page.goto('/o/acme/f/software/jonah');
-      await expect(page.getByRole('region', { name: 'Pass rate by judge, last 30 days' })).toBeVisible();
-      await expectNoHorizontalScroll(page);
-      await page.screenshot({ path: `test-results/jonah-overview-${width}-${scheme}.png`, fullPage: true });
-    });
-  }
-}
+test('each proposal links to its page', async ({ page }) => {
+  await page.goto('/o/acme/f/software/jonah');
+  await expect(page.getByRole('link', { name: /^Review/ }).first()).toHaveAttribute('href', /\/jonah\/proposals\/8$/);
+});
 
-test("Look for improvements now is not available, with no sentence beside it, until Jonah's review loop ships", async ({
-  page,
-}) => {
+test('Look for improvements now queues a review, and a second one is refused', async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah');
   const look = page.getByRole('button', { name: 'Look for improvements now' });
-  await expect(look).toHaveAttribute('aria-disabled', 'true');
-  await expect(page.getByText("Reviews start when Jonah's review loop ships")).toHaveCount(0);
+  await look.click();
+  await expect(page.getByText('Jonah is looking. New proposals appear here.')).toBeVisible();
+  await look.click();
+  await expect(page.getByText('A review is already running. Its proposals appear here.')).toBeVisible();
 });
 
 test('on a phone the review button keeps its name, is 44 px and its text does not spill', async ({ page }) => {
@@ -76,13 +62,53 @@ test('on a phone the review button keeps its name, is 44 px and its text does no
 });
 
 test('the Proposals tab filters by the state in the URL', async ({ page }) => {
-  await page.goto('/o/acme/f/software/jonah?tab=proposals');
+  await page.goto('/o/acme/f/software/jonah/proposals');
   await expect(
-    page.getByRole('navigation', { name: 'Jonah' }).getByRole('link', { name: 'Proposals' }),
+    page.getByRole('navigation', { name: 'Jonah' }).getByRole('link', { name: /Proposals/ }),
   ).toHaveAttribute('aria-current', 'page');
   await page.getByRole('radio', { name: 'Applied' }).check();
   await expect(page).toHaveURL(/state=applied/);
   await expect(page.getByText('Name the agent in every sent-back note')).toBeVisible();
+});
+
+test('the Tests tab lists kept tests by station, and Remove takes one away', async ({ page }) => {
+  await page.goto('/o/acme/f/software/jonah/tests');
+  await expect(page.getByRole('region', { name: 'build tests' })).toBeVisible();
+  await expect(page.getByText('Needs you header in the top bar')).toBeVisible();
+  await page.getByRole('button', { name: 'Actions for test #418' }).click();
+  await page.getByRole('menuitem', { name: 'Remove' }).click();
+  await expect(page.getByText('Needs you header in the top bar')).toHaveCount(0);
+  await expectAccessible(page);
+});
+
+test('the Tests tab shows each kept test’s last result and links a run to its item', async ({ page }) => {
+  await page.goto('/o/acme/f/software/jonah/tests');
+  const kept = page.getByRole('region', { name: 'Kept tests' });
+  await expect(kept.getByText('Passed')).toBeVisible();
+  await expect(kept.getByText('Failed')).toBeVisible();
+  await expect(kept.getByText('Error', { exact: true })).toBeVisible();
+  await expect(kept.getByText('Not run yet')).toBeVisible();
+  await kept.getByRole('link', { name: /Passed on/ }).click();
+  await expect(page).toHaveURL(/\/items\/451\?tab=trace/);
+});
+
+test('the Tests tab’s last results fit 390, 768 and 1440 px, and every control is 44 px at 390', async ({ page }) => {
+  for (const [width, height] of [
+    [1440, 900],
+    [768, 1024],
+    [390, 844],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await page.goto('/o/acme/f/software/jonah/tests');
+    await expect(page.getByText('Not run yet')).toBeVisible();
+    await expectNoHorizontalScroll(page);
+    if (width === 390) {
+      const targets = page.getByRole('region', { name: 'Kept tests' }).locator('a, button');
+      for (const box of await targets.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))) {
+        expect(box).toBeGreaterThanOrEqual(44);
+      }
+    }
+  }
 });
 
 test('the overview fits 375 and 768 px and renders in dark mode', async ({ page }) => {
@@ -100,25 +126,15 @@ test('the overview fits 375 and 768 px and renders in dark mode', async ({ page 
   await expectAccessible(page);
 });
 
-test('a factory with no version also shows the disabled review button', async ({ page }) => {
-  await page.goto('/o/acme/f/goal/jonah');
-  await expect(page.getByRole('button', { name: 'Look for improvements now' })).toHaveAttribute(
-    'aria-disabled',
-    'true',
-  );
-});
-
-// Every Jonah page at 1440 and 390 px in both themes: a screenshot of each, and nothing wider than the screen.
-// Not run in the box: Playwright needs a browser, which the box does not have.
+// Every Jonah page at 1440, 1024, 768 and 390 px in both themes: nothing wider than the screen, and a screenshot.
 const jonahPages = [
   ['overview', '/o/acme/f/software/jonah', 'Overview'],
-  ['judges', '/o/acme/f/software/jonah/judges', 'Judges'],
-  ['evals', '/o/acme/f/software/jonah/evals', 'Evals'],
-  ['bake-offs', '/o/acme/f/software/jonah/bake-offs', 'Bake-offs'],
+  ['proposals', '/o/acme/f/software/jonah/proposals', 'Proposals'],
+  ['tests', '/o/acme/f/software/jonah/tests', 'Tests'],
 ] as const;
 
 for (const scheme of ['light', 'dark'] as const) {
-  for (const width of [1440, 390]) {
+  for (const width of [1440, 1024, 768, 390]) {
     for (const [name, url, tab] of jonahPages) {
       test(`${name} at ${width} px in ${scheme}: current tab, no sideways scroll, screenshot`, async ({ page }) => {
         await page.setViewportSize({ width, height: 900 });
@@ -126,7 +142,7 @@ for (const scheme of ['light', 'dark'] as const) {
         await page.goto(url);
         const tabs = page.getByRole('navigation', { name: 'Jonah' });
         await expect(tabs.locator('[aria-current="page"]')).toHaveCount(1);
-        await expect(tabs.getByRole('link', { name: tab })).toHaveAttribute('aria-current', 'page');
+        await expect(tabs.getByRole('link', { name: new RegExp(tab) })).toHaveAttribute('aria-current', 'page');
         await expectNoHorizontalScroll(page);
         await expect(page).toHaveScreenshot(`jonah-${name}-${width}-${scheme}.png`);
       });

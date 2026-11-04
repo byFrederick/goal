@@ -32,8 +32,8 @@ import {
 import { PromptFull, PromptPreview } from './agent-prompt';
 import { AgentSettings } from './agent-settings';
 import { AskJonahButton } from './ask-jonah-button';
-import { BakeOffButton } from './bake-off-button';
 import { blockedSentence, reasonLabel, reasonShare } from './sentences';
+import { TryModelButton } from './try-model-dialog';
 import { type AgentView, agentViews } from './views';
 
 const none = '—';
@@ -182,13 +182,22 @@ function AgentPageBody({ agent, view }: { agent: string; view: AgentView }) {
   const agentParams = { ...params, agent };
   const byKeyboard = useRef(false);
   const session = useDraftSession();
+  const canEdit = holds(factory, 'definition:edit');
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <TopBarSlot
         crumb={agent}
         actions={[
-          <BakeOffButton key="bake-off" agent={agent} />,
+          canEdit ? (
+            <TryModelButton
+              key="model"
+              orgId={org.id}
+              factoryId={factory.id}
+              agent={agent}
+              currentModel={stats.model ?? undefined}
+            />
+          ) : null,
           <Button key="prompt" asChild variant="secondary" size="sm">
             <Link
               to="/o/$org/f/$factory/definition/$section"

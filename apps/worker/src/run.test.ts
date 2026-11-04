@@ -673,6 +673,33 @@ describe('runTask environment', () => {
     expect(events.at(-1)).toMatchObject({ type: 'finished', status: 'succeeded' });
   });
 
+  it("gives a try's env to setup alone: its variables are gone before the agent starts", async () => {
+    home = await mkdtemp(join(tmpdir(), 'goal-run-home-'));
+    const runEnv: NodeJS.ProcessEnv = { ...env, NPM_TOKEN: 'acme-npm-token' };
+    const seen: (string | undefined)[] = [];
+    const shell: Shell = async () => {
+      seen.push(runEnv.NPM_TOKEN);
+      return { code: 0, timedOut: false };
+    };
+    const trySpec = parseSpec(
+      JSON.stringify({
+        ...spec,
+        environment: { name: 'default', setup: ['pnpm install'], env: ['NPM_TOKEN'], setup_only: true },
+      }),
+    );
+
+    const { code, calls } = await run([success], {
+      spec: trySpec,
+      env: runEnv,
+      environment: { home, workspace: '/workspace', marker: join(home, 'goal/environment-setup.done'), shell },
+    });
+
+    expect(code).toBe(0);
+    expect(seen).toEqual(['acme-npm-token']);
+    expect(calls[0]?.options.env).not.toHaveProperty('NPM_TOKEN');
+    expect(JSON.stringify(calls[0]?.options)).not.toContain('acme-npm-token');
+  });
+
   it('fails the run with the command and its last lines when setup fails, and never queries the agent', async () => {
     home = await mkdtemp(join(tmpdir(), 'goal-run-home-'));
     const shell: Shell = async (_command, opts) => {

@@ -118,24 +118,24 @@ func TestAPI_DraftRequestRefusals(t *testing.T) {
 		{"empty text", `{"text":"   "}`, "draft-request-text-invalid"},
 		{"2001 characters", `{"text":"` + strings.Repeat("é", domain.MaxDraftRequestText+1) + `"}`, "draft-request-text-invalid"},
 	} {
-		code, p := evalCall(t, h, http.MethodPost, acmeDraftRequests, c.body, nil)
-		wantEvalProblem(t, c.what, code, p, http.StatusUnprocessableEntity, c.code)
+		code, p := callWithProblem(t, h, http.MethodPost, acmeDraftRequests, c.body, nil)
+		wantProblem(t, c.what, code, p, http.StatusUnprocessableEntity, c.code)
 	}
 
-	code, p := evalCall(t, h, http.MethodPost, acmeDraftRequests, `{"text":"fix it","agent":"nobody"}`, nil)
-	wantEvalProblem(t, "unknown agent", code, p, http.StatusNotFound, "agent-not-found")
+	code, p := callWithProblem(t, h, http.MethodPost, acmeDraftRequests, `{"text":"fix it","agent":"nobody"}`, nil)
+	wantProblem(t, "unknown agent", code, p, http.StatusNotFound, "agent-not-found")
 
 	if code := h.call(t, http.MethodPost, acmeDraftRequests, `{"text":"exactly 2000 `+strings.Repeat("x", domain.MaxDraftRequestText-13)+`"}`, nil); code != http.StatusCreated {
 		t.Fatalf("create of 2000 characters = %d, want 201", code)
 	}
 
-	code, p = evalCall(t, h, http.MethodPost, acmeDraftRequests, `{"text":"and another"}`, nil)
-	wantEvalProblem(t, "second while one is queued", code, p, http.StatusConflict, "draft-request-open")
+	code, p = callWithProblem(t, h, http.MethodPost, acmeDraftRequests, `{"text":"and another"}`, nil)
+	wantProblem(t, "second while one is queued", code, p, http.StatusConflict, "draft-request-open")
 
-	code, p = evalCall(t, h, http.MethodGet, acmeDraftRequests+"/01900000-0000-7000-8000-999999999999", "", nil)
-	wantEvalProblem(t, "unknown request", code, p, http.StatusNotFound, "draft-request-not-found")
+	code, p = callWithProblem(t, h, http.MethodGet, acmeDraftRequests+"/01900000-0000-7000-8000-999999999999", "", nil)
+	wantProblem(t, "unknown request", code, p, http.StatusNotFound, "draft-request-not-found")
 
-	code, p = evalCall(t, h, http.MethodGet, acmeDraftRequests+"?limit=101", "", nil)
+	code, p = callWithProblem(t, h, http.MethodGet, acmeDraftRequests+"?limit=101", "", nil)
 	if code != http.StatusBadRequest {
 		t.Errorf("list limit=101 = %d %+v, want 400", code, p)
 	}
@@ -148,8 +148,8 @@ func TestAPI_DraftRequestRefusesAnAgentOfABrokenDraft(t *testing.T) {
 	h := newHarness(t)
 	h.putDraftYAML(t, "spec: [\n")
 
-	code, p := evalCall(t, h, http.MethodPost, acmeDraftRequests, `{"text":"fix it","agent":"writer"}`, nil)
-	wantEvalProblem(t, "agent of a broken draft", code, p, http.StatusConflict, "yaml-invalid")
+	code, p := callWithProblem(t, h, http.MethodPost, acmeDraftRequests, `{"text":"fix it","agent":"writer"}`, nil)
+	wantProblem(t, "agent of a broken draft", code, p, http.StatusConflict, "yaml-invalid")
 
 	// Without an agent the request does not read the draft.
 	if code := h.call(t, http.MethodPost, acmeDraftRequests, `{"text":"fix the YAML"}`, nil); code != http.StatusCreated {
@@ -167,7 +167,7 @@ func TestAPI_DraftRequestViewerMayReadButNotAsk(t *testing.T) {
 		t.Fatalf("create = %d, want 201", code)
 	}
 
-	h.evalsAsOn(acmeID, domain.FactoryViewer)
+	h.as(acmeMember(domain.FactoryViewer))
 
 	for _, path := range []string{acmeDraftRequests, acmeDraftRequests + "/" + r.Id} {
 		if code := h.call(t, http.MethodGet, path, "", nil); code != http.StatusOK {
@@ -175,8 +175,8 @@ func TestAPI_DraftRequestViewerMayReadButNotAsk(t *testing.T) {
 		}
 	}
 
-	code, p := evalCall(t, h, http.MethodPost, acmeDraftRequests, `{"text":"another"}`, nil)
-	wantEvalProblem(t, "viewer create", code, p, http.StatusForbidden, "forbidden")
+	code, p := callWithProblem(t, h, http.MethodPost, acmeDraftRequests, `{"text":"another"}`, nil)
+	wantProblem(t, "viewer create", code, p, http.StatusForbidden, "forbidden")
 }
 
 // putDraftYAML opens acme's draft and writes doc as its factory.yaml.

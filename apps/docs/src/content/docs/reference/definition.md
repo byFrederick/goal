@@ -213,16 +213,17 @@ object, required.
       - `transient`: object. Runs whose sandbox was lost to its infrastructure (a redeploy, a box restart, a network blip): each runs again in a new box after a backoff that doubles with each loss.
         - `attempts`: integer. The most runs one claim makes when its sandbox is lost; the loss that reaches it blocks the item. Default 3.
 - `learning`: object.
-  - `librarian`: object.
+  - `librarian`: object. Ignored (ADR 0039): Jonah proposes knowledge from the line. A definition that has it loads with the warning field-ignored.
     - `agent`: string, required.
     - `after`: array of string. Stations whose completion triggers the librarian.
     - `writes`: array of string.
-  - `kaizen`: object.
+  - `kaizen`: object. Ignored (ADR 0039): Jonah reviews the line once a day. A definition that has it loads with the warning field-ignored.
     - `schedule`: string.
-  - `jonah`: object. The reviews that turn sent-back runs into proposals for the definition (ADR 0034).
-    - `enabled`: boolean, default `true`. Whether sent-back runs queue reviews at all.
-    - `proposeAfter`: integer, default `5`. The sent-back touches that queue a review, and the times an observation is seen before it becomes a proposal.
-    - `weeklyUsd`: number, default `10`. What the review runs may cost over the last 7 days, in USD.
+  - `jonah`: object. Jonah, which reviews the line once a day and proposes changes to the definition (ADR 0039).
+    - `enabled`: boolean, default `true`. Whether Jonah reviews this factory at all.
+    - `proposeAfter`: integer, default `3`. The items with the same cause an observation needs before it becomes a proposal.
+    - `share`: string matching `^(100(\.0+)?|[0-9]{1,2}(\.[0-9]+)?)%$`, default `"5%"`. Jonah's budget, as a percent of what the line spent in the last 7 days, from 0% to 100%. Each review may spend a fifth of it, and Jonah's spend never triggers runtime.budget.onExhausted.
+    - `weeklyUsd`: number. Ignored (ADR 0039): Jonah's budget is share. A definition that has it loads with the warning field-ignored.
     - `model`: string matching `^claude-[a-z0-9-]+$`. The review run's model; runtime.model when omitted.
 
 ## starter

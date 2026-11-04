@@ -23,7 +23,6 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_AUTH_GOOGLE` | config | no | on also offers sign-in with Google, with GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. |
 | `GOAL_AUTH_PROXY_SECRET` | secret | yes | The secret goald sends with every request it forwards to the auth service, which refuses any other; goal up generates one per start. |
 | `GOAL_AUTH_UPSTREAM` | config | no | Where goald's /api/auth proxy reaches the auth service. |
-| `GOAL_BAKEOFF_MODELS` | public | no | The models a bake-off that names no arms tries beside the agent's current model, comma-separated model ids; cut at four arms. |
 | `GOAL_DATABASE_URL` | secret | no | goald's PostgreSQL URL, as goal_app under row-level security; by default compose's database with GOAL_PG_APP_PASSWORD. |
 | `GOAL_DEFAULT_AGENT_IMAGE` | config | no | Retired: GOAL_AGENT_IMAGE replaced it; goald ignores it and warns while it is set. |
 | `GOAL_DEFINITION_CACHE_BYTES` | config | no | How many bytes of no-longer-current factory definition files goald keeps for the runs pinned to them. |
@@ -38,9 +37,13 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_GITHUB_API_URL` | config | no | Retired: a github connection's host gives its API; goald ignores it and warns while it is set. |
 | `GOAL_GITHUB_TOKEN` | secret | no | Retired: a factory's repository.token, a secret, replaces it; goald ignores it and warns while it is set. |
 | `GOAL_GITHUB_WEB_URL` | config | no | Retired: the repository's URL gives its host; goald ignores it and warns while it is set. |
-| `GOAL_JONAH_REVIEW_EVERY` | config | no | How often goald queues Jonah threshold reviews and runs the queued reviews. 1m when unset. |
+| `GOAL_JONAH_REVIEW_EVERY` | config | no | How often goald queues the daily Jonah reviews that are due and runs the queued reviews. 1m when unset. |
 | `GOAL_JONAH_REVIEW_LEASE_MARGIN` | config | no | How long a Jonah review's lease lasts beyond its run's time limit; a review whose goald died is taken again once the lease ends. 5m when unset. |
 | `GOAL_JONAH_REVIEW_TIMEOUT` | config | no | The time limit of one Jonah review run. 30m when unset. |
+| `GOAL_JONAH_TRIES_PER_FACTORY` | config | no | How many of a factory's tries of past items run at once, on every goald together. 2 when unset. |
+| `GOAL_JONAH_TRY_EVERY` | config | no | How often goald queues the tries of past items of Jonah's proposals and runs the queued tries. 1m when unset. |
+| `GOAL_JONAH_TRY_LEASE_MARGIN` | config | no | How long a try's lease lasts beyond its run's time limit; a try whose goald died is taken again once the lease ends. 5m when unset. |
+| `GOAL_JONAH_TRY_TIMEOUT` | config | no | The time limit of one try of a past item. 30m when unset. |
 | `GOAL_KB_WORKERS` | config | no | How many knowledge sources one goald syncs at once (0: none). |
 | `GOAL_LEGACY_IMPORT` | config | no | Retired: the legacy import is gone; goald ignores it and warns while it is set. |
 | `GOAL_LISTEN` | config | no | goald's address for the API, the UI and, without GOAL_GATEWAY_LISTEN, the gateway. |

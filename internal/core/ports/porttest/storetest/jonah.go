@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -22,19 +23,31 @@ var jonahTests = []struct {
 	// A Jonah run without an item, beside the Runs_ cases it is named with.
 	{"Runs_JonahWithoutItem", testRunsJonahWithoutItem},
 	{"Jonah_ExpiredLeaseReclaimed", testJonahLeaseReclaimed},
+	{"Jonah_RetryReturnsToPending", testJonahRetry},
+	{"Jonah_WindowStartsAtLastDoneReview", testJonahLastDone},
 	{"Jonah_ConcurrentClaimsTakeDifferentReviews", testJonahConcurrentClaims},
 	{"Jonah_ProposalsNumberedPerFactory", testJonahNumbers},
 	{"Jonah_PathOutsideAllowlistRefused", testJonahPathRefused},
+	{"Jonah_MemoryProposalStored", testJonahMemoryProposal},
+	{"Jonah_MalformedEditRefused", testJonahEditRefused},
+	{"Jonah_NewProposalSupersedesOnlyOverlapping", testJonahSupersede},
+	{"Jonah_ObservationsPersistAcrossReviews", testJonahObservationsPersist},
 	{"Jonah_DecideProposalOnlyOnce", testJonahDecide},
+	{"Jonah_UndoProposalOncePerProposal", testJonahUndo},
+	{"Jonah_ModelProposalStored", testJonahModelProposal},
 	{"Jonah_OtherOrgInvisible", testJonahTenancy},
 	{"Jonah_SpendSinceSumsJonahRuns", testJonahSpend},
-	{"Jonah_SentBackSinceCountsRejections", testJonahSentBack},
 	{"Jonah_SentBackBetweenListsWindow", testJonahSentBackBetween},
 	{"Jonah_StationFlowMeasuresStation", testJonahStationFlow},
+	{"Jonah_EvidenceItemsFinishedInWindow", testJonahEvidenceItems},
+	{"Jonah_EvidenceStationMedians", testJonahEvidenceMedians},
 }
 
 // sha is a well-formed base_sha256.
 var sha = strings.Repeat("ab", 32)
+
+// jonahRef is Actor.Ref() of domain.JonahActor, who supersedes proposals.
+var jonahRef = domain.JonahActor.Ref()
 
 // queueReview queues a manual review of factory on a new version and fails the test on an error.
 func (f *fixture) queueReview(t *testing.T, factory domain.FactoryID, at time.Time) domain.JonahReview {
@@ -82,7 +95,7 @@ func (f *fixture) finishReview(t *testing.T, factory domain.FactoryID, at time.T
 func proposal(title string, paths ...string) domain.NewProposal {
 	p := domain.NewProposal{Title: title, Summary: "why " + title}
 	for _, path := range paths {
-		p.Files = append(p.Files, domain.ProposalFile{Path: path, BaseSHA256: sha, Content: "new " + path})
+		p.Edits = append(p.Edits, domain.ProposalEdit{Path: path, Replacements: []domain.Replacement{{Old: "old " + path, New: "new " + path}}})
 	}
 
 	return p
@@ -172,6 +185,79 @@ func testJonahLeaseReclaimed(f *fixture) {
 	f.finishUnderNewLease(t, first, second)
 }
 
+// A review finished as pending goes back to the queue with its error, no lease and no finish
+// time, still in flight; the next claim takes it as attempt 2 and keeps the error until it ends.
+func testJonahRetry(f *fixture) {
+	t := f.t
+	queued := f.queueReview(t, f.factory, t0)
+	first := f.claimReview(t, t0)
+
+	back, stored, err := f.Jonah.FinishJonahReview(f.ctx(t), first, domain.JonahReviewResult{
+		State: domain.JonahPending, Error: "the review run failed", At: t0.Add(time.Minute),
+	})
+	if err != nil || len(stored) != 0 {
+		t.Fatalf("FinishJonahReview pending: %d proposals, %v", len(stored), err)
+	}
+
+	expectRetried(t, back)
+
+	if _, err := f.Jonah.QueueJonahReview(f.ctx(t), domain.NewJonahReview{
+		FactoryID: f.factory, VersionID: queued.VersionID, Trigger: domain.JonahThreshold, WindowStart: t0, WindowEnd: t1,
+		By: domain.Actor{Kind: domain.ActorSystem, ID: "jonah"}, At: t1,
+	}); !errors.Is(err, ports.ErrConflict) {
+		t.Fatalf("a review while one waits for its retry: %v, want ErrConflict", err)
+	}
+
+	second := f.claimReview(t, t1)
+	if second.ID != queued.ID || second.Attempts != 2 || second.Error != "the review run failed" {
+		t.Fatalf("second claim %+v: want %s, attempt 2, its error kept", second, queued.ID)
+	}
+
+	const last = "the review run failed a second time"
+
+	done, _, err := f.Jonah.FinishJonahReview(f.ctx(t), second, domain.JonahReviewResult{State: domain.JonahFailed, Error: last, At: t1})
+	if err != nil || done.State != domain.JonahFailed || done.Error != last || !done.FinishedAt.Equal(t1) {
+		t.Fatalf("finish failed: %+v, %v", done, err)
+	}
+}
+
+// expectRetried checks that r went back to pending after its first attempt with its error, no
+// lease and no finish time.
+func expectRetried(t *testing.T, r domain.JonahReview) {
+	t.Helper()
+
+	if r.State != domain.JonahPending || r.Error != "the review run failed" || !r.LeaseUntil.IsZero() || !r.FinishedAt.IsZero() || r.Attempts != 1 {
+		t.Fatalf("retried review %+v: want pending with its error, no lease, no finish, attempt 1", r)
+	}
+}
+
+// LastDoneJonahReview is the factory's newest done review, past any failed or in-flight one
+// after it; ErrNotFound before the first, and another factory's never counts.
+func testJonahLastDone(f *fixture) {
+	t := f.t
+
+	if _, err := f.Jonah.LastDoneJonahReview(f.ctx(t), f.factory); !errors.Is(err, ports.ErrNotFound) {
+		t.Fatalf("LastDoneJonahReview before any review: %v, want ErrNotFound", err)
+	}
+
+	done, _ := f.finishReview(t, f.factory, t0, domain.JonahReviewResult{})
+	f.finishReview(t, f.newFactory(t), t1, domain.JonahReviewResult{})
+
+	f.queueReview(t, f.factory, t1)
+	claimed := f.claimReview(t, t1)
+
+	if _, _, err := f.Jonah.FinishJonahReview(f.ctx(t), claimed, domain.JonahReviewResult{State: domain.JonahFailed, Error: "x", At: t1}); err != nil {
+		t.Fatalf("FinishJonahReview failed: %v", err)
+	}
+
+	f.queueReview(t, f.factory, t1.Add(time.Hour))
+
+	got, err := f.Jonah.LastDoneJonahReview(f.ctx(t), f.factory)
+	if err != nil || got.ID != done.ID || !got.WindowEnd.Equal(t0) {
+		t.Fatalf("LastDoneJonahReview = %s ending %s, %v; want %s ending %s", got.ID, got.WindowEnd, err, done.ID, t0)
+	}
+}
+
 // Claims that race take different reviews: a review one claim holds is skipped by the other,
 // and once both are held a third claim finds none.
 func testJonahConcurrentClaims(f *fixture) {
@@ -240,6 +326,8 @@ func testJonahNumbers(f *fixture) {
 	it := f.create(t, domain.NewItem{})
 
 	p1 := proposal("Ask for a screenshot", "agents/frontend-engineer.md", "rules/evidence.md")
+	p1.Edits = append(p1.Edits, domain.ProposalEdit{Path: "rules/new.md", Content: "", BaseSHA256: ""},
+		domain.ProposalEdit{Path: "rules/old.md", Content: "whole", BaseSHA256: sha})
 	p1.Evidence = []domain.ProposalEvidence{{ItemID: it.ID, EventID: 7, Station: stNext, Quote: "no screenshot"}}
 	p1.Estimate = domain.ProposalEstimate{Metric: domain.MetricSentBackRate, Station: stNext, Before: 0.4, After: 0.1, CostPerItemUSD: 0.02}
 
@@ -284,7 +372,7 @@ func (f *fixture) expectProposal(t *testing.T, stored domain.Proposal, review do
 		t.Errorf("proposal %d = %+v, want %s of review %s on %s, proposed", stored.Number, got, stored.ID, review.ID, review.VersionID)
 	}
 
-	if got.Title != n.Title || got.Summary != n.Summary || !reflect.DeepEqual(got.Files, n.Files) ||
+	if got.Title != n.Title || got.Summary != n.Summary || !reflect.DeepEqual(got.Edits, n.Edits) ||
 		!reflect.DeepEqual(got.Evidence, n.Evidence) || got.Estimate != n.Estimate || !got.CreatedAt.Equal(t0.Add(time.Minute)) {
 		t.Errorf("proposal %d = %+v, want what the review said: %+v", stored.Number, got, n)
 	}
@@ -349,7 +437,7 @@ func (f *fixture) expectPages(t *testing.T) {
 func testJonahPathRefused(f *fixture) {
 	t := f.t
 
-	for _, path := range []string{"evals/cases/a.yaml", "agents/../evals/x.md", "README.md", "factory.yaml.bak"} {
+	for _, path := range []string{"evals/cases/a.yaml", "agents/../evals/x.md", "README.md", "factory.yaml.bak", "skills/x/run.sh", "memory.yaml.bak", "x/memory.yaml"} {
 		f.queueReview(t, f.factory, t0)
 		claimed := f.claimReview(t, t0)
 
@@ -378,6 +466,30 @@ func testJonahPathRefused(f *fixture) {
 		if _, _, err := f.Jonah.FinishJonahReview(f.ctx(t), claimed, domain.JonahReviewResult{State: domain.JonahFailed, Error: "bad path", At: t0.Add(time.Second)}); err != nil {
 			t.Fatalf("fail the review: %v", err)
 		}
+	}
+}
+
+// A proposal of memory.yaml, the factory's memory (ADR 0039 decision 7), is stored with its
+// whole-file replacement.
+func testJonahMemoryProposal(f *fixture) {
+	t := f.t
+
+	f.queueReview(t, f.factory, t0)
+	claimed := f.claimReview(t, t0)
+
+	memory := domain.NewProposal{Title: "Add 1 fact to memory", Edits: []domain.ProposalEdit{{
+		Path: "memory.yaml", Replacements: []domain.Replacement{{Old: "[]\n", New: "- text: \"Phones are 390 wide\"\n  added: \"2026-11-04\"\n"}},
+	}}}
+
+	if _, _, err := f.Jonah.FinishJonahReview(f.ctx(t), claimed, domain.JonahReviewResult{
+		State: domain.JonahDone, At: t0.Add(time.Second), Proposals: []domain.NewProposal{memory},
+	}); err != nil {
+		t.Fatalf("FinishJonahReview with a memory proposal: %v", err)
+	}
+
+	got, err := f.Jonah.Proposals(f.ctx(t), ports.ProposalQuery{Factory: f.factory, Limit: 10})
+	if err != nil || len(got) != 1 || !reflect.DeepEqual(got[0].Edits, memory.Edits) || !slices.Equal(got[0].Paths(), []string{"memory.yaml"}) {
+		t.Errorf("proposals = %+v, %v; want the memory proposal", got, err)
 	}
 }
 
@@ -424,6 +536,39 @@ func testJonahDecide(f *fixture) {
 	}
 
 	f.expectNoProposal(t, 9)
+}
+
+// An undo proposal has no review, takes the factory's next number and names the proposal it
+// reverses; a second refuses with ErrConflict while the first is proposed, and is stored once
+// the first is rejected.
+func testJonahUndo(f *fixture) {
+	t := f.t
+	_, made := f.finishReview(t, f.factory, t0, domain.JonahReviewResult{Proposals: []domain.NewProposal{proposal("a", "rules/a.md")}})
+	version := f.NewVersion(t, f.org, f.factory)
+	undo := proposal("Undo proposal 1: a", "rules/a.md")
+
+	u, err := f.Jonah.UndoProposal(f.ctx(t), f.factory, made[0].ID, version, undo, t1)
+	if err != nil {
+		t.Fatalf("UndoProposal: %v", err)
+	}
+
+	if u.Number != 2 || u.Undoes != made[0].ID || u.ReviewID != "" || u.VersionID != version || u.State != domain.ProposalProposed {
+		t.Errorf("undo %+v, want proposal 2 undoing %s on %s without a review", u, made[0].ID, version)
+	}
+
+	if got, _ := f.Jonah.Proposal(f.ctx(t), f.factory, 2); got.Undoes != made[0].ID || got.ReviewID != "" {
+		t.Errorf("read back %+v, want it to undo %s", got, made[0].ID)
+	}
+
+	if _, err := f.Jonah.UndoProposal(f.ctx(t), f.factory, made[0].ID, version, undo, t1); !errors.Is(err, ports.ErrConflict) {
+		t.Fatalf("second undo: %v, want ErrConflict", err)
+	}
+
+	f.decide(t, 2, domain.ProposalDecision{State: domain.ProposalRejected, RejectReason: "keep it", By: ada, At: t1})
+
+	if again, err := f.Jonah.UndoProposal(f.ctx(t), f.factory, made[0].ID, version, undo, t1); err != nil || again.Number != 3 {
+		t.Errorf("undo after the first was rejected: %+v, %v; want proposal 3", again, err)
+	}
 }
 
 // expectNoProposal checks that the factory has no proposal of number to read or decide.
@@ -531,8 +676,9 @@ func (f *fixture) kindRun(t *testing.T, it domain.Item, kind domain.RunKind, at 
 	}
 }
 
-// JonahSpendSince sums the factory's jonah runs from since, the bound included: not station runs,
-// runs before since or another factory's.
+// JonahSpendSince sums the factory's runs from since, the bound included, into the line's (every
+// kind but jonah) and Jonah's: not runs before since or another factory's. SpendSince, which the
+// weekly budget's onExhausted reads, leaves the jonah runs out (ADR 0039 decision 16).
 func testJonahSpend(f *fixture) {
 	t := f.t
 	it := f.create(t, domain.NewItem{})
@@ -542,39 +688,18 @@ func testJonahSpend(f *fixture) {
 	f.kindRun(t, it, domain.RunKindJonah, t1, 1.5)
 	f.kindRun(t, it, domain.RunKindJonah, t1.Add(time.Hour), 0.25)
 	f.kindRun(t, it, domain.RunKindStation, t1, 3)
+	f.kindRun(t, it, domain.RunKindStation, t1.Add(-time.Second), 16)
 	f.kindRun(t, it, "", t1, 4)
 	f.kindRun(t, elsewhere, domain.RunKindJonah, t1, 8)
+	f.kindRun(t, elsewhere, domain.RunKindStation, t1, 32)
 
-	usd, err := f.Jonah.JonahSpendSince(f.ctx(t), f.factory, t1)
-	if err != nil || roundTo(usd, 4) != 1.75 {
-		t.Errorf("JonahSpendSince = %v, %v; want 1.75", usd, err)
+	s, err := f.Jonah.JonahSpendSince(f.ctx(t), f.factory, t1)
+	if err != nil || roundTo(s.JonahUSD, 4) != 1.75 || roundTo(s.LineUSD, 4) != 7 {
+		t.Errorf("JonahSpendSince = %+v, %v; want $1.75 of Jonah's and $7 of the line's", s, err)
 	}
 
-	if all := f.spendSince(t, f.factory, t1); roundTo(all, 4) != 8.75 {
-		t.Errorf("SpendSince = %v, want 8.75: every kind counts there", all)
-	}
-}
-
-// SentBackSince counts a person's rejected and gate_rejected touches of the factory from since:
-// not an agent's send-back, other touches, earlier ones or another factory's.
-func testJonahSentBack(f *fixture) {
-	t := f.t
-	a := f.create(t, domain.NewItem{})
-	b := f.create(t, domain.NewItem{})
-	elsewhere := f.create(t, domain.NewItem{FactoryID: f.newFactory(t)})
-
-	f.appendEvents(t,
-		by(a, ada, domain.EventRejected, t1.Add(-time.Second), map[string]any{keyReason: "early"}),
-		by(a, ada, domain.EventRejected, t1, map[string]any{keyReason: "wrong file"}),
-		by(b, bob, domain.EventGateRejected, t1.Add(time.Minute), nil),
-		by(b, bob, domain.EventNote, t1.Add(2*time.Minute), map[string]any{keyText: "x"}),
-		agentEvent(b, agWorker, domain.EventGateRejected, t1.Add(3*time.Minute)),
-		by(elsewhere, ada, domain.EventRejected, t1, nil),
-	)
-
-	n, err := f.Jonah.SentBackSince(f.ctx(t), f.factory, t1)
-	if err != nil || n != 2 {
-		t.Errorf("SentBackSince = %d, %v; want 2", n, err)
+	if all := f.spendSince(t, f.factory, t1); roundTo(all, 4) != 7 {
+		t.Errorf("SpendSince = %v, want 7: jonah runs never count toward onExhausted", all)
 	}
 }
 
@@ -705,5 +830,398 @@ func testJonahStationFlow(f *fixture) {
 
 	if got, err := f.Jonah.StationFlow(f.ctx(t), f.factory, stReview, since, until); err != nil || got != (domain.StationFlow{}) {
 		t.Errorf("StationFlow at an idle station = %+v, %v; want nothing measured", got, err)
+	}
+}
+
+// cancel closes it as cancelled where it is at at, with a person's cancelled event.
+func (f *fixture) cancel(t *testing.T, it domain.Item, at time.Time) {
+	t.Helper()
+
+	if _, err := f.Store.Transition(f.ctx(t), ports.Transition{
+		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: it.Station, State: domain.StateCancelled}, At: at,
+		Events: []domain.Event{by(it, ada, domain.EventCancelled, at, nil)},
+	}); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+}
+
+// EvidenceItems lists the factory's items done or cancelled in [since, until), the most recently
+// finished first, at most limit, each with its runs and its milestone events: not a per-turn
+// event, an item finished outside the window or still open, or another factory's or
+// organization's.
+func testJonahEvidenceItems(f *fixture) {
+	t := f.t
+	since, until := t1, t1.Add(time.Hour)
+
+	a := f.create(t, domain.NewItem{Title: "Fix the login", Body: "It times out."})
+	f.kindRun(t, a, domain.RunKindStation, t0.Add(time.Minute), 0.5)
+	f.appendEvents(t,
+		agentEvent(a, agWorker, domain.EventToolCall, since),
+		agentEvent(a, agWorker, domain.EventUsage, since),
+		by(a, ada, domain.EventNote, since.Add(time.Minute), map[string]any{keyText: "mind the tests"}),
+		agentEvent(a, agWorker, domain.EventGateRejected, since.Add(2*time.Minute)),
+	)
+	f.finish(t, a, since.Add(30*time.Minute), false)
+
+	b := f.create(t, domain.NewItem{Title: "Drop the export"})
+	f.cancel(t, b, since.Add(10*time.Minute))
+
+	f.finish(t, f.create(t, domain.NewItem{Title: "early"}), since.Add(-time.Second), false)
+	f.finish(t, f.create(t, domain.NewItem{Title: "late"}), until, false)
+	f.cancel(t, f.create(t, domain.NewItem{Title: "cancelled late"}), until)
+	f.create(t, domain.NewItem{Title: "open"})
+	f.finish(t, f.create(t, domain.NewItem{FactoryID: f.newFactory(t), Title: "another factory's"}), since, false)
+
+	got, err := f.Jonah.EvidenceItems(f.ctx(t), f.factory, since, until, 10)
+	if err != nil {
+		t.Fatalf("EvidenceItems: %v", err)
+	}
+
+	if len(got) != 2 || got[0].Item.ID != a.ID || got[1].Item.ID != b.ID {
+		t.Fatalf("EvidenceItems = %+v, want %s then %s", got, a.ID, b.ID)
+	}
+
+	expectEvidenceItems(t, got, a, since)
+
+	if got, err := f.Jonah.EvidenceItems(f.ctx(t), f.factory, since, until, 1); err != nil || len(got) != 1 || got[0].Item.ID != a.ID {
+		t.Errorf("EvidenceItems limit 1 = %+v, %v; want only the latest finished", got, err)
+	}
+
+	other := domain.WithOrg(t.Context(), f.NewOrg(t))
+	if got, err := f.Jonah.EvidenceItems(other, f.factory, since, until, 10); err != nil || len(got) != 0 {
+		t.Errorf("other org's EvidenceItems = %+v, %v; want none", got, err)
+	}
+
+	if _, err := f.Jonah.EvidenceItems(t.Context(), f.factory, since, until, 10); !errors.Is(err, domain.ErrNoOrg) {
+		t.Errorf("EvidenceItems without an org: %v, want ErrNoOrg", err)
+	}
+}
+
+// expectEvidenceItems checks got, testJonahEvidenceItems's items a and then the cancelled one:
+// when each finished, a's fields and run, and each one's milestone events.
+func expectEvidenceItems(t *testing.T, got []domain.EvidenceItem, a domain.Item, since time.Time) {
+	t.Helper()
+
+	if !got[0].FinishedAt.Equal(since.Add(30*time.Minute)) || !got[1].FinishedAt.Equal(since.Add(10*time.Minute)) {
+		t.Errorf("finished at %s and %s, want 30 and 10 minutes into the window", got[0].FinishedAt, got[1].FinishedAt)
+	}
+
+	if it := got[0].Item; it.Title != a.Title || it.Body != a.Body || it.Type != typeTask || it.State != domain.StateDone {
+		t.Errorf("item = %+v, want %s done with its title, body and type", it, a.ID)
+	}
+
+	if runs := got[0].Runs; len(runs) != 1 || roundTo(runs[0].Result.CostUSD, 4) != 0.5 || runs[0].Station != stWork {
+		t.Errorf("runs = %+v, want the one at %s that cost 0.5", runs, stWork)
+	}
+
+	expectMilestones(t, got[0].Events, []domain.EventKind{domain.EventNote, domain.EventGateRejected}, domain.PerTurnKinds)
+	expectMilestones(t, got[1].Events, []domain.EventKind{domain.EventCancelled}, nil)
+}
+
+// expectMilestones checks that events, in append order, hold every kind of want in that order
+// and none of unwanted.
+func expectMilestones(t *testing.T, events []domain.Event, want, unwanted []domain.EventKind) {
+	t.Helper()
+
+	var kinds []domain.EventKind
+
+	for _, e := range events {
+		if slices.Contains(unwanted, e.Kind) {
+			t.Errorf("events hold a %s event, want none", e.Kind)
+		}
+
+		if slices.Contains(want, e.Kind) {
+			kinds = append(kinds, e.Kind)
+		}
+	}
+
+	if !slices.Equal(kinds, want) {
+		t.Errorf("event kinds %v, want %v among %d events", kinds, want, len(events))
+	}
+}
+
+// stationRun records a run of kind on it at station, started at at, with turns and cost; finished
+// unless running.
+func (f *fixture) stationRun(t *testing.T, it domain.Item, station string, kind domain.RunKind, at time.Time, usd float64, turns int, running bool) {
+	t.Helper()
+
+	id, err := f.Store.StartRun(f.ctx(t), ports.NewRun{
+		FactoryID: it.FactoryID, ItemID: it.ID, Station: station, Agent: agWorker, Model: model, StartedAt: at, Kind: kind,
+	})
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	if running {
+		return
+	}
+
+	res := domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd, Turns: turns}
+	if err := f.Store.FinishRun(f.ctx(t), id, res, at.Add(time.Minute)); err != nil {
+		t.Fatalf("FinishRun: %v", err)
+	}
+}
+
+// StationRunMedians is the median cost and turns of the factory's finished station runs started in
+// [since, until), by station: not a running run, one started before the window, a jonah run or
+// another factory's.
+func testJonahEvidenceMedians(f *fixture) {
+	t := f.t
+	since, until := t1, t1.Add(time.Hour)
+	at := func(m int) time.Time { return since.Add(time.Duration(m) * time.Minute) }
+
+	it := f.create(t, domain.NewItem{})
+	elsewhere := f.create(t, domain.NewItem{FactoryID: f.newFactory(t)})
+
+	f.stationRun(t, it, stWork, domain.RunKindStation, at(1), 1, 10, false)
+	f.stationRun(t, it, stWork, "", at(2), 2, 20, false)
+	f.stationRun(t, it, stWork, domain.RunKindStation, at(3), 10, 30, false)
+	f.stationRun(t, it, stNext, domain.RunKindStation, at(4), 1, 4, false)
+	f.stationRun(t, it, stNext, domain.RunKindStation, at(5), 3, 6, false)
+	f.stationRun(t, it, stWork, domain.RunKindStation, at(6), 100, 100, true)
+	f.stationRun(t, it, stWork, domain.RunKindStation, since.Add(-time.Second), 50, 50, false)
+	f.stationRun(t, it, stWork, domain.RunKindJonah, at(7), 70, 70, false)
+	f.stationRun(t, it, stWork, domain.RunKindStation, until, 60, 60, false)
+	f.stationRun(t, elsewhere, stWork, domain.RunKindStation, at(8), 80, 80, false)
+
+	got, err := f.Jonah.StationRunMedians(f.ctx(t), f.factory, since, until)
+	if err != nil {
+		t.Fatalf("StationRunMedians: %v", err)
+	}
+
+	for i := range got {
+		got[i].CostUSD = roundTo(got[i].CostUSD, 4)
+	}
+
+	want := []domain.StationMedian{{Station: stNext, CostUSD: 2, Turns: 5, Runs: 2}, {Station: stWork, CostUSD: 2, Turns: 20, Runs: 3}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("StationRunMedians = %+v, want %+v", got, want)
+	}
+
+	other := domain.WithOrg(t.Context(), f.NewOrg(t))
+	if got, err := f.Jonah.StationRunMedians(other, f.factory, since, until); err != nil || len(got) != 0 {
+		t.Errorf("other org's StationRunMedians = %+v, %v; want none", got, err)
+	}
+
+	if _, err := f.Jonah.StationRunMedians(t.Context(), f.factory, since, until); !errors.Is(err, domain.ErrNoOrg) {
+		t.Errorf("StationRunMedians without an org: %v, want ErrNoOrg", err)
+	}
+}
+
+// An edit with an empty old, or with both replacements and whole content, is refused, and the
+// review stores nothing.
+func testJonahEditRefused(f *fixture) {
+	t := f.t
+
+	for name, edit := range map[string]domain.ProposalEdit{
+		"empty old":        {Path: "rules/a.md", Replacements: []domain.Replacement{{Old: "", New: "x"}}},
+		"replacements too": {Path: "rules/a.md", Replacements: []domain.Replacement{{Old: "a", New: "b"}}, Content: "whole"},
+		"bad base":         {Path: "rules/a.md", Content: "whole", BaseSHA256: "abc"},
+	} {
+		f.queueReview(t, f.factory, t0)
+		claimed := f.claimReview(t, t0)
+
+		_, _, err := f.Jonah.FinishJonahReview(f.ctx(t), claimed, domain.JonahReviewResult{
+			State: domain.JonahDone, At: t0.Add(time.Second),
+			Proposals: []domain.NewProposal{{Title: "bad", Edits: []domain.ProposalEdit{edit}}},
+		})
+		if !errors.Is(err, domain.ErrInvalid) {
+			t.Fatalf("%s: %v, want ErrInvalid", name, err)
+		}
+
+		if got := f.proposals(t, ports.ProposalQuery{Factory: f.factory, Limit: 10}); len(got) != 0 {
+			t.Errorf("%s: proposals %v, want none", name, got)
+		}
+
+		if _, _, err := f.Jonah.FinishJonahReview(f.ctx(t), claimed, domain.JonahReviewResult{State: domain.JonahFailed, Error: "bad edit", At: t0.Add(time.Second)}); err != nil {
+			t.Fatalf("fail the review: %v", err)
+		}
+	}
+}
+
+// A new proposal supersedes, by Jonah and in the same transaction, the open proposals its edits
+// overlap (NewProposal.Supersedes), and only those: another open one stays proposed, and one
+// decided since stays as it was decided. An undo proposal supersedes the same way.
+func testJonahSupersede(f *fixture) {
+	t := f.t
+	_, first := f.finishReview(t, f.factory, t0, domain.JonahReviewResult{Proposals: []domain.NewProposal{
+		proposal("a", "rules/a.md"), proposal("b", "rules/b.md"), proposal("c", "rules/c.md"),
+	}})
+
+	f.decide(t, 3, domain.ProposalDecision{State: domain.ProposalRejected, RejectReason: "no", By: ada, At: t1})
+
+	next := proposal("a again", "rules/a.md")
+	next.Supersedes = []domain.ProposalID{first[0].ID, first[2].ID}
+
+	_, second := f.finishReview(t, f.factory, t1, domain.JonahReviewResult{Proposals: []domain.NewProposal{next}})
+
+	want := map[int64]domain.ProposalState{1: domain.ProposalSuperseded, 2: domain.ProposalProposed, 3: domain.ProposalRejected, 4: domain.ProposalProposed}
+	for number, state := range want {
+		got, err := f.Jonah.Proposal(f.ctx(t), f.factory, number)
+		if err != nil || got.State != state {
+			t.Errorf("proposal %d: %s, %v; want %s", number, got.State, err, state)
+		}
+	}
+
+	if got, _ := f.Jonah.Proposal(f.ctx(t), f.factory, 1); got.DecidedBy != jonahRef || !got.DecidedAt.Equal(t1.Add(time.Minute)) {
+		t.Errorf("superseded proposal decided by %q at %s, want %s at %s", got.DecidedBy, got.DecidedAt, jonahRef, t1.Add(time.Minute))
+	}
+
+	f.decide(t, 4, domain.ProposalDecision{State: domain.ProposalPublished, By: ada, At: t1})
+
+	undo := proposal("Undo proposal 4", "rules/b.md")
+	undo.Supersedes = []domain.ProposalID{first[1].ID}
+
+	if _, err := f.Jonah.UndoProposal(f.ctx(t), f.factory, second[0].ID, f.NewVersion(t, f.org, f.factory), undo, t1); err != nil {
+		t.Fatalf("UndoProposal: %v", err)
+	}
+
+	if got, _ := f.Jonah.Proposal(f.ctx(t), f.factory, 2); got.State != domain.ProposalSuperseded || got.DecidedBy != jonahRef {
+		t.Errorf("proposal 2 after the undo: %s by %q, want superseded by %s", got.State, got.DecidedBy, jonahRef)
+	}
+}
+
+// An observation persists across reviews (ADR 0039 decision 5): a later review that names an
+// open one updates it, joining its items, adding its count and setting it proposed or not
+// Jonah's; one that names an observation no longer open, or none, is a new one. OpenObservations
+// lists the watching and proposed ones.
+func testJonahObservationsPersist(f *fixture) {
+	t := f.t
+	a, b := f.create(t, domain.NewItem{}), f.create(t, domain.NewItem{})
+
+	first, _ := f.finishReview(t, f.factory, t0, domain.JonahReviewResult{Observations: []domain.NewObservation{
+		{Summary: "No screenshot", ItemIDs: []domain.ItemID{a.ID}, Count: 2},
+		{Summary: "Sandbox lost", Count: 1},
+	}})
+
+	open := f.openObservations(t, 2)
+	screenshot, sandbox := open[0], open[1]
+
+	if screenshot.Summary != "No screenshot" {
+		screenshot, sandbox = sandbox, screenshot
+	}
+
+	_, ps := f.finishReview(t, f.factory, t1, domain.JonahReviewResult{
+		Proposals: []domain.NewProposal{proposal("Ask for a screenshot", "rules/a.md")},
+		Observations: []domain.NewObservation{
+			{ID: screenshot.ID, Summary: "No screenshot on UI changes", ItemIDs: []domain.ItemID{a.ID, b.ID}, Count: 3, Proposal: 1},
+			{ID: sandbox.ID, Summary: "Sandbox lost", Count: 1, NotJonahs: true},
+		},
+	})
+
+	f.expectPersisted(t, first.ID, screenshot.ID, sandbox.ID, ps[0].ID, []domain.ItemID{a.ID, b.ID})
+
+	if open := f.openObservations(t, 1); open[0].ID != screenshot.ID {
+		t.Errorf("open observations %+v, want only %s", open, screenshot.ID)
+	}
+
+	f.finishReview(t, f.factory, t1.Add(time.Hour), domain.JonahReviewResult{Observations: []domain.NewObservation{
+		{ID: sandbox.ID, Summary: "Sandbox lost again", Count: 1},
+	}})
+
+	if n, _ := f.Jonah.Observations(f.ctx(t), f.factory, 10); len(n) != 3 {
+		t.Errorf("observations after naming a closed one: %d, want a new third", len(n))
+	}
+}
+
+// openObservations is the factory's open observations, failing the test unless there are n.
+func (f *fixture) openObservations(t *testing.T, n int) []domain.Observation {
+	t.Helper()
+
+	open, err := f.Jonah.OpenObservations(f.ctx(t), f.factory, 10)
+	if err != nil || len(open) != n {
+		t.Fatalf("OpenObservations: %+v, %v; want %d", open, err, n)
+	}
+
+	return open
+}
+
+// expectPersisted checks testJonahObservationsPersist's two observations after the second
+// review: screenshot, made by review first, updated to count 5 on items and proposed as
+// proposal; sandbox not Jonah's with count 2.
+func (f *fixture) expectPersisted(t *testing.T, first domain.JonahReviewID, screenshot, sandbox domain.ObservationID,
+	proposal domain.ProposalID, items []domain.ItemID,
+) {
+	t.Helper()
+
+	obs, err := f.Jonah.Observations(f.ctx(t), f.factory, 10)
+	if err != nil || len(obs) != 2 {
+		t.Fatalf("Observations: %+v, %v; want the 2 of the first review", obs, err)
+	}
+
+	got := map[domain.ObservationID]domain.Observation{obs[0].ID: obs[0], obs[1].ID: obs[1]}
+
+	s := got[screenshot]
+	if s.Count != 5 || !reflect.DeepEqual(s.ItemIDs, items) || s.State != domain.ObservationProposed ||
+		s.ProposalID != proposal || s.Summary != "No screenshot on UI changes" || s.ReviewID != first ||
+		!s.CreatedAt.Equal(t0.Add(time.Minute)) || !s.UpdatedAt.Equal(t1.Add(time.Minute)) {
+		t.Errorf("updated observation %+v, want count 5, items a and b, proposed as %s, made by %s at %s, updated at %s",
+			s, proposal, first, t0.Add(time.Minute), t1.Add(time.Minute))
+	}
+
+	if n := got[sandbox]; n.State != domain.ObservationNotJonahs || n.Count != 2 {
+		t.Errorf("not Jonah's observation %+v, want not_jonahs, count 2", n)
+	}
+}
+
+// ProposeModel stores a person's model proposal with the factory's next number, the agent it
+// changes, no review and its evidence, queues its tries with it, three per item, and supersedes
+// what it names; a try given twice stores nothing.
+func testJonahModelProposal(f *fixture) {
+	t := f.t
+	_, made := f.finishReview(t, f.factory, t0, domain.JonahReviewResult{Proposals: []domain.NewProposal{proposal("a", "factory.yaml")}})
+	version := f.NewVersion(t, f.org, f.factory)
+	it := f.create(t, domain.NewItem{Title: "Fix the login"})
+	run := f.pastRun(t, it, stWork, t0, true, "")
+
+	n := proposal("Try model-b for worker", "factory.yaml")
+	n.Evidence = []domain.ProposalEvidence{{ItemID: it.ID, Station: stWork, Quote: "passed first time, $1.00"}}
+	n.Supersedes = []domain.ProposalID{made[0].ID}
+
+	tries := make([]domain.NewPastTry, domain.ModelTriesPerItem)
+	for i := range tries {
+		tries[i] = domain.NewPastTry{ItemID: it.ID, Attempt: i + 1, Station: stWork, OriginalRunID: run, Model: "model-b"}
+	}
+
+	p, queued, err := f.Jonah.ProposeModel(f.ctx(t), f.factory, version, agWorker, n, tries, t1)
+	if err != nil {
+		t.Fatalf("ProposeModel: %v", err)
+	}
+
+	f.expectModelProposal(t, p, version, n)
+
+	if len(queued) != domain.ModelTriesPerItem || queued[0].ProposalID != p.ID || queued[0].ProposalNumber != 2 || queued[2].Attempt != 3 {
+		t.Errorf("queued tries = %+v, want three of proposal 2, attempts 1 to 3", queued)
+	}
+
+	if stored, _ := f.Tries.ProposalPastTries(f.ctx(t), p.ID); len(stored) != domain.ModelTriesPerItem {
+		t.Errorf("ProposalPastTries = %d tries, want %d", len(stored), domain.ModelTriesPerItem)
+	}
+
+	if old, _ := f.Jonah.Proposal(f.ctx(t), f.factory, made[0].Number); old.State != domain.ProposalSuperseded {
+		t.Errorf("overlapping proposal is %s, want superseded", old.State)
+	}
+
+	_, _, err = f.Jonah.ProposeModel(f.ctx(t), f.factory, version, agWorker, proposal("twice", "factory.yaml"), []domain.NewPastTry{tries[0], tries[0]}, t1)
+	expect(t, "ProposeModel with a try twice", err, ports.ErrConflict)
+	f.expectNoProposal(t, 3)
+
+	_, _, err = f.Jonah.ProposeModel(f.ctx(t), f.factory, version, "", proposal("no agent", "factory.yaml"), tries, t1)
+	expect(t, "ProposeModel without an agent", err, domain.ErrInvalid)
+	f.expectNoProposal(t, 3)
+}
+
+// expectModelProposal fails t unless p, as stored and read back, is proposal 2 of agWorker on
+// version with n's evidence and no review.
+func (f *fixture) expectModelProposal(t *testing.T, p domain.Proposal, version domain.DefinitionVersionID, n domain.NewProposal) {
+	t.Helper()
+
+	if p.Number != 2 || p.Agent != agWorker || p.ReviewID != "" || p.Undoes != "" || p.VersionID != version || p.State != domain.ProposalProposed {
+		t.Errorf("ProposeModel = %+v, want proposal 2 of agent %s on %s without a review", p, agWorker, version)
+	}
+
+	got, err := f.Jonah.Proposal(f.ctx(t), f.factory, 2)
+	if err != nil || got.Agent != agWorker || !reflect.DeepEqual(got.Evidence, n.Evidence) || got.Paths()[0] != "factory.yaml" {
+		t.Errorf("read back %+v, %v; want agent %s with its evidence", got, err, agWorker)
 	}
 }

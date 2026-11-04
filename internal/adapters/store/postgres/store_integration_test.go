@@ -40,6 +40,8 @@ func TestStore_Conformance(t *testing.T) {
 			Flow:  s,
 			Spend: s,
 			Jonah: s,
+			Tries: s,
+			Kept:  s,
 			Audit: s,
 			LeaseSpans: func(t *testing.T, org domain.OrgID, id domain.ItemID) []domain.LeaseSpan {
 				t.Helper()
@@ -64,6 +66,22 @@ func TestStore_Conformance(t *testing.T) {
 				t.Helper()
 
 				return newPublishedVersion(t, s.pool, org, factory)
+			},
+			DeleteFactory: func(t *testing.T, org domain.OrgID, factory domain.FactoryID) {
+				t.Helper()
+
+				err := inOrgTx(t, s.pool, org, func(tx pgx.Tx) error {
+					if _, err := tx.Exec(t.Context(), "UPDATE factories SET archived_at = now(), archived_by = 'user:local' WHERE id = $1", string(factory)); err != nil {
+						return err
+					}
+
+					_, err := tx.Exec(t.Context(), "SELECT goal_delete_factory($1)", string(factory))
+
+					return err
+				})
+				if err != nil {
+					t.Fatalf("delete factory %s: %v", factory, err)
+				}
 			},
 		}
 	})

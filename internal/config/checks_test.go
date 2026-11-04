@@ -117,8 +117,8 @@ var locatedCases = []struct {
 		code: "yaml-invalid", section: domain.SectionFiles, anyLine: true,
 	},
 	{
-		name: "another YAML file does not parse", doc: baseFactory, extra: map[string]string{"evals/evals.yaml": "a: [b\n"},
-		code: "yaml-invalid", section: domain.SectionFiles, file: "evals/evals.yaml", anyLine: true,
+		name: "another YAML file does not parse", doc: baseFactory, extra: map[string]string{"contracts/build.yaml": "a: [b\n"},
+		code: "yaml-invalid", section: domain.SectionFiles, file: "contracts/build.yaml", anyLine: true,
 	},
 	{
 		name: "a JSON file does not parse", doc: baseFactory, extra: map[string]string{answerContract: "{"},
@@ -234,12 +234,8 @@ var locatedCases = []struct {
 		code: "unknown-contract", section: domain.SectionLine, pointer: "/line/stations/1/output",
 	},
 	{
-		name: "unknown collection", doc: baseFactory + "  learning:\n    librarian: { agent: worker, writes: [ghosts] } #here\n",
-		code: "unknown-collection", section: domain.SectionFiles,
-	},
-	{
-		name: "unknown librarian", doc: baseFactory + "  learning:\n    librarian: { agent: ghost } #here\n",
-		code: codeUnknownAgent, section: domain.SectionLine, pointer: "/line/librarian",
+		name: "ignored field", doc: baseFactory + "  learning:\n    librarian: { agent: ghost } #here\n",
+		code: codeFieldIgnored, severity: domain.SeverityWarning, section: domain.SectionFiles,
 	},
 	{
 		name: "prompt not found", doc: edited(agentPrompt, "      prompt: ./agents/missing.md #here\n"),
@@ -373,6 +369,131 @@ func TestCheck_FixesPatchTheirSection(t *testing.T) {
 	if !reflect.DeepEqual(p.Fixes, want) {
 		t.Errorf("fixes =\n%+v\nwant\n%+v", p.Fixes, want)
 	}
+}
+
+// The keys ADR 0039 retired load with a warning at their line and nothing else: they are not
+// removed forms, so the line's Removed stays empty and its runs start (decision 17).
+func TestCheck_IgnoredFieldsWarnAndDoNotRefuse(t *testing.T) {
+	t.Parallel()
+
+	doc := baseFactory + "  learning:\n" +
+		"    librarian: { agent: ghost, writes: [ghosts] }\n" +
+		"    kaizen: { schedule: weekly }\n" +
+		"    jonah: { weeklyUsd: 25 }\n"
+
+	f, err := Load(checkTree(doc, nil))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	_, problems := Check(checkTree(doc, nil))
+	got := ignoredLines(t, problems)
+
+	var want []int
+
+	for i, l := range strings.Split(doc, "\n") {
+		if strings.HasPrefix(l, "    librarian:") || strings.HasPrefix(l, "    kaizen:") || strings.HasPrefix(l, "    jonah:") {
+			want = append(want, i+1)
+		}
+	}
+
+	if slices.Sort(got); !slices.Equal(got, want) {
+		t.Errorf("field-ignored lines = %v, want %v (%+v)", got, want, problems)
+	}
+
+	l := f.Line()
+	if len(l.Removed) != 0 || l.Refusal() != "" {
+		t.Errorf("removed = %v, refusal %q; want neither", l.Removed, l.Refusal())
+	}
+
+	if l.Jonah.Share != domain.DefaultJonahPolicy().Share {
+		t.Errorf("share = %v; weeklyUsd must not change it", l.Jonah.Share)
+	}
+}
+
+// A definition that still has an evals/ folder, even one whose files no longer parse, loads with
+// one evals-ignored warning at evals/ and nothing that blocks or refuses it (ADR 0039 decision
+// 21): Jonah's kept tests replace eval cases and judges.
+func TestCheck_EvalsFolderIgnored(t *testing.T) {
+	t.Parallel()
+
+	tree := checkTree(baseFactory, map[string]string{
+		"evals/judges/followed.md": "---\noutcomes: [{ label: followed, score: 1 }]\n---\nDid it follow the plan?\n",
+		"evals/cases/fix.yaml":     "agent: worker\ninput: [not, a, case\n",
+	})
+
+	f, err := Load(tree)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	_, problems := Check(tree)
+
+	var got []domain.DefinitionProblem
+
+	for _, p := range problems {
+		if p.Blocking() {
+			t.Errorf("problem %+v; want warnings only", p)
+		}
+
+		if p.Code == codeEvalsIgnored {
+			got = append(got, p)
+		}
+	}
+
+	if len(got) != 1 {
+		t.Fatalf("evals-ignored = %+v, want one (all: %+v)", got, problems)
+	}
+
+	want := "evals/ is ignored: Jonah's kept tests replace eval cases and judges; remove it"
+	if p := got[0]; p.Severity != domain.SeverityWarning || p.File != EvalsDir+"/" || p.Message != want {
+		t.Errorf("problem = %+v; want a warning at %s/ saying %q", p, EvalsDir, want)
+	}
+
+	if l := f.Line(); len(l.Removed) != 0 || l.Refusal() != "" {
+		t.Errorf("removed = %v, refusal %q; want neither", l.Removed, l.Refusal())
+	}
+
+	if _, problems := Check(checkTree(baseFactory, nil)); slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool {
+		return p.Code == codeEvalsIgnored
+	}) {
+		t.Errorf("a definition with no evals/ warns evals-ignored: %+v", problems)
+	}
+}
+
+// replaced applies old → new replacements to s, each once.
+func replaced(s string, pairs ...string) string {
+	for i := 0; i+1 < len(pairs); i += 2 {
+		s = strings.Replace(s, pairs[i], pairs[i+1], 1)
+	}
+
+	return s
+}
+
+// ignoredLines are the factory.yaml lines of problems' field-ignored warnings; any problem that
+// blocks, or any other code that a retired key used to raise, fails t.
+func ignoredLines(t *testing.T, problems []domain.DefinitionProblem) []int {
+	t.Helper()
+
+	var lines []int
+
+	for _, p := range problems {
+		if p.Blocking() || p.Code == codeUnknownAgent || p.Code == codeFieldRemoved {
+			t.Errorf("problem %+v; want warnings only", p)
+		}
+
+		if p.Code != codeFieldIgnored {
+			continue
+		}
+
+		if p.Severity != domain.SeverityWarning || p.File != FileName {
+			t.Errorf("problem %+v; want a warning in %s", p, FileName)
+		}
+
+		lines = append(lines, p.Line)
+	}
+
+	return lines
 }
 
 // Each removed form's fix takes it out of the definition, or puts an organization connection of

@@ -14,7 +14,6 @@ const (
 	keyBoard       = "board"
 	keyRuntime     = "runtime"
 	keyLearning    = "learning"
-	keyLibrarian   = "librarian"
 	keyName        = "name"
 	keyPurpose     = "purpose"
 	keyDescription = "description"
@@ -232,11 +231,9 @@ var containerOrder = map[string][]string{
 	"spec": {
 		keyRuntime, "knowledgeBase", "secrets", keyConnections, keyKnowledge, keySkills, keyRules, "contracts", keyAgents, keyBoard, keyLearning,
 	},
-	"spec.runtime":            {"runner", keyImage, "auth", "model", "modelConnection", "size", keyTools, "repository", "budget"},
-	"spec.knowledge":          {"sources"},
-	"spec.board":              {"workTypes", "intake", keyStations, keyFlow},
-	"spec.learning":           {keyLibrarian, "kaizen"},
-	"spec.learning.librarian": {"agent", "after", "writes"},
+	"spec.runtime":   {"runner", keyImage, "auth", "model", "modelConnection", "size", keyTools, "repository", "budget"},
+	"spec.knowledge": {"sources"},
+	"spec.board":     {"workTypes", "intake", keyStations, keyFlow},
 }
 
 // snake turns a camelCase YAML key into the model's snake_case: maxRework → max_rework.

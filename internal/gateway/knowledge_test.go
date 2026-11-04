@@ -217,6 +217,43 @@ func TestBundle_KnowledgeSectionFromAppliesToAndReadWhen(t *testing.T) {
 	}
 }
 
+// A Jonah review's bundle has the knowledge that applies to every run: the factory-wide source it
+// pinned, to download into /knowledge, and the factory memory, never a source scoped to a station or
+// an agent (ADR 0039 decision 4).
+func TestServeRun_JonahBundleHoldsKnowledge(t *testing.T) {
+	t.Parallel()
+
+	h := newKnowledgeHarness(t, knowledgeYAML)
+	h.queue(t, "build") // the factory exists once an item does
+
+	c := h.jonahClaims()
+	c.Knowledge = []domain.KnowledgePin{{Source: srcHandbook, Snapshot: snapHandbook}}
+
+	b := h.fetchBundle(t, h.runServer(t), c)
+	if b.Spec.Knowledge == nil {
+		t.Fatal("the jonah bundle has no knowledge")
+	}
+
+	if want := []knowledgeSnapshot{{Source: srcHandbook, URL: "/run/knowledge/handbook"}}; !slices.Equal(b.Spec.Knowledge.Snapshots, want) {
+		t.Errorf("snapshots = %+v, want %+v", b.Spec.Knowledge.Snapshots, want)
+	}
+
+	section := b.Spec.Knowledge.Section
+	for _, want := range []string{"- `/knowledge/handbook/`: How we work.", "staging-db disk alerts below 85% are noise"} {
+		if !strings.Contains(section, want) {
+			t.Errorf("section lacks %q:\n%s", want, section)
+		}
+	}
+
+	if strings.Contains(section, "runbooks") || strings.Contains(section, "design") {
+		t.Errorf("section names a scoped source:\n%s", section)
+	}
+
+	if string(b.Files["definition/memory.yaml"]) != knowledgeMemory {
+		t.Errorf("definition/memory.yaml = %q, want the factory memory", b.Files["definition/memory.yaml"])
+	}
+}
+
 // A cloud box (Config.KnowledgeURLTTL set) downloads each pinned snapshot from the store's
 // presigned URL, a local one from the gateway's /run/knowledge/<source>; a URL the store cannot
 // sign falls back to the gateway, logged without any signed URL (ADR 0038 decision 7).

@@ -14,7 +14,7 @@ A factory is keyed by its `metadata.id`, a UUID. Its `metadata.name` is a slug s
 The definition is the set of files that describe a factory. Goal keeps each file as a content-addressed blob, and each saved state of the definition is a version.
 
 - `factory.yaml` is the factory's manifest. Its top-level keys are `apiVersion` (always `goal/v1`), `kind` (always `Factory`), `metadata` and `spec`. The `spec` holds `runtime`, `agents` and `board`.
-- `agents/`, `rules/`, `skills/` and `evals/` hold the files that `spec` refers to by name.
+- `agents/`, `rules/` and `skills/` hold the files that `spec` refers to by name.
 
 A version is either a draft or published. Drafts can be edited and are never run. The engine runs the line of the latest published version. A run that started on an older version finishes on it, and the next step of its item follows the new line.
 

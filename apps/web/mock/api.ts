@@ -62,11 +62,9 @@ import { parse } from 'yaml';
 import type { IntakeEvent, TriggerTry, TriggerTryStep } from '../src/api/types.ts';
 import { createAccess } from './access.ts';
 import { authSettings, createMockAuth } from './auth.ts';
-import { createBakeOffs } from './bake-offs.ts';
 import { createConnections } from './connections.ts';
 import { createDefinitions } from './definitions.ts';
 import { createEnvironments, serveCatalog } from './environments.ts';
-import { createEvals } from './evals.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
 import {
   acmeOrg,
@@ -82,7 +80,6 @@ import {
 import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
 import { intakeOf } from './intake.ts';
 import { createJonah } from './jonah.ts';
-import { createJudges } from './judges.ts';
 import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
 import { createOrgNotifications } from './org-notifications.ts';
@@ -353,17 +350,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     acme: acmeOrg,
   });
 
-  const evals = createEvals({
-    clock,
-    factory: (org, key) => findFactory(key, org),
-  });
-  const bakeOffs = createBakeOffs({
-    clock,
-    factory: (org, key) => findFactory(key, org),
-  });
-  const judges = createJudges({
-    factory: (org, key) => findFactory(key, org),
-  });
   const jonah = createJonah({
     factory: (org, key) => findFactory(key, org),
     clock,
@@ -1679,9 +1665,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       orgNotifications.reset();
       standingRules.reset();
       knowledge.reset(clock());
-      evals.reset();
-      bakeOffs.reset();
-      judges.reset();
       jonah.reset();
       views.reset();
       webhooks.reset();
@@ -1801,11 +1784,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (standingRules.handle(org, rest, method, url, req, res)) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);
-    // Bake-offs sit under /evals, and the evals handler answers every sub-path it does not know,
-    // so bake-offs must be tried first.
-    if (await bakeOffs.handle(org, rest, method, res, () => readBody(req))) return;
-    if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
-    if (await judges.handle(org, rest, method, res, () => readBody(req))) return;
     if (await jonah.handle(org, rest, method, url, res, () => readBody(req))) return;
     if (await views.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;

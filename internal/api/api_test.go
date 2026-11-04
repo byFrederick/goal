@@ -21,6 +21,7 @@ import (
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/catalog"
+	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/engine"
@@ -206,17 +207,8 @@ type harness struct {
 	ingestor *knowledge.Ingestor
 	kbDocs   *docsReader
 	uploads  *knowledge.Uploads
-	// evals are the factories' eval runs, evalJudges the versions' judges as tests set them, and
-	// evalLoop the jonah eval loop that starts, prices and cancels runs over them.
-	evals      *porttest.Evals
-	evalJudges *porttest.Judges
-	evalLoop   *jonah.Evals
-	// versions is the definitions cache, which reads the line of a version a bake-off runs.
+	// versions is the definitions cache, which the tests refresh after a change.
 	versions *definitions.Cache
-	// judges are the versions' judges as tests set them, judgeScores their scores; tries are
-	// queued by a jonah loop over them and the store's finished runs.
-	judges      *porttest.Judges
-	judgeScores *porttest.JudgeScores
 	// drafts are the factories' draft requests; nothing runs them, so tests finish them.
 	drafts *porttest.DraftRequests
 	// catalog are goald's tool templates; envTests keep the environments' MCP server tests, which
@@ -226,6 +218,27 @@ type harness struct {
 	// conversions are the factories' conversions to secrets, which the inbox lists when refused.
 	conversions *porttest.FactoryConversions
 	tools       *porttest.ToolLister
+	// modelLine, when set, changes the line a model proposal reads (jonah_test.go).
+	modelLine func(*domain.Line)
+}
+
+// models is Try another model over the harness's store and the definitions cache defs, as goald
+// wires it.
+func (h *harness) keptDrafts(authors *authoring.Service, defs *definitions.Cache) *jonah.KeptDrafts {
+	return jonah.NewKeptDrafts(jonah.KeptDraftDeps{
+		Drafts: api.NewJonahAuthoring(authors), Definitions: tryLines{defs}, Kept: h.store, Tries: h.store, Spend: h.store, Clock: h.clock,
+	})
+}
+
+func (h *harness) models(defs *definitions.Cache, policies ports.OrgPolicies, audit ports.Audit) *jonah.ModelProposals {
+	return jonah.NewModelProposals(jonah.ModelDeps{
+		Store: h.store, Definitions: modelLines{Cache: defs, h: h}, Check: config.ProposalCheck{}, Policies: policies, Audit: audit, Clock: h.clock,
+	})
+}
+
+// tryAgain is Try again over the harness's store and the definitions cache defs.
+func (h *harness) tryAgain(defs *definitions.Cache, audit ports.Audit) *jonah.TryAgain {
+	return jonah.NewTryAgain(jonah.TryAgainDeps{Store: h.store, Definitions: modelLines{Cache: defs, h: h}, Audit: audit, Clock: h.clock})
 }
 
 // acme's one prompt and its path.
@@ -547,12 +560,11 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		deps.Auth = api.AuthConfig{Mode: api.AuthSession, EmailCodes: !in.noEmailCodes, Google: in.google}
 	}
 
-	deps.Judges = h.judgeDeps(tenancy)
-	deps.Jonah = &api.JonahDeps{Store: h.store, Decisions: jonah.NewDecider(jonah.DecideDeps{
+	deps.Jonah = &api.JonahDeps{Store: h.store, Watches: h.store, Tests: h.store, Tries: h.store, Decisions: jonah.NewDecider(jonah.DecideDeps{
 		Proposals: h.store, Authoring: api.NewJonahAuthoring(authors), Audit: tenancy, Clock: h.clock,
-	})}
+	}), Models: h.models(defs, deps.OrgPolicies, tenancy), KeptDrafts: h.keptDrafts(authors, defs), TryAgain: h.tryAgain(defs, tenancy)}
 
-	handler, err := api.New(h.withEvals(deps, tenancy, opts))
+	handler, err := api.New(h.with(deps, opts))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -606,18 +618,13 @@ func (h *harness) startFeed(t *testing.T, in *signIn) (*api.Feed, func()) {
 	}
 }
 
-// judgeDeps are h's judges and their scores, with a jonah loop over them and the store's finished
-// runs for tries.
-func (h *harness) judgeDeps(tenancy *porttest.Tenancy) *api.JudgeDeps {
-	h.judges, h.judgeScores = porttest.NewJudges(), porttest.NewJudgeScores(h.store)
-
-	return &api.JudgeDeps{
-		Judges: h.judges, Scores: h.judgeScores,
-		Tries: jonah.New(jonah.Deps{
-			Orgs: tenancy, Runs: h.store, Finished: porttest.NewFinishedRuns(h.store), Judges: h.judges, Scores: h.judgeScores,
-			Runner: porttest.NewJudgeRunner(nil), Clock: h.clock,
-		}, jonah.Config{}),
+// with is d changed by each of opts.
+func (h *harness) with(d api.Deps, opts []func(*harness, *api.Deps)) api.Deps {
+	for _, opt := range opts {
+		opt(h, &d)
 	}
+
+	return d
 }
 
 // sharedRules are the engine's connections with the standing rules kept in the API's (h.conns),

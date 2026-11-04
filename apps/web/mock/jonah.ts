@@ -1,8 +1,9 @@
 // Jonah in the mock API (contracts/api/openapi.yaml, tag jonah): a factory's overview (its policy, the proposals
 // waiting, the month's cost and the week's observations), its proposals by state, and a manual review. A seeded
 // factory (the Software factory, by name) starts with the picture's two waiting proposals, an applied one, four
-// observations and $6.40 this month. A review answers 409 review-loop-not-running while no review loop runs
-// (software#344 ships it): nothing is queued.
+// observations and $6.40 this month. A manual review answers 202 with a queued review, and 409 review-in-flight
+// for the next one while it is queued. The Tests tab's kept tests are listed and removed; Undo answers 409
+// proposal-not-published, as no seeded proposal is published.
 // A proposal's page reads its files and evidence, and its approve, edit and reject record the decision. Proposal 8
 // is the flagged case: approving it answers 409 draft-open, as a factory with an open draft does.
 import type { ServerResponse } from 'node:http';
@@ -10,10 +11,14 @@ import type {
   JonahObservation,
   JonahOverview,
   JonahPolicy,
+  JonahReview,
+  KeptTest,
   Proposal,
   ProposalEntry,
   ProposalFile,
   ProposalState,
+  ProposalTried,
+  TriedTry,
 } from '../src/api/types.ts';
 
 export interface JonahDeps {
@@ -39,6 +44,12 @@ export interface MockJonah {
 interface FactoryJonah {
   /** The decisions made on proposals, by number: what a person approved, edited or rejected. */
   decisions: Map<number, Decision>;
+  /** The kept tests a person removed, by id. */
+  removed: Set<string>;
+  /** How many times Try again was confirmed on a proposal, by number. */
+  tried: Map<number, number>;
+  /** The queued review, once a person asked for one. */
+  review: JonahReview | undefined;
 }
 
 /** A decision on a proposal: its new state and what the decision left behind. */
@@ -58,18 +69,50 @@ const problem = (res: ServerResponse, status: number, title: string, code: strin
   json(res, status, { title, status, code, ...(detail ? { detail } : {}) });
 
 /** The policy the Software factory's learning.jonah sets, with the defaults the rest of the factories read. */
+/** The Software factory's four kept tests (tests.jpg), kept by the local user over the last weeks. */
+function softwareKeptTests(now: number): KeptTest[] {
+  const result = (r: 'passed' | 'failed' | 'error', daysAgo: number, run: string): KeptTest['last_result'] => ({
+    result: r,
+    at: new Date(now - daysAgo * 86_400_000).toISOString(),
+    run_id: run,
+  });
+  const kept = (
+    id: string,
+    number: number,
+    title: string,
+    station: string,
+    daysAgo: number,
+    last: KeptTest['last_result'] = null,
+  ): KeptTest => ({
+    id,
+    item: { id: `item-${number}`, number, title },
+    station,
+    kept_by: 'user:local',
+    kept_at: new Date(now - daysAgo * 86_400_000).toISOString(),
+    last_result: last,
+  });
+  return [
+    kept('kept-1', 451, 'A sidebar request gets the frontend lane', 'spec', 7, result('passed', 2, 'run-451')),
+    kept('kept-2', 418, 'Needs you header in the top bar', 'build', 4, result('failed', 1, 'run-418')),
+    kept('kept-3', 493, 'Phone fixes on three screens', 'build', 3, result('error', 1, 'run-493')),
+    kept('kept-4', 497, 'Board column header meta', 'review', 4),
+  ];
+}
+
 const softwarePolicy: JonahPolicy = {
   enabled: true,
   propose_after: 5,
-  weekly_usd: 20,
+  share: 0.05,
+  budget_usd: 20,
   model: 'claude-opus-5-5',
   approver_roles: ['owner', 'admin'],
 };
 
 const defaultPolicy: JonahPolicy = {
   enabled: true,
-  propose_after: 5,
-  weekly_usd: 10,
+  propose_after: 3,
+  share: 0.05,
+  budget_usd: 10,
   approver_roles: ['owner', 'admin'],
 };
 
@@ -85,6 +128,7 @@ const softwareObservations = (now: number): JonahObservation[] => [
     propose_after: 5,
     proposal: 7,
     created_at: new Date(now - 2 * 3_600_000).toISOString(),
+    updated_at: new Date(now - 2 * 3_600_000).toISOString(),
   },
   {
     id: 'obs-full-suite',
@@ -95,6 +139,7 @@ const softwareObservations = (now: number): JonahObservation[] => [
     count: 3,
     propose_after: 5,
     created_at: new Date(now - 26 * 3_600_000).toISOString(),
+    updated_at: new Date(now - 26 * 3_600_000).toISOString(),
   },
   {
     id: 'obs-rollback',
@@ -105,6 +150,7 @@ const softwareObservations = (now: number): JonahObservation[] => [
     count: 2,
     propose_after: 5,
     created_at: new Date(now - 30 * 3_600_000).toISOString(),
+    updated_at: new Date(now - 30 * 3_600_000).toISOString(),
   },
   {
     id: 'obs-plain-language',
@@ -115,6 +161,7 @@ const softwareObservations = (now: number): JonahObservation[] => [
     count: 1,
     propose_after: 5,
     created_at: new Date(now - 50 * 3_600_000).toISOString(),
+    updated_at: new Date(now - 50 * 3_600_000).toISOString(),
   },
 ];
 
@@ -160,6 +207,8 @@ const proposalSeven = (now: number): Proposal => ({
   summary: 'Four UI changes came back for want of a screenshot. The frontend engineer attaches one per changed screen.',
   made_against_version: 21,
   publishes_as_version: 22,
+  // The proposal page reads files; its edits come with the Jonah pages (software#600).
+  edits: [],
   files: [
     {
       path: 'agents/frontend-engineer.md',
@@ -225,12 +274,37 @@ const proposalSeven = (now: number): Proposal => ({
   ],
 });
 
+/** One try, done and graded fixed. */
+const doneTry = (attempt: number): TriedTry => ({ attempt, state: 'done', verdict: 'fixed', cost_usd: 1.4 });
+
+/** What proposal 7 was tried on: two past items, each with its first try and one more per confirmed Try again. */
+const triedSeven = (rounds: number): ProposalTried => ({
+  state: 'done',
+  items: [
+    ['software#511', 'Board Done cards overflow'],
+    ['software#497', 'Board column header meta'],
+  ].map(([ref, title]) => ({
+    item_ref: ref as string,
+    item_title: title as string,
+    station: 'frontend',
+    tries: Array.from({ length: rounds + 1 }, (_, i) => doneTry(i + 1)),
+  })),
+  cost_usd: 2.8 * (rounds + 1),
+  seconds: 2460,
+  kept_tests: [],
+});
+
+/** Try again is refused with learning-budget-exhausted from the third round on. */
+const maxRounds = 2;
+
 /** Proposal 8, the flagged case: one file, two runs as evidence. Approving it answers 409 draft-open. */
 const proposalEight = (now: number): Proposal => ({
   ...(softwareProposals(now).find((p) => p.number === 8) as ProposalEntry),
   summary: 'Large requests take the longest to review. Splitting them into an assembly shortens that.',
   made_against_version: 21,
   publishes_as_version: 22,
+  // The proposal page reads files; its edits come with the Jonah pages (software#600).
+  edits: [],
   files: [
     {
       path: 'agents/architect.md',
@@ -257,6 +331,33 @@ const softwareDetail = (now: number, number: number): Proposal | undefined => {
   return undefined;
 };
 
+/** Proposal 7 with the tries Try again added, so far. */
+const withTries = (p: Proposal, rounds: number): Proposal => (p.number === 7 ? { ...p, tried: triedSeven(rounds) } : p);
+
+/** What the next Try again costs: one more try on each of proposal 7's two items. */
+const tryEstimate = (rounds: number) => ({
+  number: 7,
+  items: [
+    {
+      item_ref: 'software#511',
+      item_title: 'Board Done cards overflow',
+      station: 'frontend',
+      tries: 1,
+      run_cost_usd: 1.4,
+    },
+    {
+      item_ref: 'software#497',
+      item_title: 'Board column header meta',
+      station: 'frontend',
+      tries: 1,
+      run_cost_usd: 1.4,
+    },
+  ],
+  tries: 2,
+  estimate_usd: 2.8,
+  budget_left_usd: 20 - 2.8 * (rounds + 1),
+});
+
 export function createJonah({ factory, clock }: JonahDeps): MockJonah {
   let byFactory = new Map<string, FactoryJonah>();
 
@@ -267,7 +368,7 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
   const jonahOf = (id: string): FactoryJonah => {
     let j = byFactory.get(id);
     if (!j) {
-      j = { decisions: new Map() };
+      j = { decisions: new Map(), removed: new Set(), tried: new Map(), review: undefined };
       byFactory.set(id, j);
     }
     return j;
@@ -292,7 +393,7 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
     reset,
     async handle(org, rest, method, url, res, readBody) {
       const m = rest.match(
-        /^\/factories\/([^/]+)\/jonah(?:\/(proposals|reviews)(?:\/(\d+)(?:\/(approve|edit|reject))?)?)?$/,
+        /^\/factories\/([^/]+)\/jonah(?:\/(proposals|reviews|tests)(?:\/([^/]+)(?:\/(approve|edit|reject|undo|try))?)?)?$/,
       );
       if (!m) return false;
       const f = factory(org.id, decodeURIComponent(m[1] ?? ''));
@@ -303,8 +404,27 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
       const j = jonahOf(f.id);
       const now = clock();
       const route = m[2];
-      const number = m[3] === undefined ? undefined : Number(m[3]);
+      const number = m[3] !== undefined && /^\d+$/.test(m[3]) ? Number(m[3]) : undefined;
       const action = m[4];
+
+      if (route === 'tests') {
+        const tests = seeded(f.name) ? softwareKeptTests(now).filter((t) => !j.removed.has(t.id)) : [];
+        if (m[3] === undefined && method === 'GET') {
+          json(res, 200, { tests });
+          return true;
+        }
+        if (m[3] !== undefined && method === 'DELETE') {
+          if (!tests.some((t) => t.id === m[3])) {
+            problem(res, 404, 'Kept test not found', 'kept-test-not-found', m[3]);
+            return true;
+          }
+          j.removed.add(m[3]);
+          res.statusCode = 204;
+          res.end();
+          return true;
+        }
+        return false;
+      }
 
       if (route === 'proposals' && number !== undefined) {
         const detail = seeded(f.name) ? softwareDetail(now, number) : undefined;
@@ -314,10 +434,33 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
         }
         const decided = j.decisions.get(number);
         if (action === undefined && method === 'GET') {
-          json(res, 200, withDecision(j, detail));
+          json(res, 200, withTries(withDecision(j, detail), j.tried.get(number) ?? 0));
           return true;
         }
         if (method !== 'POST' || action === undefined) return false;
+        if (action === 'undo') {
+          problem(res, 409, 'Proposal not published', 'proposal-not-published', m[3]);
+          return true;
+        }
+        if (action === 'try') {
+          const rounds = j.tried.get(number) ?? 0;
+          const confirm = (await readBody()).confirm === true;
+          if (decided) {
+            problem(res, 409, 'Proposal already decided', 'proposal-decided', m[3]);
+          } else if (number !== 7) {
+            problem(res, 409, 'Proposal not tried', 'proposal-not-tried', m[3]);
+          } else if (rounds >= maxRounds) {
+            problem(res, 409, 'Jonah’s budget is used up', 'learning-budget-exhausted', m[3]);
+          } else {
+            const estimate = tryEstimate(rounds);
+            if (confirm) j.tried.set(number, rounds + 1);
+            json(res, confirm ? 201 : 200, {
+              estimate,
+              ...(confirm ? { proposal: withTries(withDecision(j, detail), rounds + 1) } : {}),
+            });
+          }
+          return true;
+        }
         if (decided) {
           problem(res, 409, 'Proposal already decided', 'proposal-decided', m[3]);
           return true;
@@ -372,13 +515,12 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
       }
 
       if (route === 'reviews' && method === 'POST') {
-        problem(
-          res,
-          409,
-          'Review loop not running',
-          'review-loop-not-running',
-          "Reviews start when Jonah's review loop ships",
-        );
+        if (j.review) {
+          problem(res, 409, 'A review is in flight', 'review-in-flight', 'A review is pending or running.');
+          return true;
+        }
+        j.review = { id: 'review-1', state: 'pending', trigger: 'manual', created_at: new Date(now).toISOString() };
+        json(res, 202, j.review);
         return true;
       }
 

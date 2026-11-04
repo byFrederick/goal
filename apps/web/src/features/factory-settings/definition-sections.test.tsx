@@ -37,6 +37,7 @@ interface Saved {
 const api = vi.hoisted(() => ({
   model: {} as Saved,
   saves: [] as { section: string; value: Saved }[],
+  files: [] as { path: string; text: string }[],
 }));
 
 vi.mock(import('../../api/definitions'), async (original) => ({
@@ -64,6 +65,18 @@ vi.mock(import('../../api/definitions'), async (original) => ({
       };
     },
   ),
+  putDraftFile: vi.fn(async (_org: string, _factory: string, path: string, text: string) => {
+    api.files.push({ path, text });
+    return {
+      etag: 'next',
+      revision: 2,
+      updated_at: '2026-10-28T10:00:00Z',
+      sha256: 'f2',
+      sections: [],
+      change_count: 1,
+      problem_count: 0,
+    };
+  }),
   getVersionModel: vi.fn(async () => ({ model: api.model, revision: 1 }) as never),
   publishDraft: vi.fn(async () => ({ id: 'version-2', number: 2 }) as never),
 }));
@@ -77,6 +90,7 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   api.saves = [];
+  api.files = [];
   setDraft();
 });
 
@@ -152,7 +166,7 @@ async function renderSettings({ canEdit = true }: { canEdit?: boolean } = {}) {
       {
         path: 'factory.yaml',
         sha256: 'f1',
-        text: 'spec:\n  runtime:\n    modelKey: "{{claude}}"\n  agents:\n    - name: sre\n    - name: deploy-bot\n      environment: deploy\n',
+        text: 'spec:\n  runtime:\n    modelKey: "{{claude}}"\n  agents:\n    - name: sre\n    - name: deploy-bot\n      environment: deploy\nlearning:\n  # Jonah\n  jonah:\n    share: 8%\n',
       },
     ],
     [repositoryTestQuery(org.id, 'https://github.com/acme/sre', 'github-token').queryKey, passing],
@@ -414,5 +428,35 @@ describe('Read-only callers', () => {
     expect(screen.getByText('github.com/acme/sre')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
     expect(screen.getByLabelText('Each week').closest('fieldset')?.disabled).toBe(true);
+  });
+});
+
+describe('Jonah', () => {
+  it('shows learning.jonah and writes a change to factory.yaml, keeping its comments', async () => {
+    await renderSettings();
+    const share = (await screen.findByLabelText(/^Budget, %/)) as HTMLInputElement;
+    await waitFor(() => expect(share.value).toBe('8'));
+    expect(screen.getByRole('switch', { name: 'Jonah reviews this line' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByRole('switch', { name: 'Jonah reviews this line' }));
+    await waitFor(() => expect(api.files.at(-1)?.text).toMatch(/enabled: false/), { timeout: 3000 });
+    expect(api.files.at(-1)?.text).toMatch(/# Jonah/);
+    const after = screen.getByLabelText(/^Proposes after, items/);
+    fireEvent.change(after, { target: { value: '5' } });
+    fireEvent.blur(after);
+    await waitFor(() => expect(api.files.at(-1)?.text).toMatch(/proposeAfter: 5/), { timeout: 3000 });
+  });
+
+  it('flags a share over 100 and writes nothing', async () => {
+    await renderSettings();
+    const share = (await screen.findByLabelText(/^Budget, %/)) as HTMLInputElement;
+    await waitFor(() => expect(share.value).toBe('8'));
+    fireEvent.change(share, { target: { value: '150' } });
+    expect(await screen.findByText('A number from 0 to 100.')).toBeTruthy();
+    expect(api.files).toEqual([]);
+  });
+
+  it('is read-only without definition:edit', async () => {
+    await renderSettings({ canEdit: false });
+    expect(screen.getByLabelText(/^Proposes after, items/).closest('fieldset')?.disabled).toBe(true);
   });
 });

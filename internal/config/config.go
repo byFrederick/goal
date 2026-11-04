@@ -1,6 +1,6 @@
 // Package config loads and validates a factory definition: factory.yaml at the root of a
-// file tree that holds its prompts, skills, rules, contracts and evals. The tree is an fs.FS, so the
-// same loader reads a local working copy or a version's files from the bucket.
+// file tree that holds its prompts, skills, rules, contracts and environments. The tree is an fs.FS, so
+// the same loader reads a local working copy or a version's files from the bucket.
 //
 // Check validates in passes and reports every finding as a located domain.DefinitionProblem
 // (a stable code, a severity, the Visual section and model pointer, the file, line and
@@ -558,26 +558,19 @@ type Targets struct {
 	ExpediteLeadTimeMinutes int     `json:"expediteLeadTimeMinutes,omitempty"`
 }
 
-// Learning configures the librarian, the kaizen report and the Jonah reviews.
+// Learning configures the Jonah reviews. Its retired keys (learning.librarian, learning.kaizen,
+// learning.jonah.weeklyUsd) stay in the schema and are ignored (ADR 0039 decision 17, ignoredKeys).
 type Learning struct {
-	Librarian *struct {
-		Agent  string   `json:"agent"`
-		After  []string `json:"after,omitempty"`
-		Writes []string `json:"writes,omitempty"`
-	} `json:"librarian,omitempty"`
-	Kaizen *struct {
-		Schedule string `json:"schedule,omitempty"`
-	} `json:"kaizen,omitempty"`
 	Jonah *Jonah `json:"jonah,omitempty"`
 }
 
-// Jonah is learning.jonah (ADR 0034). Its keys are pointers so a key left out, which takes
-// domain.DefaultJonahPolicy's value, is told from false or zero.
+// Jonah is learning.jonah (ADR 0034, ADR 0039 decision 17). Its keys are pointers so a key left
+// out, which takes domain.DefaultJonahPolicy's value, is told from false or zero.
 type Jonah struct {
-	Enabled      *bool    `json:"enabled,omitempty"`
-	ProposeAfter *int     `json:"proposeAfter,omitempty"`
-	WeeklyUSD    *float64 `json:"weeklyUsd,omitempty"`
-	Model        string   `json:"model,omitempty"`
+	Enabled      *bool  `json:"enabled,omitempty"`
+	ProposeAfter *int   `json:"proposeAfter,omitempty"`
+	Share        string `json:"share,omitempty"`
+	Model        string `json:"model,omitempty"`
 }
 
 // FileName is the factory definition at the root of a factory's file tree.

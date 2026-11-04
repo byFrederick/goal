@@ -27,6 +27,10 @@ type Harness struct {
 	Spend ports.Spend
 	// Jonah keeps the same store's Jonah reviews, proposals and observations.
 	Jonah ports.JonahStore
+	// Tries keeps the same store's tries of past items.
+	Tries ports.PastTries
+	// Kept keeps the same store's kept tests.
+	Kept ports.KeptTests
 	// NewOrg returns a new organization.
 	NewOrg func(t *testing.T) domain.OrgID
 	// NewFactory returns a factory of org the store accepts items for.
@@ -40,6 +44,8 @@ type Harness struct {
 	NewVersion func(t *testing.T, org domain.OrgID, factory domain.FactoryID) domain.DefinitionVersionID
 	// Audit reads the audit entries the store writes with its changes.
 	Audit ports.Audit
+	// DeleteFactory deletes factory of org and every row of it, as goal_delete_factory does.
+	DeleteFactory func(t *testing.T, org domain.OrgID, factory domain.FactoryID)
 }
 
 // Run runs the suite. Tests run in parallel and call newHarness once each; every harness must
@@ -159,6 +165,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"OpenToolApprovals_ByConnection", testOpenToolApprovals},
 	}
 	tests = append(tests, jonahTests...)
+	tests = append(append(append(tests, triesTests...), keptTestsTests...), graderChecksTests...)
 
 	for _, tc := range tests {
 		runCase(t, newHarness, tc.name, tc.test)

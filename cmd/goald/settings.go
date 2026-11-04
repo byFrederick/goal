@@ -93,13 +93,20 @@ type settings struct {
 	// DefinitionCacheBytes bounds the files of the definition versions kept for runs that started
 	// on a version no longer current (GOAL_DEFINITION_CACHE_BYTES, default 64 MiB).
 	DefinitionCacheBytes int64
-	// JonahReviewEvery is how often goald sweeps for Jonah threshold reviews and works the queued
+	// JonahReviewEvery is how often goald sweeps for the daily Jonah reviews that are due and works the queued
 	// reviews (GOAL_JONAH_REVIEW_EVERY, default 1m). JonahReview bounds one review run
 	// (GOAL_JONAH_REVIEW_TIMEOUT, default 30m) and the time its lease adds beyond the run
 	// (GOAL_JONAH_REVIEW_LEASE_MARGIN, default 5m): a review whose goald died is claimed again
 	// once both have passed.
 	JonahReviewEvery time.Duration
 	JonahReview      jonah.ReviewConfig
+	// JonahTryEvery is how often goald queues the tries of past items of the proposals that have
+	// none and works the queued tries (GOAL_JONAH_TRY_EVERY, default 1m). JonahTry bounds one
+	// try's run (GOAL_JONAH_TRY_TIMEOUT, default 30m), the time its lease adds beyond the run
+	// (GOAL_JONAH_TRY_LEASE_MARGIN, default 5m) and how many of a factory's tries run at once on
+	// every goald together (GOAL_JONAH_TRIES_PER_FACTORY, default 2).
+	JonahTryEvery time.Duration
+	JonahTry      jonah.TryConfig
 	// MaxRuns caps the agent runs this goald has in flight at once (GOAL_MAX_RUNS, default 0:
 	// no cap). With a cap, claims are shared out fairly across organizations.
 	MaxRuns int
@@ -109,10 +116,6 @@ type settings struct {
 	// Models are the models the factory editor offers (GOAL_MODELS: comma-separated model ids,
 	// each optionally id=Label; the first is the default; default defaultModels).
 	Models []builder.Model
-	// BakeOffModels are the models a bake-off that names no arms tries beside the agent's own
-	// (GOAL_BAKEOFF_MODELS: comma-separated model ids, default none; ADR 0029 decision 6). Read and
-	// checked here; Jonah's eval loop takes them once goald builds it.
-	BakeOffModels []string
 	// LogLevel (GOAL_LOG_LEVEL: debug, info, warn, error) and LogFormat (GOAL_LOG_FORMAT: json or
 	// text) shape the structured log on stdout.
 	LogLevel  slog.Level
@@ -288,10 +291,6 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 
 	if s.LogFormat != "json" && s.LogFormat != "text" {
 		errs = append(errs, fmt.Errorf("GOAL_LOG_FORMAT %q is not json or text", s.LogFormat))
-	}
-
-	if s.BakeOffModels, err = bakeOffModels(getenv("GOAL_BAKEOFF_MODELS")); err != nil {
-		errs = append(errs, err)
 	}
 
 	// errors.Join drops a nil error.
@@ -517,7 +516,8 @@ func definitionSettings(s *settings, or func(name, def string) string) []error {
 	return errs
 }
 
-// jonahSettings reads the Jonah review loop's times, each a positive duration.
+// jonahSettings reads the Jonah review and try loops' times, each a positive duration, and the
+// try loop's cap per factory, a positive number.
 func jonahSettings(s *settings, or func(name, def string) string) []error {
 	var errs []error
 
@@ -531,6 +531,16 @@ func jonahSettings(s *settings, or func(name, def string) string) []error {
 	read("GOAL_JONAH_REVIEW_EVERY", or("GOAL_JONAH_REVIEW_EVERY", "1m"), &s.JonahReviewEvery)
 	read("GOAL_JONAH_REVIEW_TIMEOUT", or("GOAL_JONAH_REVIEW_TIMEOUT", "30m"), &s.JonahReview.Timeout)
 	read("GOAL_JONAH_REVIEW_LEASE_MARGIN", or("GOAL_JONAH_REVIEW_LEASE_MARGIN", "5m"), &s.JonahReview.Margin)
+	read("GOAL_JONAH_TRY_EVERY", or("GOAL_JONAH_TRY_EVERY", "1m"), &s.JonahTryEvery)
+	read("GOAL_JONAH_TRY_TIMEOUT", or("GOAL_JONAH_TRY_TIMEOUT", "30m"), &s.JonahTry.Timeout)
+	read("GOAL_JONAH_TRY_LEASE_MARGIN", or("GOAL_JONAH_TRY_LEASE_MARGIN", "5m"), &s.JonahTry.Margin)
+
+	perFactory := or("GOAL_JONAH_TRIES_PER_FACTORY", strconv.Itoa(jonah.DefaultTriesPerFactory))
+	if n, err := strconv.Atoi(perFactory); err != nil || n <= 0 {
+		errs = append(errs, fmt.Errorf("GOAL_JONAH_TRIES_PER_FACTORY %q is not a positive number", perFactory))
+	} else {
+		s.JonahTry.PerFactory = n
+	}
 
 	return errs
 }
@@ -940,31 +950,6 @@ func models(raw string) ([]builder.Model, error) {
 		}
 
 		out = append(out, builder.Model{ID: id, Label: cmp.Or(label, modelLabel(id))})
-	}
-
-	return out, nil
-}
-
-// bakeOffModels parses GOAL_BAKEOFF_MODELS: comma-separated model ids, none when empty.
-func bakeOffModels(raw string) ([]string, error) {
-	if strings.TrimSpace(raw) == "" {
-		return nil, nil
-	}
-
-	var out []string
-
-	for item := range strings.SplitSeq(raw, ",") {
-		id := strings.TrimSpace(item)
-
-		if !modelID.MatchString(id) {
-			return nil, fmt.Errorf("GOAL_BAKEOFF_MODELS: %q is not a model id (claude-...)", id)
-		}
-
-		if slices.Contains(out, id) {
-			return nil, fmt.Errorf("GOAL_BAKEOFF_MODELS: %s is listed twice", id)
-		}
-
-		out = append(out, id)
 	}
 
 	return out, nil

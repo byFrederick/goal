@@ -122,6 +122,31 @@ func TestPublish_RefusesErrorsButNotWarnings(t *testing.T) {
 	}
 }
 
+// A draft that still has an evals/ folder publishes at once: the folder is only a warning, and
+// no eval run gates the publish (ADR 0039 decision 21).
+func TestPublish_EvalsFolderOnlyWarns(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	files := acmeFiles(acmeYAML)
+	files["evals/cases/fix.yaml"] = []byte("agent: engineer\ntries: 3\n")
+	files["evals/judges/followed.md"] = []byte("---\npassMark: 0.6\n---\nDid it follow the plan?\n")
+	f := h.imported(t, files)
+
+	val, err := h.svc.ValidateDraft(h.ctx, f, authoring.ValidateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !val.OK || !slices.Contains(codes(val.Problems), "evals-ignored") {
+		t.Fatalf("validation = ok %v, problems %v; want ok with evals-ignored", val.OK, codes(val.Problems))
+	}
+
+	if v, err := h.svc.Publish(h.ctx, f, h.publishRequest(t, f)); err != nil || v.Number != 1 {
+		t.Errorf("publish with an evals/ folder = %+v, %v; want v1", v, err)
+	}
+}
+
 func TestPublish_RemovedStationsNeedMoves(t *testing.T) {
 	t.Parallel()
 

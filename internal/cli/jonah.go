@@ -21,6 +21,7 @@ func jonahCommand(ctx context.Context, out *printer, getenv func(string) string,
 	if len(args) > 0 {
 		if handler, ok := map[string]command{
 			subShow: jonahShow, verbApprove: jonahApprove, jonahEditCmd: jonahEdit, verbReject: jonahReject, jonahLookCmd: jonahLook,
+			jonahTryCmd: jonahTry,
 		}[args[0]]; ok {
 			return handler(ctx, out, getenv, args[1:])
 		}
@@ -33,11 +34,8 @@ func jonahCommand(ctx context.Context, out *printer, getenv func(string) string,
 const (
 	jonahEditCmd = "edit"
 	jonahLookCmd = "look"
+	jonahTryCmd  = "try"
 )
-
-// reviewsNotStarted is what goal jonah look and a review's 409 say while no review loop runs
-// (software#344 builds it and removes this refusal).
-const reviewsNotStarted = "Reviews start when Jonah's review loop ships"
 
 // jonahConflicts are the one-line messages of the 409 codes the Jonah operations document.
 var jonahConflicts = map[string]string{
@@ -46,8 +44,8 @@ var jonahConflicts = map[string]string{
 	"draft-conflict":            "the draft's copy of a file changed since Jonah made this proposal: nothing was written",
 	"proposal-decided":          "the proposal was already decided: goal jonah show %d says how",
 	"review-in-flight":          "a review is already pending or running: wait for it to finish",
-	"review-loop-not-running":   reviewsNotStarted,
-	"learning-budget-exhausted": "Jonah's runs reached the factory's weekly budget (learning.jonah.weeklyUsd): try again when the last 7 days cost less",
+	"proposal-not-tried":        "Jonah has not tried this proposal on past items yet: its first tries are queued soon, then try again",
+	"learning-budget-exhausted": "Jonah's runs used up its budget, learning.jonah.share of what the line spent in the last 7 days: try again when the window moves on",
 }
 
 // jonahProblem is goald's refusal of a Jonah operation on proposal number (0 for none): a
@@ -267,26 +265,139 @@ func jonahDecide(ctx context.Context, out *printer, getenv func(string) string, 
 	return nil
 }
 
-// jonahLook is goal jonah look [--factory F]: it refuses until the review loop ships, since a
-// queued review would never run. It parses its flags first, so a usage error still says so, and
-// it never connects to goald.
-func jonahLook(_ context.Context, _ *printer, _ func(string) string, args []string) error {
+// jonahLook is goal jonah look [--factory F]: it queues a manual review of the factory at once
+// ("Look for improvements now", ADR 0039 decision 3) and prints the queued review. A review in
+// flight or a spent weekly budget is the 409's one-line message.
+func jonahLook(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs := newFlags("jonah look")
-	addOrgFlag(fs)
-	fs.String("factory", "", "the factory (name or id); default the organization's only one")
+	orgFlag := addOrgFlag(fs)
+	factory := fs.String("factory", "", "the factory (name or id); default the organization's only one")
 
 	if pos, err := parseInterspersed(fs, args); err != nil || len(pos) != 0 {
 		return errUsage
 	}
 
-	return sentenceError(reviewsNotStarted)
+	c, err := connect(ctx, getenv, *orgFlag)
+	if err != nil {
+		return err
+	}
+
+	f, err := commandFactory(ctx, c, *factory)
+	if err != nil {
+		return err
+	}
+
+	r, err := c.QueueJonahReviewWithResponse(ctx, c.org, f)
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if r.JSON202 == nil {
+		return jonahProblem(r.HTTPResponse, r.ApplicationproblemJSONDefault, 0)
+	}
+
+	out.printf("review %s queued: goal jonah lists its proposals once it finishes\n", r.JSON202.Id)
+
+	return nil
 }
 
-// sentenceError is an error whose text is a sentence for the person who ran the command, not a
-// lowercase Go error string.
-type sentenceError string
+// jonahTry is goal jonah try <number> [--factory F] [--yes] [--json]: print the estimate of
+// trying the proposal again (ADR 0039 decision 11), one more try per item it was tried on or
+// three for a model proposal, ask, then queue the tries. --yes queues them without asking; --json
+// prints goald's answers as they came, and without --yes the estimate only.
+func jonahTry(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	var yes, asJSON *bool
 
-func (s sentenceError) Error() string { return string(s) }
+	c, f, number, err := jonahProposalArgs(ctx, getenv, "jonah try", args, func(fs *flag.FlagSet) func() bool {
+		yes = fs.Bool("yes", false, "queue the tries without asking")
+		asJSON = fs.Bool("json", false, "print goald's answers as they came; without --yes, the estimate only")
+
+		return func() bool { return true }
+	})
+	if err != nil {
+		return err
+	}
+
+	t := tryAgain{c: c, factory: f, number: number, json: *asJSON}
+
+	est, err := t.try(ctx, out, false)
+	if err != nil || (*asJSON && !*yes) {
+		return err
+	}
+
+	if !*yes {
+		if ok, err := askYes(out, fmt.Sprintf("Queue %s of proposal #%d? [y/N] ", plural(est.Tries, "try"), number), "nothing was queued"); err != nil || !ok {
+			return err
+		}
+	}
+
+	_, err = t.try(ctx, out, true)
+
+	return err
+}
+
+// tryAgain is one goal jonah try: proposal number of factory.
+type tryAgain struct {
+	c       orgClient
+	factory string
+	number  int64
+	json    bool
+}
+
+// try asks goald for the estimate, or with confirm for the tries, and prints the answer: as it
+// came with --json, else the estimate or what was queued.
+func (t tryAgain) try(ctx context.Context, out *printer, confirm bool) (gen.TryProposalEstimate, error) {
+	body := gen.TryJonahProposalJSONRequestBody{}
+	if confirm {
+		body.Confirm = &confirm
+	}
+
+	res, err := t.c.TryJonahProposalWithResponse(ctx, t.c.org, t.factory, t.number, body)
+	if err != nil {
+		return gen.TryProposalEstimate{}, apiDown(err)
+	}
+
+	answer := res.JSON200
+	if confirm {
+		answer = res.JSON201
+	}
+
+	if answer == nil {
+		return gen.TryProposalEstimate{}, jonahProblem(res.HTTPResponse, res.ApplicationproblemJSONDefault, t.number)
+	}
+
+	switch {
+	case t.json:
+		out.printf("%s", res.Body)
+	case confirm:
+		out.printf("✓ %s of proposal #%d queued\n", plural(answer.Estimate.Tries, "try"), t.number)
+		out.printf("see them with: goal jonah show %d --factory %s\n", t.number, t.factory)
+	default:
+		printTryEstimate(out, answer.Estimate)
+	}
+
+	return answer.Estimate, nil
+}
+
+// printTryEstimate prints what trying a proposal again adds: each item with its station and tries,
+// then the tries, their cost and what is left of Jonah's budget.
+func printTryEstimate(out *printer, e gen.TryProposalEstimate) {
+	out.printf("try proposal #%d again on the %s it was tried on:\n", e.Number, plural(len(e.Items), "item"))
+
+	var tb bytes.Buffer
+
+	tw := tabwriter.NewWriter(&tb, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "ITEM\tSTATION\tTRIES\tTITLE")
+
+	for _, it := range e.Items {
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%d\t%s\n", it.ItemRef, it.Station, it.Tries, cut(oneLine(it.ItemTitle), 60))
+	}
+
+	_ = tw.Flush()
+
+	out.printf("%s", trimLines(tb.String()))
+	out.printf("%s, about %s; %s left of Jonah's budget\n", plural(e.Tries, "try"), usd(e.EstimateUsd), usd(e.BudgetLeftUsd))
+}
 
 // jonahProposalArgs parses <number> [--factory F] [--org O] and the flags extra declares (its
 // check, run after parsing, says whether they are valid), then connects and resolves the
@@ -322,4 +433,35 @@ func jonahProposalArgs(ctx context.Context, getenv func(string) string, name str
 	}
 
 	return c, f, number, nil
+}
+
+// commandFactory is the factory a factory-scoped command acts on: --factory, else the
+// organization's only factory.
+func commandFactory(ctx context.Context, c orgClient, factory string) (string, error) {
+	if factory != "" {
+		return factory, nil
+	}
+
+	res, err := c.ListFactoriesWithResponse(ctx, c.org, nil)
+	if err != nil {
+		return "", apiDown(err)
+	}
+
+	if res.JSON200 == nil {
+		return "", problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	names := make([]string, 0, len(res.JSON200.Factories))
+	for _, f := range res.JSON200.Factories {
+		names = append(names, f.Name)
+	}
+
+	switch len(names) {
+	case 0:
+		return "", fmt.Errorf("%s has no factories", c.org)
+	case 1:
+		return names[0], nil
+	default:
+		return "", fmt.Errorf("%s has factories %s: pass --factory", c.org, strings.Join(names, ", "))
+	}
 }

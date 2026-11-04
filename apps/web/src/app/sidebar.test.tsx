@@ -89,7 +89,7 @@ const me: Me = {
 
 /** Jonah's overview of each factory: nothing waiting by default, so a row with no count keeps its plain name. */
 const jonahWaiting = (waiting: number): JonahOverview => ({
-  policy: { enabled: true, propose_after: 5, weekly_usd: 20, approver_roles: ['owner'] },
+  policy: { enabled: true, propose_after: 5, share: 0.05, budget_usd: 10, approver_roles: ['owner'] },
   waiting,
   month_cost_usd: 0,
   observations: [],
@@ -252,8 +252,8 @@ describe('the sidebar', () => {
     expect(screen.queryByText(/waiting for your review/)).toBeNull();
   });
 
-  it('keeps Jonah current on its Evals page', async () => {
-    renderSidebar({ at: '/o/acme/f/goal/jonah/evals' });
+  it('keeps Jonah current on its Tests page', async () => {
+    renderSidebar({ at: '/o/acme/f/goal/jonah/tests' });
 
     expect(
       within(await nav())

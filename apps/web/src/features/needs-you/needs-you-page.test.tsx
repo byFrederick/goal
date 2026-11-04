@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
+
+import { ApiError } from '@goal/api-client';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   answerItem,
@@ -9,6 +12,7 @@ import {
   listItemEvents,
   mergeItem,
   rejectItem,
+  undoProposal,
 } from '../../api/client';
 import { factoriesQuery, inboxQuery, keys, orgQuery } from '../../api/queries';
 import type { Inbox, InboxEntry, Item, ItemCard, OrgSummary } from '../../api/types';
@@ -25,6 +29,11 @@ vi.mock('../../api/client', async (importOriginal) => ({
   listItemEvents: vi.fn(),
   answerItem: vi.fn(),
   decideToolApproval: vi.fn(),
+  undoProposal: vi.fn(),
+}));
+vi.mock('sonner', () => ({
+  toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
+  Toaster: () => null,
 }));
 
 afterEach(() => {
@@ -727,5 +736,71 @@ describe('Needs you: the keycap hint and the type chip', () => {
     const detail = await screen.findByRole('article');
     const chip = within(detail).getByText('Decision').closest('span.rounded-chip') as HTMLElement;
     expect(chip.querySelector('[aria-hidden="true"]')).toBeTruthy();
+  });
+});
+
+describe('Needs you: a proposal that made its number worse', () => {
+  const worse: InboxEntry = {
+    ...alert,
+    id: 'watch_worse:p-14',
+    kind: 'watch_worse',
+    andon: null,
+    watch: {
+      station: 'build',
+      metric: 'sent_back_rate',
+      proposal: 14,
+      before: { items: 20, value: 0.2 },
+      after: { items: 12, value: 0.4 },
+      interval: { low: 0.05, high: 0.35 },
+      verdict: 'worse',
+      opened_at: '2026-10-24T10:00:00Z',
+      closed_at: null,
+    },
+  };
+  const seedWith = (can: string[]) =>
+    [
+      [inboxQuery(org.id).queryKey, inbox([worse])],
+      [factoriesQuery(org.id).queryKey, factories(can)],
+    ] as const;
+
+  it('names the proposal and its worse number, tied to no item, with Undo this change', async () => {
+    renderPage({ seed: seedWith(['definition:edit']) });
+
+    expect((await screen.findAllByText('Proposal 14 made send-backs worse')).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Send-backs at build/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Undo this change/ })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /^Open [a-z]+#\d+/ })).toBeNull();
+  });
+
+  it('writes the undo proposal for the entry’s factory', async () => {
+    vi.mocked(undoProposal).mockResolvedValue({ number: 15 } as never);
+    renderPage({ seed: seedWith(['definition:edit']) });
+
+    fireEvent.click(await screen.findByRole('button', { name: /Undo this change/ }));
+    await waitFor(() => expect(undoProposal).toHaveBeenCalledWith('org-1', 'factory-2', 14));
+  });
+
+  it('says goald’s message when the undo is refused', async () => {
+    vi.mocked(undoProposal).mockRejectedValue(
+      new ApiError({
+        title: 'Conflict',
+        status: 409,
+        code: 'undo-conflict',
+        detail: 'factory.yaml no longer has the text the proposal replaced.',
+      }),
+    );
+    renderPage({ seed: seedWith(['definition:edit']) });
+
+    fireEvent.click(await screen.findByRole('button', { name: /Undo this change/ }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('factory.yaml no longer has the text the proposal replaced.'),
+    );
+  });
+
+  it('offers no Undo to someone who may not edit the definition', async () => {
+    renderPage({ seed: seedWith(['item:decide']) });
+
+    await screen.findAllByText('Proposal 14 made send-backs worse');
+    expect(screen.queryByRole('button', { name: /Undo this change/ })).toBeNull();
   });
 });

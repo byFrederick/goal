@@ -75,6 +75,18 @@ Leave a field empty to remove its value. A cap with no value is no cap.
 
 Each choice keeps the other settings of its object, such as `board.flow.assemblies.freshBase`.
 
+### Jonah
+
+Jonah reviews the line once a day and proposes changes for you to approve. The section sets `learning.jonah`. Each field has an ⓘ tip beside it.
+
+| Choice | Sets | Notes |
+|---|---|---|
+| Jonah reviews this line | `learning.jonah.enabled` | On by default. Off, Jonah reviews nothing. |
+| Model | `learning.jonah.model` | The model of the daily review. The line's model when left at Same as the line. |
+| Budget, % of the line's spend | `learning.jonah.share` | From 0 to 100, as a share of what the line spent in the last 7 days. 5 by default. It never stops the line. |
+| Proposes after, items | `learning.jonah.proposeAfter` | From 1 to 50. How many items with the same cause Jonah needs before it makes a proposal. 3 by default. |
+
+A value out of range shows its message and is not saved. Like every group, Jonah saves into the draft and Save changes publishes it. The fields are read-only without `definition:edit`.
 ### Notifications
 
 A read-only Slack row. It shows "Sent with the secret `slack-bot`." when the organization has chosen a Slack secret, and "Slack is off" when it has not. Slack sends direct messages only, so a factory has no channel of its own. The secret is organization-wide: a person who holds `org:manage` sees a "Change in organization settings" link to pick or turn it off there. Without that permission the row has no link. If the setting cannot be read, the row says "Couldn’t load the Slack setting."

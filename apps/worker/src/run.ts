@@ -30,7 +30,8 @@ export interface RunDeps {
  *
  * On a spec with an environment (ADR 0037) its files are written first and its setup runs, once per
  * box (applyEnvironment's marker); a failure there ends the run with a failed event before the
- * agent is queried.
+ * agent is queried. A try's environment (setup_only) gives its env to setup alone: its variables
+ * are removed before the agent starts.
  *
  * The agent's input is a stream: the task's prompt first, then each note left on the item while
  * it works. The stream ends at the result, so the query ends with it.
@@ -43,6 +44,10 @@ export async function runTask(spec: TaskSpec, files: AgentFiles, deps: RunDeps):
     } catch (err) {
       deps.emit(failed(deps.now, err instanceof Error ? err.message : String(err)));
       return 1;
+    }
+    // A try's env is setup's alone (ADR 0039 decision 9): the agent starts without it.
+    if (spec.environment.setup_only) {
+      for (const name of spec.environment.env) delete deps.env[name];
     }
   }
   const mapper = new EventMapper(deps.now, spec.skills);

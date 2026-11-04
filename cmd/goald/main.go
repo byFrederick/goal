@@ -53,6 +53,7 @@ import (
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/catalog"
+	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/engine"
@@ -68,10 +69,21 @@ import (
 )
 
 // jonahDeps serve the Jonah routes over store: decisions publish and edit through the same
-// authoring service as the builder.
-func jonahDeps(store *postgres.Store, authors *authoring.Service, clock ports.Clock, log *slog.Logger) *api.JonahDeps {
-	return &api.JonahDeps{Store: store, Decisions: jonah.NewDecider(jonah.DecideDeps{
+// authoring service as the builder, Try another model reads versions through defs and checks
+// its edit with config's definition check against policies' models, Try again reads what a
+// proposal changes through defs, and the open draft's kept tests are queued as publish tries over
+// defs (tryDefinitions).
+func jonahDeps(store *postgres.Store, authors *authoring.Service, defs *definitions.Cache, policies ports.OrgPolicies, clock ports.Clock,
+	log *slog.Logger,
+) *api.JonahDeps {
+	return &api.JonahDeps{Store: store, Watches: store, Tests: store, Tries: store, Decisions: jonah.NewDecider(jonah.DecideDeps{
 		Proposals: store, Authoring: api.NewJonahAuthoring(authors), Audit: store, Clock: clock, Log: log,
+	}), Models: jonah.NewModelProposals(jonah.ModelDeps{
+		Store: store, Definitions: defs, Check: config.ProposalCheck{}, Policies: policies, Audit: store, Clock: clock, Log: log,
+	}), KeptDrafts: jonah.NewKeptDrafts(jonah.KeptDraftDeps{
+		Drafts: api.NewJonahAuthoring(authors), Definitions: tryDefinitions{defs: defs}, Kept: store, Tries: store, Spend: store, Clock: clock, Log: log,
+	}), TryAgain: jonah.NewTryAgain(jonah.TryAgainDeps{
+		Store: store, Definitions: tryDefinitions{defs: defs}, Audit: store, Clock: clock, Log: log,
 	})}
 }
 
@@ -216,7 +228,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// bundle; the engine's RunDefinition signs its token.
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Policies: policies, Events: store, Clock: clock, Logger: log,
-		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore,
+		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, Watches: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore, Tries: store, Proposed: gatewayProposed{defs: defs}, Grades: jonahGrades(store),
 	}, gateway.Config{Key: []byte(key), KnowledgeURLTTL: knowledgeURLTTL(s)})
 	if err != nil {
 		return err
@@ -264,7 +276,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, UploadMaxBytes: s.UploadMaxBytes, KnowledgeObjects: objects, KnowledgeCheck: kb.ingestor,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
 		NotificationPreferences: postgres.NewNotificationPreferences(store), NotificationSettings: postgres.NewNotificationSettings(store), SlackMessenger: slack.New(slack.Config{Transport: connectionTransport(false)}),
-		Jonah: jonahDeps(store, authors, clock, log), Clock: clock, Logger: log,
+		Jonah: jonahDeps(store, authors, defs, postgres.NewOrgPolicies(store, s.modelIDs()), clock, log), Clock: clock, Logger: log,
 	})
 	if err = errors.Join(err, siteErr); err != nil {
 		return err
@@ -272,7 +284,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	servers := httpServers(s, proxySecret, apiHandler, gatewayHandler(gw), web.Handler(web.Options{StrictTransport: s.strictTransport()}), site, log)
 
-	j, err := newJobs(s, store, orgSecrets, objects, platform, clock, kb.ingestor, defs, eng, intake, log)
+	j, err := newJobs(s, store, orgSecrets, objects, platform, clock, kb.ingestor, defs, eng, authors, intake, log)
 	if err != nil {
 		return err
 	}
@@ -303,7 +315,8 @@ func moveOver(ctx context.Context, store *postgres.Store, connections *postgres.
 // ingestion, the notification sender and digest, and the Jonah reviews, which the goald holding
 // the schedule lock sweeps.
 func newJobs(s settings, store *postgres.Store, orgSecrets *postgres.Secrets, objects ports.ObjectStore, platform ports.Platform,
-	clock ports.Clock, ingestor *knowledge.Ingestor, defs *definitions.Cache, eng *engine.Engine, intake scheduleLock, log *slog.Logger,
+	clock ports.Clock, ingestor *knowledge.Ingestor, defs *definitions.Cache, eng *engine.Engine, authors *authoring.Service,
+	intake scheduleLock, log *slog.Logger,
 ) (jobs, error) {
 	sender, digest, err := notificationJobs(s, store, orgSecrets, clock, log)
 	if err != nil {
@@ -315,6 +328,10 @@ func newJobs(s settings, store *postgres.Store, orgSecrets *postgres.Secrets, ob
 		purger:   retention.New(store, objects, clock, s.OrgRetention, log),
 		platform: platform, clock: clock, identity: newIdentityWatch(s, store), ingestor: ingestor, notify: sender, digest: digest,
 		reviews: jonahReviewLoop(s, store, defs, eng, clock, log), scheduleLock: intake,
+		// Each proposal is tried on past items before anyone sees it (ADR 0039 decisions 9 and 11).
+		tries: jonahTryLoop(s, store, defs, eng, clock, log),
+		// Every published change is watched station by station (ADR 0039 decision 14).
+		watcher: jonah.NewWatcher(jonah.WatchDeps{Orgs: store, Definitions: authors, Proposals: store, Watches: store, Clock: clock, Log: log}),
 	}, nil
 }
 
@@ -674,7 +691,7 @@ func (a engineToolApprovals) RequestToolApproval(ctx context.Context, c gateway.
 // jobs are goald's scheduled jobs: the purge of deleted organizations, the sign-in clean-up, the
 // knowledge base's ingestion, under GOAL_AUTH=session the startup watch of the identity service,
 // the notification sender and the daily digest (email only with GOAL_SMTP_URL), and the Jonah
-// reviews, which the goald holding the schedule lock sweeps.
+// reviews and the watch on every published change, which the goald holding the schedule lock sweeps.
 type jobs struct {
 	purger       *retention.Purger
 	platform     ports.Platform
@@ -684,6 +701,8 @@ type jobs struct {
 	notify       *notify.Sender
 	digest       *notify.DigestJob
 	reviews      *jonah.Reviews
+	tries        *jonah.Tries
+	watcher      *jonah.Watcher
 	scheduleLock scheduleLock
 }
 
@@ -734,7 +753,9 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 	wg.Go(func() { j.purger.Run(ctx, purgeEvery) })
 	wg.Go(func() { cleanUpAuth(ctx, log, j.platform, j.clock, authCleanUpEvery) })
 	wg.Go(func() { fireSchedules(ctx, log, eng, j.clock, scheduleEvery) })
-	wg.Go(func() { runJonahReviews(ctx, log, j.scheduleLock, j.reviews, j.clock, s.JonahReviewEvery) })
+	wg.Go(func() { runJonahLoop(ctx, log, j.scheduleLock, j.reviews, j.clock, s.JonahReviewEvery, reviewEvents) })
+	wg.Go(func() { runJonahLoop(ctx, log, j.scheduleLock, j.tries, j.clock, s.JonahTryEvery, tryEvents) })
+	wg.Go(func() { runWatches(ctx, log, j.scheduleLock, j.watcher, j.clock, watchEvery) })
 
 	if s.KBWorkers > 0 {
 		wg.Go(func() { j.ingestor.Run(ctx) })

@@ -237,13 +237,6 @@ type Deps struct {
 	SlackMessenger       ports.DirectMessenger
 	// ExportMaxRows caps a CSV export (ADR 0020, decision 3); 0 is 100000.
 	ExportMaxRows int
-	// Judges serve Jonah's judges routes (judges.go). Optional: while it is nil those routes
-	// answer 503 judges-unavailable; when set, all three of its collaborators are.
-	Judges *JudgeDeps
-
-	// Evals serve Jonah's evals routes (evals.go). Optional: while it is nil those routes answer
-	// 503 evals-unavailable; when set, all three of its collaborators are.
-	Evals *EvalDeps
 	// Jonah serves Jonah's overview, proposals and reviews (jonah.go). Optional: while it is nil
 	// those routes answer 503 jonah-unavailable; when set, both of its collaborators are.
 	Jonah *JonahDeps
@@ -260,8 +253,6 @@ func (d Deps) complete() bool {
 		d.Connections == nil, d.Credentials == nil, d.OrgSecrets == nil, d.EnvironmentTests == nil, d.ToolLister == nil, d.Intake == nil, d.DraftRequests == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
 		d.Knowledge == nil, d.KnowledgeUploads == nil, d.UploadMaxBytes <= 0, d.KnowledgeObjects == nil, d.KnowledgeCheck == nil,
 		d.OrgPolicies == nil, len(d.BoxSizes) == 0, d.NotificationPreferences == nil, d.NotificationSettings == nil, d.SlackMessenger == nil,
-		d.Judges != nil && (d.Judges.Judges == nil || d.Judges.Scores == nil || d.Judges.Tries == nil),
-		d.Evals != nil && (d.Evals.Runs == nil || d.Evals.Loop == nil || d.Evals.Judges == nil),
 		d.Jonah != nil && (d.Jonah.Store == nil || d.Jonah.Decisions == nil),
 	}
 
@@ -305,8 +296,7 @@ func New(d Deps) (http.Handler, error) {
 	if !d.complete() {
 		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock, " +
 			"Connections, Credentials, OrgSecrets, EnvironmentTests, ToolLister, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeObjects, KnowledgeCheck, OrgPolicies, BoxSizes, NotificationPreferences, NotificationSettings, SlackMessenger, " +
-			"a positive UploadMaxBytes and a positive OrgRetention are required, Judges, when set, needs Judges, Scores and Tries, " +
-			"Evals, when set, needs Runs, Loop and Judges, and Jonah, when set, needs Store and Decisions")
+			"a positive UploadMaxBytes and a positive OrgRetention are required, and Jonah, when set, needs Store and Decisions")
 	}
 
 	if err := d.failsClosed(); err != nil {
@@ -326,7 +316,7 @@ func New(d Deps) (http.Handler, error) {
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, uploadMax: d.UploadMaxBytes, objects: d.KnowledgeObjects, check: d.KnowledgeCheck,
 		policies: d.OrgPolicies, notifications: d.NotificationPreferences, notifySettings: d.NotificationSettings, slack: d.SlackMessenger, boxSizes: slices.Clone(d.BoxSizes), egress: slices.Clone(d.EgressAddresses),
-		judges: d.Judges, evals: d.Evals, jonah: d.Jonah, clock: d.Clock, log: log, exportMax: cmp.Or(d.ExportMaxRows, defaultExportMaxRows),
+		jonah: d.Jonah, clock: d.Clock, log: log, exportMax: cmp.Or(d.ExportMaxRows, defaultExportMaxRows),
 	}
 	s.inbox = append([]InboxSource{workInbox{s: s}}, d.InboxSources...)
 
@@ -480,10 +470,6 @@ type server struct {
 	notifications ports.NotificationPreferences
 	// slack checks a Slack bot token on the notification settings routes (notificationsettings.go).
 	slack ports.DirectMessenger
-	// judges serve the judges routes; nil when this goald does not.
-	judges *JudgeDeps
-	// evals serve the evals routes; nil when this goald does not run evals.
-	evals *EvalDeps
 	// jonah serves the Jonah routes; nil when this goald does not.
 	jonah *JonahDeps
 	clock ports.Clock
@@ -728,7 +714,7 @@ func problemOf(err error) gen.Problem {
 	// definitions' (all wrap ports.ErrNameTaken); the secrets' and the credentials' before the
 	// connections' (all wrap ports.ErrNoMasterKey).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, exportProblem, policyProblem, notificationProblem, signupDomainProblem, edgeProblem, partProblem, secretProblem, environmentTestProblem, repositoryTestProblem, credentialProblem, webhookProblem, viewProblem, connectionProblem, knowledgeProblem, judgeProblem, evalProblem, jonahProblem, definitionProblem,
+		fixedProblem, exportProblem, policyProblem, notificationProblem, signupDomainProblem, edgeProblem, partProblem, secretProblem, environmentTestProblem, repositoryTestProblem, credentialProblem, webhookProblem, viewProblem, connectionProblem, knowledgeProblem, watchProblem, keptTestProblem, jonahProblem, definitionProblem,
 		controlProblem, questionProblem, toolApprovalProblem, agentProblem, draftRequestProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {

@@ -152,8 +152,6 @@ var problemCodes = []struct {
 	{ErrImportInvalid, CodeImportInvalid},
 	{ErrBadPath, CodeBadPath},
 	{ErrTooLarge, CodeTooLarge},
-	{ErrEvalsPending, CodeEvalsPending},
-	{ErrEvalsFailing, CodeEvalsFailing},
 }
 
 // ProblemCode is the problem detail code of a refusal (a *ParseError is yaml-invalid, unless
@@ -236,9 +234,6 @@ type Deps struct {
 	// Credentials is the secrets check: SecretsCheck; nil skips it.
 	// Nil leaves the credentials check out.
 	Credentials Credentials
-	// EvalGate, when set, gates every publish of a draft with eval cases on their run
-	// (evalgate.go); nil publishes as if no draft had cases.
-	EvalGate *EvalGate
 	// Policies is the organization policy whose allowed models a version may name (ADR 0024
 	// decision 3); nil leaves the policy check out.
 	Policies ports.OrgPolicies
@@ -253,7 +248,6 @@ type Service struct {
 	store       ports.DefinitionStore
 	loads       Loads
 	credentials Credentials
-	evals       *EvalGate
 	policies    ports.OrgPolicies
 	clock       ports.Clock
 	newID       func() string
@@ -268,7 +262,7 @@ func New(d Deps) *Service {
 	}
 
 	return &Service{
-		store: d.Store, loads: d.Loads, credentials: d.Credentials, evals: d.EvalGate,
+		store: d.Store, loads: d.Loads, credentials: d.Credentials,
 		policies: d.Policies,
 		clock:    d.Clock, newID: newID,
 		templates: NewTemplateCatalog(d.Templates, d.Clock),

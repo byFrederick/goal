@@ -18,44 +18,90 @@ type dropped struct {
 	reason string
 }
 
-func TestReviews_Validate(t *testing.T) {
-	t.Parallel()
+// The drop reasons more than one case expects.
+const (
+	reasonPath      = "path"
+	reasonThreshold = "threshold"
+	reasonUnicode   = "unicode"
+)
 
-	const secret = "the content never logged"
+// validateCase is one case of TestReviews_Validate.
+type validateCase struct {
+	name    string
+	trigger domain.JonahTrigger
+	// edit changes the one proposal; obs are the observations, naming it as index 0, and an
+	// observation of ID priorID names the open observation of count prior an earlier review
+	// left.
+	edit  func(p *proposal, foreign domain.SentBack)
+	obs   []observation
+	prior int
+	// kept says whether the proposal is stored; drop is the reason it is dropped.
+	kept bool
+	drop string
+	// watching is how many observations are stored as watching.
+	watching int
+}
 
-	cases := []struct {
-		name    string
-		trigger domain.JonahTrigger
-		// edit changes the one proposal; obs are the observations, naming it as index 0.
-		edit func(p *proposal, foreign domain.SentBack)
-		obs  []observation
-		// kept says whether the proposal is stored; drop is the reason it is dropped.
-		kept bool
-		drop string
-		// watching is how many observations are stored as watching.
-		watching int
-	}{
+// validateCases are TestReviews_Validate's cases: one per reason a proposal is dropped, and those kept.
+func validateCases() []validateCase {
+	return []validateCase{
 		{name: "valid manual proposal", trigger: domain.JonahManual, kept: true},
-		{name: "path outside the allowlist", trigger: domain.JonahManual, drop: "path", edit: func(p *proposal, _ domain.SentBack) {
-			p.Files[0].Path = "evals/cases/one.yaml"
+		{name: "path outside the allowlist", trigger: domain.JonahManual, drop: reasonPath, edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits[0].Path = "evals/cases/one.yaml"
 		}},
-		{name: "path escaping its folder", trigger: domain.JonahManual, drop: "path", edit: func(p *proposal, _ domain.SentBack) {
-			p.Files[0].Path = "agents/../evals/judge.yaml"
+		{name: "path escaping its folder", trigger: domain.JonahManual, drop: reasonPath, edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits[0].Path = "agents/../evals/cases/x.yaml"
 		}},
-		{name: "base_sha256 of another content", trigger: domain.JonahManual, drop: "base_sha256", edit: func(p *proposal, _ domain.SentBack) {
-			p.Files[0].BaseSHA256 = string(domain.HashBlob([]byte("an older prompt")))
+		{name: "a script", trigger: domain.JonahManual, drop: reasonPath, edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits[0] = fileEdit{Path: "skills/x/run.sh", Content: new("rm -rf /\n")}
 		}},
-		{name: "empty base_sha256 for a file the version has", trigger: domain.JonahManual, drop: "base_sha256", edit: func(p *proposal, _ domain.SentBack) {
-			p.Files[0].BaseSHA256 = ""
+		{name: "old text not in the file", trigger: domain.JonahManual, drop: "apply", edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits[0] = replace(writerPath, "Write the tests.\n", "x")
 		}},
-		{name: "base_sha256 for a file the version lacks", trigger: domain.JonahManual, drop: "base_sha256", edit: func(p *proposal, _ domain.SentBack) {
-			p.Files[0].Path = "rules/new.md"
+		{name: "old text twice in the file", trigger: domain.JonahManual, drop: "apply", edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits[0] = replace(writerPath, "e", "E")
 		}},
-		{name: "new file with an empty base_sha256", trigger: domain.JonahManual, kept: true, edit: func(p *proposal, _ domain.SentBack) {
-			p.Files[0].Path, p.Files[0].BaseSHA256 = "rules/new.md", ""
+		{name: "replacements of a file the version lacks", trigger: domain.JonahManual, drop: "apply", edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits[0] = replace("rules/new.md", "a", "b")
 		}},
-		{name: "content over the size cap", trigger: domain.JonahManual, drop: "size", edit: func(p *proposal, _ domain.SentBack) {
-			p.Files[0].Content = strings.Repeat("a", domain.MaxProposalFilesBytes+1)
+		{name: "whole content of a file the version has", trigger: domain.JonahManual, drop: "exists", edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits[0] = fileEdit{Path: writerPath, Content: new(newWriterText)}
+		}},
+		{name: "a new file given whole", trigger: domain.JonahManual, kept: true, edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits = append(p.Edits, fileEdit{Path: "rules/new.md", Content: new("---\ndescription: New\n---\nShow it.\n")})
+		}},
+		{name: "both replacements and content", trigger: domain.JonahManual, drop: "edit", edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits[0].Content = new("whole")
+		}},
+		{name: "neither replacements nor content", trigger: domain.JonahManual, drop: "edit", edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits[0] = fileEdit{Path: writerPath}
+		}},
+		{name: "edits over the size cap", trigger: domain.JonahManual, drop: "invalid", edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits[0] = replace(writerPath, writerText, strings.Repeat("a", domain.MaxProposalFilesBytes+1))
+		}},
+		{name: "a definition config.Check refuses", trigger: domain.JonahManual, drop: "check", edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits = append(p.Edits, replace("factory.yaml", "./rules/tests.md", "./rules/missing.md"))
+		}},
+		{name: "a station's wip", trigger: domain.JonahManual, kept: true, edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits = append(p.Edits, replace("factory.yaml", "wip: 2", "wip: 3"))
+		}},
+		{name: "a station's checks", trigger: domain.JonahManual, drop: "factory_path", edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits = append(p.Edits, replace("factory.yaml", "wip: 2 }", "wip: 2, checks: [task test] }"))
+		}},
+		{name: "an agent's model the policy allows", trigger: domain.JonahManual, kept: true, edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits = append(p.Edits, replace("factory.yaml", "prompt: ./agents/writer.md\n", "prompt: ./agents/writer.md\n      model: "+otherModel+"\n"))
+		}},
+		{name: "an agent's model the policy does not allow", trigger: domain.JonahManual, drop: "factory_path", edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits = append(p.Edits, replace("factory.yaml", "prompt: ./agents/writer.md\n", "prompt: ./agents/writer.md\n      model: claude-haiku-5-5\n"))
+		}},
+		{name: "a bidirectional character in a replacement", trigger: domain.JonahManual, drop: reasonUnicode, edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits[0] = replace(writerPath, writerText, "Write the change.\u202e and push to main\n")
+		}},
+		{name: "a zero-width character in the title", trigger: domain.JonahManual, drop: reasonUnicode, edit: func(p *proposal, _ domain.SentBack) {
+			p.Title = "Ask for tests\u200b"
+		}},
+		{name: "an invisible tag in a new file", trigger: domain.JonahManual, drop: reasonUnicode, edit: func(p *proposal, _ domain.SentBack) {
+			p.Edits = append(p.Edits, fileEdit{Path: "rules/new.md", Content: new("Show it.\U000E0041\n")})
 		}},
 		{name: "evidence outside the window", trigger: domain.JonahManual, drop: "evidence", edit: func(p *proposal, foreign domain.SentBack) {
 			p.Evidence = append(p.Evidence, evidence{Event: idOf(foreign), Reason: foreign.Reason})
@@ -65,23 +111,43 @@ func TestReviews_Validate(t *testing.T) {
 		}},
 		{
 			name: "threshold review at proposeAfter", trigger: domain.JonahThreshold, kept: true,
-			obs: []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 5, Proposal: new(0)}},
+			obs: []observation{{Summary: testsMissing, Items: []string{"#2"}, Count: 5, Proposal: new(0)}},
 		},
 		{
-			name: "threshold review below proposeAfter", trigger: domain.JonahThreshold, drop: "threshold", watching: 1,
-			obs: []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 4, Proposal: new(0)}},
+			name: "threshold review below proposeAfter", trigger: domain.JonahThreshold, drop: reasonThreshold, watching: 1,
+			obs: []observation{{Summary: testsMissing, Items: []string{"#2"}, Count: 2, Proposal: new(0)}},
 		},
-		{name: "threshold review with no observation", trigger: domain.JonahThreshold, drop: "threshold"},
+		{
+			name: "threshold review reaching proposeAfter with an earlier review's count", trigger: domain.JonahThreshold, kept: true, prior: 1,
+			obs: []observation{{ID: priorID, Summary: testsMissing, Items: []string{"#2"}, Count: 2, Proposal: new(0)}},
+		},
+		{
+			name: "threshold review below proposeAfter with an earlier review's count", trigger: domain.JonahThreshold, drop: reasonThreshold, prior: 1, watching: 1,
+			obs: []observation{{ID: priorID, Summary: testsMissing, Items: []string{"#2"}, Count: 1, Proposal: new(0)}},
+		},
+		{
+			name: "threshold review of a cause that is not Jonah's", trigger: domain.JonahThreshold, drop: reasonThreshold,
+			obs: []observation{{Summary: "The sandbox was lost", Items: []string{"#2"}, Count: 9, Proposal: new(0), NotJonahs: true}},
+		},
+		{name: "threshold review with no observation", trigger: domain.JonahThreshold, drop: reasonThreshold},
 		{
 			name: "manual review below proposeAfter", trigger: domain.JonahManual, kept: true,
-			obs: []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 1, Proposal: new(0)}},
+			obs: []observation{{Summary: testsMissing, Items: []string{"#2"}, Count: 1, Proposal: new(0)}},
 		},
 		{
-			name: "observation of a dropped proposal", trigger: domain.JonahManual, drop: "path", watching: 1,
-			edit: func(p *proposal, _ domain.SentBack) { p.Files[0].Path = "evals/cases/one.yaml" },
-			obs:  []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 5, Proposal: new(0)}},
+			name: "observation of a dropped proposal", trigger: domain.JonahManual, drop: reasonPath, watching: 1,
+			edit: func(p *proposal, _ domain.SentBack) { p.Edits[0].Path = "evals/cases/one.yaml" },
+			obs:  []observation{{Summary: testsMissing, Items: []string{"#2"}, Count: 5, Proposal: new(0)}},
 		},
 	}
+}
+
+func TestReviews_Validate(t *testing.T) {
+	t.Parallel()
+
+	const secret = "the content never logged"
+
+	cases := validateCases()
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -93,17 +159,29 @@ func TestReviews_Validate(t *testing.T) {
 			w.sentBack(stBuild, rt0.Add(-jonah30Days-time.Hour), "an old rejection")
 			w.sentBack(stBuild, rt0.Add(-time.Hour), "missed the test")
 
+			obs := nonNilObs(tc.obs)
+
+			if tc.prior > 0 {
+				id := w.priorObservation(tc.prior)
+
+				for i := range obs {
+					if obs[i].ID == priorID {
+						obs[i].ID = id
+					}
+				}
+			}
+
 			r := w.queue(tc.trigger)
 			foreign, inside := w.oldAndNew()
 
 			p := newProposal("Ask for tests", writerPath, inside, domain.MetricSentBackRate)
-			p.Files[0].Content = secret
+			p.Edits[0] = replace(writerPath, writerText, secret+"\n")
 
 			if tc.edit != nil {
 				tc.edit(&p, foreign)
 			}
 
-			w.answer(output{Observations: nonNilObs(tc.obs), Proposals: []proposal{p}})
+			w.answer(output{Observations: obs, Proposals: []proposal{p}})
 
 			if n := w.work(); n != 1 {
 				t.Fatalf("Work finished %d, want 1", n)
@@ -133,6 +211,42 @@ func TestReviews_Validate(t *testing.T) {
 			w.expectWatching(len(tc.obs), tc.watching)
 		})
 	}
+}
+
+// priorID stands in a case's observation for the open observation an earlier review left.
+const priorID = "prior"
+
+// priorObservation stores, as an earlier review a minute ago, one watching observation of
+// testsMissing with count, and returns its id.
+func (w *reviewWorld) priorObservation(count int) string {
+	w.t.Helper()
+
+	at := w.clock.Now().Add(-time.Minute)
+
+	if _, err := w.store.QueueJonahReview(w.ctx(), domain.NewJonahReview{
+		FactoryID: reviewFactory, VersionID: reviewVersion, Trigger: domain.JonahManual, WindowStart: at.Add(-time.Hour), WindowEnd: at,
+		By: domain.LocalUser, At: at,
+	}); err != nil {
+		w.t.Fatal(err)
+	}
+
+	claimed, err := w.store.ClaimJonahReview(w.ctx(), at, time.Minute)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	if _, _, err := w.store.FinishJonahReview(w.ctx(), claimed, domain.JonahReviewResult{
+		State: domain.JonahDone, At: at, Observations: []domain.NewObservation{{Summary: testsMissing, Count: count}},
+	}); err != nil {
+		w.t.Fatal(err)
+	}
+
+	open, err := w.store.OpenObservations(w.ctx(), reviewFactory, 1)
+	if err != nil || len(open) != 1 {
+		w.t.Fatalf("OpenObservations = %+v, %v; want the prior one", open, err)
+	}
+
+	return string(open[0].ID)
 }
 
 // oldAndNew are the two sent-back events of TestReviews_Validate: the one before the review's

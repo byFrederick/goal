@@ -37,6 +37,17 @@ const TaskKindDraftRequest TaskKind = "draft_request"
 // and no MCP tool.
 const TaskKindJonah TaskKind = "jonah"
 
+// TaskKindTry is a try of a past item (ADR 0039 decision 9). Its token names the try (TryOf),
+// whose original run's brief, outputs and commit the gateway serves, no item and no connection;
+// its environment's env is for setup alone, and the agent gets no files, MCP servers or tools.
+const TaskKindTry TaskKind = "try"
+
+// TaskKindGrade is a grade of a try or of its item's original or final result (ADR 0039 decision
+// 10). Its token names the try (TryOf) and which result it grades (GradeOf), no item and no
+// connection: the gateway serves it spec.grade, the reason the item went back and that result,
+// and no repository, definition, file or MCP tool.
+const TaskKindGrade TaskKind = "grade"
+
 // TaskClaims scope one agent task's access to the MCP gateway: which organization, factory,
 // definition version, item, station, agent and run it acts for, which connections it may use,
 // what the organization policy decided at run start (the model, the denied commands and whether
@@ -46,7 +57,8 @@ type TaskClaims struct {
 	// Audience is always TaskAudience: SignTaskToken sets it and VerifyTaskToken requires it.
 	Audience string `json:"aud"`
 	// Kind is empty for a production task, TaskKindEval for an eval try, TaskKindJonah for a
-	// Jonah review and TaskKindDraftRequest for a draft request's box.
+	// Jonah review, TaskKindDraftRequest for a draft request's box, TaskKindTry for a try of a
+	// past item and TaskKindGrade for a grade.
 	Kind      TaskKind  `json:"k,omitempty"`
 	OrgID     OrgID     `json:"o"`
 	FactoryID FactoryID `json:"f"`
@@ -89,7 +101,13 @@ type TaskClaims struct {
 	WindowStart int64 `json:"ws,omitempty"`
 	WindowEnd   int64 `json:"we,omitempty"`
 	Manual      bool  `json:"jm,omitempty"`
-	ExpiresAt   int64 `json:"e"` // unix seconds
+	// TryOf is the past-item try a TaskKindTry task carries out, or a TaskKindGrade task grades
+	// a result for; only such tokens name one.
+	TryOf PastTryID `json:"tr,omitempty"`
+	// GradeOf is which result a TaskKindGrade task grades; only such a token names one, and it
+	// always does.
+	GradeOf   GradeOf `json:"g,omitempty"`
+	ExpiresAt int64   `json:"e"` // unix seconds
 }
 
 // SignTaskToken issues a per-task gateway token for TaskAudience, whatever c.Audience says. Any
@@ -172,6 +190,14 @@ func (c TaskClaims) checkKind() error {
 		return err
 	}
 
+	if err := c.checkTry(); err != nil {
+		return err
+	}
+
+	if err := c.checkGrade(); err != nil {
+		return err
+	}
+
 	return c.checkDraftRequest()
 }
 
@@ -202,6 +228,36 @@ func (c TaskClaims) checkDraftRequest() error {
 		return fmt.Errorf("%w: a draft request's task names no request", ErrBadTaskToken)
 	case c.Kind == TaskKindDraftRequest && (c.ItemID != "" || c.Station != "" || len(c.Connections) > 0):
 		return fmt.Errorf("%w: a draft request's task names an item, a station or connections", ErrBadTaskToken)
+	}
+
+	return nil
+}
+
+// checkTry refuses a try's claims that name an item or a connection, or no try or station, and
+// any other task's but a grade's that name a try.
+func (c TaskClaims) checkTry() error {
+	switch {
+	case c.Kind != TaskKindTry && c.Kind != TaskKindGrade && c.TryOf != "":
+		return fmt.Errorf("%w: only a try's or a grade's task names a try", ErrBadTaskToken)
+	case c.Kind == TaskKindTry && (c.TryOf == "" || c.Station == ""):
+		return fmt.Errorf("%w: a try's task names no try or station", ErrBadTaskToken)
+	case c.Kind == TaskKindTry && (c.ItemID != "" || len(c.Connections) > 0):
+		return fmt.Errorf("%w: a try's task names an item or connections", ErrBadTaskToken)
+	}
+
+	return nil
+}
+
+// checkGrade refuses a grade's claims that name an item or a connection, or no try or result to
+// grade, and any other task's that name a result to grade.
+func (c TaskClaims) checkGrade() error {
+	switch {
+	case c.Kind != TaskKindGrade && c.GradeOf != "":
+		return fmt.Errorf("%w: only a grade's task names a result to grade", ErrBadTaskToken)
+	case c.Kind == TaskKindGrade && (c.TryOf == "" || !c.GradeOf.Valid()):
+		return fmt.Errorf("%w: a grade's task names no try or result to grade", ErrBadTaskToken)
+	case c.Kind == TaskKindGrade && (c.ItemID != "" || len(c.Connections) > 0):
+		return fmt.Errorf("%w: a grade's task names an item or connections", ErrBadTaskToken)
 	}
 
 	return nil

@@ -27,6 +27,8 @@ func TestStore_Conformance(t *testing.T) {
 			Flow:  s,
 			Spend: s,
 			Jonah: s,
+			Tries: s,
+			Kept:  s,
 			Audit: tn,
 			LeaseSpans: func(_ *testing.T, org domain.OrgID, id domain.ItemID) []domain.LeaseSpan {
 				return s.LeaseSpans(org, id)
@@ -50,6 +52,7 @@ func TestStore_Conformance(t *testing.T) {
 			SetSlotCaps: func(_ *testing.T, org domain.OrgID, maxSlots int, factories map[domain.FactoryID]int) {
 				s.SetSlotCaps(org, maxSlots, factories)
 			},
+			DeleteFactory: func(_ *testing.T, _ domain.OrgID, factory domain.FactoryID) { s.DeleteFactory(factory) },
 			NewVersion: func(*testing.T, domain.OrgID, domain.FactoryID) domain.DefinitionVersionID {
 				return domain.DefinitionVersionID(fmt.Sprintf("00000000-0000-4000-a000-%012d", versions.Add(1)))
 			},

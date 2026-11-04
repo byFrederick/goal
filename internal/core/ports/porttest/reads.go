@@ -260,7 +260,15 @@ func (s *Store) SpendSince(ctx context.Context, factory domain.FactoryID, since 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.spend(org, factory, since, time.Time{}, ""), nil
+	var jonah float64
+
+	for id, r := range s.runs {
+		if s.runVisible(r, org) && r.FactoryID == factory && s.jonah.runKinds[id].Jonahs() && !r.StartedAt.Before(since) {
+			jonah += r.Result.CostUSD
+		}
+	}
+
+	return s.spend(org, factory, since, time.Time{}, "") - jonah, nil // Jonah's runs never trigger onExhausted
 }
 
 // spend adds the cost of an organization's factory's runs started in [since, until), or at or

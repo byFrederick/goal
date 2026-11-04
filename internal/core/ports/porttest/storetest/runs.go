@@ -237,8 +237,8 @@ func testRunsJonahWithoutItem(f *fixture) {
 
 	sameRuns(t, []domain.Run{got}, []domain.Run{want})
 
-	if usd, err := f.Jonah.JonahSpendSince(f.ctx(t), f.factory, t1); err != nil || usd != 0.5 {
-		t.Errorf("JonahSpendSince = %v, %v; want 0.5, the jonah run's cost", usd, err)
+	if s, err := f.Jonah.JonahSpendSince(f.ctx(t), f.factory, t1); err != nil || s.JonahUSD != 0.5 {
+		t.Errorf("JonahSpendSince = %+v, %v; want 0.5 of Jonah's, the jonah run's cost", s, err)
 	}
 
 	other := f.otherOrg(t)

@@ -266,7 +266,7 @@ function ClearDialog({ factory, pull, open, onOpenChange, onConfirm, pending }: 
               onChange={(e) => setNote(e.target.value)}
               rows={3}
               maxLength={maxNote}
-              placeholder="Fixed the prompt and re-ran the evals."
+              placeholder="Fixed the prompt and re-ran the checks."
               className={textarea}
             />
           </div>

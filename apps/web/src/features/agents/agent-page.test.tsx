@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
-import type { Problem } from '@goal/api-client';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, startBakeOff } from '../../api/client';
+import { proposeAgentModel } from '../../api/client';
 import { createDraftRequest } from '../../api/definitions';
 import {
   agentStatsQuery,
   builderMetaQuery,
   factoryQuery,
+  policyQuery,
   versionFileQuery,
   versionModelQuery,
   versionQuery,
@@ -21,9 +22,13 @@ import { DraftSession } from '../factory-editor/draft/session';
 import { AgentPage } from './agent-page';
 import type { AgentView } from './views';
 
+vi.mock('sonner', () => ({
+  toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
+  Toaster: () => null,
+}));
 vi.mock('../../api/client', async (original) => ({
   ...(await original<typeof import('../../api/client')>()),
-  startBakeOff: vi.fn(),
+  proposeAgentModel: vi.fn(),
 }));
 
 vi.mock('../../api/definitions', async (original) => ({
@@ -127,7 +132,21 @@ function seeds({
         },
       },
     ],
-    [builderMetaQuery(org.id).queryKey, { capabilities: { tool_approvals: false } }],
+    [
+      builderMetaQuery(org.id).queryKey,
+      {
+        capabilities: { tool_approvals: false },
+        models: [
+          { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', default: false },
+          { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', default: true },
+          { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', default: false },
+        ],
+      },
+    ],
+    [
+      policyQuery(org.id).queryKey,
+      { view: { policy: { allowed_models: ['claude-haiku-5-5', 'claude-sonnet-5-5'] } }, etag: '"1"' },
+    ],
     [
       versionQuery(org.id, factory.id, 'current').queryKey,
       {
@@ -324,7 +343,7 @@ describe('the top bar', () => {
 
   it('holds the actions in order, Save changes last, and not in the page body', async () => {
     await renderWithBar(edit);
-    const names = ['Bake off this agent', 'Open prompt file', 'Save changes'];
+    const names = ['Open prompt file', 'Save changes'];
     const found = names.map((n) => screen.getByRole(n === 'Open prompt file' ? 'link' : 'button', { name: n }));
     for (let i = 1; i < found.length; i++) {
       const prev = found[i - 1] as HTMLElement;
@@ -476,105 +495,58 @@ describe('the states', () => {
   });
 });
 
-describe('Bake off this agent', () => {
-  const editor = ['item:create', 'factory:manage', 'definition:edit'];
-  const button = () => screen.getByRole('button', { name: 'Bake off this agent' });
-
-  it('starts a bake-off of the agent and opens the new one', async () => {
-    vi.mocked(startBakeOff).mockResolvedValue({
-      bake_off: { id: 'bake-off-2', state: 'queued' } as never,
-      estimate: { usd: 15.6, unpriced: [] },
-    });
-    const { router } = await renderPage('overview', { can: editor });
-
-    fireEvent.click(button());
-
-    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/goal/jonah/bake-offs/bake-off-2'));
-    expect(startBakeOff).toHaveBeenCalledWith('org-1', 'factory-1', 'frontend-engineer');
-  });
-
-  it('is busy and disabled while the start is pending', async () => {
-    vi.mocked(startBakeOff).mockReturnValue(new Promise(() => {}));
-    await renderPage('overview', { can: editor });
-
-    fireEvent.click(button());
-
-    await waitFor(() => expect(button().getAttribute('aria-busy')).toBe('true'));
-    expect((button() as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it('is disabled with its reason without definition:edit, and starts nothing', async () => {
-    await renderPage('overview');
-
-    expect((button() as HTMLButtonElement).disabled).toBe(true);
-    const reason = screen.getByText('View only. Editors of goal change its definition.', {
-      selector: `#${button().getAttribute('aria-describedby')}`,
-    });
-    expect(button().getAttribute('aria-describedby')).toBe(reason.id);
-
-    fireEvent.click(button());
-    expect(startBakeOff).not.toHaveBeenCalled();
-  });
-
-  it('shows a 409 learning-budget refusal with its estimate, and says nothing started', async () => {
-    const refused = new ApiError({
-      title: 'Conflict',
-      status: 409,
-      code: 'learning-budget-exhausted',
-      estimate: { usd: 15.6, unpriced: [] },
-    } as unknown as Problem);
-    vi.mocked(startBakeOff).mockRejectedValue(refused);
-    const { router } = await renderPage('overview', { can: editor });
-
-    fireEvent.click(button());
-
-    expect(await screen.findByText(/would cost about \$15\.60/)).toBeTruthy();
-    expect(screen.getByText(/Nothing was started/)).toBeTruthy();
-    expect(router.state.location.pathname).toBe('/o/acme/f/goal/agents/frontend-engineer');
-  });
-
-  it('says the budget has run out when a 409 carries no estimate', async () => {
-    vi.mocked(startBakeOff).mockRejectedValue(
-      new ApiError({ title: 'Conflict', status: 409, code: 'learning-budget-exhausted' } as unknown as Problem),
-    );
-    await renderPage('overview', { can: editor });
-
-    fireEvent.click(button());
-
-    expect(await screen.findByText('The learning budget has run out. Nothing was started.')).toBeTruthy();
-  });
-
-  it('shows another refusal in place with its detail', async () => {
-    vi.mocked(startBakeOff).mockRejectedValue(
-      new ApiError({
-        title: 'Unprocessable',
-        status: 422,
-        code: 'invalid-bake-off',
-        detail: 'the version has no such agent',
-      } as unknown as Problem),
-    );
-    await renderPage('overview', { can: editor });
-
-    fireEvent.click(button());
-
-    expect(await screen.findByText('Not started: the version has no such agent')).toBeTruthy();
-  });
-
-  it('shows a network failure in place, and says nothing started', async () => {
-    vi.mocked(startBakeOff).mockRejectedValue(new TypeError('Failed to fetch'));
-    await renderPage('overview', { can: editor });
-
-    fireEvent.click(button());
-
-    expect(await screen.findByText('goald is not answering. Nothing started; try again once it is.')).toBeTruthy();
-  });
-});
-
 describe('phone tap targets on the agent page', () => {
   it('gives each rejection-reason button the touchLink classes', async () => {
     await renderPage('overview');
     const reasons = screen.getByRole('region', { name: 'Why review sent work back' });
     const button = within(reasons).getByRole('button', { name: /No test for a new empty or error state/ });
     for (const cls of touchLink.split(' ')) expect(button.classList.contains(cls)).toBe(true);
+  });
+});
+
+describe('Try another model', () => {
+  const estimate = {
+    agent: 'frontend-engineer',
+    current_model: 'claude-haiku-5-5',
+    model: 'claude-sonnet-5-5',
+    items: [],
+    tries: 15,
+    estimate_usd: 4.2,
+    budget_left_usd: 20,
+  };
+
+  it('is not offered without definition:edit', async () => {
+    await renderPage();
+    expect(screen.queryByRole('button', { name: 'Try another model' })).toBeNull();
+  });
+
+  it('lists only the models the policy allows, shows the estimate, then makes the proposal', async () => {
+    vi.mocked(proposeAgentModel).mockImplementation(async (_o, _f, _a, _m, confirm) =>
+      confirm ? { estimate, proposal: { number: 7 } as never } : { estimate },
+    );
+    await renderPage('overview', { can: ['definition:edit'] });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try another model' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Try another model' });
+    const make = within(dialog).getByRole('button', { name: 'Make the proposal' });
+    expect(make.hasAttribute('disabled')).toBe(true);
+
+    fireEvent.click(within(dialog).getByRole('combobox', { name: 'Model' }));
+    const options = (await screen.findAllByRole('option')).map((o) => o.textContent);
+    expect(options).toEqual(['Sonnet 5.5']);
+    fireEvent.click(screen.getByRole('option', { name: 'Sonnet 5.5' }));
+
+    expect(await within(dialog).findByText('15 tries on 0 items')).toBeTruthy();
+    expect(within(dialog).getByText('About $4.20 of $20.00 left this week')).toBeTruthy();
+    expect(vi.mocked(proposeAgentModel).mock.calls.at(-1)?.[4]).toBe(false);
+
+    await waitFor(() => expect(make.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(make);
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Proposal made'));
+    expect(vi.mocked(proposeAgentModel).mock.calls.at(-1)?.slice(2)).toEqual([
+      'frontend-engineer',
+      'claude-sonnet-5-5',
+      true,
+    ]);
   });
 });

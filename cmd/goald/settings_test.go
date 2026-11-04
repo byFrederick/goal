@@ -81,6 +81,31 @@ func TestSettings_JonahReviews(t *testing.T) {
 	}
 }
 
+// The try loop's times and cap are read from the environment, defaulting to 1m, 30m, 5m and 2, and
+// one that is not positive is refused by name.
+func TestSettings_JonahTries(t *testing.T) {
+	t.Parallel()
+
+	s, err := settingsFrom(envOf(nil))
+	if err != nil || s.JonahTryEvery != time.Minute || s.JonahTry.Timeout != 30*time.Minute || s.JonahTry.Margin != 5*time.Minute ||
+		s.JonahTry.PerFactory != 2 {
+		t.Fatalf("defaults %s, %+v (%v); want 1m, 30m, 5m and 2", s.JonahTryEvery, s.JonahTry, err)
+	}
+
+	s, err = settingsFrom(envOf(map[string]string{"GOAL_JONAH_TRY_TIMEOUT": "1h", "GOAL_JONAH_TRIES_PER_FACTORY": "4"}))
+	if err != nil || s.JonahTry.Timeout != time.Hour || s.JonahTry.PerFactory != 4 {
+		t.Fatalf("try timeout %s, per factory %d (%v); want 1h and 4", s.JonahTry.Timeout, s.JonahTry.PerFactory, err)
+	}
+
+	for name, bad := range map[string]string{
+		"GOAL_JONAH_TRY_EVERY": "0s", "GOAL_JONAH_TRY_TIMEOUT": "soon", "GOAL_JONAH_TRY_LEASE_MARGIN": "-1m", "GOAL_JONAH_TRIES_PER_FACTORY": "0",
+	} {
+		if _, err := settingsFrom(envOf(map[string]string{name: bad})); err == nil || !strings.Contains(err.Error(), name) {
+			t.Errorf("%s=%s: %v; want an error naming it", name, bad, err)
+		}
+	}
+}
+
 // Without GOAL_WORKERS_AI_URL goald converts no PDF or Office file, and with it goald does; two workers sync.
 func TestSettings_Knowledge(t *testing.T) {
 	t.Parallel()
@@ -336,33 +361,6 @@ func TestSettings_Models(t *testing.T) {
 	want = []builder.Model{{ID: "claude-sonnet-5-5", Label: "Claude Sonnet 5.5"}, {ID: "claude-fable-5-1", Label: "Fable (preview)"}}
 	if !slices.Equal(s.Models, want) {
 		t.Errorf("models = %+v, want %+v", s.Models, want)
-	}
-}
-
-// The bake-off models: none by default; GOAL_BAKEOFF_MODELS lists model ids, and a value that is
-// not a list of them refuses to start, naming the variable.
-func TestSettings_BakeOffModels(t *testing.T) {
-	t.Parallel()
-
-	s, err := settingsFrom(envOf(nil))
-	if err != nil || len(s.BakeOffModels) != 0 {
-		t.Fatalf("default bake-off models = %v (%v), want none", s.BakeOffModels, err)
-	}
-
-	s, err = settingsFrom(envOf(map[string]string{"GOAL_BAKEOFF_MODELS": " claude-sonnet-5-5 , claude-haiku-5-5"}))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if want := []string{"claude-sonnet-5-5", "claude-haiku-5-5"}; !slices.Equal(s.BakeOffModels, want) {
-		t.Errorf("bake-off models = %v, want %v", s.BakeOffModels, want)
-	}
-
-	for _, bad := range []string{"gpt-5", "claude-haiku-5-5,,claude-sonnet-5-5", "claude-haiku-5-5,claude-haiku-5-5", "Claude-Opus"} {
-		_, err := settingsFrom(envOf(map[string]string{"GOAL_BAKEOFF_MODELS": bad}))
-		if err == nil || !strings.Contains(err.Error(), "GOAL_BAKEOFF_MODELS") {
-			t.Errorf("GOAL_BAKEOFF_MODELS=%q: err = %v, want a refusal naming it", bad, err)
-		}
 	}
 }
 

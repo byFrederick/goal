@@ -1230,9 +1230,38 @@ export interface paths {
         put?: never;
         /**
          * Publish the open draft as the factory's next version
-         * @description One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items), name-taken, and with eval cases evals-pending or evals-failing (the eval gate, with eval_run_id; the draft stays open).
+         * @description One transaction: the draft becomes version N+1, the factory runs it, and the open items of stations it removes move by station_moves. Runs in progress finish on the version they started on; every later step uses the new one. Errors: 412 draft-conflict (the draft is no longer at revision); 409 draft-base-moved (the current version is not expected_current_version_id), definition-invalid (with problems), items-at-removed-station (with items) and name-taken.
          */
         post: operations["publishDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/draft/kept-tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read the open draft's kept tests and their results
+         * @description The same answer as startDraftKeptTests, and it starts nothing: a test not yet started has result null. 404 no-draft when no draft is open.
+         */
+        get: operations["getDraftKeptTests"];
+        put?: never;
+        /**
+         * Start the kept tests the open draft reaches (ADR 0039 decision 12)
+         * @description The publish dialog calls this when it opens. Goal finds the stations the draft reaches (the agent stations whose agent gets something different) and queues one try of each kept test there, on the current version with the draft's files. A test that has a try of exactly the draft's content already, from a tried proposal or an earlier publish, reuses it and queues nothing, so calling this again starts nothing new. Tries of a publish are claimed before a proposal's, and still wait while an item waits at an agent station or Jonah's budget is used up. A failing test warns and never blocks a publish: publishDraft does not read these results. A test that can't be tried (its station's agent needs MCP servers or secrets, the draft deletes a file, or Jonah is off) is answered with result error and why. 404 no-draft when no draft is open.
+         */
+        post: operations["startDraftKeptTests"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1543,270 +1572,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/orgs/{org}/factories/{factory}/evals": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-            };
-            cookie?: never;
-        };
-        /**
-         * The eval cases of the current version, with their last tries and a summary
-         * @description Each case of the current version's evals/cases/, by name, with what checks it, its last 3 finished tries (newest first) and what it cost in the latest run that ran it. The summary counts the cases whose last tries all passed and the share of those tries that passed, and names the latest run of the current version's content. A factory never published has no cases and no version. 503 evals-unavailable while this goald does not run evals.
-         */
-        get: operations["listEvals"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/factories/{factory}/evals/runs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Start an eval run of every case, or of one, on the current version or the draft
-         * @description Queues a run (trigger manual) with one try per case and try, priced as estimateEvalRun prices it, and answers at once; goald's eval loop works the tries. 400 invalid-request for a case name that is not a slug, eval-case-unknown for a case the content does not have and for content without cases; 404 version-not-found for a factory never published (on current), no-draft for one without a draft (on draft); 503 evals-unavailable.
-         */
-        post: operations["startEvalRun"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/factories/{factory}/evals/estimate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * What an eval run would cost, about, without starting it
-         * @description Each try at the mean cost of its case's last finished tries or, for a case with none, at the median cost of its agent's newest finished runs; a case with neither is unpriced. The same refusals as startEvalRun.
-         */
-        post: operations["estimateEvalRun"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The eval run's id */
-                eval_run: components["parameters"]["EvalRunRef"];
-            };
-            cookie?: never;
-        };
-        /**
-         * One eval run with its results by case and try
-         * @description 404 eval-run-not-found for a run that is not the factory's; 503 evals-unavailable.
-         */
-        get: operations["getEvalRun"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/factories/{factory}/evals/runs/{eval_run}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The eval run's id */
-                eval_run: components["parameters"]["EvalRunRef"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Cancel an eval run
-         * @description No further try of it starts and a try that is running stops at its next poll. 404 eval-run-not-found; 409 eval-run-finished for a run that is done, failed or cancelled; 503 evals-unavailable.
-         */
-        post: operations["cancelEvalRun"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/factories/{factory}/evals/cases": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Add an eval case from a past run and publish it
-         * @description Writes evals/cases/{name}.yaml from the past agent run: its agent, and its item's title, body, type and lane as the input, checked by the agent's contract or by judge, with tries tries (default 1). The file goes into a new draft of the current version, which publishes as the next version through the same checks and eval gate as publishDraft (ADR 0025 decision 5). 400 invalid-request for a name that is not a slug; 404 run-not-found for a run that is not the factory's; 409 eval-case-exists when the current version has the case, draft-open when the factory already has a draft (the draft this call opened is discarded), and the publish's own conflicts. When the eval gate refuses (evals-pending, evals-failing) the draft stays open, so it publishes once its run passes. 503 evals-unavailable.
-         */
-        post: operations["addEvalCase"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/factories/{factory}/evals/bake-offs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-            };
-            cookie?: never;
-        };
-        /**
-         * The factory's bake-offs, newest first
-         * @description At most the 20 newest bake-offs (ADR 0029): eval runs of kind bake-off, each of one agent on two to four models. 503 evals-unavailable.
-         */
-        get: operations["listBakeOffs"];
-        put?: never;
-        /**
-         * Start a bake-off of one agent across models on the current version
-         * @description Queues a bake-off of the agent's eval cases in the current version, each run trials times (default 3) on every arm, and answers at once; goald's eval loop works the tries. Without models, the arms are the agent's model and goald's default models (GOAL_BAKEOFF_MODELS). The estimate is cases × trials × arms × the price of a try, as estimateEvalRun prices it. 404 version-not-found for a factory never published; 409 learning-budget-exhausted, with the estimate, when it exceeds what is left of the learning budget; 422 invalid-bake-off for an agent the version does not have or that works at no station, arms that are not 2 to 4 distinct model ids with the agent's model among them, trials outside 1 to 10 and an agent with no eval cases; 503 evals-unavailable.
-         */
-        post: operations["startBakeOff"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The bake-off's id, the id of its eval run */
-                bake_off: components["parameters"]["BakeOffRef"];
-            };
-            cookie?: never;
-        };
-        /**
-         * One bake-off with its arms, its tries passed per case and its recommendation
-         * @description 404 eval-run-not-found for a bake-off that is not the factory's and for an eval run that is not a bake-off; 503 evals-unavailable.
-         */
-        get: operations["getBakeOff"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/rerun": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The bake-off's id, the id of its eval run */
-                bake_off: components["parameters"]["BakeOffRef"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Run a bake-off again on the current version
-         * @description Queues a new bake-off of the same agent with the same arms and trials, on the factory's current version, which may be newer than the original's (ADR 0029 decision 7). 404 eval-run-not-found; then the refusals of startBakeOff.
-         */
-        post: operations["rerunBakeOff"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/factories/{factory}/evals/bake-offs/{bake_off}/apply": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The bake-off's id, the id of its eval run */
-                bake_off: components["parameters"]["BakeOffRef"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Write an arm's model as the agent's model into the factory's draft
-         * @description Sets agents[].model of the bake-off's agent in the draft to the arm's model, opening a draft from the current version when none is open. It never publishes: the draft publishes as any other, through the eval gate (ADR 0029 decision 7). 404 eval-run-not-found; 412 draft-conflict when the agent changed since the bake-off's version; 422 invalid-bake-off for an arm the bake-off does not have; 503 evals-unavailable.
-         */
-        post: operations["applyBakeOff"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/orgs/{org}/factories/{factory}/items": {
         parameters: {
             query?: never;
@@ -2111,7 +1876,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/orgs/{org}/factories/{factory}/judges": {
+    "/v1/orgs/{org}/factories/{factory}/agents/{agent}/model-proposal": {
         parameters: {
             query?: never;
             header?: never;
@@ -2120,78 +1885,18 @@ export interface paths {
                 org: components["parameters"]["OrgRef"];
                 /** @description The factory's metadata.id or metadata.name */
                 factory: components["parameters"]["FactoryRef"];
-            };
-            cookie?: never;
-        };
-        /**
-         * The judges of the factory's current version, each with its last 30 days
-         * @description One entry per evals/judges/<slug>.md of the current version, by slug, each with its production scores of the last 30 days (runs scored, pass rate, cost and a daily pass-rate series by UTC day; tries never count). judge_cost_usd is what every judge run of the factory cost in those 30 days. Empty, with version null, before the first publish. 503 judges-unavailable when this goald does not serve judges.
-         */
-        get: operations["listJudges"];
-        put?: never;
-        /**
-         * Add a judge and publish it as the factory's next version
-         * @description Writes evals/judges/<slug>.md (the front matter and the rubric) into a new draft of the current version and publishes it with the usual checks (ADR 0025 decision 5). Errors: 409 judge-exists (the current version has a judge of that slug), draft-open (the factory has an open draft: publish or discard it first; it is left as it is), definition-invalid (with problems; the draft this call opened is discarded), draft-base-moved (expected_current_version_id is not the current version). When the factory has eval cases and the eval gate refuses (evals-pending, evals-failing), the draft stays open, so it publishes once its run passes. 503 judges-unavailable.
-         */
-        post: operations["createJudge"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/factories/{factory}/judges/{judge}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The judge's slug: its file name in evals/judges without .md */
-                judge: components["parameters"]["JudgeRef"];
-            };
-            cookie?: never;
-        };
-        /**
-         * One judge of the current version, its last 30 days, its recent scores and where it runs
-         * @description Everything in its file, its 30-day summary, its newest production scores (every state, newest first) and runs_on: the box and connections of the factory's defaults it inherits. 404 judge-not-found; 503 judges-unavailable.
-         */
-        get: operations["getJudge"];
-        /**
-         * Replace a judge's file and publish it as the factory's next version
-         * @description As createJudge, for a judge the current version has: 404 judge-not-found otherwise. The same 409 draft-open, definition-invalid and draft-base-moved answers, and the same eval gate.
-         */
-        put: operations["updateJudge"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/factories/{factory}/judges/{judge}/try": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The judge's slug: its file name in evals/judges without .md */
-                judge: components["parameters"]["JudgeRef"];
+                /** @description The agent's name, as the factory's current version declares it */
+                agent: string;
             };
             cookie?: never;
         };
         get?: never;
         put?: never;
         /**
-         * Queue the judge on the 10 newest finished runs of its agents
-         * @description Each try names the run's item and is scored like any other score, but never counts in the judge's 30-day figures. Tries cost model spend, so only those who may publish queue them. 404 judge-not-found; 503 judges-unavailable.
+         * Try another model for an agent, as a proposal (ADR 0039 decision 13)
+         * @description Estimates first: with confirm false (the default) it answers 200 with the estimate and stores nothing. The estimate names the agent's five newest finished items (done items whose first run of a claim by the agent is at a station of the current version that can be tried), how each went on the line, the tries (three per item), their cost (each item's original run's cost × 3) and what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal: an ordinary proposal against the current version whose one edit is a replacement in factory.yaml that changes the agent's model, with three queued tries per item at the item's station and run on the new model, superseding the open proposals it overlaps. Approve, edit and reject then work on it as on any proposal. 422 model-not-allowed for a model the organization's policy does not allow or the agent's model already; agent-not-triable for an agent that needs MCP servers or secrets; no-finished-items when the agent has no finished item to try; 409 learning-budget-exhausted, with the estimate, when the tries cost more than what is left of Jonah's budget; 404 agent-not-found, version-not-found before the first publish; 503 jonah-unavailable.
          */
-        post: operations["tryJudge"];
+        post: operations["proposeAgentModel"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2290,7 +1995,7 @@ export interface paths {
         put?: never;
         /**
          * Publish the proposal as a new version, as the caller (ADR 0034 decision 7)
-         * @description Opens a draft from the current version, writes the proposal's files and publishes it through the usual validation and gates. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when a file's current SHA-256 is not its base_sha256 (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate keeps the draft open). 404 proposal-not-found.
+         * @description Applies the proposal's edits again to the current version's files (ADR 0039 decision 6), opens a draft from the current version, writes the results and publishes it through the usual validation and gates. An unrelated change to an edited file since the review does not stop it. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when an edit no longer applies, because a replacement's old text no longer occurs exactly once in its file (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid). 404 proposal-not-found.
          */
         post: operations["approveProposal"];
         delete?: never;
@@ -2316,8 +2021,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Write the proposal's files into the draft, opening one if none is open (decision 8)
-         * @description Sets the proposal applied; the caller continues in the builder. 409 draft-conflict when the draft's copy of a file is not its base_sha256 (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
+         * Apply the proposal's edits to the draft, opening one if none is open (decision 8)
+         * @description Applies the proposal's edits again to the draft's copy of each file and sets the proposal applied; the caller continues in the builder. 409 draft-conflict when an edit no longer applies to the draft's copy, because a replacement's old text no longer occurs exactly once (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
          */
         post: operations["editProposal"];
         delete?: never;
@@ -2353,6 +2058,116 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The proposal's number in its factory, from 1 */
+                number: components["parameters"]["ProposalNumber"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write Undo this change, a proposal that reverses the published proposal (ADR 0039 decision 15)
+         * @description Works out the replacements the proposal's publish made, from each file in the version it was made against and its published content, and reverses them against the current version, whatever has published since. A file the proposal added is left. The new proposal is proposed, with undoes set, and publishes only when a person approves it. 409 proposal-not-published when the proposal was never published; undo-conflict, naming the file, when a reversed replacement's text no longer occurs exactly once; undo-open while an undo of the proposal is proposed, published or applied. 404 proposal-not-found.
+         */
+        post: operations["undoProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/try": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The proposal's number in its factory, from 1 */
+                number: components["parameters"]["ProposalNumber"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Try again, adding tries to an open proposal (ADR 0039 decision 11)
+         * @description Adds one more try per item the proposal was tried on, or three per item for a model proposal (Try another model). Each new try reruns the same run of the item at the same station on the same model, and is queued like the proposal's first tries. Estimates first: with confirm false (the default) it answers 200 with the estimate and queues nothing. The estimate prices each new try at its item's original run's cost and says what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal, whose tried lists the new attempts after the earlier ones. 409 learning-budget-exhausted, with try_estimate, when the tries cost more than what is left of Jonah's budget; proposal-decided for a proposal that is not proposed; proposal-not-tried when the proposal has no tries yet (Jonah queues its first ones); proposal-stale when its edits no longer apply. 422 proposal-not-triable for a proposal that changes no station that can be tried, as a memory-only or flow-only one. 404 proposal-not-found; 503 jonah-unavailable.
+         */
+        post: operations["tryJonahProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/jonah/tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the factory's kept tests (ADR 0039 decision 12)
+         * @description A kept test is a past item a person kept, at a station it passed the first time, as a test the item must keep passing there. A failing kept test warns at publish and never blocks one. Ordered by station in the current line's order (a station no longer in the line last), then newest first.
+         */
+        get: operations["listKeptTests"];
+        put?: never;
+        /**
+         * Keep a past item as a test at a station it passed the first time
+         * @description The item passed the station the first time when it was claimed there once, no gate rejected it there, and it then moved on, and its first run there finished with its commit recorded. Problems: 404 item-not-found for an unknown item number; 400 invalid-request for a station that is not an agent station of the current line; 409 not-passed-first-time when the item did not pass the station the first time; 409 kept-test-exists when the item is kept at that station already.
+         */
+        post: operations["keepTest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/jonah/tests/{test}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The kept test's id */
+                test: components["parameters"]["KeptTestRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a kept test
+         * @description The item stays; only the test goes. 404 kept-test-not-found for an unknown test or one of another factory.
+         */
+        delete: operations["removeKeptTest"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/jonah/reviews": {
         parameters: {
             query?: never;
@@ -2368,8 +2183,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Queue a manual review of the factory's sent-back runs (decision 2)
-         * @description The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-loop-not-running while no review loop runs (none does until software#344 ships): nothing is queued. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+         * Queue a manual review of the factory at once ("Look for improvements now")
+         * @description The review reads what finished since the last done review's window ended (30 days back before the first) on the current version; goald's review loop runs it, retrying a failed run twice. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while Jonah's runs over the last 7 days cost its budget or more: learning.jonah.share (default 5%) of what the line's other runs cost over those 7 days, so a line that spent nothing has none. 404 version-not-found before the first publish.
          */
         post: operations["queueJonahReview"];
         delete?: never;
@@ -3988,7 +3803,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422). */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate). */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -4004,275 +3819,12 @@ export interface components {
             /** @description draft-conflict on a file write only, the file's sha256 now; absent when the file is gone */
             sha256?: string;
             items?: components["schemas"]["ItemsAtRemovedStations"];
-            /** @description evals-pending and evals-failing only, the eval run of the draft's content the publish waits on or that failed */
-            eval_run_id?: string;
-            /** @description evals-failing only, the cases of that run with a try that did not pass */
-            failing_cases?: string[];
-            /** @description learning-budget-exhausted only, the estimate of the bake-off it refused */
-            estimate?: components["schemas"]["EvalEstimate"];
+            /** @description learning-budget-exhausted of a model proposal only, the estimate it refused */
+            model_estimate?: components["schemas"]["ModelProposalEstimate"];
+            /** @description learning-budget-exhausted of Try again only, the estimate it refused */
+            try_estimate?: components["schemas"]["TryProposalEstimate"];
             /** @description secret-in-use only, what uses the secret */
             uses?: components["schemas"]["SecretUse"][];
-        };
-        EvalList: {
-            summary: components["schemas"]["EvalSummary"];
-            cases: components["schemas"]["EvalCaseEntry"][];
-        };
-        EvalSummary: {
-            /** @description The current version's number; absent for a factory never published */
-            version?: number;
-            /** @description How many cases the current version has */
-            cases: number;
-            /** @description The cases whose last tries all passed (a case with no try does not pass) */
-            cases_passing: number;
-            /** @description The last tries of every case */
-            tries: number;
-            /** @description Of those */
-            tries_passed: number;
-            /**
-             * Format: double
-             * @description tries_passed of tries, 0 to 1; absent while no case has a try
-             */
-            first_try_pass_rate?: number;
-            /** @description The newest eval run of the current version's content */
-            latest_run_id?: string;
-            /**
-             * Format: date-time
-             * @description When that run finished, or started while it runs
-             */
-            latest_run_at?: string;
-            /** @description The most tries that run gave a case */
-            latest_tries_per_case?: number;
-        };
-        EvalCaseEntry: {
-            /** @description The case's file name under evals/cases/ */
-            name: string;
-            description: string;
-            agent: string;
-            /** @description How many tries a run gives it */
-            tries?: number;
-            checked_by: components["schemas"]["EvalCheckedBy"];
-            /** @description Its last finished tries, newest first, at most 3 */
-            last_tries: components["schemas"]["EvalHistoryTry"][];
-            /**
-             * Format: double
-             * @description What its tries cost in the latest run that ran it; absent when none did
-             */
-            cost_usd?: number;
-        };
-        EvalCheckedBy: {
-            /** @enum {string} */
-            kind: "contract" | "judge" | "reference_patch";
-            /** @description judge only */
-            judge?: string;
-            /** @description judge only */
-            title?: string;
-            /** @description reference_patch only */
-            path?: string;
-        };
-        EvalHistoryTry: {
-            eval_run_id: string;
-            try: number;
-            state: components["schemas"]["EvalResultState"];
-            /** @description The agent run of the try */
-            run_id?: string;
-            /** Format: double */
-            cost_usd: number;
-        };
-        /**
-         * @description pass, fail and error are finished; a try that failed for an infrastructure reason is error, never fail
-         * @enum {string}
-         */
-        EvalResultState: "pending" | "running" | "pass" | "fail" | "error";
-        EvalRunRequest: {
-            /** @description The one case to run; absent runs every case */
-            case?: string;
-            /**
-             * @description The content to run the cases of, the current version's or the open draft's
-             * @default current
-             * @enum {string}
-             */
-            on?: "current" | "draft";
-        };
-        EvalEstimate: {
-            /**
-             * Format: double
-             * @description About what the priced cases' tries cost
-             */
-            usd: number;
-            /** @description The cases with no tries and whose agent has no finished run to price them by */
-            unpriced: string[];
-        };
-        EvalRunStarted: {
-            run: components["schemas"]["EvalRun"];
-            estimate: components["schemas"]["EvalEstimate"];
-        };
-        EvalRun: {
-            id: string;
-            /** @enum {string} */
-            state: "queued" | "running" | "done" | "failed" | "cancelled";
-            /** @enum {string} */
-            trigger: "manual" | "publish";
-            /** @description The one case it was asked for; absent when it runs every case */
-            case?: string;
-            /** @description The published version it runs; absent for a draft's content */
-            version?: number;
-            /** @description The hash of the content it runs */
-            content_sha256: string;
-            /** Format: double */
-            estimate_usd: number;
-            /**
-             * Format: double
-             * @description What its recorded tries cost
-             */
-            cost_usd: number;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            finished_at?: string;
-            /** @description By case, then try */
-            results: components["schemas"]["EvalResult"][];
-        };
-        EvalResult: {
-            case: string;
-            try: number;
-            state: components["schemas"]["EvalResultState"];
-            /** @description contract, judge:<slug> or reference-patch:<path>, once checked */
-            checked_by?: string;
-            run_id?: string;
-            /** Format: double */
-            cost_usd: number;
-            turns: number;
-            /** @description What the check found (a reason, a contract problem, the judge's outcome and score, missing files) */
-            detail?: {
-                [key: string]: unknown;
-            };
-        };
-        BakeOffRequest: {
-            /** @description The agent to bake off */
-            agent: string;
-            /** @description The arms' models, 2 to 4 distinct ids, the agent's model among them; absent, the agent's model and goald's default models */
-            models?: string[];
-            /**
-             * @description Tries per case on every arm
-             * @default 3
-             */
-            trials?: number;
-        };
-        BakeOffApply: {
-            /** @description The arm whose model to write */
-            arm: number;
-        };
-        BakeOffStarted: {
-            bake_off: components["schemas"]["BakeOff"];
-            estimate: components["schemas"]["EvalEstimate"];
-        };
-        BakeOffList: {
-            /** @description Newest first */
-            bake_offs: components["schemas"]["BakeOff"][];
-        };
-        BakeOff: {
-            /** @description The id of its eval run */
-            id: string;
-            /** @enum {string} */
-            state: "queued" | "running" | "done" | "failed" | "cancelled";
-            agent: string;
-            /** @description The first station the agent works at */
-            station: string;
-            /** @description The published version it runs */
-            version: number;
-            /** @description Tries per case on every arm */
-            trials: number;
-            /** @description How many of the agent's eval cases it runs */
-            cases: number;
-            /** Format: double */
-            estimate_usd: number;
-            /**
-             * Format: double
-             * @description What its recorded tries cost
-             */
-            cost_usd: number;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            finished_at?: string;
-            /** @description By arm number */
-            arms: components["schemas"]["BakeOffArm"][];
-            /** @description By case name, the tries passed of each arm so far, out of trials */
-            per_case: components["schemas"]["BakeOffCase"][];
-            /** @description The arm with the highest pass rate, then the lowest cost per item; null while the bake-off is not done or when an arm errored on every try (ADR 0029 decision 4) */
-            recommended_arm: number | null;
-        };
-        BakeOffArm: {
-            /** @description Its number */
-            arm: number;
-            model: string;
-            /** @description The agent's model in the bake-off's version */
-            is_current: boolean;
-            /** @description Its row of the report, null until the bake-off is done */
-            summary: components["schemas"]["BakeOffArmSummary"] | null;
-        };
-        BakeOffArmSummary: {
-            tries: number;
-            passed: number;
-            /** @description Tries that failed for an infrastructure reason; they count as not passed */
-            errors: number;
-            /**
-             * Format: double
-             * @description passed of tries
-             */
-            pass_rate: number;
-            /**
-             * Format: double
-             * @description The mean cost of a try
-             */
-            cost_per_item_usd: number;
-            /**
-             * Format: double
-             * @description The mean duration of a try
-             */
-            time_per_item_seconds: number;
-            /**
-             * Format: double
-             * @description The mean turns of a try
-             */
-            turns: number;
-            /** @description The advisory judge's share; null when no judge scores the agent */
-            judged: components["schemas"]["BakeOffJudged"] | null;
-        };
-        BakeOffJudged: {
-            /** @description The judge's slug */
-            judge: string;
-            /** @description The judge's title when the version has it */
-            title?: string;
-            /**
-             * Format: double
-             * @description The share of the arm's tries the judge passed
-             */
-            share: number;
-        };
-        BakeOffCase: {
-            case: string;
-            /** @description By arm number */
-            arms: components["schemas"]["BakeOffCaseArm"][];
-        };
-        BakeOffCaseArm: {
-            arm: number;
-            /** @description The case's tries on the arm that passed */
-            passed: number;
-        };
-        EvalCaseFromRun: {
-            /** @description The past agent run whose agent and item the case replays */
-            run: string;
-            /** @description The case's name, its file name: 3 to 40 lowercase letters, digits and hyphens */
-            name: string;
-            /** @description What the agent must get right; the item's title when absent */
-            description?: string;
-            /** @default 1 */
-            tries?: number;
-            /** @description A judge of the current version checks it; absent */
-            judge?: string;
-            /** @description The version the caller saw running; the current one when absent */
-            expected_current_version_id?: string;
         };
         /**
          * @description session: people sign in and every request carries a session or an API key. none: sign-in is off (GOAL_AUTH=none, a loopback install), every request acts as the local user.
@@ -5806,168 +5358,21 @@ export interface components {
             /** @description Lead time of each expedite item */
             expedite_lead_time_minutes: number | null;
         };
-        JudgeOutcome: {
-            /** Format: double */
-            score: number;
-            label: string;
-            meaning: string;
-        };
-        /** @description A judge's file as evals.schema.json has its front matter, with the Markdown rubric that follows it. Validated when it is published, as every definition file is. */
-        JudgeWrite: {
-            title: string;
-            /** @description What it checks */
-            criterion: string;
-            /** @description The agents whose runs it scores; empty or absent, every agent */
-            agents?: string[];
-            outcomes: components["schemas"]["JudgeOutcome"][];
-            /**
-             * Format: double
-             * @description The lowest score that passes
-             */
-            pass_mark: number;
-            /**
-             * Format: double
-             * @description The share of the agents' finished runs it scores
-             */
-            sample: number;
-            /** @description The judge run's model; absent, the factory's runtime.model */
-            model?: string;
-            /** @default true */
-            enabled?: boolean;
-            /** @description The file's Markdown body */
-            rubric: string;
-            /** @description The version the caller saw running; the publish is refused (draft-base-moved) when another one runs */
-            expected_current_version_id?: string;
-        };
-        CreateJudgeRequest: {
-            /** @description The judge's file name without .md: 3 to 40 lowercase letters, digits and hyphens, starting with a letter */
-            slug: string;
-        } & components["schemas"]["JudgeWrite"];
-        JudgeDay: {
-            /**
-             * Format: date
-             * @description The UTC day
-             */
-            day: string;
-            scored: number;
-            passed: number;
-            /** Format: double */
-            pass_rate: number;
-        };
-        /** @description A judge's production scores over the last 30 days; tries never count */
-        JudgeSummary: {
-            /** @description The runs scored */
-            scored: number;
-            passed: number;
-            /**
-             * Format: double
-             * @description Passed over scored
-             */
-            pass_rate: number;
-            /**
-             * Format: double
-             * @description What its judge runs cost
-             */
-            cost_usd: number;
-            /** @description One point per UTC day with a scored run, oldest first */
-            days: components["schemas"]["JudgeDay"][];
-        };
-        JudgeListEntry: {
-            slug: string;
-            title: string;
-            criterion: string;
-            /** @description Empty means every agent */
-            agents: string[];
-            /** Format: double */
-            sample: number;
-            /** Format: double */
-            pass_mark: number;
-            enabled: boolean;
-            summary: components["schemas"]["JudgeSummary"];
-        };
-        JudgeList: {
-            /** @description The number of the version the judges are read from; null before the first publish */
-            version: number | null;
-            /** @description By slug */
-            judges: components["schemas"]["JudgeListEntry"][];
-            /**
-             * Format: double
-             * @description What the factory's judge runs cost over the last 30 days
-             */
-            judge_cost_usd: number;
-        };
-        /** @enum {string} */
-        JudgeScoreState: "queued" | "running" | "scored" | "error";
-        /** @description One production score of a judge; outcome, score and passed once it is scored */
-        JudgeScore: {
-            id: string;
-            state: components["schemas"]["JudgeScoreState"];
-            /** @description <factory name>#<number> */
-            item_ref: string;
-            item_title: string;
-            /** @description The label of the outcome the judge gave */
-            outcome?: string;
-            /** Format: double */
-            score?: number;
-            passed?: boolean;
-            /** @description The judge's one sentence */
-            reason?: string;
-            /** Format: date-time */
-            scored_at?: string;
-        };
-        /** @description Where the judge's runs run; a judge inherits the factory's defaults */
-        JudgeRunsOn: {
-            /** @description The box: the factory's runtime.size, medium when it says none */
-            size: string;
-            /** @description The connections of the factory's current version, read only */
-            connections: string[];
-            /** @description What a judge run reads of the run it scores */
-            sees: ("events" | "spec" | "pull_request")[];
-            /** @description True while these are the factory's defaults */
-            inherited: boolean;
-        };
-        Judge: {
-            slug: string;
-            title: string;
-            criterion: string;
-            /** @description Empty means every agent */
-            agents: string[];
-            outcomes: components["schemas"]["JudgeOutcome"][];
-            /** Format: double */
-            pass_mark: number;
-            /** Format: double */
-            sample: number;
-            /** @description Absent: the factory's runtime.model */
-            model?: string;
-            enabled: boolean;
-            rubric: string;
-            /** @description The number of the version the judge is read from */
-            version: number;
-            summary: components["schemas"]["JudgeSummary"];
-            /** @description The newest production scores, newest first */
-            recent: components["schemas"]["JudgeScore"][];
-            runs_on: components["schemas"]["JudgeRunsOn"];
-        };
-        JudgeTry: {
-            id: string;
-            state: components["schemas"]["JudgeScoreState"];
-            /** @description <factory name>#<number> */
-            item_ref: string;
-            item_title: string;
-        };
-        JudgeTries: {
-            tries: components["schemas"]["JudgeTry"][];
-        };
         /** @description The current version's learning.jonah, with its defaults where it sets none */
         JonahPolicy: {
             enabled: boolean;
-            /** @description Sent-back touches that queue a review, and how often an observation is seen before it is proposed */
+            /** @description Items with the same cause an observation needs before it becomes a proposal */
             propose_after: number;
             /**
              * Format: double
-             * @description What review runs may cost over 7 days
+             * @description learning.jonah.share as a fraction (5% is 0.05) of what the line spent over the last 7 days
              */
-            weekly_usd: number;
+            share: number;
+            /**
+             * Format: double
+             * @description Jonah's budget now: share times what the line's runs other than Jonah's cost over the last 7 days. Each review may spend a fifth of it, and Jonah's spend never triggers runtime.budget.onExhausted
+             */
+            budget_usd: number;
             /** @description The review run's model: learning.jonah.model, else runtime.model; absent when neither is set */
             model?: string;
             /** @description The roles holding definition:publish: organization roles first, then factory roles */
@@ -5977,11 +5382,14 @@ export interface components {
             id: string;
             summary: string;
             detail: string;
-            /** @description The items it rests on, as <factory name>#<number> */
+            /** @description The items it rests on, as <factory name>#<number>, gathered across reviews */
             item_refs: string[];
-            /** @enum {string} */
-            state: "watching" | "proposed";
-            /** @description How often the pattern was seen */
+            /**
+             * @description proposed: a proposal addresses it; watching: its count has not reached propose_after; not_jonahs: its cause is not a definition problem
+             * @enum {string}
+             */
+            state: "watching" | "proposed" | "not_jonahs";
+            /** @description How often the cause was seen */
             count: number;
             /** @description The count at which it becomes a proposal */
             propose_after: number;
@@ -5990,16 +5398,27 @@ export interface components {
              * @description The number of the proposal it became
              */
             proposal?: number;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When a review first noticed it
+             */
             created_at: string;
+            /**
+             * Format: date-time
+             * @description When a review last updated it
+             */
+            updated_at: string;
         };
         JonahReview: {
             id: string;
             /** @enum {string} */
             state: "pending" | "running" | "done" | "failed";
-            /** @enum {string} */
+            /**
+             * @description manual when a person asked for it; threshold is goald's daily review
+             * @enum {string}
+             */
             trigger: "manual" | "threshold";
-            /** @description Why a failed review failed */
+            /** @description Why a failed review failed, or why its last attempt failed while it waits for a retry */
             error?: string;
             /** Format: date-time */
             created_at: string;
@@ -6015,7 +5434,7 @@ export interface components {
              * @description What the factory's jonah runs cost since the first of this UTC month
              */
             month_cost_usd: number;
-            /** @description The observations made since Monday 00:00 UTC, newest first */
+            /** @description The observations a review updated since Monday 00:00 UTC, the latest updated first */
             observations: components["schemas"]["JonahObservation"][];
             last_review?: components["schemas"]["JonahReview"];
         };
@@ -6057,13 +5476,27 @@ export interface components {
              */
             next?: number;
         };
+        /** @description One exact edit of a file; old occurs exactly once in it */
+        Replacement: {
+            old: string;
+            new: string;
+        };
+        /** @description One file a proposal changes (ADR 0039 decision 6): replacements, applied in order to the file as it is when the proposal is approved or edited into the draft, or the whole content of a new file. base_sha256 is set only on a whole file stored before proposals were replacements: it replaces the file while the file still has that SHA-256. */
+        ProposalEdit: {
+            path: string;
+            replacements?: components["schemas"]["Replacement"][];
+            /** @description The whole content of a new file; absent with replacements */
+            content?: string;
+            base_sha256?: string;
+        };
+        /** @description One edited file as it reads in the version the proposal was made against, before and after its edit */
         ProposalFile: {
             path: string;
-            /** @description The SHA-256 of the file the review read; empty for a new file */
+            /** @description The SHA-256 of the file in that version; empty for a new file */
             base_sha256: string;
             /** @description The file in the version the proposal was made against; empty for a new file */
             base_content: string;
-            /** @description The file's new content */
+            /** @description The file with the proposal's edit applied to base_content */
             content: string;
         };
         ProposalEvidence: {
@@ -6074,8 +5507,116 @@ export interface components {
             /** @description The quoted reason it was sent back */
             quote: string;
         };
+        ModelProposalRequest: {
+            /** @description The model to try */
+            model: string;
+            /**
+             * @description Store the proposal and queue its tries; false answers the estimate only
+             * @default false
+             */
+            confirm?: boolean;
+        };
+        TryProposalRequest: {
+            /**
+             * @description Queue the tries; false answers the estimate only
+             * @default false
+             */
+            confirm?: boolean;
+        };
+        TryProposalItem: {
+            /** @description <factory name>#<number> */
+            item_ref: string;
+            item_title: string;
+            /** @description The station the item's tries rerun */
+            station: string;
+            /** @description The tries Try again adds for the item */
+            tries: number;
+            /**
+             * Format: double
+             * @description What the run the tries rerun cost
+             */
+            run_cost_usd: number;
+        };
+        TryProposalEstimate: {
+            /**
+             * Format: int64
+             * @description The proposal's number
+             */
+            number: number;
+            /** @description The items the proposal was tried on, in the order their first tries were queued */
+            items: components["schemas"]["TryProposalItem"][];
+            /** @description The tries Try again adds */
+            tries: number;
+            /**
+             * Format: double
+             * @description Each item's tries × its run's cost
+             */
+            estimate_usd: number;
+            /**
+             * Format: double
+             * @description What is left of Jonah's budget over the last 7 days
+             */
+            budget_left_usd: number;
+        };
+        TryProposalResult: {
+            estimate: components["schemas"]["TryProposalEstimate"];
+            /** @description The proposal with its new tries; absent from an estimate */
+            proposal?: components["schemas"]["Proposal"];
+        };
+        ModelProposalItem: {
+            /** @description <factory name>#<number> */
+            item_ref: string;
+            item_title: string;
+            /** @description The station of the run the tries rerun */
+            station: string;
+            /** @description The item's run the tries rerun */
+            run_id: string;
+            /** @description How the item went on the line, as "passed first time, $0.42" or "sent back 2 times at review, $1.10" */
+            line_result: string;
+            /** @description How many times the item was sent back */
+            sent_back: number;
+            /**
+             * Format: double
+             * @description What the item cost
+             */
+            cost_usd: number;
+            /**
+             * Format: double
+             * @description What the run the tries rerun cost
+             */
+            run_cost_usd: number;
+        };
+        ModelProposalEstimate: {
+            agent: string;
+            /** @description The agent's model now */
+            current_model: string;
+            /** @description The model to try */
+            model: string;
+            /** @description The agent's newest finished items the tries run on, newest first, at most five */
+            items: components["schemas"]["ModelProposalItem"][];
+            /** @description Three per item */
+            tries: number;
+            /**
+             * Format: double
+             * @description Each item's run cost × 3
+             */
+            estimate_usd: number;
+            /**
+             * Format: double
+             * @description What is left of Jonah's budget over the last 7 days
+             */
+            budget_left_usd: number;
+        };
+        ModelProposalResult: {
+            estimate: components["schemas"]["ModelProposalEstimate"];
+            /** @description The stored proposal; absent from an estimate */
+            proposal?: components["schemas"]["Proposal"];
+        };
         Proposal: components["schemas"]["ProposalEntry"] & {
             summary: string;
+            /** @description What the proposal stores and Approve and Edit apply again, one per file in path order */
+            edits: components["schemas"]["ProposalEdit"][];
+            /** @description Each of edits applied to its file in made_against_version, in the same order */
             files: components["schemas"]["ProposalFile"][];
             evidence: components["schemas"]["ProposalEvidence"][];
             /** @description The number of the version the review read */
@@ -6089,6 +5630,210 @@ export interface components {
             decided_by?: string;
             /** Format: date-time */
             decided_at?: string;
+            /**
+             * Format: int64
+             * @description The number of the proposal this one reverses (Undo this change)
+             */
+            undoes?: number;
+            /** @description The watch of the proposal's own number (estimate.metric at estimate.station) since Approve published it; absent until the first watch sweep after the publish */
+            watch?: components["schemas"]["Watch"];
+            /** @description How the proposal did on past items before anyone saw it (ADR 0039 decisions 11 and 13); absent for a proposal with no tries, as one that changes only memory or the flow, or reaches only stations that can't be tried */
+            tried?: components["schemas"]["ProposalTried"];
+        };
+        ProposalTried: {
+            /**
+             * @description trying: a try is queued or running; done: every try is done; budget_used: a try is still queued and Jonah's budget over the last 7 days is used up ("Not tried: budget used")
+             * @enum {string}
+             */
+            state: "trying" | "done" | "budget_used";
+            /** @description Each past item tried, in the order its tries were queued */
+            items: components["schemas"]["TriedItem"][];
+            /**
+             * Format: double
+             * @description What the tries cost
+             */
+            cost_usd: number;
+            /**
+             * Format: double
+             * @description From the first try queued to the last one finished; absent until every try is done
+             */
+            seconds?: number;
+            /** @description The proposal's tries of the kept tests at the stations it reaches (ADR 0039 decision 12), in the order they were queued; empty when it reaches none or was tried before kept tests ran on proposals */
+            kept_tests: components["schemas"]["TriedKeptTest"][];
+            /** @description How often the grader read the items' original and final results right; absent until the grader is checked */
+            grader?: components["schemas"]["TriedGrader"];
+        };
+        TriedItem: {
+            /** @description <factory name>#<number>, or the item's id when it is gone */
+            item_ref: string;
+            item_title: string;
+            /** @description The station the tries rerun */
+            station: string;
+            /** @description For a model proposal, how the item went on the line, as "passed first time, $0.42"; absent for other proposals and for an item no longer among the agent's newest */
+            line_result?: string;
+            /** @description The item's tries by attempt, one for most proposals and three for a model proposal */
+            tries: components["schemas"]["TriedTry"][];
+        };
+        TriedTry: {
+            attempt: number;
+            /** @enum {string} */
+            state: "queued" | "running" | "done";
+            /**
+             * @description fixed or not_fixed: whether the try fixed what sent the item back; unknown: its grade can't be trusted; error: the try could not be carried out (error says why). Absent while the try waits to run or to be graded.
+             * @enum {string}
+             */
+            verdict?: "fixed" | "not_fixed" | "unknown" | "error";
+            /** @description Why the try was graded as it was */
+            reason?: string;
+            /** @description Why the try could not be carried out */
+            error?: string;
+            /** Format: double */
+            cost_usd: number;
+        };
+        TriedKeptTest: {
+            /**
+             * Format: int64
+             * @description The kept test's item number
+             */
+            test: number;
+            /** @description The station the test is kept at */
+            station: string;
+            /** @description The try's attempt */
+            attempt: number;
+            result: components["schemas"]["KeptTestResult"];
+            /** @description Why it passed or failed; absent while it runs */
+            reason?: string;
+            /** @description Why the try could not be carried out */
+            error?: string;
+        };
+        /**
+         * @description running: its try is queued or runs; passed: the try passed the station's contract and checks and, at a gate, approved as the item did there; failed: it did not, or its run failed; error: the try could not be carried out, which is never a failure
+         * @enum {string}
+         */
+        KeptTestResult: "running" | "passed" | "failed" | "error";
+        /** @description A kept test's newest finished try, from a proposal or a publish */
+        KeptTestLastResult: {
+            /** @enum {string} */
+            result: "passed" | "failed" | "error";
+            /**
+             * Format: date-time
+             * @description When the try finished
+             */
+            at: string;
+            /** @description The try's own run; absent when it never ran */
+            run_id?: string;
+        };
+        DraftKeptTests: {
+            /**
+             * @description trying: a test's try is queued or running; done: every started try is done, or none was started; budget_used: a try is still queued and Jonah's budget over the last 7 days is used up
+             * @enum {string}
+             */
+            state: "trying" | "done" | "budget_used";
+            /** @description The kept tests at the stations the draft reaches, then those that can't be tried */
+            tests: components["schemas"]["DraftKeptTest"][];
+        };
+        DraftKeptTest: {
+            test: components["schemas"]["KeptTest"];
+            /** @description Null while no try of the draft's content was started */
+            result: components["schemas"]["KeptTestResult"] | null;
+            /** @description Why it passed or failed */
+            reason?: string;
+            /** @description Why it could not be tried or carried out */
+            error?: string;
+            /** @description The try's own run */
+            run_id?: string;
+        };
+        TriedGrader: {
+            /**
+             * Format: double
+             * @description The share of items whose original result the grader read as not fixed
+             */
+            original_hit_rate: number;
+            /**
+             * Format: double
+             * @description The share of items whose final accepted result the grader read as fixed
+             */
+            final_hit_rate: number;
+        };
+        /**
+         * @description sent_back_rate: the share of items a person sent back at the station; cost_per_item: the USD of an item's runs there; lead_time_p85: the 85th percentile of an item's time there, in seconds. Lower is better for each.
+         * @enum {string}
+         */
+        WatchMetric: "sent_back_rate" | "cost_per_item" | "lead_time_p85";
+        /**
+         * @description helped or worse: the 90% interval of after minus before clears the minimum effect (5 points for a rate, 10% of before for cost and lead time); no_change: it lies inside that minimum; too_early: neither yet; no_clear_change: still neither after 14 days or 150 items after the change
+         * @enum {string}
+         */
+        WatchVerdict: "too_early" | "helped" | "worse" | "no_change" | "no_clear_change";
+        WatchSide: {
+            /** @description The items counted on this side */
+            items: number;
+            /**
+             * Format: double
+             * @description The metric over them
+             */
+            value: number;
+        };
+        /** @description A 90% interval of after minus before */
+        WatchInterval: {
+            /** Format: double */
+            low: number;
+            /** Format: double */
+            high: number;
+        };
+        /** @description A past item kept, at a station it passed the first time, as a test (ADR 0039 decision 12) */
+        KeptTest: {
+            id: string;
+            item: components["schemas"]["KeptTestItem"];
+            station: string;
+            /** @description The actor ref of who kept it */
+            kept_by: string;
+            /** Format: date-time */
+            kept_at: string;
+            /** @description Its newest finished try's result; null for a test never run */
+            last_result: components["schemas"]["KeptTestLastResult"] | null;
+        };
+        KeptTestItem: {
+            id: string;
+            /** Format: int64 */
+            number: number;
+            title: string;
+        };
+        KeptTestList: {
+            tests: components["schemas"]["KeptTest"][];
+        };
+        KeepTestRequest: {
+            /**
+             * Format: int64
+             * @description The item's number in the factory
+             */
+            item: number;
+            station: string;
+        };
+        /** @description One published change watched at one station on one metric (ADR 0039 decision 14). Each item's outcome at the station counts for the definition version of its run there: before covers the versions since the last change that reached the station, after the change's version and those after it until the next change that reaches the station. */
+        Watch: {
+            station: string;
+            metric: components["schemas"]["WatchMetric"];
+            /**
+             * Format: int64
+             * @description The Jonah proposal whose own number this is; absent for a person's publish
+             */
+            proposal?: number;
+            before: components["schemas"]["WatchSide"];
+            after: components["schemas"]["WatchSide"];
+            /** @description null while either side has fewer than two items */
+            interval: components["schemas"]["WatchInterval"] | null;
+            verdict: components["schemas"]["WatchVerdict"];
+            /**
+             * Format: date-time
+             * @description When the change was published
+             */
+            opened_at: string;
+            /**
+             * Format: date-time
+             * @description When the verdict became final; null while it is watched
+             */
+            closed_at: string | null;
         };
         ProposalReject: {
             reason: string;
@@ -6971,12 +6716,12 @@ export interface components {
             truncated: boolean;
         };
         /**
-         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it
+         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo)
          * @enum {string}
          */
-        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite" | "conversion" | "knowledge_source";
+        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite" | "conversion" | "knowledge_source" | "watch_worse";
         InboxEntry: {
-            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id> */
+            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>, watch_worse:<proposal id> */
             id: string;
             kind: components["schemas"]["InboxEntryKind"];
             factory: {
@@ -6986,7 +6731,7 @@ export interface components {
             };
             /**
              * Format: date-time
-             * @description Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion)
+             * @description Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion), the watch's last update (watch_worse)
              */
             since: string;
             /** @description The item it is about, or null for an entry that is about no item */
@@ -7011,6 +6756,8 @@ export interface components {
             conversion?: components["schemas"]["InboxConversion"] | null;
             /** @description Why the knowledge source does not sync; absent or null for other kinds */
             knowledge_source?: components["schemas"]["InboxKnowledgeSource"] | null;
+            /** @description The watch of a watch_worse entry, with its proposal's number; absent or null for other kinds */
+            watch?: components["schemas"]["Watch"] | null;
         };
         /** @description A knowledge source whose last syncs failed, shown under each factory that lists it. */
         InboxKnowledgeSource: {
@@ -7514,6 +7261,8 @@ export interface components {
             /** @description This is the version that runs */
             current: boolean;
             counts: components["schemas"]["DefinitionCounts"];
+            /** @description The watches of this version's change, by station and metric: a Jonah proposal's own number, or the send-back rate and cost per item at each station it reaches; empty for a change not watched yet and absent for a draft */
+            watches?: components["schemas"]["Watch"][];
         };
         VersionDetail: components["schemas"]["Version"] & {
             files: components["schemas"]["FileInfo"][];
@@ -7642,6 +7391,10 @@ export interface components {
                 flow?: {
                     [key: string]: unknown;
                 };
+                /**
+                 * @deprecated
+                 * @description Ignored: learning.librarian is retired (ADR 0039, warning field-ignored). goald always answers null and ignores a value written here
+                 */
                 librarian?: string | null;
             };
             agents: {
@@ -8705,14 +8458,10 @@ export interface components {
         FactoryRef: string;
         /** @description The draft request's id */
         DraftRequestRef: string;
-        /** @description The judge's slug: its file name in evals/judges without .md */
-        JudgeRef: string;
         /** @description The proposal's number in its factory, from 1 */
         ProposalNumber: number;
-        /** @description The eval run's id */
-        EvalRunRef: string;
-        /** @description The bake-off's id, the id of its eval run */
-        BakeOffRef: string;
+        /** @description The kept test's id */
+        KeptTestRef: string;
         /** @description The first UTC day of the range; 6 days before `to` when absent */
         RangeFrom: string;
         /** @description The last UTC day of the range, included; today when absent */
@@ -10564,6 +10313,58 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    getDraftKeptTests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The kept tests the draft reaches, with their results so far */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftKeptTests"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    startDraftKeptTests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The kept tests the draft reaches, with their results so far */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftKeptTests"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     listDraftRequests: {
         parameters: {
             query?: {
@@ -10934,322 +10735,6 @@ export interface operations {
                 };
                 content: {
                     "text/yaml": string;
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    listEvals: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The cases and their summary */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EvalList"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    startEvalRun: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EvalRunRequest"];
-            };
-        };
-        responses: {
-            /** @description The queued run and its estimate */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EvalRunStarted"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    estimateEvalRun: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EvalRunRequest"];
-            };
-        };
-        responses: {
-            /** @description The estimate */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EvalEstimate"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    getEvalRun: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The eval run's id */
-                eval_run: components["parameters"]["EvalRunRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The run */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EvalRun"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    cancelEvalRun: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The eval run's id */
-                eval_run: components["parameters"]["EvalRunRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The cancelled run */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EvalRun"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    addEvalCase: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EvalCaseFromRun"];
-            };
-        };
-        responses: {
-            /** @description The new version */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Version"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    listBakeOffs: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The bake-offs */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BakeOffList"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    startBakeOff: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BakeOffRequest"];
-            };
-        };
-        responses: {
-            /** @description The queued bake-off and its estimate */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BakeOffStarted"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    getBakeOff: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The bake-off's id, the id of its eval run */
-                bake_off: components["parameters"]["BakeOffRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The bake-off */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BakeOff"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    rerunBakeOff: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The bake-off's id, the id of its eval run */
-                bake_off: components["parameters"]["BakeOffRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The new bake-off and its estimate */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BakeOffStarted"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    applyBakeOff: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The bake-off's id, the id of its eval run */
-                bake_off: components["parameters"]["BakeOffRef"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BakeOffApply"];
-            };
-        };
-        responses: {
-            /** @description The draft with the model written */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Draft"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -11667,7 +11152,7 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    listJudges: {
+    proposeAgentModel: {
         parameters: {
             query?: never;
             header?: never;
@@ -11676,136 +11161,33 @@ export interface operations {
                 org: components["parameters"]["OrgRef"];
                 /** @description The factory's metadata.id or metadata.name */
                 factory: components["parameters"]["FactoryRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The judges */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JudgeList"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    createJudge: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
+                /** @description The agent's name, as the factory's current version declares it */
+                agent: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateJudgeRequest"];
+                "application/json": components["schemas"]["ModelProposalRequest"];
             };
         };
         responses: {
-            /** @description The judge as the new version has it */
+            /** @description The estimate; nothing is stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelProposalResult"];
+                };
+            };
+            /** @description The estimate and the stored proposal */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Judge"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    getJudge: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The judge's slug: its file name in evals/judges without .md */
-                judge: components["parameters"]["JudgeRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The judge */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Judge"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    updateJudge: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The judge's slug: its file name in evals/judges without .md */
-                judge: components["parameters"]["JudgeRef"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["JudgeWrite"];
-            };
-        };
-        responses: {
-            /** @description The judge as the new version has it */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Judge"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    tryJudge: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The judge's slug: its file name in evals/judges without .md */
-                judge: components["parameters"]["JudgeRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The queued tries, newest run first */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JudgeTries"];
+                    "application/json": components["schemas"]["ModelProposalResult"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -11981,6 +11363,157 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProposalDecided"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    undoProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The proposal's number in its factory, from 1 */
+                number: components["parameters"]["ProposalNumber"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The undo proposal */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proposal"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    tryJonahProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The proposal's number in its factory, from 1 */
+                number: components["parameters"]["ProposalNumber"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TryProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description The estimate; nothing is queued */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TryProposalResult"];
+                };
+            };
+            /** @description The estimate and the proposal with its new tries */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TryProposalResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listKeptTests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The factory's kept tests */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KeptTestList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    keepTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KeepTestRequest"];
+            };
+        };
+        responses: {
+            /** @description The kept test */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KeptTest"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    removeKeptTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The kept test's id */
+                test: components["parameters"]["KeptTestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

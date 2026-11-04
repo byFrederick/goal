@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -125,11 +127,17 @@ func (s *Store) FinishJonahReview(ctx context.Context, claimed domain.JonahRevie
 		proposals []domain.Proposal
 	)
 
+	// A review put back to pending for a retry has no finish time (ADR 0039 decision 3).
+	finished := optionalTime(r.At)
+	if r.State == domain.JonahPending {
+		finished = nil
+	}
+
 	err = s.inTx(ctx, func(q *db.Queries) error {
 		var err error
 
 		review, err = q.FinishJonahReview(ctx, db.FinishJonahReviewParams{
-			State: string(r.State), Error: r.Error, RunID: run, FinishedAt: r.At, ID: id, LeaseUntil: claimed.LeaseUntil,
+			State: string(r.State), Error: r.Error, RunID: run, FinishedAt: finished, ID: id, LeaseUntil: claimed.LeaseUntil,
 		})
 		if err != nil {
 			return err
@@ -178,6 +186,10 @@ func insertReviewOutput(ctx context.Context, q *db.Queries, review db.JonahRevie
 			return nil, fmt.Errorf("insert proposal %d: %w", p.Number, err)
 		}
 
+		if err := supersede(ctx, q, review.FactoryID, n.Supersedes, r.At); err != nil {
+			return nil, fmt.Errorf("proposal %d: %w", p.Number, err)
+		}
+
 		got, err := proposalFrom(row)
 		if err != nil {
 			return nil, err
@@ -187,39 +199,101 @@ func insertReviewOutput(ctx context.Context, q *db.Queries, review db.JonahRevie
 	}
 
 	for _, n := range r.Observations {
-		p := db.InsertObservationParams{
-			FactoryID: review.FactoryID, ReviewID: review.ID, Summary: n.Summary, Detail: n.Detail, ItemIds: []uuid.UUID{},
-			Count: clampLimit(n.Count), State: string(domain.ObservationWatching), CreatedAt: r.At,
-		}
-
-		if p.ID, err = newID(); err != nil {
+		if err := storeObservation(ctx, q, review, n, ids, r.At); err != nil {
 			return nil, err
-		}
-
-		for _, it := range n.ItemIDs {
-			item, err := parseID("item", string(it))
-			if err != nil {
-				return nil, fmt.Errorf("observation: %w: %w", domain.ErrInvalid, err)
-			}
-
-			p.ItemIds = append(p.ItemIds, item)
-		}
-
-		if n.Proposal > 0 {
-			p.State, p.ProposalID = string(domain.ObservationProposed), &ids[n.Proposal-1]
-		}
-
-		if _, err := q.InsertObservation(ctx, p); err != nil {
-			return nil, fmt.Errorf("insert observation: %w", err)
 		}
 	}
 
 	return out, nil
 }
 
+// updateObservation updates the open observation n names, and reports whether there was one.
+func updateObservation(ctx context.Context, q *db.Queries, factory uuid.UUID, n domain.NewObservation, items []uuid.UUID,
+	proposal *uuid.UUID, at time.Time,
+) (bool, error) {
+	if n.ID == "" {
+		return false, nil
+	}
+
+	id, err := parseID("observation", string(n.ID))
+	if err != nil {
+		return false, fmt.Errorf("observation: %w: %w", domain.ErrInvalid, err)
+	}
+
+	var state *string
+	if st := n.State(); st != domain.ObservationWatching {
+		state = new(string(st))
+	}
+
+	_, err = q.UpdateObservation(ctx, db.UpdateObservationParams{
+		Summary: n.Summary, Detail: n.Detail, ItemIds: items, Count: int64(n.Count), State: state, ProposalID: proposal,
+		UpdatedAt: at, FactoryID: factory, ID: id,
+	})
+
+	switch {
+	case notFound(err):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("update observation %s: %w", n.ID, err)
+	default:
+		return true, nil
+	}
+}
+
+// supersede sets the factory's proposals of ids that are still proposed superseded by Jonah at.
+func supersede(ctx context.Context, q *db.Queries, factory uuid.UUID, ids []domain.ProposalID, at time.Time) error {
+	by := domain.JonahActor.Ref()
+
+	for _, id := range ids {
+		u, err := parseID("proposal", string(id))
+		if err != nil {
+			return fmt.Errorf("supersede: %w: %w", domain.ErrInvalid, err)
+		}
+
+		if err := q.SupersedeProposal(ctx, db.SupersedeProposalParams{DecidedBy: &by, DecidedAt: at, FactoryID: factory, ID: u}); err != nil {
+			return fmt.Errorf("supersede proposal %s: %w", id, err)
+		}
+	}
+
+	return nil
+}
+
+// storeObservation updates the open observation n names (ADR 0039 decision 5), or inserts n when
+// it names none or one no longer open. ids are the review's stored proposals, in order.
+func storeObservation(ctx context.Context, q *db.Queries, review db.JonahReview, n domain.NewObservation, ids []uuid.UUID, at time.Time) error {
+	items, err := parseIDs("item", n.ItemIDs)
+	if err != nil {
+		return fmt.Errorf("observation: %w: %w", domain.ErrInvalid, err)
+	}
+
+	var proposal *uuid.UUID
+	if n.Proposal > 0 {
+		proposal = &ids[n.Proposal-1]
+	}
+
+	if updated, err := updateObservation(ctx, q, review.FactoryID, n, items, proposal, at); updated || err != nil {
+		return err
+	}
+
+	p := db.InsertObservationParams{
+		FactoryID: review.FactoryID, ReviewID: review.ID, Summary: n.Summary, Detail: n.Detail, ItemIds: items,
+		Count: clampLimit(n.Count), State: string(n.State()), ProposalID: proposal, CreatedAt: at,
+	}
+
+	if p.ID, err = newID(); err != nil {
+		return err
+	}
+
+	if _, err := q.InsertObservation(ctx, p); err != nil {
+		return fmt.Errorf("insert observation: %w", err)
+	}
+
+	return nil
+}
+
 func insertProposalParams(review db.JonahReview, number int64, n domain.NewProposal, at time.Time) (db.InsertProposalParams, error) {
 	p := db.InsertProposalParams{
-		FactoryID: review.FactoryID, Number: number, ReviewID: review.ID, VersionID: review.VersionID, Title: n.Title,
+		FactoryID: review.FactoryID, Number: number, ReviewID: &review.ID, VersionID: review.VersionID, Title: n.Title,
 		Summary: n.Summary, Paths: n.Paths(), CreatedAt: at,
 	}
 
@@ -234,8 +308,8 @@ func insertProposalParams(review db.JonahReview, number int64, n domain.NewPropo
 		evidence = []domain.ProposalEvidence{}
 	}
 
-	if p.Files, err = json.Marshal(n.Files); err != nil {
-		return p, fmt.Errorf("proposal files: %w", err)
+	if p.Edits, err = json.Marshal(n.Edits); err != nil {
+		return p, fmt.Errorf("proposal edits: %w", err)
 	}
 
 	if p.Evidence, err = json.Marshal(evidence); err != nil {
@@ -273,6 +347,29 @@ func (s *Store) JonahReviews(ctx context.Context, factory domain.FactoryID, limi
 	}
 
 	return out, nil
+}
+
+// LastDoneJonahReview implements ports.JonahStore.
+func (s *Store) LastDoneJonahReview(ctx context.Context, factory domain.FactoryID) (domain.JonahReview, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return domain.JonahReview{}, domain.ErrNoOrg
+	}
+
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return domain.JonahReview{}, fmt.Errorf("last done jonah review: %w", err)
+	}
+
+	r, err := fetch(ctx, s.read, func(q *db.Queries) (db.JonahReview, error) { return q.LastDoneJonahReview(ctx, f) })
+
+	switch {
+	case notFound(err):
+		return domain.JonahReview{}, fmt.Errorf("last done jonah review of factory %s: %w", factory, ports.ErrNotFound)
+	case err != nil:
+		return domain.JonahReview{}, fmt.Errorf("last done jonah review of factory %s: %w", factory, err)
+	}
+
+	return jonahReviewFrom(r), nil
 }
 
 // Proposals implements ports.JonahStore.
@@ -399,29 +496,47 @@ func (s *Store) DecideProposal(ctx context.Context, factory domain.FactoryID, nu
 
 // Observations implements ports.JonahStore.
 func (s *Store) Observations(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.Observation, error) {
+	return s.observations(ctx, "observations", factory, func(q *db.Queries, f uuid.UUID) ([]db.JonahObservation, error) {
+		return q.LatestObservations(ctx, db.LatestObservationsParams{FactoryID: f, MaxObservations: clampLimit(limit)})
+	})
+}
+
+// OpenObservations implements ports.JonahStore.
+func (s *Store) OpenObservations(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.Observation, error) {
+	return s.observations(ctx, "open observations", factory, func(q *db.Queries, f uuid.UUID) ([]db.JonahObservation, error) {
+		return q.OpenObservations(ctx, db.OpenObservationsParams{FactoryID: f, MaxObservations: clampLimit(limit)})
+	})
+}
+
+// observations are the factory's observations read reads, named what in errors.
+func (s *Store) observations(ctx context.Context, what string, factory domain.FactoryID,
+	read func(q *db.Queries, f uuid.UUID) ([]db.JonahObservation, error),
+) ([]domain.Observation, error) {
 	if _, ok := domain.OrgFrom(ctx); !ok {
 		return nil, domain.ErrNoOrg
 	}
 
 	f, err := parseID("factory", string(factory))
 	if err != nil {
-		return nil, fmt.Errorf("observations: %w", err)
+		return nil, fmt.Errorf("%s: %w", what, err)
 	}
 
-	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.JonahObservation, error) {
-		return q.LatestObservations(ctx, db.LatestObservationsParams{FactoryID: f, MaxObservations: clampLimit(limit)})
-	})
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.JonahObservation, error) { return read(q, f) })
 	if err != nil {
-		return nil, fmt.Errorf("observations of factory %s: %w", factory, err)
+		return nil, fmt.Errorf("%s of factory %s: %w", what, factory, err)
 	}
 
+	return observationsFrom(rows), nil
+}
+
+func observationsFrom(rows []db.JonahObservation) []domain.Observation {
 	out := make([]domain.Observation, 0, len(rows))
 
 	for _, r := range rows {
 		o := domain.Observation{
 			ID: domain.ObservationID(r.ID.String()), FactoryID: domain.FactoryID(r.FactoryID.String()),
 			ReviewID: domain.JonahReviewID(r.ReviewID.String()), Summary: r.Summary, Detail: r.Detail, ItemIDs: []domain.ItemID{},
-			Count: int(r.Count), State: domain.ObservationState(r.State), CreatedAt: r.CreatedAt.UTC(),
+			Count: int(r.Count), State: domain.ObservationState(r.State), CreatedAt: r.CreatedAt.UTC(), UpdatedAt: r.UpdatedAt.UTC(),
 		}
 
 		for _, it := range r.ItemIds {
@@ -435,49 +550,28 @@ func (s *Store) Observations(ctx context.Context, factory domain.FactoryID, limi
 		out = append(out, o)
 	}
 
-	return out, nil
+	return out
 }
 
 // JonahSpendSince implements ports.JonahStore.
-func (s *Store) JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error) {
+func (s *Store) JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (domain.JonahSpend, error) {
 	if _, ok := domain.OrgFrom(ctx); !ok {
-		return 0, domain.ErrNoOrg
+		return domain.JonahSpend{}, domain.ErrNoOrg
 	}
 
 	f, err := parseID("factory", string(factory))
 	if err != nil {
-		return 0, fmt.Errorf("jonah spend: %w", err)
+		return domain.JonahSpend{}, fmt.Errorf("jonah spend: %w", err)
 	}
 
-	usd, err := fetch(ctx, s.read, func(q *db.Queries) (float64, error) {
+	row, err := fetch(ctx, s.read, func(q *db.Queries) (db.JonahSpendSinceRow, error) {
 		return q.JonahSpendSince(ctx, db.JonahSpendSinceParams{FactoryID: f, Since: since})
 	})
 	if err != nil {
-		return 0, fmt.Errorf("jonah spend of factory %s: %w", factory, err)
+		return domain.JonahSpend{}, fmt.Errorf("jonah spend of factory %s: %w", factory, err)
 	}
 
-	return usd, nil
-}
-
-// SentBackSince implements ports.JonahStore over item_touches.
-func (s *Store) SentBackSince(ctx context.Context, factory domain.FactoryID, since time.Time) (int, error) {
-	if _, ok := domain.OrgFrom(ctx); !ok {
-		return 0, domain.ErrNoOrg
-	}
-
-	f, err := parseID("factory", string(factory))
-	if err != nil {
-		return 0, fmt.Errorf("sent back: %w", err)
-	}
-
-	n, err := fetch(ctx, s.read, func(q *db.Queries) (int64, error) {
-		return q.SentBackSince(ctx, db.SentBackSinceParams{FactoryID: f, Since: since})
-	})
-	if err != nil {
-		return 0, fmt.Errorf("sent back in factory %s: %w", factory, err)
-	}
-
-	return int(n), nil
+	return domain.JonahSpend{LineUSD: row.LineUsd, JonahUSD: row.JonahUsd}, nil
 }
 
 // SentBackBetween implements ports.JonahStore over item_touches and lease_spans.
@@ -540,6 +634,108 @@ func (s *Store) StationFlow(ctx context.Context, factory domain.FactoryID, stati
 	return out, nil
 }
 
+// EvidenceItems implements ports.JonahStore over work_items, agent_runs and item_events, in one
+// snapshot.
+func (s *Store) EvidenceItems(ctx context.Context, factory domain.FactoryID, since, until time.Time, limit int) ([]domain.EvidenceItem, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return nil, domain.ErrNoOrg
+	}
+
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, fmt.Errorf("evidence items: %w", err)
+	}
+
+	out, err := fetch(ctx, s.read, func(q *db.Queries) ([]domain.EvidenceItem, error) {
+		return evidenceItems(ctx, q, db.EvidenceItemsParams{FactoryID: f, Since: since, Until: until, MaxItems: clampLimit(limit)})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("evidence items of factory %s from %s to %s: %w", factory, since, until, err)
+	}
+
+	return out, nil
+}
+
+// evidenceItems reads the finished items p selects, then their runs and milestone events.
+func evidenceItems(ctx context.Context, q *db.Queries, p db.EvidenceItemsParams) ([]domain.EvidenceItem, error) {
+	rows, err := q.EvidenceItems(ctx, p)
+	if err != nil {
+		return nil, fmt.Errorf("items: %w", err)
+	}
+
+	out := make([]domain.EvidenceItem, len(rows))
+	ids := make([]uuid.UUID, len(rows))
+	at := make(map[uuid.UUID]int, len(rows))
+
+	for i, r := range rows {
+		it, err := itemFrom(r.WorkItem)
+		if err != nil {
+			return nil, err
+		}
+
+		out[i] = domain.EvidenceItem{Item: it, FinishedAt: r.FinishedAt.UTC(), Runs: []domain.Run{}, Events: []domain.Event{}}
+		ids[i], at[r.WorkItem.ID] = r.WorkItem.ID, i
+	}
+
+	runs, err := q.EvidenceRuns(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("runs: %w", err)
+	}
+
+	for _, r := range runs {
+		i := at[*r.ItemID]
+		out[i].Runs = append(out[i].Runs, runFrom(r))
+	}
+
+	perTurn := make([]string, len(domain.PerTurnKinds))
+	for i, k := range domain.PerTurnKinds {
+		perTurn[i] = string(k)
+	}
+
+	events, err := q.EvidenceEvents(ctx, db.EvidenceEventsParams{ItemIds: ids, PerTurn: perTurn})
+	if err != nil {
+		return nil, fmt.Errorf("events: %w", err)
+	}
+
+	for _, r := range events {
+		e, err := eventFrom(r)
+		if err != nil {
+			return nil, err
+		}
+
+		i := at[r.ItemID]
+		out[i].Events = append(out[i].Events, e)
+	}
+
+	return out, nil
+}
+
+// StationRunMedians implements ports.JonahStore over agent_runs.
+func (s *Store) StationRunMedians(ctx context.Context, factory domain.FactoryID, since, until time.Time) ([]domain.StationMedian, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return nil, domain.ErrNoOrg
+	}
+
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, fmt.Errorf("station run medians: %w", err)
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.StationRunMediansRow, error) {
+		return q.StationRunMedians(ctx, db.StationRunMediansParams{FactoryID: f, Since: since, Until: until})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("station run medians of factory %s from %s to %s: %w", factory, since, until, err)
+	}
+
+	out := make([]domain.StationMedian, len(rows))
+	for i, r := range rows {
+		out[i] = domain.StationMedian{Station: r.Station, CostUSD: r.CostUsd, Turns: r.Turns, Runs: int(r.Runs)}
+	}
+
+	return out, nil
+}
+
 func jonahReviewFrom(r db.JonahReview) domain.JonahReview {
 	out := domain.JonahReview{
 		ID: domain.JonahReviewID(r.ID.String()), FactoryID: domain.FactoryID(r.FactoryID.String()),
@@ -566,13 +762,13 @@ func jonahReviewFrom(r db.JonahReview) domain.JonahReview {
 func proposalFrom(r db.JonahProposal) (domain.Proposal, error) {
 	out := domain.Proposal{
 		ID: domain.ProposalID(r.ID.String()), FactoryID: domain.FactoryID(r.FactoryID.String()), Number: r.Number,
-		ReviewID: domain.JonahReviewID(r.ReviewID.String()), VersionID: domain.DefinitionVersionID(r.VersionID.String()),
-		State: domain.ProposalState(r.State), Title: r.Title, Summary: r.Summary, RejectReason: r.RejectReason,
+		VersionID: domain.DefinitionVersionID(r.VersionID.String()),
+		State:     domain.ProposalState(r.State), Title: r.Title, Summary: r.Summary, RejectReason: r.RejectReason,
 		DecidedBy: deref(r.DecidedBy), CreatedAt: r.CreatedAt.UTC(),
 	}
 
-	if err := json.Unmarshal(r.Files, &out.Files); err != nil {
-		return out, fmt.Errorf("proposal %d files: %w", r.Number, err)
+	if err := json.Unmarshal(r.Edits, &out.Edits); err != nil {
+		return out, fmt.Errorf("proposal %d edits: %w", r.Number, err)
 	}
 
 	if err := json.Unmarshal(r.Evidence, &out.Evidence); err != nil {
@@ -586,6 +782,16 @@ func proposalFrom(r db.JonahProposal) (domain.Proposal, error) {
 	if err := json.Unmarshal(r.Estimate, &out.Estimate); err != nil {
 		return out, fmt.Errorf("proposal %d estimate: %w", r.Number, err)
 	}
+
+	if r.ReviewID != nil {
+		out.ReviewID = domain.JonahReviewID(r.ReviewID.String())
+	}
+
+	if r.Undoes != nil {
+		out.Undoes = domain.ProposalID(r.Undoes.String())
+	}
+
+	out.Agent = deref(r.Agent)
 
 	if r.PublishedVersionID != nil {
 		out.PublishedVersionID = domain.DefinitionVersionID(r.PublishedVersionID.String())
@@ -606,4 +812,124 @@ func isCheckViolationErr(err error) bool {
 	pgErr, ok := errors.AsType[*pgconn.PgError](err)
 
 	return ok && pgErr.Code == checkViolation
+}
+
+// ProposeModel implements ports.JonahStore: the factory's next number, the proposal and its tries
+// in one transaction.
+func (s *Store) ProposeModel(ctx context.Context, factory domain.FactoryID, version domain.DefinitionVersionID, agent string,
+	n domain.NewProposal, tries []domain.NewPastTry, at time.Time,
+) (domain.Proposal, []domain.PastTry, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return domain.Proposal{}, nil, domain.ErrNoOrg
+	}
+
+	if err := n.Check(); err != nil {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: %w", err)
+	}
+
+	if strings.TrimSpace(agent) == "" {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: no agent: %w", domain.ErrInvalid)
+	}
+
+	p, err := modelProposalParams(factory, version, agent, n, at)
+	if err != nil {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: %w", err)
+	}
+
+	if tries, err = triesOf(domain.ProposalID(p.ID.String()), tries); err != nil {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: %w", err)
+	}
+
+	var (
+		row    db.JonahProposal
+		queued = make([]domain.PastTry, 0, len(tries))
+	)
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		last, err := q.LastProposalNumber(ctx, p.FactoryID)
+		if err != nil {
+			return fmt.Errorf("last proposal number: %w", err)
+		}
+
+		p.Number = last + 1
+
+		if row, err = q.InsertModelProposal(ctx, p); err != nil {
+			return err
+		}
+
+		for _, n := range tries {
+			t, err := insertTry(ctx, q, p.FactoryID, p.ID, n, at)
+			if err != nil {
+				return err
+			}
+
+			try, err := pastTryFrom(t, p.Number)
+			if err != nil {
+				return err
+			}
+
+			queued = append(queued, try)
+		}
+
+		return supersede(ctx, q, p.FactoryID, n.Supersedes, at)
+	})
+	if err != nil {
+		return domain.Proposal{}, nil, modelProposalError(agent, err)
+	}
+
+	out, err := proposalFrom(row)
+
+	return out, queued, err
+}
+
+// triesOf are tries of proposal, each checked.
+func triesOf(proposal domain.ProposalID, tries []domain.NewPastTry) ([]domain.NewPastTry, error) {
+	out := slices.Clone(tries)
+	for i := range out {
+		out[i].ProposalID = proposal
+		if err := out[i].Check(); err != nil {
+			return nil, err
+		}
+	}
+
+	return out, nil
+}
+
+// modelProposalError is err, ProposeModel's transaction's, with the port's sentinel.
+func modelProposalError(agent string, err error) error {
+	switch {
+	case errors.Is(err, ports.ErrNotFound) || errors.Is(err, ports.ErrConflict):
+		return fmt.Errorf("propose model of agent %s: %w", agent, err)
+	case isForeignKeyViolation(err):
+		return fmt.Errorf("propose model of agent %s: %w: %w", agent, ports.ErrNotFound, err)
+	case isCheckViolationErr(err):
+		return fmt.Errorf("propose model of agent %s: %w: %w", agent, domain.ErrInvalid, err)
+	default:
+		return fmt.Errorf("propose model of agent %s: %w", agent, err)
+	}
+}
+
+// modelProposalParams are n's row as a model proposal of agent, made against version.
+func modelProposalParams(factory domain.FactoryID, version domain.DefinitionVersionID, agent string, n domain.NewProposal,
+	at time.Time,
+) (db.InsertModelProposalParams, error) {
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return db.InsertModelProposalParams{}, err
+	}
+
+	v, err := parseID("definition version", string(version))
+	if err != nil {
+		return db.InsertModelProposalParams{}, err
+	}
+
+	p, err := insertProposalParams(db.JonahReview{FactoryID: f, VersionID: v}, 0, n, at)
+	if err != nil {
+		return db.InsertModelProposalParams{}, err
+	}
+
+	return db.InsertModelProposalParams{
+		ID: p.ID, FactoryID: p.FactoryID, Agent: &agent, VersionID: p.VersionID, Title: p.Title, Summary: p.Summary, Edits: p.Edits,
+		Evidence: p.Evidence, Estimate: p.Estimate, Paths: p.Paths, CreatedAt: p.CreatedAt,
+	}, nil
 }
