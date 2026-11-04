@@ -13,18 +13,6 @@ import (
 // after that.
 const landedFollowUps = `{"followups":[{"text":"Index the runs","start":{"in":"2d","title":"Index runs"}},"Look at the logs"]}`
 
-// listed is every item of the harness's factory, newest first.
-func (h *harness) listed(t *testing.T) []domain.Item {
-	t.Helper()
-
-	got, err := h.store.ListItems(inOrg(t), ports.ItemQuery{FactoryID: factoryID, Limit: 100})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return got
-}
-
 // untilDone steps the harness until it is done, at most n ticks.
 func (h *harness) untilDone(t *testing.T, id domain.ItemID, n int) {
 	t.Helper()

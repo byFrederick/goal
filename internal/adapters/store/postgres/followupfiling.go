@@ -141,46 +141,19 @@ func (l *lander) land(ctx context.Context, rootID uuid.UUID, rows []db.FollowUp)
 	)
 
 	for _, r := range rows {
-		f, err := followUpFrom(r)
-		if err != nil {
-			return nil, err
-		}
-
-		src, err := l.item(ctx, r.ItemID)
-		if err != nil {
-			return nil, err
-		}
-
-		var row db.FollowUp
-
-		switch land := domain.LandFollowUp(f, src, root.State); {
-		case land.Drop:
-			row, err = l.q.DropFollowUp(ctx, db.DropFollowUpParams{ID: r.ID, Reason: &land.Reason, At: l.at})
-		case land.File:
-			var reason string
-			if row, reason, err = l.fileStart(ctx, f, src, landed); err == nil && reason != "" {
-				row, err = l.q.TriageFollowUp(ctx, db.TriageFollowUpParams{
-					ID: r.ID, Reason: optional(domain.StartTriageReason(*f.Start, reason)), At: l.at,
-				})
-				if err != nil {
-					return nil, fmt.Errorf("follow-up %s to triage: %w", r.ID, err)
-				}
-
-				triage = append(triage, row)
-
-				continue
-			}
-		default:
-			triage = append(triage, r)
-
-			continue
-		}
-
+		row, toTriage, err := l.route(ctx, r, root, landed)
 		if err != nil {
 			return nil, fmt.Errorf("follow-up %s: %w", r.ID, err)
 		}
 
-		if f, err = followUpFrom(row); err != nil {
+		if toTriage {
+			triage = append(triage, row)
+
+			continue
+		}
+
+		f, err := followUpFrom(row)
+		if err != nil {
 			return nil, err
 		}
 
@@ -196,27 +169,51 @@ func (l *lander) land(ctx context.Context, rootID uuid.UUID, rows []db.FollowUp)
 	return append(out, joined...), err
 }
 
+// route drops r, files it, or reports it is for triage, as it now is.
+func (l *lander) route(ctx context.Context, r db.FollowUp, root domain.Item, landed time.Time) (db.FollowUp, bool, error) {
+	f, err := followUpFrom(r)
+	if err != nil {
+		return db.FollowUp{}, false, err
+	}
+
+	src, err := l.item(ctx, r.ItemID)
+	if err != nil {
+		return db.FollowUp{}, false, err
+	}
+
+	land := domain.LandFollowUp(f, src, root.State)
+
+	switch {
+	case land.Drop:
+		row, err := l.q.DropFollowUp(ctx, db.DropFollowUpParams{ID: r.ID, Reason: &land.Reason, At: l.at})
+
+		return row, false, err
+	case !land.File:
+		return r, true, nil
+	}
+
+	row, reason, err := l.fileStart(ctx, f, src, landed)
+	if err != nil || reason == "" {
+		return row, false, err
+	}
+
+	row, err = l.q.TriageFollowUp(ctx, db.TriageFollowUpParams{
+		ID: r.ID, Reason: optional(domain.StartTriageReason(*f.Start, reason)), At: l.at,
+	})
+	if err != nil {
+		return db.FollowUp{}, false, fmt.Errorf("to triage: %w", err)
+	}
+
+	return row, true, nil
+}
+
 // fileStart files start follow-up f of src, which landed at landed, and returns its row filed; or
 // the reason it goes to triage instead.
 func (l *lander) fileStart(ctx context.Context, f domain.FollowUp, src domain.Item, landed time.Time) (db.FollowUp, string, error) {
 	id := uuid.MustParse(string(f.ID))
 
-	to := domain.NoteFactoryOf(domain.Line{FactoryID: src.FactoryID})
-	if ln, ok := l.line(src.FactoryID); ok {
-		to = domain.NoteFactoryOf(ln)
-	}
-
-	toPtr := &to
-
-	if f.Start.Factory != "" {
-		if nf, ok := domain.NoteFactoryNamed(l.factories(), f.Start.Factory); ok {
-			to = nf
-		} else {
-			toPtr = nil
-		}
-	}
-
-	if reason := domain.RouteStart(src.FactoryID, toPtr); reason != "" {
+	to := domain.StartTarget(l.factories(), src.FactoryID, *f.Start)
+	if reason := domain.RouteStart(src.FactoryID, to); reason != "" {
 		return db.FollowUp{}, reason, nil
 	}
 
@@ -225,31 +222,14 @@ func (l *lander) fileStart(ctx context.Context, f domain.FollowUp, src domain.It
 		return db.FollowUp{}, domain.ReasonNoteNoFactory, nil
 	}
 
-	srcID := uuid.MustParse(string(src.ID))
-
-	dup, err := l.q.OpenItemFiledFrom(ctx, db.OpenItemFiledFromParams{ItemID: srcID, Key: domain.FollowUpKey(f.Start.Title)})
-	if err == nil {
-		row, err := l.q.FileFollowUpOnto(ctx, db.FileFollowUpOntoParams{ID: id, FiledItemID: &dup.ID, At: l.at})
-
+	if row, ok, err := l.dedupe(ctx, id, src, f.Start.Title); ok || err != nil {
 		return row, "", err
 	}
 
-	if !notFound(err) {
-		return db.FollowUp{}, "", fmt.Errorf("open item filed from %s: %w", src.ID, err)
-	}
-
 	factory := uuid.MustParse(string(to.ID))
-	if err := l.q.LockFollowUpCap(ctx, factory); err != nil {
-		return db.FollowUp{}, "", fmt.Errorf("lock follow-up cap: %w", err)
-	}
 
-	today, err := l.q.FollowUpItemsSince(ctx, db.FollowUpItemsSinceParams{FactoryID: factory, Since: l.at.Add(-24 * time.Hour)})
-	if err != nil {
-		return db.FollowUp{}, "", fmt.Errorf("count follow-up items: %w", err)
-	}
-
-	if today >= domain.MaxFollowUpItemsADay {
-		return db.FollowUp{}, domain.ReasonFollowUpCapped, nil
+	if capped, err := l.capped(ctx, factory); err != nil || capped {
+		return db.FollowUp{}, domain.ReasonFollowUpCapped, err
 	}
 
 	after, err := l.after(ctx, f.Start.After)
@@ -270,6 +250,38 @@ func (l *lander) fileStart(ctx context.Context, f domain.FollowUp, src domain.It
 	filed, err := l.q.FileFollowUpOnto(ctx, db.FileFollowUpOntoParams{ID: id, FiledItemID: &row.ID, At: l.at})
 
 	return filed, "", err
+}
+
+// dedupe files follow-up id onto an open item already filed from src with title, and reports
+// whether there was one.
+func (l *lander) dedupe(ctx context.Context, id uuid.UUID, src domain.Item, title string) (db.FollowUp, bool, error) {
+	dup, err := l.q.OpenItemFiledFrom(ctx, db.OpenItemFiledFromParams{ItemID: uuid.MustParse(string(src.ID)), Key: domain.FollowUpKey(title)})
+	if notFound(err) {
+		return db.FollowUp{}, false, nil
+	}
+
+	if err != nil {
+		return db.FollowUp{}, false, fmt.Errorf("open item filed from %s: %w", src.ID, err)
+	}
+
+	row, err := l.q.FileFollowUpOnto(ctx, db.FileFollowUpOntoParams{ID: id, FiledItemID: &dup.ID, At: l.at})
+
+	return row, true, err
+}
+
+// capped takes factory's cap lock and reports whether it already took MaxFollowUpItemsADay
+// follow-up items in the 24 hours before l.at.
+func (l *lander) capped(ctx context.Context, factory uuid.UUID) (bool, error) {
+	if err := l.q.LockFollowUpCap(ctx, factory); err != nil {
+		return false, fmt.Errorf("lock follow-up cap: %w", err)
+	}
+
+	today, err := l.q.FollowUpItemsSince(ctx, db.FollowUpItemsSinceParams{FactoryID: factory, Since: l.at.Add(-24 * time.Hour)})
+	if err != nil {
+		return false, fmt.Errorf("count follow-up items: %w", err)
+	}
+
+	return today >= domain.MaxFollowUpItemsADay, nil
 }
 
 // after resolves a start's after refs to the items they name, nil for none, which domain.File
@@ -363,7 +375,7 @@ func (l *lander) joinTriage(ctx context.Context, factory domain.FactoryID, rows 
 
 	if _, err := l.q.RewriteTriageItem(ctx, db.RewriteTriageItemParams{
 		ID: tri.ID, Title: domain.TriageTitle(es), Body: domain.TriageBrief(es), Priority: int64(domain.TriagePriority(es)),
-		Generation: int32(min(domain.TriageGeneration(es), maxInt32)), At: l.at,
+		Generation: int32(min(max(domain.TriageGeneration(es), 0), maxInt32)), At: l.at,
 	}); err != nil {
 		return nil, fmt.Errorf("rewrite triage item %s: %w", tri.ID, err)
 	}

@@ -296,6 +296,7 @@ func (l *fakeLander) land(root *domain.Item) []domain.FollowUp {
 		case land.File:
 			if reason := l.fileStart(f, src, landed); reason != "" {
 				f.Reason, f.Target, f.Start = domain.StartTriageReason(*f.Start, reason), domain.FollowUpTriage, nil
+
 				triage = append(triage, i)
 
 				continue
@@ -318,22 +319,8 @@ func (l *fakeLander) land(root *domain.Item) []domain.FollowUp {
 
 // fileStart files f, a start of src, or returns why it goes to triage.
 func (l *fakeLander) fileStart(f *domain.FollowUp, src *domain.Item, landed time.Time) string {
-	to := domain.NoteFactoryOf(domain.Line{FactoryID: src.FactoryID})
-	if ln, ok := l.line(src.FactoryID); ok {
-		to = domain.NoteFactoryOf(ln)
-	}
-
-	toPtr := &to
-
-	if f.Start.Factory != "" {
-		if nf, ok := domain.NoteFactoryNamed(l.factories(), f.Start.Factory); ok {
-			to = nf
-		} else {
-			toPtr = nil
-		}
-	}
-
-	if reason := domain.RouteStart(src.FactoryID, toPtr); reason != "" {
+	to := domain.StartTarget(l.factories(), src.FactoryID, *f.Start)
+	if reason := domain.RouteStart(src.FactoryID, to); reason != "" {
 		return reason
 	}
 
@@ -348,22 +335,44 @@ func (l *fakeLander) fileStart(f *domain.FollowUp, src *domain.Item, landed time
 		return ""
 	}
 
-	today := 0
-
-	for _, it := range l.s.items {
-		if it.FactoryID == to.ID && it.Origin == domain.OriginFollowUp && it.CreatedBy == "" && !it.Triage &&
-			it.CreatedAt.After(l.at.Add(-24*time.Hour)) {
-			today++
-		}
-	}
-
-	if today >= domain.MaxFollowUpItemsADay {
+	if l.filedToday(to.ID) >= domain.MaxFollowUpItemsADay {
 		return domain.ReasonFollowUpCapped
 	}
 
-	after := make([]domain.After, 0, len(f.Start.After))
+	n, err := domain.File(toLine, domain.FollowUpFileRequest(to.ID, *src, l.ref(src), *f, l.after(f.Start.After), landed))
+	if err != nil {
+		return domain.ReasonOf(err)
+	}
 
-	for _, s := range f.Start.After {
+	l.s.factories[n.FactoryID] = l.org
+	it, audit := l.s.file(l.org, n, filedPart{})
+	f.State, f.FiledItem = domain.FollowUpFiled, it.ID
+
+	l.audits = append(l.audits, audit)
+
+	return ""
+}
+
+// filedToday counts the follow-up items the engine filed into factory, triage items aside, in
+// the 24 hours before l.at.
+func (l *fakeLander) filedToday(factory domain.FactoryID) int {
+	n := 0
+
+	for _, it := range l.s.items {
+		if it.FactoryID == factory && it.Origin == domain.OriginFollowUp && it.CreatedBy == "" && !it.Triage &&
+			it.CreatedAt.After(l.at.Add(-24*time.Hour)) {
+			n++
+		}
+	}
+
+	return n
+}
+
+// after resolves after refs to the items they name, nil for none.
+func (l *fakeLander) after(refs []string) []domain.After {
+	out := make([]domain.After, 0, len(refs))
+
+	for _, s := range refs {
 		a := domain.After{Ref: s}
 		ref, _ := domain.ParseItemRef(s)
 
@@ -376,20 +385,10 @@ func (l *fakeLander) fileStart(f *domain.FollowUp, src *domain.Item, landed time
 			}
 		}
 
-		after = append(after, a)
+		out = append(out, a)
 	}
 
-	n, err := domain.File(toLine, domain.FollowUpFileRequest(to.ID, *src, l.ref(src), *f, after, landed))
-	if err != nil {
-		return domain.ReasonOf(err)
-	}
-
-	l.s.factories[n.FactoryID] = l.org
-	it, audit := l.s.file(l.org, n, filedPart{})
-	l.audits = append(l.audits, audit)
-	f.State, f.FiledItem = domain.FollowUpFiled, it.ID
-
-	return ""
+	return out
 }
 
 // openFiledFrom is the oldest open item, not a triage item, already filed from src's follow-ups
@@ -465,6 +464,7 @@ func (l *fakeLander) joinTriage(factory domain.FactoryID, idx []int) []domain.Fo
 
 		tri, audit = l.s.file(l.org, n, filedPart{})
 		tri.Triage = true
+
 		l.audits = append(l.audits, audit)
 	}
 

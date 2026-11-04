@@ -72,6 +72,22 @@ func RouteStart(from FactoryID, to *NoteFactory) string {
 	}
 }
 
+// StartTarget is the factory of fs a start follow-up p from factory from goes to: the one its
+// factory names (by metadata.name or id), or from's own when it names none; nil when it names
+// one fs lacks.
+func StartTarget(fs []NoteFactory, from FactoryID, p FollowUpPlan) *NoteFactory {
+	name := p.Factory
+	if name == "" {
+		name = string(from)
+	}
+
+	if nf, ok := NoteFactoryNamed(fs, name); ok {
+		return &nf
+	}
+
+	return nil
+}
+
 // StartTriageReason is the reason a triage follow-up keeps for a start that could not be filed:
 // its title, which the row no longer holds, then why.
 func StartTriageReason(p FollowUpPlan, reason string) string {
@@ -188,7 +204,7 @@ func TriageBrief(es []TriageEntry) string {
 
 			fmt.Fprintf(&b, "\nFrom the %s agent at %s:\n\n", e.FollowUp.Agent, e.FollowUp.Station)
 
-			for _, line := range strings.Split(e.FollowUp.Text, "\n") {
+			for line := range strings.SplitSeq(e.FollowUp.Text, "\n") {
 				b.WriteString(strings.TrimRight("> "+line, " ") + "\n")
 			}
 
@@ -204,7 +220,7 @@ func TriageBrief(es []TriageEntry) string {
 }
 
 // TriageFileRequest is the filing of a triage item into factory for es, the follow-ups that
-// first join it, at at (ADR 0040 decision 10): origin follow-up by the engine, its first
+// first join it, when it is filed (ADR 0040 decision 10): origin follow-up by the engine, its first
 // source's type, standard class, starting TriageWait after at, with TriageTitle, TriageBrief,
 // TriagePriority and TriageGeneration.
 func TriageFileRequest(factory FactoryID, es []TriageEntry, at time.Time) FileRequest {
@@ -239,6 +255,8 @@ func Fileable(f FollowUp, filed ItemState, filedTriage bool) bool {
 		return true
 	case FollowUpFiled:
 		return f.Target == FollowUpTriage && filedTriage && (filed == StateDone || filed == StateCancelled)
+	case FollowUpWaiting, FollowUpDelivered:
+		return false
 	default:
 		return false
 	}

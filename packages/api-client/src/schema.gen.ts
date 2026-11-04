@@ -3152,6 +3152,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/items/{item}/follow-ups/{followUp}/drop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+                /** @description The follow-up's id (a UUID) */
+                followUp: components["parameters"]["FollowUpRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Drop a waiting follow-up of an item so it is never delivered or filed
+         * @description The follow-up becomes dropped, its reason naming the caller ("dropped by user:<id>"). File can file it again later. Problems: 404 follow-up-not-found for a follow-up that is not this item's; 409 follow-up-state when it is not waiting.
+         */
+        post: operations["dropFollowUp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/items/{item}/follow-ups/{followUp}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+                /** @description The follow-up's id (a UUID) */
+                followUp: components["parameters"]["FollowUpRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * File an item from a dropped follow-up or one in a closed triage item
+         * @description Files an item in the source item's factory at its first station, as createItem does, with origin follow-up, the caller as its filer, a generation one above the source's and the source's untrusted flag; the follow-up becomes filed with that item. Only a dropped follow-up, or one whose triage item is done or cancelled, can be filed. Problems: 400 for what the factory does not take (a type, a lane, a start); 404 follow-up-not-found for a follow-up that is not this item's; 409 follow-up-state for any other follow-up.
+         */
+        post: operations["fileFollowUp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/items/{item}/retry": {
         parameters: {
             query?: never;
@@ -4570,6 +4624,38 @@ export interface components {
             in?: string;
             /** @description The items it starts after, each an id (a UUID) or <factory>#<number>, as in goal#2, of the same factory */
             after?: string[];
+        };
+        /** @description Work an agent noticed outside its item, kept on the item (ADR 0040): a note for an open item, a start for an item of its own when the work lands, or text for the factory's triage item */
+        FollowUp: {
+            id: string;
+            /** @description The source item */
+            item_id: string;
+            /** @description The station whose run wrote it */
+            station: string;
+            agent: string;
+            text: string;
+            /**
+             * @description Where it goes, or went; absent for one dropped as it was read
+             * @enum {string}
+             */
+            target?: "note" | "start" | "triage";
+            /** @enum {string} */
+            state: "waiting" | "delivered" | "filed" | "dropped";
+            /** @description Why it was dropped, or why it went to triage instead of where it said */
+            reason?: string;
+            /** @description The item it was filed as or onto, a triage item for target triage */
+            filed_item_id?: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        FileFollowUpRequest: {
+            title: string;
+            body?: string;
+            /** @description One of the factory's work types; absent or empty, the first it declares, or none when it declares none */
+            type?: string;
+            lane?: string;
+            /** @description When the item may start; absent, as soon as it can */
+            start?: components["schemas"]["Start"];
         };
         /** @description When an item that has not started may start */
         ItemStart: {
@@ -8719,6 +8805,8 @@ export interface components {
         WorkTypeFilter: string;
         /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
         ItemRef: string;
+        /** @description The follow-up's id (a UUID) */
+        FollowUpRef: string;
         /** @description A section of the factory model, a tab of the Visual editor */
         SectionRef: components["schemas"]["Section"];
         /** @description A file's path relative to the factory's root, as in agents/engineer.md; percent-encode its slashes as %2F so it is one path segment */
@@ -13125,6 +13213,68 @@ export interface operations {
         responses: {
             /** @description The cancelled item */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    dropFollowUp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+                /** @description The follow-up's id (a UUID) */
+                followUp: components["parameters"]["FollowUpRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The dropped follow-up */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowUp"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    fileFollowUp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+                /** @description The follow-up's id (a UUID) */
+                followUp: components["parameters"]["FollowUpRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileFollowUpRequest"];
+            };
+        };
+        responses: {
+            /** @description The filed item */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

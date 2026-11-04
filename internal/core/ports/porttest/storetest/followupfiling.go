@@ -29,6 +29,7 @@ var followUpFilingTests = []struct {
 	{"FollowUps_TriageCollectsUntilClaimed", testTriageCollectsUntilClaimed},
 	{"FollowUps_TriageNoneWhenNothingLeft", testTriageNoneWhenNothingLeft},
 	{"FollowUps_FileAndDropByAPerson", testFileAndDropByAPerson},
+	{"FollowUps_FileInAClosedTriageItem", testFileInAClosedTriageItem},
 }
 
 // tLanded is when the tests' work lands, and tSweep when the sweep runs.
@@ -54,7 +55,7 @@ func startFollowUp(text string, p domain.FollowUpPlan) domain.FollowUp {
 func (f *fixture) land(t *testing.T, it domain.Item, state domain.ItemState, at time.Time) {
 	t.Helper()
 
-	tr := ports.Transition{ItemID: it.ID, From: it.Position(), To: domain.Position{Station: "done", State: state}, At: at}
+	tr := ports.Transition{ItemID: it.ID, From: it.Position(), To: domain.Position{Station: stDone, State: state}, At: at}
 	if state == domain.StateDone {
 		tr.DoneAt = at
 	}
@@ -137,29 +138,7 @@ func testFileStartsWhenWorkLands(f *fixture) {
 			t.Fatalf("follow-up = %+v; want filed with an item", fu)
 		}
 
-		it := f.item(t, fu.FiledItem)
-		if it.Origin != domain.OriginFollowUp || it.CreatedBy != "" || it.Class != domain.ClassStandard || it.Priority != 2 ||
-			it.Generation != 2 || it.Station != stWork || it.FactoryID != f.factory || it.Triage {
-			t.Errorf("filed item = %+v; want a standard follow-up by the engine at the first station, priority 2, generation 2", it)
-		}
-
-		switch it.Title {
-		case "Index runs":
-			if !it.StartAt.Equal(tLanded.Add(48*time.Hour)) || it.Lane != laneBackend {
-				t.Errorf("Index runs starts %v in lane %q; want 2 days after landing, backend", it.StartAt, it.Lane)
-			}
-
-			edges, err := f.Store.Edges(f.ctx(t), it.ID)
-			if err != nil || len(edges.Needs) != 1 || edges.Needs[0].Needs != before.ID {
-				t.Errorf("Index runs needs %+v, %v; want %s", edges.Needs, err, before.ID)
-			}
-		case "Drop column":
-			if !it.StartAt.IsZero() {
-				t.Errorf("Drop column starts %v; want now", it.StartAt)
-			}
-		default:
-			t.Errorf("filed %q", it.Title)
-		}
+		f.expectStartItem(t, f.item(t, fu.FiledItem), before)
 	}
 
 	if again := f.sweep(t, lines, 10); len(again) != 0 {
@@ -168,6 +147,43 @@ func testFileStartsWhenWorkLands(f *fixture) {
 
 	if tri := f.triageItems(t, f.factory); len(tri) != 0 {
 		t.Errorf("triage items = %+v; want none", tri)
+	}
+}
+
+// expectStartItem checks it, filed from a start of testFileStartsWhenWorkLands: a standard
+// follow-up by the engine at the first station, priority 2 and generation 2, with its start.
+func (f *fixture) expectStartItem(t *testing.T, it, before domain.Item) {
+	t.Helper()
+
+	if it.Origin != domain.OriginFollowUp || it.CreatedBy != "" || it.Class != domain.ClassStandard || it.Priority != 2 ||
+		it.Generation != 2 || it.Station != stWork || it.FactoryID != f.factory || it.Triage {
+		t.Errorf("filed item = %+v; want a standard follow-up by the engine at the first station, priority 2, generation 2", it)
+	}
+
+	switch it.Title {
+	case "Index runs":
+		f.expectIndexRuns(t, it, before)
+	case "Drop column":
+		if !it.StartAt.IsZero() {
+			t.Errorf("Drop column starts %v; want now", it.StartAt)
+		}
+	default:
+		t.Errorf("filed %q", it.Title)
+	}
+}
+
+// expectIndexRuns checks the Index runs item: it starts 2 days after landing, in the backend lane,
+// after before.
+func (f *fixture) expectIndexRuns(t *testing.T, it, before domain.Item) {
+	t.Helper()
+
+	if !it.StartAt.Equal(tLanded.Add(48*time.Hour)) || it.Lane != laneBackend {
+		t.Errorf("Index runs starts %v in lane %q; want 2 days after landing, backend", it.StartAt, it.Lane)
+	}
+
+	edges, err := f.Store.Edges(f.ctx(t), it.ID)
+	if err != nil || len(edges.Needs) != 1 || edges.Needs[0].Needs != before.ID {
+		t.Errorf("Index runs needs %+v, %v; want %s", edges.Needs, err, before.ID)
 	}
 }
 
@@ -181,7 +197,7 @@ func testFileIntoAnotherFactory(f *fixture) {
 	lines := []domain.Line{lineOf(f.factory, nameDev), lineOf(ops, nameOps, f.factory), lineOf(closed, "closed")}
 
 	devItem := f.create(t, domain.NewItem{Title: "dev item"})
-	src := f.create(t, domain.NewItem{Title: "src"})
+	src := f.create(t, domain.NewItem{Title: titleSrc})
 	f.keepNotes(t, src,
 		startFollowUp("into ops", domain.FollowUpPlan{Title: "Ops work", Factory: nameOps}),
 		startFollowUp("into closed", domain.FollowUpPlan{Title: "Closed work", Factory: "closed"}),
@@ -258,7 +274,7 @@ func testFileCappedADay(f *fixture) {
 		f.create(t, domain.NewItem{FactoryID: ops, Title: fmt.Sprintf("earlier %d", i), Origin: domain.OriginFollowUp, CreatedAt: tSweep.Add(-time.Hour)})
 	}
 
-	src := f.create(t, domain.NewItem{Title: "src"})
+	src := f.create(t, domain.NewItem{Title: titleSrc})
 	f.keepNotes(t, src, startFollowUp("one more", domain.FollowUpPlan{Title: "One more", Factory: nameOps}))
 	f.land(t, src, domain.StateDone, tLanded)
 
@@ -297,7 +313,7 @@ func testFileThreeDeep(f *fixture) {
 func testFileDedupesByTitle(f *fixture) {
 	t := f.t
 
-	src := f.create(t, domain.NewItem{Title: "src"})
+	src := f.create(t, domain.NewItem{Title: titleSrc})
 	f.keepNotes(t, src,
 		startFollowUp("first", domain.FollowUpPlan{Title: "Index runs"}),
 		startFollowUp("second", domain.FollowUpPlan{Title: "  index RUNS "}),
@@ -405,15 +421,7 @@ func testTriageCollectsUntilClaimed(f *fixture) {
 		t.Errorf("triage item = %+v; want %q, a standard story by the engine, priority 0, generation 1, starting in 24h", it, want)
 	}
 
-	for _, s := range []string{"> From a", "> From b", "> Also from b", domain.TriageClosing} {
-		if !strings.Contains(it.Body, s) {
-			t.Errorf("triage brief lacks %q:\n%s", s, it.Body)
-		}
-	}
-
-	if i, j := strings.Index(it.Body, "> From a"), strings.Index(it.Body, "> From b"); i > j {
-		t.Errorf("triage brief not in source order:\n%s", it.Body)
-	}
+	expectTriageBrief(t, it.Body)
 
 	f.startRun(t, it.ID, tSweep)
 
@@ -427,11 +435,27 @@ func testTriageCollectsUntilClaimed(f *fixture) {
 	}
 }
 
+// expectTriageBrief checks the brief of testTriageCollectsUntilClaimed's triage item: every
+// follow-up quoted, a's before b's, and the closing.
+func expectTriageBrief(t *testing.T, body string) {
+	t.Helper()
+
+	for _, s := range []string{"> From a", "> From b", "> Also from b", domain.TriageClosing} {
+		if !strings.Contains(body, s) {
+			t.Errorf("triage brief lacks %q:\n%s", s, body)
+		}
+	}
+
+	if i, j := strings.Index(body, "> From a"), strings.Index(body, "> From b"); i > j {
+		t.Errorf("triage brief not in source order:\n%s", body)
+	}
+}
+
 // No triage item is filed when nothing is left for it.
 func testTriageNoneWhenNothingLeft(f *fixture) {
 	t := f.t
 
-	src := f.create(t, domain.NewItem{Title: "src"})
+	src := f.create(t, domain.NewItem{Title: titleSrc})
 	f.land(t, src, domain.StateDone, tLanded)
 
 	if got := f.sweep(t, []domain.Line{lineOf(f.factory, nameDev)}, 10); len(got) != 0 {
@@ -443,15 +467,15 @@ func testTriageNoneWhenNothingLeft(f *fixture) {
 	}
 }
 
-// A person drops a waiting follow-up, and files a dropped one or one in a closed triage item;
-// anything else conflicts, and a follow-up of another item, or none, is not found.
+// A person drops a waiting follow-up and files a dropped one; anything else conflicts, and a
+// follow-up of another item, or none, is not found.
 func testFileAndDropByAPerson(f *fixture) {
 	t := f.t
 	ctx := f.ctx(t)
-	ada := domain.Actor{Kind: domain.ActorUser, ID: "ada", Name: "Ada"}
+	ada := adaActor
 
-	src := f.create(t, domain.NewItem{Title: "src"})
-	other := f.create(t, domain.NewItem{Title: "other"})
+	src := f.create(t, domain.NewItem{Title: titleSrc})
+	other := f.create(t, domain.NewItem{Title: "another"})
 	f.keepNotes(t, src, triageFollowUp("drop me"), triageFollowUp("to triage"))
 
 	kept, err := f.Store.FollowUps(ctx, src.ID)
@@ -459,55 +483,87 @@ func testFileAndDropByAPerson(f *fixture) {
 		t.Fatalf("FollowUps = %+v, %v", kept, err)
 	}
 
-	drop, tri := kept[0], kept[1]
+	drop := kept[0]
 
-	if _, err := f.Store.DropFollowUp(ctx, other.ID, drop.ID, ada, t1); !errors.Is(err, ports.ErrNotFound) {
-		t.Errorf("DropFollowUp of another item: err %v; want ErrNotFound", err)
-	}
+	n := personsItem(f)
 
-	n := domain.NewItem{FactoryID: f.factory, Title: "Filed by Ada", Type: typeTask, Station: stWork, State: domain.StateQueued,
-		Class: domain.ClassStandard, Origin: domain.OriginFollowUp, CreatedBy: ada, Generation: 1, CreatedAt: t1}
+	_, err = f.Store.DropFollowUp(ctx, other.ID, drop.ID, ada, t1)
+	expectErr(t, "DropFollowUp of another item", err, ports.ErrNotFound)
 
-	if _, _, err := f.Store.FileFollowUp(ctx, src.ID, drop.ID, n); !errors.Is(err, ports.ErrConflict) {
-		t.Errorf("FileFollowUp of a waiting one: err %v; want ErrConflict", err)
-	}
+	_, _, err = f.Store.FileFollowUp(ctx, src.ID, drop.ID, n)
+	expectErr(t, "FileFollowUp of a waiting one", err, ports.ErrConflict)
 
 	dropped, err := f.Store.DropFollowUp(ctx, src.ID, drop.ID, ada, t1)
 	if err != nil || dropped.State != domain.FollowUpDropped || dropped.Reason != domain.DropReason(ada) {
-		t.Fatalf("DropFollowUp = %+v, %v; want dropped by ada", dropped, err)
+		t.Fatalf("DropFollowUp = %+v, %v; want dropped by grace", dropped, err)
 	}
 
-	if _, err := f.Store.DropFollowUp(ctx, src.ID, drop.ID, ada, t1); !errors.Is(err, ports.ErrConflict) {
-		t.Errorf("DropFollowUp twice: err %v; want ErrConflict", err)
-	}
+	_, err = f.Store.DropFollowUp(ctx, src.ID, drop.ID, ada, t1)
+	expectErr(t, "DropFollowUp twice", err, ports.ErrConflict)
 
 	filed, it, err := f.Store.FileFollowUp(ctx, src.ID, drop.ID, n)
 	if err != nil || filed.State != domain.FollowUpFiled || filed.FiledItem != it.ID || it.CreatedBy != ada.Ref() || it.Origin != domain.OriginFollowUp {
-		t.Fatalf("FileFollowUp = %+v, %+v, %v; want filed as Ada's follow-up item", filed, it, err)
+		t.Fatalf("FileFollowUp = %+v, %+v, %v; want filed as Grace's follow-up item", filed, it, err)
 	}
 
-	if _, _, err := f.Store.FileFollowUp(ctx, src.ID, drop.ID, n); !errors.Is(err, ports.ErrConflict) {
-		t.Errorf("FileFollowUp twice: err %v; want ErrConflict", err)
-	}
+	_, _, err = f.Store.FileFollowUp(ctx, src.ID, drop.ID, n)
+	expectErr(t, "FileFollowUp twice", err, ports.ErrConflict)
 
-	if _, _, err := f.Store.FileFollowUp(ctx, src.ID, missingFollowUp, n); !errors.Is(err, ports.ErrNotFound) {
-		t.Errorf("FileFollowUp of none: err %v; want ErrNotFound", err)
-	}
+	_, _, err = f.Store.FileFollowUp(ctx, src.ID, missingFollowUp, n)
+	expectErr(t, "FileFollowUp of none", err, ports.ErrNotFound)
+}
 
+// expectErr reports what when err is not want.
+func expectErr(t *testing.T, what string, err, want error) {
+	t.Helper()
+
+	if !errors.Is(err, want) {
+		t.Errorf("%s: err %v; want %v", what, err, want)
+	}
+}
+
+// A follow-up in a triage item may be filed by a person only once the triage item is done or
+// cancelled.
+func testFileInAClosedTriageItem(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+
+	src := f.create(t, domain.NewItem{Title: titleSrc})
+	f.keepNotes(t, src, triageFollowUp("to triage"))
 	f.land(t, src, domain.StateDone, tLanded)
-	f.sweep(t, []domain.Line{lineOf(f.factory, nameDev)}, 10)
 
-	if _, _, err := f.Store.FileFollowUp(ctx, src.ID, tri.ID, n); !errors.Is(err, ports.ErrConflict) {
+	got := f.sweep(t, []domain.Line{lineOf(f.factory, nameDev)}, 10)
+	if len(got) != 1 {
+		t.Fatalf("FileFollowUps = %+v; want one in triage", got)
+	}
+
+	n := personsItem(f)
+
+	if _, _, err := f.Store.FileFollowUp(ctx, src.ID, got[0].ID, n); !errors.Is(err, ports.ErrConflict) {
 		t.Errorf("FileFollowUp in an open triage item: err %v; want ErrConflict", err)
 	}
 
 	triage := f.triageItems(t, f.factory)[0]
 	f.land(t, triage, domain.StateCancelled, tSweep)
 
-	if filed, _, err := f.Store.FileFollowUp(ctx, src.ID, tri.ID, n); err != nil || filed.State != domain.FollowUpFiled || filed.FiledItem == triage.ID {
+	if filed, _, err := f.Store.FileFollowUp(ctx, src.ID, got[0].ID, n); err != nil || filed.State != domain.FollowUpFiled || filed.FiledItem == triage.ID {
 		t.Errorf("FileFollowUp in a closed triage item = %+v, %v; want filed as a new item", filed, err)
+	}
+}
+
+// personsItem is the item Grace files for a follow-up.
+func personsItem(f *fixture) domain.NewItem {
+	return domain.NewItem{
+		FactoryID: f.factory, Title: "Filed by Grace", Type: typeTask, Station: stWork, State: domain.StateQueued,
+		Class: domain.ClassStandard, Origin: domain.OriginFollowUp, CreatedBy: adaActor, Generation: 1, CreatedAt: t1,
 	}
 }
 
 // missingFollowUp names no follow-up.
 const missingFollowUp domain.FollowUpID = "00000000-0000-7000-8000-fffffffffffd"
+
+// titleSrc is the tests' source items' title.
+const titleSrc = "src"
+
+// adaActor is the person who drops and files follow-ups.
+var adaActor = domain.Actor{Kind: domain.ActorUser, ID: "grace", Name: "Grace"}

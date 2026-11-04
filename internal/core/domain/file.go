@@ -125,7 +125,7 @@ func File(l Line, r FileRequest) (NewItem, error) {
 	return n, nil
 }
 
-// checkOrigin checks r's origin and via, then its lineage.
+// checkOrigin checks r's origin, via and class, then its lineage.
 func checkOrigin(r FileRequest) error {
 	switch {
 	case !slices.Contains([]Origin{OriginPerson, OriginPlan, OriginTrigger, OriginFollowUp}, r.Origin):
@@ -134,6 +134,8 @@ func checkOrigin(r FileRequest) error {
 		return fmt.Errorf("only a person files through %q, not a %s: %w", r.Via, r.Origin, ErrInvalid)
 	case r.Via != "" && !slices.Contains([]Via{ViaWeb, ViaCLI, ViaAPI}, r.Via):
 		return fmt.Errorf("unknown via %q: %w", r.Via, ErrInvalid)
+	case r.Class != "" && r.Origin != OriginTrigger && r.Origin != OriginFollowUp:
+		return fmt.Errorf("only a trigger or a follow-up sets its item's class: %w", ErrInvalid)
 	}
 
 	return checkLineage(r)
@@ -153,8 +155,6 @@ func checkLineage(r FileRequest) error {
 		return fmt.Errorf("only a part has an assembly: %w", ErrInvalid)
 	case (r.Station != "" || r.State != "") && r.Origin != OriginTrigger:
 		return fmt.Errorf("only a trigger places its item: %w", ErrInvalid)
-	case r.Class != "" && r.Origin != OriginTrigger && r.Origin != OriginFollowUp:
-		return fmt.Errorf("only a trigger or a follow-up sets its item's class: %w", ErrInvalid)
 	}
 
 	return nil

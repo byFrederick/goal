@@ -42,8 +42,8 @@ func TestFollowUpFiling_Landing(t *testing.T) {
 func TestFollowUpFiling_RouteStart(t *testing.T) {
 	t.Parallel()
 
-	other := NoteFactory{ID: "b", Name: "web"}
-	accepting := NoteFactory{ID: "b", Name: "web", FollowUpsFrom: []FactoryID{"a"}}
+	other := NoteFactory{ID: "b", Name: "ops"}
+	accepting := NoteFactory{ID: "b", Name: "ops", FollowUpsFrom: []FactoryID{"a"}}
 
 	for _, tt := range []struct {
 		name string
@@ -67,8 +67,8 @@ func TestFollowUpFiling_FileRequest(t *testing.T) {
 	landed := time.Date(2026, 11, 4, 9, 0, 0, 0, time.UTC)
 	src := Item{FactoryID: "a", Priority: 2, Generation: 1, Untrusted: true}
 	f := FollowUp{
-		Text: "The runs table needs an index", Station: "build", Agent: "backend",
-		Start: &FollowUpPlan{In: "2d", Title: "Index runs", Type: fileStory, Lane: "api"},
+		Text: "The runs table needs an index", Station: stationBuild, Agent: testAgent,
+		Start: &FollowUpPlan{In: "2d", Title: "Index runs", Type: fileStory, Lane: fileLaneAPI},
 	}
 
 	r := FollowUpFileRequest("a", src, ItemRef{Factory: "software", Number: 513}, f, nil, landed)
@@ -103,7 +103,7 @@ func TestFollowUpFiling_ClassOnlyForTriggersAndFollowUps(t *testing.T) {
 func triageEntries() []TriageEntry {
 	e := func(n int64, text string, prio int) TriageEntry {
 		return TriageEntry{
-			FollowUp: FollowUp{Text: text, Station: "build", Agent: "backend"},
+			FollowUp: FollowUp{Text: text, Station: stationBuild, Agent: testAgent},
 			Source:   ItemRef{Factory: "software", Number: n}, Title: "Source", Type: fileStory, Priority: prio, Generation: int(n % 3),
 		}
 	}
