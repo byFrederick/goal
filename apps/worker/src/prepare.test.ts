@@ -976,14 +976,8 @@ describe('prepare', () => {
       expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).judge).toEqual(judge);
     });
 
-    it('refuses a jonah review with a repository or a definition, and passes its spec on', async () => {
-      const jonah = {
-        files: [],
-        events: [],
-        rejected: [],
-        propose_after: 5,
-        manual: false,
-      };
+    it('refuses a jonah review with a repository or a definition, and writes its box and spec', async () => {
+      const jonah = { propose_after: 5, manual: false };
       const jonahSpec = { ...spec, item_id: '', station: '', jonah };
       for (const bundle of [
         { spec: jonahSpec, files: {}, repository: { url: 'https://example.com/a.git', branch: 'goal/1-x' } },
@@ -995,8 +989,15 @@ describe('prepare', () => {
       }
 
       const { exec } = recorder();
-      await prepare(depsWith(gatewayServing({ spec: jonahSpec, files: {} }).fake, exec));
+      const box = {
+        'definition/factory.yaml': b64(factory),
+        'evidence/README.md': b64('# Evidence\n'),
+        'events.md': b64('# Sent-back events\n'),
+      };
+      await prepare(depsWith(gatewayServing({ spec: jonahSpec, files: box }).fake, exec));
       expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).jonah).toEqual(jonah);
+      expect(await readFile(join(dirs.goal, 'definition', 'factory.yaml'), 'utf8')).toBe(factory);
+      expect(await readFile(join(dirs.goal, 'evidence', 'README.md'), 'utf8')).toBe('# Evidence\n');
     });
 
     it('still needs an item outside definition mode', async () => {
