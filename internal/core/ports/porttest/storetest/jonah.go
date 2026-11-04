@@ -1080,24 +1080,7 @@ func testJonahObservationsPersist(f *fixture) {
 		},
 	})
 
-	obs, err := f.Jonah.Observations(f.ctx(t), f.factory, 10)
-	if err != nil || len(obs) != 2 {
-		t.Fatalf("Observations: %+v, %v; want the 2 of the first review", obs, err)
-	}
-
-	got := map[domain.ObservationID]domain.Observation{obs[0].ID: obs[0], obs[1].ID: obs[1]}
-
-	s := got[screenshot.ID]
-	if s.Count != 5 || !reflect.DeepEqual(s.ItemIDs, []domain.ItemID{a.ID, b.ID}) || s.State != domain.ObservationProposed ||
-		s.ProposalID != ps[0].ID || s.Summary != "No screenshot on UI changes" || s.ReviewID != first.ID ||
-		!s.CreatedAt.Equal(t0.Add(time.Minute)) || !s.UpdatedAt.Equal(t1.Add(time.Minute)) {
-		t.Errorf("updated observation %+v, want count 5, items a and b, proposed as %s, made by %s at %s, updated at %s",
-			s, ps[0].ID, first.ID, t0.Add(time.Minute), t1.Add(time.Minute))
-	}
-
-	if n := got[sandbox.ID]; n.State != domain.ObservationNotJonahs || n.Count != 2 {
-		t.Errorf("not Jonah's observation %+v, want not_jonahs, count 2", n)
-	}
+	f.expectPersisted(t, first.ID, screenshot.ID, sandbox.ID, ps[0].ID, []domain.ItemID{a.ID, b.ID})
 
 	if open := f.openObservations(t, 1); open[0].ID != screenshot.ID {
 		t.Errorf("open observations %+v, want only %s", open, screenshot.ID)
@@ -1122,4 +1105,32 @@ func (f *fixture) openObservations(t *testing.T, n int) []domain.Observation {
 	}
 
 	return open
+}
+
+// expectPersisted checks testJonahObservationsPersist's two observations after the second
+// review: screenshot, made by review first, updated to count 5 on items and proposed as
+// proposal; sandbox not Jonah's with count 2.
+func (f *fixture) expectPersisted(t *testing.T, first domain.JonahReviewID, screenshot, sandbox domain.ObservationID,
+	proposal domain.ProposalID, items []domain.ItemID,
+) {
+	t.Helper()
+
+	obs, err := f.Jonah.Observations(f.ctx(t), f.factory, 10)
+	if err != nil || len(obs) != 2 {
+		t.Fatalf("Observations: %+v, %v; want the 2 of the first review", obs, err)
+	}
+
+	got := map[domain.ObservationID]domain.Observation{obs[0].ID: obs[0], obs[1].ID: obs[1]}
+
+	s := got[screenshot]
+	if s.Count != 5 || !reflect.DeepEqual(s.ItemIDs, items) || s.State != domain.ObservationProposed ||
+		s.ProposalID != proposal || s.Summary != "No screenshot on UI changes" || s.ReviewID != first ||
+		!s.CreatedAt.Equal(t0.Add(time.Minute)) || !s.UpdatedAt.Equal(t1.Add(time.Minute)) {
+		t.Errorf("updated observation %+v, want count 5, items a and b, proposed as %s, made by %s at %s, updated at %s",
+			s, proposal, first, t0.Add(time.Minute), t1.Add(time.Minute))
+	}
+
+	if n := got[sandbox]; n.State != domain.ObservationNotJonahs || n.Count != 2 {
+		t.Errorf("not Jonah's observation %+v, want not_jonahs, count 2", n)
+	}
 }

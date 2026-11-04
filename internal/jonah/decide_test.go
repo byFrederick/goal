@@ -528,8 +528,15 @@ func TestDecider_UndoReversesAfterLaterPublish(t *testing.T) {
 		t.Errorf("second undo = %v, want ErrConflict", err)
 	}
 
-	if _, _, err := f.dc.Approve(ctx, factory, 2); err != nil || f.def.current[agentPath] != "# writer\nBe brief.\n" {
-		t.Errorf("approve the undo = %v, %s = %q; want the later publish kept and the change gone", err, agentPath, f.def.current[agentPath])
+	f.expectUndoApproves(ctx, t, 2, "# writer\nBe brief.\n")
+}
+
+// expectUndoApproves checks that the undo of number approves, leaving the writer's prompt want.
+func (f *decideFixture) expectUndoApproves(ctx context.Context, t *testing.T, number int64, want string) {
+	t.Helper()
+
+	if _, _, err := f.dc.Approve(ctx, factory, number); err != nil || f.def.current[agentPath] != want {
+		t.Errorf("approve the undo = %v, %s = %q; want %q: the later publish kept and the change gone", err, agentPath, f.def.current[agentPath], want)
 	}
 }
 

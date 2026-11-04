@@ -18,34 +18,40 @@ type dropped struct {
 	reason string
 }
 
-func TestReviews_Validate(t *testing.T) {
-	t.Parallel()
+// The drop reasons more than one case expects.
+const (
+	reasonPath      = "path"
+	reasonThreshold = "threshold"
+)
 
-	const secret = "the content never logged"
+// validateCase is one case of TestReviews_Validate.
+type validateCase struct {
+	name    string
+	trigger domain.JonahTrigger
+	// edit changes the one proposal; obs are the observations, naming it as index 0, and an
+	// observation of ID priorID names the open observation of count prior an earlier review
+	// left.
+	edit  func(p *proposal, foreign domain.SentBack)
+	obs   []observation
+	prior int
+	// kept says whether the proposal is stored; drop is the reason it is dropped.
+	kept bool
+	drop string
+	// watching is how many observations are stored as watching.
+	watching int
+}
 
-	cases := []struct {
-		name    string
-		trigger domain.JonahTrigger
-		// edit changes the one proposal; obs are the observations, naming it as index 0, and an
-		// observation of ID priorID names the open observation of count prior an earlier review
-		// left.
-		edit  func(p *proposal, foreign domain.SentBack)
-		obs   []observation
-		prior int
-		// kept says whether the proposal is stored; drop is the reason it is dropped.
-		kept bool
-		drop string
-		// watching is how many observations are stored as watching.
-		watching int
-	}{
+// validateCases are TestReviews_Validate's cases: one per reason a proposal is dropped, and those kept.
+func validateCases() []validateCase {
+	return []validateCase{
 		{name: "valid manual proposal", trigger: domain.JonahManual, kept: true},
-		{name: "path outside the allowlist", trigger: domain.JonahManual, drop: "path", edit: func(p *proposal, _ domain.SentBack) {
+		{name: "path outside the allowlist", trigger: domain.JonahManual, drop: reasonPath, edit: func(p *proposal, _ domain.SentBack) {
 			p.Edits[0].Path = "evals/cases/one.yaml"
 		}},
-		{name: "path escaping its folder", trigger: domain.JonahManual, drop: "path", edit: func(p *proposal, _ domain.SentBack) {
+		{name: "path escaping its folder", trigger: domain.JonahManual, drop: reasonPath, edit: func(p *proposal, _ domain.SentBack) {
 			p.Edits[0].Path = "agents/../evals/judge.yaml"
 		}},
-		{name: "a script", trigger: domain.JonahManual, drop: "path", edit: func(p *proposal, _ domain.SentBack) {
+		{name: "a script", trigger: domain.JonahManual, drop: reasonPath, edit: func(p *proposal, _ domain.SentBack) {
 			p.Edits[0] = fileEdit{Path: "skills/x/run.sh", Content: new("rm -rf /\n")}
 		}},
 		{name: "old text not in the file", trigger: domain.JonahManual, drop: "apply", edit: func(p *proposal, _ domain.SentBack) {
@@ -107,7 +113,7 @@ func TestReviews_Validate(t *testing.T) {
 			obs: []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 5, Proposal: new(0)}},
 		},
 		{
-			name: "threshold review below proposeAfter", trigger: domain.JonahThreshold, drop: "threshold", watching: 1,
+			name: "threshold review below proposeAfter", trigger: domain.JonahThreshold, drop: reasonThreshold, watching: 1,
 			obs: []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 4, Proposal: new(0)}},
 		},
 		{
@@ -115,24 +121,32 @@ func TestReviews_Validate(t *testing.T) {
 			obs: []observation{{ID: priorID, Summary: testsMissing, Items: []string{"#1"}, Count: 2, Proposal: new(0)}},
 		},
 		{
-			name: "threshold review below proposeAfter with an earlier review's count", trigger: domain.JonahThreshold, drop: "threshold", prior: 2, watching: 1,
+			name: "threshold review below proposeAfter with an earlier review's count", trigger: domain.JonahThreshold, drop: reasonThreshold, prior: 2, watching: 1,
 			obs: []observation{{ID: priorID, Summary: testsMissing, Items: []string{"#1"}, Count: 2, Proposal: new(0)}},
 		},
 		{
-			name: "threshold review of a cause that is not Jonah's", trigger: domain.JonahThreshold, drop: "threshold",
+			name: "threshold review of a cause that is not Jonah's", trigger: domain.JonahThreshold, drop: reasonThreshold,
 			obs: []observation{{Summary: "The sandbox was lost", Items: []string{"#1"}, Count: 9, Proposal: new(0), NotJonahs: true}},
 		},
-		{name: "threshold review with no observation", trigger: domain.JonahThreshold, drop: "threshold"},
+		{name: "threshold review with no observation", trigger: domain.JonahThreshold, drop: reasonThreshold},
 		{
 			name: "manual review below proposeAfter", trigger: domain.JonahManual, kept: true,
 			obs: []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 1, Proposal: new(0)}},
 		},
 		{
-			name: "observation of a dropped proposal", trigger: domain.JonahManual, drop: "path", watching: 1,
+			name: "observation of a dropped proposal", trigger: domain.JonahManual, drop: reasonPath, watching: 1,
 			edit: func(p *proposal, _ domain.SentBack) { p.Edits[0].Path = "evals/cases/one.yaml" },
 			obs:  []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 5, Proposal: new(0)}},
 		},
 	}
+}
+
+func TestReviews_Validate(t *testing.T) {
+	t.Parallel()
+
+	const secret = "the content never logged"
+
+	cases := validateCases()
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -145,8 +159,10 @@ func TestReviews_Validate(t *testing.T) {
 			w.sentBack(stBuild, rt0.Add(-time.Hour), "missed the test")
 
 			obs := nonNilObs(tc.obs)
+
 			if tc.prior > 0 {
 				id := w.priorObservation(tc.prior)
+
 				for i := range obs {
 					if obs[i].ID == priorID {
 						obs[i].ID = id

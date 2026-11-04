@@ -177,6 +177,7 @@ func (s *Store) storeReviewOutput(org domain.OrgID, r domain.JonahReview, res do
 			Evidence: slices.Clone(n.Evidence), Estimate: n.Estimate, CreatedAt: res.At,
 		}
 		s.supersede(org, r.FactoryID, n.Supersedes, res.At)
+
 		stored = append(stored, p)
 		s.jonah.proposals = append(s.jonah.proposals, jonahRow[domain.Proposal]{org, p})
 	}

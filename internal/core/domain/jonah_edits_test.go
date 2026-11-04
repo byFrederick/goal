@@ -8,6 +8,9 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
+// ruleA is the rule file the proposal tests edit.
+const ruleA = "rules/a.md"
+
 // An edit applies its replacements to the file as it is now, so an unrelated change since the
 // review still applies; it fails only when an old no longer occurs exactly once, or a new file
 // already exists (ADR 0039 decision 6).
@@ -15,7 +18,7 @@ func TestProposalEdits_Apply(t *testing.T) {
 	t.Parallel()
 
 	rules := "# Rules\n\n- Ask for a screenshot.\n- Run the tests.\n"
-	edit := domain.ProposalEdit{Path: "rules/a.md", Replacements: []domain.Replacement{{Old: "- Run the tests.\n", New: "- Run the tests twice.\n"}}}
+	edit := domain.ProposalEdit{Path: ruleA, Replacements: []domain.Replacement{{Old: "- Run the tests.\n", New: "- Run the tests twice.\n"}}}
 
 	for name, tc := range map[string]struct {
 		edit    domain.ProposalEdit
@@ -31,9 +34,9 @@ func TestProposalEdits_Apply(t *testing.T) {
 		"file gone":                   {edit: edit, fails: true},
 		"new file":                    {edit: domain.ProposalEdit{Path: "rules/b.md", Content: "x"}, want: "x"},
 		"new file exists":             {edit: domain.ProposalEdit{Path: "rules/b.md", Content: "x"}, content: "y", present: true, fails: true},
-		"whole file on its base":      {edit: domain.ProposalEdit{Path: "rules/a.md", BaseSHA256: string(domain.HashBlob([]byte(rules))), Content: "x"}, content: rules, present: true, want: "x"},
-		"whole file off its base":     {edit: domain.ProposalEdit{Path: "rules/a.md", BaseSHA256: string(domain.HashBlob([]byte(rules))), Content: "x"}, content: rules + "z", present: true, fails: true},
-		"whole file with a base gone": {edit: domain.ProposalEdit{Path: "rules/a.md", BaseSHA256: string(domain.HashBlob([]byte(rules))), Content: "x"}, fails: true},
+		"whole file on its base":      {edit: domain.ProposalEdit{Path: ruleA, BaseSHA256: string(domain.HashBlob([]byte(rules))), Content: "x"}, content: rules, present: true, want: "x"},
+		"whole file off its base":     {edit: domain.ProposalEdit{Path: ruleA, BaseSHA256: string(domain.HashBlob([]byte(rules))), Content: "x"}, content: rules + "z", present: true, fails: true},
+		"whole file with a base gone": {edit: domain.ProposalEdit{Path: ruleA, BaseSHA256: string(domain.HashBlob([]byte(rules))), Content: "x"}, fails: true},
 	} {
 		got, err := tc.edit.Apply([]byte(tc.content), tc.present)
 
@@ -51,7 +54,7 @@ func TestProposalEdits_Apply(t *testing.T) {
 func TestProposalEdits_Overlap(t *testing.T) {
 	t.Parallel()
 
-	files := map[string][]byte{"rules/a.md": []byte("one\ntwo\nthree\nfour\n"), "agents/x.md": []byte("x\n")}
+	files := map[string][]byte{ruleA: []byte("one\ntwo\nthree\nfour\n"), "agents/x.md": []byte("x\n")}
 	reps := func(path string, olds ...string) domain.ProposalEdit {
 		e := domain.ProposalEdit{Path: path}
 		for _, o := range olds {
@@ -65,14 +68,14 @@ func TestProposalEdits_Overlap(t *testing.T) {
 		a, b []domain.ProposalEdit
 		want bool
 	}{
-		"same span":            {a: []domain.ProposalEdit{reps("rules/a.md", "two\n")}, b: []domain.ProposalEdit{reps("rules/a.md", "two\n")}, want: true},
-		"spans overlap":        {a: []domain.ProposalEdit{reps("rules/a.md", "one\ntwo\n")}, b: []domain.ProposalEdit{reps("rules/a.md", "two\nthree\n")}, want: true},
-		"spans apart":          {a: []domain.ProposalEdit{reps("rules/a.md", "one\n")}, b: []domain.ProposalEdit{reps("rules/a.md", "four\n")}},
-		"spans touch":          {a: []domain.ProposalEdit{reps("rules/a.md", "one\n")}, b: []domain.ProposalEdit{reps("rules/a.md", "two\n")}},
-		"other files":          {a: []domain.ProposalEdit{reps("rules/a.md", "one\n")}, b: []domain.ProposalEdit{reps("agents/x.md", "x\n")}},
-		"one gives it whole":   {a: []domain.ProposalEdit{{Path: "rules/a.md", Content: "new"}}, b: []domain.ProposalEdit{reps("rules/a.md", "four\n")}, want: true},
-		"second of two edits":  {a: []domain.ProposalEdit{reps("agents/x.md", "x\n"), reps("rules/a.md", "three\n")}, b: []domain.ProposalEdit{reps("rules/a.md", "three\nfour\n")}, want: true},
-		"old not in the file":  {a: []domain.ProposalEdit{reps("rules/a.md", "gone\n")}, b: []domain.ProposalEdit{reps("rules/a.md", "two\n")}},
+		"same span":            {a: []domain.ProposalEdit{reps(ruleA, "two\n")}, b: []domain.ProposalEdit{reps(ruleA, "two\n")}, want: true},
+		"spans overlap":        {a: []domain.ProposalEdit{reps(ruleA, "one\ntwo\n")}, b: []domain.ProposalEdit{reps(ruleA, "two\nthree\n")}, want: true},
+		"spans apart":          {a: []domain.ProposalEdit{reps(ruleA, "one\n")}, b: []domain.ProposalEdit{reps(ruleA, "four\n")}},
+		"spans touch":          {a: []domain.ProposalEdit{reps(ruleA, "one\n")}, b: []domain.ProposalEdit{reps(ruleA, "two\n")}},
+		"other files":          {a: []domain.ProposalEdit{reps(ruleA, "one\n")}, b: []domain.ProposalEdit{reps("agents/x.md", "x\n")}},
+		"one gives it whole":   {a: []domain.ProposalEdit{{Path: ruleA, Content: "new"}}, b: []domain.ProposalEdit{reps(ruleA, "four\n")}, want: true},
+		"second of two edits":  {a: []domain.ProposalEdit{reps("agents/x.md", "x\n"), reps(ruleA, "three\n")}, b: []domain.ProposalEdit{reps(ruleA, "three\nfour\n")}, want: true},
+		"old not in the file":  {a: []domain.ProposalEdit{reps(ruleA, "gone\n")}, b: []domain.ProposalEdit{reps(ruleA, "two\n")}},
 		"both new, same file":  {a: []domain.ProposalEdit{{Path: "rules/n.md", Content: "a"}}, b: []domain.ProposalEdit{{Path: "rules/n.md", Content: "b"}}, want: true},
 		"both new, other file": {a: []domain.ProposalEdit{{Path: "rules/n.md", Content: "a"}}, b: []domain.ProposalEdit{{Path: "rules/m.md", Content: "b"}}},
 	} {
@@ -108,7 +111,7 @@ func TestProposalEdits_HiddenCharacters(t *testing.T) {
 		}
 	}
 
-	p := domain.NewProposal{Title: "a", Edits: []domain.ProposalEdit{{Path: "rules/a.md", Replacements: []domain.Replacement{{Old: "a", New: "b\u202E"}}}}}
+	p := domain.NewProposal{Title: "a", Edits: []domain.ProposalEdit{{Path: ruleA, Replacements: []domain.Replacement{{Old: "a", New: "b\u202E"}}}}}
 	if _, ok := p.HiddenCharacter(); !ok {
 		t.Error("a hidden character in a replacement's new is not found")
 	}
@@ -132,7 +135,7 @@ func TestProposalEdits_JSON(t *testing.T) {
 	t.Parallel()
 
 	for _, e := range []domain.ProposalEdit{
-		{Path: "rules/a.md", Replacements: []domain.Replacement{{Old: "a", New: ""}}},
+		{Path: ruleA, Replacements: []domain.Replacement{{Old: "a", New: ""}}},
 		{Path: "rules/b.md", Content: ""},
 		{Path: "rules/c.md", Content: "x", BaseSHA256: string(domain.HashBlob([]byte("y")))},
 	} {

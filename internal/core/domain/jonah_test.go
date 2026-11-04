@@ -83,7 +83,7 @@ func TestJonahReviewResult_AndDecisionCheck(t *testing.T) {
 	t.Parallel()
 
 	at := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
-	p := domain.NewProposal{Title: "a", Edits: []domain.ProposalEdit{{Path: "rules/a.md"}}}
+	p := domain.NewProposal{Title: "a", Edits: []domain.ProposalEdit{{Path: ruleA}}}
 
 	res := domain.JonahReviewResult{
 		State: domain.JonahDone, At: at, Proposals: []domain.NewProposal{p},

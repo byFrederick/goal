@@ -100,6 +100,8 @@ func TestJonah_ProposalChecks(t *testing.T) {
 		return []domain.ProposalEdit{{Path: path, Replacements: []domain.Replacement{{Old: old, New: nw}}}}
 	}
 
+	const editPath = "path"
+
 	for name, tc := range map[string]struct {
 		paths []string
 		edits any
@@ -114,10 +116,10 @@ func TestJonah_ProposalChecks(t *testing.T) {
 		"too big":           {[]string{ruleA}, replace(ruleA, "a", strings.Repeat("x", domain.MaxProposalFilesBytes))},
 		"bad base hash":     {[]string{ruleA}, []domain.ProposalEdit{{Path: ruleA, BaseSHA256: "abc", Content: "x"}}},
 		"empty old":         {[]string{ruleA}, replace(ruleA, "", "b")},
-		"no replacements":   {[]string{ruleA}, []map[string]any{{"path": ruleA, "replacements": []any{}}}},
-		"both":              {[]string{ruleA}, []map[string]any{{"path": ruleA, "content": "x", "replacements": []any{map[string]any{"old": "a", "new": "b"}}}}},
-		"neither":           {[]string{ruleA}, []map[string]any{{"path": ruleA}}},
-		"replacement shape": {[]string{ruleA}, []map[string]any{{"path": ruleA, "replacements": []any{map[string]any{"old": "a"}}}}},
+		"no replacements":   {[]string{ruleA}, []map[string]any{{editPath: ruleA, "replacements": []any{}}}},
+		"both":              {[]string{ruleA}, []map[string]any{{editPath: ruleA, "content": "x", "replacements": []any{map[string]any{"old": "a", "new": "b"}}}}},
+		"neither":           {[]string{ruleA}, []map[string]any{{editPath: ruleA}}},
+		"replacement shape": {[]string{ruleA}, []map[string]any{{editPath: ruleA, "replacements": []any{map[string]any{"old": "a"}}}}},
 	} {
 		if err := insert(tc.paths, tc.edits); !isCheckViolationErr(err) {
 			t.Errorf("%s: insert = %v, want a check violation", name, err)

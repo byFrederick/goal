@@ -69,27 +69,53 @@ func FactoryChangeAllowed(before, after any, models []string) (string, bool) {
 // changeAllowed reports whether c is at a path a proposal may change.
 func changeAllowed(c factoryChange, models []string) bool {
 	p := c.path
+	if len(p) < 2 || p[0] != "spec" {
+		return false
+	}
 
-	switch {
-	case at(p, "spec", "rules"), at(p, "spec", "contracts"):
+	switch p[1] {
+	case "rules", "contracts":
 		return true
-	case len(p) >= 4 && at(p, "spec", "agents") && p[3] == "skills":
-		return true
-	case len(p) == 4 && at(p, "spec", "agents") && p[3] == "model":
-		m, ok := c.after.(string)
-
-		return c.absent[1] || ok && slices.Contains(models, m)
-	case len(p) == 2 && at(p, "spec", "skills"): // their order
-		return true
-	case len(p) >= 3 && at(p, "spec", "skills"):
-		return (c.absent[0] || localSource(c.before, p)) && (c.absent[1] || localSource(c.after, p))
-	case len(p) == 5 && at(p, "spec", "board") && p[2] == "stations" && (p[4] == "wip" || p[4] == "buffer"):
-		return true
-	case len(p) == 6 && at(p, "spec", "board") && p[2] == "stations" && p[4] == "gate" && p[5] == "maxRework":
-		return true
+	case "agents":
+		return agentChangeAllowed(c, models)
+	case "skills":
+		// Their order (spec.skills itself), or an entry of a local skill before and after.
+		return len(p) == 2 || (c.absent[0] || localSource(c.before, p)) && (c.absent[1] || localSource(c.after, p))
+	case "board":
+		return stationChangeAllowed(p)
 	default:
 		return false
 	}
+}
+
+// agentChangeAllowed reports whether c, under spec.agents, is to an agent's skills, or its model
+// to one of models or removed.
+func agentChangeAllowed(c factoryChange, models []string) bool {
+	p := c.path
+	if len(p) < 4 {
+		return false
+	}
+
+	switch p[3] {
+	case "skills":
+		return true
+	case "model":
+		m, ok := c.after.(string)
+
+		return len(p) == 4 && (c.absent[1] || ok && slices.Contains(models, m))
+	default:
+		return false
+	}
+}
+
+// stationChangeAllowed reports whether p, under spec.board, is a station's wip, buffer or
+// gate.maxRework.
+func stationChangeAllowed(p []string) bool {
+	if len(p) < 5 || p[2] != "stations" {
+		return false
+	}
+
+	return len(p) == 5 && (p[4] == "wip" || p[4] == "buffer") || len(p) == 6 && p[4] == "gate" && p[5] == "maxRework"
 }
 
 // localSource reports whether v, the skill entry at p or a field of it, belongs to a local
@@ -109,11 +135,6 @@ func localSource(v any, p []string) bool {
 	s, ok := entry["source"].(string)
 
 	return ok && strings.HasPrefix(s, localSkill)
-}
-
-// at reports whether p is prefix or a path under it.
-func at(p []string, prefix ...string) bool {
-	return len(p) >= len(prefix) && slices.Equal(p[:len(prefix)], prefix)
 }
 
 // diffTree appends to out every difference between a and b at path. noA and noB say a side is

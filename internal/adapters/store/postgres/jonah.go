@@ -205,6 +205,39 @@ func insertReviewOutput(ctx context.Context, q *db.Queries, review db.JonahRevie
 	return out, nil
 }
 
+// updateObservation updates the open observation n names, and reports whether there was one.
+func updateObservation(ctx context.Context, q *db.Queries, factory uuid.UUID, n domain.NewObservation, items []uuid.UUID,
+	proposal *uuid.UUID, at time.Time,
+) (bool, error) {
+	if n.ID == "" {
+		return false, nil
+	}
+
+	id, err := parseID("observation", string(n.ID))
+	if err != nil {
+		return false, fmt.Errorf("observation: %w: %w", domain.ErrInvalid, err)
+	}
+
+	var state *string
+	if st := n.State(); st != domain.ObservationWatching {
+		state = new(string(st))
+	}
+
+	_, err = q.UpdateObservation(ctx, db.UpdateObservationParams{
+		Summary: n.Summary, Detail: n.Detail, ItemIds: items, Count: int64(n.Count), State: state, ProposalID: proposal,
+		UpdatedAt: at, FactoryID: factory, ID: id,
+	})
+
+	switch {
+	case notFound(err):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("update observation %s: %w", n.ID, err)
+	default:
+		return true, nil
+	}
+}
+
 // supersede sets the factory's proposals of ids that are still proposed superseded by Jonah at.
 func supersede(ctx context.Context, q *db.Queries, factory uuid.UUID, ids []domain.ProposalID, at time.Time) error {
 	by := domain.JonahActor.Ref()
@@ -236,28 +269,8 @@ func storeObservation(ctx context.Context, q *db.Queries, review db.JonahReview,
 		proposal = &ids[n.Proposal-1]
 	}
 
-	if n.ID != "" {
-		id, err := parseID("observation", string(n.ID))
-		if err != nil {
-			return fmt.Errorf("observation: %w: %w", domain.ErrInvalid, err)
-		}
-
-		var state *string
-		if st := n.State(); st != domain.ObservationWatching {
-			state = new(string(st))
-		}
-
-		_, err = q.UpdateObservation(ctx, db.UpdateObservationParams{
-			Summary: n.Summary, Detail: n.Detail, ItemIds: items, Count: int64(n.Count), State: state, ProposalID: proposal,
-			UpdatedAt: at, FactoryID: review.FactoryID, ID: id,
-		})
-		if !notFound(err) {
-			if err != nil {
-				return fmt.Errorf("update observation %s: %w", n.ID, err)
-			}
-
-			return nil
-		}
+	if updated, err := updateObservation(ctx, q, review.FactoryID, n, items, proposal, at); updated || err != nil {
+		return err
 	}
 
 	p := db.InsertObservationParams{
@@ -481,41 +494,34 @@ func (s *Store) DecideProposal(ctx context.Context, factory domain.FactoryID, nu
 
 // Observations implements ports.JonahStore.
 func (s *Store) Observations(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.Observation, error) {
-	if _, ok := domain.OrgFrom(ctx); !ok {
-		return nil, domain.ErrNoOrg
-	}
-
-	f, err := parseID("factory", string(factory))
-	if err != nil {
-		return nil, fmt.Errorf("observations: %w", err)
-	}
-
-	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.JonahObservation, error) {
+	return s.observations(ctx, "observations", factory, func(q *db.Queries, f uuid.UUID) ([]db.JonahObservation, error) {
 		return q.LatestObservations(ctx, db.LatestObservationsParams{FactoryID: f, MaxObservations: clampLimit(limit)})
 	})
-	if err != nil {
-		return nil, fmt.Errorf("observations of factory %s: %w", factory, err)
-	}
-
-	return observationsFrom(rows), nil
 }
 
 // OpenObservations implements ports.JonahStore.
 func (s *Store) OpenObservations(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.Observation, error) {
+	return s.observations(ctx, "open observations", factory, func(q *db.Queries, f uuid.UUID) ([]db.JonahObservation, error) {
+		return q.OpenObservations(ctx, db.OpenObservationsParams{FactoryID: f, MaxObservations: clampLimit(limit)})
+	})
+}
+
+// observations are the factory's observations read reads, named what in errors.
+func (s *Store) observations(ctx context.Context, what string, factory domain.FactoryID,
+	read func(q *db.Queries, f uuid.UUID) ([]db.JonahObservation, error),
+) ([]domain.Observation, error) {
 	if _, ok := domain.OrgFrom(ctx); !ok {
 		return nil, domain.ErrNoOrg
 	}
 
 	f, err := parseID("factory", string(factory))
 	if err != nil {
-		return nil, fmt.Errorf("open observations: %w", err)
+		return nil, fmt.Errorf("%s: %w", what, err)
 	}
 
-	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.JonahObservation, error) {
-		return q.OpenObservations(ctx, db.OpenObservationsParams{FactoryID: f, MaxObservations: clampLimit(limit)})
-	})
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.JonahObservation, error) { return read(q, f) })
 	if err != nil {
-		return nil, fmt.Errorf("open observations of factory %s: %w", factory, err)
+		return nil, fmt.Errorf("%s of factory %s: %w", what, factory, err)
 	}
 
 	return observationsFrom(rows), nil

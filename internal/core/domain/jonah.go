@@ -447,41 +447,42 @@ func checkProposalEdits(edits []ProposalEdit, bad func(format string, args ...an
 	total := 0
 
 	for _, e := range edits {
-		switch {
-		case !ProposalPathAllowed(e.Path):
-			bad("path %q is not one a proposal may edit", e.Path)
-		case seen[e.Path]:
-			bad("path %q twice", e.Path)
-		}
+		checkProposalEdit(e, seen, bad)
 
 		seen[e.Path] = true
-
-		for _, r := range e.Replacements {
-			if r.Old == "" {
-				bad("a replacement of %s has no old text", e.Path)
-			}
-		}
-
-		switch {
-		case !e.Whole() && (e.Content != "" || e.BaseSHA256 != ""):
-			bad("an edit of %s has replacements and whole content", e.Path)
-		case e.BaseSHA256 != "" && !BlobHash(e.BaseSHA256).Valid():
-			bad("base_sha256 of %s is not 64 lowercase hex", e.Path)
-		}
-
-		for _, s := range e.texts() {
-			if !utf8.ValidString(s) || strings.ContainsRune(s, 0) {
-				bad("an edit of %s is not UTF-8 text", e.Path)
-
-				break
-			}
-		}
-
 		total += e.size()
 	}
 
 	if total > MaxProposalFilesBytes {
 		bad("edits total %d bytes, more than %d", total, MaxProposalFilesBytes)
+	}
+}
+
+// checkProposalEdit reports to bad what makes e impossible to store, seen holding the paths of
+// the edits before it.
+func checkProposalEdit(e ProposalEdit, seen map[string]bool, bad func(format string, args ...any)) {
+	switch {
+	case !ProposalPathAllowed(e.Path):
+		bad("path %q is not one a proposal may edit", e.Path)
+	case seen[e.Path]:
+		bad("path %q twice", e.Path)
+	}
+
+	for _, r := range e.Replacements {
+		if r.Old == "" {
+			bad("a replacement of %s has no old text", e.Path)
+		}
+	}
+
+	switch {
+	case !e.Whole() && (e.Content != "" || e.BaseSHA256 != ""):
+		bad("an edit of %s has replacements and whole content", e.Path)
+	case e.BaseSHA256 != "" && !BlobHash(e.BaseSHA256).Valid():
+		bad("base_sha256 of %s is not 64 lowercase hex", e.Path)
+	}
+
+	if slices.ContainsFunc(e.texts(), func(s string) bool { return !utf8.ValidString(s) || strings.ContainsRune(s, 0) }) {
+		bad("an edit of %s is not UTF-8 text", e.Path)
 	}
 }
 

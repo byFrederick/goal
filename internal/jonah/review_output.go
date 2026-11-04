@@ -138,7 +138,7 @@ func checkOutput(in reviewInput, out reviewOutput, drop func(i int, reason, deta
 	)
 
 	for i, p := range out.Proposals {
-		n, reason, detail := checkProposal(in, &checker, events, p)
+		n, reason, detail := checkProposal(&checker, events, p)
 		if reason == "" && in.review.Trigger == domain.JonahThreshold && !sighted[i] {
 			reason, detail = dropThreshold, fmt.Sprintf("no observation of it reaches %d", in.proposeAfter)
 		}
@@ -159,6 +159,12 @@ func checkOutput(in reviewInput, out reviewOutput, drop func(i int, reason, deta
 		number[i] = len(kept)
 	}
 
+	return kept, observationsOf(in, out, open, number, items)
+}
+
+// observationsOf are out's observations to store: each with the open observation it names, when
+// it names one, and number[i], the stored number of the proposal of index i it became.
+func observationsOf(in reviewInput, out reviewOutput, open map[string]domain.Observation, number []int, items map[string]domain.ItemID) []domain.NewObservation {
 	observations := make([]domain.NewObservation, 0, len(out.Observations))
 
 	for _, o := range out.Observations {
@@ -176,7 +182,7 @@ func checkOutput(in reviewInput, out reviewOutput, drop func(i int, reason, deta
 		}
 	}
 
-	return kept, observations
+	return observations
 }
 
 // names is the index of the proposal o names among n, and whether o may make it one: never as
@@ -210,7 +216,7 @@ func windowIndex(sent []domain.SentBack) (map[string]domain.SentBack, map[string
 }
 
 // checkProposal is p as a proposal to store, or why it is dropped and the detail.
-func checkProposal(in reviewInput, checker *definitionChecker, events map[string]domain.SentBack, p outputProposal) (domain.NewProposal, string, string) {
+func checkProposal(checker *definitionChecker, events map[string]domain.SentBack, p outputProposal) (domain.NewProposal, string, string) {
 	n := domain.NewProposal{
 		Title: p.Title, Summary: p.Summary,
 		Estimate: domain.ProposalEstimate{Metric: p.Estimate.Metric, Station: p.Estimate.Station, After: p.Estimate.After, CostPerItemUSD: p.Estimate.CostDelta},
