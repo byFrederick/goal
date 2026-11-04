@@ -13,6 +13,12 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
+// The stations of a try's past item: the one it reruns and the one before it.
+const (
+	tryStation = "build"
+	tryEarlier = "spec"
+)
+
 // The commits a try's original run recorded.
 var (
 	tryHead = strings.Repeat("c", 40)
@@ -45,10 +51,10 @@ func (h *harness) pastTry(t *testing.T) (domain.Item, domain.PastTry) {
 		return id
 	}
 
-	run("spec", now.Add(-3*time.Hour), domain.RunInput{}, `{"spec":"add /health"}`)
-	orig := run("build", now.Add(-2*time.Hour), domain.RunInput{Brief: "the recorded brief", BranchHead: tryHead, BaseHead: tryBase}, `{"pr":1}`)
+	run(tryEarlier, now.Add(-3*time.Hour), domain.RunInput{}, `{"spec":"add /health"}`)
+	orig := run(tryStation, now.Add(-2*time.Hour), domain.RunInput{Brief: "the recorded brief", BranchHead: tryHead, BaseHead: tryBase}, `{"pr":1}`)
 
-	rv, err := h.store.QueueJonahReview(ctx, domain.NewJonahReview{
+	_, err := h.store.QueueJonahReview(ctx, domain.NewJonahReview{
 		FactoryID: factoryID, VersionID: version, Trigger: domain.JonahManual, WindowStart: now.Add(-time.Hour), WindowEnd: now,
 		By: domain.LocalUser, At: now,
 	})
@@ -56,7 +62,8 @@ func (h *harness) pastTry(t *testing.T) (domain.Item, domain.PastTry) {
 		t.Fatal(err)
 	}
 
-	if rv, err = h.store.ClaimJonahReview(ctx, now, time.Hour); err != nil {
+	rv, err := h.store.ClaimJonahReview(ctx, now, time.Hour)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -68,7 +75,7 @@ func (h *harness) pastTry(t *testing.T) (domain.Item, domain.PastTry) {
 	}
 
 	tries, err := h.store.QueuePastTries(ctx, factoryID, ps[0].ID, []domain.NewPastTry{{
-		ProposalID: ps[0].ID, ItemID: it.ID, Station: "build", OriginalRunID: orig, Model: "claude-sonnet-5-5",
+		ProposalID: ps[0].ID, ItemID: it.ID, Station: tryStation, OriginalRunID: orig, Model: "claude-sonnet-5-5",
 	}}, now)
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +130,7 @@ spec:
 		t.Fatal(err)
 	}
 
-	if b.Spec.Brief != "the recorded brief" || string(b.Spec.Inputs["spec"]) != `{"spec":"add /health"}` || len(b.Spec.Inputs) != 1 {
+	if b.Spec.Brief != "the recorded brief" || string(b.Spec.Inputs[tryEarlier]) != `{"spec":"add /health"}` || len(b.Spec.Inputs) != 1 {
 		t.Errorf("brief %q, inputs %s; want the recorded brief and the spec run's output alone", b.Spec.Brief, b.Spec.Inputs)
 	}
 
@@ -131,20 +138,7 @@ spec:
 		t.Errorf("prompt %q; want the proposal's", got)
 	}
 
-	e := b.Spec.Environment
-	if e == nil || !e.SetupOnly || len(e.Files) != 0 || len(e.MCPServers) != 0 || !slices.Equal(e.Env, []string{"NPM_TOKEN"}) ||
-		!slices.Equal(e.Setup, []string{"pnpm install --frozen-lockfile"}) {
-		t.Errorf("environment %+v; want its setup and env names, setup only, without files or MCP servers", e)
-	}
-
-	if len(b.Spec.Connections) != 0 || len(b.Spec.GrantedCalls) != 0 || b.Spec.Knowledge != nil {
-		t.Errorf("connections %+v, granted calls %+v, knowledge %+v; want none", b.Spec.Connections, b.Spec.GrantedCalls, b.Spec.Knowledge)
-	}
-
-	r := b.Repository
-	if r == nil || r.Commit != tryHead || r.BaseCommit != tryBase || len(b.Git) != 1 || !b.Git[0].Store {
-		t.Errorf("repository %+v with logins %+v; want the recorded commits and the repository token's login", r, b.Git)
-	}
+	expectTryBox(t, b)
 
 	if n := len(h.store.Events(it.ID)); n != before {
 		t.Errorf("%d events of the past item, want %d: a try records nothing on it", n, before)
@@ -159,7 +153,7 @@ func TestBundle_TryOfAnotherStationForbidden(t *testing.T) {
 	_, try := h.pastTry(t)
 
 	c := h.tryClaims(try)
-	c.Station = "spec"
+	c.Station = tryEarlier
 
 	if status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c)); status != http.StatusForbidden {
 		t.Errorf("status = %d, want 403 (%s)", status, body)
@@ -168,5 +162,35 @@ func TestBundle_TryOfAnotherStationForbidden(t *testing.T) {
 	status, _, body := request(t, http.MethodGet, h.runServer(t)+"?notes_after=0", h.token(t, h.tryClaims(try)))
 	if status != http.StatusOK || !strings.Contains(string(body), `"notes":[]`) {
 		t.Errorf("notes = %d %s; want 200 with none", status, body)
+	}
+}
+
+// expectTryBox fails the test unless b's environment keeps its setup and env names, marked setup
+// only, without files or MCP servers, b has no connection, granted call or knowledge, and its
+// repository is at the recorded commits with the repository token's login to clone it.
+func expectTryBox(t *testing.T, b runBundle) {
+	t.Helper()
+
+	e := b.Spec.Environment
+	if e == nil || !e.SetupOnly || len(e.Files) != 0 || len(e.MCPServers) != 0 || !slices.Equal(e.Env, []string{"NPM_TOKEN"}) ||
+		!slices.Equal(e.Setup, []string{"pnpm install --frozen-lockfile"}) {
+		t.Errorf("environment %+v; want its setup and env names, setup only, without files or MCP servers", e)
+	}
+
+	if len(b.Spec.Connections) != 0 || len(b.Spec.GrantedCalls) != 0 || b.Spec.Knowledge != nil {
+		t.Errorf("connections %+v, granted calls %+v, knowledge %+v; want none", b.Spec.Connections, b.Spec.GrantedCalls, b.Spec.Knowledge)
+	}
+
+	expectTryRepository(t, b)
+}
+
+// expectTryRepository fails the test unless b's repository is at the recorded commits with the
+// repository token's login to clone it.
+func expectTryRepository(t *testing.T, b runBundle) {
+	t.Helper()
+
+	r := b.Repository
+	if r == nil || r.Commit != tryHead || r.BaseCommit != tryBase || len(b.Git) != 1 || !b.Git[0].Store {
+		t.Errorf("repository %+v with logins %+v; want the recorded commits and the repository token's login", r, b.Git)
 	}
 }

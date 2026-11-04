@@ -22,6 +22,8 @@ const (
 	tryVersion = domain.DefinitionVersionID("try-version-1")
 	stSpec     = "spec"
 	tryTimeout = 10 * time.Minute
+	stTryDone  = "done"
+	tryRunID   = domain.RunID("try-run")
 )
 
 var tryHead = strings.Repeat("c", 40)
@@ -86,12 +88,12 @@ func newTryWorld(t *testing.T, orgs int) *tryWorld {
 		defs:      &tryDefs{lines: map[domain.OrgID]domain.Line{}, reached: map[string][]string{}},
 		factories: map[domain.OrgID]domain.FactoryID{},
 		runner: &taskRunner{answer: func(context.Context, domain.RunRequest) (domain.RunResult, error) {
-			return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), CostUSD: 0.25, Diff: "diff --git a/x b/x\n", RunID: "try-run"}, nil
+			return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), CostUSD: 0.25, Diff: "diff --git a/x b/x\n", RunID: tryRunID}, nil
 		}},
 	}
 
 	for i := range orgs {
-		o, err := w.tn.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: fmt.Sprintf("acme-%d", i), Name: "Acme"})
+		o, err := w.tn.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: fmt.Sprintf("acme-%d", i), Name: "Acme tries"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -104,7 +106,7 @@ func newTryWorld(t *testing.T, orgs int) *tryWorld {
 			Runtime: domain.Runtime{ModelConnection: modelConn, Model: reviewModel, Repository: domain.Repository{URL: "https://example.com/acme.git"}},
 			Agents:  []domain.AgentSpec{{Name: tryAgent}},
 			Stations: []domain.Station{
-				{ID: stSpec, Kind: domain.KindHuman}, {ID: stBuild, Kind: domain.KindAgent, Agent: tryAgent}, {ID: "done", Kind: domain.KindDone},
+				{ID: stSpec, Kind: domain.KindHuman}, {ID: stBuild, Kind: domain.KindAgent, Agent: tryAgent}, {ID: stTryDone, Kind: domain.KindDone},
 			},
 		}
 	}
@@ -125,7 +127,7 @@ func (w *tryWorld) pastItem(org domain.OrgID, at time.Time, first bool) (domain.
 
 	ctx := w.ctx(org)
 
-	it, err := w.store.CreateItem(ctx, domain.NewItem{FactoryID: w.factories[org], Title: "past", Station: "done", State: domain.StateDone})
+	it, err := w.store.CreateItem(ctx, domain.NewItem{FactoryID: w.factories[org], Title: "past", Station: stTryDone, State: domain.StateDone})
 	if err != nil {
 		w.t.Fatal(err)
 	}
@@ -157,7 +159,7 @@ func (w *tryWorld) propose(org domain.OrgID, path string, items ...domain.Item) 
 
 	ctx := w.ctx(org)
 
-	rv, err := w.store.QueueJonahReview(ctx, domain.NewJonahReview{
+	_, err := w.store.QueueJonahReview(ctx, domain.NewJonahReview{
 		FactoryID: w.factories[org], VersionID: tryVersion, Trigger: domain.JonahManual, WindowStart: rt0.Add(-time.Hour), WindowEnd: rt0,
 		By: domain.LocalUser, At: rt0,
 	})
@@ -165,7 +167,8 @@ func (w *tryWorld) propose(org domain.OrgID, path string, items ...domain.Item) 
 		w.t.Fatal(err)
 	}
 
-	if rv, err = w.store.ClaimJonahReview(ctx, rt0, time.Hour); err != nil {
+	rv, err := w.store.ClaimJonahReview(ctx, rt0, time.Hour)
+	if err != nil {
 		w.t.Fatal(err)
 	}
 
@@ -271,8 +274,10 @@ func TestTries_SweepSkipsUntriableAndMemoryOnly(t *testing.T) {
 
 	l.Agents = []domain.AgentSpec{{Name: tryAgent}}
 	l.Runtime.ModelConnection, l.Runtime.ModelKey = "", "{{claude-key}}"
-	l.Environments = []domain.Environment{{Name: domain.DefaultEnvironment, Env: map[string]string{"NPM_TOKEN": "{{npm}}"},
-		MCP: map[string]domain.MCPServer{"linear": {URL: "https://mcp.example.com"}}}}
+	l.Environments = []domain.Environment{{
+		Name: domain.DefaultEnvironment, Env: map[string]string{"NPM_TOKEN": "{{npm}}"},
+		MCP: map[string]domain.MCPServer{"linear": {URL: "https://mcp.example.com"}},
+	}}
 	w.defs.lines[org] = l
 
 	w.sweep()
@@ -487,12 +492,12 @@ func TestTries_InfraFailureIsError(t *testing.T) {
 	org := w.orgs[0]
 	w.queued(org, 1)
 	w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
-		return domain.RunResult{RunID: "try-run", CostUSD: 0.01}, fmt.Errorf("agent: %w", ports.ErrSandboxLost)
+		return domain.RunResult{RunID: tryRunID, CostUSD: 0.01}, fmt.Errorf("agent: %w", ports.ErrSandboxLost)
 	}
 
 	got := w.onlyTry(org)
 	if got.State != domain.PastTryDone || got.Verdict != domain.PastTryError || !strings.Contains(got.Error, "sandbox") ||
-		got.TryRunID != "try-run" || got.CostUSD != 0.01 {
+		got.TryRunID != tryRunID || got.CostUSD != 0.01 {
 		t.Errorf("try = %+v; want done with verdict error, the reason, its run and cost", got)
 	}
 }
@@ -505,7 +510,7 @@ func TestTries_MissingCommitIsError(t *testing.T) {
 	org := w.orgs[0]
 	w.queued(org, 1)
 	w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
-		return domain.RunResult{RunID: "try-run"}, errors.New("prepare the sandbox: goal-agent prepare exited 1: commit " + tryHead + " is gone")
+		return domain.RunResult{RunID: tryRunID}, errors.New("prepare the sandbox: goal-agent prepare exited 1: commit " + tryHead + " is gone")
 	}
 
 	got := w.onlyTry(org)
@@ -526,7 +531,7 @@ func TestTries_FinishedRunStoresDiffAndCost(t *testing.T) {
 	w.sweep()
 
 	got := w.onlyTry(org)
-	if got.State != domain.PastTryDone || got.Verdict != "" || got.Diff != "diff --git a/x b/x\n" || got.CostUSD != 0.25 || got.TryRunID != "try-run" {
+	if got.State != domain.PastTryDone || got.Verdict != "" || got.Diff != "diff --git a/x b/x\n" || got.CostUSD != 0.25 || got.TryRunID != tryRunID {
 		t.Errorf("try = %+v; want done with no verdict, the run's diff, cost and run", got)
 	}
 

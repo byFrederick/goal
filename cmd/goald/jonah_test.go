@@ -32,9 +32,10 @@ func (r *countedReviews) Sweep(context.Context) error { r.swept++; return nil }
 
 func (r *countedReviews) Work(context.Context) (int, error) { r.worked++; return 0, nil }
 
-// A round sweeps for daily reviews only on the goald that takes the schedule lock, and works
-// the queue on every goald: claims are leased, so each review runs once wherever it is claimed.
-func TestJonahReviews_SweepsOnlyUnderTheLock(t *testing.T) {
+// A round of the review loop or the try loop sweeps (for daily reviews, or for the tries to
+// queue) only on the goald that takes the schedule lock, and works the queue on every goald:
+// claims are leased, so each runs once wherever it is claimed.
+func TestJonahLoops_SweepOnlyUnderTheLock(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -46,42 +47,17 @@ func TestJonahReviews_SweepsOnlyUnderTheLock(t *testing.T) {
 		{"lock held by another goald", heldLock{held: true}, 0},
 		{"lock fails", heldLock{err: errors.New("connection refused")}, 0},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+		for _, ev := range []loopEvents{reviewEvents, tryEvents} {
+			t.Run(tc.name+" "+ev.work, func(t *testing.T) {
+				t.Parallel()
 
-			r := &countedReviews{}
-			jonahRound(t.Context(), slog.New(slog.DiscardHandler), tc.lock, r)
+				r := &countedReviews{}
+				jonahRound(t.Context(), slog.New(slog.DiscardHandler), tc.lock, r, ev)
 
-			if r.swept != tc.swept || r.worked != 1 {
-				t.Errorf("swept %d and worked %d times; want %d and 1", r.swept, r.worked, tc.swept)
-			}
-		})
-	}
-}
-
-// A try round queues tries only on the goald that takes the schedule lock, and works the queued
-// tries on every goald: claims are leased, so each try runs once wherever it is claimed.
-func TestJonahTries_SweepsOnlyUnderTheLock(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name  string
-		lock  heldLock
-		swept int
-	}{
-		{"lock taken", heldLock{}, 1},
-		{"lock held by another goald", heldLock{held: true}, 0},
-		{"lock fails", heldLock{err: errors.New("connection refused")}, 0},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			r := &countedReviews{}
-			jonahTryRound(t.Context(), slog.New(slog.DiscardHandler), tc.lock, r)
-
-			if r.swept != tc.swept || r.worked != 1 {
-				t.Errorf("swept %d and worked %d times; want %d and 1", r.swept, r.worked, tc.swept)
-			}
-		})
+				if r.swept != tc.swept || r.worked != 1 {
+					t.Errorf("swept %d and worked %d times; want %d and 1", r.swept, r.worked, tc.swept)
+				}
+			})
+		}
 	}
 }

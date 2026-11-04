@@ -125,9 +125,9 @@ func (s *Store) ProposalPastTries(ctx context.Context, proposal domain.ProposalI
 		return nil, domain.ErrNoOrg
 	}
 
-	p, err := uuid.Parse(string(proposal))
+	p, err := parseID("proposal", string(proposal))
 	if err != nil {
-		return []domain.PastTry{}, nil
+		return nil, err
 	}
 
 	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.ProposalTriesRow, error) { return q.ProposalTries(ctx, p) })
@@ -235,6 +235,7 @@ func (s *Store) FinishPastTry(ctx context.Context, claimed domain.PastTry, r dom
 	}
 
 	var verdict *string
+
 	if r.Verdict != "" {
 		v := string(r.Verdict)
 		verdict = &v

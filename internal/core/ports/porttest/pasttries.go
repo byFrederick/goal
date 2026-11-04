@@ -32,14 +32,7 @@ func (s *Store) QueuePastTries(ctx context.Context, factory domain.FactoryID, pr
 	defer s.changes.signal()
 	defer s.mu.Unlock()
 
-	var number int64
-
-	for _, p := range s.jonah.proposals {
-		if p.org == org && p.row.FactoryID == factory && p.row.ID == proposal {
-			number = p.row.Number
-		}
-	}
-
+	number := s.proposalNumber(org, factory, proposal)
 	if number == 0 {
 		return nil, fmt.Errorf("queue past tries: proposal %s: %w", proposal, ports.ErrNotFound)
 	}
@@ -48,6 +41,33 @@ func (s *Store) QueuePastTries(ctx context.Context, factory domain.FactoryID, pr
 		return nil, fmt.Errorf("queue past tries: proposal %s has tries: %w", proposal, ports.ErrConflict)
 	}
 
+	out, err := s.newPastTries(org, factory, proposal, number, tries, at)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, t := range out {
+		s.jonah.tries = append(s.jonah.tries, jonahRow[domain.PastTry]{org: org, row: t})
+	}
+
+	return out, nil
+}
+
+// proposalNumber is the number of org's factory's proposal, 0 when there is none. Callers hold s.mu.
+func (s *Store) proposalNumber(org domain.OrgID, factory domain.FactoryID, proposal domain.ProposalID) int64 {
+	for _, p := range s.jonah.proposals {
+		if p.org == org && p.row.FactoryID == factory && p.row.ID == proposal {
+			return p.row.Number
+		}
+	}
+
+	return 0
+}
+
+// newPastTries are the queued tries of tries, checked against org's items and runs. Callers hold s.mu.
+func (s *Store) newPastTries(org domain.OrgID, factory domain.FactoryID, proposal domain.ProposalID, number int64,
+	tries []domain.NewPastTry, at time.Time,
+) ([]domain.PastTry, error) {
 	out := make([]domain.PastTry, 0, len(tries))
 
 	for _, n := range tries {
@@ -66,10 +86,6 @@ func (s *Store) QueuePastTries(ctx context.Context, factory domain.FactoryID, pr
 			ID: domain.PastTryID(s.newID()), FactoryID: factory, ProposalID: proposal, ProposalNumber: number, ItemID: n.ItemID,
 			Station: n.Station, OriginalRunID: n.OriginalRunID, Model: n.Model, State: domain.PastTryQueued, CreatedAt: at,
 		})
-	}
-
-	for _, t := range out {
-		s.jonah.tries = append(s.jonah.tries, jonahRow[domain.PastTry]{org: org, row: t})
 	}
 
 	return out, nil
@@ -200,8 +216,7 @@ func (s *Store) PastTryTarget(ctx context.Context, item domain.ItemID, station s
 	var best *domain.Run
 
 	for id, r := range s.runs {
-		if r.ItemID != item || r.Station != station || !s.runVisible(r, org) || s.jonah.runKinds[id] != domain.RunKindStation ||
-			r.Result.Status == domain.RunRunning || r.Input.BranchHead == "" {
+		if !s.firstRunAt(org, id, r, item, station) {
 			continue
 		}
 
@@ -215,6 +230,13 @@ func (s *Store) PastTryTarget(ctx context.Context, item domain.ItemID, station s
 	}
 
 	return *best, nil
+}
+
+// firstRunAt reports whether run id, r, is a finished station run of org's item at station that
+// was a claim's first: its branch head is recorded. Callers hold s.mu.
+func (s *Store) firstRunAt(org domain.OrgID, id domain.RunID, r *domain.Run, item domain.ItemID, station string) bool {
+	return r.ItemID == item && r.Station == station && s.runVisible(r, org) && s.jonah.runKinds[id] == domain.RunKindStation &&
+		r.Result.Status != domain.RunRunning && r.Input.BranchHead != ""
 }
 
 // PastTryInput implements ports.PastTries.
@@ -232,10 +254,16 @@ func (s *Store) PastTryInput(ctx context.Context, run domain.RunID) (domain.Past
 		return domain.PastTryInput{}, fmt.Errorf("run %s: %w", run, ports.ErrNotFound)
 	}
 
+	return domain.PastTryInput{Run: *r, Outputs: s.outputsBefore(r.ItemID, r.StartedAt)}, nil
+}
+
+// outputsBefore is item's latest output of each station among its runs that ended before before.
+// Callers hold s.mu.
+func (s *Store) outputsBefore(item domain.ItemID, before time.Time) map[string]json.RawMessage {
 	latest := map[string]*domain.Run{}
 
 	for _, o := range s.runs {
-		if o.ItemID != r.ItemID || o.EndedAt.IsZero() || !o.EndedAt.Before(r.StartedAt) || len(o.Result.Output) == 0 {
+		if o.ItemID != item || o.EndedAt.IsZero() || !o.EndedAt.Before(before) || len(o.Result.Output) == 0 {
 			continue
 		}
 
@@ -249,5 +277,5 @@ func (s *Store) PastTryInput(ctx context.Context, run domain.RunID) (domain.Past
 		outputs[st] = slices.Clone(o.Result.Output)
 	}
 
-	return domain.PastTryInput{Run: *r, Outputs: outputs}, nil
+	return outputs
 }

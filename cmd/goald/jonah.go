@@ -32,20 +32,35 @@ type scheduleLock interface {
 	WithScheduleLock(ctx context.Context, fn func(ctx context.Context) error) (bool, error)
 }
 
-// jonahReviews is the Jonah review loop's two steps; *jonah.Reviews satisfies it.
+// jonahReviews is a Jonah loop's two steps; *jonah.Reviews and *jonah.Tries satisfy it.
 type jonahReviews interface {
 	Sweep(ctx context.Context) error
 	Work(ctx context.Context) (int, error)
 }
 
-// runJonahReviews runs a round of the Jonah review loop at once and then on each tick of every
-// until ctx ends (ADR 0034).
-func runJonahReviews(ctx context.Context, log *slog.Logger, lock scheduleLock, reviews jonahReviews, clock ports.Clock, every time.Duration) {
+// loopEvents are the log events of one of Jonah's loops, stable per loop.
+type loopEvents struct{ sweep, skipped, work string }
+
+// The log events of the review loop and of the try loop.
+var (
+	reviewEvents = loopEvents{
+		sweep: "jonah review sweep", skipped: "jonah review sweep skipped: another goald holds the schedule lock", work: "jonah review work",
+	}
+	tryEvents = loopEvents{
+		sweep: "jonah try sweep", skipped: "jonah try sweep skipped: another goald holds the schedule lock", work: "jonah try work",
+	}
+)
+
+// runJonahLoop runs a round of one of Jonah's loops, its reviews (ADR 0034) or its tries of past
+// items (ADR 0039 decisions 9 and 11), at once and then on each tick of every until ctx ends.
+func runJonahLoop(ctx context.Context, log *slog.Logger, lock scheduleLock, loop jonahReviews, clock ports.Clock, every time.Duration,
+	ev loopEvents,
+) {
 	t := clock.NewTicker(every)
 	defer t.Stop()
 
 	for {
-		jonahRound(ctx, log, lock, reviews)
+		jonahRound(ctx, log, lock, loop, ev)
 
 		select {
 		case <-ctx.Done():
@@ -55,24 +70,25 @@ func runJonahReviews(ctx context.Context, log *slog.Logger, lock scheduleLock, r
 	}
 }
 
-// jonahRound queues the daily reviews that are due, on the goald holding the schedule lock
-// only, and then works the queued reviews on every goald: each claim is leased (ClaimJonahReview),
-// so a review runs once wherever it is claimed. Failures are logged and retried next round.
-func jonahRound(ctx context.Context, log *slog.Logger, lock scheduleLock, reviews jonahReviews) {
-	ran, err := lock.WithScheduleLock(ctx, reviews.Sweep)
+// jonahRound sweeps (queues the daily reviews or the tries that are due) on the goald holding
+// the schedule lock only, and then works the queue on every goald: each claim is leased
+// (ClaimJonahReview, ClaimPastTry), so each runs once wherever it is claimed. Failures are logged
+// and retried next round.
+func jonahRound(ctx context.Context, log *slog.Logger, lock scheduleLock, loop jonahReviews, ev loopEvents) {
+	ran, err := lock.WithScheduleLock(ctx, loop.Sweep)
 
 	switch {
 	case err != nil:
 		if ctx.Err() == nil {
-			log.WarnContext(ctx, "jonah review sweep", slog.Any("error", err))
+			log.WarnContext(ctx, ev.sweep, slog.Any("error", err))
 		}
 	case !ran:
-		log.DebugContext(ctx, "jonah review sweep skipped: another goald holds the schedule lock")
+		log.DebugContext(ctx, ev.skipped)
 	}
 
-	n, err := reviews.Work(ctx)
+	n, err := loop.Work(ctx)
 	if err != nil && ctx.Err() == nil {
-		log.WarnContext(ctx, "jonah review work", slog.Int("finished", n), slog.Any("error", err))
+		log.WarnContext(ctx, ev.work, slog.Int("finished", n), slog.Any("error", err))
 	}
 }
 
@@ -116,49 +132,14 @@ func jonahTryLoop(s settings, store *postgres.Store, defs *definitions.Cache, en
 	}, s.JonahTry)
 }
 
-// runJonahTries runs a round of the try loop at once and then on each tick of every until ctx
-// ends: the goald holding the schedule lock queues the tries, and every goald works them, each
-// claim leased (ClaimPastTry). Failures are logged and retried next round.
-func runJonahTries(ctx context.Context, log *slog.Logger, lock scheduleLock, tries jonahReviews, clock ports.Clock, every time.Duration) {
-	t := clock.NewTicker(every)
-	defer t.Stop()
-
-	for {
-		jonahTryRound(ctx, log, lock, tries)
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C():
-		}
-	}
-}
-
-// jonahTryRound is one round of the try loop.
-func jonahTryRound(ctx context.Context, log *slog.Logger, lock scheduleLock, tries jonahReviews) {
-	ran, err := lock.WithScheduleLock(ctx, tries.Sweep)
-
-	switch {
-	case err != nil:
-		if ctx.Err() == nil {
-			log.WarnContext(ctx, "jonah try sweep", slog.Any("error", err))
-		}
-	case !ran:
-		log.DebugContext(ctx, "jonah try sweep skipped: another goald holds the schedule lock")
-	}
-
-	n, err := tries.Work(ctx)
-	if err != nil && ctx.Err() == nil {
-		log.WarnContext(ctx, "jonah try work", slog.Int("finished", n), slog.Any("error", err))
-	}
-}
-
 // tryDefinitions is jonah.TryDefinitions over the definitions cache: a proposal's line is its
 // version with the proposal's files written over it, and the stations it reaches are
 // factorymodel.StationsReached's between the two.
 type tryDefinitions struct{ defs *definitions.Cache }
 
-func (d tryDefinitions) CurrentLines(ctx context.Context) ([]domain.Line, error) { return d.defs.CurrentLines(ctx) }
+func (d tryDefinitions) CurrentLines(ctx context.Context) ([]domain.Line, error) {
+	return d.defs.CurrentLines(ctx)
+}
 
 func (d tryDefinitions) ProposedLine(ctx context.Context, v domain.DefinitionVersionID, files []domain.ProposalFile) (domain.Line, []string, error) {
 	set := make(map[string][]byte, len(files))

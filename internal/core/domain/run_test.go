@@ -139,9 +139,9 @@ func TestRunRequest_CheckTry(t *testing.T) {
 	t.Parallel()
 
 	try := RunRequest{
-		OrgID: "org", FactoryID: "factory", Agent: "engineer", Station: "work", Kind: RunKindTry, Bundle: TaskKindTry,
+		OrgID: "org-1", FactoryID: "factory", Agent: "engineer", Station: "work", Kind: RunKindTry, Bundle: TaskKindTry,
 		ModelKey: testModelKey, TryOf: "try-1", Commit: strings.Repeat("a", 40),
-		Repository: Repository{URL: "https://example.com/acme.git", Token: "{{secret.REPO}}"},
+		Repository: Repository{URL: "https://example.com/acme.git"},
 	}
 
 	tests := []struct {
@@ -151,7 +151,7 @@ func TestRunRequest_CheckTry(t *testing.T) {
 	}{
 		{name: "a try", change: func(*RunRequest) {}, ok: true},
 		{name: "on a model connection", change: func(r *RunRequest) {
-			r.ModelKey, r.ModelConnection, r.Repository.Token, r.Repository.Connection = "", testModelConn, "", "code"
+			r.ModelKey, r.ModelConnection, r.Repository.Connection = "", testModelConn, "code"
 		}, ok: true},
 		{name: "with an item", change: func(r *RunRequest) { r.Item = "item" }},
 		{name: "with a lease", change: func(r *RunRequest) { r.Lease = &Lease{} }},

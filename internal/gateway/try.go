@@ -49,14 +49,8 @@ func (g *Gateway) tryBundle(ctx context.Context, c domain.TaskClaims) (runBundle
 	}
 
 	orig := in.Run
-
-	switch {
-	case try.FactoryID != c.FactoryID || orig.FactoryID != c.FactoryID:
-		return runBundle{}, fmt.Errorf("%w: try %s is not of factory %s", errForbidden, try.ID, c.FactoryID)
-	case try.Station != c.Station || orig.Station != c.Station || orig.Agent != c.Agent:
-		return runBundle{}, fmt.Errorf("%w: try %s is not of agent %s at %s", errForbidden, try.ID, c.Agent, c.Station)
-	case orig.Input.BranchHead == "":
-		return runBundle{}, fmt.Errorf("%w: run %s recorded no commit", errForbidden, orig.ID)
+	if err := tryOfToken(c, try, orig); err != nil {
+		return runBundle{}, err
 	}
 
 	p, err := g.jonah.Proposal(ctx, c.FactoryID, try.ProposalNumber)
@@ -82,6 +76,21 @@ func (g *Gateway) tryBundle(ctx context.Context, c domain.TaskClaims) (runBundle
 	ic.ItemID = orig.ItemID
 
 	return pg.tryOf(ctx, ic, in)
+}
+
+// tryOfToken refuses a try, or its original run, that is not of c's factory, station and agent,
+// and a run that recorded no commit, wrapping errForbidden.
+func tryOfToken(c domain.TaskClaims, try domain.PastTry, orig domain.Run) error {
+	switch {
+	case try.FactoryID != c.FactoryID || orig.FactoryID != c.FactoryID:
+		return fmt.Errorf("%w: try %s is not of factory %s", errForbidden, try.ID, c.FactoryID)
+	case try.Station != c.Station || orig.Station != c.Station || orig.Agent != c.Agent:
+		return fmt.Errorf("%w: try %s is not of agent %s at %s", errForbidden, try.ID, c.Agent, c.Station)
+	case orig.Input.BranchHead == "":
+		return fmt.Errorf("%w: run %s recorded no commit", errForbidden, orig.ID)
+	}
+
+	return nil
 }
 
 // tryOf builds a try's bundle on g's definitions, c naming the past item.

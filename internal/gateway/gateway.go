@@ -246,7 +246,7 @@ type Gateway struct {
 	tries    Tries
 	proposed ProposedDefinitions
 	cfg      Config
-	mcp           http.Handler
+	mcp      http.Handler
 }
 
 // New returns a gateway; goald mounts it at its MCP path.

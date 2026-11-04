@@ -119,8 +119,8 @@ func testTriesQueuedOnce(f *fixture) {
 	}
 }
 
-// A claim takes the factory's oldest due try while fewer than limit run under a live lease; a
-// finish is fenced by its lease; an ended lease is claimed again with one more attempt.
+// A claim takes the factory's oldest due try while fewer than limit run under a live lease, and
+// its finish is fenced by its lease (testTriesFenced).
 func testTriesClaim(f *fixture) {
 	t := f.t
 	p := f.triedProposal(t, t1)
@@ -143,7 +143,13 @@ func testTriesClaim(f *fixture) {
 		t.Fatalf("ClaimPastTry under a cap of 2 = %+v, %v; want the second try", second, err)
 	}
 
-	// The first's lease ends: it is claimed again, and its old claim no longer finishes it.
+	testTriesFenced(f, first, second, now)
+}
+
+// A try whose lease ended is claimed again with one more attempt, and its old claim no longer
+// finishes it; a finish stores the verdict error with its reason, or a run's diff, cost and run.
+func testTriesFenced(f *fixture, first, second domain.PastTry, now time.Time) {
+	t := f.t
 	later := now.Add(ttl)
 
 	again, err := f.Tries.ClaimPastTry(f.ctx(t), f.factory, later, ttl, 3)
@@ -167,6 +173,13 @@ func testTriesClaim(f *fixture) {
 	_, err = f.Tries.FinishPastTry(f.ctx(t), second, domain.PastTryResult{Verdict: "fail", Error: "x", At: later})
 	expect(t, "FinishPastTry with a fail verdict", err, domain.ErrInvalid)
 
+	f.finishRan(second, later)
+}
+
+// finishRan finishes the claimed try as a run that ended: done with no verdict, its diff, cost
+// and run.
+func (f *fixture) finishRan(second domain.PastTry, later time.Time) {
+	t := f.t
 	run := f.pastRun(t, f.create(t, domain.NewItem{}), stNext, t1, false, "")
 	ok := domain.PastTryResult{Diff: "diff --git a/x b/x\n", CostUSD: 0.25, TryRunID: run, At: later}
 

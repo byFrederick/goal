@@ -237,7 +237,7 @@ func (h *harness) expectJonahRun(t *testing.T, id domain.RunID) {
 func tryRequest() domain.RunRequest {
 	return domain.RunRequest{
 		OrgID: testOrg, FactoryID: factoryID, Version: v1, Kind: domain.RunKindTry, Station: stWork, Agent: agWorker,
-		Model: "claude-opus-5-5", ModelConnection: connModel, Bundle: domain.TaskKindTry, TryOf: "try-1",
+		Model: modelOpus, ModelConnection: connModel, Bundle: domain.TaskKindTry, TryOf: "try-1",
 		Commit: strings.Repeat("c", 40), Repository: domain.Repository{URL: repoURL, Connection: connGit},
 	}
 }
@@ -283,7 +283,15 @@ func TestRunTask_TryRecordsNoItemCost(t *testing.T) {
 		t.Errorf("token claims = %+v; want a try token of try-1 at %s with no item or connection", c, stWork)
 	}
 
-	run, err := h.store.Run(inOrg(t), res.RunID)
+	h.expectTryRun(t, res.RunID, past.ID, before)
+}
+
+// expectTryRun fails the test unless run is a finished try at stWork without an item, whose cost
+// is Jonah's and not the line's, and past's cost and events are as they were (before events).
+func (h *harness) expectTryRun(t *testing.T, id domain.RunID, past domain.ItemID, before int) {
+	t.Helper()
+
+	run, err := h.store.Run(inOrg(t), id)
 	if err != nil || run.ItemID != "" || run.Station != stWork || run.Result.CostUSD != 0.5 {
 		t.Errorf("run = %+v, %v; want a finished run at %s without an item, with its cost", run, err, stWork)
 	}
@@ -292,8 +300,8 @@ func TestRunTask_TryRecordsNoItemCost(t *testing.T) {
 		t.Errorf("JonahSpendSince = %+v, %v; want the try's 0.5 as Jonah's and none as the line's", s, err)
 	}
 
-	if got := h.item(t, past.ID); got.CostUSD != 0 || len(h.store.Events(past.ID)) != before {
-		t.Errorf("past item cost %v with %d events; want it unchanged", got.CostUSD, len(h.store.Events(past.ID)))
+	if got := h.item(t, past); got.CostUSD != 0 || len(h.store.Events(past)) != before {
+		t.Errorf("past item cost %v with %d events; want it unchanged", got.CostUSD, len(h.store.Events(past)))
 	}
 
 	if events := h.store.Events(""); len(events) != 0 {

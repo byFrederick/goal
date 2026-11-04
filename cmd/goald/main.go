@@ -216,8 +216,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// bundle; the engine's RunDefinition signs its token.
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Policies: policies, Events: store, Clock: clock, Logger: log,
-		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore,
-		Tries: store, Proposed: gatewayProposed{defs: defs},
+		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore, Tries: store, Proposed: gatewayProposed{defs: defs},
 	}, gateway.Config{Key: []byte(key)})
 	if err != nil {
 		return err
@@ -722,8 +721,8 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 	wg.Go(func() { j.purger.Run(ctx, purgeEvery) })
 	wg.Go(func() { cleanUpAuth(ctx, log, j.platform, j.clock, authCleanUpEvery) })
 	wg.Go(func() { fireSchedules(ctx, log, eng, j.clock, scheduleEvery) })
-	wg.Go(func() { runJonahReviews(ctx, log, j.scheduleLock, j.reviews, j.clock, s.JonahReviewEvery) })
-	wg.Go(func() { runJonahTries(ctx, log, j.scheduleLock, j.tries, j.clock, s.JonahTryEvery) })
+	wg.Go(func() { runJonahLoop(ctx, log, j.scheduleLock, j.reviews, j.clock, s.JonahReviewEvery, reviewEvents) })
+	wg.Go(func() { runJonahLoop(ctx, log, j.scheduleLock, j.tries, j.clock, s.JonahTryEvery, tryEvents) })
 	wg.Go(func() { runWatches(ctx, log, j.scheduleLock, j.watcher, j.clock, watchEvery) })
 
 	if s.KBWorkers > 0 {
