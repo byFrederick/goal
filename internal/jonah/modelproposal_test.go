@@ -178,6 +178,34 @@ func TestModelProposals_EstimateStoresNothing(t *testing.T) {
 	}
 }
 
+// Run costs that don't come out even in binary answer whole cents: six items at $0.102 to $0.602,
+// the newest five tried three times each.
+func TestModelProposals_EstimateRoundsToCents(t *testing.T) {
+	t.Parallel()
+
+	w := newModelWorld(t)
+
+	for i := range 6 {
+		w.doneItem(rt0.Add(-time.Duration(6-i)*time.Hour), 0.1*float64(i+1)+0.002, 0)
+	}
+
+	est, _, err := w.propose(false)
+	if err != nil {
+		t.Fatalf("Propose estimate: %v", err)
+	}
+
+	// 3 × $2.01 of the newest five, and 10 × $2.112 of the line's spend left.
+	if est.EstimateUSD != 6.03 || est.BudgetLeftUSD != 21.12 || len(est.Items) != domain.MaxPastTryItems {
+		t.Fatalf("estimate = $%v with $%v left of %d items; want $6.03 with $21.12 left", est.EstimateUSD, est.BudgetLeftUSD, len(est.Items))
+	}
+
+	for i, it := range est.Items {
+		if want := []float64{0.6, 0.5, 0.4, 0.3, 0.2}[i]; it.Run.Result.CostUSD != want {
+			t.Errorf("item %d run cost = $%v, want $%v", i, it.Run.Result.CostUSD, want)
+		}
+	}
+}
+
 func TestModelProposals_ConfirmQueuesThreeTriesPerItem(t *testing.T) {
 	t.Parallel()
 

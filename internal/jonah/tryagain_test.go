@@ -86,6 +86,49 @@ func expectAgainEstimate(t *testing.T, est jonah.TryAgainEstimate, p domain.Prop
 	}
 }
 
+// Run costs and a spend that don't come out even in binary answer whole cents, and the refusal
+// compares the cents it shows: runs of $0.1 and $0.2049 estimate $0.30.
+func TestTryAgain_EstimateRoundsToCents(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		share   float64
+		left    float64
+		refused bool
+	}{
+		// 1 × $0.3049 of the line's spend leaves $0.30.
+		{name: "fits", share: 1, left: 0.3},
+		// 0.99 × $0.3049 leaves $0.301851: less than the $0.3049 estimate, the same in cents.
+		{name: "fits in cents", share: 0.99, left: 0.3},
+		// 0.5 × $0.3049 leaves $0.15245.
+		{name: "over", share: 0.5, left: 0.15, refused: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			w := newTryWorld(t, 1)
+			org := w.orgs[0]
+			a, _ := w.pastItemCost(org, rt0.Add(-2*time.Hour), true, 0.1)
+			b, _ := w.pastItemCost(org, rt0.Add(-time.Hour), true, 0.2049)
+			p := w.propose(org, "agents/writer.md", a, b)
+			w.sweep()
+
+			est, err := w.tryAgain(&audits{}).Try(w.actor(org), w.factories[org], p.Number, againPolicy(tt.share), false)
+			if refused := errors.Is(err, domain.ErrLearningBudgetExhausted); refused != tt.refused || (!refused && err != nil) {
+				t.Fatalf("Try estimate = %v; want refused %t", err, tt.refused)
+			}
+
+			if est.EstimateUSD != 0.3 || est.BudgetLeftUSD != tt.left || len(est.Items) != 2 || est.Items[0].RunCostUSD != 0.2 ||
+				est.Items[1].RunCostUSD != 0.1 {
+				t.Errorf("estimate = %+v; want $0.30 with $%v left, items at $0.20 and $0.10", est, tt.left)
+			}
+		})
+	}
+}
+
 func TestTryAgain_ConfirmAddsAttempts(t *testing.T) {
 	t.Parallel()
 
