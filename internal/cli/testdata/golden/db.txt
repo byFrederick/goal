@@ -238,18 +238,27 @@ usage:
                                                   each step and why, the item it would create; nothing
                                                   is created, but the model check runs and its cost is
                                                   spent
-  goal webhooks list <factory> [--json]           the factory's webhook endpoints: kind, address,
-                                                  the triggers they feed, deliveries in 7 days
-                                                  (never a secret)
-  goal webhooks create <factory> <name> [--kind generic|github] [--json]
-                                                  add an endpoint (default kind generic); its signing
-                                                  secret is printed once, alone on stdout: store it in
-                                                  the sender now
-  goal webhooks rotate <factory> <name> [--json]  replace its signing secret, printed once the same
-                                                  way; the old one stops working at once
-  goal webhooks deliveries <factory> <name> [--limit N] [--after C] [--json]
+  goal webhooks list [--json]                     the organization's webhooks: sender, address, the
+                                                  secret that signs them, the factories they are open
+                                                  to, the triggers that use them, deliveries in 7
+                                                  days (never a secret's value)
+  goal webhooks create <name> [--sender github|gitlab|standard|pagerduty|sentry|token] [--secret <name>] [--json]
+                                                  add a webhook, open to no factory (default sender
+                                                  standard; --kind generic|github is the old name of
+                                                  --sender, generic being standard); without --secret
+                                                  it makes the secret webhook-<name> and prints its
+                                                  value once, alone on stdout: store it in the sender
+                                                  now
+  goal webhooks open <webhook> <factory> [--repos a,b] [--json]
+                                                  the factory receives its deliveries, only those of
+                                                  the repositories listed with --repos; again replaces
+                                                  the repositories
+  goal webhooks close <webhook> <factory> [--json]
+                                                  the factory no longer receives its deliveries
+  goal webhooks deliveries <webhook> [--limit N] [--after C] [--json]
                                                   what it received, newest first: refused (and why),
                                                   accepted or created an item
+  goal webhooks delete <webhook>                  delete it and its deliveries; its secret stays
   goal storage init                               create the bucket if missing
   goal catalog skills sync --file <sources.yaml> [--search <q>]... [--top <n>]
                                                   fetch skills.sh skills (a YAML list of

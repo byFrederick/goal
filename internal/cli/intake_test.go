@@ -25,6 +25,9 @@ const (
 	intakeFactory  = "docs"
 	intakeEndpoint = "gh"
 	intakeHookID   = "019a1c00-0000-7000-8000-0000000000e1"
+	intakeDocsID   = "019a1c00-0000-7000-8000-00000000d0c5"
+	hookInUse      = "in-use"
+	hookOwnSecret  = "pd-key" //nolint:gosec // a secret's name, not a value
 	triggerNightly = "nightly"
 	cmdTriggers    = "triggers"
 	cmdWebhooks    = "webhooks"
@@ -68,7 +71,6 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 
 	at := time.Date(2026, 10, 26, 8, 0, 0, 0, time.UTC)
 	lane, reason, item := "fast", "dedupe: an open item has the title", int64(12)
-	rotated := at.Add(-time.Hour)
 
 	nightly := gen.IntakeTrigger{
 		Name: triggerNightly, Enabled: true, On: eventSchedule, Source: eventSchedule,
@@ -92,22 +94,31 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 	}}
 	detail.Week.Created, detail.Week.Merged, detail.Week.SpendUsd = 3, 1, 4.2
 
-	gh := gen.WebhookEndpoint{
-		Id: intakeHookID, Name: intakeEndpoint, Kind: gen.WebhookKindGithub, Address: "/hooks/" + intakeHookID,
-		SecretName: "gh-hook-secret", Triggers: []string{"ci-failures"}, Days: days, CreatedAt: at.Add(-48 * time.Hour), RotatedAt: &rotated,
+	repos := []string{"acme/api"}
+	gh := gen.Webhook{
+		Id: intakeHookID, Name: intakeEndpoint, Sender: gen.WebhookSenderGithub, Enabled: true, Address: "/hooks/" + intakeHookID,
+		Secret: "webhook-gh", Openings: []gen.WebhookOpening{{Factory: intakeDocsID, Repositories: &repos}},
+		Triggers: []gen.WebhookTrigger{{Factory: intakeDocsID, FactoryName: intakeFactory, Trigger: "ci-failures"}}, Days: days, CreatedAt: at.Add(-48 * time.Hour),
 	}
-	created := gen.CreatedWebhookEndpoint{
-		Id: gh.Id, Name: gh.Name, Kind: gh.Kind, Address: gh.Address, SecretName: gh.SecretName,
-		Triggers: gh.Triggers, Days: gh.Days, CreatedAt: gh.CreatedAt, Secret: fakeHookSecret,
+	value := fakeHookSecret
+	created := gen.CreatedWebhook{
+		Id: gh.Id, Name: gh.Name, Sender: gh.Sender, Enabled: true, Address: gh.Address, Secret: gh.Secret, SecretValue: &value,
+		Openings: []gen.WebhookOpening{}, Triggers: []gen.WebhookTrigger{}, Days: []gen.WebhookDeliveryDay{}, CreatedAt: gh.CreatedAt,
 	}
+	own := created
+	own.Name, own.Sender, own.Secret, own.SecretValue = "pd", gen.WebhookSenderPagerduty, hookOwnSecret, nil
 	next := "cursor-2"
 	wouldCreate, skipped := tryAnswers()
 
 	g := &intakeGoald{bodies: map[string][]byte{
 		"intake":  indented(t, gen.Intake{Triggers: []gen.IntakeTrigger{nightly, ci}}),
 		"trigger": indented(t, detail),
-		subList:   indented(t, gen.WebhookEndpointList{Endpoints: []gen.WebhookEndpoint{gh}}),
-		"created": indented(t, created),
+		subList:     indented(t, gen.WebhookList{Webhooks: []gen.Webhook{gh}}),
+		"created":   indented(t, created),
+		"own":       indented(t, own),
+		"webhook":   indented(t, gh),
+		"factory":   indented(t, gen.Factory{Id: intakeDocsID, Name: intakeFactory}),
+		"factories": indented(t, gen.FactoryList{Factories: []gen.Factory{{Id: intakeDocsID, Name: intakeFactory}}}),
 		subDeliveries: indented(t, gen.WebhookDeliveryPage{NextAfter: &next, Deliveries: []gen.WebhookDelivery{
 			{Id: "d2", ReceivedAt: at, Outcome: gen.WebhookDeliveryOutcomeCreated, Item: &gen.WebhookDeliveryItem{Id: "i12", Number: 12}},
 			{Id: "d1", ReceivedAt: at.Add(-time.Minute), Outcome: gen.WebhookDeliveryOutcomeRefused, Reason: "signature did not match"},
@@ -165,10 +176,34 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 			_, _ = w.Write(g.bodies[req.Firing])
 		}
 	})
-	mux.HandleFunc("GET "+base+"/webhooks", reply(subList, http.StatusOK))
-	mux.HandleFunc("POST "+base+"/webhooks", reply(answerCreated, http.StatusCreated))
-	mux.HandleFunc("POST "+base+"/webhooks/"+intakeHookID+"/rotate", reply(answerCreated, http.StatusOK))
-	mux.HandleFunc("GET "+base+"/webhooks/"+intakeHookID+"/deliveries", reply(subDeliveries, http.StatusOK))
+	mux.HandleFunc("GET /v1/orgs/acme/factories", reply("factories", http.StatusOK))
+	mux.HandleFunc("GET "+base, reply("factory", http.StatusOK))
+
+	hooks := "/v1/orgs/acme/webhooks"
+	mux.HandleFunc("GET "+hooks, reply(subList, http.StatusOK))
+	mux.HandleFunc("POST "+hooks, func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(b))
+
+		if bytes.Contains(b, []byte(`"secret"`)) {
+			reply("own", http.StatusCreated)(w, r)
+		} else {
+			reply(answerCreated, http.StatusCreated)(w, r)
+		}
+	})
+	mux.HandleFunc("PATCH "+hooks+"/"+intakeEndpoint, reply("webhook", http.StatusOK))
+	mux.HandleFunc("DELETE "+hooks+"/"+intakeEndpoint, reply("none", http.StatusNoContent))
+	mux.HandleFunc("DELETE "+hooks+"/"+hookInUse, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"code":"webhook-in-use","title":"Conflict","status":409,"detail":"webhook \"in-use\" is used by the published triggers docs ci-failures; publish them without it first"}`))
+	})
+	mux.HandleFunc("GET "+hooks+"/"+intakeEndpoint+"/deliveries", reply(subDeliveries, http.StatusOK))
+	mux.HandleFunc("GET "+hooks+"/{other}/deliveries", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"code":"webhook-not-found","title":"Not found","status":404,"detail":"webhook \"nope\" not found"}`))
+	})
 
 	g.srv = httptest.NewServer(mux)
 	t.Cleanup(g.srv.Close)
@@ -346,13 +381,15 @@ func TestTriggers_TryProblem(t *testing.T) {
 	}
 }
 
-// The endpoints print with their address, kind, secret's name, triggers and 7-day totals.
+// The organization's webhooks print with their sender, state, address, secret's name, the
+// factories they are open to (by name, with their repositories), the triggers that use them and
+// their 7-day totals.
 func TestWebhooks_List(t *testing.T) {
 	t.Parallel()
 
 	g := newIntakeGoald(t)
 
-	out, _, err := goalIntake(t, g.srv.URL, cmdWebhooks, subList, intakeFactory)
+	out, _, err := goalIntake(t, g.srv.URL, cmdWebhooks, subList)
 	if err != nil {
 		t.Fatalf("goal webhooks list = %v", err)
 	}
@@ -360,14 +397,14 @@ func TestWebhooks_List(t *testing.T) {
 	checkGolden(t, "webhooks-list", out)
 }
 
-// The deliveries of the endpoint named print newest first, then the next page's command;
-// --limit and --after reach goald.
+// The deliveries of the webhook named print newest first, then the next page's command;
+// --limit and --after reach goald, and an unknown webhook is goald's problem.
 func TestWebhooks_Deliveries(t *testing.T) {
 	t.Parallel()
 
 	g := newIntakeGoald(t)
 
-	out, _, err := goalIntake(t, g.srv.URL, cmdWebhooks, subDeliveries, intakeFactory, intakeEndpoint, "--limit", "3", "--after", "cursor-1")
+	out, _, err := goalIntake(t, g.srv.URL, cmdWebhooks, subDeliveries, intakeEndpoint, "--limit", "3", "--after", "cursor-1")
 	if err != nil {
 		t.Fatalf("goal webhooks deliveries = %v", err)
 	}
@@ -378,77 +415,131 @@ func TestWebhooks_Deliveries(t *testing.T) {
 		t.Errorf("goald was sent %v; want limit=3 and after=cursor-1", q)
 	}
 
-	if _, _, err := goalIntake(t, g.srv.URL, cmdWebhooks, subDeliveries, intakeFactory, "nope"); err == nil || !strings.Contains(err.Error(), `no webhook endpoint named "nope"`) {
-		t.Errorf("goal webhooks deliveries of an unknown endpoint = %v; want it named", err)
+	if _, _, err := goalIntake(t, g.srv.URL, cmdWebhooks, subDeliveries, "nope"); err == nil || !strings.Contains(err.Error(), `webhook "nope" not found`) {
+		t.Errorf("goal webhooks deliveries of an unknown webhook = %v; want goald's problem", err)
 	}
 }
 
-// create posts the name and kind, prints the secret alone on stdout and the address and the
-// warning on stderr.
+// create posts the name, the sender (standard by default, --kind generic|github its alias) and
+// the secret named; a generated value prints alone on stdout, the address and the warning on
+// stderr.
 func TestWebhooks_CreatePrintsSecretOnce(t *testing.T) {
 	t.Parallel()
 
 	g := newIntakeGoald(t)
 
 	for _, tc := range []struct {
-		args []string
-		want gen.NewWebhookEndpoint
+		args   []string
+		sender gen.WebhookSender
 	}{
-		{[]string{intakeEndpoint, flagKind, importedGitHub}, gen.NewWebhookEndpoint{Name: intakeEndpoint, Kind: gen.WebhookKindGithub}},
-		{[]string{"plain"}, gen.NewWebhookEndpoint{Name: "plain", Kind: gen.WebhookKindGeneric}},
+		{[]string{intakeEndpoint, "--sender", importedGitHub}, gen.WebhookSenderGithub},
+		{[]string{intakeEndpoint, flagKind, importedGitHub}, gen.WebhookSenderGithub},
+		{[]string{intakeEndpoint, flagKind, "generic"}, gen.WebhookSenderStandard},
+		{[]string{intakeEndpoint}, gen.WebhookSenderStandard},
 	} {
-		stdout, stderr, err := goalIntake(t, g.srv.URL, append([]string{cmdWebhooks, verbCreate, intakeFactory}, tc.args...)...)
+		stdout, stderr, err := goalIntake(t, g.srv.URL, append([]string{cmdWebhooks, verbCreate}, tc.args...)...)
 		if err != nil {
 			t.Fatalf("goal webhooks create %q = %v", tc.args, err)
 		}
 
-		var sent gen.NewWebhookEndpoint
+		var sent gen.NewWebhook
 
 		b, _ := g.last()
-		if err := json.Unmarshal(b, &sent); err != nil || sent != tc.want {
-			t.Errorf("goal webhooks create %q sent %s; want %+v", tc.args, b, tc.want)
+		if err := json.Unmarshal(b, &sent); err != nil || sent.Name != intakeEndpoint || sent.Sender != tc.sender || sent.Secret != nil || sent.Token != nil {
+			t.Errorf("goal webhooks create %q sent %s; want %s, sender %s and no secret", tc.args, b, intakeEndpoint, tc.sender)
 		}
 
 		if stdout != fakeHookSecret+"\n" {
-			t.Errorf("goal webhooks create %q stdout = %q; want the secret alone", tc.args, stdout)
+			t.Errorf("goal webhooks create %q stdout = %q; want the value alone", tc.args, stdout)
 		}
 
-		if !strings.Contains(stderr, "/hooks/"+intakeHookID) || !strings.Contains(stderr, "store it now") || strings.Contains(stderr, fakeHookSecret) {
-			t.Errorf("goal webhooks create %q stderr = %q; want the address and the warning, without the secret", tc.args, stderr)
+		if !strings.Contains(stderr, "/hooks/"+intakeHookID) || !strings.Contains(stderr, "store it now") || !strings.Contains(stderr, "goal webhooks open gh") ||
+			strings.Contains(stderr, fakeHookSecret) {
+			t.Errorf("goal webhooks create %q stderr = %q; want the address, how to open it and the warning, without the value", tc.args, stderr)
 		}
 	}
 }
 
-// rotate replaces the endpoint's secret and prints the new one alone on stdout.
-func TestWebhooks_Rotate(t *testing.T) {
+// create --secret signs the webhook with the secret named: goald makes no value, so none prints.
+func TestWebhooks_CreateWithItsSecret(t *testing.T) {
 	t.Parallel()
 
 	g := newIntakeGoald(t)
 
-	stdout, stderr, err := goalIntake(t, g.srv.URL, cmdWebhooks, "rotate", intakeFactory, intakeEndpoint)
+	stdout, stderr, err := goalIntake(t, g.srv.URL, cmdWebhooks, verbCreate, "pd", "--sender", "pagerduty", "--secret", hookOwnSecret)
 	if err != nil {
-		t.Fatalf("goal webhooks rotate = %v", err)
+		t.Fatalf("goal webhooks create --secret = %v", err)
 	}
 
-	if stdout != fakeHookSecret+"\n" {
-		t.Errorf("goal webhooks rotate stdout = %q; want the secret alone", stdout)
+	var sent gen.NewWebhook
+
+	b, _ := g.last()
+	if err := json.Unmarshal(b, &sent); err != nil || sent.Sender != gen.WebhookSenderPagerduty || sent.Secret == nil || *sent.Secret != hookOwnSecret {
+		t.Errorf("goal webhooks create --secret sent %s; want pagerduty signed by %s", b, hookOwnSecret)
 	}
 
-	if !strings.Contains(stderr, "/hooks/"+intakeHookID) || !strings.Contains(stderr, "store it now") || strings.Contains(stderr, fakeHookSecret) {
-		t.Errorf("goal webhooks rotate stderr = %q; want the address and the warning, without the secret", stderr)
+	if stdout != "" || strings.Contains(stderr, "store it now") || !strings.Contains(stderr, "signed by the secret "+hookOwnSecret) {
+		t.Errorf("goal webhooks create --secret = %q, %q; want nothing on stdout and the secret's name on stderr", stdout, stderr)
 	}
 }
 
-// No command but create and rotate prints a secret, even when goald's answer carried one.
-func TestWebhooks_SecretOnlyOnCreateAndRotate(t *testing.T) {
+// open and close patch the webhook with the factory's id, open with the repositories listed or
+// none for every one.
+func TestWebhooks_OpenAndClose(t *testing.T) {
 	t.Parallel()
 
 	g := newIntakeGoald(t)
 
-	// A careless goald that leaks the secret into every answer: the text output still never shows it.
+	for _, tc := range []struct {
+		line []string
+		sent string
+		say  string
+	}{
+		{[]string{"open", intakeEndpoint, intakeFactory, "--repos", "acme/api, acme/web"},
+			`{"open":[{"factory":"` + intakeDocsID + `","repositories":["acme/api","acme/web"]}]}`, "✓ opened webhook gh to docs for acme/api, acme/web"},
+		{[]string{"open", intakeEndpoint, intakeFactory}, `{"open":[{"factory":"` + intakeDocsID + `"}]}`, "every repository"},
+		{[]string{"close", intakeEndpoint, intakeFactory}, `{"close":["` + intakeDocsID + `"]}`, "✓ closed webhook gh to docs"},
+	} {
+		stdout, stderr, err := goalIntake(t, g.srv.URL, append([]string{cmdWebhooks}, tc.line...)...)
+		if err != nil {
+			t.Fatalf("goal webhooks %q = %v", tc.line, err)
+		}
+
+		if b, _ := g.last(); string(b) != tc.sent {
+			t.Errorf("goal webhooks %q sent %s; want %s", tc.line, b, tc.sent)
+		}
+
+		if stdout != "" || !strings.Contains(stderr, tc.say) {
+			t.Errorf("goal webhooks %q = %q, %q; want %q on stderr", tc.line, stdout, stderr, tc.say)
+		}
+	}
+}
+
+// delete removes the webhook, and goald's refusal while triggers use it names them.
+func TestWebhooks_Delete(t *testing.T) {
+	t.Parallel()
+
+	g := newIntakeGoald(t)
+
+	if _, stderr, err := goalIntake(t, g.srv.URL, cmdWebhooks, "delete", intakeEndpoint); err != nil || !strings.Contains(stderr, "✓ deleted webhook gh") {
+		t.Errorf("goal webhooks delete = %q, %v; want it deleted", stderr, err)
+	}
+
+	if _, _, err := goalIntake(t, g.srv.URL, cmdWebhooks, "delete", hookInUse); err == nil || !strings.Contains(err.Error(), "docs ci-failures") {
+		t.Errorf("goal webhooks delete of a webhook in use = %v; want the triggers named", err)
+	}
+}
+
+// No command but create prints a secret's value, even when goald's answer carried one.
+func TestWebhooks_SecretOnlyOnCreate(t *testing.T) {
+	t.Parallel()
+
+	g := newIntakeGoald(t)
+
+	// A careless goald that leaks the value into every answer: the text output still never shows it.
 	for k, b := range g.bodies {
 		if k != answerCreated {
-			g.bodies[k] = bytes.Replace(b, []byte(`"name": "`), []byte(`"secret": "`+fakeHookSecret+`",
+			g.bodies[k] = bytes.Replace(b, []byte(`"name": "`), []byte(`"secret_value": "`+fakeHookSecret+`",
    "name": "`), 1)
 		}
 	}
@@ -456,8 +547,9 @@ func TestWebhooks_SecretOnlyOnCreateAndRotate(t *testing.T) {
 	for _, line := range [][]string{
 		{cmdTriggers, subList, intakeFactory},
 		{cmdTriggers, subShow, intakeFactory, triggerNightly},
-		{cmdWebhooks, subList, intakeFactory},
-		{cmdWebhooks, subDeliveries, intakeFactory, intakeEndpoint},
+		{cmdWebhooks, subList},
+		{cmdWebhooks, "open", intakeEndpoint, intakeFactory},
+		{cmdWebhooks, subDeliveries, intakeEndpoint},
 	} {
 		stdout, stderr, err := goalIntake(t, g.srv.URL, line...)
 		if err != nil {
@@ -465,12 +557,12 @@ func TestWebhooks_SecretOnlyOnCreateAndRotate(t *testing.T) {
 		}
 
 		if strings.Contains(stdout+stderr, fakeHookSecret) {
-			t.Errorf("goal %q printed the secret:\n%s%s", line, stdout, stderr)
+			t.Errorf("goal %q printed the value:\n%s%s", line, stdout, stderr)
 		}
 	}
 }
 
-// --json prints goald's answer as it came, for each of the seven commands.
+// --json prints goald's answer as it came, for each command that has one.
 func TestIntakeCommands_JSONAsSent(t *testing.T) {
 	t.Parallel()
 
@@ -483,10 +575,11 @@ func TestIntakeCommands_JSONAsSent(t *testing.T) {
 		{[]string{cmdTriggers, subList, intakeFactory}, "intake"},
 		{[]string{cmdTriggers, subShow, intakeFactory, triggerNightly}, "trigger"},
 		{[]string{cmdTriggers, subTry, intakeFactory, triggerNightly, flagEvent, firingCreate}, firingCreate},
-		{[]string{cmdWebhooks, subList, intakeFactory}, subList},
-		{[]string{cmdWebhooks, verbCreate, intakeFactory, intakeEndpoint}, answerCreated},
-		{[]string{cmdWebhooks, "rotate", intakeFactory, intakeEndpoint}, answerCreated},
-		{[]string{cmdWebhooks, subDeliveries, intakeFactory, intakeEndpoint}, subDeliveries},
+		{[]string{cmdWebhooks, subList}, subList},
+		{[]string{cmdWebhooks, verbCreate, intakeEndpoint}, answerCreated},
+		{[]string{cmdWebhooks, "open", intakeEndpoint, intakeFactory}, "webhook"},
+		{[]string{cmdWebhooks, "close", intakeEndpoint, intakeFactory}, "webhook"},
+		{[]string{cmdWebhooks, subDeliveries, intakeEndpoint}, subDeliveries},
 	} {
 		stdout, _, err := goalIntake(t, g.srv.URL, append(tc.line, "--json")...)
 		if want := string(g.bodies[tc.body]); err != nil || stdout != want {
@@ -495,8 +588,8 @@ func TestIntakeCommands_JSONAsSent(t *testing.T) {
 	}
 }
 
-// Missing or extra arguments, an unknown subcommand and a kind other than generic or github are
-// the usage, before goald is asked.
+// Missing or extra arguments, an unknown subcommand (rotate included), a kind other than generic
+// or github, an unknown sender and both --sender and --kind are the usage, before goald is asked.
 func TestIntakeCommands_Usage(t *testing.T) {
 	t.Parallel()
 
@@ -511,15 +604,21 @@ func TestIntakeCommands_Usage(t *testing.T) {
 		{cmdTriggers, subTry, intakeFactory, flagEvent, firingCreate},
 		{cmdTriggers, subTry, intakeFactory, triggerNightly, argExtra, flagEvent, firingCreate},
 		{cmdWebhooks},
-		{cmdWebhooks, "delete", intakeFactory, intakeEndpoint},
-		{cmdWebhooks, subList},
-		{cmdWebhooks, subList, intakeFactory, argExtra},
-		{cmdWebhooks, verbCreate, intakeFactory},
-		{cmdWebhooks, verbCreate, intakeFactory, intakeEndpoint, flagKind, "gitlab"},
-		{cmdWebhooks, "rotate", intakeFactory},
-		{cmdWebhooks, "rotate", intakeFactory, intakeEndpoint, argExtra},
-		{cmdWebhooks, subDeliveries, intakeFactory},
-		{cmdWebhooks, subDeliveries, intakeFactory, intakeEndpoint, "--limit", "0"},
+		{cmdWebhooks, "rotate", intakeEndpoint},
+		{cmdWebhooks, subList, argExtra},
+		{cmdWebhooks, verbCreate},
+		{cmdWebhooks, verbCreate, intakeEndpoint, argExtra},
+		{cmdWebhooks, verbCreate, intakeEndpoint, flagKind, "gitlab"},
+		{cmdWebhooks, verbCreate, intakeEndpoint, "--sender", "bitbucket"},
+		{cmdWebhooks, verbCreate, intakeEndpoint, "--sender", importedGitHub, flagKind, importedGitHub},
+		{cmdWebhooks, "open", intakeEndpoint},
+		{cmdWebhooks, "open", intakeEndpoint, intakeFactory, argExtra},
+		{cmdWebhooks, "close", intakeEndpoint},
+		{cmdWebhooks, "delete"},
+		{cmdWebhooks, "delete", intakeEndpoint, argExtra},
+		{cmdWebhooks, subDeliveries},
+		{cmdWebhooks, subDeliveries, intakeEndpoint, argExtra},
+		{cmdWebhooks, subDeliveries, intakeEndpoint, "--limit", "0"},
 	} {
 		if _, _, err := goalIntake(t, "http://127.0.0.1:1", line...); !errors.Is(err, errUsage) {
 			t.Errorf("goal %q = %v; want the usage", line, err)
