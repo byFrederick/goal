@@ -357,7 +357,7 @@ describe('the controls that are not built yet', () => {
     expect(screen.getByRole('button', { name: /^Running/ }).getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('renders Open transcript and Send to Jonah on a failed row disabled and inert', async () => {
+  it('renders Open transcript on a failed row disabled and inert, and no Send to Jonah', async () => {
     const { router } = renderRuns();
     const table = await screen.findByRole('table');
     const failed = within(table)
@@ -366,26 +366,23 @@ describe('the controls that are not built yet', () => {
     const detail = failed.nextElementSibling as HTMLElement;
     const before = router.state.location.href;
 
-    for (const name of ['Open transcript', 'Send to Jonah']) {
-      const control = within(detail).getByRole('button', { name });
-      expect(control.getAttribute('aria-disabled')).toBe('true');
-      fireEvent.click(control);
-    }
+    const control = within(detail).getByRole('button', { name: 'Open transcript' });
+    expect(control.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(control);
+    expect(within(detail).queryByRole('button', { name: 'Send to Jonah' })).toBeNull();
     expect(router.state.location.href).toBe(before);
   });
 });
 
 describe('phone tap targets on the failed row', () => {
-  it('gives Open transcript and Send to Jonah the touchLink classes', async () => {
+  it('gives Open transcript the touchLink classes', async () => {
     renderRuns();
     const table = await screen.findByRole('table');
     const failed = within(table)
       .getByText(/Check the budget before each run$/)
       .closest('tr') as HTMLElement;
     const detail = failed.nextElementSibling as HTMLElement;
-    for (const name of ['Open transcript', 'Send to Jonah']) {
-      const control = within(detail).getByRole('button', { name });
-      for (const cls of touchLink.split(' ')) expect(control.classList.contains(cls)).toBe(true);
-    }
+    const control = within(detail).getByRole('button', { name: 'Open transcript' });
+    for (const cls of touchLink.split(' ')) expect(control.classList.contains(cls)).toBe(true);
   });
 });

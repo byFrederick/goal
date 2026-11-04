@@ -22,6 +22,7 @@ import {
   getAuthConfig,
   getBoard,
   getConstraint,
+  getDraftKeptTests,
   getFactoryActivity,
   getFactoryOverview,
   getInbox,
@@ -965,4 +966,11 @@ export const standingRulesQuery = (org: string) =>
     queryKey: keys.standingRules(org),
     queryFn: ({ signal }) => listStandingRules(org, signal),
     staleTime: 30_000,
+  });
+
+/** The open draft's kept tests, read (never started) by the poll that follows startDraftKeptTests. */
+export const draftKeptTestsQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.jonah(org, factory), 'draft-kept-tests'] as const,
+    queryFn: ({ signal }) => getDraftKeptTests(org, factory, signal),
   });

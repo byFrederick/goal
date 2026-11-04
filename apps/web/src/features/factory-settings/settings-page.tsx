@@ -1,5 +1,5 @@
 // Settings of a factory (canvas "Settings"): the title, with Save changes in the top bar, then General, Repository, Runtime,
-// Budgets and targets, Flow, People with access and the Danger zone, with a list of the sections at the right
+// Budgets and targets, Flow, Jonah, People with access and the Danger zone, with a list of the sections at the right
 // from 1024 px. The four groups between General and People edit the factory definition through a draft
 // session, the same one the Definition editor uses, and Save changes publishes it. The Danger zone shows the rows the caller may use:
 // Pause on factory:manage in the factory's `can` (not for an archived factory), Archive or Restore on
@@ -20,6 +20,7 @@ import { BudgetsSection } from './budgets-section';
 import { DangerZone } from './danger-zone';
 import { FlowSection } from './flow-section';
 import { GeneralCard } from './general';
+import { JonahSection } from './jonah-section';
 import { PauseRow } from './pause-row';
 import { PeopleCard } from './people';
 import { RepositorySection } from './repository-section';
@@ -32,6 +33,7 @@ const sections = [
   { id: 'runtime', label: 'Runtime' },
   { id: 'budgets', label: 'Budgets and targets' },
   { id: 'flow', label: 'Flow' },
+  { id: 'jonah', label: 'Jonah' },
   { id: 'people', label: 'People with access' },
   { id: 'danger', label: 'Danger zone' },
 ];
@@ -114,6 +116,7 @@ function SettingsBody({
           <RuntimeSection />
           <BudgetsSection />
           <FlowSection />
+          <JonahSection />
           <PeopleCard org={org} factory={factory} />
           {showDanger ? (
             <SectionCard

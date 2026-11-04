@@ -79,7 +79,7 @@ goal factory push ./acme-line --publish --move build-old=build
 
 ## Review in the editor
 
-In the Definition editor, Review and publish shows, beside the changes of the open draft, the checks of the draft, or of the version that runs when no draft is open, and the four newest versions with a link to all of them. Evals before publish is not available yet. Budgets are not part of this page; set them in Factory settings under Budgets and targets.
+In the Definition editor, Review and publish shows, beside the changes of the open draft, the checks of the draft, or of the version that runs when no draft is open, and the four newest versions with a link to all of them. Before you publish, the Publish card lists the kept tests of the stations the draft reaches and shows each result as it arrives. A failing test, or one that could not run, warns with its reason and never blocks Publish. Each version in the list shows the watch on its change: the metric, its number before and after, and the verdict, or Watching while the watch is open. Budgets are not part of this page; set them in Factory settings under Budgets and targets.
 
 ## Edit the line in the app
 

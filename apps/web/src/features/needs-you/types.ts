@@ -1,7 +1,8 @@
 // What waits on a person, by the type MASTER.md's vocabulary gives it. Pure, so the mapping is
 // tested without a DOM. The API keeps the names (ADR 0016, decision 5): InboxEntryKind's decision is
 // a Decision, question is a Question (ADR 0018), tool_approval is an Approval (ADR 0031); andon,
-// rework_warning, blocked and expedite are Alerts.
+// rework_warning, blocked, expedite, knowledge_source and watch_worse (a published Jonah
+// proposal whose own number got worse, ADR 0039 decision 15) are Alerts.
 import type { InboxEntry } from '../../api/types';
 
 /** The type of an entry the page can show. `generic` is a kind this build does not know. */
@@ -10,7 +11,14 @@ export type EntryType = 'approval' | 'decision' | 'question' | 'alert' | 'generi
 /** A tab of the Needs you page: All, or one type. */
 export type NeedsTab = 'all' | 'approval' | 'decision' | 'question' | 'alert';
 
-const alertKinds: ReadonlySet<string> = new Set(['andon', 'rework_warning', 'blocked', 'expedite', 'knowledge_source']);
+const alertKinds: ReadonlySet<string> = new Set([
+  'andon',
+  'rework_warning',
+  'blocked',
+  'expedite',
+  'knowledge_source',
+  'watch_worse',
+]);
 
 /** The type of an entry: Approval, Decision, Question, Alert, or generic for a kind this build does not know. */
 export function typeOf(entry: Pick<InboxEntry, 'kind'>): EntryType {
