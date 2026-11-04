@@ -42,7 +42,6 @@ locals {
     GOAL_S3_ACCESS_KEY        = module.r2_token.id
     GOAL_S3_SECRET_KEY        = sha256(module.r2_token.value)
     GOAL_WORKERS_AI_KEY       = module.workers_ai_token.value
-    GOAL_EMBED_KEY            = module.workers_ai_token.value # old name, bound by the Worker deployed before #525: remove after the next deploy
     GOAL_DATABASE_URL         = module.database_urls.app_url
     GOAL_MIGRATE_DATABASE_URL = module.database_urls.migrate_url
     GOAL_AUTH_DATABASE_URL    = module.database_urls.auth_url
@@ -55,7 +54,7 @@ locals {
     goald = [
       "GOAL_MASTER_KEYS", "GOAL_GATEWAY_KEY", "GOAL_SANDBOX_KEY", "GOAL_AUTH_PROXY_SECRET",
       "GOAL_DATABASE_URL", "GOAL_MIGRATE_DATABASE_URL", "GOAL_S3_ACCESS_KEY", "GOAL_S3_SECRET_KEY",
-      "GOAL_WORKERS_AI_KEY", "GOAL_EMBED_KEY",
+      "GOAL_WORKERS_AI_KEY",
     ]
     auth = concat([
       "BETTER_AUTH_SECRET", "GOAL_AUTH_PROXY_SECRET", "GOAL_AUTH_DATABASE_URL",
