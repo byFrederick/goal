@@ -140,3 +140,76 @@ func show(fs []FollowUp) string {
 	b, _ := json.Marshal(fs)
 	return string(b)
 }
+
+// The factories and names of the note routing tests.
+const (
+	noteFrom FactoryID = "f-from"
+	noteInto FactoryID = "f-into"
+	nameOps            = "ops"
+)
+
+func TestRouteNote(t *testing.T) {
+	t.Parallel()
+
+	open := &NoteFactory{ID: noteInto, Name: nameOps, FollowUpsFrom: []FactoryID{noteFrom}}
+	closed := &NoteFactory{ID: noteInto, Name: nameOps}
+	own := &NoteFactory{ID: noteFrom, Name: "dev"}
+
+	cases := []struct {
+		name  string
+		to    *NoteFactory
+		state ItemState
+		today int
+		want  string
+	}{
+		{"an open item of a factory that accepts the sender", open, StateQueued, MaxNotesADay - 1, ""},
+		{"no factory by the name", nil, StateQueued, 0, ReasonNoteNoFactory},
+		{"a factory that does not accept the sender", closed, StateQueued, 0, ReasonNoteNotAccepted},
+		{"no item with the number", open, "", 0, ReasonNoteNoItem},
+		{"a done item", open, StateDone, 0, ReasonNoteItemClosed},
+		{"a cancelled item", open, StateCancelled, 0, ReasonNoteItemClosed},
+		{"past the cap", open, StateBlocked, MaxNotesADay, ReasonNoteCapped},
+		{"the sender's own factory needs no followUpsFrom", own, StateInProgress, 0, ""},
+		{"the sender's own factory has no cap", own, StateQueued, MaxNotesADay * 3, ""},
+		{"a closed item of the sender's own factory", own, StateDone, 0, ReasonNoteItemClosed},
+	}
+
+	for _, c := range cases {
+		if got := RouteNote(noteFrom, c.to, c.state, c.today); got != c.want {
+			t.Errorf("%s: RouteNote = %q; want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func TestNoteFactoryNamed(t *testing.T) {
+	t.Parallel()
+
+	fs := []NoteFactory{{ID: noteFrom, Name: "dev"}, {ID: noteInto, Name: nameOps}}
+
+	for name, want := range map[string]FactoryID{nameOps: noteInto, string(noteFrom): noteFrom, "unknown": ""} {
+		got, ok := NoteFactoryNamed(fs, name)
+		if ok != (want != "") || got.ID != want {
+			t.Errorf("NoteFactoryNamed(%q) = %+v, %v; want %q", name, got, ok, want)
+		}
+	}
+}
+
+func TestFollowUpNoteData(t *testing.T) {
+	t.Parallel()
+
+	f := FollowUp{ID: "fu-1", FactoryID: noteFrom, ItemID: "i-1", Station: stationBuild, Agent: testAgent, Text: "Mind the index"}
+
+	got := NoteData(f, ItemRef{Factory: "dev", Number: 4})
+	want := map[string]any{
+		"text": "Mind the index", "follow_up_id": "fu-1", "from_item": "dev#4", "from_item_id": "i-1",
+		"from_factory_id": string(noteFrom), "station": stationBuild, "agent": testAgent, "actor": "system:engine",
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("NoteData = %v; want %v", got, want)
+	}
+
+	if r := NoteTriageReason(ItemRef{Factory: nameOps, Number: 9}, ReasonNoteNoItem); r != "for ops#9: "+ReasonNoteNoItem {
+		t.Errorf("NoteTriageReason = %q", r)
+	}
+}
