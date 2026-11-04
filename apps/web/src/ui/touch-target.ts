@@ -15,3 +15,10 @@ export const touchTarget =
  * (an 18 px line plus 16 px each side).
  */
 export const touchLink = 'max-md:-my-4 max-md:py-4';
+
+/**
+ * For a short text link that is narrow as well as low (an "Edit" beside a value): 12 px more on each
+ * side and 16 px above and below, taken back by the same negative margins, so the drawn text stays
+ * where it was and the link answers across at least 44×44 px below 768 px.
+ */
+export const touchLinkWide = 'max-md:-mx-3 max-md:-my-4 max-md:px-3 max-md:py-4';

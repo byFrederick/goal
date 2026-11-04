@@ -398,7 +398,9 @@ function AlertLinks({ entry, canUndo }: { entry: InboxEntry; canUndo: boolean })
     <div className="flex flex-wrap gap-2">
       {proposal !== undefined ? (
         <>
-          {canUndo ? <UndoThisChange number={proposal} factoryId={entry.factory.id} factoryName={factory} /> : null}
+          {canUndo ? (
+            <UndoThisChange number={proposal} factoryId={entry.factory.id} factoryName={factory} size="md" />
+          ) : null}
           <Button asChild variant="secondary">
             <Link
               to="/o/$org/f/$factory/jonah/proposals/$number"

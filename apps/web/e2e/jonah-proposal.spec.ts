@@ -2,6 +2,7 @@
 // draft and Reject records a reason. Not run in the box: Playwright needs a browser, which the box does not have.
 import { expect, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll } from './support';
+import { expectNoOverlap, expectTarget44 } from './support-boxes';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -111,6 +112,19 @@ for (const scheme of ['light', 'dark'] as const) {
     });
   }
 }
+
+test('the tries ⓘ is 44×44 and does not lie over Try again at 390 px', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/f/software/jonah/proposals/7');
+  const again = page.getByRole('button', { name: 'Try again' });
+  await expect(again).toBeVisible();
+  for (const name of ['How tries work', 'How model tries work']) {
+    const tip = page.getByRole('button', { name });
+    if ((await tip.count()) === 0) continue;
+    await expectTarget44(tip, name);
+    await expectNoOverlap(tip, again, `${name} and Try again`);
+  }
+});
 
 // Not run in the box: Playwright needs a browser, which the box does not have.
 for (const width of [375, 768, 1440]) {
