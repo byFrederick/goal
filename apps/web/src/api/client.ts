@@ -20,20 +20,9 @@ import type {
   AndonPull,
   AssemblyParts,
   AuthConfig,
-  BakeOff,
-  BakeOffApply,
-  BakeOffList,
-  BakeOffStarted,
   Board,
   ConstraintReport,
-  CreateJudgeRequest,
   DeviceRequest,
-  Draft,
-  EvalCaseFromRun,
-  EvalEstimate,
-  EvalList,
-  EvalRunRequest,
-  EvalRunStarted,
   EventPage,
   Factory,
   FactoryOverviewList,
@@ -46,10 +35,7 @@ import type {
   ItemState,
   JonahOverview,
   JonahReview,
-  Judge,
-  JudgeList,
-  JudgeTries,
-  JudgeWrite,
+  KeptTestList,
   LeadTimeBridge,
   Me,
   Member,
@@ -83,7 +69,6 @@ import type {
   ToolDecision,
   TouchMetrics,
   TouchReason,
-  Version,
   WeeklyThroughput,
 } from './types';
 
@@ -406,105 +391,6 @@ export function getAgentStats(
   );
 }
 
-/**
- * The factory's eval cases of the current version, each with its last tries, and the summary
- * (ADR 0025). 503 evals-unavailable while goald runs no evals.
- */
-export function listEvals(org: string, factory: string, signal?: AbortSignal): Promise<EvalList> {
-  return unwrap(
-    goal.GET(orgPath('/factories/{factory}/evals'), { params: { path: { org, factory } }, ...cancel(signal) }),
-  );
-}
-
-/** What a run would cost, about, without starting it. Asked with no case, it prices every case. */
-export function estimateEvalRun(
-  org: string,
-  factory: string,
-  run: EvalRunRequest,
-  signal?: AbortSignal,
-): Promise<EvalEstimate> {
-  return unwrap(
-    goal.POST(orgPath('/factories/{factory}/evals/estimate'), {
-      params: { path: { org, factory } },
-      body: run,
-      ...cancel(signal),
-    }),
-  );
-}
-
-/** 400 eval-case-unknown for a case the content does not have; 404 version-not-found; 503 evals-unavailable. */
-export function startEvalRun(org: string, factory: string, run: EvalRunRequest): Promise<EvalRunStarted> {
-  return unwrap(
-    goal.POST(orgPath('/factories/{factory}/evals/runs'), { params: { path: { org, factory } }, body: run }),
-  );
-}
-
-/**
- * Adds a case from a past run and publishes it as the next version. 409 eval-case-exists, draft-open,
- * evals-pending and evals-failing (the publish's eval gate) are the dialog's to show.
- */
-export function addEvalCase(org: string, factory: string, from: EvalCaseFromRun): Promise<Version> {
-  return unwrap(
-    goal.POST(orgPath('/factories/{factory}/evals/cases'), { params: { path: { org, factory } }, body: from }),
-  );
-}
-
-/** The factory's bake-offs, newest first: at most 20 (ADR 0029). 503 evals-unavailable. */
-export function listBakeOffs(org: string, factory: string, signal?: AbortSignal): Promise<BakeOffList> {
-  return unwrap(
-    goal.GET(orgPath('/factories/{factory}/evals/bake-offs'), {
-      params: { path: { org, factory } },
-      ...cancel(signal),
-    }),
-  );
-}
-
-/** One bake-off with its arms, its tries passed per case and its recommendation. 404 eval-run-not-found. */
-export function getBakeOff(org: string, factory: string, bakeOff: string, signal?: AbortSignal): Promise<BakeOff> {
-  return unwrap(
-    goal.GET(orgPath('/factories/{factory}/evals/bake-offs/{bake_off}'), {
-      params: { path: { org, factory, bake_off: bakeOff } },
-      ...cancel(signal),
-    }),
-  );
-}
-
-/**
- * Queues a bake-off of one agent's eval cases on the current version, with goald's default arms. 404
- * version-not-found; 409 learning-budget-exhausted, with the estimate; 422 invalid-bake-off; 503 evals-unavailable.
- */
-export function startBakeOff(org: string, factory: string, agent: string): Promise<BakeOffStarted> {
-  return unwrap(
-    goal.POST(orgPath('/factories/{factory}/evals/bake-offs'), {
-      params: { path: { org, factory } },
-      body: { agent },
-    }),
-  );
-}
-
-/** Queues a new bake-off of the same agent on the current version. 404 eval-run-not-found, then the refusals of a start. */
-export function rerunBakeOff(org: string, factory: string, bakeOff: string): Promise<BakeOffStarted> {
-  return unwrap(
-    goal.POST(orgPath('/factories/{factory}/evals/bake-offs/{bake_off}/rerun'), {
-      params: { path: { org, factory, bake_off: bakeOff } },
-    }),
-  );
-}
-
-/**
- * Writes an arm's model as the agent's model into the factory's draft; it never publishes. 412
- * draft-conflict when the agent changed since the bake-off's version: the builder shows it.
- */
-export function applyBakeOff(org: string, factory: string, bakeOff: string, arm: number): Promise<Draft> {
-  const body: BakeOffApply = { arm };
-  return unwrap(
-    goal.POST(orgPath('/factories/{factory}/evals/bake-offs/{bake_off}/apply'), {
-      params: { path: { org, factory, bake_off: bakeOff } },
-      body,
-    }),
-  );
-}
-
 /** The factory's shared views, then the caller's personal ones, each by name (ADR 0020). */
 export function listSavedViews(org: string, factory: string, signal?: AbortSignal): Promise<SavedViewList> {
   return unwrap(
@@ -532,51 +418,9 @@ export function updateSavedView(
   );
 }
 
-/** The factory's judges of the current version, each with its last 30 days (ADR 0025). 503 judges-unavailable while goald serves none. */
-export function listJudges(org: string, factory: string, signal?: AbortSignal): Promise<JudgeList> {
-  return unwrap(
-    goal.GET(orgPath('/factories/{factory}/judges'), { params: { path: { org, factory } }, ...cancel(signal) }),
-  );
-}
-
-/** One judge of the current version: its file, its 30 days, its newest scores and where it runs. 404 judge-not-found. */
-export function getJudge(org: string, factory: string, judge: string, signal?: AbortSignal): Promise<Judge> {
-  return unwrap(
-    goal.GET(orgPath('/factories/{factory}/judges/{judge}'), {
-      params: { path: { org, factory, judge } },
-      ...cancel(signal),
-    }),
-  );
-}
-
 /** 404 view-not-found; 403 forbidden for a shared view without factory:manage. */
 export async function deleteSavedView(org: string, factory: string, view: string): Promise<void> {
   await unwrap(goal.DELETE(orgPath('/factories/{factory}/views/{view}'), { params: { path: { org, factory, view } } }));
-}
-
-/**
- * Adds a judge and publishes it as the next version. 409 judge-exists, draft-open, definition-invalid,
- * draft-base-moved, evals-pending and evals-failing are the page's to show.
- */
-export function createJudge(org: string, factory: string, judge: CreateJudgeRequest): Promise<Judge> {
-  return unwrap(goal.POST(orgPath('/factories/{factory}/judges'), { params: { path: { org, factory } }, body: judge }));
-}
-
-/** Replaces a judge's file and publishes it: the same 409s as createJudge, and 404 judge-not-found. */
-export function updateJudge(org: string, factory: string, judge: string, write: JudgeWrite): Promise<Judge> {
-  return unwrap(
-    goal.PUT(orgPath('/factories/{factory}/judges/{judge}'), {
-      params: { path: { org, factory, judge } },
-      body: write,
-    }),
-  );
-}
-
-/** Queues the judge on the 10 newest finished runs of its agents. Those scores never count in the 30 days. */
-export function tryJudge(org: string, factory: string, judge: string): Promise<JudgeTries> {
-  return unwrap(
-    goal.POST(orgPath('/factories/{factory}/judges/{judge}/try'), { params: { path: { org, factory, judge } } }),
-  );
 }
 
 /** Jonah's overview: the policy, what waits for a person, this month's cost and what it noticed this week (getJonahOverview). 503 jonah-unavailable while goald runs no Jonah. */
@@ -639,6 +483,32 @@ export function rejectProposal(org: string, factory: string, number: number, rea
       params: { path: { org, factory, number } },
       body: { reason },
     }),
+  );
+}
+
+/**
+ * Undoes a published proposal: stores the proposal that reverses it and answers it (undoProposal).
+ * 409 proposal-decided style refusals are the page's to show.
+ */
+export function undoProposal(org: string, factory: string, number: number): Promise<Proposal> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/jonah/proposals/{number}/undo'), {
+      params: { path: { org, factory, number } },
+    }),
+  );
+}
+
+/** The factory's kept tests (listKeptTests). */
+export function listKeptTests(org: string, factory: string, signal?: AbortSignal): Promise<KeptTestList> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/jonah/tests'), { params: { path: { org, factory } }, ...cancel(signal) }),
+  );
+}
+
+/** Removes a kept test (removeKeptTest). Needs definition:edit. */
+export async function removeKeptTest(org: string, factory: string, test: string): Promise<void> {
+  await unwrap(
+    goal.DELETE(orgPath('/factories/{factory}/jonah/tests/{test}'), { params: { path: { org, factory, test } } }),
   );
 }
 
