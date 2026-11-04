@@ -37,6 +37,11 @@ const TaskKindDraftRequest TaskKind = "draft_request"
 // and no MCP tool.
 const TaskKindJonah TaskKind = "jonah"
 
+// TaskKindTry is a try of a past item (ADR 0039 decision 9). Its token names the try (TryOf),
+// whose original run's brief, outputs and commit the gateway serves, no item and no connection;
+// its environment's env is for setup alone, and the agent gets no files, MCP servers or tools.
+const TaskKindTry TaskKind = "try"
+
 // TaskClaims scope one agent task's access to the MCP gateway: which organization, factory,
 // definition version, item, station, agent and run it acts for, which connections it may use,
 // what the organization policy decided at run start (the model, the denied commands and whether
@@ -89,7 +94,9 @@ type TaskClaims struct {
 	WindowStart int64 `json:"ws,omitempty"`
 	WindowEnd   int64 `json:"we,omitempty"`
 	Manual      bool  `json:"jm,omitempty"`
-	ExpiresAt   int64 `json:"e"` // unix seconds
+	// TryOf is the past-item try a TaskKindTry task carries out; only such a token names one.
+	TryOf     PastTryID `json:"tr,omitempty"`
+	ExpiresAt int64     `json:"e"` // unix seconds
 }
 
 // SignTaskToken issues a per-task gateway token for TaskAudience, whatever c.Audience says. Any
@@ -172,6 +179,10 @@ func (c TaskClaims) checkKind() error {
 		return err
 	}
 
+	if err := c.checkTry(); err != nil {
+		return err
+	}
+
 	return c.checkDraftRequest()
 }
 
@@ -202,6 +213,21 @@ func (c TaskClaims) checkDraftRequest() error {
 		return fmt.Errorf("%w: a draft request's task names no request", ErrBadTaskToken)
 	case c.Kind == TaskKindDraftRequest && (c.ItemID != "" || c.Station != "" || len(c.Connections) > 0):
 		return fmt.Errorf("%w: a draft request's task names an item, a station or connections", ErrBadTaskToken)
+	}
+
+	return nil
+}
+
+// checkTry refuses a try's claims that name an item or a connection, or no try or station, and
+// any other task's that name a try.
+func (c TaskClaims) checkTry() error {
+	switch {
+	case c.Kind != TaskKindTry && c.TryOf != "":
+		return fmt.Errorf("%w: only a try's task names a try", ErrBadTaskToken)
+	case c.Kind == TaskKindTry && (c.TryOf == "" || c.Station == ""):
+		return fmt.Errorf("%w: a try's task names no try or station", ErrBadTaskToken)
+	case c.Kind == TaskKindTry && (c.ItemID != "" || len(c.Connections) > 0):
+		return fmt.Errorf("%w: a try's task names an item or connections", ErrBadTaskToken)
 	}
 
 	return nil

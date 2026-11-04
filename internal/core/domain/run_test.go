@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -119,6 +120,54 @@ func TestRunRequest_Check(t *testing.T) {
 
 	for _, tt := range tests {
 		r := station
+		tt.change(&r)
+
+		err := r.Check()
+		if tt.ok != (err == nil) {
+			t.Errorf("%s: Check = %v; want ok %v", tt.name, err, tt.ok)
+		}
+
+		if err != nil && !errors.Is(err, ErrBadRunRequest) {
+			t.Errorf("%s: Check = %v; want ErrBadRunRequest", tt.name, err)
+		}
+	}
+}
+
+// A try of a past item (ADR 0039 decision 9) reruns a station on no item, under no lease, with no
+// connection but the model's, from its recorded commit; only a try names a try or a commit.
+func TestRunRequest_CheckTry(t *testing.T) {
+	t.Parallel()
+
+	try := RunRequest{
+		OrgID: "org", FactoryID: "factory", Agent: "engineer", Station: "work", Kind: RunKindTry, Bundle: TaskKindTry,
+		ModelKey: testModelKey, TryOf: "try-1", Commit: strings.Repeat("a", 40),
+		Repository: Repository{URL: "https://example.com/acme.git", Token: "{{secret.REPO}}"},
+	}
+
+	tests := []struct {
+		name   string
+		change func(*RunRequest)
+		ok     bool
+	}{
+		{name: "a try", change: func(*RunRequest) {}, ok: true},
+		{name: "on a model connection", change: func(r *RunRequest) {
+			r.ModelKey, r.ModelConnection, r.Repository.Token, r.Repository.Connection = "", testModelConn, "", "code"
+		}, ok: true},
+		{name: "with an item", change: func(r *RunRequest) { r.Item = "item" }},
+		{name: "with a lease", change: func(r *RunRequest) { r.Lease = &Lease{} }},
+		{name: "with a connection", change: func(r *RunRequest) {
+			r.ModelKey, r.ModelConnection, r.Connections = "", testModelConn, []string{"issues"}
+		}},
+		{name: "without a recorded commit", change: func(r *RunRequest) { r.Commit = "" }},
+		{name: "without a repository", change: func(r *RunRequest) { r.Repository = Repository{} }},
+		{name: "without its try", change: func(r *RunRequest) { r.TryOf = "" }},
+		{name: "without a station", change: func(r *RunRequest) { r.Station = "" }},
+		{name: "on a station bundle", change: func(r *RunRequest) { r.Bundle = "" }},
+		{name: "a station run naming a try", change: func(r *RunRequest) { r.Kind, r.Item, r.Bundle = RunKindStation, "item", "" }},
+	}
+
+	for _, tt := range tests {
+		r := try
 		tt.change(&r)
 
 		err := r.Check()

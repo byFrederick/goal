@@ -134,12 +134,17 @@ type RunResult struct {
 	// PushedHead is the item branch's commit on the remote when the agent ended, as the worker
 	// read it; empty without a repository or when it could not be read.
 	PushedHead string
+	// Diff is a try's change against the commit it started from, as engine.RunTask read it from
+	// the box once the agent ended; empty for every other run.
+	Diff string
 }
 
 // RunRequest is one agent run for engine.RunTask: what it records, which sandbox it opens, what
 // the gateway serves it and what it is given. A line's run (Kind station) works an item at a
 // station under the item's lease; a Jonah review's (Kind jonah, ADR 0034 decision 1) works no
-// item, holds no lease, clones no repository and gets only the model connection (Check).
+// item, holds no lease, clones no repository and gets only the model connection (Check). A try of
+// a past item (Kind try, ADR 0039 decision 9) reruns a station on no item and under no lease, from
+// a recorded commit, with only the model's access.
 type RunRequest struct {
 	OrgID     OrgID
 	FactoryID FactoryID
@@ -193,6 +198,11 @@ type RunRequest struct {
 	// Lease is the lease the run heartbeats while it runs, and loses the run with when it is lost;
 	// nil holds none.
 	Lease *Lease
+	// TryOf is the past-item try a try run carries out, which its task token names so the gateway
+	// serves the original run's brief, outputs and commit, and Commit the commit it starts from
+	// (the original run's branch head); both empty for every other kind.
+	TryOf  PastTryID
+	Commit string
 }
 
 // ErrBadRunRequest refuses a RunRequest that Check does not accept.
@@ -215,6 +225,10 @@ func (r RunRequest) Check() error {
 	switch {
 	case r.Kind == RunKindJonah:
 		return r.checkJonah()
+	case r.Kind == RunKindTry:
+		return r.checkTry()
+	case r.TryOf != "" || r.Commit != "" || r.Bundle == TaskKindTry:
+		return fmt.Errorf("%w: only a try names a try and a commit", ErrBadRunRequest)
 	case r.Kind != "" && r.Kind != RunKindStation:
 		return fmt.Errorf("%w: unknown run kind %q", ErrBadRunRequest, r.Kind)
 	case r.Item == "" || r.Station == "":
@@ -261,6 +275,21 @@ func (r RunRequest) checkJonah() error {
 	if r.Item != "" || r.Station != "" || r.Lease != nil || r.Repository != (Repository{}) || len(r.Connections) > 0 ||
 		r.Environment.Name != "" || len(r.Environment.Env) > 0 {
 		return fmt.Errorf("%w: a Jonah run has no item, station, lease, repository, environment or connection but the model's", ErrBadRunRequest)
+	}
+
+	return nil
+}
+
+// checkTry refuses a try run with an item, a lease or a connection besides the model's, without its
+// station, its try, its recorded commit or a repository to fetch it from, or on another bundle.
+func (r RunRequest) checkTry() error {
+	switch {
+	case r.Item != "" || r.Lease != nil || len(r.Connections) > 0:
+		return fmt.Errorf("%w: a try has no item, lease or connection but the model's", ErrBadRunRequest)
+	case r.Station == "" || r.TryOf == "" || r.Bundle != TaskKindTry:
+		return fmt.Errorf("%w: a try needs its station, its try and a try bundle", ErrBadRunRequest)
+	case r.Commit == "" || r.Repository.URL == "":
+		return fmt.Errorf("%w: a try needs a recorded commit and the repository it is in", ErrBadRunRequest)
 	}
 
 	return nil
