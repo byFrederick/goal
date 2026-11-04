@@ -141,17 +141,19 @@ func show(fs []FollowUp) string {
 	return string(b)
 }
 
+// The factories and names of the note routing tests.
+const (
+	noteFrom FactoryID = "f-from"
+	noteInto FactoryID = "f-into"
+	nameOps            = "ops"
+)
+
 func TestRouteNote(t *testing.T) {
 	t.Parallel()
 
-	const (
-		from FactoryID = "f-from"
-		into FactoryID = "f-into"
-	)
-
-	open := &NoteFactory{ID: into, Name: "ops", FollowUpsFrom: []FactoryID{from}}
-	closed := &NoteFactory{ID: into, Name: "ops"}
-	own := &NoteFactory{ID: from, Name: "dev"}
+	open := &NoteFactory{ID: noteInto, Name: nameOps, FollowUpsFrom: []FactoryID{noteFrom}}
+	closed := &NoteFactory{ID: noteInto, Name: nameOps}
+	own := &NoteFactory{ID: noteFrom, Name: "dev"}
 
 	cases := []struct {
 		name  string
@@ -173,7 +175,7 @@ func TestRouteNote(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		if got := RouteNote(from, c.to, c.state, c.today); got != c.want {
+		if got := RouteNote(noteFrom, c.to, c.state, c.today); got != c.want {
 			t.Errorf("%s: RouteNote = %q; want %q", c.name, got, c.want)
 		}
 	}
@@ -182,9 +184,9 @@ func TestRouteNote(t *testing.T) {
 func TestNoteFactoryNamed(t *testing.T) {
 	t.Parallel()
 
-	fs := []NoteFactory{{ID: "f-1", Name: "dev"}, {ID: "f-2", Name: "ops"}}
+	fs := []NoteFactory{{ID: noteFrom, Name: "dev"}, {ID: noteInto, Name: nameOps}}
 
-	for name, want := range map[string]FactoryID{"ops": "f-2", "f-1": "f-1", "acme": ""} {
+	for name, want := range map[string]FactoryID{nameOps: noteInto, string(noteFrom): noteFrom, "unknown": ""} {
 		got, ok := NoteFactoryNamed(fs, name)
 		if ok != (want != "") || got.ID != want {
 			t.Errorf("NoteFactoryNamed(%q) = %+v, %v; want %q", name, got, ok, want)
@@ -195,19 +197,19 @@ func TestNoteFactoryNamed(t *testing.T) {
 func TestFollowUpNoteData(t *testing.T) {
 	t.Parallel()
 
-	f := FollowUp{ID: "fu-1", FactoryID: "f-1", ItemID: "i-1", Station: "build", Agent: "backend", Text: "Mind the index"}
+	f := FollowUp{ID: "fu-1", FactoryID: noteFrom, ItemID: "i-1", Station: stationBuild, Agent: testAgent, Text: "Mind the index"}
 
 	got := NoteData(f, ItemRef{Factory: "dev", Number: 4})
 	want := map[string]any{
 		"text": "Mind the index", "follow_up_id": "fu-1", "from_item": "dev#4", "from_item_id": "i-1",
-		"from_factory_id": "f-1", "station": "build", "agent": "backend", "actor": "system:engine",
+		"from_factory_id": string(noteFrom), "station": stationBuild, "agent": testAgent, "actor": "system:engine",
 	}
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("NoteData = %v; want %v", got, want)
 	}
 
-	if r := NoteTriageReason(ItemRef{Factory: "ops", Number: 9}, ReasonNoteNoItem); r != "for ops#9: "+ReasonNoteNoItem {
+	if r := NoteTriageReason(ItemRef{Factory: nameOps, Number: 9}, ReasonNoteNoItem); r != "for ops#9: "+ReasonNoteNoItem {
 		t.Errorf("NoteTriageReason = %q", r)
 	}
 }

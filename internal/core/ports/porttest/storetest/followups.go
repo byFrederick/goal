@@ -27,6 +27,7 @@ var followUpsTests = []struct {
 	{"FollowUps_DeliverNotesCappedADay", testDeliverNotesCapped},
 	{"FollowUps_DeliverNotesLeavesUntrustedWaiting", testDeliverNotesLeavesUntrusted},
 	{"FollowUps_DeliverNotesBetweenItemsNotingEachOther", testDeliverNotesEachOther},
+	{"Touches_ItemNoteIsNotATouch", testTouchesItemNoteIsNotATouch},
 }
 
 // followUpsOf are the follow-ups a run at the work station wrote, in output order.
@@ -266,21 +267,7 @@ func testDeliverNotesIntoAnOpenItem(f *fixture) {
 		t.Fatalf("DeliverNotes = %+v; want the note delivered", got)
 	}
 
-	notes := f.itemNotes(t, dst.ID)
-	if len(notes) != 1 {
-		t.Fatalf("item_note events on the target = %+v; want one", notes)
-	}
-
-	want := map[string]any{
-		"text": "The API needs this field", domain.KeyNoteFollowUp: string(got[0].ID),
-		domain.KeyNoteFromItem: fmt.Sprintf("%s#%d", nameDev, src.Number), domain.KeyNoteFromItemID: string(src.ID),
-		domain.KeyNoteFromFactory: string(f.factory), domain.KeyNoteStation: stWork, domain.KeyNoteAgent: agWorker,
-		"actor": domain.EngineActor.Ref(),
-	}
-
-	if n := notes[0]; n.Actor != domain.ActorEngine || n.FactoryID != f.factory || n.Station != stWork || !reflect.DeepEqual(n.Data, want) {
-		t.Errorf("item_note = %+v\nwant actor %s, data %v", n, domain.ActorEngine, want)
-	}
+	f.expectItemNote(t, src, dst, got[0])
 
 	if kept := f.keptFollowUps(t, src); len(kept) != 1 || kept[0].State != domain.FollowUpDelivered {
 		t.Errorf("kept follow-ups = %+v; want the note delivered", kept)
@@ -292,6 +279,27 @@ func testDeliverNotesIntoAnOpenItem(f *fixture) {
 
 	if len(f.itemNotes(t, src.ID)) != 0 {
 		t.Error("the source item got an item_note; want only the target")
+	}
+}
+
+// expectItemNote checks the one item_note on dst: by the engine, with the follow-up's source.
+func (f *fixture) expectItemNote(t *testing.T, src, dst domain.Item, fu domain.FollowUp) {
+	t.Helper()
+
+	notes := f.itemNotes(t, dst.ID)
+	if len(notes) != 1 {
+		t.Fatalf("item_note events on the target = %+v; want one", notes)
+	}
+
+	want := map[string]any{
+		"text": "The API needs this field", domain.KeyNoteFollowUp: string(fu.ID),
+		domain.KeyNoteFromItem: fmt.Sprintf("%s#%d", nameDev, src.Number), domain.KeyNoteFromItemID: string(src.ID),
+		domain.KeyNoteFromFactory: string(f.factory), domain.KeyNoteStation: stWork, domain.KeyNoteAgent: agWorker,
+		dataActor: domain.EngineActor.Ref(),
+	}
+
+	if n := notes[0]; n.Actor != domain.ActorEngine || n.FactoryID != f.factory || n.Station != stWork || !reflect.DeepEqual(n.Data, want) {
+		t.Errorf("item_note = %+v\nwant actor %s, data %v", n, domain.ActorEngine, want)
 	}
 }
 
@@ -448,6 +456,7 @@ func testDeliverNotesEachOther(f *fixture) {
 			defer mu.Unlock()
 
 			total += len(got)
+
 			errs = append(errs, err)
 		})
 	}

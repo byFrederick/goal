@@ -100,28 +100,11 @@ func (s *Store) DeliverNotes(ctx context.Context, factories []domain.NoteFactory
 
 // deliverNote routes one claimed note from src, as the store's transaction does. Callers hold s.mu.
 func (s *Store) deliverNote(org domain.OrgID, f *domain.FollowUp, src *domain.Item, factories []domain.NoteFactory, at time.Time) {
-	var (
-		to     *domain.NoteFactory
-		target *domain.Item
-		state  domain.ItemState
-		today  int
-	)
+	to, target, today := s.noteTarget(org, *f, factories, at)
 
-	if nf, ok := domain.NoteFactoryNamed(factories, f.For.Factory); ok {
-		to = &nf
-
-		for _, it := range s.items {
-			if it.OrgID == org && it.FactoryID == nf.ID && it.Number == f.For.Number {
-				target, state = it, it.State
-			}
-		}
-
-		for _, e := range s.events {
-			if e.FactoryID == nf.ID && e.Kind == domain.EventItemNote && e.At.After(at.Add(-24*time.Hour)) &&
-				e.Data[domain.KeyNoteFromFactory] != string(nf.ID) {
-				today++
-			}
-		}
+	var state domain.ItemState
+	if target != nil {
+		state = target.State
 	}
 
 	if reason := domain.RouteNote(src.FactoryID, to, state, today); reason != "" {
@@ -141,4 +124,34 @@ func (s *Store) deliverNote(org domain.OrgID, f *domain.FollowUp, src *domain.It
 	})
 
 	f.State = domain.FollowUpDelivered
+}
+
+// noteTarget is the factory f's for names (nil for none), its item with that number (nil for
+// none) and the notes that factory took from other factories in the 24 hours before at.
+// Callers hold s.mu.
+func (s *Store) noteTarget(org domain.OrgID, f domain.FollowUp, factories []domain.NoteFactory, at time.Time) (*domain.NoteFactory, *domain.Item, int) {
+	nf, ok := domain.NoteFactoryNamed(factories, f.For.Factory)
+	if !ok {
+		return nil, nil, 0
+	}
+
+	var (
+		target *domain.Item
+		today  int
+	)
+
+	for _, it := range s.items {
+		if it.OrgID == org && it.FactoryID == nf.ID && it.Number == f.For.Number {
+			target = it
+		}
+	}
+
+	for _, e := range s.events {
+		if e.FactoryID == nf.ID && e.Kind == domain.EventItemNote && e.At.After(at.Add(-24*time.Hour)) &&
+			e.Data[domain.KeyNoteFromFactory] != string(nf.ID) {
+			today++
+		}
+	}
+
+	return &nf, target, today
 }

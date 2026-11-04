@@ -90,37 +90,12 @@ func deliverNote(ctx context.Context, q *db.Queries, row db.ClaimNoteRow, factor
 		return domain.FollowUp{}, err
 	}
 
-	var (
-		to     *domain.NoteFactory
-		target db.WorkItem
-		state  domain.ItemState
-		today  int
-	)
-
-	if nf, ok := domain.NoteFactoryNamed(factories, f.For.Factory); ok && isUUID(string(nf.ID)) {
-		to = &nf
-		id := uuid.MustParse(string(nf.ID))
-
-		if nf.ID == f.FactoryID || slices.Contains(nf.FollowUpsFrom, f.FactoryID) {
-			target, err = q.LockNoteTarget(ctx, db.LockNoteTargetParams{FactoryID: id, Number: f.For.Number})
-
-			switch {
-			case notFound(err):
-			case err != nil:
-				return domain.FollowUp{}, fmt.Errorf("lock note target: %w", err)
-			default:
-				state = domain.ItemState(target.State)
-			}
-		}
-
-		if state != "" && nf.ID != f.FactoryID {
-			if today, err = notesToday(ctx, q, id, at); err != nil {
-				return domain.FollowUp{}, err
-			}
-		}
+	to, target, today, err := noteTarget(ctx, q, f, factories, at)
+	if err != nil {
+		return domain.FollowUp{}, err
 	}
 
-	if reason := domain.RouteNote(f.FactoryID, to, state, today); reason != "" {
+	if reason := domain.RouteNote(f.FactoryID, to, domain.ItemState(target.State), today); reason != "" {
 		r, err := q.TriageFollowUp(ctx, db.TriageFollowUpParams{
 			ID: row.FollowUp.ID, Reason: optional(domain.NoteTriageReason(*f.For, reason)), At: at,
 		})
@@ -150,6 +125,40 @@ func deliverNote(ctx context.Context, q *db.Queries, row db.ClaimNoteRow, factor
 	}
 
 	return followUpFrom(r)
+}
+
+// noteTarget resolves what domain.RouteNote needs of note f's for: the factory it names (nil for
+// none), the item, locked, when that factory accepts the sender (zero when it has none), and,
+// for another factory's open item, the notes it took from other factories today.
+func noteTarget(ctx context.Context, q *db.Queries, f domain.FollowUp, factories []domain.NoteFactory, at time.Time) (
+	*domain.NoteFactory, db.WorkItem, int, error,
+) {
+	nf, ok := domain.NoteFactoryNamed(factories, f.For.Factory)
+	if !ok || !isUUID(string(nf.ID)) {
+		return nil, db.WorkItem{}, 0, nil
+	}
+
+	id := uuid.MustParse(string(nf.ID))
+	if nf.ID != f.FactoryID && !slices.Contains(nf.FollowUpsFrom, f.FactoryID) {
+		return &nf, db.WorkItem{}, 0, nil
+	}
+
+	target, err := q.LockNoteTarget(ctx, db.LockNoteTargetParams{FactoryID: id, Number: f.For.Number})
+	if notFound(err) {
+		return &nf, db.WorkItem{}, 0, nil
+	}
+
+	if err != nil {
+		return nil, db.WorkItem{}, 0, fmt.Errorf("lock note target: %w", err)
+	}
+
+	if nf.ID == f.FactoryID {
+		return &nf, target, 0, nil
+	}
+
+	today, err := notesToday(ctx, q, id, at)
+
+	return &nf, target, today, err
 }
 
 // notesToday counts the notes from other factories the factory took in the 24 hours before at,
