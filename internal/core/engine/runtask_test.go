@@ -451,13 +451,13 @@ func expectNoSecretButModel(t *testing.T, env map[string]string) {
 	}
 }
 
-// gradeRequest is a grade of try-1's original result at stWork on the test factory: a run of
+// gradeRequest is a grade of try-2's original result at stWork on the test factory: a run of
 // kind try on a grade bundle, with no item, lease, repository, commit, check or connection but the
 // model's (ADR 0039 decision 10).
 func gradeRequest() domain.RunRequest {
 	return domain.RunRequest{
 		OrgID: testOrg, FactoryID: factoryID, Version: v1, Kind: domain.RunKindTry, Station: stWork, Agent: agWorker,
-		Model: modelOpus, ModelConnection: connModel, Bundle: domain.TaskKindGrade, TryOf: "try-1", GradeOf: domain.GradeOriginal,
+		Model: modelOpus, ModelConnection: connModel, Bundle: domain.TaskKindGrade, TryOf: "try-2", GradeOf: domain.GradeOriginal,
 	}
 }
 
@@ -489,6 +489,16 @@ func TestRunTask_Grade(t *testing.T) {
 		t.Errorf("%d diffs read; want none for a grade", n)
 	}
 
+	h.expectGradeBox(t)
+	h.expectGradeRun(t, res.RunID)
+}
+
+// expectGradeBox fails the test unless the grade prepared its one box without the repository's
+// git login and its agent got the model's access alone and a grade token of try-2's original
+// result with the model and no item or connection.
+func (h *harness) expectGradeBox(t *testing.T) {
+	t.Helper()
+
 	prepares, runs := h.worker.Prepares(), h.worker.Runs()
 	if len(prepares) != 1 || len(runs) != 1 {
 		t.Fatalf("%d prepares and %d agent runs; want one of each", len(prepares), len(runs))
@@ -503,11 +513,17 @@ func TestRunTask_Grade(t *testing.T) {
 	expectNoSecretButModel(t, runs[0].Env)
 
 	c := h.claims(t, runs[0].Env[envTaskToken])
-	if c.Kind != domain.TaskKindGrade || c.TryOf != "try-1" || c.GradeOf != domain.GradeOriginal || c.ItemID != "" || len(c.Connections) != 0 || c.Model != modelOpus {
-		t.Errorf("token claims = %+v; want a grade token of try-1's original result with the model and no item or connection", c)
+	if c.Kind != domain.TaskKindGrade || c.TryOf != "try-2" || c.GradeOf != domain.GradeOriginal || c.ItemID != "" || len(c.Connections) != 0 || c.Model != modelOpus {
+		t.Errorf("token claims = %+v; want a grade token of try-2's original result with the model and no item or connection", c)
 	}
+}
 
-	run, err := h.store.Run(inOrg(t), res.RunID)
+// expectGradeRun fails the test unless run is a finished run without an item that cost 0.5 of
+// Jonah's and none of the line's, with no item event and no box left.
+func (h *harness) expectGradeRun(t *testing.T, id domain.RunID) {
+	t.Helper()
+
+	run, err := h.store.Run(inOrg(t), id)
 	if err != nil || run.ItemID != "" || run.Result.CostUSD != 0.5 {
 		t.Errorf("run = %+v, %v; want a finished run without an item, with its cost", run, err)
 	}
@@ -545,7 +561,7 @@ func TestRunTask_GradeOnSecrets(t *testing.T) {
 	}
 
 	keys := slices.Sorted(maps.Keys(runs[0].Env))
-	if want := []string{domain.EnvAnthropicAPIKey, "GOAL_GATEWAY_TOKEN", envGatewayURL}; !slices.Equal(keys, want) {
+	if want := []string{domain.EnvAnthropicAPIKey, envTaskToken, envGatewayURL}; !slices.Equal(keys, want) {
 		t.Errorf("the agent's env = %v; want %v", keys, want)
 	}
 

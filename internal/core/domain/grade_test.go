@@ -22,7 +22,7 @@ func TestParseGradeAnswer(t *testing.T) {
 
 	for name, out := range map[string]string{
 		"no output":        ``,
-		"not an object":    `"fixed"`,
+		"a string":         `"fixed"`,
 		"no reason":        `{"verdict":"fixed"}`,
 		"a blank reason":   `{"reason":"  ","verdict":"fixed"}`,
 		"no verdict":       `{"reason":"r"}`,
@@ -38,7 +38,7 @@ func TestParseGradeAnswer(t *testing.T) {
 func TestGradeOf_Valid(t *testing.T) {
 	t.Parallel()
 
-	for g, want := range map[GradeOf]bool{GradeTry: true, GradeOriginal: true, GradeFinal: true, "": false, "other": false} {
+	for g, want := range map[GradeOf]bool{GradeTry: true, GradeOriginal: true, GradeFinal: true, "": false, "again": false} {
 		if g.Valid() != want {
 			t.Errorf("GradeOf(%q).Valid() = %v; want %v", g, !want, want)
 		}

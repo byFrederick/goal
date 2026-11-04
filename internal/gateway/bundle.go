@@ -98,6 +98,8 @@ type bundleSpec struct {
 	// Jonah is a Jonah review's definition files, events and rejected proposals (jonah.go); nil
 	// for every other run.
 	Jonah *bundleJonah `json:"jonah,omitempty"`
+	// Grade is a grade's reason and the result it grades (grade.go); nil for every other run.
+	Grade *bundleGrade `json:"grade,omitempty"`
 }
 
 // grantedCall is one call approved for the run, its input as canonical JSON.
@@ -220,7 +222,8 @@ type gitCredential struct {
 // factory, agent, station or item the version or the organization does not have is 403. A draft
 // request's token gets its definition bundle (definitionBundle), 409 once the draft moved past
 // the token's revision. A jonah token is served a Jonah review's bundle (jonahBundle), and 503
-// without Deps.Jonah.
+// without Deps.Jonah; a grade token a grade's (gradeBundle), and 503 without Deps.Grades or
+// Deps.Jonah.
 func (g *Gateway) ServeRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
@@ -273,7 +276,8 @@ func (g *Gateway) ServeRun(w http.ResponseWriter, r *http.Request) {
 }
 
 // bundleOf is the bundle of the run c names: a Jonah review's for a TaskKindJonah token, a draft
-// request's definition bundle for a TaskKindDraftRequest one, and the run's bundle otherwise.
+// request's definition bundle for a TaskKindDraftRequest one, a try's for a TaskKindTry one, a
+// grade's for a TaskKindGrade one, and the run's bundle otherwise.
 func (g *Gateway) bundleOf(ctx context.Context, c domain.TaskClaims) (runBundle, error) {
 	if c.Kind == domain.TaskKindJonah {
 		return g.jonahBundle(ctx, c)
@@ -285,6 +289,10 @@ func (g *Gateway) bundleOf(ctx context.Context, c domain.TaskClaims) (runBundle,
 
 	if c.Kind == domain.TaskKindTry {
 		return g.tryBundle(ctx, c)
+	}
+
+	if c.Kind == domain.TaskKindGrade {
+		return g.gradeBundle(ctx, c)
 	}
 
 	return g.bundle(ctx, c)

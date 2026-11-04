@@ -194,6 +194,10 @@ func (c TaskClaims) checkKind() error {
 		return err
 	}
 
+	if err := c.checkGrade(); err != nil {
+		return err
+	}
+
 	return c.checkDraftRequest()
 }
 
@@ -229,21 +233,31 @@ func (c TaskClaims) checkDraftRequest() error {
 	return nil
 }
 
-// checkTry refuses a try's claims that name an item or a connection, or no try or station, a
-// grade's that name an item or a connection, or no try or result to grade, and any other task's
-// that name a try or a result to grade.
+// checkTry refuses a try's claims that name an item or a connection, or no try or station, and
+// any other task's but a grade's that name a try.
 func (c TaskClaims) checkTry() error {
 	switch {
 	case c.Kind != TaskKindTry && c.Kind != TaskKindGrade && c.TryOf != "":
 		return fmt.Errorf("%w: only a try's or a grade's task names a try", ErrBadTaskToken)
-	case c.Kind != TaskKindGrade && c.GradeOf != "":
-		return fmt.Errorf("%w: only a grade's task names a result to grade", ErrBadTaskToken)
 	case c.Kind == TaskKindTry && (c.TryOf == "" || c.Station == ""):
 		return fmt.Errorf("%w: a try's task names no try or station", ErrBadTaskToken)
+	case c.Kind == TaskKindTry && (c.ItemID != "" || len(c.Connections) > 0):
+		return fmt.Errorf("%w: a try's task names an item or connections", ErrBadTaskToken)
+	}
+
+	return nil
+}
+
+// checkGrade refuses a grade's claims that name an item or a connection, or no try or result to
+// grade, and any other task's that name a result to grade.
+func (c TaskClaims) checkGrade() error {
+	switch {
+	case c.Kind != TaskKindGrade && c.GradeOf != "":
+		return fmt.Errorf("%w: only a grade's task names a result to grade", ErrBadTaskToken)
 	case c.Kind == TaskKindGrade && (c.TryOf == "" || !c.GradeOf.Valid()):
 		return fmt.Errorf("%w: a grade's task names no try or result to grade", ErrBadTaskToken)
-	case (c.Kind == TaskKindTry || c.Kind == TaskKindGrade) && (c.ItemID != "" || len(c.Connections) > 0):
-		return fmt.Errorf("%w: a %s task names an item or connections", ErrBadTaskToken, c.Kind)
+	case c.Kind == TaskKindGrade && (c.ItemID != "" || len(c.Connections) > 0):
+		return fmt.Errorf("%w: a grade's task names an item or connections", ErrBadTaskToken)
 	}
 
 	return nil

@@ -432,9 +432,9 @@ func TestTaskToken_Grade(t *testing.T) {
 	bad := map[string]func(c *TaskClaims){
 		"no try":                func(c *TaskClaims) { c.TryOf = "" },
 		"no result":             func(c *TaskClaims) { c.GradeOf = "" },
-		"an unknown result":     func(c *TaskClaims) { c.GradeOf = "other" },
+		"an unknown result":     func(c *TaskClaims) { c.GradeOf = "again" },
 		"an item":               func(c *TaskClaims) { c.ItemID = "i1" },
-		"connections":           func(c *TaskClaims) { c.Connections = []string{"acme-host"} },
+		"connections":           func(c *TaskClaims) { c.Connections = []string{"acme-tracker"} },
 		"a result on a try":     func(c *TaskClaims) { c.Kind = TaskKindTry },
 		"a result on a station": func(c *TaskClaims) { c.Kind, c.TryOf, c.ItemID = "", "", "i1" },
 		"a result on a draft":   func(c *TaskClaims) { c.Kind, c.TryOf, c.Station, c.DraftRequest = TaskKindDraftRequest, "", "", "d1" },

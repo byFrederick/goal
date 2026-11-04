@@ -232,8 +232,9 @@ var ErrBadRunRequest = fmt.Errorf("bad run request: %w", ErrInvalid)
 // Check reports why r cannot run: a request without its organization, factory or agent, without
 // a model connection or a model key or with both, on a model key with a connection, a station run
 // without its item and station, a Jonah run with an item, a station, a lease, a repository, an
-// environment or a connection besides the model's, a jonah bundle without a window that ends
-// after it starts, or a window on another bundle.
+// environment or a connection besides the model's, a try or a grade with what it may not have
+// (checkTry, checkGrade), a jonah bundle without a window that ends after it starts, or a window
+// on another bundle.
 func (r RunRequest) Check() error {
 	if err := r.checkModel(); err != nil {
 		return err
@@ -243,17 +244,28 @@ func (r RunRequest) Check() error {
 		return err
 	}
 
-	switch {
-	case r.Kind == RunKindJonah:
+	switch r.Kind {
+	case RunKindJonah:
 		return r.checkJonah()
-	case r.Kind == RunKindTry && r.Bundle == TaskKindGrade:
-		return r.checkGrade()
-	case r.Kind == RunKindTry:
+	case RunKindTry:
+		if r.Bundle == TaskKindGrade {
+			return r.checkGrade()
+		}
+
 		return r.checkTry()
+	case "", RunKindStation:
+		return r.checkStation()
+	default:
+		return fmt.Errorf("%w: unknown run kind %q", ErrBadRunRequest, r.Kind)
+	}
+}
+
+// checkStation refuses a line's run without its item and station, or that names what only a try
+// or a grade has.
+func (r RunRequest) checkStation() error {
+	switch {
 	case r.TryOf != "" || r.Commit != "" || r.GradeOf != "" || r.Bundle == TaskKindTry || r.Bundle == TaskKindGrade || len(r.Checks) > 0:
 		return fmt.Errorf("%w: only a try names a try, a commit, a result to grade and checks", ErrBadRunRequest)
-	case r.Kind != "" && r.Kind != RunKindStation:
-		return fmt.Errorf("%w: unknown run kind %q", ErrBadRunRequest, r.Kind)
 	case r.Item == "" || r.Station == "":
 		return fmt.Errorf("%w: a station run needs its item and station", ErrBadRunRequest)
 	}

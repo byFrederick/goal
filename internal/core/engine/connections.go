@@ -75,13 +75,7 @@ func (e *Engine) connectionEnv(ctx context.Context, req domain.RunRequest, own [
 		return runEnv{}, err
 	}
 
-	if req.Kind == domain.RunKindJonah || req.Bundle == domain.TaskKindGrade {
-		modelRefs := conns[req.ModelConnection].refs
-
-		opened = slices.DeleteFunc(opened, func(rc domain.ResolvedCredential) bool {
-			return !slices.Contains(modelRefs, rc.Credential.Name)
-		})
-	}
+	opened = modelOnly(req, conns, opened)
 
 	env := runEnv{prepare: map[string]string{}, gitHosts: map[string]string{}}
 	for _, rc := range conns {
@@ -111,6 +105,20 @@ func (e *Engine) connectionEnv(ctx context.Context, req domain.RunRequest, own [
 	}
 
 	return env, nil
+}
+
+// modelOnly is opened, less the credentials the model connection does not refer to for a Jonah run
+// or a grade, which get only the model's access.
+func modelOnly(req domain.RunRequest, conns map[string]runConnection, opened []domain.ResolvedCredential) []domain.ResolvedCredential {
+	if req.Kind != domain.RunKindJonah && req.Bundle != domain.TaskKindGrade {
+		return opened
+	}
+
+	modelRefs := conns[req.ModelConnection].refs
+
+	return slices.DeleteFunc(opened, func(rc domain.ResolvedCredential) bool {
+		return !slices.Contains(modelRefs, rc.Credential.Name)
+	})
 }
 
 // agentEnv gives the agent the model connection's env and the env of its own connections,

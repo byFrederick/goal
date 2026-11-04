@@ -89,8 +89,8 @@ func parseNotesAfter(s string) (int64, bool) {
 // oldest first, at most maxNotes. Until the run's run_started is found none counts, so a note
 // left before the run, or on a run that was never recorded, is never listed.
 func (g *Gateway) notes(ctx context.Context, c domain.TaskClaims, after int64) ([]runNote, error) {
-	// A try of a past item works no item, so no note is left for it.
-	if c.Kind == domain.TaskKindTry {
+	// A try of a past item works no item, nor does a grade, so no note is left for either.
+	if c.Kind == domain.TaskKindTry || c.Kind == domain.TaskKindGrade {
 		return []runNote{}, nil
 	}
 
