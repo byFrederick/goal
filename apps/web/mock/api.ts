@@ -85,6 +85,7 @@ import { createJonah } from './jonah.ts';
 import { createJudges } from './judges.ts';
 import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
+import { createOrgNotifications } from './org-notifications.ts';
 import { directory, membersFor, orgCanOf } from './people.ts';
 import { createPolicy } from './policy.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
@@ -321,6 +322,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     actor: (req) => auth.actor(req),
     stale: (req, res) => stale(req, res),
     factories: (org) => state.factories.filter((f) => f.org_id === org),
+    acme: acmeOrg,
+  });
+
+  const orgNotifications = createOrgNotifications({
+    secretNames: (org) => secrets.outlines(org).map((s) => s.name),
     acme: acmeOrg,
   });
 
@@ -1670,6 +1676,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       apiKeys.reset(clock());
       connections.reset(clock());
       secrets.reset(clock());
+      orgNotifications.reset();
       standingRules.reset();
       knowledge.reset(clock());
       evals.reset();
@@ -1790,6 +1797,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (access.handle(org, rest, method, url, res)) return;
     if (await secrets.handle(org, rest, method, url, req, res, () => readBody(req))) return;
+    if (await orgNotifications.handle(org, rest, method, res, () => readBody(req))) return;
     if (standingRules.handle(org, rest, method, url, req, res)) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);

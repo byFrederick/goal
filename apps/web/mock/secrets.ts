@@ -150,6 +150,15 @@ function seeds(): Seed[] {
       uses: [def('software'), { kind: 'slack', name: 'Slack' }, { kind: 'connection', name: 'claude' }],
     },
     {
+      name: 'slack-bot',
+      description: 'Slack bot token',
+      factories: null,
+      expiresInDays: null,
+      remindDays: 0,
+      usedAgo: hourMs,
+      uses: [{ kind: 'slack', name: 'Slack' }],
+    },
+    {
       name: 'zendesk-token',
       description: 'Zendesk API token',
       factories: ['support'],
