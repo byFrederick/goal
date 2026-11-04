@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -448,4 +449,125 @@ func expectNoSecretButModel(t *testing.T, env map[string]string) {
 			}
 		}
 	}
+}
+
+// gradeRequest is a grade of try-2's original result at stWork on the test factory: a run of
+// kind try on a grade bundle, with no item, lease, repository, commit, check or connection but the
+// model's (ADR 0039 decision 10).
+func gradeRequest() domain.RunRequest {
+	return domain.RunRequest{
+		OrgID: testOrg, FactoryID: factoryID, Version: v1, Kind: domain.RunKindTry, Station: stWork, Agent: agWorker,
+		Model: modelOpus, ModelConnection: connModel, Bundle: domain.TaskKindGrade, TryOf: "try-2", GradeOf: domain.GradeOriginal,
+	}
+}
+
+// A grade records a run of kind try without an item, so its cost is Jonah's; signs a grade token
+// naming the try and the result it grades; gives its agent the model connection's env alone, and
+// prepare no repository's git login; reads no diff and runs no check; and returns the
+// worker's answer and cost.
+func TestRunTask_Grade(t *testing.T) {
+	t.Parallel()
+
+	const answer = `{"reason":"It does not touch the failing handler.","verdict":"not_fixed"}`
+
+	h := newHarness(t, connLine(), func(context.Context, porttest.ExecCall, io.Writer) domain.RunResult {
+		return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(answer), CostUSD: 0.5, Turns: 1}
+	})
+	h.store.AddFactory(testOrg, factoryID)
+	h.addCredential(t, domain.NewCredential{Name: credDeploy, Scope: domain.CredentialScope{All: true}, Value: deployKeyValue})
+
+	res, err := h.e.RunTask(t.Context(), gradeRequest())
+	if err != nil {
+		t.Fatalf("RunTask: %v", err)
+	}
+
+	if res.Status != domain.RunSucceeded || string(res.Output) != answer || res.CostUSD != 0.5 || res.RunID == "" || res.Diff != "" || res.FailedCheck != nil {
+		t.Errorf("RunTask = %+v; want the worker's answer and cost, naming its run, with no diff or failed check", res)
+	}
+
+	if n := len(h.worker.Diffs()); n != 0 {
+		t.Errorf("%d diffs read; want none for a grade", n)
+	}
+
+	h.expectGradeBox(t)
+	h.expectGradeRun(t, res.RunID)
+}
+
+// expectGradeBox fails the test unless the grade prepared its one box without the repository's
+// git login and its agent got the model's access alone and a grade token of try-2's original
+// result with the model and no item or connection.
+func (h *harness) expectGradeBox(t *testing.T) {
+	t.Helper()
+
+	prepares, runs := h.worker.Prepares(), h.worker.Runs()
+	if len(prepares) != 1 || len(runs) != 1 {
+		t.Fatalf("%d prepares and %d agent runs; want one of each", len(prepares), len(runs))
+	}
+
+	for name, v := range prepares[0].Env {
+		if name == envCodeToken || strings.Contains(v, codeToken) {
+			t.Errorf("prepare got %s, the repository's git login; a grade clones no repository", name)
+		}
+	}
+
+	expectNoSecretButModel(t, runs[0].Env)
+
+	c := h.claims(t, runs[0].Env[envTaskToken])
+	if c.Kind != domain.TaskKindGrade || c.TryOf != "try-2" || c.GradeOf != domain.GradeOriginal || c.ItemID != "" || len(c.Connections) != 0 || c.Model != modelOpus {
+		t.Errorf("token claims = %+v; want a grade token of try-2's original result with the model and no item or connection", c)
+	}
+}
+
+// expectGradeRun fails the test unless run is a finished run without an item that cost 0.5 of
+// Jonah's and none of the line's, with no item event and no box left.
+func (h *harness) expectGradeRun(t *testing.T, id domain.RunID) {
+	t.Helper()
+
+	run, err := h.store.Run(inOrg(t), id)
+	if err != nil || run.ItemID != "" || run.Result.CostUSD != 0.5 {
+		t.Errorf("run = %+v, %v; want a finished run without an item, with its cost", run, err)
+	}
+
+	if s, err := h.store.JonahSpendSince(inOrg(t), factoryID, t0); err != nil || s.JonahUSD != 0.5 || s.LineUSD != 0 {
+		t.Errorf("JonahSpendSince = %+v, %v; want the grade's 0.5 as Jonah's and none as the line's", s, err)
+	}
+
+	if events := h.store.Events(""); len(events) != 0 {
+		t.Errorf("events without an item = %+v; want none", events)
+	}
+
+	h.expectSandboxes(t, 0)
+}
+
+// A grade of a version on secrets gets the model key alone: no repository token, environment or
+// connection.
+func TestRunTask_GradeOnSecrets(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, secretsLine(), porttest.Succeed(`{"reason":"r","verdict":"fixed"}`))
+	h.store.AddFactory(testOrg, factoryID)
+	h.addSecrets(t)
+
+	req := gradeRequest()
+	req.ModelConnection, req.ModelKey = "", "{{"+secClaude+"}}"
+
+	if _, err := h.e.RunTask(t.Context(), req); err != nil {
+		t.Fatalf("RunTask: %v", err)
+	}
+
+	runs := h.worker.Runs()
+	if len(runs) != 1 {
+		t.Fatalf("%d agent runs; want 1", len(runs))
+	}
+
+	keys := slices.Sorted(maps.Keys(runs[0].Env))
+	if want := []string{domain.EnvAnthropicAPIKey, envTaskToken, envGatewayURL}; !slices.Equal(keys, want) {
+		t.Errorf("the agent's env = %v; want %v", keys, want)
+	}
+
+	if got, want := h.secretsUsed(t, agWorker), []string{secClaude}; !slices.Equal(got, want) {
+		t.Errorf("secret.used of %v; want %v", got, want)
+	}
+
+	h.noConnectionUsed(t)
 }

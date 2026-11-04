@@ -312,6 +312,44 @@ func (q *Queries) InsertTry(ctx context.Context, arg InsertTryParams) (Try, erro
 	return i, err
 }
 
+const latestItemTry = `-- name: LatestItemTry :one
+SELECT id, org_id, factory_id, proposal_id, item_id, station, original_run_id, try_run_id, model, state, verdict, error, diff, cost_usd, lease_until, attempts, created_at, finished_at, reason, attempt FROM tries WHERE proposal_id = $1 AND item_id = $2 ORDER BY attempt DESC LIMIT 1
+`
+
+type LatestItemTryParams struct {
+	ProposalID uuid.UUID
+	ItemID     uuid.UUID
+}
+
+// The proposal's try of the item with the highest attempt: what Try again copies.
+func (q *Queries) LatestItemTry(ctx context.Context, arg LatestItemTryParams) (Try, error) {
+	row := q.db.QueryRow(ctx, latestItemTry, arg.ProposalID, arg.ItemID)
+	var i Try
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.FactoryID,
+		&i.ProposalID,
+		&i.ItemID,
+		&i.Station,
+		&i.OriginalRunID,
+		&i.TryRunID,
+		&i.Model,
+		&i.State,
+		&i.Verdict,
+		&i.Error,
+		&i.Diff,
+		&i.CostUsd,
+		&i.LeaseUntil,
+		&i.Attempts,
+		&i.CreatedAt,
+		&i.FinishedAt,
+		&i.Reason,
+		&i.Attempt,
+	)
+	return i, err
+}
+
 const lockFactoryTries = `-- name: LockFactoryTries :exec
 SELECT pg_advisory_xact_lock(hashtextextended('goal.tries:' || $1::uuid::text, 0))
 `
@@ -324,7 +362,7 @@ func (q *Queries) LockFactoryTries(ctx context.Context, factoryID uuid.UUID) err
 
 const lockProposal = `-- name: LockProposal :one
 
-SELECT id, number FROM jonah_proposals WHERE factory_id = $1 AND id = $2 FOR UPDATE
+SELECT id, number, state FROM jonah_proposals WHERE factory_id = $1 AND id = $2 FOR UPDATE
 `
 
 type LockProposalParams struct {
@@ -335,15 +373,17 @@ type LockProposalParams struct {
 type LockProposalRow struct {
 	ID     uuid.UUID
 	Number int64
+	State  string
 }
 
 // Tries of past items (00102, ADR 0039 decisions 9 and 11). Row-level security scopes every query
 // to the organization.
-// The proposal whose tries are queued, locked so two sweeps queue its tries once.
+// The proposal whose tries are queued, locked so two sweeps queue its tries once and two Try
+// agains number their attempts in turn.
 func (q *Queries) LockProposal(ctx context.Context, arg LockProposalParams) (LockProposalRow, error) {
 	row := q.db.QueryRow(ctx, lockProposal, arg.FactoryID, arg.ID)
 	var i LockProposalRow
-	err := row.Scan(&i.ID, &i.Number)
+	err := row.Scan(&i.ID, &i.Number, &i.State)
 	return i, err
 }
 

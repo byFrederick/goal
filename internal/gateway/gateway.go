@@ -87,6 +87,16 @@
 // no connection, environment file or MCP server, and its environment's env is for setup alone.
 // Its MCP session lists no tool, and it records no event on the past item.
 //
+// # Grades
+//
+// A token of kind domain.TaskKindGrade is a grade (ADR 0039 decision 10, grade.go): one model call
+// that decides whether a result fixed the reason an item went back. It names the try and which
+// result it grades, a try's or the item's original or final one. Its bundle's spec.grade holds the
+// reason and that result's output and diff, read through Deps.Grades (503 when it or Deps.Jonah is
+// nil), with the token's model and Jonah's budget left as max_usd; it has no item, repository,
+// definition, file, connection, knowledge, rule or tool. Its MCP session lists no tool, refuses
+// every call, and its notes are none.
+//
 // # State
 //
 // None: every HTTP request is verified and served on its own (the SDK's stateless mode), so any
@@ -195,6 +205,9 @@ type Deps struct {
 	// token's bundle is 503.
 	Tries    Tries
 	Proposed ProposedDefinitions
+	// Grades give a grade its reason and the result it grades (grade.go). Without it, or without
+	// Jonah, a grade token's bundle is 503.
+	Grades Grades
 }
 
 // DraftRequests reads a draft request of the organization in ctx; ports.DraftRequests satisfies
@@ -249,6 +262,7 @@ type Gateway struct {
 	// tries and proposed are nil without Deps.Tries and Deps.Proposed.
 	tries    Tries
 	proposed ProposedDefinitions
+	grades   Grades // nil without Deps.Grades
 	cfg      Config
 	mcp      http.Handler
 }
@@ -269,7 +283,7 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 	g := &Gateway{
 		defs: d.Definitions, items: d.Items, connections: d.Connections, policies: d.Policies, events: d.Events, clock: d.Clock, log: d.Logger,
 		knowledge: d.Knowledge, objects: d.Objects, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah,
-		watches: d.Watches, tries: d.Tries, proposed: d.Proposed, cfg: cfg,
+		watches: d.Watches, tries: d.Tries, proposed: d.Proposed, grades: d.Grades, cfg: cfg,
 	}
 	if g.log == nil {
 		g.log = slog.New(slog.DiscardHandler)
@@ -361,8 +375,8 @@ func (g *Gateway) session(ctx context.Context, c domain.TaskClaims) (*session, e
 	}
 
 	// A Jonah review's agent is not one of the factory's, and it is served no tool; nor is a try
-	// of a past item, which has no person to ask and no connection.
-	if c.Kind == domain.TaskKindJonah || c.Kind == domain.TaskKindTry {
+	// of a past item, which has no person to ask and no connection, or a grade, which calls none.
+	if c.Kind == domain.TaskKindJonah || c.Kind == domain.TaskKindTry || c.Kind == domain.TaskKindGrade {
 		return &session{g: g, claims: c, noTools: true}, nil
 	}
 
