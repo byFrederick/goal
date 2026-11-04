@@ -6,6 +6,7 @@ import (
 	"maps"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -189,28 +190,9 @@ func (t secretTable) create(ctx context.Context, n domain.NewSecret, by domain.A
 	}
 
 	err = t.s.inTx(ctx, func(q *db.Queries) error {
-		s, err := t.seal(org, out.ID, n.Value)
-		if err != nil {
-			return err
-		}
+		out.CreatedAt, err = t.insertIn(ctx, q, org, id, out, cols, n.Value, data)
 
-		out.CreatedAt, err = q.InsertSecret(ctx, db.InsertSecretParams{
-			ID: id, Name: out.Name, Source: string(out.Source), Description: out.Description, AllFactories: out.Scope.All,
-			FactoryIds: cols.factories, KeyID: s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext,
-			ExpiresAt: out.ExpiresAt, RemindDays: cols.remindDays, CreatedBy: by.Ref(),
-		})
-		if violates(err, secretsNameKey) {
-			return fmt.Errorf("%s %q: %w", t.kind.noun, n.Name, ports.ErrNameTaken)
-		}
-
-		if err != nil {
-			return err
-		}
-
-		entry := map[string]any{auditName: n.Name}
-		maps.Copy(entry, data)
-
-		return t.audit(ctx, q, by, t.kind.created, id, entry)
+		return err
 	})
 	if err != nil {
 		return domain.Secret{}, fmt.Errorf("create %s %s: %w", t.kind.noun, n.Name, ruleError(err, ""))
@@ -220,6 +202,36 @@ func (t secretTable) create(ctx context.Context, n domain.NewSecret, by domain.A
 	out.UpdatedAt = out.CreatedAt
 
 	return out, nil
+}
+
+// insertIn inserts out, with id and its columns cols, holding value sealed, in q's transaction,
+// and audits it as created by out.CreatedBy with data beside its name; it returns when it was
+// created.
+func (t secretTable) insertIn(ctx context.Context, q *db.Queries, org domain.OrgID, id uuid.UUID, out domain.Secret, cols columns,
+	value string, data map[string]any,
+) (time.Time, error) {
+	s, err := t.seal(org, out.ID, value)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	created, err := q.InsertSecret(ctx, db.InsertSecretParams{
+		ID: id, Name: out.Name, Source: string(out.Source), Description: out.Description, AllFactories: out.Scope.All,
+		FactoryIds: cols.factories, KeyID: s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext,
+		ExpiresAt: out.ExpiresAt, RemindDays: cols.remindDays, CreatedBy: out.CreatedBy.Ref(),
+	})
+	if violates(err, secretsNameKey) {
+		return time.Time{}, fmt.Errorf("%s %q: %w", t.kind.noun, out.Name, ports.ErrNameTaken)
+	}
+
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	entry := map[string]any{auditName: out.Name}
+	maps.Copy(entry, data)
+
+	return created, t.audit(ctx, q, out.CreatedBy, t.kind.created, id, entry)
 }
 
 // patch applies p to the secret name, the result checked with check; metadata says whether the

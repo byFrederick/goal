@@ -12,6 +12,48 @@ import (
 	"github.com/google/uuid"
 )
 
+const convertWebhookEndpoint = `-- name: ConvertWebhookEndpoint :exec
+UPDATE webhook_endpoints SET factory_id = NULL, name = $1, sender = $2, secret_id = $3
+WHERE id = $4
+`
+
+type ConvertWebhookEndpointParams struct {
+	Name     string
+	Sender   *string
+	SecretID *uuid.UUID
+	ID       uuid.UUID
+}
+
+// The endpoint becomes the organization's webhook, signed by secret_id; its sealed columns stay.
+func (q *Queries) ConvertWebhookEndpoint(ctx context.Context, arg ConvertWebhookEndpointParams) error {
+	_, err := q.db.Exec(ctx, convertWebhookEndpoint,
+		arg.Name,
+		arg.Sender,
+		arg.SecretID,
+		arg.ID,
+	)
+	return err
+}
+
+const convertedNameTaken = `-- name: ConvertedNameTaken :one
+SELECT EXISTS (SELECT 1 FROM webhook_endpoints
+               WHERE name = $1 AND id <> $2 AND (factory_id IS NULL OR id < $2))::bool
+`
+
+type ConvertedNameTakenParams struct {
+	Name string
+	ID   uuid.UUID
+}
+
+// Whether the conversion of endpoint id must not take the name: the organization's webhook has
+// it, or an older factory endpoint does, which keeps it when its turn comes.
+func (q *Queries) ConvertedNameTaken(ctx context.Context, arg ConvertedNameTakenParams) (bool, error) {
+	row := q.db.QueryRow(ctx, convertedNameTaken, arg.Name, arg.ID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const deleteWebhookEndpoint = `-- name: DeleteWebhookEndpoint :execrows
 DELETE FROM webhook_endpoints WHERE id = $1
 `
@@ -289,6 +331,43 @@ func (q *Queries) LockOrgWebhook(ctx context.Context, id uuid.UUID) (LockOrgWebh
 	row := q.db.QueryRow(ctx, lockOrgWebhook, id)
 	var i LockOrgWebhookRow
 	err := row.Scan(&i.ID, &i.Name)
+	return i, err
+}
+
+const nextFactoryEndpoint = `-- name: NextFactoryEndpoint :one
+SELECT id, factory_id::uuid AS factory_id, name, coalesce(kind, '')::text AS kind, key_id::text AS key_id,
+       nonce::bytea AS nonce, ciphertext::bytea AS ciphertext
+FROM webhook_endpoints
+WHERE factory_id IS NOT NULL
+ORDER BY id
+LIMIT 1
+FOR UPDATE SKIP LOCKED
+`
+
+type NextFactoryEndpointRow struct {
+	ID         uuid.UUID
+	FactoryID  uuid.UUID
+	Name       string
+	Kind       string
+	KeyID      string
+	Nonce      []byte
+	Ciphertext []byte
+}
+
+// The conversion (ADR 0040 decision 15): the oldest endpoint that still has a factory, locked,
+// with its sealed secret; none when every one is converted.
+func (q *Queries) NextFactoryEndpoint(ctx context.Context) (NextFactoryEndpointRow, error) {
+	row := q.db.QueryRow(ctx, nextFactoryEndpoint)
+	var i NextFactoryEndpointRow
+	err := row.Scan(
+		&i.ID,
+		&i.FactoryID,
+		&i.Name,
+		&i.Kind,
+		&i.KeyID,
+		&i.Nonce,
+		&i.Ciphertext,
+	)
 	return i, err
 }
 

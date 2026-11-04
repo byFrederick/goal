@@ -40,6 +40,15 @@ type Intake interface {
 	// WebhookSecretUses are the secrets the organization's webhooks are signed by, by secret then
 	// webhook.
 	WebhookSecretUses(ctx context.Context) ([]domain.WebhookSecretUse, error)
+	// ConvertEndpoints moves each of the organization's factory endpoints to the organization
+	// (ADR 0040 decision 15), oldest first, one transaction each. Its sealed secret becomes a new
+	// secret open to no factory, created by by and named domain.ConvertedSecretName, whose value
+	// is the hex the endpoint showed when it was made. The endpoint takes
+	// domain.ConvertedWebhookName (a name is taken by the organization's webhooks and by older
+	// factory endpoints), its kind's sender and that secret, and opens to its factory with every
+	// repository. It returns what it converted, in that order; a second call finds nothing.
+	// ErrNoMasterKey without a master key when there is an endpoint to convert.
+	ConvertEndpoints(ctx context.Context, by domain.Actor) ([]domain.ConvertedEndpoint, error)
 	// RotateSecret replaces the factory endpoint's secret with a new one, returned once, and sets
 	// RotatedAt. ErrNotFound when there is none, ErrNoMasterKey without a master key; an
 	// organization webhook's secret is replaced through OrgSecrets (domain.ErrInvalid).
