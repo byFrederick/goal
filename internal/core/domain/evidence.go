@@ -513,7 +513,8 @@ func itemFile(x *evItem, numbers map[DefinitionVersionID]int) string {
 
 	it := x.Item
 	fmt.Fprintf(&b, "# #%d %s\n\n", it.Number, oneLine(it.Title))
-	fmt.Fprintf(&b, "- Type: %s\n- Lane: %s\n- Finished: %s, %s\n- Evidence: %s\n\n", orNone(it.Type), orNone(it.Lane), it.State, stamped(x.FinishedAt), x.why())
+	fmt.Fprintf(&b, "- Type: %s\n- Lane: %s\n- Origin: %s\n- Finished: %s, %s\n- Evidence: %s\n\n", orNone(it.Type), orNone(it.Lane),
+		orNone(string(it.Origin)), it.State, stamped(x.FinishedAt), x.why())
 	b.WriteString("## Body\n\n")
 	b.WriteString(quoted(it.Body, 0))
 

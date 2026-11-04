@@ -851,6 +851,10 @@ func (s *server) itemOf(ctx context.Context, it domain.Item) gen.Item {
 		out.DoneAt = &it.DoneAt
 	}
 
+	if it.Origin != "" {
+		out.Origin = new(gen.ItemOrigin(it.Origin))
+	}
+
 	return out
 }
 

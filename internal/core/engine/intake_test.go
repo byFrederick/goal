@@ -121,10 +121,15 @@ func TestIntake_MatchCreatesItem(t *testing.T) {
 		Class               domain.ClassOfService
 		Source              domain.ItemSource
 		Trigger             string
+		Origin              domain.Origin
+		CreatedBy           string
 	}
 
-	got := placed{it.Type, it.Station, it.Lane, it.State, it.Class, it.Source, it.Trigger}
-	if want := (placed{typeFeature, stWork, laneBack, domain.StateQueued, domain.ClassExpedite, domain.ItemFromGitHub, trFlaky}); got != want {
+	got := placed{it.Type, it.Station, it.Lane, it.State, it.Class, it.Source, it.Trigger, it.Origin, it.CreatedBy}
+	if want := (placed{
+		typeFeature, stWork, laneBack, domain.StateQueued, domain.ClassExpedite, domain.ItemFromGitHub, trFlaky, domain.OriginTrigger,
+		domain.EngineActor.Ref(),
+	}); got != want {
 		t.Errorf("item = %+v; want the trigger's create %+v", got, want)
 	}
 
