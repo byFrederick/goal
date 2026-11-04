@@ -14,6 +14,7 @@ import {
   type ReactNode,
   type RefObject,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useSyncExternalStore,
@@ -116,15 +117,22 @@ function flattenActions(node: ReactNode): ReactNode[] {
  */
 function TopBarActions({ children }: { children: ReactNode }) {
   const actions = flattenActions(children);
-  if (actions.length === 0) return null;
   const primary = actions[actions.length - 1];
   const more = actions.slice(0, -1);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const hidden = useRef<HTMLDivElement>(null);
+  // The hidden copies stay out of the tab order; only a menu item (or a closing dialog) reaches them.
+  useLayoutEffect(() => {
+    for (const control of hidden.current?.querySelectorAll<HTMLElement>('a, button') ?? []) control.tabIndex = -1;
+  });
+  if (actions.length === 0) return null;
   return (
     <div className="flex min-w-0 shrink items-center gap-1 [&_a]:min-h-11 [&_button]:min-h-11 [&_kbd]:hidden">
       {more.length > 0 ? (
         <Menu>
           <MenuTrigger asChild>
             <button
+              ref={moreRef}
               type="button"
               aria-label="More actions"
               className="flex size-11 flex-none items-center justify-center rounded-control text-ink-soft hover:bg-hover hover:text-ink"
@@ -134,10 +142,25 @@ function TopBarActions({ children }: { children: ReactNode }) {
           </MenuTrigger>
           <MenuContent align="end" side="bottom">
             {more.map((action, i) => (
-              <MoreAction key={isValidElement(action) && action.key != null ? action.key : i}>{action}</MoreAction>
+              <MoreAction key={isValidElement(action) && action.key != null ? action.key : i} index={i} copies={hidden}>
+                {action}
+              </MoreAction>
             ))}
           </MenuContent>
         </Menu>
+      ) : null}
+      {/* One copy of each hidden action lives here, so a dialog it owns outlives the closing menu. A dialog
+          returns focus to its trigger, which is in this copy; focus then goes on to More actions. */}
+      {more.length > 0 ? (
+        <div ref={hidden} aria-hidden="true" className="sr-only" onFocus={() => moreRef.current?.focus()}>
+          {more.map((action, i) =>
+            menuParts(action) ? null : (
+              <div key={isValidElement(action) && action.key != null ? action.key : i} data-more-action={i}>
+                {action}
+              </div>
+            ),
+          )}
+        </div>
       ) : null}
       {primary}
     </div>
@@ -160,9 +183,17 @@ function menuParts(action: ReactNode): { label: ReactNode; entries: ReactNode } 
 
 /**
  * One hidden action as an entry of the More actions menu: a menu action of the page becomes a submenu; any other
- * is a menu item that activates the page's own button or link, and closes the menu.
+ * is a menu item that activates the hidden copy of the page's own button or link, and closes the menu.
  */
-function MoreAction({ children }: { children: ReactNode }) {
+function MoreAction({
+  children,
+  index,
+  copies,
+}: {
+  children: ReactNode;
+  index: number;
+  copies: RefObject<HTMLDivElement | null>;
+}) {
   const parts = menuParts(children);
   if (parts) {
     return (
@@ -175,9 +206,8 @@ function MoreAction({ children }: { children: ReactNode }) {
   return (
     <MenuItem
       asChild
-      onSelect={(event) => {
-        const control = (event.currentTarget as HTMLElement).querySelector<HTMLElement>('a, button');
-        control?.click();
+      onSelect={() => {
+        copies.current?.querySelector<HTMLElement>(`[data-more-action="${index}"] :is(a, button)`)?.click();
       }}
     >
       <div className="[&_*]:pointer-events-none [&_kbd]:hidden">{children}</div>
