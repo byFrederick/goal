@@ -66,6 +66,6 @@ ALTER TABLE jonah_proposals ALTER COLUMN review_id DROP NOT NULL;
 ALTER TABLE jonah_proposals ADD CONSTRAINT jonah_proposals_undoes_fkey
   FOREIGN KEY (org_id, undoes) REFERENCES jonah_proposals (org_id, id) ON DELETE CASCADE;
 ALTER TABLE jonah_proposals ADD CONSTRAINT jonah_proposals_review_check
-  CHECK (review_id IS NOT NULL OR undoes IS NOT NULL);
+  CHECK (review_id IS NOT NULL OR undoes IS NOT NULL OR agent IS NOT NULL);
 CREATE UNIQUE INDEX jonah_proposals_undoes_key ON jonah_proposals (org_id, undoes)
   WHERE undoes IS NOT NULL AND state IN ('proposed', 'published', 'applied');

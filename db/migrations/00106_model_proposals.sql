@@ -4,7 +4,7 @@
 -- agents[].model, with three tries per item on the agent's newest finished items.
 --
 -- A model proposal has no review and undoes nothing: agent names the agent whose model it changes,
--- and jonah_proposals_review_check accepts it as a third kind. Every row stored before has a review
+-- and the review check 00111 writes accepts it as a third kind. Every row stored before has a review
 -- or undoes, so it stays valid.
 --
 -- tries.attempt numbers a proposal's tries of one item, 1 to 3: a review's proposal has one per
@@ -12,10 +12,6 @@
 -- (org_id, proposal_id, item_id, attempt), so each is queued once. goal_app inserts the column and
 -- never updates it.
 ALTER TABLE jonah_proposals ADD COLUMN agent text CHECK (length(agent) BETWEEN 1 AND 100);
-ALTER TABLE jonah_proposals DROP CONSTRAINT jonah_proposals_review_check;
-ALTER TABLE jonah_proposals ADD CONSTRAINT jonah_proposals_review_check
-  CHECK (review_id IS NOT NULL OR undoes IS NOT NULL OR agent IS NOT NULL) NOT VALID;
-ALTER TABLE jonah_proposals VALIDATE CONSTRAINT jonah_proposals_review_check;
 
 ALTER TABLE tries ADD COLUMN attempt integer NOT NULL DEFAULT 1 CHECK (attempt BETWEEN 1 AND 3);
 ALTER TABLE tries DROP CONSTRAINT tries_key;
