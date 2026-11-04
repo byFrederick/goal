@@ -2,9 +2,12 @@ package cli
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -16,6 +19,8 @@ import (
 const (
 	subShow       = "show"
 	subDeliveries = "deliveries"
+	subOpen       = "open"
+	subClose      = "close"
 )
 
 // intakeTitleWidth is how much of an event's title a row of goal triggers show keeps.
@@ -37,15 +42,17 @@ func triggersCommand(ctx context.Context, out *printer, getenv func(string) stri
 	return handler(ctx, out, getenv, args[1:])
 }
 
-// webhooksCommand is goal webhooks list|create|rotate|deliveries: a factory's webhook endpoints,
-// their signing secrets and the deliveries they received.
+// webhooksCommand is goal webhooks list|create|open|close|deliveries|delete: the organization's
+// webhooks (ADR 0040 decisions 12 and 22), the factories they are open to and the deliveries they
+// received. A webhook's secret is an organization secret: its value changes through goal secret.
 func webhooksCommand(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	if len(args) == 0 {
 		return errUsage
 	}
 
 	handler, ok := map[string]command{
-		subList: webhooksList, verbCreate: webhooksCreate, "rotate": webhooksRotate, subDeliveries: webhooksDeliveries,
+		subList: webhooksList, verbCreate: webhooksCreate, subOpen: webhooksOpen, subClose: webhooksClose,
+		subDeliveries: webhooksDeliveries, "delete": webhooksDelete,
 	}[args[0]]
 	if !ok {
 		return errUsage
@@ -330,12 +337,13 @@ func sum(days []int) int {
 	return n
 }
 
-// webhooksList is goal webhooks list <factory> [--json]: the endpoints, never a secret.
+// webhooksList is goal webhooks list [--json]: the organization's webhooks, never a secret's
+// value.
 func webhooksList(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs, orgFlag, asJSON := intakeFlags("webhooks list")
 
 	pos, err := parseInterspersed(fs, args)
-	if err != nil || len(pos) != 1 {
+	if err != nil || len(pos) != 0 {
 		return errUsage
 	}
 
@@ -344,7 +352,7 @@ func webhooksList(ctx context.Context, out *printer, getenv func(string) string,
 		return err
 	}
 
-	res, err := c.ListWebhookEndpointsWithResponse(ctx, c.org, pos[0])
+	res, err := c.ListWebhooksWithResponse(ctx, c.org)
 	if err != nil {
 		return apiDown(err)
 	}
@@ -359,14 +367,29 @@ func webhooksList(ctx context.Context, out *printer, getenv func(string) string,
 		return nil
 	}
 
-	printEndpoints(out, pos[0], res.JSON200.Endpoints)
+	names, err := openedFactoryNames(ctx, c, res.JSON200.Webhooks)
+	if err != nil {
+		return err
+	}
+
+	printWebhooks(out, res.JSON200.Webhooks, names)
 
 	return nil
 }
 
-func printEndpoints(out *printer, factory string, endpoints []gen.WebhookEndpoint) {
-	if len(endpoints) == 0 {
-		out.printf("No webhook endpoints: goal webhooks create %s <name> adds one\n", factory)
+// openedFactoryNames are factoryNames when a webhook has an opening, and none otherwise, so
+// goald is asked only when there is a factory to name.
+func openedFactoryNames(ctx context.Context, c orgClient, hooks []gen.Webhook) (map[string]string, error) {
+	if !slices.ContainsFunc(hooks, func(w gen.Webhook) bool { return len(w.Openings) > 0 }) {
+		return map[string]string{}, nil
+	}
+
+	return factoryNames(ctx, c)
+}
+
+func printWebhooks(out *printer, hooks []gen.Webhook, names map[string]string) {
+	if len(hooks) == 0 {
+		out.printf("No webhooks: goal webhooks create <name> --sender <sender> adds one\n")
 
 		return
 	}
@@ -374,20 +397,16 @@ func printEndpoints(out *printer, factory string, endpoints []gen.WebhookEndpoin
 	var b bytes.Buffer
 
 	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "NAME\tKIND\tADDRESS\tSECRET\tTRIGGERS\t7 DAYS")
+	_, _ = fmt.Fprintln(tw, "NAME\tSENDER\tSTATE\tADDRESS\tSECRET\tOPEN TO\tTRIGGERS\t7 DAYS")
 
-	for _, e := range endpoints {
+	for _, w := range hooks {
 		delivered, refused := 0, 0
-		for _, d := range e.Days {
+		for _, d := range w.Days {
 			delivered, refused = delivered+d.Delivered, refused+d.Refused
 		}
 
-		feeds := "-"
-		if len(e.Triggers) > 0 {
-			feeds = strings.Join(e.Triggers, ", ")
-		}
-
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d delivered, %d refused\n", e.Name, e.Kind, e.Address, e.SecretName, feeds, delivered, refused)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d delivered, %d refused\n",
+			w.Name, w.Sender, onOff(w.Enabled), w.Address, w.Secret, openTo(w.Openings, names), triggersOf(w.Triggers), delivered, refused)
 	}
 
 	_ = tw.Flush()
@@ -395,17 +414,60 @@ func printEndpoints(out *printer, factory string, endpoints []gen.WebhookEndpoin
 	out.printf("%s", b.String())
 }
 
-// webhooksCreate is goal webhooks create <factory> <name> [--kind generic|github] [--json].
+// openTo names the factories of openings, each with its repositories when it is limited to some.
+func openTo(openings []gen.WebhookOpening, names map[string]string) string {
+	if len(openings) == 0 {
+		return "-"
+	}
+
+	parts := make([]string, 0, len(openings))
+
+	for _, o := range openings {
+		name := cmp.Or(names[o.Factory], o.Factory)
+		if o.Repositories != nil && len(*o.Repositories) > 0 {
+			name += " (" + strings.Join(*o.Repositories, ", ") + ")"
+		}
+
+		parts = append(parts, name)
+	}
+
+	return strings.Join(parts, ", ")
+}
+
+// triggersOf names the published triggers that use a webhook as factory/trigger.
+func triggersOf(triggers []gen.WebhookTrigger) string {
+	if len(triggers) == 0 {
+		return "-"
+	}
+
+	parts := make([]string, 0, len(triggers))
+	for _, t := range triggers {
+		parts = append(parts, t.FactoryName+"/"+t.Trigger)
+	}
+
+	return strings.Join(parts, ", ")
+}
+
+// senderOfKind maps the factory endpoints' --kind to its sender: generic is standard's alias for
+// one release (ADR 0040 decision 22).
+var senderOfKind = map[string]gen.WebhookSender{"generic": gen.WebhookSenderStandard, "github": gen.WebhookSenderGithub}
+
+// webhooksCreate is goal webhooks create <name> [--sender S | --kind generic|github]
+// [--secret <name>] [--json]: an enabled webhook open to no factory, signed by the secret named or
+// by a new webhook-<name> whose generated value is printed once.
 func webhooksCreate(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs, orgFlag, asJSON := intakeFlags("webhooks create")
-	kind := fs.String("kind", string(gen.WebhookKindGeneric), "how requests are signed: generic or github")
+	sender := fs.String("sender", "", "how deliveries are signed: github, gitlab, standard (the default), pagerduty, sentry or token")
+	kind := fs.String("kind", "", "generic or github: the old name of --sender, generic being standard")
+	secret := fs.String("secret", "", "the existing secret that signs deliveries; default a new webhook-<name> with a generated value")
 
 	pos, err := parseInterspersed(fs, args)
-	if err != nil || len(pos) != 2 {
+	if err != nil || len(pos) != 1 {
 		return errUsage
 	}
 
-	if k := gen.WebhookKind(*kind); k != gen.WebhookKindGeneric && k != gen.WebhookKindGithub {
+	n, ok := newWebhook(pos[0], *sender, *kind, *secret)
+	if !ok {
 		return errUsage
 	}
 
@@ -414,7 +476,7 @@ func webhooksCreate(ctx context.Context, out *printer, getenv func(string) strin
 		return err
 	}
 
-	res, err := c.CreateWebhookEndpointWithResponse(ctx, c.org, pos[0], gen.NewWebhookEndpoint{Name: pos[1], Kind: gen.WebhookKind(*kind)})
+	res, err := c.CreateWebhookWithResponse(ctx, c.org, n)
 	if err != nil {
 		return apiDown(err)
 	}
@@ -423,35 +485,123 @@ func webhooksCreate(ctx context.Context, out *printer, getenv func(string) strin
 		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
 	}
 
-	e := res.JSON201
-	printSecret(out, *asJSON, res.Body, e)
-	out.noticef("✓ created webhook endpoint %s (%s) in %s: senders post to %s on goald's public origin\n", e.Name, e.Kind, pos[0], e.Address)
-	secretWarning(out)
+	w := res.JSON201
+	if *asJSON {
+		out.printf("%s", res.Body)
+	} else if w.SecretValue != nil {
+		out.printf("%s\n", *w.SecretValue)
+	}
+
+	out.noticef("✓ created webhook %s (%s), signed by the secret %s: senders post to %s on goald's public origin\n", w.Name, w.Sender, w.Secret, w.Address)
+	out.noticef("  it is open to no factory yet: goal webhooks open %s <factory>\n", w.Name)
+
+	if w.SecretValue != nil {
+		out.noticef("  the secret's value is shown once: store it now in the sender (for github, the webhook's Secret field); goald never shows it again\n")
+	}
 
 	return nil
 }
 
-// webhooksRotate is goal webhooks rotate <factory> <name> [--json]: a new signing secret; the old
-// one stops working at once.
-func webhooksRotate(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
-	fs, orgFlag, asJSON := intakeFlags("webhooks rotate")
+// newWebhook is create's body: the sender from --sender or its alias --kind (standard when neither
+// is given), false for both, an unknown one or a name the secret flag leaves empty.
+func newWebhook(name, sender, kind, secret string) (gen.NewWebhook, bool) {
+	n := gen.NewWebhook{Name: name, Sender: gen.WebhookSenderStandard}
+
+	switch {
+	case sender != "" && kind != "":
+		return n, false
+	case kind != "":
+		s, ok := senderOfKind[kind]
+		if !ok {
+			return n, false
+		}
+
+		n.Sender = s
+	case sender != "":
+		n.Sender = gen.WebhookSender(sender)
+		if !slices.Contains([]gen.WebhookSender{
+			gen.WebhookSenderGithub, gen.WebhookSenderGitlab, gen.WebhookSenderStandard, gen.WebhookSenderPagerduty, gen.WebhookSenderSentry, gen.WebhookSenderToken,
+		}, n.Sender) {
+			return n, false
+		}
+	}
+
+	if secret != "" {
+		n.Secret = &secret
+	}
+
+	return n, true
+}
+
+// webhooksOpen is goal webhooks open <webhook> <factory> [--repos a,b] [--json]: the factory
+// receives the webhook's deliveries, only those of the repositories listed when --repos is given.
+// Opening it again replaces the repositories.
+func webhooksOpen(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs, orgFlag, asJSON := intakeFlags("webhooks open")
+	repos := fs.String("repos", "", "owner/name of the repositories whose deliveries reach the factory, comma-separated; default every one")
 
 	pos, err := parseInterspersed(fs, args)
 	if err != nil || len(pos) != 2 {
 		return errUsage
 	}
 
-	c, err := connect(ctx, getenv, *orgFlag)
+	var list []string
+
+	for r := range strings.SplitSeq(*repos, ",") {
+		if r = strings.TrimSpace(r); r != "" {
+			list = append(list, r)
+		}
+	}
+
+	return patchOpening(ctx, out, getenv, *orgFlag, *asJSON, pos, func(factory string) gen.WebhookPatch {
+		o := gen.WebhookOpening{Factory: factory}
+		if len(list) > 0 {
+			o.Repositories = &list
+		}
+
+		return gen.WebhookPatch{Open: &[]gen.WebhookOpening{o}}
+	}, func(w *gen.Webhook) string {
+		if len(list) == 0 {
+			return fmt.Sprintf("✓ opened webhook %s to %s: every repository's deliveries reach it\n", w.Name, pos[1])
+		}
+
+		return fmt.Sprintf("✓ opened webhook %s to %s for %s\n", w.Name, pos[1], strings.Join(list, ", "))
+	})
+}
+
+// webhooksClose is goal webhooks close <webhook> <factory> [--json]: the factory no longer
+// receives the webhook's deliveries.
+func webhooksClose(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs, orgFlag, asJSON := intakeFlags("webhooks close")
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 2 {
+		return errUsage
+	}
+
+	return patchOpening(ctx, out, getenv, *orgFlag, *asJSON, pos, func(factory string) gen.WebhookPatch {
+		return gen.WebhookPatch{Close: &[]string{factory}}
+	}, func(w *gen.Webhook) string {
+		return fmt.Sprintf("✓ closed webhook %s to %s\n", w.Name, pos[1])
+	})
+}
+
+// patchOpening patches the webhook pos[0] with what patch makes of the id of the factory pos[1],
+// then prints goald's answer (--json) or done's line.
+func patchOpening(ctx context.Context, out *printer, getenv func(string) string, org string, asJSON bool, pos []string,
+	patch func(factory string) gen.WebhookPatch, done func(w *gen.Webhook) string,
+) error {
+	c, err := connect(ctx, getenv, org)
 	if err != nil {
 		return err
 	}
 
-	id, err := endpointID(ctx, c, pos[0], pos[1])
+	f, err := getFactory(ctx, c, pos[1])
 	if err != nil {
 		return err
 	}
 
-	res, err := c.RotateWebhookSecretWithResponse(ctx, c.org, pos[0], id)
+	res, err := c.PatchWebhookWithResponse(ctx, c.org, pos[0], patch(f.Id))
 	if err != nil {
 		return apiDown(err)
 	}
@@ -460,41 +610,67 @@ func webhooksRotate(ctx context.Context, out *printer, getenv func(string) strin
 		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
 	}
 
-	e := res.JSON200
-	printSecret(out, *asJSON, res.Body, e)
-	out.noticef("✓ rotated the signing secret of %s (%s) in %s, which receives at %s: the old secret stops working at once,\n", e.Name, e.Kind, pos[0], e.Address)
-	out.noticef("  so its sender's requests are refused until it has the new one\n")
-	secretWarning(out)
+	if asJSON {
+		out.printf("%s", res.Body)
+
+		return nil
+	}
+
+	out.noticef("%s", done(res.JSON200))
 
 	return nil
 }
 
-// printSecret prints the secret alone on stdout, so `goal webhooks create … > file` keeps only
-// it, or with --json goald's whole answer, which carries it. These are the only two places a
-// signing secret is printed.
-func printSecret(out *printer, asJSON bool, body []byte, e *gen.CreatedWebhookEndpoint) {
-	if asJSON {
-		out.printf("%s", body)
+// webhooksDelete is goal webhooks delete <webhook>: the webhook and its deliveries; its secret
+// stays, and the line names it. goald refuses while published triggers use it, naming them.
+func webhooksDelete(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs := newFlags("webhooks delete")
+	orgFlag := addOrgFlag(fs)
 
-		return
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 1 {
+		return errUsage
 	}
 
-	out.printf("%s\n", e.Secret)
+	c, err := connect(ctx, getenv, *orgFlag)
+	if err != nil {
+		return err
+	}
+
+	// Read first, so the line names the secret that stays.
+	got, err := c.GetWebhookWithResponse(ctx, c.org, pos[0])
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if got.JSON200 == nil {
+		return problem(got.HTTPResponse, got.ApplicationproblemJSONDefault)
+	}
+
+	res, err := c.DeleteWebhookWithResponse(ctx, c.org, pos[0])
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if res.StatusCode() != http.StatusNoContent {
+		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	w := got.JSON200
+	out.noticef("✓ deleted webhook %s and its deliveries; its secret %s stays (goal secret delete %s removes it)\n", w.Name, w.Secret, w.Secret)
+
+	return nil
 }
 
-func secretWarning(out *printer) {
-	out.noticef("  the signing secret is shown once: store it now in the sender (for github, the webhook's Secret field); goald never shows it again\n")
-}
-
-// webhooksDeliveries is goal webhooks deliveries <factory> <name> [--limit N] [--after C] [--json]:
-// the deliveries an endpoint received, newest first.
+// webhooksDeliveries is goal webhooks deliveries <webhook> [--limit N] [--after C] [--json]: the
+// deliveries a webhook received, newest first.
 func webhooksDeliveries(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs, orgFlag, asJSON := intakeFlags("webhooks deliveries")
 	limit := fs.Int("limit", 0, "how many deliveries (default goald's page)")
 	after := fs.String("after", "", "the next page's cursor, as the previous page printed it")
 
 	pos, err := parseInterspersed(fs, args)
-	if err != nil || len(pos) != 2 {
+	if err != nil || len(pos) != 1 {
 		return errUsage
 	}
 
@@ -512,12 +688,7 @@ func webhooksDeliveries(ctx context.Context, out *printer, getenv func(string) s
 		return err
 	}
 
-	id, err := endpointID(ctx, c, pos[0], pos[1])
-	if err != nil {
-		return err
-	}
-
-	params := &gen.ListWebhookDeliveriesParams{}
+	params := &gen.ListOrgWebhookDeliveriesParams{}
 	if limitGiven {
 		params.Limit = limit
 	}
@@ -526,7 +697,7 @@ func webhooksDeliveries(ctx context.Context, out *printer, getenv func(string) s
 		params.After = after
 	}
 
-	res, err := c.ListWebhookDeliveriesWithResponse(ctx, c.org, pos[0], id, params)
+	res, err := c.ListOrgWebhookDeliveriesWithResponse(ctx, c.org, pos[0], params)
 	if err != nil {
 		return apiDown(err)
 	}
@@ -541,12 +712,12 @@ func webhooksDeliveries(ctx context.Context, out *printer, getenv func(string) s
 		return nil
 	}
 
-	printDeliveries(out, pos[0], pos[1], res.JSON200)
+	printDeliveries(out, pos[0], res.JSON200)
 
 	return nil
 }
 
-func printDeliveries(out *printer, factory, endpoint string, p *gen.WebhookDeliveryPage) {
+func printDeliveries(out *printer, webhook string, p *gen.WebhookDeliveryPage) {
 	if len(p.Deliveries) == 0 {
 		out.printf("No deliveries\n")
 	} else {
@@ -562,7 +733,7 @@ func printDeliveries(out *printer, factory, endpoint string, p *gen.WebhookDeliv
 			}
 
 			if d.Item != nil {
-				item = factory + "#" + strconv.FormatInt(d.Item.Number, 10)
+				item = "#" + strconv.FormatInt(d.Item.Number, 10)
 			}
 
 			_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", stamp(d.ReceivedAt), d.Outcome, reason, item)
@@ -574,27 +745,6 @@ func printDeliveries(out *printer, factory, endpoint string, p *gen.WebhookDeliv
 	}
 
 	if p.NextAfter != nil && *p.NextAfter != "" {
-		out.printf("next: goal webhooks deliveries %s %s --after %s\n", factory, endpoint, *p.NextAfter)
+		out.printf("next: goal webhooks deliveries %s --after %s\n", webhook, *p.NextAfter)
 	}
-}
-
-// endpointID finds the id of the factory's webhook endpoint by its name (or its id), since goald's
-// paths take the id.
-func endpointID(ctx context.Context, c orgClient, factory, ref string) (string, error) {
-	res, err := c.ListWebhookEndpointsWithResponse(ctx, c.org, factory)
-	if err != nil {
-		return "", apiDown(err)
-	}
-
-	if res.JSON200 == nil {
-		return "", problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
-	}
-
-	for _, e := range res.JSON200.Endpoints {
-		if e.Name == ref || e.Id == ref {
-			return e.Id, nil
-		}
-	}
-
-	return "", fmt.Errorf("no webhook endpoint named %q in %s: `goal webhooks list %s` shows them", ref, factory, factory)
 }

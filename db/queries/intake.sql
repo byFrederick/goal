@@ -82,6 +82,28 @@ ORDER BY s.name, e.name;
 SELECT key_id::text AS key_id, nonce::bytea AS nonce, ciphertext::bytea AS ciphertext FROM webhook_endpoints
 WHERE id = sqlc.arg(id) AND key_id IS NOT NULL;
 
+-- name: NextFactoryEndpoint :one
+-- The conversion (ADR 0040 decision 15): the oldest endpoint that still has a factory, locked,
+-- with its sealed secret; none when every one is converted.
+SELECT id, factory_id::uuid AS factory_id, name, coalesce(kind, '')::text AS kind, key_id::text AS key_id,
+       nonce::bytea AS nonce, ciphertext::bytea AS ciphertext
+FROM webhook_endpoints
+WHERE factory_id IS NOT NULL
+ORDER BY id
+LIMIT 1
+FOR UPDATE SKIP LOCKED;
+
+-- name: ConvertedNameTaken :one
+-- Whether the conversion of endpoint id must not take the name: the organization's webhook has
+-- it, or an older factory endpoint does, which keeps it when its turn comes.
+SELECT EXISTS (SELECT 1 FROM webhook_endpoints
+               WHERE name = sqlc.arg(name) AND id <> sqlc.arg(id) AND (factory_id IS NULL OR id < sqlc.arg(id)))::bool;
+
+-- name: ConvertWebhookEndpoint :exec
+-- The endpoint becomes the organization's webhook, signed by secret_id; its sealed columns stay.
+UPDATE webhook_endpoints SET factory_id = NULL, name = sqlc.arg(name), sender = sqlc.arg(sender), secret_id = sqlc.arg(secret_id)
+WHERE id = sqlc.arg(id);
+
 -- name: RotateWebhookSecret :one
 UPDATE webhook_endpoints SET key_id = sqlc.arg(key_id), nonce = sqlc.arg(nonce), ciphertext = sqlc.arg(ciphertext), rotated_at = now()
 WHERE id = sqlc.arg(id) AND factory_id IS NOT NULL
@@ -116,7 +138,7 @@ VALUES (sqlc.arg(id), sqlc.arg(endpoint_id), sqlc.arg(received_at), sqlc.arg(hea
         sqlc.arg(reason), sqlc.narg(item_id));
 
 -- name: InsertReceivedDelivery :one
--- A delivery the receiver keeps a row of (00117): an accepted one with its id, event and body, or
+-- A delivery the receiver keeps a row of (00118): an accepted one with its id, event and body, or
 -- a refused one with metadata only.
 INSERT INTO webhook_deliveries (id, endpoint_id, received_at, headers, body, outcome, reason, delivery_id, event, receipt)
 VALUES (sqlc.arg(id), sqlc.arg(endpoint_id), sqlc.arg(received_at), sqlc.arg(headers), sqlc.arg(body), sqlc.arg(outcome),

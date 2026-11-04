@@ -318,7 +318,9 @@ func seedWebhook(t *testing.T, d connectionsDB, org domain.OrgID, name string) d
 }
 
 // Migration 00115: another organization sees no webhook opening; goal_app cannot change a
-// webhook's sender, secret or factory, nor an opening's webhook or factory; the database refuses
+// webhook's token settings, nor an opening's webhook or factory, and its keys refuse a secret or a
+// factory the organization does not have (00117 grants the conversion UPDATE on sender, secret_id
+// and factory_id); the database refuses
 // a reserved name and the delete of a secret a webhook uses, and a rename of the secret follows;
 // goal_connection_key_ids skips the webhook's null key id; the purge removes both.
 func TestIntake_OrgWebhooksRLSAndGrants(t *testing.T) {
@@ -342,7 +344,6 @@ func TestIntake_OrgWebhooksRLSAndGrants(t *testing.T) {
 	}
 
 	appRefuses(t, d, acme, []string{
-		`UPDATE webhook_endpoints SET sender = 'gitlab'`,
 		`UPDATE webhook_endpoints SET secret_id = gen_random_uuid()`,
 		`UPDATE webhook_endpoints SET factory_id = gen_random_uuid()`,
 		`UPDATE webhook_endpoints SET token_header = 'X-Token'`,
@@ -404,7 +405,7 @@ func purgeRemovesWebhooks(t *testing.T, d connectionsDB, org domain.OrgID) {
 	}
 }
 
-// Migration 00117: another organization sees no ledger id or daily count; goal_app may change a
+// Migration 00118: another organization sees no ledger id or daily count; goal_app may change a
 // delivery's duplicates and a count's count only, deletes ledger ids but no count; the database
 // refuses a signature header, a refused delivery with a body and a second row for one delivery id;
 // without an organization the ledger's prune goes through its definer.
@@ -472,5 +473,38 @@ func TestIntake_ReceiverRLSAndGrants(t *testing.T) {
 
 	if n, err := in.PruneDeliveries(t.Context(), time.Now()); err != nil || n != 2 {
 		t.Errorf("PruneDeliveries = %d, %v; want d-2's ledger id and its day's count", n, err)
+	}
+}
+
+// The conversion's secret is audited as created by the actor given, in the endpoint's
+// transaction, and the converted row keeps its sealed columns until the cleanup.
+func TestIntake_ConvertAuditsTheSecret(t *testing.T) {
+	t.Parallel()
+
+	d := newConnectionsDB(t)
+	acme := newOrgID(t, d.store)
+	ctx := domain.WithOrg(t.Context(), acme)
+	in := NewIntake(d.store, testKey(t, "k1"))
+
+	s, err := in.CreateEndpoint(ctx, domain.NewWebhookEndpoint{FactoryID: saveFactory(ctx, t, d.store), Name: "ci-hooks", Kind: domain.WebhookGitHub})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	goal := domain.Actor{Kind: domain.ActorSystem, ID: "goal", Name: "Goal"}
+	if _, err := in.ConvertEndpoints(ctx, goal); err != nil {
+		t.Fatal(err)
+	}
+
+	var audited, sealed int
+	if err := d.admin.QueryRow(t.Context(), `SELECT count(*) FROM audit_log a JOIN webhook_endpoints e ON e.secret_id::text = a.target_id
+		WHERE a.org_id = $1 AND a.action = 'secret.created' AND a.actor_kind = 'system' AND a.actor_id = 'goal' AND e.id = $2`,
+		string(acme), string(s.Endpoint.ID)).Scan(&audited); err != nil || audited != 1 {
+		t.Errorf("secret.created entries by Goal = %d, %v; want 1", audited, err)
+	}
+
+	if err := d.admin.QueryRow(t.Context(), `SELECT count(*) FROM webhook_endpoints WHERE id = $1 AND key_id IS NOT NULL AND factory_id IS NULL`,
+		string(s.Endpoint.ID)).Scan(&sealed); err != nil || sealed != 1 {
+		t.Errorf("converted rows keeping their sealed secret = %d, %v; want 1", sealed, err)
 	}
 }

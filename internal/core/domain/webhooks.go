@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -62,8 +63,53 @@ func CheckWebhookName(name string) error {
 // WebhookSecretName is the secret New webhook creates for webhook name: webhook-<name>, cut to a
 // secret name's 40 characters without a trailing hyphen.
 func WebhookSecretName(name string) string {
-	return strings.TrimRight(truncate("webhook-"+name, 40), "-")
+	return strings.TrimRight(truncate("webhook-"+name, maxWebhookName), "-")
 }
+
+// maxWebhookName is the longest name a webhook or a secret takes.
+const maxWebhookName = 40
+
+// ConvertedWebhookName is the name a factory endpoint called name takes when the conversion moves
+// it to the organization (ADR 0040 decision 15): its own, or, when name is reserved or taken
+// reports it taken, the first free of name-2, name-3…, cut as freeName does.
+func ConvertedWebhookName(name string, taken func(string) bool) string {
+	return freeName(name, func(n string) bool { return slices.Contains(reservedWebhookNames, n) || taken(n) })
+}
+
+// ConvertedSecretName is the secret the conversion makes for the webhook called webhook:
+// WebhookSecretName, or, when taken reports it taken, the first free of its -2, -3… suffixes.
+func ConvertedSecretName(webhook string, taken func(string) bool) string {
+	return freeName(WebhookSecretName(webhook), taken)
+}
+
+// freeName is base, or base with the first suffix -2, -3… that taken does not report, base cut so
+// the result has at most 40 characters and no hyphen before the suffix.
+func freeName(base string, taken func(string) bool) string {
+	if !taken(base) {
+		return base
+	}
+
+	for i := 2; ; i++ {
+		suffix := "-" + strconv.Itoa(i)
+
+		if name := strings.TrimRight(truncate(base, maxWebhookName-len(suffix)), "-") + suffix; !taken(name) {
+			return name
+		}
+	}
+}
+
+// ConvertedEndpoint is a factory endpoint the conversion moved to the organization: its id, the
+// factory it now opens to, its name before and after, and the secret made from its sealed value.
+type ConvertedEndpoint struct {
+	ID        WebhookEndpointID
+	FactoryID FactoryID
+	From      string
+	Name      string
+	Secret    string
+}
+
+// Renamed reports whether the conversion gave c another name.
+func (c ConvertedEndpoint) Renamed() bool { return c.From != c.Name }
 
 // DefaultTokenHeader is the header a token sender's value comes in when its settings name none,
 // as "Authorization: Bearer <value>".

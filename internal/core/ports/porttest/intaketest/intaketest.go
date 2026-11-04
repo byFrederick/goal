@@ -78,6 +78,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 
 	tests = append(tests, webhookTests...)
 	tests = append(tests, receiptTests...)
+	tests = append(tests, convertTests...)
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1115,7 +1116,8 @@ func testNoOrg(f *fixture) {
 			_, err := f.in.Receive(ctx, domain.NewReceipt{WebhookID: id, ReceivedAt: t0, Receipt: domain.ReceiptAccepted, DeliveryID: "d"})
 			return err
 		},
-		"UnnamedDays": func() error { _, err := f.in.UnnamedDays(ctx, id, t0); return err },
+		"UnnamedDays":      func() error { _, err := f.in.UnnamedDays(ctx, id, t0); return err },
+		"ConvertEndpoints": func() error { _, err := f.in.ConvertEndpoints(ctx, domain.LocalUser); return err },
 	}
 
 	for name, call := range calls {

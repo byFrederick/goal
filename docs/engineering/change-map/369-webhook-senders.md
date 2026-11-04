@@ -4,7 +4,7 @@ The webhook sender catalog: a sender entry (`internal/catalog/senders/*.yaml`), 
 
 ## Also change
 
-A new sender also needs its name in `domain.WebhookSenders` (`internal/core/domain/webhooks.go`), in 00115's `sender` and reserved-name CHECKs (a new migration), and its signature header in `domain.SignatureHeaders` (`internal/core/domain/intake.go`) and the headers CHECK of `webhook_deliveries` (a new migration, as 00117 does); the senders table under "Receiving deliveries" in `apps/docs/src/content/docs/concepts/access-and-secrets.md`; the `POST /hooks/{webhook id}` row in `docs/engineering/architecture.md` when an answer or a limit changes
+A new sender also needs its name in `domain.WebhookSenders` (`internal/core/domain/webhooks.go`), in 00115's `sender` and reserved-name CHECKs (a new migration), and its signature header in `domain.SignatureHeaders` (`internal/core/domain/intake.go`) and the headers CHECK of `webhook_deliveries` (a new migration, as 00118 does); the senders table under "Receiving deliveries" in `apps/docs/src/content/docs/concepts/access-and-secrets.md`; the `POST /hooks/{webhook id}` row in `docs/engineering/architecture.md` when an answer or a limit changes
 
 ## Run
 

@@ -209,7 +209,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// the engine merges with them and the API lists what a connection reaches.
 	hosts := codeHosts(s.AllowPrivateUpstreams)
 	toolLister := toollister.New(connectionTransport(s.AllowPrivateUpstreams))
-	moveOver(ctx, store, connections, orgSecrets, definitionStore, authors, hosts, toolLister, clock, log)
+	moveOver(ctx, store, connections, orgSecrets, intake, definitionStore, authors, hosts, toolLister, clock, log)
 
 	boxes, err := sandboxes(ctx, s, log)
 	if err != nil {
@@ -297,17 +297,18 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 }
 
 // moveOver moves every organization from connections and credentials to secrets and environment
-// files, once (ADR 0037 decision 19), and points synced knowledge sources at their connections'
-// secrets: run before the lines load, so they load the converted versions. A converted version is
-// published only after its repository token (on hosts) and remote MCP servers (through tools)
-// pass their test. A failure is logged and goald starts, an unconverted factory running on the
+// files, once (ADR 0037 decision 19), points synced knowledge sources at their connections'
+// secrets and moves factory webhook endpoints to the organization (ADR 0040 decision 15): run
+// before the lines load, so they load the converted versions. A converted version is published
+// only after its repository token (on hosts) and remote MCP servers (through tools) pass their
+// test. A failure is logged and goald starts, an unconverted factory running on the
 // old path.
-func moveOver(ctx context.Context, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets,
+func moveOver(ctx context.Context, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets, intake *postgres.Intake,
 	definitions ports.DefinitionStore, authors *authoring.Service, hosts map[string]ports.CodeHost, tools ports.ToolLister,
 	clock ports.Clock, log *slog.Logger,
 ) {
 	err := moveover.New(moveover.Deps{
-		Orgs: store, Connections: connections, Secrets: secrets, Settings: postgres.NewNotificationSettings(store), Knowledge: postgres.NewKnowledge(store), Definitions: definitions,
+		Orgs: store, Connections: connections, Secrets: secrets, Settings: postgres.NewNotificationSettings(store), Knowledge: postgres.NewKnowledge(store), Webhooks: intake, Definitions: definitions,
 		Publisher: authors, Conversions: postgres.NewFactoryConversions(store), CodeHosts: hosts, Tools: tools, Clock: clock, Logger: log,
 	}).Run(ctx)
 	if err != nil {
