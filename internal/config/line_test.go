@@ -459,6 +459,10 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 	if !reflect.DeepEqual(l.ExpediteTypes, []string{"incident"}) {
 		t.Errorf("expedite types = %v, want [incident]", l.ExpediteTypes)
 	}
+
+	if !reflect.DeepEqual(l.WorkTypes, []string{"feature", workIncident}) {
+		t.Errorf("work types = %v, want board.workTypes [feature incident]", l.WorkTypes)
+	}
 }
 
 // A version published before the cutover keeps loading, but its line runs nothing: it names the
