@@ -155,9 +155,9 @@ export function AccountMenu({ org, size = 'sidebar' }: { org: OrgSummary; size?:
           aria-label={label}
           className="flex w-full items-center gap-3 rounded-cell p-2 text-left text-ink hover:bg-hover aria-expanded:bg-hover"
         >
-          <Avatar initials={initials} size="sidebar" />
+          <Avatar initials={initials} size="sidebar" />{' '}
           <span className="flex min-w-0 flex-col">
-            <span className="truncate text-body font-semibold">{name}</span>
+            <span className="truncate text-body font-semibold">{name}</span>{' '}
             {roleName(org.role) ? <span className="truncate text-meta text-muted">{roleName(org.role)}</span> : null}
           </span>
           <ChevronsUpDown size={16} strokeWidth={1.5} aria-hidden="true" className="ml-auto flex-none text-muted" />

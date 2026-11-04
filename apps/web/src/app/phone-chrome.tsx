@@ -354,7 +354,7 @@ function NeedsYouTab({ org }: { org: OrgSummary }) {
             <NumberRoll value={waiting} />
           </span>
         ) : null}
-      </span>
+      </span>{' '}
       Needs you
     </Link>
   );

@@ -61,7 +61,7 @@ function LastResult({ test }: { test: KeptTest }) {
   const { label, tone } = resultLabels[last.result];
   const body = (
     <>
-      <Chip tone={tone}>{label}</Chip>
+      <Chip tone={tone}>{label}</Chip>{' '}
       <span className="text-secondary text-muted tabular-nums">{keptOn.format(new Date(last.at))}</span>
     </>
   );

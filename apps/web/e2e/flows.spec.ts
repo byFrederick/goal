@@ -180,9 +180,9 @@ test('the drawer opens a factory on a phone', async ({ page }) => {
 test('a decision made elsewhere updates the badges without a reload', async ({ page, request }) => {
   await page.goto('/o/acme/f/goal/board');
   await expectBoardLive(page);
-  const goal = orgNav(page).getByRole('link', { name: /^G, goal factory/ });
+  const goal = orgNav(page).getByRole('link', { name: /^G goal / });
   await expect(goal).toHaveAccessibleName('G goal 2 waiting on you, 1 item blocked');
-  await expect(orgNav(page).getByRole('link', { name: /^\S+, sre factory, blocked: andon pulled$/ })).toBeVisible();
+  await expect(orgNav(page).getByRole('link', { name: /^\S+ sre .*blocked: andon pulled$/ })).toBeVisible();
 
   // Someone else approves (the CLI, another tab): the stream brings the change.
   await request.post('/v1/orgs/acme/items/goal%2312/approve');

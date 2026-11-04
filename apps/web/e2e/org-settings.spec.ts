@@ -156,7 +156,7 @@ test('slot limits: per factory and across the organization', async ({ page, requ
 test('leaving with unsaved changes asks first', async ({ page }) => {
   await page.goto('/o/acme/settings');
   await page.getByLabel('Name').fill('Acme Robotics');
-  const goal = orgNav(page).getByRole('link', { name: /^G, goal factory/ });
+  const goal = orgNav(page).getByRole('link', { name: /^G goal / });
 
   await goal.click();
   const prompt = page.getByRole('dialog', { name: 'Leave without saving?' });
