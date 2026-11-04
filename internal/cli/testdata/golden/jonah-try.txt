@@ -1,0 +1,10 @@
+exit 0
+--- stdout
+try proposal #7 again on the 2 items it was tried on:
+ITEM    STATION  TRIES  TITLE
+web#12  build    3      Fix the login timeout
+web#9   build    3      Add the export
+6 tries, about $4.50; $12.25 left of Jonah's budget
+Queue 6 tries of proposal #7? [y/N] ✓ 6 tries of proposal #7 queued
+see them with: goal jonah show 7 --factory web
+--- stderr

@@ -2928,6 +2928,47 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Proposal" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/try:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/ProposalNumber"
+    post:
+      operationId: tryJonahProposal
+      x-goal-scope: definition:edit
+      tags: [learning]
+      summary: Try again, adding tries to an open proposal (ADR 0039 decision 11)
+      description: >-
+        Adds one more try per item the proposal was tried on, or three per item for a model
+        proposal (Try another model). Each new try reruns the same run of the item at the same
+        station on the same model, and is queued like the proposal's first tries. Estimates
+        first: with confirm false (the default) it answers 200 with the estimate and queues
+        nothing. The estimate prices each new try at its item's original run's cost and says what
+        is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days,
+        less Jonah's). With confirm true it answers 201 with the estimate and the proposal, whose
+        tried lists the new attempts after the earlier ones. 409 learning-budget-exhausted, with
+        try_estimate, when the tries cost more than what is left of Jonah's budget;
+        proposal-decided for a proposal that is not proposed; proposal-not-tried when the proposal
+        has no tries yet (Jonah queues its first ones); proposal-stale when its edits no longer
+        apply. 422 proposal-not-triable for a proposal that changes no station that can be tried,
+        as a memory-only or flow-only one. 404 proposal-not-found; 503 jonah-unavailable.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TryProposalRequest" }
+      responses:
+        "200":
+          description: The estimate; nothing is queued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TryProposalResult" }
+        "201":
+          description: The estimate and the proposal with its new tries
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TryProposalResult" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/jonah/tests:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -5275,7 +5316,9 @@ components:
             Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off
             (422). Try another model (ADR 0039 decision 13): model-not-allowed, agent-not-triable
             and no-finished-items (422), learning-budget-exhausted (409, with estimate and
-            model_estimate).
+            model_estimate). Try again (ADR 0039 decision 11): proposal-not-triable (422),
+            proposal-not-tried (409), learning-budget-exhausted (409, with estimate and
+            try_estimate).
         problems:
           type: array
           description: definition-invalid only, every problem of the definition (errors block the publish)
@@ -5309,6 +5352,9 @@ components:
         model_estimate:
           allOf: [{ $ref: "#/components/schemas/ModelProposalEstimate" }]
           description: learning-budget-exhausted of a model proposal only, the estimate it refused
+        try_estimate:
+          allOf: [{ $ref: "#/components/schemas/TryProposalEstimate" }]
+          description: learning-budget-exhausted of Try again only, the estimate it refused
         uses:
           type: array
           description: secret-in-use only, what uses the secret
@@ -7750,6 +7796,42 @@ components:
           type: boolean
           default: false
           description: Store the proposal and queue its tries; false answers the estimate only
+    TryProposalRequest:
+      type: object
+      properties:
+        confirm:
+          type: boolean
+          default: false
+          description: Queue the tries; false answers the estimate only
+    TryProposalItem:
+      type: object
+      required: [item_ref, item_title, station, tries, run_cost_usd]
+      properties:
+        item_ref: { type: string, description: "<factory name>#<number>" }
+        item_title: { type: string }
+        station: { type: string, description: The station the item's tries rerun }
+        tries: { type: integer, description: The tries Try again adds for the item, 1 or 3 for a model proposal }
+        run_cost_usd: { type: number, format: double, description: What the run the tries rerun cost, the price of each }
+    TryProposalEstimate:
+      type: object
+      required: [number, items, tries, estimate_usd, budget_left_usd]
+      properties:
+        number: { type: integer, format: int64, description: The proposal's number }
+        items:
+          type: array
+          description: The items the proposal was tried on, in the order their first tries were queued
+          items: { $ref: "#/components/schemas/TryProposalItem" }
+        tries: { type: integer, description: The tries Try again adds, over every item }
+        estimate_usd: { type: number, format: double, description: Each item's tries × its run's cost, summed }
+        budget_left_usd: { type: number, format: double, description: What is left of Jonah's budget over the last 7 days }
+    TryProposalResult:
+      type: object
+      required: [estimate]
+      properties:
+        estimate: { $ref: "#/components/schemas/TryProposalEstimate" }
+        proposal:
+          allOf: [{ $ref: "#/components/schemas/Proposal" }]
+          description: The proposal with its new tries; absent from an estimate
     ModelProposalItem:
       type: object
       required: [item_ref, item_title, station, run_id, line_result, sent_back, cost_usd, run_cost_usd]

@@ -2,11 +2,16 @@
 -- to the organization.
 
 -- name: LockProposal :one
--- The proposal whose tries are queued, locked so two sweeps queue its tries once.
-SELECT id, number FROM jonah_proposals WHERE factory_id = sqlc.arg(factory_id) AND id = sqlc.arg(id) FOR UPDATE;
+-- The proposal whose tries are queued, locked so two sweeps queue its tries once and two Try
+-- agains number their attempts in turn.
+SELECT id, number, state FROM jonah_proposals WHERE factory_id = sqlc.arg(factory_id) AND id = sqlc.arg(id) FOR UPDATE;
 
 -- name: ProposalHasTries :one
 SELECT EXISTS (SELECT 1 FROM tries WHERE proposal_id = sqlc.arg(proposal_id))::bool;
+
+-- name: LatestItemTry :one
+-- The proposal's try of the item with the highest attempt: what Try again copies.
+SELECT * FROM tries WHERE proposal_id = sqlc.arg(proposal_id) AND item_id = sqlc.arg(item_id) ORDER BY attempt DESC LIMIT 1;
 
 -- name: InsertTry :one
 INSERT INTO tries (id, factory_id, proposal_id, item_id, attempt, station, original_run_id, model, created_at)

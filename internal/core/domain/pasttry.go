@@ -59,7 +59,8 @@ const (
 	// MaxPastTryReason bounds the reason of a try's grade, in characters (tries.reason).
 	MaxPastTryReason = 2000
 	// ModelTriesPerItem is how many tries a model proposal (Try another model, ADR 0039 decision
-	// 13) gets per item, and the highest attempt a try of one item may have (tries.attempt).
+	// 13) gets per item, and the highest attempt a proposal's first tries of one item may have.
+	// Try again adds attempts past it (PastTryAdd).
 	ModelTriesPerItem = 3
 )
 
@@ -111,6 +112,37 @@ type NewPastTry struct {
 	Station       string
 	OriginalRunID RunID
 	Model         string
+}
+
+// PastTryAdd asks Try again (ADR 0039 decision 11) for Tries more tries of ItemID, an item the
+// proposal was tried on: each a copy of the item's try with the highest attempt, at the attempts
+// after it.
+type PastTryAdd struct {
+	ItemID ItemID
+	Tries  int
+}
+
+// CheckPastTryAdds reports what makes adds impossible to queue, wrapping ErrInvalid: none at all,
+// an add without its item or of no tries, or an item given twice.
+func CheckPastTryAdds(adds []PastTryAdd) error {
+	if len(adds) == 0 {
+		return fmt.Errorf("past try adds: none: %w", ErrInvalid)
+	}
+
+	seen := make(map[ItemID]bool, len(adds))
+
+	for _, a := range adds {
+		switch {
+		case a.ItemID == "" || a.Tries < 1:
+			return fmt.Errorf("past try adds: each needs an item and at least one try: %w", ErrInvalid)
+		case seen[a.ItemID]:
+			return fmt.Errorf("past try adds: item %s twice: %w", a.ItemID, ErrInvalid)
+		}
+
+		seen[a.ItemID] = true
+	}
+
+	return nil
 }
 
 // Check reports what makes n impossible to queue, wrapping ErrInvalid.

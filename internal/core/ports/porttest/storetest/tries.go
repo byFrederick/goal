@@ -19,6 +19,7 @@ var triesTests = []struct {
 }{
 	{"Tries_QueuedOncePerProposal", testTriesQueuedOnce},
 	{"Tries_ThreePerItem", testTriesThreePerItem},
+	{"Tries_TryAgain", testTriesTryAgain},
 	{"Tries_AgentDoneItemsNewestFirst", testTriesAgentDoneItems},
 	{"Tries_ClaimCappedPerFactoryAndLeased", testTriesClaim},
 	{"Tries_FinishStoresVerdictAndReason", testTriesGraded},
@@ -390,6 +391,68 @@ func testTriesThreePerItem(f *fixture) {
 
 	if !attempts[1] || !attempts[2] || !attempts[3] {
 		t.Errorf("attempts = %v, want 1, 2 and 3 of the item", attempts)
+	}
+}
+
+// Try again adds tries of the items a proposal was tried on, all or none, each a copy of the
+// item's try with the highest attempt at the attempts after it: past the first three, and the
+// next attempts on a second call. A decided proposal, an item it has no try of and an empty add
+// change nothing.
+func testTriesTryAgain(f *fixture) {
+	t, t2 := f.t, t1.Add(time.Hour)
+	p := f.triedProposal(t, t1)
+	a, b := f.create(t, domain.NewItem{}), f.create(t, domain.NewItem{})
+	first := f.newTries(t, p, a, b)
+
+	added, err := f.Tries.AddPastTries(f.ctx(t), f.factory, p.ID, []domain.PastTryAdd{{ItemID: a.ID, Tries: 3}, {ItemID: b.ID, Tries: 1}}, t2)
+	if err != nil {
+		t.Fatalf("AddPastTries: %v", err)
+	}
+
+	expectCopies(t, added, []domain.PastTry{first[0], first[0], first[0], first[1]}, []int{2, 3, 4, 2}, t2)
+
+	again, err := f.Tries.AddPastTries(f.ctx(t), f.factory, p.ID, []domain.PastTryAdd{{ItemID: a.ID, Tries: 1}}, t2)
+	if err != nil || len(again) != 1 || again[0].Attempt != 5 {
+		t.Errorf("a second AddPastTries = %+v, %v; want attempt 5 of a", again, err)
+	}
+
+	stranger := f.create(t, domain.NewItem{})
+	_, err = f.Tries.AddPastTries(f.ctx(t), f.factory, p.ID, []domain.PastTryAdd{{ItemID: b.ID, Tries: 1}, {ItemID: stranger.ID, Tries: 1}}, t2)
+	expect(t, "AddPastTries of an item never tried", err, ports.ErrNotFound)
+
+	_, err = f.Tries.AddPastTries(f.ctx(t), f.factory, p.ID, []domain.PastTryAdd{{ItemID: b.ID}}, t2)
+	expect(t, "AddPastTries of no tries", err, domain.ErrInvalid)
+
+	_, err = f.Tries.AddPastTries(f.ctx(t), f.factory, domain.ProposalID("019a0000-0000-7000-8000-000000000099"), []domain.PastTryAdd{{ItemID: a.ID, Tries: 1}}, t2)
+	expect(t, "AddPastTries of no such proposal", err, ports.ErrNotFound)
+
+	_, err = f.Tries.AddPastTries(f.otherOrg(t).ctx(t), f.factory, p.ID, []domain.PastTryAdd{{ItemID: a.ID, Tries: 1}}, t2)
+	expect(t, "AddPastTries of another org's proposal", err, ports.ErrNotFound)
+
+	f.decide(t, p.Number, domain.ProposalDecision{State: domain.ProposalRejected, RejectReason: "no", By: ada, At: t2})
+
+	_, err = f.Tries.AddPastTries(f.ctx(t), f.factory, p.ID, []domain.PastTryAdd{{ItemID: a.ID, Tries: 1}}, t2)
+	expect(t, "AddPastTries of a decided proposal", err, ports.ErrProposalDecided)
+
+	if got, err := f.Tries.ProposalPastTries(f.ctx(t), p.ID); err != nil || len(got) != len(first)+len(added)+len(again) {
+		t.Errorf("ProposalPastTries = %d tries, %v; want %d, the refused adds none", len(got), err, len(first)+len(added)+len(again))
+	}
+}
+
+// expectCopies fails t unless added are queued copies of from, one each, at attempts, made at at.
+func expectCopies(t *testing.T, added, from []domain.PastTry, attempts []int, at time.Time) {
+	t.Helper()
+
+	if len(added) != len(from) {
+		t.Fatalf("AddPastTries = %+v; want %d tries", added, len(from))
+	}
+
+	for i, g := range added {
+		w := from[i]
+		if g.ItemID != w.ItemID || g.Attempt != attempts[i] || g.State != domain.PastTryQueued || g.Station != w.Station ||
+			g.OriginalRunID != w.OriginalRunID || g.Model != w.Model || g.ProposalNumber != w.ProposalNumber || !g.CreatedAt.Equal(at) {
+			t.Errorf("added[%d] = %+v; want a queued copy of %+v at attempt %d", i, g, w, attempts[i])
+		}
 	}
 }
 

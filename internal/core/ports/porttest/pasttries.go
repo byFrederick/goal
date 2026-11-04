@@ -54,6 +54,73 @@ func (s *Store) QueuePastTries(ctx context.Context, factory domain.FactoryID, pr
 	return out, nil
 }
 
+// AddPastTries implements ports.PastTries.
+func (s *Store) AddPastTries(ctx context.Context, factory domain.FactoryID, proposal domain.ProposalID, adds []domain.PastTryAdd,
+	at time.Time,
+) ([]domain.PastTry, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := domain.CheckPastTryAdds(adds); err != nil {
+		return nil, fmt.Errorf("add past tries: %w", err)
+	}
+
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	i := slices.IndexFunc(s.jonah.proposals, func(r jonahRow[domain.Proposal]) bool {
+		return r.org == org && r.row.FactoryID == factory && r.row.ID == proposal
+	})
+	if i < 0 {
+		return nil, fmt.Errorf("add past tries: proposal %s: %w", proposal, ports.ErrNotFound)
+	}
+
+	p := s.jonah.proposals[i].row
+	if p.State != domain.ProposalProposed {
+		return nil, fmt.Errorf("add past tries: proposal %s is %s: %w", proposal, p.State, ports.ErrProposalDecided)
+	}
+
+	var out []domain.PastTry
+
+	for _, a := range adds {
+		latest := s.latestTry(org, proposal, a.ItemID)
+		if latest.ID == "" {
+			return nil, fmt.Errorf("add past tries: proposal %s has no try of item %s: %w", proposal, a.ItemID, ports.ErrNotFound)
+		}
+
+		for k := 1; k <= a.Tries; k++ {
+			out = append(out, domain.PastTry{
+				ID: domain.PastTryID(s.newID()), FactoryID: factory, ProposalID: proposal, ProposalNumber: p.Number, ItemID: a.ItemID,
+				Attempt: latest.Attempt + k, Station: latest.Station, OriginalRunID: latest.OriginalRunID, Model: latest.Model,
+				State: domain.PastTryQueued, CreatedAt: at,
+			})
+		}
+	}
+
+	for _, t := range out {
+		s.jonah.tries = append(s.jonah.tries, jonahRow[domain.PastTry]{org: org, row: t})
+	}
+
+	return out, nil
+}
+
+// latestTry is org's proposal's try of item with the highest attempt, zero when it has none.
+// Callers hold s.mu.
+func (s *Store) latestTry(org domain.OrgID, proposal domain.ProposalID, item domain.ItemID) domain.PastTry {
+	var latest domain.PastTry
+
+	for _, r := range s.jonah.tries {
+		if r.org == org && r.row.ProposalID == proposal && r.row.ItemID == item && r.row.Attempt > latest.Attempt {
+			latest = r.row
+		}
+	}
+
+	return latest
+}
+
 // proposalNumber is the number of org's factory's proposal, 0 when there is none. Callers hold s.mu.
 func (s *Store) proposalNumber(org domain.OrgID, factory domain.FactoryID, proposal domain.ProposalID) int64 {
 	for _, p := range s.jonah.proposals {
