@@ -70,7 +70,7 @@ import (
 // jonahDeps serve the Jonah routes over store: decisions publish and edit through the same
 // authoring service as the builder.
 func jonahDeps(store *postgres.Store, authors *authoring.Service, clock ports.Clock, log *slog.Logger) *api.JonahDeps {
-	return &api.JonahDeps{Store: store, Watches: store, Decisions: jonah.NewDecider(jonah.DecideDeps{
+	return &api.JonahDeps{Store: store, Watches: store, Tests: store, Decisions: jonah.NewDecider(jonah.DecideDeps{
 		Proposals: store, Authoring: api.NewJonahAuthoring(authors), Audit: store, Clock: clock, Log: log,
 	})}
 }
