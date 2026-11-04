@@ -36,7 +36,7 @@ test('the agent page at 768 keeps the crumbs clear of the actions and does not s
   await expect(page.getByRole('heading', { level: 1, name: 'investigator' })).toBeVisible();
   await expectNoHorizontalScroll(page);
   const crumbs = await page.getByRole('navigation', { name: 'Breadcrumb' }).boundingBox();
-  const action = await page.getByRole('button', { name: 'Bake off this agent' }).boundingBox();
+  const action = await page.getByRole('link', { name: 'Open prompt file' }).boundingBox();
   expect(crumbs).not.toBeNull();
   expect(action).not.toBeNull();
   expect((crumbs?.x ?? 0) + (crumbs?.width ?? 0)).toBeLessThanOrEqual(action?.x ?? 0);
@@ -96,18 +96,12 @@ test('the agent page reads as pictured: the prompt, settings and the Not availab
   await expectNoHorizontalScroll(page);
 });
 
-test('Bake off this agent starts a bake-off and opens the new one', async ({ page }) => {
+test('the agent page keeps its actions in the top bar, Save changes last', async ({ page }) => {
   await page.goto('/o/acme/f/software/agents/frontend-engineer');
   await expect(page.getByRole('heading', { level: 1, name: 'frontend-engineer' })).toBeVisible();
-
-  // The actions sit in the top bar (the phone's bar below 768 px), Save changes last.
   await expect(page.getByRole('link', { name: 'Open prompt file' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible();
-  await page.getByRole('button', { name: 'Bake off this agent' }).click();
-
-  await expect(page).toHaveURL(/\/o\/acme\/f\/software\/jonah\/bake-offs\/bake-off-\d+$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Which model for frontend-engineer?' })).toBeVisible();
-  await expect(page.getByText('Queued')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Bake off this agent' })).toHaveCount(0);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });

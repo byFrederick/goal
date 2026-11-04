@@ -1,151 +1,85 @@
-// Jonah's header (MASTER.md "Jonah"): the name and the intro of the tab the page is on,
-// then the tabs Overview, Proposals, Judges, Evals and Bake-offs. The tab the page is on is current, and
-// each tab can show a count. A tab with no page yet renders through NotAvailable, so it stays in the tab
-// order and says "Not available yet". A page that sets its own title uses JonahTabs, the tab bar alone.
+// Jonah's header (MASTER.md "Jonah"): the name and the intro of the tab the page is on, then the tabs
+// Overview, Proposals and Tests, each with its own URL. The tab the page is on is current, and Proposals and Tests
+// show their counts once they are known. A page that sets its own title uses JonahTabs, the tab bar alone.
+import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import { keptTestsQuery, proposalsQuery } from '../../api/queries';
 import { useFactory, useFactoryParams } from '../../shared/factory';
-import { cn } from '../../ui/cn';
-import { NotAvailable } from '../../ui/not-available';
+import { useOrg } from '../../shared/org';
 import { TabNav, tabNavUnderlineItem } from '../../ui/tab-nav';
 
-export type JonahTab = 'overview' | 'proposals' | 'judges' | 'evals' | 'bake-offs';
+export type JonahTab = 'overview' | 'proposals' | 'tests';
 
 const tabLabels: Record<JonahTab, string> = {
   overview: 'Overview',
   proposals: 'Proposals',
-  judges: 'Judges',
-  evals: 'Evals',
-  'bake-offs': 'Bake-offs',
+  tests: 'Tests',
 };
 
-/** The tabs in order; Judges, Evals and Bake-offs have pages so far. */
-const tabOrder: readonly JonahTab[] = ['overview', 'proposals', 'judges', 'evals', 'bake-offs'];
+/** The intro line under the name, per tab, in the factory's own name (the pictures' words). */
+function introOf(tab: JonahTab, factory: string): string {
+  if (tab === 'tests') return 'Past items Goal reruns when a change reaches their station.';
+  return `Proposes changes to ${factory}'s definition. Nothing changes until you approve.`;
+}
 
-const evalsIntro =
-  'Eval cases replay a task an agent must get right, before any change to the definition is published.';
-
-/** The intro line of Overview and Proposals, in the factory's own name (the picture's words). */
-const overviewIntro = (factory: string) =>
-  `Learns from ${factory}'s runs and proposes changes to its definition. Nothing changes until you approve.`;
-
-/** The intro line under the name, per tab. The tabs without a page keep the evals line, the first Jonah had. */
-const introOf: Record<Exclude<JonahTab, 'overview' | 'proposals'>, string> = {
-  judges: 'Judges read a sample of runs and score them against a rubric you write.',
-  evals: 'Cases replay tasks agents must get right. They run on every publish, and a failing case blocks it.',
-  'bake-offs': evalsIntro,
-};
-
-export function JonahHeader({
-  tab,
-  counts = {},
-}: {
-  tab: JonahTab;
-  counts?: Partial<Record<JonahTab, number>> | undefined;
-}) {
+export function JonahHeader({ tab }: { tab: JonahTab }) {
   const factory = useFactory();
-  const intro = tab === 'overview' || tab === 'proposals' ? overviewIntro(factory.title ?? factory.name) : introOf[tab];
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <header className="flex flex-wrap items-center gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="m-0 text-page-title tracking-display">Jonah</h1>
-          <p className="m-0 text-body text-ink-soft">{intro}</p>
+          <p className="m-0 text-body text-ink-soft">{introOf(tab, factory.title ?? factory.name)}</p>
         </div>
       </header>
-      <JonahTabs tab={tab} counts={counts} />
+      <JonahTabs tab={tab} />
     </div>
   );
 }
 
-/** The Jonah tab bar: Overview, Proposals, Judges, Evals and Bake-offs, with the tab the page is on current. */
-export function JonahTabs({
-  tab,
-  counts = {},
-}: {
-  tab: JonahTab;
-  counts?: Partial<Record<JonahTab, number>> | undefined;
-}) {
+/** The counts of the tabs: all proposals (the first page, with a plus when more follow) and the kept tests. */
+function useTabCounts(): Partial<Record<JonahTab, string>> {
+  const org = useOrg();
+  const factory = useFactory();
+  const proposals = useQuery(proposalsQuery(org.id, factory.id));
+  const tests = useQuery(keptTestsQuery(org.id, factory.id));
+  return {
+    ...(proposals.data
+      ? { proposals: `${proposals.data.proposals.length}${proposals.data.next === undefined ? '' : '+'}` }
+      : {}),
+    ...(tests.data ? { tests: String(tests.data.tests.length) } : {}),
+  };
+}
+
+/** The Jonah tab bar: Overview, Proposals and Tests, with the tab the page is on current. */
+export function JonahTabs({ tab }: { tab: JonahTab }) {
   const params = useFactoryParams();
+  const counts = useTabCounts();
+  const item = (t: JonahTab) => ({
+    'aria-current': t === tab ? ('page' as const) : undefined,
+    className: tabNavUnderlineItem,
+    activeOptions: { exact: true },
+    params,
+  });
+  const label = (t: JonahTab) => (
+    <>
+      {tabLabels[t]}
+      {counts[t] === undefined ? null : (
+        <span className="text-meta font-normal text-muted tabular-nums">{counts[t]}</span>
+      )}
+    </>
+  );
   return (
     <TabNav label="Jonah" variant="underline">
-      {tabOrder.map((t) => {
-        const current = t === tab;
-        const classes = tabNavUnderlineItem;
-        const count = counts[t];
-        const label = (
-          <>
-            {tabLabels[t]}
-            {count === undefined ? null : (
-              <span className="text-meta font-normal text-muted tabular-nums">{count}</span>
-            )}
-          </>
-        );
-        if (t === 'overview' || t === 'proposals') {
-          // Overview is the factory's Jonah page itself; Proposals is its tab (?tab=proposals).
-          return (
-            <Link
-              key={t}
-              to="/o/$org/f/$factory/jonah"
-              params={params}
-              search={t === 'proposals' ? { tab: 'proposals' } : {}}
-              activeOptions={{ exact: true }}
-              aria-current={current ? 'page' : undefined}
-              className={classes}
-            >
-              {label}
-            </Link>
-          );
-        }
-        if (t === 'judges') {
-          return (
-            <Link
-              key={t}
-              to="/o/$org/f/$factory/jonah/judges"
-              params={params}
-              activeOptions={{ exact: true }}
-              aria-current={current ? 'page' : undefined}
-              className={classes}
-            >
-              {label}
-            </Link>
-          );
-        }
-        if (t === 'bake-offs') {
-          return (
-            <Link
-              key={t}
-              to="/o/$org/f/$factory/jonah/bake-offs"
-              params={params}
-              activeOptions={{ exact: true }}
-              aria-current={current ? 'page' : undefined}
-              className={classes}
-            >
-              {label}
-            </Link>
-          );
-        }
-        if (t !== 'evals') {
-          return (
-            <NotAvailable key={t} label={tabLabels[t]}>
-              <button type="button" className={cn(classes, 'cursor-not-allowed')}>
-                {label}
-              </button>
-            </NotAvailable>
-          );
-        }
-        return (
-          <Link
-            key={t}
-            to="/o/$org/f/$factory/jonah/evals"
-            params={params}
-            activeOptions={{ exact: true }}
-            aria-current={current ? 'page' : undefined}
-            className={classes}
-          >
-            {label}
-          </Link>
-        );
-      })}
+      <Link to="/o/$org/f/$factory/jonah" {...item('overview')}>
+        {label('overview')}
+      </Link>
+      <Link to="/o/$org/f/$factory/jonah/proposals" {...item('proposals')}>
+        {label('proposals')}
+      </Link>
+      <Link to="/o/$org/f/$factory/jonah/tests" {...item('tests')}>
+        {label('tests')}
+      </Link>
     </TabNav>
   );
 }

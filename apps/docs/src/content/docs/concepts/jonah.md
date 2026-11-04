@@ -149,7 +149,9 @@ A goald without judges or evals shows the Judges, Evals and Bake-offs pages empt
 
 ## Where you meet it
 
-- The Jonah overview shows each judge's pass rate over the last 30 days against its pass mark: the latest period in black, the earlier ones in grey, and the pass mark as a dashed line. Each chart opens that judge.
+- The Jonah page has three tabs, each at its own address: Overview, Proposals and Tests. Overview shows the proposals waiting for your review, After publish (each published change's number before and after, with Undo this change on one that got worse), what Jonah noticed this week and how Jonah works here. Look for improvements now, in the top bar, starts a review at once.
+- A proposal's page shows its estimate, the diffs, why (the items and their reasons) and Tried on past items. A memory proposal lists its facts with the quotes they come from. A model proposal shows its three tries per item beside each item's result on the line. Approve and publish, Edit and Reject with a reason sit in the top bar, and on a phone Approve stays in the bar.
+- The Tests tab lists the kept tests by station, with who kept each and when. A person who can edit the definition removes one from its row menu.
 - `goal jonah` lists proposals. `show` displays the evidence and a unified diff, and `approve`, `edit` and `reject` decide one.
 - `goal agent try-model` proposes another model for an agent.
 - `goal judge` and `goal eval` manage judges and eval runs. `goal bake-off` runs the comparisons.

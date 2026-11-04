@@ -13,7 +13,7 @@ describe('TabNav', () => {
           Overview
         </a>
         <a href="/b" className={tabNavItem}>
-          Judges
+          Tests
         </a>
       </TabNav>,
     );

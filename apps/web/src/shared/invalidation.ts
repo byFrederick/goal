@@ -98,7 +98,7 @@ function isDefinitionEvent(data: unknown): data is DefinitionEvent {
  *   with the eval cases (a publish starts an eval run);
  * - `current`, the version that runs moved or the factory was paused or resumed: the factory and
  *   the list, its versions, draft (based on, running), comparisons, board, overviews, the
- *   connections, the knowledge sources (what uses each), the eval cases and Jonah's reads;
+ *   connections, the knowledge sources (what uses each), Jonah's reads;
  * - `factory`, a factory created or deleted: the factory and the list, attention and overviews.
  */
 export function definitionInvalidations(org: string, data: unknown): QueryKey[] {
@@ -113,9 +113,6 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
       return [
         ...factory,
         defKeys.draft(org, f),
-        ...(data.number !== undefined
-          ? [defKeys.versions(org, f), defKeys.versionsOf(org, f), keys.evals(org, f), keys.judges(org, f)]
-          : []),
         ...(data.number !== undefined ? [defKeys.versions(org, f), defKeys.versionsOf(org, f)] : []),
         ...(data.number !== undefined ? [intakeKeys.triggers(org, f)] : []),
       ];
@@ -127,7 +124,6 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
         defKeys.draft(org, f),
         defKeys.compares(org, f),
         keys.board(org, f),
-        keys.judges(org, f),
         // A publish changes the policy Jonah follows (learning.jonah), so its overview is read again.
         keys.jonah(org, f),
         keys.overviews(org),
@@ -136,7 +132,6 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
         // What uses a connection or a knowledge source is read from the current versions.
         keys.connections(org),
         keys.knowledge(org),
-        keys.evals(org, f),
         // A trigger's rules and its results read from the current definition.
         intakeKeys.triggers(org, f),
       ];
@@ -175,12 +170,12 @@ export function knowledgeInvalidations(org: string): QueryKey[] {
 
 /**
  * The queries one `learning` event touches: Jonah made or changed a review, proposal or observation of
- * a factory, so its overview and proposals are read again. goald does not send this event yet
+ * a factory, so its overview, proposals, kept tests and the versions' watches are read again. goald does not send this event yet
  * (openapi.yaml names no such event); the handler waits for it, and a resync or a focus refetch covers the gap.
  */
 export function learningInvalidations(org: string, data: unknown): QueryKey[] {
   const factory = (data as { factory_id?: unknown } | null)?.factory_id;
-  return typeof factory === 'string' ? [keys.jonah(org, factory)] : [];
+  return typeof factory === 'string' ? [keys.jonah(org, factory), defKeys.versions(org, factory)] : [];
 }
 
 /** A resync may have missed anything of the organization: everything under it is re-read. */

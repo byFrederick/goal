@@ -1,9 +1,7 @@
 // @vitest-environment jsdom
-import type { Problem } from '@goal/api-client';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, startBakeOff } from '../../api/client';
 import { createDraftRequest } from '../../api/definitions';
 import {
   agentStatsQuery,
@@ -23,7 +21,6 @@ import type { AgentView } from './views';
 
 vi.mock('../../api/client', async (original) => ({
   ...(await original<typeof import('../../api/client')>()),
-  startBakeOff: vi.fn(),
 }));
 
 vi.mock('../../api/definitions', async (original) => ({
@@ -324,7 +321,7 @@ describe('the top bar', () => {
 
   it('holds the actions in order, Save changes last, and not in the page body', async () => {
     await renderWithBar(edit);
-    const names = ['Bake off this agent', 'Open prompt file', 'Save changes'];
+    const names = ['Open prompt file', 'Save changes'];
     const found = names.map((n) => screen.getByRole(n === 'Open prompt file' ? 'link' : 'button', { name: n }));
     for (let i = 1; i < found.length; i++) {
       const prev = found[i - 1] as HTMLElement;
@@ -473,100 +470,6 @@ describe('the states', () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
     await renderPage('overview', { version: false });
     await waitFor(() => expect(screen.getByText('The version that runs can’t be read right now.')).toBeTruthy());
-  });
-});
-
-describe('Bake off this agent', () => {
-  const editor = ['item:create', 'factory:manage', 'definition:edit'];
-  const button = () => screen.getByRole('button', { name: 'Bake off this agent' });
-
-  it('starts a bake-off of the agent and opens the new one', async () => {
-    vi.mocked(startBakeOff).mockResolvedValue({
-      bake_off: { id: 'bake-off-2', state: 'queued' } as never,
-      estimate: { usd: 15.6, unpriced: [] },
-    });
-    const { router } = await renderPage('overview', { can: editor });
-
-    fireEvent.click(button());
-
-    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/goal/jonah/bake-offs/bake-off-2'));
-    expect(startBakeOff).toHaveBeenCalledWith('org-1', 'factory-1', 'frontend-engineer');
-  });
-
-  it('is busy and disabled while the start is pending', async () => {
-    vi.mocked(startBakeOff).mockReturnValue(new Promise(() => {}));
-    await renderPage('overview', { can: editor });
-
-    fireEvent.click(button());
-
-    await waitFor(() => expect(button().getAttribute('aria-busy')).toBe('true'));
-    expect((button() as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it('is disabled with its reason without definition:edit, and starts nothing', async () => {
-    await renderPage('overview');
-
-    expect((button() as HTMLButtonElement).disabled).toBe(true);
-    const reason = screen.getByText('View only. Editors of goal change its definition.', {
-      selector: `#${button().getAttribute('aria-describedby')}`,
-    });
-    expect(button().getAttribute('aria-describedby')).toBe(reason.id);
-
-    fireEvent.click(button());
-    expect(startBakeOff).not.toHaveBeenCalled();
-  });
-
-  it('shows a 409 learning-budget refusal with its estimate, and says nothing started', async () => {
-    const refused = new ApiError({
-      title: 'Conflict',
-      status: 409,
-      code: 'learning-budget-exhausted',
-      estimate: { usd: 15.6, unpriced: [] },
-    } as unknown as Problem);
-    vi.mocked(startBakeOff).mockRejectedValue(refused);
-    const { router } = await renderPage('overview', { can: editor });
-
-    fireEvent.click(button());
-
-    expect(await screen.findByText(/would cost about \$15\.60/)).toBeTruthy();
-    expect(screen.getByText(/Nothing was started/)).toBeTruthy();
-    expect(router.state.location.pathname).toBe('/o/acme/f/goal/agents/frontend-engineer');
-  });
-
-  it('says the budget has run out when a 409 carries no estimate', async () => {
-    vi.mocked(startBakeOff).mockRejectedValue(
-      new ApiError({ title: 'Conflict', status: 409, code: 'learning-budget-exhausted' } as unknown as Problem),
-    );
-    await renderPage('overview', { can: editor });
-
-    fireEvent.click(button());
-
-    expect(await screen.findByText('The learning budget has run out. Nothing was started.')).toBeTruthy();
-  });
-
-  it('shows another refusal in place with its detail', async () => {
-    vi.mocked(startBakeOff).mockRejectedValue(
-      new ApiError({
-        title: 'Unprocessable',
-        status: 422,
-        code: 'invalid-bake-off',
-        detail: 'the version has no such agent',
-      } as unknown as Problem),
-    );
-    await renderPage('overview', { can: editor });
-
-    fireEvent.click(button());
-
-    expect(await screen.findByText('Not started: the version has no such agent')).toBeTruthy();
-  });
-
-  it('shows a network failure in place, and says nothing started', async () => {
-    vi.mocked(startBakeOff).mockRejectedValue(new TypeError('Failed to fetch'));
-    await renderPage('overview', { can: editor });
-
-    fireEvent.click(button());
-
-    expect(await screen.findByText('goald is not answering. Nothing started; try again once it is.')).toBeTruthy();
   });
 });
 
