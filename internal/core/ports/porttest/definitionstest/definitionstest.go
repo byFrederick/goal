@@ -65,6 +65,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Publish_FirstWithoutStartIsPaused", testPublishPaused},
 		{"Publish_RemovedStationsMoveOpenItems", testPublishRemovedStations},
 		{"Versions_PublishedNewestFirstAndPaged", testVersions},
+		{"Versions_KeepTheirCounts", testVersionCounts},
 		{"Restore_MovesThePointerBack", testRestore},
 		{"Restore_Guards", testRestoreGuards},
 		{"SetPaused_PausesAndResumes", testSetPaused},

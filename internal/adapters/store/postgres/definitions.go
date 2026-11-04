@@ -728,6 +728,28 @@ type sourceDoc struct {
 	Manifest domain.Manifest   `json:"manifest,omitempty"`
 }
 
+// countsDoc is definition_versions.counts.
+type countsDoc struct {
+	Stations    int `json:"stations"`
+	Agents      int `json:"agents"`
+	Skills      int `json:"skills"`
+	Connections int `json:"connections"`
+}
+
+// countsJSON is c as definition_versions.counts stores it; nil is NULL.
+func countsJSON(c *domain.VersionCounts) ([]byte, error) {
+	if c == nil {
+		return nil, nil
+	}
+
+	b, err := json.Marshal(countsDoc{Stations: c.Stations, Agents: c.Agents, Skills: c.Skills, Connections: c.Connections})
+	if err != nil {
+		return nil, fmt.Errorf("version counts: %w", err)
+	}
+
+	return b, nil
+}
+
 func versionFrom(r db.DefinitionVersion) (domain.DefinitionVersion, error) {
 	v := domain.DefinitionVersion{
 		ID: domain.DefinitionVersionID(r.ID.String()), OrgID: domain.OrgID(r.OrgID.String()),
@@ -757,6 +779,15 @@ func versionFrom(r db.DefinitionVersion) (domain.DefinitionVersion, error) {
 	v.Source = domain.VersionSource{
 		Kind: src.Kind, Template: src.Template, Factory: src.Factory, Version: domain.DefinitionVersionID(src.Version),
 		Manifest: src.Manifest,
+	}
+
+	if r.Counts != nil {
+		var c countsDoc
+		if err := json.Unmarshal(r.Counts, &c); err != nil {
+			return domain.DefinitionVersion{}, fmt.Errorf("definition version %s: counts: %w", r.ID, err)
+		}
+
+		v.Counts = &domain.VersionCounts{Stations: c.Stations, Agents: c.Agents, Skills: c.Skills, Connections: c.Connections}
 	}
 
 	var errs [3]error

@@ -84,6 +84,7 @@ type DefinitionVersion struct {
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 	PublishedAt   *time.Time
+	Counts        []byte
 }
 
 type DraftRequest struct {
