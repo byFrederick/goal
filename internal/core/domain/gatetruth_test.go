@@ -56,6 +56,7 @@ func TestGateTruth(t *testing.T) {
 		Data: withData(person, evKeyFrom, gtShipped, evKeyTo, gtGate, evKeyReason, "it broke main"),
 	}
 	engineMovedBack := Event{At: at(3), Kind: EventMoved, Station: gtGate, Actor: ActorEngine, Data: map[string]any{evKeyFrom: gtGate, evKeyTo: gtWork}}
+	personMovedForward := Event{At: at(4), Kind: EventMoved, Station: gtWork, Actor: gtPerson, Data: withData(person, evKeyFrom, gtWork, evKeyTo, gtGate, evKeyReason, "the gate was wrong")}
 
 	tests := []struct {
 		name   string
@@ -103,6 +104,7 @@ func TestGateTruth(t *testing.T) {
 			{At: at(4), Kind: EventMoved, Station: gtShipped, Actor: gtPerson, Data: withData(person, evKeyFrom, gtShipped, evKeyTo, gtSignoff)},
 			merged,
 		}, want: Approve, reason: string(EventMerged)},
+		{name: "a person moved it forward to the gate after the gate rejected it", events: []Event{claim(0, gtGate), gateRejected, engineMovedBack, personMovedForward, claim(5, gtGate)}},
 	}
 
 	for _, tt := range tests {

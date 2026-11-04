@@ -22,7 +22,7 @@ type GateTruth struct {
 //
 // Reject is right when a person sent the item back inside the window: a person's gate_rejected, a
 // person's rejected that sent it to the station or before it (or to a place its events don't
-// name), or a person's move to the station or before it. Approve is right when the item merged
+// name), or a person's move backward to the station or before it. Approve is right when the item merged
 // inside the window and no person sent it back afterwards. Anything else is no answer: an item
 // still open, cancelled, or sent back by the gate agent alone. The gate agent's own gate_rejected
 // and gate_approved, and their reasons, never decide it.
@@ -75,8 +75,9 @@ func personSendBack(later []Event, e Event, line []string, gate int) (string, bo
 		to := rejectTarget(later, e)
 		sent = to == "" || linePlace(line, to) <= gate
 	case e.Kind == EventMoved:
-		to := dataText(e, evKeyTo)
-		sent = to != "" && linePlace(line, to) <= gate
+		// Only a move backward sends the item back; a move forward to the gate overrules it.
+		from, to := cmp.Or(dataText(e, evKeyFrom), e.Station), dataText(e, evKeyTo)
+		sent = to != "" && linePlace(line, to) <= gate && linePlace(line, to) < linePlace(line, from)
 	}
 
 	if !sent {

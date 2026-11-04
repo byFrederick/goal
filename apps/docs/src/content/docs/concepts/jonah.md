@@ -115,11 +115,11 @@ Code grades a try first. A try whose output breaks the station's contract, as th
 
 A try at a gate station, where the proposal changes the gate's own agent, rules or contract, is then graded by what people did with the item after its original run, never by a model and never by the gate's own reasons. Goal reads the item's events from the original run's start up to its next claim at the gate or at a station before it:
 
-- **Reject is right** when a person sent the item back: a person's rejection at the gate, a person's rejection back to the gate or before it, or a person's move there.
+- **Reject is right** when a person sent the item back: a person's rejection at the gate, a person's rejection back to the gate or before it, or a person's move back there. A person who moves the item forward to the gate overrules it, so that move does not count.
 - **Approve is right** when the item merged and no person sent it back afterwards.
 - **No answer** when the item is still open, was cancelled, or only the gate agent sent it back.
 
-The try is `fixed` when its decision matches, and `not_fixed` when it differs or its output is not a gate verdict. It is `unknown` when there is no answer. Its reason names the person's verdict or the merge.
+The try is `fixed` when its decision matches, and `not_fixed` when it differs or its output is not a gate verdict, as when the try's run failed. It is `unknown` when there is no answer. Its reason names the person's verdict or the merge.
 
 A try at any other station that passes the contract and the checks stays done without a verdict until the grader is built. The grader's hit rates (`tried.grader`) and the station's kept tests (`tried.kept_tests`) are not shown yet: `grader` is absent and `kept_tests` is empty.
 
