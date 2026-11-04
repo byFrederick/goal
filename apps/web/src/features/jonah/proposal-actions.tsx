@@ -35,8 +35,6 @@ export function approveFailure(err: unknown): string {
     'proposal-decided': decidedMessage,
     'proposal-not-found': 'This proposal no longer exists.',
     'definition-invalid': 'The change does not validate, so it was not published. The draft is open to fix it.',
-    'evals-pending': 'Evals are still running for this change. Approve it again once they finish.',
-    'evals-failing': 'An eval case fails with this change, so it was not published. The draft is open to look at it.',
   });
 }
 

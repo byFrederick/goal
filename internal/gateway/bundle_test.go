@@ -1405,13 +1405,6 @@ func TestServeRun_RefusesJonahTokens(t *testing.T) {
 		if status, _, body := request(t, http.MethodGet, url, h.token(t, station)); status != http.StatusOK {
 			t.Errorf("station token: status = %d, want 200 (%s)", status, body)
 		}
-
-		eval := station
-		eval.Kind, eval.Connections = domain.TaskKindEval, nil
-
-		if status, _, body := request(t, http.MethodGet, url, h.token(t, eval)); status != http.StatusOK {
-			t.Errorf("eval token: status = %d, want 200 (%s)", status, body)
-		}
 	})
 }
 

@@ -31,7 +31,6 @@ test('Review is accessible and fits the screen; the copy says runs finish on v8'
   await expect(page.getByText('3 changes', { exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Changes to factory.yaml' })).toContainText('@@ Line: build station');
   await expect(publishButton(page)).toHaveText('Publish v9');
-  await expect(page.getByRole('button', { name: 'Evals before publish' })).toHaveAttribute('aria-disabled', 'true');
   await expect(page.getByRole('region', { name: 'Publish' })).toContainText(
     'You can roll back to any earlier version later.',
   );

@@ -1,13 +1,12 @@
 // Review's alert and Checks (D §10.10, board Define-Publish): "Fix N problems before you publish
 // v9" with a link per error to its section and entity, and B's checks with their problems and
-// "Fix it in <Section>". The Evals row is not built yet: it stays visible, disabled, with a tip.
+// "Fix it in <Section>".
 import { Check, Info, TriangleAlert } from 'lucide-react';
 import type { CheckResult, DefinitionProblem, Validation } from '../../../api/types';
 import type { Model } from '../../../shared/definition/model';
 import { plural } from '../../../shared/format';
 import { SectionCard } from '../../../ui/card';
 import { cn } from '../../../ui/cn';
-import { NotAvailable } from '../../../ui/not-available';
 import { Skeleton, SkeletonRows } from '../../../ui/skeleton';
 import { placeSearch, problemPlace } from '../frame/state';
 import { SectionLink } from '../search-link';
@@ -138,14 +137,6 @@ export function ChecksCard({
                 <span>{p.message}</span>
               </li>
             ))}
-          <li className="border-t border-line py-3">
-            <NotAvailable label="Evals before publish">
-              <button type="button" className="flex w-full items-center gap-3 text-left text-body text-muted">
-                <Check size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
-                Evals before publish
-              </button>
-            </NotAvailable>
-          </li>
         </ul>
       )}
     </SectionCard>
