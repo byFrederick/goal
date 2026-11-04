@@ -6302,6 +6302,79 @@ export interface components {
             undoes?: number;
             /** @description The watch of the proposal's own number (estimate.metric at estimate.station) since Approve published it; absent until the first watch sweep after the publish */
             watch?: components["schemas"]["Watch"];
+            /** @description How the proposal did on past items before anyone saw it (ADR 0039 decisions 11 and 13); absent for a proposal with no tries, as one that changes only memory or the flow, or reaches only stations that can't be tried */
+            tried?: components["schemas"]["ProposalTried"];
+        };
+        ProposalTried: {
+            /**
+             * @description trying: a try is queued or running; done: every try is done; budget_used: a try is still queued and Jonah's budget over the last 7 days is used up ("Not tried: budget used")
+             * @enum {string}
+             */
+            state: "trying" | "done" | "budget_used";
+            /** @description Each past item tried, in the order its tries were queued */
+            items: components["schemas"]["TriedItem"][];
+            /**
+             * Format: double
+             * @description What the tries cost
+             */
+            cost_usd: number;
+            /**
+             * Format: double
+             * @description From the first try queued to the last one finished; absent until every try is done
+             */
+            seconds?: number;
+            /** @description The station's kept tests run on the proposal, each passed or failed; empty until kept tests run on proposals */
+            kept_tests: components["schemas"]["TriedKeptTest"][];
+            /** @description How often the grader read the items' original and final results right; absent until the grader is checked */
+            grader?: components["schemas"]["TriedGrader"];
+        };
+        TriedItem: {
+            /** @description <factory name>#<number>, or the item's id when it is gone */
+            item_ref: string;
+            item_title: string;
+            /** @description The station the tries rerun */
+            station: string;
+            /** @description For a model proposal, how the item went on the line, as "passed first time, $0.42"; absent for other proposals and for an item no longer among the agent's newest */
+            line_result?: string;
+            /** @description The item's tries by attempt, one for most proposals and three for a model proposal */
+            tries: components["schemas"]["TriedTry"][];
+        };
+        TriedTry: {
+            attempt: number;
+            /** @enum {string} */
+            state: "queued" | "running" | "done";
+            /**
+             * @description fixed or not_fixed: whether the try fixed what sent the item back; unknown: its grade can't be trusted; error: the try could not be carried out (error says why). Absent while the try waits to run or to be graded.
+             * @enum {string}
+             */
+            verdict?: "fixed" | "not_fixed" | "unknown" | "error";
+            /** @description Why the try was graded as it was */
+            reason?: string;
+            /** @description Why the try could not be carried out */
+            error?: string;
+            /** Format: double */
+            cost_usd: number;
+        };
+        TriedKeptTest: {
+            /**
+             * Format: int64
+             * @description The kept test's item number
+             */
+            test: number;
+            /** @enum {string} */
+            result: "passed" | "failed";
+        };
+        TriedGrader: {
+            /**
+             * Format: double
+             * @description The share of items whose original result the grader read as not fixed
+             */
+            original_hit_rate: number;
+            /**
+             * Format: double
+             * @description The share of items whose final accepted result the grader read as fixed
+             */
+            final_hit_rate: number;
         };
         /**
          * @description sent_back_rate: the share of items a person sent back at the station; cost_per_item: the USD of an item's runs there; lead_time_p85: the 85th percentile of an item's time there, in seconds. Lower is better for each.

@@ -790,3 +790,59 @@ func TestJonah_ModelProposalUnavailable(t *testing.T) {
 	code, p := problemOfCall(t, h, http.MethodPost, lineModels+bakeOffAgent+"/model-proposal", `{"model":"`+modelOpus+`"}`)
 	wantProblem(t, "a model proposal without Try another model", code, p, http.StatusServiceUnavailable, "jonah-unavailable")
 }
+
+func TestJonah_ProposalTried(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	it := h.doneLineItem(t, 2, 998) // the line spent $1,000: Jonah's budget is $50
+
+	var made gen.ModelProposalResult
+	if code := h.call(t, http.MethodPost, lineModels+bakeOffAgent+"/model-proposal", `{"model":"`+modelOpus+`","confirm":true}`, &made); code != http.StatusCreated {
+		t.Fatalf("confirm = %d, want 201", code)
+	}
+
+	ctx := inOrg(t)
+
+	claimed, err := h.store.ClaimPastTry(ctx, lineID, h.clock.Now(), time.Minute, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.clock.Advance(90 * time.Second)
+
+	if _, err := h.store.FinishPastTry(ctx, claimed, domain.PastTryResult{
+		Verdict: domain.PastTryFixed, Reason: "The tests now cover the merge.", CostUSD: 1.25, At: h.clock.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	tried := h.getProposal(t, fmt.Sprintf("/v1/orgs/acme/factories/line/jonah/proposals/%d", made.Proposal.Number)).Tried
+	if tried == nil || tried.State != gen.ProposalTriedStateTrying || tried.CostUsd != 1.25 || tried.Seconds != nil ||
+		len(tried.KeptTests) != 0 || tried.Grader != nil || len(tried.Items) != 1 {
+		t.Fatalf("tried = %+v, want one item trying at $1.25, no time, kept tests or grader yet", tried)
+	}
+
+	item := tried.Items[0]
+	if item.ItemRef != fmt.Sprintf("line#%d", it.Number) || item.ItemTitle != it.Title || item.Station != stBuild ||
+		val(item.LineResult) != "sent back once at merge, $2.00" || len(item.Tries) != 3 {
+		t.Fatalf("item = %+v, want %s at %s with its line result and 3 tries", item, it.Title, stBuild)
+	}
+
+	first := item.Tries[0]
+	if first.Attempt != 1 || first.State != gen.TriedTryStateDone || val(first.Verdict) != gen.TriedTryVerdictFixed ||
+		val(first.Reason) != "The tests now cover the merge." || first.CostUsd != 1.25 || first.Error != nil {
+		t.Errorf("first try = %+v, want attempt 1 done and fixed with its reason", first)
+	}
+
+	for i, try := range item.Tries[1:] {
+		if try.Attempt != i+2 || try.State != gen.TriedTryStateQueued || try.Verdict != nil || try.Reason != nil {
+			t.Errorf("try %d = %+v, want attempt %d queued without a verdict", i+2, try, i+2)
+		}
+	}
+
+	stored := h.review(t, []domain.NewProposal{{Title: "Tighten the rule", Edits: proposalFiles()}})
+	if p := h.getProposal(t, fmt.Sprintf("%s/%d", acmeProposals, stored[0].Number)); p.Tried != nil {
+		t.Errorf("a proposal with no tries has tried %+v", p.Tried)
+	}
+}
