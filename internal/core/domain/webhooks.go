@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -315,4 +316,134 @@ type SigningSecret struct {
 	Current       string
 	Previous      string
 	PreviousUntil *time.Time
+}
+
+// DeliveryReceipt is what the receiver made of a delivery to an organization's webhook (ADR 0040
+// decision 13): the first part of the delivery log's vocabulary.
+type DeliveryReceipt string
+
+const (
+	// ReceiptAccepted is a signed delivery with an id the webhook had not taken.
+	ReceiptAccepted DeliveryReceipt = "accepted"
+	// ReceiptDuplicate is a signed delivery with an id the webhook had already taken; it creates
+	// nothing.
+	ReceiptDuplicate DeliveryReceipt = "duplicate"
+	// ReceiptRefused is a delivery whose signature was missing or wrong; it keeps metadata only.
+	ReceiptRefused DeliveryReceipt = "refused"
+)
+
+// LedgerRetention is how long a webhook's ledger keeps an accepted delivery id, and its daily
+// counts their day (ADR 0040 decision 12): past DeliveryRetention, so a replay is caught after its
+// row is gone.
+const LedgerRetention = 365 * 24 * time.Hour
+
+// MaxDeliveryID is the longest delivery id a webhook's ledger keeps, in characters.
+const MaxDeliveryID = 200
+
+// GitHubPingReason is the reason an accepted GitHub ping keeps, shown on its webhook (ADR 0040
+// decision 13).
+const GitHubPingReason = "Received GitHub's ping"
+
+// maxEvent is the longest event name a delivery keeps, in characters.
+const maxEvent = 200
+
+// NewReceipt is what the receiver made of one delivery to an organization's webhook, to record
+// (ports.Intake.Receive).
+type NewReceipt struct {
+	WebhookID  WebhookEndpointID
+	ReceivedAt time.Time
+	// Receipt is ReceiptAccepted or ReceiptRefused; the store tells a duplicate.
+	Receipt DeliveryReceipt
+	// DeliveryID is an accepted delivery's id, the sender's or the hash of its body, and Event its
+	// event ("" when the sender names none). A refused one has neither: nothing in it is trusted.
+	DeliveryID string
+	Event      string
+	// Headers are the request's; recording keeps StoredHeaders of them. Body is an accepted one's.
+	Headers map[string]string
+	Body    []byte
+	Reason  string
+	// Named is whether an enabled trigger of a factory the webhook is open to names the delivery
+	// (Trigger.NamesDelivery): an accepted delivery no trigger names keeps only its ledger id and a
+	// daily count.
+	Named bool
+}
+
+// Check refuses an unknown receipt, an accepted delivery without an id or a refused one with an id,
+// event or body, an id over MaxDeliveryID, an event over 200 characters, a body over
+// MaxDeliveryBody and a reason over 500 characters; the error wraps ErrInvalid.
+func (n NewReceipt) Check() error {
+	switch {
+	case n.WebhookID == "":
+		return fmt.Errorf("a receipt needs its webhook: %w", ErrInvalid)
+	case n.Receipt != ReceiptAccepted && n.Receipt != ReceiptRefused:
+		return fmt.Errorf("receipt %q must be accepted or refused: %w", n.Receipt, ErrInvalid)
+	case n.Receipt == ReceiptAccepted && n.DeliveryID == "":
+		return fmt.Errorf("an accepted delivery needs its id: %w", ErrInvalid)
+	case n.Receipt == ReceiptRefused && (n.DeliveryID != "" || n.Event != "" || len(n.Body) > 0):
+		return fmt.Errorf("a refused delivery keeps metadata only: %w", ErrInvalid)
+	case utf8.RuneCountInString(n.DeliveryID) > MaxDeliveryID:
+		return fmt.Errorf("a delivery id is over %d characters: %w", MaxDeliveryID, ErrInvalid)
+	case utf8.RuneCountInString(n.Event) > maxEvent:
+		return fmt.Errorf("a delivery event is over %d characters: %w", maxEvent, ErrInvalid)
+	case len(n.Body) > MaxDeliveryBody:
+		return fmt.Errorf("a delivery body of %d bytes is over %d: %w", len(n.Body), MaxDeliveryBody, ErrInvalid)
+	case utf8.RuneCountInString(n.Reason) > maxIntakeText:
+		return fmt.Errorf("a delivery reason is over %d characters: %w", maxIntakeText, ErrInvalid)
+	}
+
+	return nil
+}
+
+// Received is what recording a receipt did: the receipt (a duplicate when the webhook had taken
+// the id), the delivery id, and the delivery row it kept or, for a duplicate, the one the id first
+// came with; Row is "" when there is none (an accepted delivery no trigger names, or a duplicate
+// whose first row was counted only or is gone).
+type Received struct {
+	Receipt    DeliveryReceipt
+	DeliveryID string
+	Row        WebhookDeliveryID
+}
+
+// DeliveryCount is how many accepted deliveries no enabled trigger named a webhook received on one
+// UTC day, Day its midnight.
+type DeliveryCount struct {
+	WebhookID WebhookEndpointID
+	Day       time.Time
+	Count     int
+}
+
+// InboundDelivery is a request to POST /hooks/{webhook id} as the sender catalog checks it:
+// its headers, names lower-cased, its raw body and when it came.
+type InboundDelivery struct {
+	Headers map[string][]string
+	Body    []byte
+	At      time.Time
+}
+
+// CheckedDelivery is a delivery whose signature passed: its id (the sender's, or the hex SHA-256
+// of the body when it names none) and its event ("" when it names none).
+type CheckedDelivery struct {
+	ID    string
+	Event string
+}
+
+// ErrSignature means a delivery's signature, token or timestamp is missing or wrong. An error
+// that wraps it says which, never a value.
+var ErrSignature = errors.New("the signature is missing or does not match")
+
+// NamesDelivery reports whether t is enabled and its on names a delivery of event from sender to
+// the webhook named webhook (ADR 0040 decision 14): it names the webhook (TriggerNames), or is
+// <sender>.<event>, alone or followed by today's action (github.check_run.failed).
+func (t Trigger) NamesDelivery(webhook string, sender WebhookSender, event string) bool {
+	if !t.Enabled || t.On == OnSchedule {
+		return false
+	}
+
+	if TriggerNames(t.On, webhook) {
+		return true
+	}
+
+	key := string(sender) + "." + event
+
+	return event != "" && (t.On == key || strings.HasPrefix(t.On, key+"."))
 }
