@@ -80,6 +80,9 @@ const (
 	codeMemoryTooBig  = "memory-too-big"
 
 	codeContractNotToolSchema = "contract-not-tool-schema"
+	// codeFollowUpsNotPlain: a contract declares board.flow.outputs.followUps as anything but a
+	// plain array, so a follow-up could fail its run's checks (ADR 0040 decision 5).
+	codeFollowUpsNotPlain = "follow-ups-not-plain-array"
 
 	codeToolSpecInvalid = "tool-spec-invalid"
 
@@ -309,7 +312,84 @@ func (c *checker) outputContracts() {
 					"Describe the alternatives in one object (optional fields, an enum field that names the form) "+
 					"or nest the choice under a property, and check the alternatives in Go", name, file, why)
 		}
+
+		if why := notPlainFollowUps(raw, c.followUpsField()); why != "" {
+			c.errorf(checkContracts, codeFollowUpsNotPlain, at("spec", "contracts", name),
+				"contract %s (%s): its follow-ups field %s %s; declare it as a plain array of strings or objects "+
+					"(no $ref, no maxItems, no required on its items), so a follow-up never fails its run's checks",
+				name, file, c.followUpsField(), why)
+		}
 	}
+}
+
+// followUpsField is board.flow.outputs.followUps, "" when unset.
+func (c *checker) followUpsField() string {
+	if fl := c.f.Spec.Board.Flow; fl != nil && fl.Outputs != nil {
+		return fl.Outputs.FollowUps
+	}
+
+	return ""
+}
+
+// notPlainFollowUps says why a contract's declaration of the follow-ups field is not a plain
+// array, "" when it is, when field is "" or when the contract does not declare it.
+func notPlainFollowUps(raw []byte, field string) string {
+	if field == "" {
+		return ""
+	}
+
+	var top struct {
+		Properties map[string]map[string]any `json:"properties"`
+	}
+
+	prop, ok := map[string]any(nil), false
+	if json.Unmarshal(raw, &top) == nil {
+		prop, ok = top.Properties[field]
+	}
+
+	switch {
+	case !ok:
+		return ""
+	case prop["$ref"] != nil:
+		return "is a $ref"
+	case prop["type"] != "array":
+		return "is not an array"
+	case prop["maxItems"] != nil:
+		return "has maxItems"
+	}
+
+	switch {
+	case hasKey(prop["items"], "$ref"):
+		return "has a $ref in its items"
+	case hasKey(prop["items"], "required"):
+		return "has required fields in its items"
+	}
+
+	return ""
+}
+
+// hasKey reports whether the schema v, or one nested in it, has key.
+func hasKey(v any, key string) bool {
+	switch s := v.(type) {
+	case map[string]any:
+		if _, ok := s[key]; ok {
+			return true
+		}
+
+		for _, sub := range s {
+			if hasKey(sub, key) {
+				return true
+			}
+		}
+	case []any:
+		for _, sub := range s {
+			if hasKey(sub, key) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // notToolSchema says why a contract's top level is not a plain object, "" when it is.

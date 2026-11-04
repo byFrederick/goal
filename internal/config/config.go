@@ -507,6 +507,16 @@ type Flow struct {
 	Retry      *Retry      `json:"retry,omitempty"`
 	// Dependencies maps the output fields that set an item's dependencies.
 	Dependencies *Dependencies `json:"dependencies,omitempty"`
+	// Outputs maps the other output fields goald reads.
+	Outputs *Outputs `json:"outputs,omitempty"`
+	// FollowUpsFrom are the factories (metadata.id) this one accepts follow-ups from.
+	FollowUpsFrom []string `json:"followUpsFrom,omitempty"`
+}
+
+// Outputs names the output fields goald reads besides a contract's own: FollowUps the one that
+// holds follow-ups (ADR 0040 decision 5). An unset key maps no field.
+type Outputs struct {
+	FollowUps string `json:"followUps,omitempty"`
 }
 
 // Dependencies names the output fields that set an item's dependencies: After the one listing

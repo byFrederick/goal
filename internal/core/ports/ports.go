@@ -84,6 +84,10 @@ type Store interface {
 	// Item returns one item, or ErrNotFound.
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
 
+	// FollowUps returns the follow-ups kept for an item (Transition.FollowUps), oldest first and
+	// in output order within a run. An unknown item has none.
+	FollowUps(ctx context.Context, item domain.ItemID) ([]domain.FollowUp, error)
+
 	// Waiting returns up to limit queued or ready items at a station in pull order: expedite
 	// first, then priority (highest first), then age (oldest first).
 	Waiting(ctx context.Context, factory domain.FactoryID, station string, limit int) ([]domain.Item, error)
@@ -790,6 +794,11 @@ type Transition struct {
 	// DoneAt is stored when To.State is done.
 	DoneAt time.Time
 	Events []domain.Event
+	// FollowUps are kept on the item with the change (ADR 0040 decision 6), each with its run,
+	// station and agent: the store sets their ids, factory, item and CreatedAt (At). One whose
+	// domain.FollowUpKey matches a follow-up already kept for the item is skipped, so a rerun
+	// or a retry of the transaction keeps each text once.
+	FollowUps []domain.FollowUp
 }
 
 // ItemNotices streams a notice of every item event as it is committed, from any goald

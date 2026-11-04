@@ -38,6 +38,7 @@ type Store struct {
 	leaseLog  map[domain.ItemID][]domain.LeaseSpan
 	andon     []andonRecord
 	edges     []domain.Edge // item needs, in the order they were added
+	followUps []domain.FollowUp
 	views     map[domain.SavedViewID]savedViewRecord
 	jonah     jonahRows
 	ids       int
@@ -831,6 +832,8 @@ func (s *Store) move(it *domain.Item, t ports.Transition) {
 	for _, e := range t.Events {
 		s.append(e)
 	}
+
+	s.keepFollowUps(it, t.FollowUps, t.At)
 }
 
 // checkLease refuses a transition that releases or takes a lease without an outcome, names both,
