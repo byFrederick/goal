@@ -202,7 +202,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// definition's secret references and knowledge sources are checked against the organization's
 	// (ADR 0037), its models against the organization policy.
 	authors := authoring.New(authoring.Deps{
-		Store: definitionStore, Loads: store, Templates: objects, Policies: policies, Clock: clock,
+		Store: definitionStore, Loads: store, Templates: objects, Policies: policies, Webhooks: intake, Clock: clock,
 		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.kb, Webhooks: intake},
 	})
 	// The code host adapters: moving over tests a converted version's repository token with them,

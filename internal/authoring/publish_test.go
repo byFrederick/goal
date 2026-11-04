@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -578,5 +579,65 @@ func TestPublish_RefusesAModelThePolicyDoesNotAllow(t *testing.T) {
 
 	if _, err := h.svc.Publish(h.ctx, f, h.publishRequest(t, f)); err != nil {
 		t.Errorf("publish with an allowed model = %v", err)
+	}
+}
+
+// webhooksStub is the organization's one GitHub webhook, open to the factories in open.
+type webhooksStub struct {
+	mu   sync.Mutex
+	open []domain.FactoryID
+}
+
+func (w *webhooksStub) Webhooks(context.Context) ([]domain.WebhookEndpoint, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	hook := domain.WebhookEndpoint{ID: "w1", Name: "gh-acme", Sender: domain.SenderGitHub}
+	for _, f := range w.open {
+		hook.Openings = append(hook.Openings, domain.WebhookOpening{FactoryID: f})
+	}
+
+	return []domain.WebhookEndpoint{hook}, nil
+}
+
+// Publish refuses a trigger naming a webhook that isn't open to the factory, and a filter its
+// sender's event never supplies; once the webhook is open and the filter fits, it publishes.
+func TestPublish_RefusesWebhookNotOpen(t *testing.T) {
+	t.Parallel()
+
+	hooks := &webhooksStub{}
+	h := newHarness(t, func(d *authoring.Deps) { d.Webhooks = hooks })
+
+	withTrigger := func(filter string) string {
+		return strings.Replace(acmeYAML, "  board:\n", "  board:\n    workTypes: [feature]\n    triggers:\n"+
+			"      - name: red\n        on: gh-acme.check_run\n"+filter+"        create: { type: feature, station: build }\n", 1)
+	}
+
+	f := h.imported(t, acmeFiles(withTrigger("")))
+
+	_, err := h.svc.Publish(h.ctx, f, h.publishRequest(t, f))
+	if invalid, ok := errors.AsType[*authoring.InvalidError](err); !ok || !slices.Contains(codes(invalid.Problems), authoring.CodeWebhookNotOpen) {
+		t.Fatalf("publish naming a closed webhook = %v; want %s", err, authoring.CodeWebhookNotOpen)
+	}
+
+	hooks.mu.Lock()
+	hooks.open = []domain.FactoryID{f}
+	hooks.mu.Unlock()
+
+	if _, err := h.svc.PutFile(h.ctx, f, authoring.FileWrite{Path: yamlFile, Content: []byte(withTrigger("        filter: { paths: [\"**/*.go\"] }\n"))}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = h.svc.Publish(h.ctx, f, h.publishRequest(t, f))
+	if invalid, ok := errors.AsType[*authoring.InvalidError](err); !ok || !slices.Contains(codes(invalid.Problems), config.CodeFilterUnsupplied) {
+		t.Fatalf("publish with a filter check_run can't supply = %v; want %s", err, config.CodeFilterUnsupplied)
+	}
+
+	if _, err := h.svc.PutFile(h.ctx, f, authoring.FileWrite{Path: yamlFile, Content: []byte(withTrigger("        filter: { conclusion: failure }\n"))}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.svc.Publish(h.ctx, f, h.publishRequest(t, f)); err != nil {
+		t.Errorf("publish naming an open webhook = %v; want it published", err)
 	}
 }
