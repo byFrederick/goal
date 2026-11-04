@@ -7817,6 +7817,89 @@ components:
                 Approve published it; absent until the first watch sweep after the publish
               allOf:
                 - $ref: "#/components/schemas/Watch"
+            tried:
+              description: >-
+                How the proposal did on past items before anyone saw it (ADR 0039 decisions 11 and
+                13); absent for a proposal with no tries, as one that changes only memory or the
+                flow, or reaches only stations that can't be tried
+              allOf:
+                - $ref: "#/components/schemas/ProposalTried"
+    ProposalTried:
+      type: object
+      required: [state, items, cost_usd, kept_tests]
+      properties:
+        state:
+          type: string
+          description: >-
+            trying: a try is queued or running; done: every try is done; budget_used: a try is
+            still queued and Jonah's budget over the last 7 days is used up ("Not tried: budget
+            used")
+          enum: [trying, done, budget_used]
+        items:
+          type: array
+          description: Each past item tried, in the order its tries were queued
+          items: { $ref: "#/components/schemas/TriedItem" }
+        cost_usd: { type: number, format: double, description: What the tries cost, summed }
+        seconds:
+          type: number
+          format: double
+          description: From the first try queued to the last one finished; absent until every try is done
+        kept_tests:
+          type: array
+          description: The station's kept tests run on the proposal, each passed or failed; empty until kept tests run on proposals
+          items: { $ref: "#/components/schemas/TriedKeptTest" }
+        grader:
+          description: How often the grader read the items' original and final results right; absent until the grader is checked
+          allOf:
+            - $ref: "#/components/schemas/TriedGrader"
+    TriedItem:
+      type: object
+      required: [item_ref, item_title, station, tries]
+      properties:
+        item_ref: { type: string, description: "<factory name>#<number>, or the item's id when it is gone" }
+        item_title: { type: string }
+        station: { type: string, description: The station the tries rerun }
+        line_result:
+          type: string
+          description: >-
+            For a model proposal, how the item went on the line, as "passed first time, $0.42";
+            absent for other proposals and for an item no longer among the agent's newest
+        tries:
+          type: array
+          description: The item's tries by attempt, one for most proposals and three for a model proposal
+          items: { $ref: "#/components/schemas/TriedTry" }
+    TriedTry:
+      type: object
+      required: [attempt, state, cost_usd]
+      properties:
+        attempt: { type: integer }
+        state:
+          type: string
+          enum: [queued, running, done]
+        verdict:
+          type: string
+          description: >-
+            fixed or not_fixed: whether the try fixed what sent the item back; unknown: its grade
+            can't be trusted; error: the try could not be carried out (error says why). Absent
+            while the try waits to run or to be graded.
+          enum: [fixed, not_fixed, unknown, error]
+        reason: { type: string, description: Why the try was graded as it was, first; absent without a grade }
+        error: { type: string, description: Why the try could not be carried out }
+        cost_usd: { type: number, format: double }
+    TriedKeptTest:
+      type: object
+      required: [test, result]
+      properties:
+        test: { type: integer, format: int64, description: The kept test's item number }
+        result:
+          type: string
+          enum: [passed, failed]
+    TriedGrader:
+      type: object
+      required: [original_hit_rate, final_hit_rate]
+      properties:
+        original_hit_rate: { type: number, format: double, description: The share of items whose original result the grader read as not fixed }
+        final_hit_rate: { type: number, format: double, description: The share of items whose final accepted result the grader read as fixed }
     WatchMetric:
       type: string
       description: >-

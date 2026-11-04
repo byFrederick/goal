@@ -300,6 +300,7 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		DraftRequests: h.requests,
 		Drafts:        h.drafts,
 		Jonah:         jonah,
+		Watches:       h.store,
 		Tries:         h.store,
 		Proposed:      proposing{base: defs},
 		Knowledge:     kb,

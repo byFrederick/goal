@@ -1428,6 +1428,27 @@ func (e ProposalState) Valid() bool {
 	}
 }
 
+// Defines values for ProposalTriedState.
+const (
+	ProposalTriedStateBudgetUsed ProposalTriedState = "budget_used"
+	ProposalTriedStateDone       ProposalTriedState = "done"
+	ProposalTriedStateTrying     ProposalTriedState = "trying"
+)
+
+// Valid indicates whether the value is a known member of the ProposalTriedState enum.
+func (e ProposalTriedState) Valid() bool {
+	switch e {
+	case ProposalTriedStateBudgetUsed:
+		return true
+	case ProposalTriedStateDone:
+		return true
+	case ProposalTriedStateTrying:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for QueueTrend.
 const (
 	Growing   QueueTrend = "growing"
@@ -1929,6 +1950,69 @@ func (e TouchReason) Valid() bool {
 	case TouchReasonRequiredGate:
 		return true
 	case TouchReasonWrongDecision:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TriedKeptTestResult.
+const (
+	TriedKeptTestResultFailed TriedKeptTestResult = "failed"
+	TriedKeptTestResultPassed TriedKeptTestResult = "passed"
+)
+
+// Valid indicates whether the value is a known member of the TriedKeptTestResult enum.
+func (e TriedKeptTestResult) Valid() bool {
+	switch e {
+	case TriedKeptTestResultFailed:
+		return true
+	case TriedKeptTestResultPassed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TriedTryState.
+const (
+	TriedTryStateDone    TriedTryState = "done"
+	TriedTryStateQueued  TriedTryState = "queued"
+	TriedTryStateRunning TriedTryState = "running"
+)
+
+// Valid indicates whether the value is a known member of the TriedTryState enum.
+func (e TriedTryState) Valid() bool {
+	switch e {
+	case TriedTryStateDone:
+		return true
+	case TriedTryStateQueued:
+		return true
+	case TriedTryStateRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TriedTryVerdict.
+const (
+	TriedTryVerdictError    TriedTryVerdict = "error"
+	TriedTryVerdictFixed    TriedTryVerdict = "fixed"
+	TriedTryVerdictNotFixed TriedTryVerdict = "not_fixed"
+	TriedTryVerdictUnknown  TriedTryVerdict = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the TriedTryVerdict enum.
+func (e TriedTryVerdict) Valid() bool {
+	switch e {
+	case TriedTryVerdictError:
+		return true
+	case TriedTryVerdictFixed:
+		return true
+	case TriedTryVerdictNotFixed:
+		return true
+	case TriedTryVerdictUnknown:
 		return true
 	default:
 		return false
@@ -6389,6 +6473,9 @@ type Proposal struct {
 	Summary            string        `json:"summary"`
 	Title              string        `json:"title"`
 
+	// Tried How the proposal did on past items before anyone saw it (ADR 0039 decisions 11 and 13); absent for a proposal with no tries, as one that changes only memory or the flow, or reaches only stations that can't be tried
+	Tried *ProposalTried `json:"tried,omitempty"`
+
 	// Undoes The number of the proposal this one reverses (Undo this change)
 	Undoes *int64 `json:"undoes,omitempty"`
 
@@ -6484,6 +6571,30 @@ type ProposalReject struct {
 
 // ProposalState defines model for ProposalState.
 type ProposalState string
+
+// ProposalTried defines model for ProposalTried.
+type ProposalTried struct {
+	// CostUsd What the tries cost
+	CostUsd float64 `json:"cost_usd"`
+
+	// Grader How often the grader read the items' original and final results right; absent until the grader is checked
+	Grader *TriedGrader `json:"grader,omitempty"`
+
+	// Items Each past item tried, in the order its tries were queued
+	Items []TriedItem `json:"items"`
+
+	// KeptTests The station's kept tests run on the proposal, each passed or failed; empty until kept tests run on proposals
+	KeptTests []TriedKeptTest `json:"kept_tests"`
+
+	// Seconds From the first try queued to the last one finished; absent until every try is done
+	Seconds *float64 `json:"seconds,omitempty"`
+
+	// State trying: a try is queued or running; done: every try is done; budget_used: a try is still queued and Jonah's budget over the last 7 days is used up ("Not tried: budget used")
+	State ProposalTriedState `json:"state"`
+}
+
+// ProposalTriedState trying: a try is queued or running; done: every try is done; budget_used: a try is still queued and Jonah's budget over the last 7 days is used up ("Not tried: budget used")
+type ProposalTriedState string
 
 // PublishRequest defines model for PublishRequest.
 type PublishRequest struct {
@@ -7648,6 +7759,64 @@ type TransferRequest struct {
 	// To The user id of the admin who becomes an owner
 	To string `json:"to"`
 }
+
+// TriedGrader defines model for TriedGrader.
+type TriedGrader struct {
+	// FinalHitRate The share of items whose final accepted result the grader read as fixed
+	FinalHitRate float64 `json:"final_hit_rate"`
+
+	// OriginalHitRate The share of items whose original result the grader read as not fixed
+	OriginalHitRate float64 `json:"original_hit_rate"`
+}
+
+// TriedItem defines model for TriedItem.
+type TriedItem struct {
+	// ItemRef <factory name>#<number>, or the item's id when it is gone
+	ItemRef   string `json:"item_ref"`
+	ItemTitle string `json:"item_title"`
+
+	// LineResult For a model proposal, how the item went on the line, as "passed first time, $0.42"; absent for other proposals and for an item no longer among the agent's newest
+	LineResult *string `json:"line_result,omitempty"`
+
+	// Station The station the tries rerun
+	Station string `json:"station"`
+
+	// Tries The item's tries by attempt, one for most proposals and three for a model proposal
+	Tries []TriedTry `json:"tries"`
+}
+
+// TriedKeptTest defines model for TriedKeptTest.
+type TriedKeptTest struct {
+	Result TriedKeptTestResult `json:"result"`
+
+	// Test The kept test's item number
+	Test int64 `json:"test"`
+}
+
+// TriedKeptTestResult defines model for TriedKeptTest.Result.
+type TriedKeptTestResult string
+
+// TriedTry defines model for TriedTry.
+type TriedTry struct {
+	Attempt int     `json:"attempt"`
+	CostUsd float64 `json:"cost_usd"`
+
+	// Error Why the try could not be carried out
+	Error *string `json:"error,omitempty"`
+
+	// Reason Why the try was graded as it was
+	Reason *string       `json:"reason,omitempty"`
+	State  TriedTryState `json:"state"`
+
+	// Verdict fixed or not_fixed: whether the try fixed what sent the item back; unknown: its grade can't be trusted; error: the try could not be carried out (error says why). Absent while the try waits to run or to be graded.
+	Verdict *TriedTryVerdict `json:"verdict,omitempty"`
+}
+
+// TriedTryState defines model for TriedTry.State.
+type TriedTryState string
+
+// TriedTryVerdict fixed or not_fixed: whether the try fixed what sent the item back; unknown: its grade can't be trusted; error: the try could not be carried out (error says why). Absent while the try waits to run or to be graded.
+type TriedTryVerdict string
 
 // TriggerTry What the trigger would do with the event now. Every string shaped by the event (the item's title and brief, the model's reason, a step's reason) is text to show as text, never markup.
 type TriggerTry struct {

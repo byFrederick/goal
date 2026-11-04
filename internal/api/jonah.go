@@ -31,6 +31,15 @@ type JonahDeps struct {
 	Models JonahModels
 	// Tests keeps the kept tests (kepttests.go); while it is nil those routes answer 503.
 	Tests KeptTestStore
+	// Tries reads a proposal's tries of past items (ADR 0039 decision 11) for its tried; nil
+	// shows none.
+	Tries PastTryReads
+}
+
+// PastTryReads are the reads of ports.PastTries a proposal's tried makes.
+type PastTryReads interface {
+	ProposalPastTries(ctx context.Context, proposal domain.ProposalID) ([]domain.PastTry, error)
+	AgentDoneItems(ctx context.Context, factory domain.FactoryID, agent string, limit int) ([]domain.AgentItem, error)
 }
 
 // JonahModels estimates and makes a model proposal as the person in ctx; its refusals are
@@ -404,11 +413,103 @@ func (s *server) proposalOut(ctx context.Context, rec ports.FactoryRecord, p dom
 		}
 	}
 
-	if out.Watch, err = s.proposalWatch(ctx, p); err != nil {
+	if err := s.withOutcomes(ctx, rec.ID, p, &out); err != nil {
 		return gen.Proposal{}, err
 	}
 
 	return out, nil
+}
+
+// withOutcomes sets out's watch of p's own number and how p did on past items.
+func (s *server) withOutcomes(ctx context.Context, f domain.FactoryID, p domain.Proposal, out *gen.Proposal) error {
+	var err error
+
+	if out.Watch, err = s.proposalWatch(ctx, p); err != nil {
+		return err
+	}
+
+	out.Tried, err = s.proposalTried(ctx, f, p)
+
+	return err
+}
+
+// triedLineItems bounds the agent's done items read for a model proposal's line results: as many
+// as Try another model reads to pick its items.
+const triedLineItems = 4 * domain.MaxPastTryItems
+
+// proposalTried is how p did on past items, nil when it has no tries or this goald reads none. A
+// model proposal's items carry how each went on the line while it is among the agent's newest.
+func (s *server) proposalTried(ctx context.Context, f domain.FactoryID, p domain.Proposal) (*gen.ProposalTried, error) {
+	if s.jonah.Tries == nil {
+		return nil, nil
+	}
+
+	tries, err := s.jonah.Tries.ProposalPastTries(ctx, p.ID)
+	if err != nil {
+		return nil, fmt.Errorf("read the tries of proposal %d: %w", p.Number, err)
+	}
+
+	if len(tries) == 0 {
+		return nil, nil
+	}
+
+	spend, err := s.jonah.Store.JonahSpendSince(ctx, f, s.clock.Now().UTC().Add(-domain.JonahBudgetWindow))
+	if err != nil {
+		return nil, fmt.Errorf("read jonah's spend: %w", err)
+	}
+
+	tried, _ := jonah.TriedOf(tries, s.jonahPolicy(ctx, f).Budget(spend))
+
+	lines := map[domain.ItemID]string{}
+
+	if p.Agent != "" {
+		items, err := s.jonah.Tries.AgentDoneItems(ctx, f, p.Agent, triedLineItems)
+		if err != nil {
+			return nil, fmt.Errorf("read the items of agent %s: %w", p.Agent, err)
+		}
+
+		for _, it := range items {
+			lines[it.ItemID] = it.LineResult()
+		}
+	}
+
+	out := &gen.ProposalTried{
+		State: gen.ProposalTriedState(tried.State), Items: make([]gen.TriedItem, 0, len(tried.Items)), CostUsd: tried.CostUSD,
+		KeptTests: []gen.TriedKeptTest{},
+	}
+
+	if tried.State == jonah.TriedDone {
+		secs := tried.Duration.Seconds()
+		out.Seconds = &secs
+	}
+
+	for _, it := range tried.Items {
+		ref, title := s.itemRef(ctx, f, it.ItemID)
+		e := gen.TriedItem{ItemRef: ref, ItemTitle: title, Station: it.Station, Tries: make([]gen.TriedTry, 0, len(it.Tries))}
+
+		if line, ok := lines[it.ItemID]; ok {
+			e.LineResult = &line
+		}
+
+		for _, t := range it.Tries {
+			e.Tries = append(e.Tries, triedTryOut(t))
+		}
+
+		out.Items = append(out.Items, e)
+	}
+
+	return out, nil
+}
+
+// triedTryOut is t as a proposal's tried shows it.
+func triedTryOut(t domain.PastTry) gen.TriedTry {
+	out := gen.TriedTry{Attempt: t.Attempt, State: gen.TriedTryState(t.State), CostUsd: t.CostUSD, Reason: optional(t.Reason), Error: optional(t.Error)}
+	if t.Verdict != "" {
+		v := gen.TriedTryVerdict(t.Verdict)
+		out.Verdict = &v
+	}
+
+	return out
 }
 
 // proposalEditsOut are edits as the API gives them.
