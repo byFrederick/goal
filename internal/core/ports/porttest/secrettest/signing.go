@@ -8,7 +8,7 @@ import (
 )
 
 // The secret the suite's webhook is signed by.
-const hookSecret = "webhook-github-acme"
+const hookSecret = "webhook-github-acme" //nolint:gosec // a secret's name, not a value
 
 // signingTests are the cases of opening a webhook's secret (ADR 0040 decision 15).
 var signingTests = []struct {

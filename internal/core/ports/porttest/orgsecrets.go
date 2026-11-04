@@ -207,12 +207,7 @@ func (s *OrgSecrets) Patch(ctx context.Context, name string, p domain.SecretPatc
 		}
 	}
 
-	sealed := &secretRow{secret: next, keyID: r.keyID, nonce: r.nonce, ciphertext: r.ciphertext, previous: r.previous}
-	if p.Replace != nil && len(s.d.signs[org][r.secret.ID]) > 0 {
-		sealed.previous = &previousValue{
-			keyID: r.keyID, nonce: r.nonce, ciphertext: r.ciphertext, until: time.Now().UTC().Add(domain.PreviousSecretKept).Truncate(time.Microsecond),
-		}
-	}
+	sealed := &secretRow{secret: next, keyID: r.keyID, nonce: r.nonce, ciphertext: r.ciphertext, previous: s.d.keptLocked(org, r, p)}
 
 	if p.Replace != nil {
 		if err := s.sealLocked(org, sealed, *p.Replace); err != nil {
@@ -422,6 +417,18 @@ func (s *OrgSecrets) sign(org domain.OrgID, id domain.SecretID, webhook string, 
 		s.d.signs[org][id][webhook] = true
 	} else {
 		delete(s.d.signs[org][id], webhook)
+	}
+}
+
+// keptLocked is the previous value r keeps after p: its value now, for 24 hours, when p replaces
+// the value of a secret a webhook uses, and the one it had otherwise.
+func (d *secretData) keptLocked(org domain.OrgID, r *secretRow, p domain.SecretPatch) *previousValue {
+	if p.Replace == nil || len(d.signs[org][r.secret.ID]) == 0 {
+		return r.previous
+	}
+
+	return &previousValue{
+		keyID: r.keyID, nonce: r.nonce, ciphertext: r.ciphertext, until: time.Now().UTC().Add(domain.PreviousSecretKept).Truncate(time.Microsecond),
 	}
 }
 

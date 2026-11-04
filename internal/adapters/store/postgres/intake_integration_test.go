@@ -341,7 +341,7 @@ func TestIntake_OrgWebhooksRLSAndGrants(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, stmt := range []string{
+	appRefuses(t, d, acme, []string{
 		`UPDATE webhook_endpoints SET sender = 'gitlab'`,
 		`UPDATE webhook_endpoints SET secret_id = gen_random_uuid()`,
 		`UPDATE webhook_endpoints SET factory_id = gen_random_uuid()`,
@@ -352,12 +352,7 @@ func TestIntake_OrgWebhooksRLSAndGrants(t *testing.T) {
 		`INSERT INTO webhook_endpoints (id, name, sender, secret_id) VALUES (gen_random_uuid(), 'github-acme', 'github', '` + string(w.SecretID) + `')`,
 		`INSERT INTO webhook_endpoints (id, name, sender) VALUES (gen_random_uuid(), 'no-secret', 'github')`,
 		`DELETE FROM secrets WHERE id = '` + string(w.SecretID) + `'`,
-	} {
-		err := inOrgTx(t, d.store.pool, acme, func(tx pgx.Tx) error { _, err := tx.Exec(t.Context(), stmt); return err })
-		if err == nil {
-			t.Errorf("goal_app ran %s", stmt)
-		}
-	}
+	})
 
 	ctx := domain.WithOrg(t.Context(), acme)
 	renamed := "github-signing"
@@ -374,12 +369,32 @@ func TestIntake_OrgWebhooksRLSAndGrants(t *testing.T) {
 		t.Errorf("ConnectionKeyIDs = %v, %v; want [k1], the secret's, and no empty id", ids, err)
 	}
 
+	purgeRemovesWebhooks(t, d, acme)
+}
+
+// appRefuses checks that goal_app, in org, runs none of stmts.
+func appRefuses(t *testing.T, d connectionsDB, org domain.OrgID, stmts []string) {
+	t.Helper()
+
+	for _, stmt := range stmts {
+		err := inOrgTx(t, d.store.pool, org, func(tx pgx.Tx) error { _, err := tx.Exec(t.Context(), stmt); return err })
+		if err == nil {
+			t.Errorf("goal_app ran %s", stmt)
+		}
+	}
+}
+
+// purgeRemovesWebhooks deletes and purges org, whose webhook uses one of its secrets, and checks
+// no webhook row is left.
+func purgeRemovesWebhooks(t *testing.T, d connectionsDB, org domain.OrgID) {
+	t.Helper()
+
 	deleted := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
-	if err := d.store.DeleteOrg(ctx, domain.LocalUser, deleted); err != nil {
+	if err := d.store.DeleteOrg(domain.WithOrg(t.Context(), org), domain.LocalUser, deleted); err != nil {
 		t.Fatal(err)
 	}
 
-	if ok, err := d.store.PurgeOrg(t.Context(), acme, deleted.Add(time.Second), nil); !ok || err != nil {
+	if ok, err := d.store.PurgeOrg(t.Context(), org, deleted.Add(time.Second), nil); !ok || err != nil {
 		t.Fatalf("PurgeOrg with a webhook and its secret = %v, %v", ok, err)
 	}
 

@@ -146,11 +146,21 @@ func TestRekey_ResealsPreviousSecrets(t *testing.T) {
 		t.Errorf("OpenSigning under k3 after Rekey = %+v, %v; want both values", got, err)
 	}
 
-	if _, err := d.admin.Exec(t.Context(), `UPDATE secrets SET previous_until = now() - interval '1 second' WHERE id = $1`, string(w.SecretID)); err != nil {
+	lapsedPreviousGoes(t, d, org, w.SecretID)
+}
+
+// lapsedPreviousGoes moves secret id's previous value past its 24 hours and checks it no longer
+// opens and goes at the next rekey.
+func lapsedPreviousGoes(t *testing.T, d connectionsDB, org domain.OrgID, id domain.SecretID) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), org)
+
+	if _, err := d.admin.Exec(t.Context(), `UPDATE secrets SET previous_until = now() - interval '1 second' WHERE id = $1`, string(id)); err != nil {
 		t.Fatal(err)
 	}
 
-	if got, err := NewSecrets(d.store, testKey(t, "k3")).OpenSigning(ctx, w.SecretID); err != nil || got.Previous != "" || got.PreviousUntil != nil {
+	if got, err := NewSecrets(d.store, testKey(t, "k3")).OpenSigning(ctx, id); err != nil || got.Previous != "" || got.PreviousUntil != nil {
 		t.Errorf("OpenSigning once the previous value lapsed = %+v, %v; want the value alone", got, err)
 	}
 

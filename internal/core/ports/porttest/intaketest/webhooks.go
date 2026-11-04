@@ -12,7 +12,7 @@ import (
 // The organization's webhooks (ADR 0040 decisions 12 and 15) the suite creates.
 const (
 	orgHook   = "github-acme"
-	hookToken = "webhook-github-acme"
+	hookToken = "webhook-github-acme" //nolint:gosec // a secret's name, not a value
 	hookValue = "whsec-conformance-value"
 )
 
@@ -81,19 +81,26 @@ func (f *fixture) listed(factory domain.FactoryID) []string {
 	return names
 }
 
+// expectNew checks the new webhook w is enabled, open to no factory and signed by its secret.
+func (f *fixture) expectNew(w domain.WebhookEndpoint) {
+	f.t.Helper()
+
+	if !w.OrgLevel() || w.Sender != domain.SenderGitHub || !w.Enabled || len(w.Openings) != 0 || w.Secret != hookToken || w.SecretID == "" {
+		f.t.Fatalf("created = %+v; want an enabled github webhook, open to none, signed by %s", w, hookToken)
+	}
+
+	if got := f.listed(f.factory); len(got) != 0 {
+		f.t.Errorf("the factory's endpoints before an opening = %v; want none", got)
+	}
+}
+
 // A new webhook is enabled and open to no factory; an opening, limited to repositories or not,
 // lists it for that factory; a rename, turning it off and closing it change what reads it.
 func testWebhookPatch(f *fixture) {
 	t := f.t
 	w := f.webhook(orgHook)
 
-	if !w.OrgLevel() || w.Sender != domain.SenderGitHub || !w.Enabled || len(w.Openings) != 0 || w.Secret != hookToken || w.SecretID == "" {
-		t.Fatalf("created = %+v; want an enabled github webhook, open to none, signed by %s", w, hookToken)
-	}
-
-	if got := f.listed(f.factory); len(got) != 0 {
-		t.Errorf("the factory's endpoints before an opening = %v; want none", got)
-	}
+	f.expectNew(w)
 
 	other := f.NewFactory(t, f.org)
 	repos := []string{"acme/api", "acme/web"}
@@ -111,6 +118,12 @@ func testWebhookPatch(f *fixture) {
 		t.Errorf("the factory's endpoints = %v; want %s", got, orgHook)
 	}
 
+	f.renameAndClose(w, other)
+}
+
+// renameAndClose renames w, turns it off and closes it to other, and checks every read sees it.
+func (f *fixture) renameAndClose(w domain.WebhookEndpoint, other domain.FactoryID) {
+	t := f.t
 	renamed, off := "github-labs", false
 	w = f.patch(w.ID, domain.WebhookPatch{Name: &renamed, Enabled: &off, Close: []domain.FactoryID{other}})
 
@@ -128,9 +141,16 @@ func testWebhookPatch(f *fixture) {
 		t.Errorf("Endpoint = %+v, %v; want the renamed webhook with its opening and secret", byID, err)
 	}
 
+	f.onlyWebhook(w.ID)
+}
+
+// onlyWebhook checks the organization's one webhook is id.
+func (f *fixture) onlyWebhook(id domain.WebhookEndpointID) {
+	f.t.Helper()
+
 	list, err := f.in.Webhooks(f.ctx())
-	if err != nil || len(list) != 1 || list[0].ID != w.ID {
-		t.Errorf("Webhooks = %+v, %v; want the one webhook", list, err)
+	if err != nil || len(list) != 1 || list[0].ID != id {
+		f.t.Errorf("Webhooks = %+v, %v; want the one webhook", list, err)
 	}
 }
 

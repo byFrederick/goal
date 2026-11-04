@@ -11,7 +11,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/domain"

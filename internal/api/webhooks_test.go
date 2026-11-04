@@ -24,6 +24,7 @@ const (
 	hookBody     = `{"name":"` + hookName + `","kind":"generic"}`
 	// codeHookNotFound answers an endpoint the factory does not have.
 	codeHookNotFound = "webhook-not-found"
+	codeHookInvalid  = "webhook-invalid"
 	contentType      = "Content-Type"
 )
 
@@ -136,8 +137,8 @@ func TestWebhooks_CreateRefusals(t *testing.T) {
 		code                     string
 	}{
 		{"a taken name", http.MethodPost, webhooksPath, `{"name":"ci-hooks","kind":"github"}`, http.StatusConflict, "webhook-name-taken"},
-		{"not a slug", http.MethodPost, webhooksPath, `{"name":"CI Hooks","kind":"generic"}`, http.StatusBadRequest, "webhook-invalid"},
-		{"unknown kind", http.MethodPost, webhooksPath, `{"name":"deploys","kind":"gitlab"}`, http.StatusBadRequest, "webhook-invalid"},
+		{"not a slug", http.MethodPost, webhooksPath, `{"name":"CI Hooks","kind":"generic"}`, http.StatusBadRequest, codeHookInvalid},
+		{"unknown kind", http.MethodPost, webhooksPath, `{"name":"deploys","kind":"gitlab"}`, http.StatusBadRequest, codeHookInvalid},
 		{"rotate of no endpoint", http.MethodPost, webhooksPath + "/019a0000-0000-7000-8000-000000000000/rotate", "", http.StatusNotFound, codeHookNotFound},
 		{"another factory's endpoint", http.MethodPost, lineWebhooks + "/" + created.Id + "/rotate", "", http.StatusNotFound, codeHookNotFound},
 		{"delete through another factory", http.MethodDelete, lineWebhooks + "/" + created.Id, "", http.StatusNotFound, codeHookNotFound},
@@ -146,7 +147,7 @@ func TestWebhooks_CreateRefusals(t *testing.T) {
 			"no such delivery", http.MethodGet, webhooksPath + "/" + created.Id + "/deliveries/019a0000-0000-7000-8000-000000000000", "",
 			http.StatusNotFound, "webhook-delivery-not-found",
 		},
-		{"a cursor of nothing", http.MethodGet, webhooksPath + "/" + created.Id + "/deliveries?after=nope", "", http.StatusBadRequest, "webhook-invalid"},
+		{"a cursor of nothing", http.MethodGet, webhooksPath + "/" + created.Id + "/deliveries?after=nope", "", http.StatusBadRequest, codeHookInvalid},
 	}
 
 	for _, tc := range tests {
@@ -314,7 +315,6 @@ func TestWebhooks_Permissions(t *testing.T) {
 // orgHooksPath is the organization's webhook routes.
 const orgHooksPath = "/v1/orgs/acme/webhooks"
 
-
 // createOrgHook creates the organization webhook of body as the local user.
 func (h *harness) createOrgHook(t *testing.T, body string) gen.CreatedWebhook {
 	t.Helper()
@@ -342,6 +342,15 @@ func TestWebhooks_OrgCreate(t *testing.T) {
 	}
 
 	h.expectNoSecret(t, []string{*w.SecretValue}, orgHooksPath, orgHooksPath+"/ci-hooks", orgHooksPath+"/"+w.Id, secretsPath, "/v1/orgs/acme/audit")
+}
+
+// A long name's secret is cut without a trailing hyphen; a standard sender's value is whsec_; an
+// existing secret answers no value and cannot be deleted while the webhook uses it; a token
+// sender reads its default header.
+func TestWebhooks_OrgCreateNamesAndSecrets(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
 
 	long := h.createOrgHook(t, `{"name":"abcdefghijklmnopqrstuvwxyzabcde-fgh","sender":"standard"}`)
 	if long.Secret != "webhook-abcdefghijklmnopqrstuvwxyzabcde" || long.SecretValue == nil || !strings.HasPrefix(*long.SecretValue, "whsec_") {
@@ -358,7 +367,7 @@ func TestWebhooks_OrgCreate(t *testing.T) {
 	}
 
 	token := h.createOrgHook(t, `{"name":"datadog","sender":"token","token":{"event_path":"event.type"}}`)
-	if token.Token == nil || deref(token.Token.Header) != "Authorization" || deref(token.Token.EventPath) != "event.type" {
+	if token.Token == nil || deref(token.Token.Header) != domain.DefaultTokenHeader || deref(token.Token.EventPath) != "event.type" {
 		t.Errorf("token webhook's settings = %+v; want the default header and its event path", token.Token)
 	}
 
@@ -368,8 +377,8 @@ func TestWebhooks_OrgCreate(t *testing.T) {
 	}
 
 	list := decode[gen.WebhookList](t, h.request(t, http.MethodGet, orgHooksPath, "", nil), http.StatusOK)
-	if names := webhookNames(list); !slices.Equal(names, []string{"abcdefghijklmnopqrstuvwxyzabcde-fgh", "ci-hooks", "datadog", "pages"}) {
-		t.Errorf("webhooks = %v; want the four by name", names)
+	if names := webhookNames(list); !slices.Equal(names, []string{"abcdefghijklmnopqrstuvwxyzabcde-fgh", "datadog", "pages"}) {
+		t.Errorf("webhooks = %v; want the three by name", names)
 	}
 }
 
@@ -395,17 +404,17 @@ func TestWebhooks_OrgRefusals(t *testing.T) {
 		status                   int
 		code                     string
 	}{
-		{"a reserved name", http.MethodPost, orgHooksPath, `{"name":"schedule","sender":"github"}`, http.StatusBadRequest, "webhook-invalid"},
-		{"an unknown sender", http.MethodPost, orgHooksPath, `{"name":"pings","sender":"slack"}`, http.StatusBadRequest, "webhook-invalid"},
-		{"token settings on github", http.MethodPost, orgHooksPath, `{"name":"pings","sender":"github","token":{"header":"X-Token"}}`, http.StatusBadRequest, "webhook-invalid"},
+		{"a reserved name", http.MethodPost, orgHooksPath, `{"name":"schedule","sender":"github"}`, http.StatusBadRequest, codeHookInvalid},
+		{"an unknown sender", http.MethodPost, orgHooksPath, `{"name":"pings","sender":"slack"}`, http.StatusBadRequest, codeHookInvalid},
+		{"token settings on github", http.MethodPost, orgHooksPath, `{"name":"pings","sender":"github","token":{"header":"X-Token"}}`, http.StatusBadRequest, codeHookInvalid},
 		{"a taken name", http.MethodPost, orgHooksPath, `{"name":"builds","sender":"gitlab"}`, http.StatusConflict, "webhook-name-taken"},
 		{"no such secret", http.MethodPost, orgHooksPath, `{"name":"pings","sender":"sentry","secret":"ghost-secret"}`, http.StatusNotFound, "secret-not-found"},
 		{"no such webhook", http.MethodGet, orgHooksPath + "/ghost", "", http.StatusNotFound, codeHookNotFound},
-		{"no such factory", http.MethodPatch, orgHooksPath + "/builds", `{"open":[{"factory":"00000000-0000-4000-8000-ffffffffffff"}]}`, http.StatusNotFound, "factory-not-found"},
-		{"opened and closed", http.MethodPatch, orgHooksPath + "/builds", `{"open":[{"factory":"` + lineID + `"}],"close":["` + lineID + `"]}`, http.StatusBadRequest, "webhook-invalid"},
-		{"a reserved rename", http.MethodPatch, orgHooksPath + "/builds", `{"name":"webhook"}`, http.StatusBadRequest, "webhook-invalid"},
-		{"rotating its secret on the factory route", http.MethodPost, webhooksPath + "/" + w.Id + "/rotate", "", http.StatusBadRequest, "webhook-invalid"},
-		{"a cursor of nothing", http.MethodGet, orgHooksPath + "/builds/deliveries?after=nope", "", http.StatusBadRequest, "webhook-invalid"},
+		{"no such factory", http.MethodPatch, orgHooksPath + "/builds", `{"open":[{"factory":"00000000-0000-4000-8000-ffffffffffff"}]}`, http.StatusNotFound, codeFactoryNotFound},
+		{"opened and closed", http.MethodPatch, orgHooksPath + "/builds", `{"open":[{"factory":"` + lineID + `"}],"close":["` + lineID + `"]}`, http.StatusBadRequest, codeHookInvalid},
+		{"a reserved rename", http.MethodPatch, orgHooksPath + "/builds", `{"name":"webhook"}`, http.StatusBadRequest, codeHookInvalid},
+		{"rotating its secret on the factory route", http.MethodPost, webhooksPath + "/" + w.Id + "/rotate", "", http.StatusBadRequest, codeHookInvalid},
+		{"a cursor of nothing", http.MethodGet, orgHooksPath + "/builds/deliveries?after=nope", "", http.StatusBadRequest, codeHookInvalid},
 	}
 
 	for _, tc := range tests {
@@ -438,10 +447,34 @@ func TestWebhooks_OrgOpenCloseAndInUse(t *testing.T) {
 		t.Fatalf("acme's endpoints before an opening = %+v; want none", l.Endpoints)
 	}
 
+	use := gen.WebhookTrigger{Factory: acmeID, FactoryName: acmeName, Trigger: "deploy-failed"}
+	h.openToAcmeAndLine(t, path, use)
+
+	l := decode[gen.WebhookEndpointList](t, h.request(t, http.MethodGet, webhooksPath, "", nil), http.StatusOK)
+	if len(l.Endpoints) != 1 || l.Endpoints[0].Sender != gen.WebhookSenderGithub || l.Endpoints[0].Kind != gen.WebhookKindGithub ||
+		l.Endpoints[0].SecretName != "webhook-ci-hooks" || !slices.Equal(l.Endpoints[0].Triggers, []string{"deploy-failed"}) {
+		t.Errorf("acme's endpoints = %+v; want ci-hooks as github, signed by webhook-ci-hooks, feeding deploy-failed", l.Endpoints)
+	}
+
+	h.expectOpenDeliveries(t, w.Id)
+	h.expectInUse(t, w.Id, use)
+
+	closed := decode[gen.Webhook](t, h.request(t, http.MethodPatch, path, `{"close":["`+lineID+`"],"enabled":false}`, nil), http.StatusOK)
+	if len(closed.Openings) != 1 || closed.Openings[0].Factory != acmeID || closed.Enabled {
+		t.Errorf("after closing line = %+v; want open to acme alone, disabled", closed)
+	}
+
+	refused(t, "line's deliveries once closed", h.request(t, http.MethodGet, lineWebhooks+"/"+w.Id+"/deliveries", "", nil), http.StatusNotFound, codeHookNotFound)
+}
+
+// openToAcmeAndLine opens the webhook at path to acme, limited to acme/api, and to line, and
+// checks acme's trigger use is its one use.
+func (h *harness) openToAcmeAndLine(t *testing.T, path string, use gen.WebhookTrigger) {
+	t.Helper()
+
 	opened := decode[gen.Webhook](t, h.request(t, http.MethodPatch, path,
 		`{"open":[{"factory":"`+acmeID+`","repositories":["acme/api"]},{"factory":"`+lineID+`"}]}`, nil), http.StatusOK)
 
-	use := gen.WebhookTrigger{Factory: acmeID, FactoryName: "acme", Trigger: "deploy-failed"}
 	if len(opened.Openings) != 2 || !slices.Equal(opened.Triggers, []gen.WebhookTrigger{use}) {
 		t.Fatalf("opened = %+v; want open to acme and line, used by acme's deploy-failed", opened)
 	}
@@ -451,16 +484,17 @@ func TestWebhooks_OrgOpenCloseAndInUse(t *testing.T) {
 			t.Errorf("opening = %+v; want acme limited to acme/api and line to none", o)
 		}
 	}
+}
 
-	l := decode[gen.WebhookEndpointList](t, h.request(t, http.MethodGet, webhooksPath, "", nil), http.StatusOK)
-	if len(l.Endpoints) != 1 || l.Endpoints[0].Sender != gen.WebhookSenderGithub || l.Endpoints[0].Kind != gen.WebhookKindGithub ||
-		l.Endpoints[0].SecretName != "webhook-ci-hooks" || !slices.Equal(l.Endpoints[0].Triggers, []string{"deploy-failed"}) {
-		t.Errorf("acme's endpoints = %+v; want ci-hooks as github, signed by webhook-ci-hooks, feeding deploy-failed", l.Endpoints)
-	}
+// expectOpenDeliveries checks a delivery to webhook id is listed on its route and on the routes
+// of both factories it is open to, and read with its body.
+func (h *harness) expectOpenDeliveries(t *testing.T, id string) {
+	t.Helper()
 
-	d := h.deliver(t, w.Id, domain.NewWebhookDelivery{ReceivedAt: t0, Body: []byte(`{"action":"completed"}`)})
+	d := h.deliver(t, id, domain.NewWebhookDelivery{ReceivedAt: t0, Body: []byte(`{"action":"completed"}`)})
+	path := orgHooksPath + "/" + id
 
-	for _, deliveries := range []string{path + "/deliveries", webhooksPath + "/" + w.Id + "/deliveries", lineWebhooks + "/" + w.Id + "/deliveries"} {
+	for _, deliveries := range []string{path + "/deliveries", webhooksPath + "/" + id + "/deliveries", lineWebhooks + "/" + id + "/deliveries"} {
 		if got := deliveryIDs(decode[gen.WebhookDeliveryPage](t, h.request(t, http.MethodGet, deliveries, "", nil), http.StatusOK)); !slices.Equal(got, []string{string(d.ID)}) {
 			t.Errorf("GET %s = %v; want the delivery", deliveries, got)
 		}
@@ -470,25 +504,33 @@ func TestWebhooks_OrgOpenCloseAndInUse(t *testing.T) {
 	if req.Body != `{"action":"completed"}` {
 		t.Errorf("delivery = %+v; want its body", req)
 	}
+}
+
+// expectInUse checks that closing acme, renaming and deleting webhook id answer 409 naming use.
+func (h *harness) expectInUse(t *testing.T, id string, use gen.WebhookTrigger) {
+	t.Helper()
+
+	path := orgHooksPath + "/" + id
 
 	for _, r := range []struct{ name, method, path, body string }{
 		{"closing acme", http.MethodPatch, path, `{"close":["` + acmeID + `"]}`},
 		{"a rename", http.MethodPatch, path, `{"name":"github-acme"}`},
 		{"a delete", http.MethodDelete, path, ""},
-		{"a delete through the factory route", http.MethodDelete, webhooksPath + "/" + w.Id, ""},
+		{"a delete through the factory route", http.MethodDelete, webhooksPath + "/" + id, ""},
 	} {
 		p := refused(t, r.name, h.request(t, r.method, r.path, r.body, nil), http.StatusConflict, "webhook-in-use")
 		if p.Triggers == nil || !slices.Equal(*p.Triggers, []gen.WebhookTrigger{use}) {
 			t.Errorf("%s: triggers = %v; want acme's deploy-failed", r.name, p.Triggers)
 		}
 	}
+}
 
-	closed := decode[gen.Webhook](t, h.request(t, http.MethodPatch, path, `{"close":["`+lineID+`"],"enabled":false}`, nil), http.StatusOK)
-	if len(closed.Openings) != 1 || closed.Openings[0].Factory != acmeID || closed.Enabled {
-		t.Errorf("after closing line = %+v; want open to acme alone, disabled", closed)
-	}
+// A webhook no published trigger uses is renamed, closed and deleted, and then its secret is
+// deleted too.
+func TestWebhooks_OrgUnusedChanges(t *testing.T) {
+	t.Parallel()
 
-	refused(t, "line's deliveries once closed", h.request(t, http.MethodGet, lineWebhooks+"/"+w.Id+"/deliveries", "", nil), http.StatusNotFound, codeHookNotFound)
+	h := newHarness(t)
 
 	h.createOrgHook(t, `{"name":"builds","sender":"gitlab"}`)
 	h.request(t, http.MethodPatch, orgHooksPath+"/builds", `{"open":[{"factory":"`+acmeID+`"}]}`, nil)

@@ -404,11 +404,6 @@ func (s *server) secretUses(ctx context.Context, name string) ([]gen.SecretUse, 
 		return nil, fmt.Errorf("the uses of secret %q: %w", name, err)
 	}
 
-	hooks, err := s.intake.WebhookSecretUses(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("the uses of secret %q: %w", name, err)
-	}
-
 	uses := make([]gen.SecretUse, 0, len(conns))
 
 	for _, c := range conns {
@@ -437,14 +432,30 @@ func (s *server) secretUses(ctx context.Context, name string) ([]gen.SecretUse, 
 		uses = append(uses, gen.SecretUse{Kind: gen.SecretUseSlack, Name: slackUseName})
 	}
 
-	// Webhooks come by secret, then name.
+	hooks, err := s.webhooksSignedBy(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("the uses of secret %q: %w", name, err)
+	}
+
+	return append(uses, hooks...), nil
+}
+
+// webhooksSignedBy are the organization webhooks secret name signs, by name.
+func (s *server) webhooksSignedBy(ctx context.Context, name string) ([]gen.SecretUse, error) {
+	hooks, err := s.intake.WebhookSecretUses(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []gen.SecretUse
+
 	for _, h := range hooks {
 		if h.Secret == name {
-			uses = append(uses, gen.SecretUse{Kind: gen.SecretUseWebhook, Name: h.Webhook})
+			out = append(out, gen.SecretUse{Kind: gen.SecretUseWebhook, Name: h.Webhook})
 		}
 	}
 
-	return uses, nil
+	return out, nil
 }
 
 // secretRefNames are the secrets f's {{name}} references name, each once.
