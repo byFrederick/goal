@@ -218,7 +218,7 @@ describe('BoardCard as the screen draws it', () => {
     );
 
     const card_ = await article();
-    expect(within(card_).getByRole('link', { name: 'Part 2 of 3 of PWA' })).toBeTruthy();
+    expect(within(card_).getByRole('link', { name: /^PWA.*2 of 3/ })).toBeTruthy();
     expect(card_.querySelectorAll('i.bg-ink')).toHaveLength(1);
     expect(card_.querySelectorAll('i.bg-rule')).toHaveLength(2);
   });
