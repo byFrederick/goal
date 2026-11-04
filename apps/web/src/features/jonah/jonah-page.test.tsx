@@ -319,6 +319,61 @@ describe('the Jonah overview, its four states', () => {
   });
 });
 
+describe('the evidence line on a proposal card', () => {
+  const model: ProposalEntry = {
+    ...proposal7,
+    number: 9,
+    title: 'Try a smaller model for the reviewer',
+    paths: ['factory.yaml'],
+    evidence_count: 0,
+  };
+  const fullModel = {
+    ...full7,
+    ...model,
+    evidence: [],
+    tried: {
+      state: 'done',
+      cost_usd: 1,
+      seconds: 60,
+      kept_tests: [],
+      items: [
+        {
+          item_ref: 'software#1',
+          item_title: 'An item',
+          station: 'review',
+          line_result: 'passed first time, $0.42',
+          tries: [],
+        },
+      ],
+    },
+  };
+  const without7 = (extra: ProposalEntry[]): Seed[] => [
+    ...seeds().filter(
+      ([key]) => JSON.stringify(key) !== JSON.stringify(proposalsQuery(org.id, editor.id, 'proposed').queryKey),
+    ),
+    [proposalsQuery(org.id, editor.id, 'proposed').queryKey, page(extra)],
+    [proposalQuery(org.id, editor.id, 9).queryKey, fullModel],
+  ];
+
+  it('shows none on a waiting model proposal', async () => {
+    renderOverview(editor, without7([model]));
+    const card = await screen.findByRole('article', { name: /Try a smaller model/ });
+    expect(within(card).queryByText(/runs sent back/)).toBeNull();
+  });
+
+  it('shows none when the kind is unknown and the evidence count is 0', async () => {
+    renderOverview(editor, without7([{ ...model, number: 12, title: 'Unknown kind' }]));
+    const card = await screen.findByRole('article', { name: /Unknown kind/ });
+    expect(within(card).queryByText(/runs sent back/)).toBeNull();
+  });
+
+  it('keeps "Based on 4 runs sent back" on a definition proposal', async () => {
+    renderOverview();
+    const card = await screen.findByRole('article', { name: /Ask frontend-engineer/ });
+    expect(within(card).getByText('Based on 4 runs sent back')).toBeTruthy();
+  });
+});
+
 describe('After publish', () => {
   it('shows each change before and after with its verdict, and Undo this change only on a Worse watch of a proposal', async () => {
     renderOverview();

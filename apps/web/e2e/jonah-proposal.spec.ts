@@ -125,3 +125,20 @@ test('the tries ⓘ is 44×44 and does not lie over Try again at 390 px', async 
     await expectNoOverlap(tip, again, `${name} and Try again`);
   }
 });
+
+// Not run in the box: Playwright needs a browser, which the box does not have.
+for (const width of [375, 768, 1440]) {
+  test(`a model proposal shows no evidence lines at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/o/acme/f/software/jonah/proposals');
+    const card = page.getByRole('article', { name: /Try a smaller model for the reviewer/ });
+    await expect(card).toBeVisible();
+    await expect(card.getByText(/runs sent back/)).toHaveCount(0);
+
+    await page.goto('/o/acme/f/software/jonah/proposals/9');
+    await expect(page.getByRole('heading', { level: 1, name: /Try a smaller model/ })).toBeVisible();
+    await expect(page.getByText('Found in')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: /^Why/ })).toHaveCount(0);
+    await expect(page.getByText(/runs sent back/)).toHaveCount(0);
+  });
+}
