@@ -224,6 +224,10 @@ const usage = `usage:
   goal jonah reject <number> --reason "..." [--factory F]
                                                   reject it; later reviews read the reason
   goal jonah look [--factory F]                   queue a review of what the factory finished, now
+  goal jonah try <number> [--factory F] [--yes] [--json]
+                                                  print what trying the proposal again costs: one more
+                                                  try per item it was tried on, three for a model
+                                                  proposal; ask, then queue them (--yes: without asking)
   goal agent try-model <agent> <model> [--factory F] [--yes] [--json]
                                                   print what trying the model costs: three tries on each
                                                   of the agent's five newest finished items, beside how
