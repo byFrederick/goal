@@ -136,11 +136,22 @@ func (l *lander) land(ctx context.Context, rootID uuid.UUID, rows []db.FollowUp)
 	}
 
 	var (
-		out    []domain.FollowUp
-		triage []db.FollowUp
+		out       []domain.FollowUp
+		triage    []db.FollowUp
+		untrusted []db.FollowUp
 	)
 
 	for _, r := range rows {
+		if row, ok, err := l.untrusted(ctx, r, root); err != nil || ok {
+			if err != nil {
+				return nil, fmt.Errorf("follow-up %s: %w", r.ID, err)
+			}
+
+			untrusted = append(untrusted, row)
+
+			continue
+		}
+
 		row, toTriage, err := l.route(ctx, r, root, landed)
 		if err != nil {
 			return nil, fmt.Errorf("follow-up %s: %w", r.ID, err)
@@ -160,6 +171,15 @@ func (l *lander) land(ctx context.Context, rootID uuid.UUID, rows []db.FollowUp)
 		out = append(out, f)
 	}
 
+	if len(untrusted) > 0 {
+		own, err := l.untrustedTriage(ctx, root.FactoryID, untrusted)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, own...)
+	}
+
 	if len(triage) == 0 {
 		return out, nil
 	}
@@ -167,6 +187,104 @@ func (l *lander) land(ctx context.Context, rootID uuid.UUID, rows []db.FollowUp)
 	joined, err := l.joinTriage(ctx, root.FactoryID, triage)
 
 	return append(out, joined...), err
+}
+
+// untrusted turns r, when its source is untrusted (domain.LandFollowUp), into a follow-up for
+// the triage item of its own, with its ref in the reason, and reports that it did.
+func (l *lander) untrusted(ctx context.Context, r db.FollowUp, root domain.Item) (db.FollowUp, bool, error) {
+	f, err := followUpFrom(r)
+	if err != nil {
+		return db.FollowUp{}, false, err
+	}
+
+	src, err := l.item(ctx, r.ItemID)
+	if err != nil {
+		return db.FollowUp{}, false, err
+	}
+
+	if !domain.LandFollowUp(f, src, root.State).Untrusted {
+		return db.FollowUp{}, false, nil
+	}
+
+	row, err := l.q.TriageFollowUp(ctx, db.TriageFollowUpParams{ID: r.ID, Reason: optional(domain.UntrustedTriageReason(f)), At: l.at})
+	if err != nil {
+		return db.FollowUp{}, false, fmt.Errorf("to its own triage: %w", err)
+	}
+
+	return row, true, nil
+}
+
+// untrustedTriage files rows, the follow-ups of untrusted work that landed, onto a triage item of
+// their own (domain.UntrustedTriageFileRequest), filed paused: blocked, with the engine's paused
+// event whose reason is domain.ReasonUntrustedFollowUps, so a person checks it and resumes it.
+func (l *lander) untrustedTriage(ctx context.Context, factory domain.FactoryID, rows []db.FollowUp) ([]domain.FollowUp, error) {
+	ln, ok := l.line(factory)
+	if !ok || !isUUID(string(factory)) {
+		return nil, fmt.Errorf("untrusted triage of factory %s: no line: %w", factory, ports.ErrNotFound)
+	}
+
+	es := make([]domain.TriageEntry, 0, len(rows))
+
+	for _, r := range rows {
+		f, err := followUpFrom(r)
+		if err != nil {
+			return nil, err
+		}
+
+		src, err := l.item(ctx, r.ItemID)
+		if err != nil {
+			return nil, err
+		}
+
+		es = append(es, domain.TriageEntry{
+			FollowUp: f, Source: l.ref(src), Title: src.Title, Type: src.Type, Priority: src.Priority, Generation: src.Generation,
+		})
+	}
+
+	n, err := domain.File(ln, domain.UntrustedTriageFileRequest(factory, es, l.at))
+	if err != nil {
+		return nil, fmt.Errorf("file untrusted triage item: %w", err)
+	}
+
+	row, err := fileItem(ctx, l.q, filingOf(n, uuid.MustParse(string(factory))))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := l.q.MarkTriageItem(ctx, row.ID); err != nil {
+		return nil, fmt.Errorf("mark triage item: %w", err)
+	}
+
+	if row, err = l.q.PauseUntrustedTriageItem(ctx, db.PauseUntrustedTriageItemParams{ID: row.ID, At: l.at}); err != nil {
+		return nil, fmt.Errorf("pause untrusted triage item: %w", err)
+	}
+
+	it, err := itemFrom(row)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := appendEvents(ctx, l.q, []domain.Event{domain.UntrustedTriagePaused(it, l.at)}); err != nil {
+		return nil, err
+	}
+
+	out := make([]domain.FollowUp, 0, len(rows))
+
+	for _, r := range rows {
+		filed, err := l.q.FileFollowUpOnto(ctx, db.FileFollowUpOntoParams{ID: r.ID, FiledItemID: &row.ID, At: l.at})
+		if err != nil {
+			return nil, fmt.Errorf("follow-up %s to its own triage item: %w", r.ID, err)
+		}
+
+		f, err := followUpFrom(filed)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, f)
+	}
+
+	return out, nil
 }
 
 // route drops r, files it, or reports it is for triage, as it now is.

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -40,11 +41,19 @@ type hookRig struct {
 	logs    *bytes.Buffer
 }
 
-// namesStub names every delivery when named is true, as a loaded trigger would.
-type namesStub struct{ named bool }
+// namesStub has the acme factory evaluate every delivery when named is true, as a loaded trigger
+// would, skipped at once when skip is set.
+type namesStub struct {
+	named bool
+	skip  string
+}
 
-func (n *namesStub) NamesDelivery(context.Context, domain.WebhookEndpoint, string) bool {
-	return n.named
+func (n *namesStub) Evaluations(context.Context, domain.WebhookEndpoint, string, []byte) []domain.NewDeliveryEvaluation {
+	if !n.named {
+		return nil
+	}
+
+	return []domain.NewDeliveryEvaluation{{FactoryID: acmeID, Triggers: []string{"ci"}, Skip: n.skip}}
 }
 
 func newHookRig(t *testing.T, sender domain.WebhookSender, token domain.TokenSettings) *hookRig {
@@ -183,6 +192,48 @@ func TestHooks_AcceptedThenDuplicate(t *testing.T) {
 
 	if _, ok := ds[0].Headers["x-hub-signature-256"]; ok {
 		t.Errorf("the delivery keeps its signature header: %v", ds[0].Headers)
+	}
+}
+
+// An accepted delivery a factory's trigger names gets that factory's evaluation with its row,
+// pending or skipped at once; its duplicate adds none.
+func TestReceiver_AddsEvaluations(t *testing.T) {
+	t.Parallel()
+
+	r := newHookRig(t, domain.SenderGitHub, domain.TokenSettings{})
+
+	for i, skip := range []string{"", "acme/legacy is not one of acme's repositories"} {
+		r.names.skip = skip
+		id := fmt.Sprintf("d-%d", i)
+
+		if rec := r.github(t, `{}`, "check_run", id, hookSecret); rec.Code != http.StatusAccepted {
+			t.Fatalf("POST = %d %s; want 202", rec.Code, rec.Body)
+		}
+
+		if rec := r.github(t, `{}`, "check_run", id, hookSecret); rec.Code != http.StatusOK {
+			t.Fatalf("POST again = %d %s; want 200", rec.Code, rec.Body)
+		}
+	}
+
+	ds := r.deliveries(t)
+	if len(ds) != 2 {
+		t.Fatalf("deliveries = %+v; want two", ds)
+	}
+
+	for _, d := range ds {
+		es, err := r.intake.DeliveryEvaluations(r.ctx(t), d.ID)
+		if err != nil || len(es) != 1 || es[0].FactoryID != acmeID || es[0].Event != "check_run" {
+			t.Fatalf("evaluations of %s = %+v, %v; want one for acme", d.DeliveryID, es, err)
+		}
+
+		want := domain.EvaluationPending
+		if d.DeliveryID == "d-1" {
+			want = domain.EvaluationDone
+		}
+
+		if es[0].State != want || (want == domain.EvaluationDone) != (es[0].Outcome == domain.EvaluationSkipped) {
+			t.Errorf("evaluation of %s = %s %s; want %s", d.DeliveryID, es[0].State, es[0].Outcome, want)
+		}
 	}
 }
 

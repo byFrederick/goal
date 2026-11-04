@@ -37,6 +37,24 @@ const (
 // (ADR 0040 decision 21).
 const ReasonUntrustedFollowUps = "Its follow-ups come from work that read outside text. Check them, then resume."
 
+// ReasonUntrustedSource is why a note or a start of untrusted work joined its own triage item
+// instead of going where it said.
+const ReasonUntrustedSource = "its work read outside text, so a person checks it first"
+
+// UntrustedTriageReason is the reason f keeps when it joins its untrusted source's own triage
+// item: a note's or a start's ref, which it loses, with ReasonUntrustedSource; f's own reason for
+// a follow-up already for triage.
+func UntrustedTriageReason(f FollowUp) string {
+	switch {
+	case f.Target == FollowUpNote && f.For != nil:
+		return NoteTriageReason(*f.For, ReasonUntrustedSource)
+	case f.Target == FollowUpStart && f.Start != nil:
+		return StartTriageReason(*f.Start, ReasonUntrustedSource)
+	default:
+		return f.Reason
+	}
+}
+
 // FollowUpLanding is what happens to a waiting follow-up when its work lands or is cancelled (ADR
 // 0040 decisions 8 and 21): Drop with Reason, File it when it is a start and its source may have
 // follow-ups filed, or, for an untrusted source, join a triage item of its own (Untrusted).
@@ -254,6 +272,15 @@ func UntrustedTriageFileRequest(factory FactoryID, es []TriageEntry, at time.Tim
 	r.Untrusted, r.Start = true, nil
 
 	return r
+}
+
+// UntrustedTriagePaused is the paused event an untrusted item's own triage item is filed with,
+// by the engine, with ReasonUntrustedFollowUps, so it waits for a person (Needs you).
+func UntrustedTriagePaused(it Item, at time.Time) Event {
+	return Event{
+		FactoryID: it.FactoryID, ItemID: it.ID, At: at, Kind: EventPaused, Station: it.Station, Actor: ActorEngine,
+		Data: map[string]any{"reason": ReasonUntrustedFollowUps},
+	}
 }
 
 // CheckTriagePlan refuses a plan of more than MaxTriageParts parts from a triage item as

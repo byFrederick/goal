@@ -239,10 +239,16 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// factory's code host connections and, at its start and every ReapEvery, deletes the
 	// sandboxes of runs that are over, whichever goald on this Docker host or this Worker
 	// started them.
+	// The senders' event tables read each delivery's fields (ADR 0040 decision 14).
+	events, err := senders.Shipped()
+	if err != nil {
+		return err
+	}
+
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
 		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Clock: clock,
-		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Audit: store, NotificationOutbox: store, Logger: log,
+		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Events: events, Audit: store, NotificationOutbox: store, Logger: log,
 	}, engineConfig(s, boxes.gateway))
 	if err != nil {
 		return err

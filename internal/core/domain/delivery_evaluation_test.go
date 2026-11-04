@@ -14,7 +14,7 @@ func TestEvaluationFor(t *testing.T) {
 
 	line := domain.Line{
 		FactoryID: "f1", Name: "shop",
-		Runtime:  domain.Runtime{Repository: domain.Repository{URL: "https://github.com/acme/shop.git"}},
+		Runtime: domain.Runtime{Repository: domain.Repository{URL: "https://github.com/acme/shop.git"}},
 		Triggers: []domain.Trigger{
 			{Name: "ci", Enabled: true, On: "github.check_run"},
 			{Name: "issues", Enabled: true, On: "github.issues"},

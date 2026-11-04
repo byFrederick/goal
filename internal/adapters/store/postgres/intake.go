@@ -404,7 +404,7 @@ func (in *Intake) PruneDeliveries(ctx context.Context, now time.Time) (int, erro
 }
 
 // Receive implements ports.Intake: the ledger's insert decides a duplicate, so two goalds that
-// receive one delivery at once keep one.
+// receive one delivery at once keep one, and a kept delivery's evaluations go in with its row.
 func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Received, error) {
 	if err := n.Check(); err != nil {
 		return domain.Received{}, fmt.Errorf("receive delivery: %w", err)
@@ -450,7 +450,11 @@ func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Rece
 		row, err := in.insertReceived(ctx, q, webhook, headers, n)
 		out.Row = row
 
-		return err
+		if err != nil || len(n.Evaluations) == 0 {
+			return err
+		}
+
+		return insertEvaluations(ctx, q, uuid.MustParse(string(row)), n)
 	})
 
 	switch {

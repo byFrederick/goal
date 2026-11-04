@@ -6,9 +6,10 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
-// A delivery is named by an enabled trigger of a loaded factory the webhook is open to; not by a
-// factory it is closed to, nor in another organization.
-func TestNamesDelivery_LoadedFactoriesItIsOpenTo(t *testing.T) {
+// A delivery is evaluated by a loaded factory the webhook is open to with an enabled trigger that
+// names it; not by a factory it is closed to, nor in another organization, and GitHub's ping by
+// none.
+func TestEvaluations_LoadedFactoriesItIsOpenTo(t *testing.T) {
 	t.Parallel()
 
 	h := intakeHarness(t,
@@ -28,13 +29,15 @@ func TestNamesDelivery_LoadedFactoriesItIsOpenTo(t *testing.T) {
 		{"disabled trigger", open, "push", false},
 		{"other event", open, "issues", false},
 		{"closed", closed, "check_run", false},
+		{"ping", open, "ping", false},
 	} {
-		if got := h.e.NamesDelivery(inOrg(t), tc.w, tc.event); got != tc.want {
-			t.Errorf("%s: NamesDelivery = %v; want %v", tc.name, got, tc.want)
+		got := h.e.Evaluations(inOrg(t), tc.w, tc.event, []byte(`{}`))
+		if (len(got) == 1) != tc.want || tc.want && (got[0].FactoryID != factoryID || got[0].Triggers[0] != "on-check-run") {
+			t.Errorf("%s: Evaluations = %+v; want one for the factory: %v", tc.name, got, tc.want)
 		}
 	}
 
-	if h.e.NamesDelivery(domain.WithOrg(t.Context(), "019a0000-0000-7000-8000-0000000000ff"), open, "check_run") {
-		t.Error("another organization's NamesDelivery = true; want false")
+	if got := h.e.Evaluations(domain.WithOrg(t.Context(), "019a0000-0000-7000-8000-0000000000ff"), open, "check_run", nil); len(got) != 0 {
+		t.Errorf("another organization's Evaluations = %+v; want none", got)
 	}
 }
