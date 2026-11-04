@@ -225,8 +225,9 @@ func testFlowMetrics(f *fixture) {
 	until := since.Add(72 * time.Hour)
 	day := func(n int) time.Time { return since.Truncate(24 * time.Hour).Add(time.Duration(n) * 24 * time.Hour) }
 
-	// Lead times 1h, 2h, 4h, 10h; the 2h one was reworked. One done before the window, one
-	// after it, one still open, one cancelled.
+	// Lead times 1h, 2h, 4h, 10h from when each left the inbox, where it waited 5h first (that
+	// wait is not lead time); the 2h one was reworked. One done before the window, one after it,
+	// one still open, one cancelled.
 	done := []struct {
 		after   time.Duration
 		rework  bool
@@ -234,8 +235,10 @@ func testFlowMetrics(f *fixture) {
 	}{{time.Hour, false, 0}, {2 * time.Hour, true, 0}, {4 * time.Hour, false, 1}, {10 * time.Hour, false, 1}}
 
 	for i, d := range done {
-		created := day(d.dayOver).Add(time.Duration(2+i) * time.Hour)
-		f.finish(t, f.create(t, domain.NewItem{CreatedAt: created}), created.Add(d.after), d.rework)
+		started := day(d.dayOver).Add(time.Duration(2+i) * time.Hour)
+		it := f.create(t, domain.NewItem{Station: stInbox, CreatedAt: started.Add(-5 * time.Hour)})
+		it = f.move(t, ports.Transition{ItemID: it.ID, From: it.Position(), To: domain.Position{Station: stWork, State: domain.StateQueued}, At: started})
+		f.finish(t, it, started.Add(d.after), d.rework)
 	}
 
 	f.finish(t, f.create(t, domain.NewItem{CreatedAt: since.Add(-48 * time.Hour)}), since.Add(-time.Second), false)

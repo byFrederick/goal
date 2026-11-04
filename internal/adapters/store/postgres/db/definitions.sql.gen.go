@@ -508,7 +508,8 @@ const moveOffStation = `-- name: MoveOffStation :many
 UPDATE work_items SET
   station = $1,
   state = CASE WHEN state = 'blocked' THEN state ELSE $2::text END,
-  updated_at = $3::timestamptz
+  updated_at = $3::timestamptz,
+  started_at = coalesce(started_at, $3::timestamptz)
 WHERE factory_id = $4 AND station = $5
   AND state NOT IN ('done', 'cancelled', 'in_progress')
 RETURNING id, number, updated_at

@@ -65,6 +65,14 @@ func itemFrom(w db.WorkItem) (domain.Item, error) {
 		it.DoneAt = w.DoneAt.UTC()
 	}
 
+	if w.StartAt != nil {
+		it.StartAt = w.StartAt.UTC()
+	}
+
+	if w.StartedAt != nil {
+		it.StartedAt = w.StartedAt.UTC()
+	}
+
 	return it, nil
 }
 

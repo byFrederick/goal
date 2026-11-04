@@ -1057,6 +1057,10 @@ func (s *Store) moveOffStations(org domain.OrgID, factory domain.FactoryID, m st
 
 	for _, it := range move {
 		from, to, before := it.Station, m.moves[it.Station], *it
+		if it.StartedAt.IsZero() {
+			it.StartedAt = m.at
+		}
+
 		it.Station, it.UpdatedAt = to.To, m.at
 
 		if it.State != domain.StateBlocked {

@@ -290,6 +290,62 @@ func (s *Store) Waiting(ctx context.Context, factory domain.FactoryID, station s
 	return out, nil
 }
 
+// Releasable implements ports.Store.
+func (s *Store) Releasable(ctx context.Context, factory domain.FactoryID, station string, now time.Time, limit int) ([]domain.Item, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	w := slices.DeleteFunc(s.waiting(org, factory, station), func(it *domain.Item) bool { return s.held(it, now) })
+	out := make([]domain.Item, 0, min(limit, len(w)))
+
+	for _, it := range w[:min(limit, len(w))] {
+		out = append(out, clone(it))
+	}
+
+	return out, nil
+}
+
+// held reports whether it may not start at now: an open need, or a start after now. Callers
+// hold s.mu.
+func (s *Store) held(it *domain.Item, now time.Time) bool {
+	return s.heldByNeeds(it) || it.StartAt.After(now)
+}
+
+// SetStart implements ports.Store.
+func (s *Store) SetStart(ctx context.Context, id domain.ItemID, from domain.Position, at time.Time, by domain.Actor, now time.Time) (domain.Item, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Item{}, err
+	}
+
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	it, ok := s.visible(id, org)
+	if !ok {
+		return domain.Item{}, fmt.Errorf("item %s: %w", id, ports.ErrNotFound)
+	}
+
+	if it.Position() != from {
+		return domain.Item{}, fmt.Errorf("item %s is %s at %s, not %s at %s: %w", id, it.State, it.Station, from.State, from.Station, ports.ErrConflict)
+	}
+
+	it.StartAt, it.UpdatedAt = at.UTC(), now
+	if at.IsZero() {
+		it.StartAt = time.Time{}
+	}
+
+	s.append(domain.StartChangedEvent(*it, by, now))
+
+	return clone(it), nil
+}
+
 // Leases implements ports.Store.
 func (s *Store) Leases(ctx context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error) {
 	org, err := orgOf(ctx)
@@ -332,7 +388,7 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 		}
 	}
 
-	w := slices.DeleteFunc(s.waiting(org, c.FactoryID, c.Station.ID), s.heldByNeeds)
+	w := slices.DeleteFunc(s.waiting(org, c.FactoryID, c.Station.ID), func(it *domain.Item) bool { return s.held(it, c.Now) })
 	if len(w) == 0 {
 		return domain.Item{}, domain.Lease{}, fmt.Errorf("station %s: %w", c.Station.ID, ports.ErrNoWork)
 	}
@@ -741,6 +797,7 @@ func (s *Store) move(it *domain.Item, t ports.Transition) {
 
 	before := *it
 	it.Station, it.State, it.UpdatedAt = t.To.Station, t.To.State, t.At
+	started(it, before.Station, t.At)
 
 	if t.Lane != "" {
 		it.Lane = t.Lane
@@ -950,6 +1007,14 @@ func (s *Store) FactoryActivity(ctx context.Context, factory domain.FactoryID, l
 	})
 
 	return out[:min(len(out), limit)], nil
+}
+
+// started sets it's StartedAt to at when it has none and moved off from, as MoveItem does: the
+// first move off a station is the item leaving its line's first one.
+func started(it *domain.Item, from string, at time.Time) {
+	if it.StartedAt.IsZero() && it.Station != from {
+		it.StartedAt = at
+	}
 }
 
 // waiting returns an organization's items waiting at a station in pull order. Callers hold s.mu.

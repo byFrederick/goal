@@ -108,23 +108,24 @@ GROUP BY 1
 ORDER BY 1;
 
 -- name: FlowDoneStats :one
--- Items done, those reworked, and lead-time (created to done) percentiles in seconds,
+-- Items done, those reworked, and lead-time (started, or created when it never started, to
+-- done) percentiles in seconds,
 -- interpolated between ranks.
 SELECT count(*) AS items_done,
        count(*) FILTER (WHERE rework_count > 0) AS reworked,
-       coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - created_at)::float8), 0)::float8 AS p50_seconds,
-       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - created_at)::float8), 0)::float8 AS p85_seconds
+       coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - coalesce(started_at, created_at))::float8), 0)::float8 AS p50_seconds,
+       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - coalesce(started_at, created_at))::float8), 0)::float8 AS p85_seconds
 FROM work_items
 WHERE factory_id = sqlc.arg(factory_id) AND done_at >= sqlc.arg(since)::timestamptz AND done_at < sqlc.arg(until)::timestamptz
   AND (sqlc.arg(type)::text = '' OR type = sqlc.arg(type)::text);
 
 -- name: FlowAssemblyStats :one
--- Assemblies (items with parts) done, and their lead-time (created to last part done)
+-- Assemblies (items with parts) done, and their lead-time (started, or created, to last part done)
 -- percentiles in seconds, interpolated between ranks: done items on work_items_done_at_idx,
 -- their parts on work_items_parent_part_key_idx. Cancelled assemblies never reach done.
 SELECT count(*) AS assemblies_done,
-       coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM w.done_at - w.created_at)::float8), 0)::float8 AS p50_seconds,
-       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM w.done_at - w.created_at)::float8), 0)::float8 AS p85_seconds
+       coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM w.done_at - coalesce(w.started_at, w.created_at))::float8), 0)::float8 AS p50_seconds,
+       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM w.done_at - coalesce(w.started_at, w.created_at))::float8), 0)::float8 AS p85_seconds
 FROM work_items w
 WHERE w.factory_id = sqlc.arg(factory_id) AND w.done_at >= sqlc.arg(since)::timestamptz AND w.done_at < sqlc.arg(until)::timestamptz
   AND w.state = 'done' AND (sqlc.arg(type)::text = '' OR w.type = sqlc.arg(type)::text)

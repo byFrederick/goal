@@ -130,3 +130,14 @@ func (r StartRequest) Resolve(factory FactoryID, now time.Time) (Start, error) {
 
 	return s, nil
 }
+
+// StartChangedEvent is the start_changed event of by's change of it's start, as it is after
+// the change, at now.
+func StartChangedEvent(it Item, by Actor, now time.Time) Event {
+	data := map[string]any{"actor": by.Ref()}
+	if !it.StartAt.IsZero() {
+		data["start_at"] = it.StartAt.UTC().Format(time.RFC3339)
+	}
+
+	return Event{FactoryID: it.FactoryID, ItemID: it.ID, At: now, Kind: EventStartChanged, Station: it.Station, Actor: by.Name, Data: data}
+}

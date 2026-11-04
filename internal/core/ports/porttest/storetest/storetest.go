@@ -65,6 +65,10 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"ClaimNext_NoWork", testClaimNoWork},
 		{"ClaimNext_SlotTaken", testClaimSlotTaken},
 		{"ClaimNext_SkipsItemsWithOpenNeeds", testClaimSkipsOpenNeeds},
+		{"ClaimNext_SkipsAFutureStart", testClaimSkipsAFutureStart},
+		{"Releasable_SkipsOpenNeedsAndFutureStarts", testReleasableSkipsOpenNeedsAndFutureStarts},
+		{"CreateItem_KeepsTheStartAndLinksAfter", testCreateItemWithAStart},
+		{"SetStart_ChangesAndClears", testSetStart},
 		{"Edges_AddListRemove", testEdgesAddListRemove},
 		{"Edges_CycleRefused", testEdgesCycleRefused},
 		{"Edges_OtherFactoryRefused", testEdgesOtherFactoryRefused},
@@ -595,6 +599,7 @@ func testTransition(f *fixture) {
 	want := it
 	want.Station, want.State, want.Lane, want.ReworkCount, want.UpdatedAt = stNext, domain.StateQueued, laneBackend, 1, t2
 	want.Outputs = map[string]json.RawMessage{stWork: tr.Output}
+	want.StartedAt = t2 // its first move off a station: it left the first one
 	sameItem(t, moved, want)
 	sameItem(t, f.item(t, it.ID), want)
 
@@ -605,7 +610,7 @@ func testTransition(f *fixture) {
 	events := f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-1:], tr.Events)
 
-	// No lease, no lane, no output: those stay; reaching done stores DoneAt.
+	// No lease, no lane, no output: those stay, and so does StartedAt; reaching done stores DoneAt.
 	done, err := f.Store.Transition(f.ctx(t), ports.Transition{
 		ItemID: it.ID, From: domain.Position{Station: stNext, State: domain.StateQueued},
 		To: domain.Position{Station: "done", State: domain.StateDone}, At: t3, DoneAt: t3,

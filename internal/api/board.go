@@ -526,11 +526,12 @@ func (s *server) assemblies(ctx context.Context, f domain.FactoryID, items []dom
 	return asms, nil
 }
 
-// ageSeconds is how long it has been open at now, or was from created to done.
+// ageSeconds is how long it has been open at now, or was to done, from when it started
+// (Item.LeadFrom).
 func ageSeconds(it domain.Item, now time.Time) int64 {
-	age := now.Sub(it.CreatedAt)
+	age := now.Sub(it.LeadFrom())
 	if !it.DoneAt.IsZero() {
-		age = it.DoneAt.Sub(it.CreatedAt)
+		age = it.DoneAt.Sub(it.LeadFrom())
 	}
 
 	return int64(max(age, 0) / time.Second)

@@ -296,8 +296,8 @@ func (q *Queries) CurrentRun(ctx context.Context, arg CurrentRunParams) (Current
 
 const flowAssemblyStats = `-- name: FlowAssemblyStats :one
 SELECT count(*) AS assemblies_done,
-       coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM w.done_at - w.created_at)::float8), 0)::float8 AS p50_seconds,
-       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM w.done_at - w.created_at)::float8), 0)::float8 AS p85_seconds
+       coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM w.done_at - coalesce(w.started_at, w.created_at))::float8), 0)::float8 AS p50_seconds,
+       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM w.done_at - coalesce(w.started_at, w.created_at))::float8), 0)::float8 AS p85_seconds
 FROM work_items w
 WHERE w.factory_id = $1 AND w.done_at >= $2::timestamptz AND w.done_at < $3::timestamptz
   AND w.state = 'done' AND ($4::text = '' OR w.type = $4::text)
@@ -317,7 +317,7 @@ type FlowAssemblyStatsRow struct {
 	P85Seconds     float64
 }
 
-// Assemblies (items with parts) done, and their lead-time (created to last part done)
+// Assemblies (items with parts) done, and their lead-time (started, or created, to last part done)
 // percentiles in seconds, interpolated between ranks: done items on work_items_done_at_idx,
 // their parts on work_items_parent_part_key_idx. Cancelled assemblies never reach done.
 func (q *Queries) FlowAssemblyStats(ctx context.Context, arg FlowAssemblyStatsParams) (FlowAssemblyStatsRow, error) {
@@ -436,8 +436,8 @@ func (q *Queries) FlowDonePerDay(ctx context.Context, arg FlowDonePerDayParams) 
 const flowDoneStats = `-- name: FlowDoneStats :one
 SELECT count(*) AS items_done,
        count(*) FILTER (WHERE rework_count > 0) AS reworked,
-       coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - created_at)::float8), 0)::float8 AS p50_seconds,
-       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - created_at)::float8), 0)::float8 AS p85_seconds
+       coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - coalesce(started_at, created_at))::float8), 0)::float8 AS p50_seconds,
+       coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM done_at - coalesce(started_at, created_at))::float8), 0)::float8 AS p85_seconds
 FROM work_items
 WHERE factory_id = $1 AND done_at >= $2::timestamptz AND done_at < $3::timestamptz
   AND ($4::text = '' OR type = $4::text)
@@ -457,7 +457,8 @@ type FlowDoneStatsRow struct {
 	P85Seconds float64
 }
 
-// Items done, those reworked, and lead-time (created to done) percentiles in seconds,
+// Items done, those reworked, and lead-time (started, or created when it never started, to
+// done) percentiles in seconds,
 // interpolated between ranks.
 func (q *Queries) FlowDoneStats(ctx context.Context, arg FlowDoneStatsParams) (FlowDoneStatsRow, error) {
 	row := q.db.QueryRow(ctx, flowDoneStats,

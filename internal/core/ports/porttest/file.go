@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
@@ -31,7 +32,7 @@ func (s *Store) file(org domain.OrgID, n domain.NewItem, p filedPart) (*domain.I
 		Station: n.Station, State: n.State, Class: n.Class, Priority: n.Priority,
 		Outputs: map[string]json.RawMessage{}, CreatedAt: n.CreatedAt, UpdatedAt: n.CreatedAt,
 		Source: n.Source, Trigger: n.Trigger, Origin: cmp.Or(n.Origin, domain.OriginPerson), Via: n.Via,
-		Generation: n.Generation, Untrusted: n.Untrusted,
+		Generation: n.Generation, Untrusted: n.Untrusted, StartAt: utc(n.StartAt), StartedAt: utc(n.StartedAt),
 	}
 
 	by := n.FiledBy()
@@ -44,6 +45,12 @@ func (s *Store) file(org domain.OrgID, n domain.NewItem, p filedPart) (*domain.I
 
 	created, audit := domain.FiledRecords(*it, by)
 	s.append(created)
+
+	for _, need := range n.After {
+		e := domain.Edge{Item: it.ID, Needs: need, Kind: domain.EdgeLinked, By: by.Ref(), At: n.CreatedAt}
+		s.edges = append(s.edges, e)
+		s.append(edgeEvent(domain.EventEdgeAdded, it, e, by, n.CreatedAt))
+	}
 
 	return it, audit
 }
@@ -61,4 +68,13 @@ func appendAudits(ctx context.Context, a ports.Audit, entries ...domain.AuditEnt
 	}
 
 	return nil
+}
+
+// utc is t in UTC, and zero when it is zero, as PostgreSQL reads a timestamptz back.
+func utc(t time.Time) time.Time {
+	if t.IsZero() {
+		return t
+	}
+
+	return t.UTC()
 }

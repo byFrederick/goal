@@ -68,6 +68,7 @@ func fileItem(ctx context.Context, q *db.Queries, f filing) (db.WorkItem, error)
 		Source: optional(string(n.Source)), Trigger: optional(n.Trigger),
 		Origin: string(cmp.Or(n.Origin, domain.OriginPerson)), Via: optional(string(n.Via)), CreatedBy: createdBy,
 		Generation: int32(min(max(n.Generation, 0), maxInt32)), Untrusted: n.Untrusted,
+		StartAt: optionalTime(n.StartAt), StartedAt: optionalTime(n.StartedAt),
 	})
 	if violates(err, partKeyIndex) {
 		return db.WorkItem{}, fmt.Errorf("part key %q is taken: %w", deref(f.partKey), ports.ErrConflict)

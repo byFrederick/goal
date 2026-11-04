@@ -384,4 +384,6 @@ type WorkItem struct {
 	CreatedBy         *string
 	Generation        int32
 	Untrusted         bool
+	StartAt           *time.Time
+	StartedAt         *time.Time
 }
