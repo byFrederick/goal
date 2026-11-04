@@ -258,12 +258,13 @@ const (
 )
 
 // proposalPathPattern is the positive allowlist of the paths a proposal may edit (ADR 0039
-// decision 6): factory.yaml, whose paths goald checks apart, and the .md, .yaml and .json files
-// under agents/, skills/, rules/ and contracts/. Never evals/, a script or any other file.
-var proposalPathPattern = regexp.MustCompile(`^(factory\.yaml|(agents|skills|rules|contracts)/.+\.(md|yaml|json))$`)
+// decisions 6 and 7): factory.yaml, whose paths goald checks apart, memory.yaml, which only goald
+// writes from the facts it verified, and the .md, .yaml and .json files under agents/, skills/,
+// rules/ and contracts/. Never evals/, a script or any other file.
+var proposalPathPattern = regexp.MustCompile(`^(factory\.yaml|memory\.yaml|(agents|skills|rules|contracts)/.+\.(md|yaml|json))$`)
 
 // ProposalPathAllowed reports whether a proposal may edit path: one under the allowlist, without
-// a . or .. segment or a control character. 00101's goal_jonah_paths_allowed checks the same.
+// a . or .. segment or a control character. 00102's goal_jonah_paths_allowed checks the same.
 func ProposalPathAllowed(path string) bool {
 	if !proposalPathPattern.MatchString(path) || strings.ContainsFunc(path, unicode.IsControl) {
 		return false
@@ -276,6 +277,32 @@ func ProposalPathAllowed(path string) bool {
 	}
 
 	return true
+}
+
+// PersonWords is the text a person wrote in e that a memory fact may quote (ADR 0039 decision 7),
+// and whether e has one: a note's text, an answer to a question, or the reason of a reject, a
+// gate's reject or a move, when data.actor is a person. An agent's or a check's event has none.
+func PersonWords(e Event) (string, bool) {
+	if !byPerson(e) {
+		return "", false
+	}
+
+	var key string
+
+	switch e.Kind {
+	case EventNote:
+		key = "text"
+	case EventQuestionAnswered:
+		key = "answer"
+	case EventRejected, EventGateRejected, EventMoved:
+		key = evKeyReason
+	default:
+		return "", false
+	}
+
+	text := dataText(e, key)
+
+	return text, text != ""
 }
 
 // ProposalEvidence is one sent-back event a proposal rests on, with its quoted reason.
