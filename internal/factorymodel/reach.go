@@ -149,4 +149,3 @@ func clean(p string) string {
 
 // within reports whether v is in list, or list is not given, as a rule's scope reads.
 func within(list []string, v string) bool { return len(list) == 0 || slices.Contains(list, v) }
-
