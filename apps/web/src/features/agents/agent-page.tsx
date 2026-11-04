@@ -195,7 +195,7 @@ function AgentPageBody({ agent, view }: { agent: string; view: AgentView }) {
               orgId={org.id}
               factoryId={factory.id}
               agent={agent}
-              currentModel={stats.model}
+              currentModel={stats.model ?? undefined}
             />
           ) : null,
           <Button key="prompt" asChild variant="secondary" size="sm">

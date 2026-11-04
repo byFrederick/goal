@@ -278,9 +278,7 @@ describe('Keep as a test', () => {
   });
 
   it('says what goald refused', async () => {
-    vi.mocked(keepTest).mockRejectedValue(
-      new ApiError({ type: 'x', title: 'Conflict', status: 409, code: 'kept-test-exists' }),
-    );
+    vi.mocked(keepTest).mockRejectedValue(new ApiError({ title: 'Conflict', status: 409, code: 'kept-test-exists' }));
     renderTab(async () => finished, ['definition:edit']);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Keep as a test' }));

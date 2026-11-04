@@ -143,7 +143,10 @@ function seeds({
         ],
       },
     ],
-    [policyQuery(org.id).queryKey, { policy: { allowed_models: ['claude-haiku-5-5', 'claude-sonnet-5-5'] } }],
+    [
+      policyQuery(org.id).queryKey,
+      { view: { policy: { allowed_models: ['claude-haiku-5-5', 'claude-sonnet-5-5'] } }, etag: '"1"' },
+    ],
     [
       versionQuery(org.id, factory.id, 'current').queryKey,
       {

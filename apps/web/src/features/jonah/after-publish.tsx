@@ -2,21 +2,18 @@
 // of its watch (ADR 0039 decisions 14 and 15). A Worse watch of a Jonah proposal offers Undo this change, which
 // writes the proposal that reverses it and opens it for a person to approve. The watches come with the
 // factory's published versions, newest first; a person's own publish has no proposal to undo.
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
-import { toast } from 'sonner';
-import { ApiError, undoProposal } from '../../api/client';
-import { keys, proposalsQuery, versionsQuery } from '../../api/queries';
+import { useQuery } from '@tanstack/react-query';
+import { proposalsQuery, versionsQuery } from '../../api/queries';
 import type { Version, Watch } from '../../api/types';
-import { useFactory, useFactoryParams } from '../../shared/factory';
+import { useFactory } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
-import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { EmptyState } from '../../ui/empty-state';
 import { Skeleton } from '../../ui/skeleton';
 import { InfoTip } from './info-tip';
 import { watchText, watchVerdicts } from './jonah-format';
+import { UndoThisChange } from './undo-button';
 
 const block = 'rounded-control bg-hover';
 
@@ -29,41 +26,6 @@ export function AfterPublishShape() {
       <div className={`${block} h-12`} />
       <div className={`${block} h-12`} />
     </div>
-  );
-}
-
-/** What Undo says when it is refused, by the API's code. */
-export function undoFailure(err: unknown): string {
-  const code = err instanceof ApiError ? err.code : undefined;
-  if (code === 'undo-open') return 'An undo of this change is already waiting or was published.';
-  if (code === 'undo-conflict')
-    return 'The files changed since, so Jonah cannot reverse this change on its own. Edit them by hand.';
-  if (code === 'proposal-not-published') return 'This proposal was never published, so there is nothing to undo.';
-  return 'goald is not answering. Try again in a moment.';
-}
-
-/** Undo this change: writes the reversing proposal, then opens it. */
-function UndoButton({ number, disabled }: { number: number; disabled: boolean }) {
-  const org = useOrg();
-  const factory = useFactory();
-  const params = useFactoryParams();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const undo = useMutation({
-    mutationFn: () => undoProposal(org.id, factory.id, number),
-    onSuccess: async (made) => {
-      await queryClient.invalidateQueries({ queryKey: keys.jonah(org.id, factory.id) });
-      await navigate({
-        to: '/o/$org/f/$factory/jonah/proposals/$number',
-        params: { ...params, number: String(made.number) },
-      });
-    },
-    onError: (err) => toast.error(undoFailure(err)),
-  });
-  return (
-    <Button variant="secondary" size="sm" disabled={disabled || undo.isPending} onClick={() => undo.mutate()}>
-      Undo this change<span className="sr-only"> of proposal {number}</span>
-    </Button>
   );
 }
 
@@ -141,7 +103,7 @@ export function AfterPublishPanel() {
                   <span className="flex flex-wrap items-center gap-2 md:justify-end">
                     <Chip tone={verdict.tone}>{verdict.label}</Chip>
                     {undoable && canEdit && row.watch.proposal !== undefined ? (
-                      <UndoButton number={row.watch.proposal} disabled={false} />
+                      <UndoThisChange number={row.watch.proposal} factoryId={factory.id} factoryName={factory.name} />
                     ) : null}
                   </span>
                 </li>

@@ -48,7 +48,7 @@ export function TryModelButton({
   const policy = useQuery({ ...policyQuery(orgId), enabled: open, retry: false });
   const installed = meta.data?.models ?? [];
   // The policy narrows the install's models; when it can't be read, the install's list stands.
-  const allowed = policy.data?.policy.allowed_models;
+  const allowed = policy.data?.view.policy.allowed_models;
   const choices = installed.filter((m) => m.id !== currentModel && (!allowed || allowed.includes(m.id)));
 
   const estimate = useQuery({
