@@ -150,7 +150,7 @@ func (a *TryAgain) estimate(ctx context.Context, p domain.Proposal, policy domai
 			return TryAgainEstimate{}, nil, fmt.Errorf("try again: read run %s of item %s: %w", latest.OriginalRunID, it.ItemID, err)
 		}
 
-		est.Items = append(est.Items, TryAgainItem{ItemID: it.ItemID, Station: latest.Station, Tries: per, RunCostUSD: run.Result.CostUSD})
+		est.Items = append(est.Items, TryAgainItem{ItemID: it.ItemID, Station: latest.Station, Tries: per, RunCostUSD: domain.RoundCents(run.Result.CostUSD)})
 		est.Tries += per
 		est.EstimateUSD += float64(per) * run.Result.CostUSD
 		adds = append(adds, domain.PastTryAdd{ItemID: it.ItemID, Tries: per})
@@ -161,8 +161,8 @@ func (a *TryAgain) estimate(ctx context.Context, p domain.Proposal, policy domai
 		return TryAgainEstimate{}, nil, fmt.Errorf("try again: read spend: %w", err)
 	}
 
-	b := policy.Budget(spend)
-	est.BudgetLeftUSD = max(b.BudgetUSD-b.SpentUSD, 0)
+	est.EstimateUSD = domain.RoundCents(est.EstimateUSD)
+	est.BudgetLeftUSD = policy.Budget(spend).LeftUSD()
 
 	if est.EstimateUSD > est.BudgetLeftUSD {
 		return est, nil, fmt.Errorf("try again: the estimate $%.2f is more than the $%.2f left of Jonah's budget: %w", est.EstimateUSD,
