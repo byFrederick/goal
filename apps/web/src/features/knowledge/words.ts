@@ -51,7 +51,7 @@ export function syncTimes(s: KnowledgeSource, now: number): { last: string; next
   if (s.status === 'syncing') return { last: 'Running' };
   const last = s.last_synced_at ? ago(s.last_synced_at, now) : 'Not yet';
   if (s.kind === 'upload') return { last, next: 'When files are added' };
-  if (!s.next_sync_at) return { last };
+  if (s.sync_every_seconds === 0 || !s.next_sync_at) return { last };
   const wait = Date.parse(s.next_sync_at) - now;
   if (wait < 60_000) return { last, next: 'Due now' };
   if (wait < 3_600_000) return { last, next: `Next in ${formatAge(wait / 1000)}` };
@@ -59,8 +59,9 @@ export function syncTimes(s: KnowledgeSource, now: number): { last: string; next
   return { last, next: `Next ${formatDay(s.next_sync_at)}` };
 }
 
-/** The schedules a synced source takes (at least every 15 minutes). */
+/** The schedules a synced source takes: on demand, or at least every 15 minutes. */
 export const syncChoices = [
+  { seconds: 0, label: 'Only when someone presses Sync' },
   { seconds: 900, label: '15 minutes' },
   { seconds: 3600, label: '1 hour' },
   { seconds: 6 * 3600, label: '6 hours' },
@@ -69,6 +70,7 @@ export const syncChoices = [
 
 /** "1 hour", or "2 h" for a schedule set elsewhere (the CLI's --every). */
 export function everyLabel(seconds: number): string {
+  if (seconds === 0) return syncChoices[0].label;
   return syncChoices.find((c) => c.seconds === seconds)?.label ?? formatDuration(seconds * 1000);
 }
 

@@ -19,9 +19,8 @@ import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
-import { Field, Input, Textarea } from '../../ui/field';
+import { Field, Input, NativeSelect, Textarea } from '../../ui/field';
 import { RadioCards } from '../../ui/radio-cards';
-import { SegmentedControl } from '../../ui/segmented-control';
 import { CheckPanel } from './check-panel';
 import { type Config, ConfigFields, configErrors, trimmed } from './config-fields';
 import { listInDrafts } from './draft';
@@ -51,6 +50,7 @@ const later = [
 const schedules = [
   { value: '3600', label: 'Every hour' },
   { value: '86400', label: 'Every day' },
+  { value: '0', label: 'Only when someone presses Sync' },
 ] as const;
 
 export function NewSourcePage() {
@@ -302,7 +302,15 @@ function SourceForm({ kind }: { kind: NewKind }) {
               Sync
             </h2>
             <div className={cardBody}>
-              <SegmentedControl label="Sync" options={schedules} value={every} onChange={setEvery} />
+              <Field label="Sync every" help="Only changed documents are fetched again.">
+                <NativeSelect value={every} onChange={(e) => setEvery(e.target.value)}>
+                  {schedules.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </Field>
             </div>
           </section>
         ) : null}

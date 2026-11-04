@@ -23,6 +23,27 @@ test('factory settings is accessible and fits the screen', async ({ page }) => {
   await expectNoHorizontalScroll(page);
 });
 
+test('Runtime points at environments and Notifications shows the Slack secret', async ({ page }) => {
+  await page.goto('/o/acme/f/goal/settings');
+  const runtime = page.getByRole('region', { name: 'Runtime' });
+  await expect(runtime.getByText('Box size, CLIs and what agents reach live in')).toBeVisible();
+  await expect(runtime.getByRole('link', { name: 'environments' })).toHaveAttribute(
+    'href',
+    '/o/acme/f/goal/definition/environments',
+  );
+  await expect(runtime.getByRole('radio')).toHaveCount(0);
+  await expect(runtime.getByText('Tools', { exact: true })).toHaveCount(0);
+  const slack = page.getByRole('region', { name: 'Notifications' });
+  await expect(slack.getByText('Sent with the secret slack-bot.')).toBeVisible();
+  await expect(slack.getByRole('link', { name: 'Change in organization settings' })).toHaveAttribute(
+    'href',
+    '/o/acme/settings',
+  );
+  await expect(
+    page.getByRole('navigation', { name: 'On this page' }).getByRole('link', { name: 'Notifications' }),
+  ).toBeVisible();
+});
+
 test('factory settings has no sideways scroll at 390 px', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto('/o/acme/f/goal/settings');

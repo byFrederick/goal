@@ -113,7 +113,13 @@ describe('GET /v1/orgs/acme/search', () => {
   it('finds secrets by name with their scope and expiry, never a value', async () => {
     const res = await fetch(`${base}/v1/orgs/acme/search?q=token`);
     const body = (await res.json()) as OrgSearch;
-    expect(body.secrets.map((s) => s.name)).toEqual(['github-token', 'old-npm-token', 'sentry-token', 'zendesk-token']);
+    expect(body.secrets.map((s) => s.name)).toEqual([
+      'confluence-token',
+      'github-token',
+      'old-npm-token',
+      'sentry-token',
+      'zendesk-token',
+    ]);
     for (const secret of body.secrets) expect(Object.keys(secret).sort()).toEqual(['expires_at', 'name', 'scope']);
   });
 
