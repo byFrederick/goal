@@ -1,6 +1,6 @@
 # ADR 0040 — One door for every source: start times, follow-ups that say where they go, checks that ask an agent what to file, webhooks that work
 
-Status: proposed · 2026-11-03 · Amended by [ADR 0041](0041-code-and-github-without-an-app.md) (a trigger can set the item's repositories; GitHub webhooks are connected once for the organization)
+Status: accepted · 2026-11-04 · Amended by [ADR 0041](0041-code-and-github-without-an-app.md) (a trigger can set the item's repositories; GitHub webhooks are connected once for the organization)
 
 - **Replaces:**
   - [ADR 0028](0028-trigger-try-and-model-check.md), decisions 3–7: the model check in Only if goes, and a check asks an agent instead (decisions 18 and 19). Decisions 1 and 2, one evaluation function and Try as a dry run, stay; Try now covers webhook deliveries too.

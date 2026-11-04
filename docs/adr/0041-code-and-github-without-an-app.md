@@ -1,6 +1,6 @@
 # ADR 0041 — Code and GitHub without an App: optional code access, the repositories an item opens, write access per agent, webhooks the organization connects once
 
-Status: proposed · 2026-11-03
+Status: accepted · 2026-11-04
 
 - **Amends:**
   - [ADR 0037](0037-secrets-and-environment-files.md), decisions 6–7: `runtime.repository` becomes a list of repositories with their access, on code hosts the organization lists (decisions 1–8). Its run start on secrets, which software#538 finishes, is what this builds on.
