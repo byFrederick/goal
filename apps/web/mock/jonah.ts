@@ -1,7 +1,7 @@
 // Jonah in the mock API (contracts/api/openapi.yaml, tag jonah): a factory's overview (its policy, the proposals
 // waiting, the month's cost and the week's observations), its proposals by state, and a manual review. A seeded
-// factory (the Software factory, by name) starts with the picture's two waiting proposals, an applied one, four
-// observations and $6.40 this month. A manual review answers 202 with a queued review, and 409 review-in-flight
+// factory (the Software factory, by name) starts with four waiting proposals (7 and 8, memory proposal 9 and model proposal 10), an applied one, four
+// observations (one about the line's send-backs) and $6.40 this month. A manual review answers 202 with a queued review, and 409 review-in-flight
 // for the next one while it is queued. The Tests tab's kept tests are listed and removed; Undo answers 409
 // proposal-not-published, as no seeded proposal is published.
 // A proposal's page reads its files and evidence, and its approve, edit and reject record the decision. Proposal 8
@@ -303,12 +303,12 @@ const softwareObservations = (now: number): JonahObservation[] => [
     updated_at: new Date(now - 30 * 3_600_000).toISOString(),
   },
   {
-    id: 'obs-plain-language',
-    summary: 'Plain-language judge passes 96% of runs',
-    detail: 'Could sample 10% instead of 25% and save $1.10 a month',
-    item_refs: [],
+    id: 'obs-phone-check',
+    summary: 'Review sends back 1 in 4 frontend items for a missing phone check',
+    detail: 'The frontend station is sent back more than any other; 4 of the last 16 items lacked a check at 375 px',
+    item_refs: ['software#508', 'software#511', 'software#502', 'software#499'],
     state: 'watching',
-    count: 1,
+    count: 4,
     propose_after: 5,
     created_at: new Date(now - 50 * 3_600_000).toISOString(),
     updated_at: new Date(now - 50 * 3_600_000).toISOString(),
@@ -317,6 +317,24 @@ const softwareObservations = (now: number): JonahObservation[] => [
 
 /** The Software factory's proposals, newest first. */
 const softwareProposals = (now: number): ProposalEntry[] => [
+  {
+    number: 10,
+    title: 'frontend-engineer on claude-haiku-5-5',
+    state: 'proposed',
+    created_at: new Date(now - 20 * 60_000).toISOString(),
+    paths: ['factory.yaml'],
+    agents: [],
+    evidence_count: 0,
+  },
+  {
+    number: 9,
+    title: 'Add 3 facts from answers, notes and send-backs',
+    state: 'proposed',
+    created_at: new Date(now - 24 * 3_600_000).toISOString(),
+    paths: ['memory.yaml'],
+    agents: [],
+    evidence_count: 3,
+  },
   {
     number: 8,
     title: 'Split requests over 400 changed lines into an assembly',
@@ -474,10 +492,126 @@ const proposalEight = (now: number): Proposal => ({
   ],
 });
 
-/** The detail of a seeded proposal; only 7 and 8 have one, the other numbers answer 404. */
+/** A memory.yaml of the given facts, each with the item it came from. */
+const memoryYaml = (facts: [string, string, string][]): string =>
+  facts.map(([text, from, added]) => `- text: ${text}\n  from: [${from}]\n  added: ${added}`).join('\n');
+
+const baseFacts: [string, string, string][] = Array.from({ length: 11 }, (_, i) => [
+  `Earlier fact ${i + 1}.`,
+  `software#${400 + i}`,
+  '2026-10-20',
+]);
+baseFacts.push([
+  'The pre-push hook runs task check with GIT_DIR set, so tests that run git must clear it.',
+  'software#524',
+  '2026-11-02',
+]);
+
+/** Proposal 9 as proposal-memory.jpg shows it: three facts that each quote a person, and no try. */
+const proposalNine = (now: number): Proposal => ({
+  ...(softwareProposals(now).find((p) => p.number === 9) as ProposalEntry),
+  summary: 'Three things people wrote are worth keeping for every run.',
+  made_against_version: 40,
+  publishes_as_version: 41,
+  edits: [],
+  files: [
+    {
+      path: 'memory.yaml',
+      base_sha256: 'd4',
+      base_content: memoryYaml(baseFacts),
+      content: memoryYaml([
+        ...baseFacts,
+        ['Phones are 390 wide; check 375 too.', 'software#493', '2026-11-03'],
+        [
+          'The docs site is apps/docs, served at /docs; change it in the same pull request.',
+          'software#371',
+          '2026-11-03',
+        ],
+        [
+          'An ADR’s number is taken when its branch merges; check main before you number one.',
+          'software#308',
+          '2026-11-03',
+        ],
+      ]),
+    },
+  ] satisfies ProposalFile[],
+  evidence: [
+    {
+      item_ref: 'software#493',
+      item_title: 'Phone fixes',
+      station: 'An answer',
+      quote:
+        'frontend-engineer asked: “Which phone width should I check?” Freddy Cruz answered: “Phones are 390 wide; check 375 too.”',
+    },
+    {
+      item_ref: 'software#371',
+      item_title: 'Docs for the CLI',
+      station: 'A note',
+      quote: 'Freddy Cruz: “The docs site is apps/docs, served at /docs. Change it in the same pull request.”',
+    },
+    {
+      item_ref: 'software#308',
+      item_title: 'ADR numbering',
+      station: 'A send-back',
+      quote:
+        'Freddy Cruz moved it back: “An ADR’s number is taken when its branch merges; check main before you number one.”',
+    },
+  ],
+});
+
+/** Proposal 10's seven items as proposal-model.jpg shows them: [ref, title, verdicts of the three tries, line result]. */
+const modelItems: [string, string, boolean[], string][] = [
+  ['software#418', 'Needs you header', [true, true, false], 'passed first time, $0.40'],
+  ['software#493', 'Phone fixes', [true, true, true], 'passed first time, $0.50'],
+  ['software#511', 'Done cards overflow', [true, false, false], 'sent back 2 times at review, $1.10'],
+  ['software#508', 'Item tabs first', [false, false, false], 'sent back once at review, $0.78'],
+  ['software#502', 'Tablet details', [true, false, true], 'passed first time, $0.46'],
+  ['software#499', 'Trace took column', [false, true, true], 'passed first time, $0.58'],
+  ['software#497', 'Board header meta', [true, false, false], 'passed first time, $0.52'],
+];
+
+/** Proposal 10: a model change tried three times on each of seven past items, and no estimate, as goald sends it. */
+const proposalTen = (now: number): Proposal => ({
+  ...(softwareProposals(now).find((p) => p.number === 10) as ProposalEntry),
+  summary: 'frontend-engineer on claude-haiku-5-5, tried on its seven newest finished items.',
+  made_against_version: 40,
+  publishes_as_version: 41,
+  edits: [],
+  files: [
+    {
+      path: 'factory.yaml',
+      base_sha256: 'e5',
+      base_content: [...filler(), '- name: frontend-engineer', '  model: claude-sonnet-5-5'].join('\n'),
+      content: [...filler(), '- name: frontend-engineer', '  model: claude-haiku-5-5'].join('\n'),
+    },
+  ] satisfies ProposalFile[],
+  evidence: [],
+  tried: {
+    state: 'done',
+    items: modelItems.map(([ref, title, passes, line]) => ({
+      item_ref: ref,
+      item_title: title,
+      station: 'frontend',
+      line_result: line,
+      tries: passes.map((fixed, i) => ({
+        attempt: i + 1,
+        state: 'done' as const,
+        verdict: fixed ? ('fixed' as const) : ('not_fixed' as const),
+        cost_usd: 0.21,
+      })),
+    })),
+    cost_usd: 4.4,
+    seconds: 3900,
+    kept_tests: [],
+  },
+});
+
+/** The detail of a seeded proposal; only 7 to 10 have one, the other numbers answer 404. */
 const softwareDetail = (now: number, number: number): Proposal | undefined => {
   if (number === 7) return proposalSeven(now);
   if (number === 8) return proposalEight(now);
+  if (number === 9) return proposalNine(now);
+  if (number === 10) return proposalTen(now);
   return undefined;
 };
 

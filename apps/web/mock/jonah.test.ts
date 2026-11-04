@@ -40,11 +40,11 @@ async function call(
 }
 
 describe('the mock Jonah API', () => {
-  it('reads the picture: two proposals waiting, $6.40 this month and the four observations', async () => {
+  it('reads the picture: four proposals waiting, $6.40 this month and the four observations', async () => {
     const { status, body } = await call(jonah(), '/factories/software/jonah', 'GET');
 
     expect(status).toBe(200);
-    expect(body.waiting).toBe(2);
+    expect(body.waiting).toBe(4);
     expect(body.month_cost_usd).toBe(6.4);
     expect(body.policy.approver_roles).toEqual(['owner', 'admin']);
     expect(body.observations).toHaveLength(4);
@@ -59,10 +59,68 @@ describe('the mock Jonah API', () => {
   it('lists the proposals newest first, and only those in the state the query names', async () => {
     const api = jonah();
     const all = await call(api, '/factories/software/jonah/proposals', 'GET');
-    expect(all.body.proposals.map((p: { number: number }) => p.number)).toEqual([8, 7, 6]);
+    expect(all.body.proposals.map((p: { number: number }) => p.number)).toEqual([10, 9, 8, 7, 6]);
 
     const waiting = await call(api, '/factories/software/jonah/proposals?state=proposed', 'GET');
-    expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([8, 7]);
+    expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([10, 9, 8, 7]);
+  });
+
+  it('serves proposal 9 as a memory proposal: memory.yaml only, three quoted facts and no tries', async () => {
+    const api = jonah();
+    const list = await call(api, '/factories/software/jonah/proposals', 'GET');
+    const entry = list.body.proposals.find((p: { number: number }) => p.number === 9);
+    expect(entry).toMatchObject({ paths: ['memory.yaml'], agents: [], evidence_count: 3 });
+    expect(entry.estimate).toBeUndefined();
+
+    const { status, body } = await call(api, '/factories/software/jonah/proposals/9', 'GET');
+    expect(status).toBe(200);
+    expect(body.tried).toBeUndefined();
+    const count = (y: string) => (y.match(/^- text:/gm) ?? []).length;
+    expect(count(body.files[0].base_content)).toBe(12);
+    expect(count(body.files[0].content)).toBe(15);
+    expect(body.evidence.map((e: { item_ref: string }) => e.item_ref)).toEqual([
+      'software#493',
+      'software#371',
+      'software#308',
+    ]);
+    for (const e of body.evidence) expect(e.quote).toContain('“');
+  });
+
+  it('serves proposal 10 as a model proposal: three tries on each of seven items, each with its line result, and no estimate', async () => {
+    const api = jonah();
+    const list = await call(api, '/factories/software/jonah/proposals', 'GET');
+    const entry = list.body.proposals.find((p: { number: number }) => p.number === 10);
+    expect(entry).toMatchObject({
+      title: 'frontend-engineer on claude-haiku-5-5',
+      paths: ['factory.yaml'],
+      agents: [],
+    });
+    expect(entry.estimate).toBeUndefined();
+
+    const { status, body } = await call(api, '/factories/software/jonah/proposals/10', 'GET');
+    expect(status).toBe(200);
+    expect(body.files[0].content).toContain('model: claude-haiku-5-5');
+    expect(body.tried).toMatchObject({ state: 'done', seconds: 3900, cost_usd: 4.4, kept_tests: [] });
+    expect(body.tried.items).toHaveLength(7);
+    const items = body.tried.items as { line_result: string; tries: { verdict: string }[] }[];
+    for (const item of items) {
+      expect(item.line_result).toMatch(/\$\d/);
+      expect(item.tries).toHaveLength(3);
+    }
+    const tries = items.flatMap((i) => i.tries);
+    expect(tries.filter((t) => t.verdict === 'fixed')).toHaveLength(11);
+    expect(tries).toHaveLength(21);
+    expect(items.filter((i) => i.line_result.startsWith('passed first time'))).toHaveLength(5);
+
+    const again = await call(api, '/factories/software/jonah/proposals/10/try', 'POST');
+    expect(again.status).toBe(409);
+    expect(again.body.code).toBe('proposal-not-tried');
+  });
+
+  it('has no judge among the observations: the line observation replaced it', async () => {
+    const { body } = await call(jonah(), '/factories/software/jonah', 'GET');
+    expect(JSON.stringify(body)).not.toMatch(/judge/i);
+    expect(body.observations.map((o: { id: string }) => o.id)).not.toContain('obs-plain-language');
   });
 
   it('queues a manual review with 202 and answers 409 review-in-flight to the next while it waits', async () => {
@@ -181,7 +239,7 @@ describe('the mock Jonah API', () => {
     expect(rejected.body).toMatchObject({ number: 7, state: 'rejected' });
 
     const waiting = await call(api, '/factories/software/jonah/proposals?state=proposed', 'GET');
-    expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([8]);
+    expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([10, 9, 8]);
   });
 
   it('answers Try again with an estimate, then with the new tries once confirmed, and refuses over budget', async () => {
