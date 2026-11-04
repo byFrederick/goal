@@ -37,6 +37,27 @@ func TestCheckFilePath_RelativeCleanAndBounded(t *testing.T) {
 	}
 }
 
+func TestSlug_LowerCaseLettersAndDigitsDashedOnce(t *testing.T) {
+	t.Parallel()
+
+	for title, want := range map[string]string{
+		"Runbooks":                  "runbooks",
+		"  On-call: Paging & SLOs ": "on-call-paging-slos",
+		"Über uns / Team":           "über-uns-team",
+		"../..":                     "page",
+		"":                          "page",
+		strings.Repeat("a", 300):    strings.Repeat("a", 200),
+	} {
+		if got := Slug(title); got != want {
+			t.Errorf("Slug(%.40q) = %q, want %q", title, got, want)
+		}
+
+		if err := CheckFilePath(Slug(title)); err != nil {
+			t.Errorf("Slug(%.40q) is not a file name: %v", title, err)
+		}
+	}
+}
+
 func TestCheckReadWhen_OneLineOfAtMost160(t *testing.T) {
 	t.Parallel()
 

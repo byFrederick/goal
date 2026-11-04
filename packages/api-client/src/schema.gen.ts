@@ -8418,7 +8418,7 @@ export interface components {
             connection?: string;
             /** @description The secret a synced source reads with, opened at each sync; absent for an upload or live source and a synced one still on its connection */
             secret?: string;
-            /** @description What its reader reads (a repository, a branch and path globs; a Confluence space). A synced source on a secret also names its reader (reader: gitdocs or confluence) and, for confluence, the site and the account's email. */
+            /** @description What its reader reads (a repository, a branch and path globs; Confluence spaces and, with root_page, only one page's tree). A synced source on a secret also names its reader (reader: gitdocs or confluence) and, for confluence, the site and the account's email. */
             config: {
                 [key: string]: string;
             };
@@ -8496,7 +8496,7 @@ export interface components {
             connection?: string;
             /** @description The secret a synced source reads with: the code host's token for gitdocs, the API token for confluence. It must be open to all factories. */
             secret?: components["schemas"]["SecretName"];
-            /** @description What its reader reads. A synced source names its reader (reader: gitdocs or confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or on the host code_host names: github or gitlab), branch, include and exclude; confluence reads site, email and spaces. */
+            /** @description What its reader reads. A synced source names its reader (reader: gitdocs or confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or on the host code_host names: github or gitlab), branch, include and exclude; confluence reads site, email and spaces (space keys separated by commas), and the optional root_page (a page id: only that page and the pages under it). */
             config?: {
                 [key: string]: string;
             };

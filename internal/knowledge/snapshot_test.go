@@ -310,10 +310,10 @@ func TestSnapshot_UploadsWriteTheirFiles(t *testing.T) {
 	w.want("page.md", files["page.md"].text, strings.Contains(files["page.md"].text, "# Expenses"), strings.Contains(files["page.md"].text, "Receipts within 30 days."))
 }
 
-// A Confluence source is read by its kind's reader with its secret opened at sync time, and
-// syncs into a snapshot.
-func TestSnapshot_AConfluenceSourceReadsWithItsSecret(t *testing.T) {
-	t.Parallel()
+// confluenceWorld is a world with only a Confluence source, "wiki", read by docs with the secret
+// wiki-token.
+func confluenceWorld(t *testing.T) *world {
+	t.Helper()
 
 	w := repoWorld(t)
 	ctx := w.ctx()
@@ -332,6 +332,16 @@ func TestSnapshot_AConfluenceSourceReadsWithItsSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	return w
+}
+
+// A Confluence source is read by its kind's reader with its secret opened at sync time, and
+// syncs into a snapshot.
+func TestSnapshot_AConfluenceSourceReadsWithItsSecret(t *testing.T) {
+	t.Parallel()
+
+	w := confluenceWorld(t)
+
 	w.docs.set(map[string]string{deployMD: shipOnTuesdays})
 	w.syncDue(w.ingestor(nil))
 
@@ -340,6 +350,34 @@ func TestSnapshot_AConfluenceSourceReadsWithItsSecret(t *testing.T) {
 
 	files := w.zipOf(w.snapshots("wiki")[0])
 	w.want("its files", files, len(files) == 1)
+}
+
+// A Confluence page lands at the path of its page tree: its folder, then its title's slug and its
+// id. A page without a folder lands at the top, and one whose folder would not make a file's path
+// (not clean, or too long) lands at the top too.
+func TestSnapshot_ConfluencePagesLandAtTheirTreePaths(t *testing.T) {
+	t.Parallel()
+
+	w := confluenceWorld(t)
+
+	w.docs.set(map[string]string{"11": "# Runbooks", "12": "# Deploy", "13": "# Paging", "15": "# Odd", "16": "# Deep"})
+	w.docs.titles = map[string]string{"11": "Runbooks", "12": "Deploy", "13": "Paging: On-call", "15": "Odd", "16": "Deep"}
+	w.docs.folders = map[string]string{"11": "ENG", "13": "ENG/runbooks", "15": "ENG/../up", "16": "ENG/" + strings.Repeat("a", domain.MaxFilePath)}
+	w.syncDue(w.ingestor(nil))
+
+	got := w.files("wiki")
+	slices.Sort(got)
+
+	want := []string{"ENG/runbooks-11.md", "ENG/runbooks/paging-on-call-13.md", "deep-16.md", "deploy-12.md", "odd-15.md"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("files = %v, want %v", got, want)
+	}
+
+	for _, p := range got {
+		if err := domain.CheckFilePath(p); err != nil {
+			t.Errorf("file %s: %v", p, err)
+		}
+	}
 }
 
 // manyDocs is n Markdown files, docs/page-<i>.md.
