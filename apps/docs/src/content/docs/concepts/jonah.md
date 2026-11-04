@@ -108,8 +108,9 @@ Tries run only while Jonah is on, while no item waits at an agent station, and w
 
 - **Each item** with its tries by attempt. Each try is queued, running or done. A done try is `fixed` or `not_fixed`, with its reason first; `unknown` when its grade can't be trusted; or `error` when it could not be carried out, such as a lost box or a commit that is gone. An `error` is never counted as a failing try.
 - **A model proposal's items** show how each went on the line beside its three tries, such as "sent back once at merge, $2.00". An item that is no longer among the agent's newest finished items shows no line result.
-- **The cost and the time:** what the tries cost together, and the seconds from the first try queued to the last one finished, once all are done.
-- **The state:** `trying` while a try is queued or running, `done` when every try is done, and `budget_used`, shown as "Not tried: budget used", while a try is still queued and Jonah's budget has run out. Queued tries run once the 7-day window has room again.
+- **The cost and the time:** what the tries and the grader's checks cost together, and the seconds from the first try queued to the last one finished, once all are done.
+- **The state:** `trying` while a try is queued or running, `done` when every try is done, and `budget_used`, shown as "Not tried: budget used", while a try is not done and Jonah's budget has run out. Waiting tries run and are graded once the 7-day window has room again.
+- **The grader:** `grader` has the grader's two hit rates once it has been checked on an item (see below). `original_hit_rate` is the share of original results it read as not fixed, and `final_hit_rate` the share of final results it read as fixed. Each is 0 until it has a check.
 
 Code grades a try first. A try whose output breaks the station's contract, as the proposal changes it, or fails one of the station's checks is `not_fixed`, with what failed as its reason.
 
@@ -121,7 +122,16 @@ A try at a gate station, where the proposal changes the gate's own agent, rules 
 
 The try is `fixed` when its decision matches, and `not_fixed` when it differs or its output is not a gate verdict, as when the try's run failed. It is `unknown` when there is no answer. Its reason names the person's verdict or the merge.
 
-A try at any other station that passes the contract and the checks stays done without a verdict until the grader is built. The grader's hit rates (`tried.grader`) and the station's kept tests (`tried.kept_tests`) are not shown yet: `grader` is absent and `kept_tests` is empty.
+A try at any other station whose run failed is `not_fixed`, as it passes no code grading. One that passes the contract and the checks goes to the grader: one model call, on the current line's model, with no tools, that reads why the item went back and a result, and answers `fixed`, `not_fixed` or `unknown` with its reason. The reason the item went back is the one given with its first send-back after its original run.
+
+The grader is checked both ways first, once per proposal and item:
+
+- **The original result**, the run that was sent back, should come out `not_fixed`.
+- **The final accepted result**, the item's newest run at the station that succeeded, should come out `fixed`. An item with no such run has no final result, and that check counts as a miss.
+
+When the grader misreads either one, its grade can't be trusted on that item: the item's tries are `unknown`, their reason names the result it misread, and they get no grade of their own. Otherwise the grader grades each try's output and change, and the try takes its answer and reason. A grade that gives no valid answer, or whose run fails, is `unknown` too.
+
+The grader's runs count against Jonah's budget. When the budget runs out before a grade, the try waits with its run kept, and `tried.state` is `budget_used`. Once the budget has room again the try is graded without being run again. The station's kept tests (`tried.kept_tests`) are not shown yet: `kept_tests` is empty.
 
 ### Try again
 

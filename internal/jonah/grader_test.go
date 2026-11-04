@@ -10,6 +10,9 @@ import (
 	"github.com/byFrederick/goal/internal/jonah"
 )
 
+// sendBack is why the graded items went back.
+const sendBack = "the change has no tests"
+
 // gradeWorld is a try world with one queued try of a graded item, claimed, and the grade
 // material read from the same store.
 type gradeWorld struct {
@@ -60,7 +63,7 @@ func TestGrades_MaterialOfEachResult(t *testing.T) {
 	t.Parallel()
 
 	g := newGradeWorld(t, func(w *tryWorld, org domain.OrgID) domain.Item {
-		return w.gradedItem(org, rt0.Add(-2*time.Hour), "no tests")
+		return w.gradedItem(org, rt0.Add(-2*time.Hour), sendBack)
 	})
 	g.ran(`{"tests":"added"}`, tryDiff)
 
@@ -68,9 +71,9 @@ func TestGrades_MaterialOfEachResult(t *testing.T) {
 		of   domain.GradeOf
 		want domain.GradeMaterial
 	}{
-		{of: domain.GradeTry, want: domain.GradeMaterial{Reason: "no tests", Output: `{"tests":"added"}`, Diff: tryDiff}},
-		{of: domain.GradeOriginal, want: domain.GradeMaterial{Reason: "no tests", Output: originalOutput}},
-		{of: domain.GradeFinal, want: domain.GradeMaterial{Reason: "no tests", Output: `{"tests":true}`}},
+		{of: domain.GradeTry, want: domain.GradeMaterial{Reason: sendBack, Output: `{"tests":"added"}`, Diff: tryDiff}},
+		{of: domain.GradeOriginal, want: domain.GradeMaterial{Reason: sendBack, Output: originalOutput}},
+		{of: domain.GradeFinal, want: domain.GradeMaterial{Reason: sendBack, Output: `{"tests":true}`}},
 	} {
 		got, err := g.material(tt.of)
 		if err != nil || got != tt.want {

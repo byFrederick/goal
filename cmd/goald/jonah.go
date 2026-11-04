@@ -136,6 +136,11 @@ func jonahTryLoop(s settings, store *postgres.Store, defs *definitions.Cache, en
 	}, s.JonahTry)
 }
 
+// jonahGrades is what the gateway serves a grade run (ADR 0039 decision 10), read from store.
+func jonahGrades(store *postgres.Store) *jonah.Grades {
+	return jonah.NewGrades(jonah.GradeDeps{Tries: store, Runs: store, Events: store})
+}
+
 // tryDefinitions is jonah.TryDefinitions over the definitions cache: a proposal's line is its
 // version with the proposal's edits applied to it, and the stations it reaches are
 // factorymodel.StationsReached's between the two; its output is validated against the proposed

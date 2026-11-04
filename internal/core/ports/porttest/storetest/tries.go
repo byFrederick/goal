@@ -248,6 +248,7 @@ func testTriesRecordRun(f *fixture) {
 	t := f.t
 	p := f.triedProposal(t, t1)
 	f.newTries(t, p, f.create(t, domain.NewItem{}))
+
 	now := t1.Add(time.Hour)
 	run := f.pastRun(t, f.create(t, domain.NewItem{}), stNext, t1, false, "")
 
@@ -290,6 +291,7 @@ func testTriesRecordRunKept(f *fixture) {
 	t := f.t
 	p := f.triedProposal(t, t1)
 	f.newTries(t, p, f.create(t, domain.NewItem{}))
+
 	now := t1.Add(time.Hour)
 	run := f.pastRun(t, f.create(t, domain.NewItem{}), stNext, t1, false, "")
 

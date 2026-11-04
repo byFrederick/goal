@@ -23,7 +23,7 @@ const (
 )
 
 // PastTryVerdict is how a done try came out (ADR 0039 decision 10). Values match tries.verdict.
-// Empty is a try whose run ended and is waiting for the grader.
+// Empty is a try not done yet, or one finished before the grader graded tries.
 type PastTryVerdict string
 
 // Past-item try verdicts. Code grades first: a try whose output fails the proposed contract or

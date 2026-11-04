@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -93,9 +94,9 @@ func finalRun(ctx context.Context, runs ItemRuns, try domain.PastTry) (domain.Ru
 		return domain.Run{}, fmt.Errorf("read the runs of item %s: %w", try.ItemID, err)
 	}
 
-	for i := len(rs) - 1; i >= 0; i-- {
-		if rs[i].Station == try.Station && rs[i].Result.Status == domain.RunSucceeded {
-			return rs[i], nil
+	for _, r := range slices.Backward(rs) {
+		if r.Station == try.Station && r.Result.Status == domain.RunSucceeded {
+			return r, nil
 		}
 	}
 
@@ -294,6 +295,7 @@ func (s *Tries) gradeRun(ctx context.Context, current domain.Line, try domain.Pa
 	}
 
 	rt := current.Runtime
+
 	req := domain.RunRequest{
 		FactoryID: try.FactoryID, Version: current.VersionID, Kind: domain.RunKindTry, Station: try.Station, Agent: orig.Agent,
 		Model: rt.Model, Bundle: domain.TaskKindGrade, TryOf: try.ID, GradeOf: of, ModelConnection: rt.ModelConnection,

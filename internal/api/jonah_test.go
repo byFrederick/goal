@@ -843,7 +843,21 @@ func TestJonah_ProposalTried(t *testing.T) {
 
 	wantTriedItem(t, tried.Items[0], it)
 
-	path := fmt.Sprintf("/v1/orgs/acme/factories/line/jonah/proposals/%d", made.Proposal.Number)
+	wantGrader(t, h, fmt.Sprintf("/v1/orgs/acme/factories/line/jonah/proposals/%d", made.Proposal.Number), claimed, it)
+
+	stored := h.review(t, []domain.NewProposal{{Title: "Tighten the rule", Edits: proposalFiles()}})
+	if p := h.getProposal(t, fmt.Sprintf("%s/%d", acmeProposals, stored[0].Number)); p.Tried != nil {
+		t.Errorf("a proposal with no tries has tried %+v", p.Tried)
+	}
+}
+
+// wantGrader records checks of the grader on it for claimed's proposal, at path, and fails t
+// unless its tried shows each hit rate as hits over checks, 0 without checks, and adds the checks'
+// cost to the tries' $1.25.
+func wantGrader(t *testing.T, h *harness, path string, claimed domain.PastTry, it domain.Item) {
+	t.Helper()
+
+	ctx := inOrg(t)
 	check := func(r domain.GraderCheckResult, answer domain.PastTryVerdict) {
 		t.Helper()
 
@@ -864,11 +878,6 @@ func TestJonah_ProposalTried(t *testing.T) {
 
 	if g := h.getProposal(t, path).Tried; g.Grader == nil || g.Grader.OriginalHitRate != 1 || g.Grader.FinalHitRate != 0 || g.CostUsd != 1.75 {
 		t.Errorf("tried = %+v, want hit rates 1 and 0 and $1.75 with both checks", g)
-	}
-
-	stored := h.review(t, []domain.NewProposal{{Title: "Tighten the rule", Edits: proposalFiles()}})
-	if p := h.getProposal(t, fmt.Sprintf("%s/%d", acmeProposals, stored[0].Number)); p.Tried != nil {
-		t.Errorf("a proposal with no tries has tried %+v", p.Tried)
 	}
 }
 

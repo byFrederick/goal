@@ -492,23 +492,33 @@ func (s *Tries) run(ctx context.Context, current domain.Line, try domain.PastTry
 	req.Timeout = s.c.Timeout
 
 	run, err := s.d.Runner.RunTask(ctx, req)
-
-	switch {
-	case err != nil && ctx.Err() != nil:
-		return domain.PastTryResult{}, fmt.Errorf("run: %w", err)
-	case err != nil:
-		res := tryError("the try could not run: %v", err)
-		res.CostUSD, res.TryRunID = run.CostUSD, run.RunID
-
-		return res, nil
-	case run.Status == domain.RunCancelled:
-		res := tryError("the try's run was cancelled: %s", run.Error)
-		res.CostUSD, res.TryRunID = run.CostUSD, run.RunID
-
-		return res, nil
+	if res, ended, err := notCarriedOut(ctx, run, err); ended {
+		return res, err
 	}
 
 	return s.grade(ctx, current, p, line, try, in.Run, run)
+}
+
+// notCarriedOut is the result of a try's run that RunTask could not carry out or that was
+// cancelled, verdict error with its cost and run, and whether it was one; a cancelled ctx is an
+// error.
+func notCarriedOut(ctx context.Context, run domain.RunResult, err error) (domain.PastTryResult, bool, error) {
+	var res domain.PastTryResult
+
+	switch {
+	case err != nil && ctx.Err() != nil:
+		return domain.PastTryResult{}, true, fmt.Errorf("run: %w", err)
+	case err != nil:
+		res = tryError("the try could not run: %v", err)
+	case run.Status == domain.RunCancelled:
+		res = tryError("the try's run was cancelled: %s", run.Error)
+	default:
+		return domain.PastTryResult{}, false, nil
+	}
+
+	res.CostUSD, res.TryRunID = run.CostUSD, run.RunID
+
+	return res, true, nil
 }
 
 // grade is the result of try's run that ended, with its diff, cost and run (ADR 0039 decision 10).

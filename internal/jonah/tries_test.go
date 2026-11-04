@@ -772,8 +772,8 @@ func (w *tryWorld) gradedItem(org domain.OrgID, started time.Time, reason string
 	it, _ := w.pastItem(org, started, true)
 
 	err := w.store.AppendEvents(ctx, domain.Event{
-		FactoryID: w.factories[org], ItemID: it.ID, At: started.Add(10 * time.Minute), Kind: domain.EventRejected, Station: stBuild, Actor: "ada",
-		Data: map[string]any{"actor": "user:ada", "reason": reason},
+		FactoryID: w.factories[org], ItemID: it.ID, At: started.Add(10 * time.Minute), Kind: domain.EventRejected, Station: stBuild, Actor: "grace",
+		Data: map[string]any{"reason": reason},
 	})
 	if err != nil {
 		w.t.Fatal(err)
@@ -802,7 +802,7 @@ func TestTries_GraderGradesTry(t *testing.T) {
 
 	w := newTryWorld(t, 1)
 	org := w.orgs[0]
-	it := w.gradedItem(org, rt0.Add(-2*time.Hour), "no tests")
+	it := w.gradedItem(org, rt0.Add(-2*time.Hour), sendBack)
 	p := w.propose(org, writerPath, it)
 	w.sweep()
 
@@ -811,15 +811,36 @@ func TestTries_GraderGradesTry(t *testing.T) {
 		t.Errorf("try = %+v; want fixed with the grader's reason, its cost with the grade's", got)
 	}
 
-	reqs := w.runner.requests()
+	wantGradeRequests(t, w.runner.requests(), org, w.factories[org], got.ID)
+	wantHits(t, w, org, p, it)
+}
+
+// wantHits fails t unless p has the grader's original then final check of it, both hits, each
+// with its cost and run.
+func wantHits(t *testing.T, w *tryWorld, org domain.OrgID, p domain.Proposal, it domain.Item) {
+	t.Helper()
+
+	checks, err := w.store.ProposalGraderChecks(w.ctx(org), p.ID)
+	if err != nil || len(checks) != 2 || checks[0].Result != domain.GraderCheckOriginal || checks[1].Result != domain.GraderCheckFinal ||
+		!checks[0].Hit() || !checks[1].Hit() || checks[0].CostUSD != gradeCost || checks[1].RunID == "" || checks[0].ItemID != it.ID {
+		t.Errorf("checks = %+v, %v; want the original then the final check, both hits, with their cost and run", checks, err)
+	}
+}
+
+// wantGradeRequests fails t unless reqs are the try's run then grades of the original, the final
+// and the try: each a try-kind run on a grade bundle with the current line's model and the
+// model's access alone.
+func wantGradeRequests(t *testing.T, reqs []domain.RunRequest, org domain.OrgID, f domain.FactoryID, try domain.PastTryID) {
+	t.Helper()
+
 	if g := gradesOf(reqs); !slices.Equal(g, []domain.GradeOf{domain.GradeOriginal, domain.GradeFinal, domain.GradeTry}) || len(reqs) != 4 {
 		t.Fatalf("grades %v of %d runs; want the original, the final, then the try, after the try's run", g, len(reqs))
 	}
 
 	for _, r := range reqs[1:] {
 		want := domain.RunRequest{
-			OrgID: org, FactoryID: w.factories[org], Version: tryVersion, Kind: domain.RunKindTry, Station: stBuild, Agent: tryAgent,
-			Model: reviewModel, Bundle: domain.TaskKindGrade, TryOf: got.ID, GradeOf: r.GradeOf, ModelConnection: modelConn,
+			OrgID: org, FactoryID: f, Version: tryVersion, Kind: domain.RunKindTry, Station: stBuild, Agent: tryAgent,
+			Model: reviewModel, Bundle: domain.TaskKindGrade, TryOf: try, GradeOf: r.GradeOf, ModelConnection: modelConn,
 			Size: domain.SandboxSmall, Timeout: tryTimeout,
 		}
 		if !reflect.DeepEqual(r, want) {
@@ -829,12 +850,6 @@ func TestTries_GraderGradesTry(t *testing.T) {
 		if err := r.Check(); err != nil {
 			t.Errorf("grade request Check: %v", err)
 		}
-	}
-
-	checks, err := w.store.ProposalGraderChecks(w.ctx(org), p.ID)
-	if err != nil || len(checks) != 2 || checks[0].Result != domain.GraderCheckOriginal || checks[1].Result != domain.GraderCheckFinal ||
-		!checks[0].Hit() || !checks[1].Hit() || checks[0].CostUSD != gradeCost || checks[1].RunID == "" || checks[0].ItemID != it.ID {
-		t.Errorf("checks = %+v, %v; want the original then the final check, both hits, with their cost and run", checks, err)
 	}
 }
 
@@ -887,7 +902,7 @@ func TestTries_GraderMissMakesUnknown(t *testing.T) {
 			if tt.noFinal {
 				it = w.unacceptedItem(org)
 			} else {
-				it = w.gradedItem(org, rt0.Add(-2*time.Hour), "no tests")
+				it = w.gradedItem(org, rt0.Add(-2*time.Hour), sendBack)
 			}
 
 			w.propose(org, writerPath, it)
@@ -950,7 +965,7 @@ func TestTries_GraderChecksOncePerItem(t *testing.T) {
 
 	w := newTryWorld(t, 1)
 	org := w.orgs[0]
-	it := w.gradedItem(org, rt0.Add(-2*time.Hour), "no tests")
+	it := w.gradedItem(org, rt0.Add(-2*time.Hour), sendBack)
 	p := w.propose(org, writerPath, it)
 	w.sweep()
 
@@ -1014,7 +1029,7 @@ func TestTries_GraderWaitsForBudget(t *testing.T) {
 	w := newTryWorld(t, 1)
 	org := w.orgs[0]
 	f := w.factories[org]
-	it := w.gradedItem(org, rt0.Add(-2*time.Hour), "no tests") // the line spent $101: Jonah's 5% is $5.05
+	it := w.gradedItem(org, rt0.Add(-2*time.Hour), sendBack) // the line spent $101: Jonah's 5% is $5.05
 	p := w.propose(org, writerPath, it)
 	w.sweep()
 
@@ -1037,13 +1052,8 @@ func TestTries_GraderWaitsForBudget(t *testing.T) {
 		t.Fatalf("try = %+v, grades %v; want running with its run recorded and no grade", waiting, gradesOf(w.runner.requests()))
 	}
 
-	spend, err := w.store.JonahSpendSince(w.ctx(org), f, rt0.Add(-jonah.BudgetWindow))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if tried, _ := jonah.TriedOf(w.tries(org, p), domain.DefaultJonahPolicy().Budget(spend)); tried.State != jonah.TriedBudgetUsed {
-		t.Errorf("tried state = %s; want budget_used", tried.State)
+	if st := w.triedState(org, p); st != jonah.TriedBudgetUsed {
+		t.Errorf("tried state = %s; want budget_used", st)
 	}
 
 	w.pastItem(org, rt0, false) // $100 more of the line's spend: $10.05 of share
@@ -1061,6 +1071,20 @@ func TestTries_GraderWaitsForBudget(t *testing.T) {
 	if reqs := w.runner.requests(); len(reqs)-len(gradesOf(reqs)) != 1 {
 		t.Errorf("%d try runs; want the one, never run again", len(reqs)-len(gradesOf(reqs)))
 	}
+}
+
+// triedState is where p's tries are, as its page shows them, with Jonah's budget now.
+func (w *tryWorld) triedState(org domain.OrgID, p domain.Proposal) jonah.TriedState {
+	w.t.Helper()
+
+	spend, err := w.store.JonahSpendSince(w.ctx(org), p.FactoryID, w.clock.Now().Add(-jonah.BudgetWindow))
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	tried, _ := jonah.TriedOf(w.tries(org, p), domain.DefaultJonahPolicy().Budget(spend))
+
+	return tried.State
 }
 
 // jonahSpent records a Jonah run of factory f that cost usd.
