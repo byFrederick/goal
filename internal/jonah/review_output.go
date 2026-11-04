@@ -7,6 +7,7 @@ import (
 	"maps"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 )
@@ -16,6 +17,9 @@ import (
 type reviewOutput struct {
 	Observations []outputObservation `json:"observations"`
 	Proposals    []outputProposal    `json:"proposals"`
+	// Facts are the memory facts it proposes (ADR 0039 decision 7); goald makes them one
+	// proposal of memory.yaml (memoryProposal).
+	Facts []outputFact `json:"facts"`
 }
 
 // outputObservation names its proposal by index in proposals, from 0; nil when it has none. ID
@@ -74,7 +78,8 @@ func parseReviewOutput(raw json.RawMessage) (reviewOutput, error) {
 // reviewInput is what a review's output is checked against: the review, its policy's
 // proposeAfter, the files of the version it read, the sent-back events of its window, the
 // factory's open observations and proposals, the models the organization's policy allows, and
-// the definition check.
+// the definition check; and for its facts, the window's evidence items, the factory's name
+// (metadata.name) and the day it finishes.
 type reviewInput struct {
 	review       domain.JonahReview
 	proposeAfter int
@@ -84,6 +89,9 @@ type reviewInput struct {
 	proposals    []domain.Proposal
 	models       []string
 	check        DefinitionCheck
+	evidence     []domain.EvidenceItem
+	factoryName  string
+	today        time.Time
 }
 
 // Reasons a proposal is dropped, as `jonah proposal dropped` logs them.
@@ -107,7 +115,7 @@ const maxQuote = 500
 // returns them with every observation, numbered onto the kept proposals. It drops a proposal,
 // telling drop its index, reason and detail, for: an invisible or bidirectional character in its
 // title, summary or edits; a path outside the allowlist; an edit with both or neither of
-// replacements and content; an old that does not occur exactly once in the version's file, or
+// replacements and content; an edit of memory.yaml, which only the review's facts reach; an old that does not occur exactly once in the version's file, or
 // replacements of a file it lacks; whole content for a file it has; a factory.yaml change at a
 // path no proposal may change; a blocking problem config.Check finds in the edited files that the
 // version does not have; evidence naming an event outside the window's; on a threshold review, no
@@ -223,8 +231,8 @@ func checkProposal(checker *definitionChecker, events map[string]domain.SentBack
 	}
 
 	for _, e := range p.Edits {
-		if !domain.ProposalPathAllowed(e.Path) {
-			return domain.NewProposal{}, dropPath, e.Path + " is not a file a proposal may edit"
+		if !domain.DefinitionEditAllowed(e.Path) {
+			return domain.NewProposal{}, dropPath, e.Path + " is not a file a definition edit may change"
 		}
 
 		if (e.Content == nil) == (len(e.Replacements) == 0) {

@@ -140,7 +140,8 @@ func (g *Gateway) jonahBudgetLeft(ctx context.Context, factory domain.FactoryID,
 
 // jonahDefinition adds every file of c's version that is UTF-8 text under definitionDir, and
 // filesIndex: each one's path, its sha256 (a proposal's base_sha256) and whether a proposal may
-// edit it (domain.ProposalPathAllowed). A file that is not text is left out of both.
+// edit it (domain.DefinitionEditAllowed: memory.yaml is no, as the review proposes facts for it
+// instead). A file that is not text is left out of both.
 func (g *Gateway) jonahDefinition(ctx context.Context, c domain.TaskClaims, out map[string][]byte) error {
 	files, err := g.defs.VersionFiles(ctx, c.VersionID)
 	if err != nil {
@@ -160,7 +161,7 @@ func (g *Gateway) jonahDefinition(ctx context.Context, c domain.TaskClaims, out 
 		out[definitionDir+p] = files[p]
 
 		editable := "no"
-		if domain.ProposalPathAllowed(p) {
+		if domain.DefinitionEditAllowed(p) {
 			editable = "yes"
 		}
 

@@ -31,6 +31,9 @@ var tryHead = strings.Repeat("c", 40)
 // tryDiff is the diff the graded tries' runs leave.
 const tryDiff = "diff --git a/notes.go b/notes.go\n"
 
+// contractNote is the output contract the try tests build a station with.
+const contractNote = "note"
+
 // tryDefs is TryDefinitions over each organization's one line: ProposedLine answers the line of
 // the version and the stations reached[version] names, every agent station by default.
 type tryDefs struct {
@@ -663,13 +666,13 @@ func TestTries_ContractOfTheProposalIsChecked(t *testing.T) {
 	} {
 		w := newTryWorld(t, 1)
 		org := w.orgs[0]
-		w.defs.build(org, func(s *domain.Station) { s.Output = "note" })
+		w.defs.build(org, func(s *domain.Station) { s.Output = contractNote })
 		w.queued(org, 1)
 
 		var seen []domain.ProposalEdit
 
 		w.defs.validate = func(contract string, edits []domain.ProposalEdit, output json.RawMessage) error {
-			if contract != "note" || string(output) != `{}` {
+			if contract != contractNote || string(output) != `{}` {
 				return fmt.Errorf("validated %s with %s; want note with the run's output", contract, output)
 			}
 
@@ -710,7 +713,7 @@ func TestTries_PassingChecksAwaitTheGrader(t *testing.T) {
 	} {
 		w := newTryWorld(t, 1)
 		org := w.orgs[0]
-		w.defs.build(org, func(s *domain.Station) { s.Output, s.Checks = "note", []string{"make test"} })
+		w.defs.build(org, func(s *domain.Station) { s.Output, s.Checks = contractNote, []string{"make test"} })
 		w.queued(org, 1)
 		w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
 			return domain.RunResult{Status: tt.status, Output: json.RawMessage(`{}`), Diff: tryDiff, RunID: tryRunID}, nil

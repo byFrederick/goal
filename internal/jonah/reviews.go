@@ -66,6 +66,8 @@ const (
 	reviewEventLimit       = 200
 	reviewObservationLimit = 200
 	reviewProposalLimit    = 500
+	// reviewEvidenceLimit is the evidence items a review's facts may name, as the gateway serves them.
+	reviewEvidenceLimit = 200
 )
 
 // reviewActor queues the daily reviews.
@@ -396,7 +398,7 @@ func (r *Reviews) review(ctx context.Context, org domain.OrgID, rv domain.JonahR
 		return ran(failed("%v", err), run), errRetry
 	}
 
-	res, err := r.result(ctx, rv, l.Jonah, out)
+	res, err := r.result(ctx, rv, l, out)
 
 	return ran(res, run), err
 }
@@ -409,9 +411,10 @@ func ran(res domain.JonahReviewResult, run domain.RunResult) domain.JonahReviewR
 }
 
 // result checks out against rv's version and window, the factory's open observations and
-// proposals and the organization's allowed models, and computes each kept proposal's before
-// value: a done result.
-func (r *Reviews) result(ctx context.Context, rv domain.JonahReview, p domain.JonahPolicy, out reviewOutput) (domain.JonahReviewResult, error) {
+// proposals and the organization's allowed models, makes its facts one memory proposal checked
+// against the window's evidence items, and computes each kept proposal's before value: a done
+// result.
+func (r *Reviews) result(ctx context.Context, rv domain.JonahReview, l domain.Line, out reviewOutput) (domain.JonahReviewResult, error) {
 	files, err := r.d.Definitions.VersionFiles(ctx, rv.VersionID)
 	if err != nil {
 		return domain.JonahReviewResult{}, fmt.Errorf("read files of version %s: %w", rv.VersionID, err)
@@ -422,7 +425,16 @@ func (r *Reviews) result(ctx context.Context, rv domain.JonahReview, p domain.Jo
 		return domain.JonahReviewResult{}, fmt.Errorf("read sent-back events: %w", err)
 	}
 
-	in := reviewInput{review: rv, proposeAfter: proposeAfter(p), files: files, events: events, check: r.d.Check}
+	in := reviewInput{
+		review: rv, proposeAfter: proposeAfter(l.Jonah), files: files, events: events, check: r.d.Check,
+		factoryName: l.Name, today: r.d.Clock.Now().UTC(),
+	}
+
+	if len(out.Facts) > 0 {
+		if in.evidence, err = r.d.Jonah.EvidenceItems(ctx, rv.FactoryID, rv.WindowStart, rv.WindowEnd, reviewEvidenceLimit); err != nil {
+			return domain.JonahReviewResult{}, fmt.Errorf("read evidence items: %w", err)
+		}
+	}
 
 	if in.observations, err = r.d.Jonah.OpenObservations(ctx, rv.FactoryID, reviewObservationLimit); err != nil {
 		return domain.JonahReviewResult{}, fmt.Errorf("read open observations: %w", err)
@@ -447,15 +459,37 @@ func (r *Reviews) result(ctx context.Context, rv domain.JonahReview, p domain.Jo
 			slog.String("reason", reason), slog.String("detail", truncate(detail, maxReviewError)))
 	})
 
+	checker := definitionChecker{in: in}
+	if memory, ok := memoryProposal(&checker, out.Facts, func(i int, reason, detail string) {
+		r.log.WarnContext(ctx, "jonah fact dropped", slog.String("review_id", string(rv.ID)), slog.Int("fact", i),
+			slog.String("reason", reason), slog.String("detail", truncate(detail, maxReviewError)))
+	}); ok {
+		proposals = append(proposals, memory)
+	}
+
+	if err := r.estimate(ctx, rv, proposals); err != nil {
+		return domain.JonahReviewResult{}, err
+	}
+
+	return domain.JonahReviewResult{State: domain.JonahDone, Proposals: proposals, Observations: observations}, nil
+}
+
+// estimate computes each of proposals' before value over rv's window; a memory proposal has no
+// metric and none.
+func (r *Reviews) estimate(ctx context.Context, rv domain.JonahReview, proposals []domain.NewProposal) error {
 	flows := map[string]domain.StationFlow{}
 
 	for i := range proposals {
 		e := &proposals[i].Estimate
+		if e.Metric == "" {
+			continue
+		}
 
 		f, ok := flows[e.Station]
 		if !ok {
+			var err error
 			if f, err = r.d.Jonah.StationFlow(ctx, rv.FactoryID, e.Station, rv.WindowStart, rv.WindowEnd); err != nil {
-				return domain.JonahReviewResult{}, fmt.Errorf("measure station %s: %w", e.Station, err)
+				return fmt.Errorf("measure station %s: %w", e.Station, err)
 			}
 
 			flows[e.Station] = f
@@ -464,7 +498,7 @@ func (r *Reviews) result(ctx context.Context, rv domain.JonahReview, p domain.Jo
 		e.Before = before(e.Metric, f)
 	}
 
-	return domain.JonahReviewResult{State: domain.JonahDone, Proposals: proposals, Observations: observations}, nil
+	return nil
 }
 
 // before is metric's value in f: the sent-back rate (0 when no item passed), or the lead time

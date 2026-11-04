@@ -9,7 +9,7 @@ import { type Jonah, paths, relativePath, type TaskSpec } from './spec.js';
 /**
  * Jonah mode (ADR 0034, ADR 0039 decision 4): a review that reads a read-only box with Read, Grep
  * and Glob alone (the definition, the evidence, the proposals, the knowledge) and returns
- * observations and proposals.
+ * observations, proposals and memory facts (ADR 0039 decision 7).
  */
 
 /** A review proposes at most this many changes. */
@@ -59,6 +59,8 @@ export const jonahSystemPrompt = [
     "- Say when a cause is not a definition problem, such as a lost sandbox, a provider outage or a person's choice: give it an observation with not_jonahs and no proposal.",
     '- Give each proposal an estimate of the metric it should move for one station.',
     `- Propose at most ${maxProposals} proposals.`,
+    "- Propose a fact for the factory's memory (/goal/definition/memory.yaml) only when its text is copied word for word from a person's note, answer to a question or send-back reason in the evidence, and it holds beyond its item, such as \"Phones are 390 wide; check 375 too\". Give the items whose events hold those words. Never propose a fact you inferred from agents' runs, checks or your own reading: goald drops a fact unless a person wrote its words on each item it names.",
+    "- Never edit memory.yaml: propose facts for it instead. When memory is near 50 entries or 8 KB, give in a fact's replaces the exact text of each fact it replaces.",
   ].join('\n'),
   'Answer with one JSON object and nothing else, of the shape the request gives. Each observation names its proposal by index when it has one.',
 ].join('\n\n');
@@ -96,6 +98,13 @@ const Proposal = z.object({
   estimate: Estimate,
 });
 
+/** A memory fact: a person's words, the items (#<number>) whose events hold them, and the texts of the facts it replaces. goald checks the quote. */
+const Fact = z.object({
+  text: z.string().trim().min(1).max(300),
+  items: z.array(z.string().min(1)).min(1),
+  replaces: z.array(z.string()),
+});
+
 const Observation = z.object({
   /** The id of the open observation of /goal/observations.md this one updates; absent for a new one. */
   id: z.string().min(1).optional(),
@@ -114,6 +123,7 @@ export const JonahReply = z
   .object({
     observations: z.array(Observation),
     proposals: z.array(Proposal).max(maxProposals),
+    facts: z.array(Fact).optional(),
   })
   .refine((reply) => reply.observations.every((o) => o.proposal === undefined || o.proposal < reply.proposals.length), {
     message: 'an observation names a proposal that the review does not have',
@@ -201,6 +211,19 @@ export const jonahSchema = {
         additionalProperties: false,
       },
     },
+    facts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          text: { type: 'string' },
+          items: { type: 'array', minItems: 1, items: { type: 'string' } },
+          replaces: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['text', 'items', 'replaces'],
+        additionalProperties: false,
+      },
+    },
   },
   required: ['observations', 'proposals'],
   additionalProperties: false,
@@ -224,7 +247,7 @@ export function jonahPrompt(jonah: Jonah, knowledge?: string): string {
     ].join('\n'),
     `## Threshold\n${threshold}`,
     knowledge ?? '',
-    '## Your answer\nOne JSON object: {"observations": [...], "proposals": [...]}. Each observation has id (only when it updates an open observation), summary, detail, items (the item refs it is based on, such as #12), count (this window\'s), not_jonahs (when the cause is not a definition problem) and, when it leads to a proposal, proposal (that proposal\'s index). Each proposal has title, summary, edits ([{path, replacements: [{old, new}]}] for an existing file or [{path, content}] for a new one, paths relative to the definition), evidence ([{event, reason}], an event id of /goal/events.md each) and estimate ({metric, station, after, cost_per_item_usd_delta}).',
+    '## Your answer\nOne JSON object: {"observations": [...], "proposals": [...]}. Each observation has id (only when it updates an open observation), summary, detail, items (the item refs it is based on, such as #12), count (this window\'s), not_jonahs (when the cause is not a definition problem) and, when it leads to a proposal, proposal (that proposal\'s index). Each proposal has title, summary, edits ([{path, replacements: [{old, new}]}] for an existing file or [{path, content}] for a new one, paths relative to the definition), evidence ([{event, reason}], an event id of /goal/events.md each) and estimate ({metric, station, after, cost_per_item_usd_delta}). Add facts ([{text, items, replaces}]) only for memory facts: text, a person\'s exact words; items, the refs of the items whose events hold them, such as #12; replaces, the exact texts of the facts of memory.yaml it replaces, or [].',
   ]
     .filter(Boolean)
     .join('\n\n');

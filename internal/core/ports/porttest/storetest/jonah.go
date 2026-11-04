@@ -28,6 +28,7 @@ var jonahTests = []struct {
 	{"Jonah_ConcurrentClaimsTakeDifferentReviews", testJonahConcurrentClaims},
 	{"Jonah_ProposalsNumberedPerFactory", testJonahNumbers},
 	{"Jonah_PathOutsideAllowlistRefused", testJonahPathRefused},
+	{"Jonah_MemoryProposalStored", testJonahMemoryProposal},
 	{"Jonah_MalformedEditRefused", testJonahEditRefused},
 	{"Jonah_NewProposalSupersedesOnlyOverlapping", testJonahSupersede},
 	{"Jonah_ObservationsPersistAcrossReviews", testJonahObservationsPersist},
@@ -435,7 +436,7 @@ func (f *fixture) expectPages(t *testing.T) {
 func testJonahPathRefused(f *fixture) {
 	t := f.t
 
-	for _, path := range []string{"evals/cases/a.yaml", "agents/../evals/x.md", "README.md", "factory.yaml.bak", "skills/x/run.sh", "memory.yaml"} {
+	for _, path := range []string{"evals/cases/a.yaml", "agents/../evals/x.md", "README.md", "factory.yaml.bak", "skills/x/run.sh", "memory.yaml.bak", "x/memory.yaml"} {
 		f.queueReview(t, f.factory, t0)
 		claimed := f.claimReview(t, t0)
 
@@ -464,6 +465,30 @@ func testJonahPathRefused(f *fixture) {
 		if _, _, err := f.Jonah.FinishJonahReview(f.ctx(t), claimed, domain.JonahReviewResult{State: domain.JonahFailed, Error: "bad path", At: t0.Add(time.Second)}); err != nil {
 			t.Fatalf("fail the review: %v", err)
 		}
+	}
+}
+
+// A proposal of memory.yaml, the factory's memory (ADR 0039 decision 7), is stored with its
+// whole-file replacement.
+func testJonahMemoryProposal(f *fixture) {
+	t := f.t
+
+	f.queueReview(t, f.factory, t0)
+	claimed := f.claimReview(t, t0)
+
+	memory := domain.NewProposal{Title: "Add 1 fact to memory", Edits: []domain.ProposalEdit{{
+		Path: "memory.yaml", Replacements: []domain.Replacement{{Old: "[]\n", New: "- text: \"Phones are 390 wide\"\n  added: \"2026-11-04\"\n"}},
+	}}}
+
+	if _, _, err := f.Jonah.FinishJonahReview(f.ctx(t), claimed, domain.JonahReviewResult{
+		State: domain.JonahDone, At: t0.Add(time.Second), Proposals: []domain.NewProposal{memory},
+	}); err != nil {
+		t.Fatalf("FinishJonahReview with a memory proposal: %v", err)
+	}
+
+	got, err := f.Jonah.Proposals(f.ctx(t), ports.ProposalQuery{Factory: f.factory, Limit: 10})
+	if err != nil || len(got) != 1 || !reflect.DeepEqual(got[0].Edits, memory.Edits) || !slices.Equal(got[0].Paths(), []string{"memory.yaml"}) {
+		t.Errorf("proposals = %+v, %v; want the memory proposal", got, err)
 	}
 }
 

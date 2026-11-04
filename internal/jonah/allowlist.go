@@ -17,6 +17,8 @@ type DefinitionCheck interface {
 	// ParseFactory is factory.yaml's raw content as a tree of map[string]any, []any and JSON
 	// scalars.
 	ParseFactory(raw []byte) (any, error)
+	// MemoryJSON is memory.yaml's raw content as JSON, an unquoted date kept as written.
+	MemoryJSON(raw []byte) ([]byte, error)
 }
 
 // keyedLists are the lists of factory.yaml whose entries are matched by a key, not by index, and

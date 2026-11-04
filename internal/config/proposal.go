@@ -41,3 +41,13 @@ func (ProposalCheck) ParseFactory(raw []byte) (any, error) {
 
 	return tree, nil
 }
+
+// MemoryJSON is memory.yaml's raw content as JSON, an unquoted date kept as the text written.
+func (ProposalCheck) MemoryJSON(raw []byte) ([]byte, error) {
+	doc, bad := parseYAMLWith(MemoryFile, raw, datesAsText)
+	if bad != nil {
+		return nil, errors.New(bad.Message)
+	}
+
+	return doc.json, nil
+}

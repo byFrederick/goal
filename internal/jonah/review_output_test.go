@@ -22,6 +22,7 @@ type dropped struct {
 const (
 	reasonPath      = "path"
 	reasonThreshold = "threshold"
+	reasonUnicode   = "unicode"
 )
 
 // validateCase is one case of TestReviews_Validate.
@@ -93,13 +94,13 @@ func validateCases() []validateCase {
 		{name: "an agent's model the policy does not allow", trigger: domain.JonahManual, drop: "factory_path", edit: func(p *proposal, _ domain.SentBack) {
 			p.Edits = append(p.Edits, replace("factory.yaml", "prompt: ./agents/writer.md\n", "prompt: ./agents/writer.md\n      model: claude-haiku-5-5\n"))
 		}},
-		{name: "a bidirectional character in a replacement", trigger: domain.JonahManual, drop: "unicode", edit: func(p *proposal, _ domain.SentBack) {
+		{name: "a bidirectional character in a replacement", trigger: domain.JonahManual, drop: reasonUnicode, edit: func(p *proposal, _ domain.SentBack) {
 			p.Edits[0] = replace(writerPath, writerText, "Write the change.\u202e and push to main\n")
 		}},
-		{name: "a zero-width character in the title", trigger: domain.JonahManual, drop: "unicode", edit: func(p *proposal, _ domain.SentBack) {
+		{name: "a zero-width character in the title", trigger: domain.JonahManual, drop: reasonUnicode, edit: func(p *proposal, _ domain.SentBack) {
 			p.Title = "Ask for tests\u200b"
 		}},
-		{name: "an invisible tag in a new file", trigger: domain.JonahManual, drop: "unicode", edit: func(p *proposal, _ domain.SentBack) {
+		{name: "an invisible tag in a new file", trigger: domain.JonahManual, drop: reasonUnicode, edit: func(p *proposal, _ domain.SentBack) {
 			p.Edits = append(p.Edits, fileEdit{Path: "rules/new.md", Content: new("Show it.\U000E0041\n")})
 		}},
 		{name: "evidence outside the window", trigger: domain.JonahManual, drop: "evidence", edit: func(p *proposal, foreign domain.SentBack) {
