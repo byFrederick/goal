@@ -58,7 +58,9 @@ func (in *Intake) CreateEndpoint(ctx context.Context, n domain.NewWebhookEndpoin
 		return domain.WebhookSecret{}, err
 	}
 
-	e := domain.WebhookEndpoint{ID: domain.WebhookEndpointID(id.String()), FactoryID: n.FactoryID, Name: n.Name, Kind: n.Kind}
+	e := domain.WebhookEndpoint{
+		ID: domain.WebhookEndpointID(id.String()), FactoryID: n.FactoryID, Name: n.Name, Kind: n.Kind, Sender: n.Kind.Sender(), Enabled: true,
+	}
 
 	secret, s, err := in.newSecret(org, e.ID)
 	if err != nil {
@@ -67,7 +69,7 @@ func (in *Intake) CreateEndpoint(ctx context.Context, n domain.NewWebhookEndpoin
 
 	err = in.s.inTx(ctx, func(q *db.Queries) error {
 		at, err := q.InsertWebhookEndpoint(ctx, db.InsertWebhookEndpointParams{
-			ID: id, FactoryID: factory, Name: n.Name, Kind: string(n.Kind), KeyID: s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext,
+			ID: id, FactoryID: &factory, Name: n.Name, Kind: new(string(n.Kind)), KeyID: &s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext,
 		})
 
 		switch {
@@ -97,14 +99,16 @@ func (in *Intake) ListEndpoints(ctx context.Context, factory domain.FactoryID) (
 		return nil, err
 	}
 
-	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.WebhookEndpointsRow, error) { return q.WebhookEndpoints(ctx, fid) })
+	out, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]domain.WebhookEndpoint, error) {
+		rows, err := q.WebhookEndpoints(ctx, &fid)
+		if err != nil {
+			return nil, err
+		}
+
+		return withOpenings(ctx, q, convertRows(rows, func(r db.WebhookEndpointsRow) db.WebhookEndpointRow { return db.WebhookEndpointRow(r) }))
+	})
 	if err != nil {
 		return nil, fmt.Errorf("endpoints of factory %s: %w", factory, err)
-	}
-
-	out := make([]domain.WebhookEndpoint, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, endpointFrom(db.WebhookEndpointRow(r)))
 	}
 
 	return out, nil
@@ -117,7 +121,7 @@ func (in *Intake) Endpoint(ctx context.Context, id domain.WebhookEndpointID) (do
 		return domain.WebhookEndpoint{}, err
 	}
 
-	r, err := fetch(ctx, in.s.read, func(q *db.Queries) (db.WebhookEndpointRow, error) { return q.WebhookEndpoint(ctx, uid) })
+	e, err := fetch(ctx, in.s.read, func(q *db.Queries) (domain.WebhookEndpoint, error) { return endpointIn(ctx, q, uid) })
 
 	switch {
 	case notFound(err):
@@ -125,7 +129,7 @@ func (in *Intake) Endpoint(ctx context.Context, id domain.WebhookEndpointID) (do
 	case err != nil:
 		return domain.WebhookEndpoint{}, fmt.Errorf("endpoint %s: %w", id, err)
 	default:
-		return endpointFrom(r), nil
+		return e, nil
 	}
 }
 
@@ -146,8 +150,21 @@ func (in *Intake) RotateSecret(ctx context.Context, id domain.WebhookEndpointID)
 		return domain.WebhookSecret{}, fmt.Errorf("rotate endpoint %s: %w", id, err)
 	}
 
-	r, err := fetch(ctx, in.s.inTx, func(q *db.Queries) (db.RotateWebhookSecretRow, error) {
-		return q.RotateWebhookSecret(ctx, db.RotateWebhookSecretParams{KeyID: s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext, ID: uid})
+	e, err := fetch(ctx, in.s.inTx, func(q *db.Queries) (domain.WebhookEndpoint, error) {
+		if _, err := q.RotateWebhookSecret(ctx, db.RotateWebhookSecretParams{KeyID: &s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext, ID: uid}); !notFound(err) {
+			if err != nil {
+				return domain.WebhookEndpoint{}, err
+			}
+
+			return endpointIn(ctx, q, uid)
+		}
+
+		// No factory endpoint: an organization webhook is signed by a secret, replaced on its own.
+		if _, err := q.WebhookEndpoint(ctx, uid); err != nil {
+			return domain.WebhookEndpoint{}, err
+		}
+
+		return domain.WebhookEndpoint{}, fmt.Errorf("webhook %s is signed by an organization secret; replace its value: %w", id, domain.ErrInvalid)
 	})
 
 	switch {
@@ -156,7 +173,7 @@ func (in *Intake) RotateSecret(ctx context.Context, id domain.WebhookEndpointID)
 	case err != nil:
 		return domain.WebhookSecret{}, fmt.Errorf("rotate endpoint %s: %w", id, err)
 	default:
-		return domain.WebhookSecret{Endpoint: endpointFrom(db.WebhookEndpointRow(r)), Secret: secret}, nil
+		return domain.WebhookSecret{Endpoint: e, Secret: secret}, nil
 	}
 }
 
@@ -339,9 +356,15 @@ func (in *Intake) Delivery(ctx context.Context, endpoint domain.WebhookEndpointI
 
 // DeliveryDays implements ports.Intake.
 func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.DeliveryDay, error) {
-	fid, err := parseID("factory", string(factory))
-	if err != nil {
-		return nil, err
+	var fid *uuid.UUID
+
+	if factory != "" {
+		id, err := parseID("factory", string(factory))
+		if err != nil {
+			return nil, err
+		}
+
+		fid = &id
 	}
 
 	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.WebhookDeliveryDaysRow, error) {
@@ -695,11 +718,29 @@ func (in *Intake) newSecret(org domain.OrgID, id domain.WebhookEndpointID) ([]by
 	return secret, sealedValue{keyID: keyID, nonce: nonce, ciphertext: ct}, nil
 }
 
+// endpointFrom is r without its openings (withOpenings): a factory endpoint reads as its kind's
+// sender, enabled.
 func endpointFrom(r db.WebhookEndpointRow) domain.WebhookEndpoint {
-	return domain.WebhookEndpoint{
-		ID: domain.WebhookEndpointID(r.ID.String()), FactoryID: domain.FactoryID(r.FactoryID.String()), Name: r.Name,
-		Kind: domain.WebhookKind(r.Kind), CreatedAt: r.CreatedAt.UTC(), RotatedAt: utc(r.RotatedAt),
+	e := domain.WebhookEndpoint{
+		ID: domain.WebhookEndpointID(r.ID.String()), Name: r.Name, Kind: domain.WebhookKind(deref(r.Kind)),
+		Sender: domain.WebhookSender(deref(r.Sender)), Secret: r.SecretName, Enabled: r.Enabled,
+		Token:     domain.TokenSettings{Header: deref(r.TokenHeader), EventPath: deref(r.TokenEventPath), IDPath: deref(r.TokenIDPath)},
+		CreatedAt: r.CreatedAt.UTC(), RotatedAt: utc(r.RotatedAt),
 	}
+
+	if r.FactoryID != nil {
+		e.FactoryID = domain.FactoryID(r.FactoryID.String())
+	}
+
+	if r.SecretID != nil {
+		e.SecretID = domain.SecretID(r.SecretID.String())
+	}
+
+	if e.Sender == "" {
+		e.Sender = e.Kind.Sender()
+	}
+
+	return e
 }
 
 func deliveryFrom(r db.WebhookDeliveriesRow) (domain.WebhookDelivery, error) {
@@ -748,7 +789,7 @@ func resealWebhookSecrets(ctx context.Context, q *db.Queries, key ports.MasterKe
 	}
 
 	return resealRows(key, "webhook endpoint", stale, webhookSecretAAD, func(id uuid.UUID, s sealedValue) error {
-		return q.ResealWebhookSecret(ctx, db.ResealWebhookSecretParams{KeyID: s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext, ID: id})
+		return q.ResealWebhookSecret(ctx, db.ResealWebhookSecretParams{KeyID: &s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext, ID: id})
 	})
 }
 

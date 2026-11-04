@@ -27,9 +27,10 @@ func TestIntake_Conformance(t *testing.T) {
 		d := newConnectionsDB(t)
 
 		return intaketest.Harness{
-			Intake: func(key ports.MasterKey) ports.Intake { return NewIntake(d.store, key) },
-			Key:    func(ids ...string) ports.MasterKey { return testKey(t, ids...) },
-			Store:  d.store,
+			Intake:  func(key ports.MasterKey) ports.Intake { return NewIntake(d.store, key) },
+			Secrets: func(key ports.MasterKey) ports.OrgSecrets { return NewSecrets(d.store, key) },
+			Key:     func(ids ...string) ports.MasterKey { return testKey(t, ids...) },
+			Store:   d.store,
 			NewOrg: func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, d.store) },
 			NewFactory: func(t *testing.T, org domain.OrgID) domain.FactoryID {
 				t.Helper()
@@ -210,7 +211,8 @@ func TestRekey_ResealsWebhookSecrets(t *testing.T) {
 }
 
 // As goal_app, another organization neither reads nor writes the intake tables' rows, goal_app
-// cannot rewrite an endpoint's id, organization, factory, name or kind, nor change or delete a
+// cannot rewrite an endpoint's id, organization, factory or kind (00113 grants its name and
+// enabled, for renaming the organization's webhooks), nor change or delete a
 // delivery or a firing; only the definers reach across organizations.
 func TestIntake_RLSAndGrants(t *testing.T) {
 	t.Parallel()
@@ -239,7 +241,6 @@ func TestIntake_RLSAndGrants(t *testing.T) {
 		`UPDATE webhook_endpoints SET id = gen_random_uuid()`,
 		`UPDATE webhook_endpoints SET org_id = '` + string(labs) + `'`,
 		`UPDATE webhook_endpoints SET factory_id = gen_random_uuid()`,
-		`UPDATE webhook_endpoints SET name = 'renamed'`,
 		`UPDATE webhook_endpoints SET kind = 'generic'`,
 		`UPDATE webhook_endpoints SET created_at = now()`,
 		`UPDATE webhook_deliveries SET outcome = 'created'`,
@@ -286,5 +287,104 @@ func labsSeesNoIntake(t *testing.T, pool *pgxpool.Pool, org domain.OrgID) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// seedWebhook creates the organization webhook name of org, signed by a new secret, open to a
+// new factory, and returns it.
+func seedWebhook(t *testing.T, d connectionsDB, org domain.OrgID, name string) domain.WebhookEndpoint {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), org)
+	secret := domain.WebhookSecretName(name)
+
+	if _, err := NewSecrets(d.store, testKey(t, "k1")).Create(ctx, domain.NewSecret{Name: secret, Value: "whsec-integration"}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	in := NewIntake(d.store, testKey(t, "k1"))
+
+	w, err := in.CreateWebhook(ctx, domain.NewWebhook{Name: name, Sender: domain.SenderGitHub, Secret: secret})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w, err = in.PatchWebhook(ctx, w.ID, domain.WebhookPatch{Open: []domain.WebhookOpening{{FactoryID: saveFactory(ctx, t, d.store), Repositories: []string{"acme/api"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return w
+}
+
+// Migration 00113: another organization sees no webhook opening; goal_app cannot change a
+// webhook's sender, secret or factory, nor an opening's webhook or factory; the database refuses
+// a reserved name and the delete of a secret a webhook uses, and a rename of the secret follows;
+// goal_connection_key_ids skips the webhook's null key id; the purge removes both.
+func TestIntake_OrgWebhooksRLSAndGrants(t *testing.T) {
+	t.Parallel()
+
+	d := newConnectionsDB(t)
+	acme, labs := newOrgID(t, d.store), newOrgID(t, d.store)
+	w := seedWebhook(t, d, acme, "github-acme")
+
+	labsSeesNoIntake(t, d.store.pool, labs)
+
+	if err := inOrgTx(t, d.store.pool, labs, func(tx pgx.Tx) error {
+		var n int
+		if err := tx.QueryRow(t.Context(), `SELECT count(*) FROM webhook_openings`).Scan(&n); err != nil || n != 0 {
+			t.Errorf("labs sees %d openings, %v; want none", n, err)
+		}
+
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, stmt := range []string{
+		`UPDATE webhook_endpoints SET sender = 'gitlab'`,
+		`UPDATE webhook_endpoints SET secret_id = gen_random_uuid()`,
+		`UPDATE webhook_endpoints SET factory_id = gen_random_uuid()`,
+		`UPDATE webhook_endpoints SET token_header = 'X-Token'`,
+		`UPDATE webhook_openings SET factory_id = gen_random_uuid()`,
+		`UPDATE webhook_openings SET webhook_id = gen_random_uuid()`,
+		`INSERT INTO webhook_endpoints (id, name, sender, secret_id) VALUES (gen_random_uuid(), 'schedule', 'github', '` + string(w.SecretID) + `')`,
+		`INSERT INTO webhook_endpoints (id, name, sender, secret_id) VALUES (gen_random_uuid(), 'github-acme', 'github', '` + string(w.SecretID) + `')`,
+		`INSERT INTO webhook_endpoints (id, name, sender) VALUES (gen_random_uuid(), 'no-secret', 'github')`,
+		`DELETE FROM secrets WHERE id = '` + string(w.SecretID) + `'`,
+	} {
+		err := inOrgTx(t, d.store.pool, acme, func(tx pgx.Tx) error { _, err := tx.Exec(t.Context(), stmt); return err })
+		if err == nil {
+			t.Errorf("goal_app ran %s", stmt)
+		}
+	}
+
+	ctx := domain.WithOrg(t.Context(), acme)
+	renamed := "github-signing"
+
+	if _, err := NewSecrets(d.store, testKey(t, "k1")).Patch(ctx, w.Secret, domain.SecretPatch{Name: &renamed}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := NewIntake(d.store, testKey(t, "k1")).Endpoint(ctx, w.ID); err != nil || got.Secret != renamed || len(got.Openings) != 1 {
+		t.Errorf("Endpoint after the secret's rename = %+v, %v; want it signed by %s, still open", got, err, renamed)
+	}
+
+	if ids, err := ConnectionKeyIDs(t.Context(), d.store); err != nil || !slices.Equal(ids, []string{"k1"}) {
+		t.Errorf("ConnectionKeyIDs = %v, %v; want [k1], the secret's, and no empty id", ids, err)
+	}
+
+	deleted := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
+	if err := d.store.DeleteOrg(ctx, domain.LocalUser, deleted); err != nil {
+		t.Fatal(err)
+	}
+
+	if ok, err := d.store.PurgeOrg(t.Context(), acme, deleted.Add(time.Second), nil); !ok || err != nil {
+		t.Fatalf("PurgeOrg with a webhook and its secret = %v, %v", ok, err)
+	}
+
+	var n int
+	if err := d.admin.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM webhook_endpoints) + (SELECT count(*) FROM webhook_openings)`).Scan(&n); err != nil || n != 0 {
+		t.Errorf("%d webhook rows left after the purge, %v; want none", n, err)
 	}
 }

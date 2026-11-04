@@ -9,20 +9,83 @@ VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(name), sqlc.arg(kind), sqlc
 RETURNING created_at;
 
 -- name: WebhookEndpoints :many
-SELECT id, factory_id, name, kind, created_at, rotated_at FROM webhook_endpoints
-WHERE factory_id = sqlc.arg(factory_id)
-ORDER BY name;
+-- The endpoints open to the factory: its own, and the organization's webhooks with an opening.
+SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at
+FROM webhook_endpoints e
+LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
+WHERE e.factory_id = sqlc.arg(factory_id)
+   OR EXISTS (SELECT 1 FROM webhook_openings o WHERE o.webhook_id = e.id AND o.factory_id = sqlc.arg(factory_id))
+ORDER BY e.name, e.id;
 
 -- name: WebhookEndpoint :one
-SELECT id, factory_id, name, kind, created_at, rotated_at FROM webhook_endpoints WHERE id = sqlc.arg(id);
+SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at
+FROM webhook_endpoints e
+LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
+WHERE e.id = sqlc.arg(id);
+
+-- name: OrgWebhooks :many
+-- The organization's webhooks (no factory), by name.
+SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at
+FROM webhook_endpoints e
+LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
+WHERE e.factory_id IS NULL
+ORDER BY e.name;
+
+-- name: OrgWebhookByName :one
+SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at
+FROM webhook_endpoints e
+LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
+WHERE e.factory_id IS NULL AND e.name = sqlc.arg(name);
+
+-- name: LockOrgWebhook :one
+-- The organization's webhook, locked for a patch.
+SELECT id, name FROM webhook_endpoints WHERE id = sqlc.arg(id) AND factory_id IS NULL FOR UPDATE;
+
+-- name: WebhookNameTaken :one
+-- Whether an endpoint of the organization other than the one given has the name: a factory's
+-- endpoint keeps its name until the conversion, so the partial unique index does not see it.
+SELECT EXISTS (SELECT 1 FROM webhook_endpoints WHERE name = sqlc.arg(name) AND id <> sqlc.arg(except_id)::uuid)::bool;
+
+-- name: InsertOrgWebhook :one
+-- org_id comes from its default, goal_org(); secret_id is the secret named, none for no such one.
+INSERT INTO webhook_endpoints (id, name, sender, secret_id, token_header, token_event_path, token_id_path)
+SELECT sqlc.arg(id), sqlc.arg(name), sqlc.arg(sender), s.id, sqlc.narg(token_header), sqlc.narg(token_event_path), sqlc.narg(token_id_path)
+FROM secrets s WHERE s.name = sqlc.arg(secret)
+RETURNING secret_id, created_at;
+
+-- name: UpdateOrgWebhook :exec
+UPDATE webhook_endpoints SET name = sqlc.arg(name), enabled = sqlc.arg(enabled) WHERE id = sqlc.arg(id);
+
+-- name: WebhookOpenings :many
+-- The openings of the webhooks given, by webhook then factory.
+SELECT webhook_id, factory_id, repositories FROM webhook_openings
+WHERE webhook_id = ANY (sqlc.arg(webhook_ids)::uuid[])
+ORDER BY webhook_id, factory_id;
+
+-- name: UpsertWebhookOpening :exec
+INSERT INTO webhook_openings (webhook_id, factory_id, repositories)
+VALUES (sqlc.arg(webhook_id), sqlc.arg(factory_id), sqlc.narg(repositories)::text[])
+ON CONFLICT (org_id, webhook_id, factory_id) DO UPDATE SET repositories = excluded.repositories;
+
+-- name: DeleteWebhookOpening :exec
+DELETE FROM webhook_openings WHERE webhook_id = sqlc.arg(webhook_id) AND factory_id = sqlc.arg(factory_id);
+
+-- name: WebhookSecretUses :many
+-- The secrets the organization's webhooks are signed by, by secret then webhook.
+SELECT s.name AS secret, e.name AS webhook
+FROM webhook_endpoints e
+JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
+ORDER BY s.name, e.name;
 
 -- name: SealedWebhookSecret :one
-SELECT key_id, nonce, ciphertext FROM webhook_endpoints WHERE id = sqlc.arg(id);
+-- A factory endpoint's sealed secret; the organization's webhooks have none.
+SELECT key_id::text AS key_id, nonce::bytea AS nonce, ciphertext::bytea AS ciphertext FROM webhook_endpoints
+WHERE id = sqlc.arg(id) AND key_id IS NOT NULL;
 
 -- name: RotateWebhookSecret :one
 UPDATE webhook_endpoints SET key_id = sqlc.arg(key_id), nonce = sqlc.arg(nonce), ciphertext = sqlc.arg(ciphertext), rotated_at = now()
-WHERE id = sqlc.arg(id)
-RETURNING id, factory_id, name, kind, created_at, rotated_at;
+WHERE id = sqlc.arg(id) AND factory_id IS NOT NULL
+RETURNING id;
 
 -- name: DeleteWebhookEndpoint :execrows
 DELETE FROM webhook_endpoints WHERE id = sqlc.arg(id);
@@ -34,7 +97,9 @@ SELECT o.org::uuid AS org_id FROM goal_webhook_endpoint_org(sqlc.arg(id)::uuid) 
 -- name: StaleSealedWebhookSecrets :many
 -- goal db rekey, as goal_owner: a batch of endpoints sealed under another key than the active one,
 -- in every organization, locked.
-SELECT id, org_id, key_id, nonce, ciphertext FROM webhook_endpoints
+SELECT id, org_id, coalesce(key_id, '')::text AS key_id, coalesce(nonce, ''::bytea)::bytea AS nonce,
+       coalesce(ciphertext, ''::bytea)::bytea AS ciphertext
+FROM webhook_endpoints
 WHERE key_id <> sqlc.arg(active)::text
 ORDER BY id
 LIMIT sqlc.arg(batch)
@@ -71,7 +136,10 @@ SELECT d.endpoint_id, date_trunc('day', d.received_at, 'UTC')::timestamptz AS da
        count(*) FILTER (WHERE d.outcome = 'refused') AS refused
 FROM webhook_endpoints e
 JOIN webhook_deliveries d ON d.endpoint_id = e.id AND d.received_at >= sqlc.arg(since)
-WHERE e.factory_id = sqlc.arg(factory_id)
+WHERE CASE WHEN sqlc.narg(factory_id)::uuid IS NULL THEN e.factory_id IS NULL
+           ELSE e.factory_id = sqlc.narg(factory_id)::uuid
+                OR EXISTS (SELECT 1 FROM webhook_openings o WHERE o.webhook_id = e.id AND o.factory_id = sqlc.narg(factory_id)::uuid)
+      END
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
