@@ -3,6 +3,7 @@
 // tap targets are 44 px. These specs are not run in the box (no browser); CI runs them.
 import { expect, test } from '@playwright/test';
 import { expectNoClippedElements, expectNoHorizontalScroll } from './support';
+import { expectTarget44 } from './support-boxes';
 
 const sizes = [
   { width: 1440, height: 1000 },
@@ -53,5 +54,15 @@ test('keeps the 44 px tap targets on a phone', async ({ page }, testInfo) => {
   );
   for (const box of boxes.filter((b) => b.width > 8 && b.height > 8)) {
     expect(box.height, `${box.name} is ${box.height}px tall`).toBeGreaterThanOrEqual(44);
+  }
+});
+
+test('Edit prompt, Show the full prompt and Show the lists are 44×44 on a phone', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs the whole matrix');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(path);
+  await expect(page.getByRole('region', { name: 'Settings' })).toBeVisible();
+  for (const name of ['Edit prompt', 'Show the full prompt', 'Show the lists']) {
+    await expectTarget44(page.getByRole('link', { name, exact: true }).first(), name);
   }
 });
