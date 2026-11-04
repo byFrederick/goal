@@ -64,7 +64,7 @@ function Keys({ row }: { row: AccessRow }) {
           to="/o/$org/secrets/$secret"
           params={{ org: org.slug, secret: name }}
           translate="no"
-          className="press inline-flex h-5.5 max-md:h-11 max-w-full items-center gap-1 rounded-chip bg-run-tint px-2 font-mono text-meta text-run-ink no-underline"
+          className="press inline-flex h-6 max-md:h-11 max-w-full items-center gap-1 rounded-chip bg-run-tint px-2 font-mono text-meta text-run-ink no-underline"
         >
           <KeyRound size={12} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
           <span title={name} className="min-w-0 truncate">
