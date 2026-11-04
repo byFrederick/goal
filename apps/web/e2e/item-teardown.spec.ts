@@ -1,7 +1,7 @@
 // The item's Teardown tab (ADR 0019, decision 3): a finished item with a failed check and human touches (item 4),
 // an item no agent picked up (item 15), a failed read, and the link into the Trace tab. Not run in the box (no browser).
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll } from './support';
+import { expectAccessible, expectNoHorizontalScroll } from './support';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -58,4 +58,35 @@ test('a failed read shows an error, and Try again shows the breakdown', async ({
   await expect(page.getByRole('alert')).toBeVisible();
   await page.getByRole('button', { name: 'Try again' }).click();
   await expect(page.getByRole('region', { name: 'Totals' })).toBeVisible();
+});
+
+test('at 375 px no two station labels overlap and each has a title', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto('/o/acme/f/goal/items/4?tab=teardown');
+  const labels = page.getByRole('table', { name: 'Time by station' }).locator('tbody th[scope="row"] [title]');
+  const count = await labels.count();
+  expect(count).toBeGreaterThan(0);
+  const boxes = [];
+  for (let i = 0; i < count; i++) {
+    expect(await labels.nth(i).getAttribute('title')).toBeTruthy();
+    const b = await labels.nth(i).boundingBox();
+    if (b) boxes.push(b);
+  }
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i];
+      const b = boxes[j];
+      if (!a || !b) continue;
+      expect(a.y + a.height <= b.y || b.y + b.height <= a.y || a.x + a.width <= b.x || b.x + b.width <= a.x).toBe(true);
+    }
+  }
+});
+
+test('at 1440 px the runs scroller is focusable, named and accessible', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/o/acme/f/goal/items/4?tab=teardown');
+  const region = page.getByRole('region', { name: 'Runs table', exact: true });
+  await region.focus();
+  await expect(region).toBeFocused();
+  await expectAccessible(page);
 });

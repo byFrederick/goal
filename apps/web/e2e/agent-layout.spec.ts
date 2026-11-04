@@ -57,6 +57,16 @@ test('keeps the 44 px tap targets on a phone', async ({ page }, testInfo) => {
   }
 });
 
+for (const width of [375, 768, 1440]) {
+  test(`the selected tab is inside the viewport at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(path);
+    const tab = page.getByRole('navigation').getByRole('link', { name: 'Overview' }).first();
+    const box = await tab.boundingBox();
+    expect(box && box.x >= 0 && box.x + box.width <= width).toBe(true);
+  });
+}
+
 test('Edit prompt, Show the full prompt and Show the lists are 44×44 on a phone', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs the whole matrix');
   await page.setViewportSize({ width: 390, height: 844 });

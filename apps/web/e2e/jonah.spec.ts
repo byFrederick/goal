@@ -151,6 +151,27 @@ for (const scheme of ['light', 'dark'] as const) {
   }
 }
 
+for (const width of [375, 768, 1440]) {
+  test(`the proposal filter reaches its last option and keeps the chosen one in view at ${width} px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/o/acme/f/software/jonah/proposals?state=applied');
+    const last = page.getByRole('radio', { name: 'Superseded' });
+    await last.scrollIntoViewIfNeeded();
+    await last.evaluate((el) => el.parentElement?.scrollIntoView({ inline: 'nearest' }));
+    const box = await last.boundingBox();
+    expect(box && box.x >= 0 && box.x + box.width <= width).toBe(true);
+    await page.getByRole('radio', { name: 'Applied' }).check();
+    const chosen = await page.getByRole('radio', { name: 'Applied' }).boundingBox();
+    expect(chosen && chosen.x >= 0 && chosen.x + chosen.width <= width).toBe(true);
+    if (width === 375) {
+      const title = page.locator('header.shell-topbar p').first();
+      expect(await title.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    }
+  });
+}
+
 test('on the Tests tab each result ⓘ is 44×44 and does not lie over the next row at 390 px', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/o/acme/f/software/jonah/tests');
