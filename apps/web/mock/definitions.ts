@@ -92,6 +92,17 @@ const routedLanes = (model: Json): string[] => {
   }
   return [...lanes].sort();
 };
+/** Each station's agents by station id: its agent, or the values of its route (Station.LaneAgents). */
+const routedAgents = (model: Json): Record<string, string[]> => {
+  const out: Record<string, string[]> = {};
+  for (const station of list((model.line as Json | undefined)?.stations)) {
+    if (typeof station.id !== 'string') continue;
+    const route = isObject(station.route) ? Object.values(station.route) : [];
+    const names = typeof station.agent === 'string' && station.agent ? [station.agent] : route;
+    out[station.id] = [...new Set(names.filter((n): n is string => typeof n === 'string'))].sort();
+  }
+  return out;
+};
 const now = () => new Date().toISOString();
 
 const send = (res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) => {
@@ -818,6 +829,8 @@ export interface Definitions {
   knowledgeSourceNames: (factory: Factory) => string[];
   /** The lanes the current version's stations route by, sorted: the lanes an item may be set to. */
   laneNames: (factory: Factory) => string[];
+  /** The agents of each station of the current version, by station id, as Station.LaneAgents names them. */
+  stationAgents: (factory: Factory) => Record<string, string[]>;
   /** A file of the factory's draft, else of its current version. */
   fileText: (org: string, factory: string, path: string) => string | undefined;
 }
@@ -1929,6 +1942,10 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
     laneNames: (f) => {
       const read = currentModel(f);
       return read ? routedLanes(read) : [];
+    },
+    stationAgents: (f) => {
+      const read = currentModel(f);
+      return read ? routedAgents(read) : {};
     },
     faultBody: (path, fault) => {
       const status = fault.status ?? 500;
